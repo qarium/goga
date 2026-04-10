@@ -1,0 +1,35 @@
+Verify that the implementation matches CODEMANIFEST contract specifications.
+
+## What to Check
+
+1. Entity existence - every type, class, function declared in CODEMANIFEST files must exist in the codebase
+2. Location compliance - each entity must be implemented in the file specified by its `location` field
+3. Signature matching - constructor parameters, method signatures, and property types must match declarations
+4. Facade availability - all entities must be importable from the package facade (__init__.py)
+5. Re-exports - all `->Name` re-export blocks must make the type available from the facade
+6. Mutations - `Type::SubType` entities must implement the extension relationship declared in the contract
+
+## How to Check
+
+1. Find all CODEMANIFEST files in the project (recursively)
+2. Parse each CODEMANIFEST: Imports, Usages, Annotations, entity blocks, re-exports
+3. For each entity block:
+   - Verify the entity exists at the declared `location` file
+   - Verify the entity name (class, function) matches the signature
+   - Verify all declared methods exist with matching signatures
+   - Verify all declared properties exist with matching types
+4. For re-exports (`->Name`):
+   - Verify the name is importable from the package
+5. For mutations (`Type::SubType`):
+   - Verify the extension relationship is implemented
+
+## What to Report
+
+For each violation:
+- CODEMANIFEST file path
+- Entity name and signature
+- Expected (from CODEMANIFEST) vs Actual (in code)
+- Severity: missing entity, wrong location, signature mismatch, missing method/property
+
+Format: list each violation on its own line with file:line reference.
+If everything matches, report: CODEMANIFEST compliance verified, no violations found.

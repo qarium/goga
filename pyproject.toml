@@ -1,0 +1,11 @@
+[project]
+name = "goga"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["click", "pyyaml"]
+
+[tool.setuptools]
+packages = ["goga", "goga.config", "goga.commands"]
+
+[project.scripts]
+goga = "goga.cli:main"

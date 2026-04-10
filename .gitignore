@@ -1,3 +1,8 @@
+# goga: ralphex config managed by goga
+.goga/prompts/*.txt
+.goga/agents/*.txt
+.goga/config
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
