@@ -1,0 +1,17 @@
+name: Publish Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    uses: qarium/ci/.github/workflows/library-publish.yml@0.0.x
+    with:
+      src-package: 'goga'
+    secrets:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+      ZAI_TOKEN: ${{ secrets.ZAI_TOKEN }}
