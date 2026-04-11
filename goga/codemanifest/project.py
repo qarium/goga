@@ -32,6 +32,7 @@ class Project:
         self._path = path
         self._tree: list[DocumentRoot] = []
         self._errors: list[ProjectRuleError | ManifestRuleError] = []
+        self._index: dict[str, DocumentRoot] = {}
 
     @property
     def path(self) -> str:
@@ -49,6 +50,7 @@ class Project:
         """Load the document tree from the filesystem and run all rules."""
         self._tree = []
         self._errors = []
+        self._index = {}
 
         # Map from directory path to its DocumentRoot (for parent-child wiring)
         loaded: dict[str, DocumentRoot] = {}
@@ -81,6 +83,9 @@ class Project:
                 # Nested document — add as child of parent
                 parent_doc.children.append(document_root)
 
+        # Build normalized path index for O(1) lookup
+        self._index = {os.path.normpath(os.path.abspath(k)): v for k, v in loaded.items()}
+
         # Apply document-level rules via Visitor
         document_rules = [
             ImportsCanNotBeEmptyRule(),
@@ -101,3 +106,10 @@ class Project:
 
         analyzer = Analyzer(all_documents)
         self._errors.extend(analyzer.analyze(project_rules))
+
+    def codemanifest(self, path: str) -> DocumentRoot:
+        """Look up a DocumentRoot by its directory path at O(1)."""
+        resolved = os.path.normpath(os.path.abspath(path))
+        if resolved not in self._index:
+            raise KeyError(f"Document not found for path: {path}")
+        return self._index[resolved]

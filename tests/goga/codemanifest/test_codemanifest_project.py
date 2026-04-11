@@ -1,5 +1,6 @@
 """Contract tests for the codemanifest root package — Project class."""
 
+import pytest
 from goga.codemanifest import Project
 from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
 
@@ -343,3 +344,176 @@ class TestIntermediateDirectoryWithoutCodemanifest:
         p.load()
         assert p.tree == []
         assert p.errors == []
+
+
+# ---------------------------------------------------------------------------
+# 10. codemanifest() lookup by path
+# ---------------------------------------------------------------------------
+
+
+class TestCodemanifestLookup:
+    """Contract tests for the Project.codemanifest(path) method."""
+
+    # -- helpers --
+
+    @staticmethod
+    def _make_three_level_tree(tmp_path):
+        """Create a 3-level CODEMANIFEST hierarchy and return (root_dir, level2, level3)."""
+        root_dir = tmp_path / "level1"
+        root_dir.mkdir()
+        (root_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+
+        level2 = root_dir / "level2"
+        level2.mkdir()
+        (level2 / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+
+        level3 = level2 / "level3"
+        level3.mkdir()
+        (level3 / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+
+        return root_dir, level2, level3
+
+    # -- 1. Facade availability --
+
+    def test_project_has_codemanifest_method(self):
+        """Project exposes a codemanifest method."""
+        p = Project("/tmp")
+        assert hasattr(p, "codemanifest")
+        assert callable(p.codemanifest)
+
+    # -- 2. API shape --
+
+    def test_codemanifest_accepts_str_returns_document_root(self, tmp_path):
+        """codemanifest(path) takes a str and returns a DocumentRoot."""
+        from goga.codemanifest.nodes import DocumentRoot
+
+        root_dir, _, _ = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        result = p.codemanifest(str(root_dir))
+        assert isinstance(result, DocumentRoot)
+
+    # -- 3. Positive — relative path with dot --
+
+    def test_relative_path_with_dot(self, tmp_path):
+        """codemanifest('./relative') resolves and finds the document."""
+        import os
+
+        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        # Build "./" + relative from root_dir, and resolve from root_dir as cwd
+        relative = os.path.relpath(str(level3), str(root_dir))
+        dotted_path = "./" + relative
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(root_dir))
+            doc = p.codemanifest(dotted_path)
+        finally:
+            os.chdir(original_cwd)
+
+        assert doc.path == os.path.normpath(os.path.abspath(str(level3)))
+
+    # -- 4. Positive — relative path without dot --
+
+    def test_relative_path_without_dot(self, tmp_path):
+        """codemanifest('path/path') resolves and finds the document."""
+        import os
+
+        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        relative = os.path.relpath(str(level2), str(root_dir))
+
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(str(root_dir))
+            doc = p.codemanifest(relative)
+        finally:
+            os.chdir(original_cwd)
+
+        assert doc.path == os.path.normpath(os.path.abspath(str(level2)))
+
+    # -- 5. Positive — absolute path --
+
+    def test_absolute_path(self, tmp_path):
+        """codemanifest(absolute_path) returns the correct document."""
+        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        doc = p.codemanifest(str(level3))
+        assert doc.path == str(level3)
+
+    # -- 6. Negative — nonexistent path --
+
+    def test_nonexistent_path_raises_key_error(self, tmp_path):
+        """codemanifest('/nonexistent/path') raises KeyError."""
+        root_dir, _, _ = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        with pytest.raises(KeyError, match="Document not found for path"):
+            p.codemanifest("/nonexistent/path")
+
+    # -- 7. Negative — call before load() --
+
+    def test_call_before_load_raises_key_error(self):
+        """codemanifest() before load() raises KeyError (index is empty)."""
+        p = Project("/some/path")
+        with pytest.raises(KeyError, match="Document not found for path"):
+            p.codemanifest("any/path")
+
+    # -- 8. Edge — path normalization --
+
+    def test_path_normalization(self, tmp_path):
+        """codemanifest('path/./subpath/../subpath') resolves via normalization."""
+        import os
+
+        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        p = Project(str(root_dir))
+        p.load()
+
+        # Construct a path with . and .. segments
+        tricky_path = str(level3) + "/../level3"
+        doc = p.codemanifest(tricky_path)
+        assert doc.path == os.path.normpath(os.path.abspath(str(level3)))
+
+    # -- 9. Edge — load() rebuilds index --
+
+    def test_load_rebuilds_index(self, tmp_path):
+        """Calling load() twice picks up documents from the second load."""
+        import os
+
+        root_dir = tmp_path / "rebuild_root"
+        root_dir.mkdir()
+        (root_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+
+        new_dir = tmp_path / "rebuild_new"
+        new_dir.mkdir()
+        # No CODEMANIFEST yet
+
+        p = Project(str(tmp_path))
+        p.load()
+
+        # root_dir is findable, new_dir is not
+        doc = p.codemanifest(str(root_dir))
+        assert doc.path == os.path.normpath(os.path.abspath(str(root_dir)))
+
+        with pytest.raises(KeyError):
+            p.codemanifest(str(new_dir))
+
+        # Now add CODEMANIFEST to new_dir and reload
+        (new_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+        p.load()
+
+        # Both should be findable now
+        doc_root = p.codemanifest(str(root_dir))
+        assert doc_root.path == os.path.normpath(os.path.abspath(str(root_dir)))
+
+        doc_new = p.codemanifest(str(new_dir))
+        assert doc_new.path == os.path.normpath(os.path.abspath(str(new_dir)))
