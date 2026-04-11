@@ -1,0 +1,114 @@
+# ************************************************** #
+# Манифест описывает правила применяемые к манифесту #
+# ************************************************** #
+
+Imports:
+  - Types:
+      - DocumentRoot
+      - DocumentNode
+      - ImportsNode
+      - ImportItemNode
+    From: goga/codemanifest/nodes
+  - Types:
+      - CodemanifestRuleError
+    From: goga/codemanifest/errors
+
+Usages:
+  nodes: |
+    Использовать манифест goga/codemanifest/nodes и его API для работы с структурой документа
+
+Annotations: |
+  Соглашения:
+    * Код должен быть совместим с python версии 3.10 и выше
+
+---
+
+# Правила на уровне документа
+
+"DocumentRule(name: str)":
+  location: document.py
+  annotations: |
+    Описывает одно конкретное правило документа
+
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+  methods:
+    "check(node: DocumentNode) -> errors:list[CodemanifestRuleError]": |
+      Проверяет ноду на соответствие правилу
+
+      `node`: нода которую необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+"DocumentRule::ImportsCanNotBeEmptyRule(name: str = 'imports_can_not_be_empty')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правило - список импортов не может быть пустым.
+
+"DocumentRule::ImportHasTypeRule(name: str = 'import_has_type')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportItemNode`.
+
+    Правило - импорт содержит подключаемый тип.
+
+"DocumentRule::ImportHasValidFromPathRule(name: str = 'import_has_valid_from_path')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportItemNode`.
+
+    Правила:
+    - импорт содержит путь from откуда подключаются типы
+    - путь существует на файловой системе
+    - путь не выходит на пределы CWD
+
+# Правила на уровне всех документов
+
+"ProjectRule(tree: list[DocumentRoot], name: str)":
+  location: project.py
+  annotations: |
+    Описывает одно конкретное правило которое применяет глобально ко всем документам
+
+    `tree`: дерево документов к которым необходимо применить правило, дерево можно читать используя практику `nodes`
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+    tree -> list[DocumentRoot]: |
+      Дерево документов с которым было создано правило
+  methods:
+    "check(document: DocumentRoot) -> errors:list[CodemanifestRuleError]": |
+      Проверяет документ на соответствие правилу
+
+      `document`: документ который необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+"ProjectRule::ImportsHasNotCyclicalDepsRule(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
+  location: project.py
+  annotations: |
+    Правило - ни один импорт в документе не является циклическим.
+
+    Если в документе есть импорт из пути и в документе по этому
+    пути тоже есть импорт из текущего документа - это является ошибкой.
+
+"ProjectRule::AllUsagesIsUsed(tree: list[DocumentRoot], name: str = 'all_usages_is_used')":
+  location: project.py
+  annotations: |
+    Правило - все usages декларированные в header используются в аннотациях документа.
+
+    Ссылка на имя практики должно использоваться хотя бы в одной аннотации документа:
+    - в заголовке
+    - в сущности
+    - в методе
+    - в свойстве
+
+---
+
+Architector: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает свод правил применяемых к манифесту
