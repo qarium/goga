@@ -30,7 +30,7 @@ Annotations: |
     document -> DocumentRoot: |
       Документ с которым создано правило
   methods:
-    "analyze(rules: list[DocumentRule]) ->  errors:list[ManifestRuleError]": |
+    "analyze(rules: list[DocumentRule]) -> errors:list[ManifestRuleError]": |
       Анализировать правила применяемые к документу
 
       `errors`: список ошибок после применения правил
