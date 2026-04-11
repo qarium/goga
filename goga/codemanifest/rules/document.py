@@ -31,6 +31,8 @@ class ImportsCanNotBeEmptyRule(DocumentRule):
         super().__init__(name="imports_can_not_be_empty")
 
     def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+        if "Imports" not in node.root.header.data:
+            return []
         errors: list[ManifestRuleError] = []
         if not node.root.header.imports.items:
             errors.append(

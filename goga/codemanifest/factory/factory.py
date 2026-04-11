@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from typing import Optional
 
 import yaml
@@ -68,32 +69,49 @@ class Factory:
             footer=footer,
         )
 
-        # Wire root references for all document nodes
+        # Wire root references and parent references for all document nodes
         header.root = document_root
+        header.parent = document_root
         header.imports.root = document_root
+        header.imports.parent = header
         for item in header.imports.items:
             item.root = document_root
+            item.parent = header.imports
         header.usages.root = document_root
+        header.usages.parent = header
         for item in header.usages.items:
             item.root = document_root
+            item.parent = header.usages
             item.annotations.root = document_root
+            item.annotations.parent = item
         header.annotations.root = document_root
+        header.annotations.parent = header
 
         body.root = document_root
+        body.parent = document_root
         for entity in body.entities:
             entity.root = document_root
+            entity.parent = body
             entity.annotations.root = document_root
+            entity.annotations.parent = entity
             for prop in entity.properties:
                 prop.root = document_root
+                prop.parent = entity
                 prop.annotations.root = document_root
+                prop.annotations.parent = prop
             for method in entity.methods:
                 method.root = document_root
+                method.parent = entity
                 method.annotations.root = document_root
+                method.annotations.parent = method
         for routine in body.routines:
             routine.root = document_root
+            routine.parent = body
             routine.annotations.root = document_root
+            routine.annotations.parent = routine
 
         footer.root = document_root
+        footer.parent = document_root
 
         # Populate types dict: map type names to their nodes
         document_root.types = self._build_types_dict(body)
@@ -118,7 +136,8 @@ class Factory:
         annotations_text = data.get("Annotations", "")
         if annotations_text is None:
             annotations_text = ""
-        annotations_node = AnnotationsNode(text=str(annotations_text))
+        annotations_text = str(annotations_text)
+        annotations_node = AnnotationsNode(text=annotations_text, links=self._extract_links(annotations_text))
 
         # Collect imported type names
         types: list[str] = []
@@ -130,6 +149,7 @@ class Factory:
             usages=usages_node,
             annotations=annotations_node,
             types=types,
+            data=dict(data),
         )
 
     def _parse_imports(self, data: object, filepath: str) -> ImportsNode:
@@ -171,6 +191,7 @@ class Factory:
                         type_name={type_name},
                         from_path=str(from_path),
                         alias=alias,
+                        data=dict(entry),
                     )
                 )
 
@@ -193,6 +214,7 @@ class Factory:
                 UsageItemNode(
                     name=str(name),
                     annotations=annotations,
+                    data={str(name): value},
                 )
             )
 
@@ -201,10 +223,10 @@ class Factory:
     def _build_usage_annotations(self, value: str) -> AnnotationsNode:
         """Build an AnnotationsNode for a usage entry based on its value type."""
         if value.startswith("http://") or value.startswith("https://"):
-            return AnnotationsNode(url=value)
+            return AnnotationsNode(url=value, links=self._extract_links(value))
         if value.endswith(".md"):
-            return AnnotationsNode(filepath=value)
-        return AnnotationsNode(text=value)
+            return AnnotationsNode(filepath=value, links=self._extract_links(value))
+        return AnnotationsNode(text=value, links=self._extract_links(value))
 
     def _parse_body(self, data: dict) -> BodyNode:
         """Parse the body section (Section 2) of the CODEMANIFEST."""
@@ -217,11 +239,13 @@ class Factory:
             if isinstance(value, str):
                 # Plain string value -> RoutineTypeNode
                 name, signature = self._split_name_and_signature(key)
+                value_text = str(value)
                 routines.append(
                     RoutineTypeNode(
                         name=name,
                         signature=signature,
-                        annotations=AnnotationsNode(text=str(value)),
+                        annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
+                        data={key: value},
                     )
                 )
             elif isinstance(value, dict):
@@ -240,16 +264,21 @@ class Factory:
                     annotations_text = value.get("annotations", "")
                     if annotations_text is None:
                         annotations_text = ""
+                    annotations_text = str(annotations_text)
                     routines.append(
                         RoutineTypeNode(
                             name=name,
                             signature=signature,
                             location=location,
-                            annotations=AnnotationsNode(text=str(annotations_text)),
+                            annotations=AnnotationsNode(
+                                text=annotations_text,
+                                links=self._extract_links(annotations_text),
+                            ),
+                            data=dict(value),
                         )
                     )
 
-        return BodyNode(entities=entities, routines=routines)
+        return BodyNode(entities=entities, routines=routines, data=dict(data))
 
     def _parse_entity(self, key: str, value: dict) -> EntityTypeNode:
         """Parse a single entity type declaration from the body."""
@@ -267,6 +296,7 @@ class Factory:
         annotations_text = value.get("annotations", "")
         if annotations_text is None:
             annotations_text = ""
+        annotations_text = str(annotations_text)
 
         # Parse properties
         properties = self._parse_properties(value.get("properties"))
@@ -278,11 +308,12 @@ class Factory:
             name=actual_name,
             signature=signature,
             location=location,
-            annotations=AnnotationsNode(text=str(annotations_text)),
+            annotations=AnnotationsNode(text=annotations_text, links=self._extract_links(annotations_text)),
             properties=properties,
             methods=methods,
             embedded=embedded,
             mutations=mutations,
+            data=dict(value),
         )
 
     def _parse_properties(self, data: object) -> list[PropertyNode]:
@@ -306,7 +337,8 @@ class Factory:
                 PropertyNode(
                     name=name.strip(),
                     type=type_str.strip(),
-                    annotations=AnnotationsNode(text=value_text),
+                    annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
+                    data={prop_key: prop_value},
                 )
             )
 
@@ -327,7 +359,8 @@ class Factory:
                 MethodNode(
                     name=name,
                     signature=signature,
-                    annotations=AnnotationsNode(text=value_text),
+                    annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
+                    data={method_key: method_value},
                 )
             )
 
@@ -351,6 +384,7 @@ class Factory:
             architector=str(architector) if architector is not None else "",
             created_at=str(created_at) if created_at is not None else "",
             description=str(description) if description is not None else "",
+            data=dict(data),
         )
 
     def _split_name_and_signature(self, key: str) -> tuple[str, str]:
@@ -388,6 +422,14 @@ class Factory:
             return location
         # Bare filename: prepend self._path
         return os.path.join(self._path, location)
+
+    @staticmethod
+    def _extract_links(text: str) -> list[str]:
+        """Extract backtick-enclosed link names from annotation text.
+
+        Returns a list of all names found inside backtick pairs (`name`).
+        """
+        return re.findall(r"`([^`]+)`", text)
 
     def _build_types_dict(self, body: BodyNode) -> dict[str, list]:
         """Build the types mapping from the body node."""

@@ -58,7 +58,7 @@ class TestVisitorAnalyze:
         assert errors == []
 
     def test_analyze_with_failing_rule_returns_errors(self):
-        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[])))
+        root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
         visitor = Visitor(document=root)
         rule = ImportsCanNotBeEmptyRule()
         errors = visitor.analyze(rules=[rule])
@@ -67,7 +67,7 @@ class TestVisitorAnalyze:
         assert errors[0].rule == "imports_can_not_be_empty"
 
     def test_analyze_with_multiple_rules_aggregates_errors(self):
-        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[])))
+        root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
         visitor = Visitor(document=root)
 
         class AlwaysFailRule(DocumentRule):

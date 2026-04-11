@@ -10,7 +10,7 @@ Imports:
       - ImportItemNode
     From: goga/codemanifest/nodes
   - Types:
-      - CodemanifestRuleError
+      - ManifestRuleError
     From: goga/codemanifest/errors
 
 Usages:
@@ -35,7 +35,7 @@ Annotations: |
     name -> str: |
       Имя с которым было создано правило
   methods:
-    "check(node: DocumentNode) -> errors:list[CodemanifestRuleError]": |
+    "check(node: DocumentNode) -> errors:list[ManifestRuleError]": |
       Проверяет ноду на соответствие правилу
 
       `node`: нода которую необходимо проверить
@@ -47,6 +47,7 @@ Annotations: |
     Проверяет `ImportsNode`.
 
     Правило - список импортов не может быть пустым.
+    Правило применяется только в том случаи если импорт декларирован в документе.
 
 "DocumentRule::ImportHasTypeRule(name: str = 'import_has_type')":
   location: document.py
@@ -80,7 +81,7 @@ Annotations: |
     tree -> list[DocumentRoot]: |
       Дерево документов с которым было создано правило
   methods:
-    "check(document: DocumentRoot) -> errors:list[CodemanifestRuleError]": |
+    "check(document: DocumentRoot) -> errors:list[ManifestRuleError]": |
       Проверяет документ на соответствие правилу
 
       `document`: документ который необходимо проверить

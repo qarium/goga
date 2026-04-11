@@ -83,13 +83,77 @@ class TestImportsCanNotBeEmptyRule:
         assert errors == []
 
     def test_negative_empty_imports_returns_error(self):
-        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[])))
+        root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
         node = DocumentNode(root=root)
         rule = ImportsCanNotBeEmptyRule()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
+
+
+# ---------------------------------------------------------------------------
+# 3b. ImportsCanNotBeEmptyRule — conditional behavior
+# ---------------------------------------------------------------------------
+
+
+class TestImportsCanNotBeEmptyRuleConditional:
+    """Tests for conditional check: rule only applies when Imports is declared in data."""
+
+    def test_positive_declared_imports_with_non_empty_items_no_errors(self):
+        """Manifest with declared Imports and non-empty items produces no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                data={"Imports": [{"Foo": {"from": "bar"}}]},
+                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]),
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmptyRule()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_declared_imports_with_empty_items_returns_error(self):
+        """Manifest with declared Imports but empty items returns an error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                data={"Imports": []},
+                imports=ImportsNode(items=[]),
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmptyRule()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert errors[0].rule == "imports_can_not_be_empty"
+
+    def test_positive_no_imports_key_in_data_no_errors(self):
+        """Manifest without Imports key in data — rule is skipped, no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                data={},
+                imports=ImportsNode(items=[]),
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmptyRule()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_only_usages_and_annotations_no_errors(self):
+        """Manifest with only Usages and Annotations but no Imports — no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                data={"Usages": {"nodes": {}}, "Annotations": "some annotation"},
+                usages=UsagesNode(items=[UsageItemNode(name="nodes")]),
+                annotations=AnnotationsNode(root=None),
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmptyRule()
+        errors = rule.check(node)
+        assert errors == []
 
 
 # ---------------------------------------------------------------------------
