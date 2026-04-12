@@ -166,8 +166,8 @@ DocumentNode::PropertyNode():
 DocumentNode::FooterNode:
   location: footer.py
   properties:
-    architector -> str: |
-      Имя, фамилия архитектора
+    author -> str: |
+      Имя автора
     created_at -> str: |
       Дата создания документа
     description -> str: |
@@ -175,7 +175,7 @@ DocumentNode::FooterNode:
 
 ---
 
-Architector: Mikhail Trifonov
+Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |

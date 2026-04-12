@@ -52,11 +52,8 @@ class ManifestRuleError(BaseCodemanifestError):
         path = os.path.dirname(self._document.path)
         return (
             f"Error: {self.message}\n"
-            f"      * Rule: {self._rule}\n"
-            f"      * Path: {path}\n"
-            f"      * Node:\n"
-            f"        {repr(self._node)}"
+            f"Rule: {self._rule}\n"
+            f"Path: {path}\n"
+            f"Node:\n"
+            f"  {str(self._node.data)}"
         )
-
-
-CodemanifestRuleError = ManifestRuleError

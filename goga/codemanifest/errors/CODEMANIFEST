@@ -28,7 +28,7 @@ Annotations: |
     message -> str: |
       Сообщение с которым была создана ошибка
 
-"BaseCodemanifestException::ManifestParseError(message: str, filepath: str)":
+"BaseCodemanifestError::ManifestParseError(message: str, filepath: str)":
   location: manifest.py
   annotations: |
     Ошибка при парсинге манифеста
@@ -39,7 +39,7 @@ Annotations: |
     filepath -> str: |
       Путь к файлу с которым была создана ошибка
 
-"BaseCodemanifestException::ManifestRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
+"BaseCodemanifestError::ManifestRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
   location: manifest.py
   annotations: |
     Ошибка при не соблюдении правила
@@ -53,10 +53,10 @@ Annotations: |
     - Ошибка должна приводиться к строке по формату
       ```
       Error: <message>
-        * Rule: <rule>
-        * Path: <document path without filename>
-        * Node:
-          <beautiful node data>
+      Rule: <rule>
+      Path: <document path without filename>
+      Node:
+        <beautiful node data>
       ```
   properties:
     rule -> str: |
@@ -66,7 +66,7 @@ Annotations: |
     node -> DocumentNode: |
       Нода с которой была создана ошибка
 
-"BaseCodemanifestException::ProjectRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
+"BaseCodemanifestError::ProjectRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
   location: project.py
   annotations: |
     Ошибка при не соблюдении правила
@@ -80,10 +80,10 @@ Annotations: |
     - Ошибка должна приводиться к строке по формату
       ```
       Error: <message>
-        * Rule: <rule>
-        * Path: <document path without filename if document exists>
-        * Node:
-          <beautiful node data if node exists>
+      Rule: <rule>
+      Path: <document path without filename if document exists>
+      Node:
+        <beautiful node data if node exists>
       ```
   properties:
     rule -> str: |
@@ -95,7 +95,7 @@ Annotations: |
 
 ---
 
-Architector: Mikhail Trifonov
+Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |

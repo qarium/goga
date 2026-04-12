@@ -37,12 +37,14 @@ class ProjectRuleError(BaseCodemanifestError):
         return self._node
 
     def __str__(self) -> str:
-        lines = [f"Error: {self.message}"]
-        lines.append(f"      * Rule: {self._rule}")
+        lines = [f"Error: {self.message}", f"Rule: {self._rule}"]
+
         if self._document is not None:
             path = os.path.dirname(self._document.path)
-            lines.append(f"      * Path: {path}")
+            lines.append(f"Path: {path}")
+
         if self._node is not None:
-            lines.append("      * Node:")
-            lines.append(f"        {repr(self._node)}")
+            lines.append("Node:")
+            lines.append(f"  {str(self._node.data)}")
+
         return "\n".join(lines)

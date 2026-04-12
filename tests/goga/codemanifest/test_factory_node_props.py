@@ -64,7 +64,7 @@ Annotations: |
     Uses `MethodNode` internally.
 
 ---
-Architector: Test Author
+Author: Test Author
 CreatedAt: 11/04/26
 Description: |
   Test manifest description
@@ -219,10 +219,10 @@ class TestDataFooterNode:
 
         footer = root.footer
         assert isinstance(footer.data, dict)
-        assert "Architector" in footer.data
+        assert "Author" in footer.data
         assert "CreatedAt" in footer.data
         assert "Description" in footer.data
-        assert footer.data["Architector"] == "Test Author"
+        assert footer.data["Author"] == "Test Author"
 
 
 # ---------------------------------------------------------------------------
@@ -428,12 +428,40 @@ class TestExtractLinks:
         result = Factory._extract_links("calls `Factory.create()` internally")
         assert result == ["Factory.create()"]
 
-    def test_adjacent_backtick_pairs(self) -> None:
-        result = Factory._extract_links("`a``b`")
-        assert result == ["a", "b"]
-
     def test_unclosed_backtick_ignored(self) -> None:
         result = Factory._extract_links("see `unclosed link text")
+        assert result == []
+
+    def test_triple_backtick_block_not_matched(self) -> None:
+        result = Factory._extract_links("```\ncode\n```")
+        assert result == []
+
+    def test_double_backtick_not_matched(self) -> None:
+        result = Factory._extract_links("``notalink``")
+        assert result == []
+
+    def test_four_backtick_not_matched(self) -> None:
+        result = Factory._extract_links("````notalink````")
+        assert result == []
+
+    def test_link_after_triple_backtick_block(self) -> None:
+        result = Factory._extract_links("```\nError: msg\n``` see `MyType`")
+        assert result == ["MyType"]
+
+    def test_multiline_content_inside_single_backtick_not_matched(self) -> None:
+        result = Factory._extract_links("`line1\nline2`")
+        assert result == []
+
+    def test_adjacent_with_text_between(self) -> None:
+        result = Factory._extract_links("`a` and `b`")
+        assert result == ["a", "b"]
+
+    def test_five_backtick_not_matched(self) -> None:
+        result = Factory._extract_links("`````notalink`````")
+        assert result == []
+
+    def test_triple_backtick_with_single_inside(self) -> None:
+        result = Factory._extract_links("```foo `bar` baz```")
         assert result == []
 
 

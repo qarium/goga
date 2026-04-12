@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING
 
 from goga.codemanifest.errors import ProjectRuleError
@@ -66,48 +67,64 @@ class ImportsHasNotCyclicalDepsRule(ProjectRule):
         return errors
 
 
-class AllUsagesIsUsed(ProjectRule):
-    """Rule: every usage declared in the header must appear in at least one annotation."""
+class EmbeddedTypeHasLowLevel(ProjectRule):
+    """Rule: embedded types must be defined in documents lower in the file hierarchy."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
-        super().__init__(tree=tree, name="all_usages_is_used")
+        super().__init__(tree=tree, name="embedded_type_has_low_level")
 
     def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
-        usage_names = [item.name for item in document.header.usages.items]
-
-        if not usage_names:
-            return []
-
-        # Collect all annotation texts from the document
-        annotation_texts: list[str] = []
-
-        # Header annotations
-        annotation_texts.append(document.header.annotations.text)
-
-        # Body entity annotations
-        for entity in document.body.entities:
-            annotation_texts.append(entity.annotations.text)
-            for method in entity.methods:
-                annotation_texts.append(method.annotations.text)
-            for prop in entity.properties:
-                annotation_texts.append(prop.annotations.text)
-
-        # Body routine annotations
-        for routine in document.body.routines:
-            annotation_texts.append(routine.annotations.text)
-
-        combined_text = " ".join(annotation_texts)
-
         errors: list[ProjectRuleError] = []
-        for usage_name in usage_names:
-            if usage_name not in combined_text:
-                errors.append(
-                    ProjectRuleError(
-                        message=f"Usage '{usage_name}' is declared but not used in any annotation",
-                        rule=self.name,
-                        document=document,
-                        node=None,
+        current_path = os.path.normpath(document.path)
+
+        # Collect all embedded entities and routines from the document body
+        embedded_entities = [e for e in document.body.entities if e.embedded]
+        embedded_routines = [r for r in document.body.routines if r.embedded]
+
+        # Build a lookup: type name -> document that defines it
+        type_source: dict[str, DocumentRoot] = {}
+        for doc in self._tree:
+            for entity in doc.body.entities:
+                if not entity.embedded:
+                    type_source[entity.name] = doc
+            for routine in doc.body.routines:
+                if not routine.embedded:
+                    type_source[routine.name] = doc
+
+        for entity in embedded_entities:
+            source_doc = type_source.get(entity.name)
+            if source_doc is not None:
+                source_path = os.path.normpath(source_doc.path)
+                if not source_path.startswith(current_path + os.sep):
+                    errors.append(
+                        ProjectRuleError(
+                            message=(
+                                f"Embedded entity '{entity.name}' is defined in "
+                                f"'{source_path}', which is not a subdirectory of "
+                                f"'{current_path}'"
+                            ),
+                            rule=self.name,
+                            document=document,
+                            node=entity,
+                        )
                     )
-                )
+
+        for routine in embedded_routines:
+            source_doc = type_source.get(routine.name)
+            if source_doc is not None:
+                source_path = os.path.normpath(source_doc.path)
+                if not source_path.startswith(current_path + os.sep):
+                    errors.append(
+                        ProjectRuleError(
+                            message=(
+                                f"Embedded routine '{routine.name}' is defined in "
+                                f"'{source_path}', which is not a subdirectory of "
+                                f"'{current_path}'"
+                            ),
+                            rule=self.name,
+                            document=document,
+                            node=routine,
+                        )
+                    )
 
         return errors

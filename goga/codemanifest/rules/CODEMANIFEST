@@ -8,6 +8,15 @@ Imports:
       - DocumentNode
       - ImportsNode
       - ImportItemNode
+      - AnnotationsNode
+      - HeaderNode
+      - UsagesNode
+      - UsageItemNode
+      - BodyNode
+      - RoutineTypeNode
+      - EntityTypeNode
+      - MethodNode
+      - PropertyNode
     From: goga/codemanifest/nodes
   - Types:
       - ManifestRuleError
@@ -23,7 +32,9 @@ Annotations: |
 
 ---
 
-# Правила на уровне документа
+# *************************** #
+# Правила на уровне документа #
+# *************************** #
 
 "DocumentRule(name: str)":
   location: document.py
@@ -46,15 +57,19 @@ Annotations: |
   annotations: |
     Проверяет `ImportsNode`.
 
-    Правило - список импортов не может быть пустым.
-    Правило применяется только в том случаи если импорт декларирован в документе.
+    Правила:
+    - список импортов не может быть пустым
+
+    Требования:
+    - Правило применяется только в том случаи если импорт декларирован в документе
 
 "DocumentRule::ImportHasTypeRule(name: str = 'import_has_type')":
   location: document.py
   annotations: |
     Проверяет `ImportItemNode`.
 
-    Правило - импорт содержит подключаемый тип.
+    Правила:
+    - импорт содержит подключаемый тип
 
 "DocumentRule::ImportHasValidFromPathRule(name: str = 'import_has_valid_from_path')":
   location: document.py
@@ -66,7 +81,115 @@ Annotations: |
     - путь существует на файловой системе
     - путь не выходит на пределы CWD
 
-# Правила на уровне всех документов
+"DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - все имена типов должны быть уникальны в рамках всех подключаемых документов
+
+"DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
+  location: document.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все декларированные usages используются в `AnnotationsNode` документа в нодах:
+      - `HeaderNode`
+      - `UsageItemNode`
+      - `RoutineTypeNode`
+      - `EntityTypeNode`
+      - `MethodNode`
+      - `PropertyNode`
+
+    Требования:
+      - ссылка на имя практики должна использоваться хотя бы в одной `AnnotationsNode`
+
+"DocumentRule::AnnotationLinksExists(name: str = 'annotation_links_exists')":
+  location: document.py
+  annotations: |
+    Проверяет ссылки на существование в `AnnotationsNode` для нод:
+    - `HeaderNode`
+    - `UsageItemNode`
+    - `RoutineTypeNode`
+    - `EntityTypeNode`
+    - `MethodNode`
+    - `PropertyNode`
+
+    Одно из правил должно соблюдаться:
+    - Ссылка существует импортах `HeaderNode` в качестве type или alias
+    - Ссылка существует в usages `HeaderNode` в качестве name
+    - Ссылка существует в `BodyNode` в качестве имени entity или routine
+
+    Дополнительные правила:
+    - В `EntityTypeNode`, `RoutineTypeNode`, `MethodNode` ссылка может существовать в сигнатуре
+
+    Требования:
+    - Поиск ссылки в сигнатуре как поиск целого слова, где разделителями могут быть пробелы
+      или пунктуация (например, :), но не символы _ и -. В терминах регулярных выражений это
+      поиск подстроки, которая не окружена символами [\w-], то есть проверка должна падать
+      на param_ или param-, но проходить на param:
+
+"DocumentRule::UsageLinksHasNotConflicts(name: str = 'usage_links_has_not_conflicts')":
+  location: document.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все имена usage items не имеют пересечений с именами подключаемых типов
+      (конфликт может быть решен через alias для типа)
+    - все имена usage items не имеют пересечений с именами entity и routine
+
+"DocumentRule::EntitiesAndRoutinesHasNotConflicts(name: str = 'entities_and_routines_has_not_conflicts')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - все имена entities и routines не имеют пересечений с именами подключаемых типов в `ImportsNode`
+      (конфликт может быть решен через alias для типа)
+
+"DocumentRule::MutationExists(name: str = 'mutation_exists')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Одно из правил должно совпасть:
+    - все мутации существуют среди имен entities
+    - все мутации существуют среди имен routines
+    - все мутации существуют среди типов в items `ImportsNode`
+
+"DocumentRule::MutationIsValid(name: str = 'mutation_is_valid')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - имена мутаций не совпадают с именем entity
+
+"DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - возвращаемый тип в сигнатуре имеет ссылку, правильно -> link:Type, не правильно -> Type
+
+    Требования:
+    - сигнатура может ничего не возвращать на выходе - это валидная ситуация
+
+"DocumentRule::EmbeddedEntityCanNotHasMutations(name: str = 'embedded_entity_can_not_has_mutations')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - embedded сущность не может иметь мутации
+
+# ********************************* #
+# Правила на уровне всех документов #
+# ********************************* #
 
 "ProjectRule(tree: list[DocumentRoot], name: str)":
   location: project.py
@@ -95,20 +218,25 @@ Annotations: |
     Если в документе есть импорт из пути и в документе по этому
     пути тоже есть импорт из текущего документа - это является ошибкой.
 
-"ProjectRule::AllUsagesIsUsed(tree: list[DocumentRoot], name: str = 'all_usages_is_used')":
+    Дополнительные требования:
+    - Алгоритм поиска документа из которого происходит импорт при проверке должен иметь алгоритмическую сложность O(1)
+
+"ProjectRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
   location: project.py
   annotations: |
-    Правило - все usages декларированные в header используются в аннотациях документа.
+    Правило - все embedded типы располагаются ниже в иерархии файловой системы.
 
-    Ссылка на имя практики должно использоваться хотя бы в одной аннотации документа:
-    - в заголовке
-    - в сущности
-    - в методе
-    - в свойстве
+    Примеры:
+    - В данном примере level-1 может встраивать level-2, а level-2 не может встраивать level-1
+      root/
+      ├── level-1/
+      │   ├── level-2/
+      │   │   ├── CODEMANIFEST
+      │   └── CODEMANIFEST
 
 ---
 
-Architector: Mikhail Trifonov
+Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |

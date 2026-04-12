@@ -77,7 +77,7 @@ Annotations: |
   A helper routine annotation
 
 ---
-Architector: Test Author
+Author: Test Author
 CreatedAt: 11/04/26
 Description: |
   Test manifest description
@@ -290,10 +290,10 @@ class TestBasicParsingFooter:
         root = Factory(pkg).create()
         assert isinstance(root.footer, FooterNode)
 
-    def test_footer_architector(self, tmp_path) -> None:
+    def test_footer_author(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        assert root.footer.architector == "Test Author"
+        assert root.footer.author == "Test Author"
 
     def test_footer_created_at(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
@@ -422,7 +422,7 @@ Imports:
         entity = root.body.entities[0]
         assert entity.name == "SomeRule"
         assert entity.mutations == ["DocumentRule"]
-        assert entity.embedded is True
+        assert entity.embedded is False
         assert entity.properties == []
         assert entity.methods == []
 
@@ -626,7 +626,7 @@ class TestDeepHierarchy:
   properties:
     "name -> str": root name
 ---
-Architector: L1
+Author: L1
 """,
         )
         _write_codemanifest(
@@ -638,7 +638,7 @@ Architector: L1
   properties:
     "val -> int": child val
 ---
-Architector: L2
+Author: L2
 """,
         )
         _write_codemanifest(
@@ -650,7 +650,7 @@ Architector: L2
   properties:
     "flag -> bool": leaf flag
 ---
-Architector: L3
+Author: L3
 """,
         )
 
@@ -781,7 +781,7 @@ class TestAllNodePropertiesPopulated:
     def test_footer_all_fields(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        assert root.footer.architector == "Test Author"
+        assert root.footer.author == "Test Author"
         assert root.footer.created_at == "11/04/26"
         assert "Test manifest description" in root.footer.description
 
@@ -832,7 +832,7 @@ class TestNonDictSections:
         yaml_content = "---\n---\njust a string\n"
         pkg = _write_codemanifest(str(tmp_path / "str_footer"), yaml_content)
         root = Factory(pkg).create()
-        assert root.footer.architector == ""
+        assert root.footer.author == ""
         assert root.footer.created_at == ""
 
 
@@ -991,3 +991,129 @@ Imports: not_a_list
         pkg = _write_codemanifest(str(tmp_path / "import_str"), yaml_content)
         with pytest.raises(ManifestParseError, match="Imports must be a list"):
             Factory(pkg).create()
+
+
+# ---------------------------------------------------------------------------
+# 11b. Embedded types via -> prefix
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddedEntityType:
+    """Embedded type via -> prefix creates EntityTypeNode with embedded=True."""
+
+    def test_embedded_entity_empty_dict(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - Entity
+    From: some/folder
+
+---
+"->Entity": {}
+"""
+        pkg = _write_codemanifest(str(tmp_path / "embedded_entity"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.body.entities) == 1
+        assert len(root.body.routines) == 0
+        entity = root.body.entities[0]
+        assert entity.name == "Entity"
+        assert entity.embedded is True
+        assert entity.mutations == []
+
+    def test_embedded_entity_with_methods(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - Service
+    From: some/folder
+
+---
+"->Service":
+  location: service.py
+  annotations: |
+    Embedded service
+  methods:
+    "run() -> void:null": |
+      Runs the service
+"""
+        pkg = _write_codemanifest(str(tmp_path / "embedded_service"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.body.entities) == 1
+        entity = root.body.entities[0]
+        assert entity.name == "Service"
+        assert entity.embedded is True
+        assert entity.mutations == []
+        assert len(entity.methods) == 1
+
+
+class TestEmbeddedRoutineType:
+    """Embedded routine via -> prefix creates RoutineTypeNode with embedded=True."""
+
+    def test_embedded_routine_string_value(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - helper
+    From: some/folder
+
+---
+"->helper(x: int) -> result:int": |
+  An embedded helper function
+"""
+        pkg = _write_codemanifest(str(tmp_path / "embedded_routine"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.body.routines) == 1
+        assert len(root.body.entities) == 0
+        routine = root.body.routines[0]
+        assert routine.name == "helper"
+        assert routine.embedded is True
+        assert routine.signature == "(x: int) -> result:int"
+
+    def test_embedded_routine_dict_value(self, tmp_path) -> None:
+        """Embedded type with -> prefix is always entity, even without properties/methods."""
+        yaml_content = """\
+Imports:
+  - Types:
+      - setup
+    From: some/folder
+
+---
+"->setup(cfg: str)":
+  location: setup.py
+  annotations: |
+    Embedded setup routine
+"""
+        pkg = _write_codemanifest(str(tmp_path / "embedded_dict_routine"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.body.entities) == 1
+        entity = root.body.entities[0]
+        assert entity.name == "setup"
+        assert entity.embedded is True
+
+
+class TestMutationDoesNotSetEmbedded:
+    """Mutation syntax (::) sets mutations but NOT embedded."""
+
+    def test_mutation_entity_not_embedded(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - BaseType
+    From: some/folder
+
+---
+"BaseType::Derived()":
+  location: derived.py
+  annotations: |
+    A derived type
+  methods:
+    "run() -> void:null": |
+      Runs
+"""
+        pkg = _write_codemanifest(str(tmp_path / "mutation_not_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.body.entities) == 1
+        entity = root.body.entities[0]
+        assert entity.name == "Derived"
+        assert entity.mutations == ["BaseType"]
+        assert entity.embedded is False

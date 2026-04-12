@@ -293,6 +293,6 @@ class TestFooterNode:
 
     def test_defaults(self) -> None:
         footer = FooterNode()
-        assert footer.architector == ""
+        assert footer.author == ""
         assert footer.created_at == ""
         assert footer.description == ""

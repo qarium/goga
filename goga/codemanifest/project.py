@@ -5,13 +5,22 @@ import os
 from goga.codemanifest.analyzer import Analyzer
 from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
 from goga.codemanifest.factory import Factory
-from goga.codemanifest.nodes import DocumentRoot
+from goga.codemanifest.nodes import DocumentRoot, EntityTypeNode, RoutineTypeNode
 from goga.codemanifest.rules import (
     AllUsagesIsUsed,
+    AnnotationLinksExists,
+    EmbeddedEntityCanNotHasMutations,
+    EmbeddedTypeHasLowLevel,
+    EntitiesAndRoutinesHasNotConflicts,
+    ImportHasNotDuplicate,
     ImportHasTypeRule,
     ImportHasValidFromPathRule,
     ImportsCanNotBeEmptyRule,
     ImportsHasNotCyclicalDepsRule,
+    MutationExists,
+    MutationIsValid,
+    ReturnTypeHasLink,
+    UsageLinksHasNotConflicts,
 )
 from goga.codemanifest.visitor import Visitor
 
@@ -86,14 +95,26 @@ class Project:
         # Build normalized path index for O(1) lookup
         self._index = {os.path.normpath(os.path.abspath(k)): v for k, v in loaded.items()}
 
+        # Deferred routing: reclassify embedded entities whose original type is a routine
+        all_documents = _flatten_tree(self._tree)
+        self._reclassify_embedded_types(all_documents)
+
         # Apply document-level rules via Visitor
         document_rules = [
             ImportsCanNotBeEmptyRule(),
             ImportHasTypeRule(),
             ImportHasValidFromPathRule(),
+            ImportHasNotDuplicate(),
+            AllUsagesIsUsed(),
+            AnnotationLinksExists(),
+            UsageLinksHasNotConflicts(),
+            EntitiesAndRoutinesHasNotConflicts(),
+            MutationExists(),
+            MutationIsValid(),
+            ReturnTypeHasLink(),
+            EmbeddedEntityCanNotHasMutations(),
         ]
 
-        all_documents = _flatten_tree(self._tree)
         for doc in all_documents:
             visitor = Visitor(doc)
             self._errors.extend(visitor.analyze(document_rules))
@@ -101,11 +122,51 @@ class Project:
         # Apply project-level rules via Analyzer
         project_rules = [
             ImportsHasNotCyclicalDepsRule(all_documents),
-            AllUsagesIsUsed(all_documents),
+            EmbeddedTypeHasLowLevel(all_documents),
         ]
 
         analyzer = Analyzer(all_documents)
         self._errors.extend(analyzer.analyze(project_rules))
+
+    @staticmethod
+    def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
+        """Reclassify embedded entities whose original type is a routine.
+
+        Factory creates all embedded types as EntityTypeNode. After all documents
+        are loaded, this method finds the original type definition and reclassifies
+        entities whose original is a routine into RoutineTypeNode.
+        """
+        # Build lookup: type name -> (is_routine, is_entity) from non-embedded definitions
+        routine_names: set[str] = set()
+        entity_names: set[str] = set()
+        for doc in all_documents:
+            for entity in doc.body.entities:
+                if not entity.embedded:
+                    entity_names.add(entity.name)
+            for routine in doc.body.routines:
+                if not routine.embedded:
+                    routine_names.add(routine.name)
+
+        for doc in all_documents:
+            to_remove: list[EntityTypeNode] = []
+            for entity in doc.body.entities:
+                if entity.embedded and entity.name in routine_names and entity.name not in entity_names:
+                    to_remove.append(entity)
+
+            for entity in to_remove:
+                doc.body.entities.remove(entity)
+                doc.body.routines.append(
+                    RoutineTypeNode(
+                        name=entity.name,
+                        signature=entity.signature,
+                        location=entity.location,
+                        annotations=entity.annotations,
+                        embedded=True,
+                        data=entity.data,
+                        parent=entity.parent,
+                        root=entity.root,
+                    )
+                )
 
     def codemanifest(self, path: str) -> DocumentRoot:
         """Look up a DocumentRoot by its directory path at O(1)."""

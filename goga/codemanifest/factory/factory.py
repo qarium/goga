@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from typing import Optional
 
 import yaml
@@ -24,7 +23,7 @@ from goga.codemanifest.nodes import (
 )
 
 _VALID_HEADER_KEYS = frozenset({"Imports", "Usages", "Annotations"})
-_VALID_FOOTER_KEYS = frozenset({"Architector", "CreatedAt", "Description"})
+_VALID_FOOTER_KEYS = frozenset({"Author", "CreatedAt", "Description"})
 
 
 class Factory:
@@ -239,11 +238,13 @@ class Factory:
             if isinstance(value, str):
                 # Plain string value -> RoutineTypeNode
                 name, signature = self._split_name_and_signature(key)
+                name, is_embedded = self._strip_embedded_prefix(name)
                 value_text = str(value)
                 routines.append(
                     RoutineTypeNode(
                         name=name,
                         signature=signature,
+                        embedded=is_embedded,
                         annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
                         data={key: value},
                     )
@@ -252,14 +253,16 @@ class Factory:
                 has_properties = "properties" in value
                 has_methods = "methods" in value
                 has_mutations_in_sig = "::" in key.split("(")[0]
+                has_embedded_prefix = key.startswith("->")
 
-                if has_properties or has_methods or has_mutations_in_sig:
+                if has_properties or has_methods or has_mutations_in_sig or has_embedded_prefix:
                     # EntityTypeNode
                     entity = self._parse_entity(key, value)
                     entities.append(entity)
                 else:
                     # RoutineTypeNode from dict (has location/annotations but no entity features)
                     name, signature = self._split_name_and_signature(key)
+                    name, is_embedded = self._strip_embedded_prefix(name)
                     location = self._resolve_location(value.get("location", ""))
                     annotations_text = value.get("annotations", "")
                     if annotations_text is None:
@@ -269,6 +272,7 @@ class Factory:
                         RoutineTypeNode(
                             name=name,
                             signature=signature,
+                            embedded=is_embedded,
                             location=location,
                             annotations=AnnotationsNode(
                                 text=annotations_text,
@@ -282,15 +286,18 @@ class Factory:
 
     def _parse_entity(self, key: str, value: dict) -> EntityTypeNode:
         """Parse a single entity type declaration from the body."""
+        # Strip -> prefix first (embedded indicator)
+        clean_key, is_embedded = self._strip_embedded_prefix(key)
+
         # Parse mutation chain from name
-        full_name_part = key.split("(")[0]
+        full_name_part = clean_key.split("(")[0]
         segments = full_name_part.split("::")
         actual_name = segments[-1]
         mutations = segments[:-1]
-        embedded = len(mutations) > 0
+        embedded = is_embedded
 
         # Extract signature (everything from the first '(' onwards)
-        _, signature = self._split_name_and_signature(key)
+        _, signature = self._split_name_and_signature(clean_key)
 
         location = self._resolve_location(value.get("location", ""))
         annotations_text = value.get("annotations", "")
@@ -376,12 +383,12 @@ class Factory:
                 filepath,
             )
 
-        architector = data.get("Architector", "")
+        author = data.get("Author", "")
         created_at = data.get("CreatedAt", "")
         description = data.get("Description", "")
 
         return FooterNode(
-            architector=str(architector) if architector is not None else "",
+            author=str(author) if author is not None else "",
             created_at=str(created_at) if created_at is not None else "",
             description=str(description) if description is not None else "",
             data=dict(data),
@@ -408,6 +415,13 @@ class Factory:
 
         return name, signature
 
+    @staticmethod
+    def _strip_embedded_prefix(name: str) -> tuple[str, bool]:
+        """Strip -> prefix and return (clean_name, is_embedded)."""
+        if name.startswith("->"):
+            return name[2:], True
+        return name, False
+
     def _resolve_location(self, location: str) -> str:
         """Resolve a location value to a path relative to CWD.
 
@@ -427,9 +441,62 @@ class Factory:
     def _extract_links(text: str) -> list[str]:
         """Extract backtick-enclosed link names from annotation text.
 
-        Returns a list of all names found inside backtick pairs (`name`).
+        Returns a list of all names found inside single backtick pairs (`name`).
+        Only matches exactly one backtick on each side — not ``..`` or ```..```.
+        Content inside multi-backtick blocks is excluded entirely.
         """
-        return re.findall(r"`([^`]+)`", text)
+        # Strip multi-backtick blocks first: from an opening run of 2+ backticks
+        # to the next run of equal or greater length.
+        cleaned: list[str] = []
+        i = 0
+        n = len(text)
+        while i < n:
+            if text[i] != "`":
+                cleaned.append(text[i])
+                i += 1
+                continue
+            # Count consecutive backticks
+            j = i
+            while j < n and text[j] == "`":
+                j += 1
+            run_len = j - i
+            if run_len == 1:
+                # Single backtick — keep as-is
+                cleaned.append("`")
+                i = j
+                continue
+            # Multi-backtick opening — find matching close
+            close = j
+            while close < n:
+                k = close
+                while k < n and text[k] == "`":
+                    k += 1
+                if k - close >= run_len:
+                    close = k
+                    break
+                close = k if k > close else close + 1
+            i = close
+            # (skip everything between opening and closing runs)
+
+        stripped = "".join(cleaned)
+
+        # Now find single-backtick pairs in the cleaned text
+        results: list[str] = []
+        i = 0
+        n = len(stripped)
+        while i < n:
+            if stripped[i] != "`":
+                i += 1
+                continue
+            # Single backtick — find closing
+            close = stripped.find("`", i + 1)
+            if close == -1:
+                break
+            content = stripped[i + 1 : close]
+            if "\n" not in content:
+                results.append(content)
+            i = close + 1
+        return results
 
     def _build_types_dict(self, body: BodyNode) -> dict[str, list]:
         """Build the types mapping from the body node."""

@@ -71,7 +71,7 @@ Imports:
       Does work
 
 ---
-Architector: Test
+Author: Test
 CreatedAt: 11/04/26
 Description: Test
 """
@@ -165,7 +165,7 @@ Imports: []
     A test class
 
 ---
-Architector: Test
+Author: Test
 CreatedAt: 11/04/26
 Description: Test
 """
@@ -215,14 +215,14 @@ Usages:
     A test class without referencing the usage
 
 ---
-Architector: Test
+Author: Test
 CreatedAt: 11/04/26
 Description: Test
 """
 
 
 class TestProjectRuleViolations:
-    def test_unused_usage_produces_project_rule_error(self, tmp_path):
+    def test_unused_usage_produces_manifest_rule_error(self, tmp_path):
         doc_dir = tmp_path / "unusedusage"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(UNUSED_USAGE_DOC)
@@ -230,8 +230,9 @@ class TestProjectRuleViolations:
         p = Project(str(doc_dir))
         p.load()
 
-        project_errors = [e for e in p.errors if isinstance(e, ProjectRuleError)]
-        assert len(project_errors) > 0
+        manifest_errors = [e for e in p.errors if isinstance(e, ManifestRuleError)]
+        usage_errors = [e for e in manifest_errors if e.rule == "all_usages_is_used"]
+        assert len(usage_errors) > 0
 
     def test_unused_usage_rule_name(self, tmp_path):
         doc_dir = tmp_path / "unusedusage"
@@ -241,7 +242,7 @@ class TestProjectRuleViolations:
         p = Project(str(doc_dir))
         p.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ProjectRuleError)]
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
         assert "all_usages_is_used" in rule_names
 
 
@@ -262,14 +263,14 @@ Usages:
     A test class
 
 ---
-Architector: Test
+Author: Test
 CreatedAt: 11/04/26
 Description: Test
 """
 
 
 class TestAccumulatedErrors:
-    def test_both_manifest_and_project_errors(self, tmp_path):
+    def test_both_manifest_rule_errors_from_different_rules(self, tmp_path):
         doc_dir = tmp_path / "accum"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_AND_UNUSED_USAGE_DOC)
@@ -278,12 +279,13 @@ class TestAccumulatedErrors:
         p.load()
 
         manifest_errors = [e for e in p.errors if isinstance(e, ManifestRuleError)]
-        project_errors = [e for e in p.errors if isinstance(e, ProjectRuleError)]
+        rule_names = {e.rule for e in manifest_errors}
 
-        assert len(manifest_errors) > 0, "Expected at least one ManifestRuleError"
-        assert len(project_errors) > 0, "Expected at least one ProjectRuleError"
+        assert len(manifest_errors) >= 2, "Expected at least two ManifestRuleError"
+        assert "imports_can_not_be_empty" in rule_names
+        assert "all_usages_is_used" in rule_names
 
-    def test_errors_contains_both_types(self, tmp_path):
+    def test_errors_are_all_manifest_rule_errors(self, tmp_path):
         doc_dir = tmp_path / "accum2"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_AND_UNUSED_USAGE_DOC)
@@ -291,9 +293,9 @@ class TestAccumulatedErrors:
         p = Project(str(doc_dir))
         p.load()
 
-        types_set = {type(e) for e in p.errors}
-        assert ManifestRuleError in types_set
-        assert ProjectRuleError in types_set
+        # Both errors are now ManifestRuleError
+        for e in p.errors:
+            assert isinstance(e, ManifestRuleError)
 
 
 # ---------------------------------------------------------------------------
@@ -517,3 +519,428 @@ class TestCodemanifestLookup:
 
         doc_new = p.codemanifest(str(new_dir))
         assert doc_new.path == os.path.normpath(os.path.abspath(str(new_dir)))
+
+
+# ---------------------------------------------------------------------------
+# 11. load() detects ImportHasNotDuplicate violations
+# ---------------------------------------------------------------------------
+
+
+DUPLICATE_IMPORT_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+  - Types:
+      - Node
+    From: goga/codemanifest/other
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    A test class
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestImportHasNotDuplicateViolation:
+    def test_duplicate_import_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "dupimport"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(DUPLICATE_IMPORT_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "import_has_not_duplicate" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 12. load() detects AnnotationLinksExists violations
+# ---------------------------------------------------------------------------
+
+
+BROKEN_LINK_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    Uses `NonExistent` link
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestAnnotationLinksExistsViolation:
+    def test_broken_annotation_link_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "brokenlink"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(BROKEN_LINK_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "annotation_links_exists" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 13. load() detects UsageLinksHasNotConflicts violations
+# ---------------------------------------------------------------------------
+
+
+USAGE_CONFLICT_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+Usages:
+  Node: some value
+
+---
+"MyClass()":
+  location: myclass.py
+  annotations: |
+    Uses `Node`
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestUsageLinksHasNotConflictsViolation:
+    def test_usage_conflicts_with_import_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "usageconflict"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(USAGE_CONFLICT_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "usage_links_has_not_conflicts" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 14. load() detects EntitiesAndRoutinesHasNotConflicts violations
+# ---------------------------------------------------------------------------
+
+
+ENTITY_CONFLICT_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"Node()":
+  location: node.py
+  annotations: |
+    Conflicts with import
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestEntitiesAndRoutinesHasNotConflictsViolation:
+    def test_entity_name_conflicts_with_import_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "entityconflict"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(ENTITY_CONFLICT_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "entities_and_routines_has_not_conflicts" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 15. load() detects MutationExists violations
+# ---------------------------------------------------------------------------
+
+
+INVALID_MUTATION_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"FakeMutation::MyClass()":
+  location: myclass.py
+  annotations: |
+    Has a non-existent mutation
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestMutationExistsViolation:
+    def test_nonexistent_mutation_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "badmutation"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(INVALID_MUTATION_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "mutation_exists" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 16. load() detects MutationIsValid violations
+# ---------------------------------------------------------------------------
+
+
+SELF_MUTATION_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyClass::MyClass()":
+  location: myclass.py
+  annotations: |
+    Self-mutation is invalid
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestMutationIsValidViolation:
+    def test_self_mutation_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "selfmutation"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(SELF_MUTATION_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "mutation_is_valid" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 17. load() detects ReturnTypeHasLink violations
+# ---------------------------------------------------------------------------
+
+
+MISSING_RETURN_LABEL_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"do_work() -> str":
+  location: work.py
+  annotations: |
+    Missing label on return type
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestReturnTypeHasLinkViolation:
+    def test_missing_return_label_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "noreturnlabel"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(MISSING_RETURN_LABEL_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "return_type_has_link" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 18. load() detects EmbeddedEntityCanNotHasMutations violations
+# ---------------------------------------------------------------------------
+
+
+EMBEDDED_WITH_MUTATION_DOC = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"->MutA::EmbeddedClass()":
+  location: embedded.py
+  annotations: |
+    Embedded entity with mutation
+  methods:
+    "do_work() -> result:str": |
+      Does work
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+
+
+class TestEmbeddedEntityCanNotHasMutationsViolation:
+    def test_embedded_with_mutation_produces_manifest_rule_error(self, tmp_path):
+        doc_dir = tmp_path / "embeddedmut"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(EMBEDDED_WITH_MUTATION_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        assert "embedded_entity_can_not_has_mutations" in rule_names
+
+
+# ---------------------------------------------------------------------------
+# 19. Deferred routing: embedded type reclassified by original definition
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddedReclassification:
+    """Embedded types are reclassified based on the original type definition."""
+
+    def test_embedded_routine_reclassified_from_entity(self, tmp_path):
+        """->MyRoutine pointing to a routine gets reclassified from entity to routine."""
+        from goga.codemanifest.nodes import RoutineTypeNode, EntityTypeNode
+
+        # Parent doc defines a routine
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"helper(x: int) -> result:int": |
+  A helper routine
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        # Child doc embeds the routine via -> prefix
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - helper
+    From: ..
+
+---
+"->helper": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        # Find the child document
+        child_root = p.codemanifest(str(child_dir))
+
+        # helper should be reclassified as a routine, not entity
+        entity_names = [e.name for e in child_root.body.entities]
+        routine_names = [r.name for r in child_root.body.routines]
+        assert "helper" not in entity_names
+        assert "helper" in routine_names
+        routine = [r for r in child_root.body.routines if r.name == "helper"][0]
+        assert routine.embedded is True
+
+    def test_embedded_entity_stays_entity(self, tmp_path):
+        """->MyEntity pointing to an entity stays as entity."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyEntity":
+  location: entity.py
+  annotations: |
+    An entity
+  methods:
+    "run() -> void:null": |
+      Runs
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - MyEntity
+    From: ..
+
+---
+"->MyEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        # MyEntity should remain as entity
+        entity_names = [e.name for e in child_root.body.entities]
+        assert "MyEntity" in entity_names
+        entity = [e for e in child_root.body.entities if e.name == "MyEntity"][0]
+        assert entity.embedded is True

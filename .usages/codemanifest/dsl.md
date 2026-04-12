@@ -310,7 +310,7 @@ DSL не фиксирует форму реализации - только ож�
 Нижний колонтитул не является обязательным и описывает метаданные манифеста
 
 ```yaml
-Architector: FirstName SecondName 
+Author: FirstName SecondName 
 CreatedAt: day/month/year
 
 Description: |
@@ -318,7 +318,7 @@ Description: |
 ```
 
 Поля:
-- `Architector`: имя, фамилия архитектора интерфейса
+- `Author`: имя, фамилия автора манифеста
 - `CreatedAt`: дата создания манифеста
 - `Description`: описание манифеста
 
