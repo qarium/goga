@@ -38,10 +38,10 @@ Usages:
     Использовать манифест goga/codemanifest/visitor и его API для анализа одного документа
   analyzer: |
     Использовать манифест goga/codemanifest/analyzer и его API для анализа всего дерева документов
+  conventions: .usages/development/conventions.md
 
 Annotations: |
-  Соглашения:
-    * Код должен быть совместим с python версии 3.10 и выше
+  При написании кода использовать практику `conventions` для общих соглашений.
 
 ---
 
@@ -52,23 +52,7 @@ Annotations: |
 
     `path`: путь из которого необходимо загрузить дерево
 
-    Список правил для проверки документа:
-    - `ImportsCanNotBeEmptyRule`
-    - `ImportHasTypeRule`
-    - `ImportHasValidFromPathRule`
-    - `ImportHasNotDuplicate`
-    - `AllUsagesIsUsed`
-    - `AnnotationLinksExists`
-    - `UsageLinksHasNotConflicts`
-    - `EntitiesAndRoutinesHasNotConflicts`
-    - `MutationExists`
-    - `MutationIsValid`
-    - `ReturnTypeHasLink`
-    - `EmbeddedEntityCanNotHasMutations`
-
-    Список правил для проверки проекта:
-    - `ImportsHasNotCyclicalDepsRule`
-    - `EmbeddedTypeHasLowLevel`
+    Правила документа и проекта определены в подключенных типах из `goga/codemanifest/rules`.
   properties:
     tree -> list[DocumentRoot]: |
       Дерево документов в проекте.

@@ -8,15 +8,17 @@ Imports:
       - DocumentNode
     From: goga/codemanifest/nodes
 
+Usages:
+  conventions: .usages/development/conventions.md
+
 Annotations: |
-  Соглашения:
-    * Код должен быть совместим с python версии 3.10 и выше
+  При написании кода использовать практику `conventions` для общих соглашений.
 
 ---
 
 "BaseCodemanifestError(message: str)":
   location: base.py
-  annotation: |
+  annotations: |
     Базовое исключение при работе с CODEMANIFEST
 
     `message`: текст ошибки
@@ -99,4 +101,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает фабрику по построению дерева документа манифеста
+  Манифест описывает возможные ошибки при работе с CODEMANIFEST

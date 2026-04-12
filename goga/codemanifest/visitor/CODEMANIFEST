@@ -7,16 +7,18 @@ Imports:
       - DocumentRoot
     From: goga/codemanifest/nodes
   - Types:
-      - CodemanifestParseError
+      - ManifestParseError
       - ManifestRuleError
     From: goga/codemanifest/errors
   - Types:
       - DocumentRule
     From: goga/codemanifest/rules
 
+Usages:
+  conventions: .usages/development/conventions.md
+
 Annotations: |
-  Соглашения:
-    * Код должен быть совместим с python версии 3.10 и выше
+  При написании кода использовать практику `conventions` для общих соглашений.
 
 ---
 
