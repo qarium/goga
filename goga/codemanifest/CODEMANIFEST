@@ -30,6 +30,7 @@ Imports:
     From: goga/codemanifest/errors
 
 Usages:
+  conventions: .usages/development/conventions.md
   nodes: |
     Использовать манифест goga/codemanifest/nodes и его API дл работы с структурой документа
   factory: |
@@ -38,10 +39,9 @@ Usages:
     Использовать манифест goga/codemanifest/visitor и его API для анализа одного документа
   analyzer: |
     Использовать манифест goga/codemanifest/analyzer и его API для анализа всего дерева документов
-  conventions: .usages/development/conventions.md
 
 Annotations: |
-  При написании кода использовать практику `conventions` для общих соглашений.
+  При разработке и тестировании использовать практику `conventions`.
 
 ---
 

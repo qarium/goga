@@ -6,7 +6,7 @@ Usages:
   conventions: .usages/development/conventions.md
 
 Annotations: |
-  При написании кода использовать практику `conventions` для общих соглашений.
+  При разработке и тестировании использовать практику `conventions`.
 
 ---
 
