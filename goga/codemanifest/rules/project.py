@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from goga.codemanifest.errors import ProjectRuleError
@@ -63,6 +64,52 @@ class ImportsHasNotCyclicalDepsRule(ProjectRule):
                         node=item,
                     )
                 )
+
+        return errors
+
+
+class ImportTypeExists(ProjectRule):
+    """Rule: every imported type must exist in the target document."""
+
+    def __init__(self, tree: list[DocumentRoot]) -> None:
+        super().__init__(tree=tree, name="import_type_exists")
+
+    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
+        errors: list[ProjectRuleError] = []
+
+        # Build O(1) lookup: doc path -> DocumentRoot
+        path_lookup: dict[str, DocumentRoot] = {doc.path: doc for doc in self._tree}
+
+        for item in document.header.imports.items:
+            from_path = item.from_path
+
+            # Skip if from_path does not exist on filesystem
+            if not Path(from_path).exists():
+                continue
+
+            target_doc = path_lookup.get(from_path)
+            if target_doc is None:
+                continue
+
+            # Collect all available type names in the target document
+            entity_names = {entity.name for entity in target_doc.body.entities}
+            routine_names = {routine.name for routine in target_doc.body.routines}
+            header_type_names = set(target_doc.header.types)
+            available_names = entity_names | routine_names | header_type_names
+
+            for type_name in item.type_name:
+                if type_name not in available_names:
+                    errors.append(
+                        ProjectRuleError(
+                            message=(
+                                f"Imported type '{type_name}' from '{from_path}' "
+                                f"does not exist in the target document"
+                            ),
+                            rule=self.name,
+                            document=document,
+                            node=item,
+                        )
+                    )
 
         return errors
 

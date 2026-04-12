@@ -63,6 +63,16 @@ Annotations: |
     Требования:
     - Правило применяется только в том случаи если импорт декларирован в документе
 
+"DocumentRule::ImportsHasOnlyValidKeys(name: str = 'Imports_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - каждый item в node.data не содержит ключей отличных от:
+      - Types
+      - From
+
 "DocumentRule::ImportHasTypeRule(name: str = 'import_has_type')":
   location: document.py
   annotations: |
@@ -80,6 +90,7 @@ Annotations: |
     - импорт содержит путь from откуда подключаются типы
     - путь существует на файловой системе
     - путь не выходит на пределы CWD
+    - путь находится на одном уровне или ниже по иерархии на файловой системе
 
 "DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
   location: document.py
@@ -190,6 +201,28 @@ Annotations: |
     Правила:
     - embedded сущность не может иметь мутации
 
+"DocumentRule::EntityHasOnlyValidKeys(name: str = 'entity_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+      - properties
+      - methods
+
+"DocumentRule::RoutineHasOnlyValidKeys(name: str = 'routine_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `RoutineTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+
 # ********************************* #
 # Правила на уровне всех документов #
 # ********************************* #
@@ -223,6 +256,14 @@ Annotations: |
 
     Дополнительные требования:
     - Алгоритм поиска документа из которого происходит импорт при проверке должен иметь алгоритмическую сложность O(1)
+
+"ProjectRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
+  location: project.py
+  annotations: |
+    Правило - подключаемый тип через Imports существует в указанном в From документе.
+
+    Требования:
+    - Если путь в From не существует на файловой системе, то проверка игнорируется
 
 "ProjectRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
   location: project.py

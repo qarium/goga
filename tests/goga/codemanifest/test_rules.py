@@ -26,25 +26,30 @@ from goga.codemanifest.rules import (
     EmbeddedEntityCanNotHasMutations,
     EmbeddedTypeHasLowLevel,
     EntitiesAndRoutinesHasNotConflicts,
+    EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
     ImportHasTypeRule,
     ImportHasValidFromPathRule,
     ImportsCanNotBeEmptyRule,
     ImportsHasNotCyclicalDepsRule,
+    ImportsHasOnlyValidKeys,
+    ImportTypeExists,
     MutationExists,
     MutationIsValid,
     ProjectRule,
     ReturnTypeHasLink,
+    RoutineHasOnlyValidKeys,
     UsageLinksHasNotConflicts,
 )
 
 # ---------------------------------------------------------------------------
-# 1. Facade: all 7 rule classes are importable
+# 1. Facade: all 20 rule classes are importable
 # ---------------------------------------------------------------------------
 
 EXPECTED_RULE_CLASSES = [
     DocumentRule,
     ImportsCanNotBeEmptyRule,
+    ImportsHasOnlyValidKeys,
     ImportHasTypeRule,
     ImportHasValidFromPathRule,
     ImportHasNotDuplicate,
@@ -56,14 +61,17 @@ EXPECTED_RULE_CLASSES = [
     MutationIsValid,
     ReturnTypeHasLink,
     EmbeddedEntityCanNotHasMutations,
+    EntityHasOnlyValidKeys,
+    RoutineHasOnlyValidKeys,
     ProjectRule,
     ImportsHasNotCyclicalDepsRule,
+    ImportTypeExists,
     EmbeddedTypeHasLowLevel,
 ]
 
 
 def test_all_rule_classes_importable():
-    """All 16 rule classes must be importable from the rules facade."""
+    """All 20 rule classes must be importable from the rules facade."""
     for cls in EXPECTED_RULE_CLASSES:
         assert isinstance(cls, type), f"{cls.__name__} is not a class"
 
@@ -1189,3 +1197,426 @@ class TestEmbeddedTypeHasLowLevel:
         assert len(errors) == 1
         assert isinstance(errors[0], ProjectRuleError)
         assert errors[0].rule == "embedded_type_has_low_level"
+
+
+# ---------------------------------------------------------------------------
+# 20. ImportsHasOnlyValidKeys
+# ---------------------------------------------------------------------------
+
+
+class TestImportsHasOnlyValidKeys:
+    def test_default_name(self):
+        rule = ImportsHasOnlyValidKeys()
+        assert rule.name == "Imports_has_only_valid_keys"
+
+    def test_positive_valid_keys(self):
+        """Import item with only Types and From keys — no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a"}),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_unknown_key(self):
+        """Import item with extra key like 'Extra' — error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(
+                            type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a", "Extra": True}
+                        ),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert errors[0].rule == "Imports_has_only_valid_keys"
+        assert "Extra" in errors[0].message
+
+    def test_positive_empty_data(self):
+        """Import item with empty data dict — no errors (no unknown keys)."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"Foo"}, from_path="a", data={}),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# 21. EntityHasOnlyValidKeys
+# ---------------------------------------------------------------------------
+
+
+class TestEntityHasOnlyValidKeys:
+    def test_default_name(self):
+        rule = EntityHasOnlyValidKeys()
+        assert rule.name == "entity_has_only_valid_keys"
+
+    def test_positive_all_valid_keys(self):
+        """Entity with all 4 valid keys — no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(
+                entities=[
+                    EntityTypeNode(name="MyEntity", data={"location": "a.py", "annotations": "...", "properties": {}, "methods": {}}),
+                ],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntityHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_unknown_key(self):
+        """Entity with extra key — error."""
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(
+                entities=[
+                    EntityTypeNode(name="MyEntity", data={"location": "a.py", "Extra": True}),
+                ],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntityHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert "Extra" in errors[0].message
+
+    def test_positive_empty_data(self):
+        """Entity with empty data — no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[EntityTypeNode(name="E", data={})]),
+        )
+        node = DocumentNode(root=root)
+        rule = EntityHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# 22. RoutineHasOnlyValidKeys
+# ---------------------------------------------------------------------------
+
+
+class TestRoutineHasOnlyValidKeys:
+    def test_default_name(self):
+        rule = RoutineHasOnlyValidKeys()
+        assert rule.name == "routine_has_only_valid_keys"
+
+    def test_positive_valid_keys(self):
+        """Routine with location and annotations — no errors."""
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(
+                routines=[
+                    RoutineTypeNode(name="my_func", data={"location": "a.py", "annotations": "..."}),
+                ],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = RoutineHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_unknown_key(self):
+        """Routine with extra key — error."""
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(
+                routines=[
+                    RoutineTypeNode(name="my_func", data={"location": "a.py", "Extra": True}),
+                ],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = RoutineHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert "Extra" in errors[0].message
+
+    def test_positive_empty_data(self):
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(routines=[RoutineTypeNode(name="r", data={})]),
+        )
+        node = DocumentNode(root=root)
+        rule = RoutineHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# 23. ImportTypeExists (ProjectRule)
+# ---------------------------------------------------------------------------
+
+
+class TestImportTypeExists:
+    def test_default_name(self):
+        rule = ImportTypeExists(tree=[])
+        assert rule.name == "import_type_exists"
+
+    def test_positive_type_exists_in_target_doc(self):
+        """Imported type exists as entity in target document — no errors."""
+        target_doc = DocumentRoot(
+            path="target_pkg",
+            header=HeaderNode(),
+            body=BodyNode(entities=[EntityTypeNode(name="MyType")]),
+        )
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"MyType"}, from_path="target_pkg"),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc, target_doc])
+        errors = rule.check(current_doc)
+        assert errors == []
+
+    def test_positive_type_exists_as_routine(self):
+        """Imported type exists as routine in target — no errors."""
+        target_doc = DocumentRoot(
+            path="target_pkg",
+            header=HeaderNode(),
+            body=BodyNode(routines=[RoutineTypeNode(name="MyFunc")]),
+        )
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"MyFunc"}, from_path="target_pkg"),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc, target_doc])
+        errors = rule.check(current_doc)
+        assert errors == []
+
+    def test_positive_type_exists_in_header_types(self):
+        """Imported type exists in header.types — no errors."""
+        target_doc = DocumentRoot(
+            path="target_pkg",
+            header=HeaderNode(types=["ReExportedType"]),
+        )
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"ReExportedType"}, from_path="target_pkg"),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc, target_doc])
+        errors = rule.check(current_doc)
+        assert errors == []
+
+    def test_negative_type_not_found(self, tmp_path: Path):
+        """Imported type not found in target doc — error."""
+        target_dir = tmp_path / "target_pkg"
+        target_dir.mkdir()
+
+        target_doc = DocumentRoot(
+            path=str(target_dir),
+            header=HeaderNode(),
+            body=BodyNode(entities=[EntityTypeNode(name="OtherType")]),
+        )
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"MissingType"}, from_path=str(target_dir)),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc, target_doc])
+        errors = rule.check(current_doc)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ProjectRuleError)
+        assert "MissingType" in errors[0].message
+
+    def test_positive_from_path_not_on_filesystem_skipped(self):
+        """from_path that doesn't exist on filesystem — check skipped, no errors."""
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"MyType"}, from_path="/nonexistent/path"),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc])
+        errors = rule.check(current_doc)
+        assert errors == []
+
+    def test_positive_target_doc_not_in_tree_no_error_if_path_missing(self):
+        """from_path not found in tree and not on filesystem — no error."""
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"MyType"}, from_path="missing_pkg"),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc])
+        errors = rule.check(current_doc)
+        assert errors == []
+
+    def test_negative_target_doc_in_tree_but_type_missing(self, tmp_path: Path):
+        """Target doc in tree but type not there — error."""
+        target_dir = tmp_path / "target_pkg"
+        target_dir.mkdir()
+
+        target_doc = DocumentRoot(
+            path=str(target_dir),
+            header=HeaderNode(),
+            body=BodyNode(entities=[]),
+        )
+        current_doc = DocumentRoot(
+            path="current_pkg",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportItemNode(type_name={"Missing"}, from_path=str(target_dir)),
+                    ],
+                ),
+            ),
+        )
+        rule = ImportTypeExists(tree=[current_doc, target_doc])
+        errors = rule.check(current_doc)
+        assert len(errors) == 1
+
+
+# ---------------------------------------------------------------------------
+# 24. ImportHasValidFromPathRule — hierarchy checks
+# ---------------------------------------------------------------------------
+
+
+class TestImportHasValidFromPathHierarchy:
+    def test_positive_same_level(self, tmp_path: Path):
+        """from_path at the same level as document — no hierarchy error."""
+        # Create a real sibling directory under the project CWD
+        cwd = Path.cwd().resolve()
+        sibling = cwd / "_test_sibling_pkg"
+        sibling.mkdir(exist_ok=True)
+        try:
+            (sibling / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
+
+            doc_dir = cwd / "_test_current_pkg"
+            doc_dir.mkdir(exist_ok=True)
+            try:
+                root = DocumentRoot(
+                    path=str(doc_dir),
+                    header=HeaderNode(
+                        imports=ImportsNode(
+                            items=[
+                                ImportItemNode(type_name={"Foo"}, from_path=str(sibling)),
+                            ],
+                        ),
+                    ),
+                )
+                node = DocumentNode(root=root)
+                rule = ImportHasValidFromPathRule()
+                errors = rule.check(node)
+                hierarchy_errors = [e for e in errors if "not at the same level" in e.message]
+                assert len(hierarchy_errors) == 0
+            finally:
+                doc_dir.rmdir()
+        finally:
+            (sibling / "CODEMANIFEST").unlink(missing_ok=True)
+            sibling.rmdir()
+
+    def test_positive_below_document(self, tmp_path: Path):
+        """from_path below document in hierarchy — no hierarchy error."""
+        cwd = Path.cwd().resolve()
+        doc_dir = cwd / "_test_doc_pkg"
+        doc_dir.mkdir(exist_ok=True)
+        child = doc_dir / "child_pkg"
+        child.mkdir(exist_ok=True)
+        try:
+            root = DocumentRoot(
+                path=str(doc_dir),
+                header=HeaderNode(
+                    imports=ImportsNode(
+                        items=[
+                            ImportItemNode(type_name={"Foo"}, from_path=str(child)),
+                        ],
+                    ),
+                ),
+            )
+            node = DocumentNode(root=root)
+            rule = ImportHasValidFromPathRule()
+            errors = rule.check(node)
+            hierarchy_errors = [e for e in errors if "not at the same level" in e.message]
+            assert len(hierarchy_errors) == 0
+        finally:
+            child.rmdir()
+            doc_dir.rmdir()
+
+    def test_negative_above_document(self, tmp_path: Path):
+        """from_path above document in hierarchy — hierarchy error."""
+        cwd = Path.cwd().resolve()
+        parent_pkg = cwd / "_test_parent_pkg"
+        parent_pkg.mkdir(exist_ok=True)
+        doc_dir = parent_pkg / "child_pkg"
+        doc_dir.mkdir(exist_ok=True)
+        try:
+            (parent_pkg / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
+
+            root = DocumentRoot(
+                path=str(doc_dir),
+                header=HeaderNode(
+                    imports=ImportsNode(
+                        items=[
+                            ImportItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
+                        ],
+                    ),
+                ),
+            )
+            node = DocumentNode(root=root)
+            rule = ImportHasValidFromPathRule()
+            errors = rule.check(node)
+            assert len(errors) >= 1
+            assert any("not at the same level" in e.message for e in errors)
+        finally:
+            (parent_pkg / "CODEMANIFEST").unlink(missing_ok=True)
+            doc_dir.rmdir()
+            parent_pkg.rmdir()

@@ -80,6 +80,8 @@ Annotations: |
       - Только строковое представление
       - Извлечение ссылок (backtick) согласно практике `dsl`
 
+      Неизвестные ключи → `ManifestParseError`
+
       ## Тело → BodyNode
 
       Рутины → `RoutineTypeNode` (только если нет properties, methods и мутаций):

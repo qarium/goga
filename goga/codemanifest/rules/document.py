@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -107,6 +108,26 @@ class ImportHasValidFromPathRule(DocumentRule):
                 errors.append(
                     ManifestRuleError(
                         message=f"Import from_path '{item.from_path}' escapes CWD",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+                continue
+
+            # Hierarchy check: from_path must be at the same level as the document or below
+            doc_parent = Path(node.root.path).resolve().parent
+            from_resolved = Path(item.from_path).resolve()
+            from_parent = from_resolved.parent
+            is_same_level = from_parent == doc_parent
+            is_below = str(from_resolved).startswith(str(doc_parent) + os.sep)
+            if not is_same_level and not is_below:
+                errors.append(
+                    ManifestRuleError(
+                        message=(
+                            f"Import from_path '{item.from_path}' is not at the same level "
+                            f"or below the document directory"
+                        ),
                         rule=self.name,
                         document=node.root,
                         node=item,
@@ -496,6 +517,81 @@ class EmbeddedEntityCanNotHasMutations(DocumentRule):
                         rule=self.name,
                         document=node.root,
                         node=entity,
+                    )
+                )
+
+        return errors
+
+
+class ImportsHasOnlyValidKeys(DocumentRule):
+    """Rule: import items must only contain 'Types' and 'From' keys."""
+
+    def __init__(self) -> None:
+        super().__init__(name="Imports_has_only_valid_keys")
+
+    def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+        errors: list[ManifestRuleError] = []
+        valid_keys = {"Types", "From"}
+
+        for item in node.root.header.imports.items:
+            unknown_keys = set(item.data.keys()) - valid_keys
+            if unknown_keys:
+                errors.append(
+                    ManifestRuleError(
+                        message=f"Import item has unknown keys: {sorted(unknown_keys)}",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+
+        return errors
+
+
+class EntityHasOnlyValidKeys(DocumentRule):
+    """Rule: entity entries must only contain 'location', 'annotations', 'properties', 'methods' keys."""
+
+    def __init__(self) -> None:
+        super().__init__(name="entity_has_only_valid_keys")
+
+    def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+        errors: list[ManifestRuleError] = []
+        valid_keys = {"location", "annotations", "properties", "methods"}
+
+        for entity in node.root.body.entities:
+            unknown_keys = set(entity.data.keys()) - valid_keys
+            if unknown_keys:
+                errors.append(
+                    ManifestRuleError(
+                        message=f"Entity '{entity.name}' has unknown keys: {sorted(unknown_keys)}",
+                        rule=self.name,
+                        document=node.root,
+                        node=entity,
+                    )
+                )
+
+        return errors
+
+
+class RoutineHasOnlyValidKeys(DocumentRule):
+    """Rule: routine entries must only contain 'location' and 'annotations' keys."""
+
+    def __init__(self) -> None:
+        super().__init__(name="routine_has_only_valid_keys")
+
+    def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+        errors: list[ManifestRuleError] = []
+        valid_keys = {"location", "annotations"}
+
+        for routine in node.root.body.routines:
+            unknown_keys = set(routine.data.keys()) - valid_keys
+            if unknown_keys:
+                errors.append(
+                    ManifestRuleError(
+                        message=f"Routine '{routine.name}' has unknown keys: {sorted(unknown_keys)}",
+                        rule=self.name,
+                        document=node.root,
+                        node=routine,
                     )
                 )
 
