@@ -25,6 +25,8 @@ Node::DocumentRoot():
       Относительный путь расположения документа
     links -> dict[str, list[Node]]: |
       Все ссылки в документе с маппингом на ноды аннотаций в которых они встречаются
+    embeddings -> list[tuple[str, str]]: |
+      Список отношений имени встраиваемого типа к пути из которого он встраивается
     header -> HeaderNode: |
       Нода с содержимым заголовка, default=HeaderNode()
     body -> BodyNode: |

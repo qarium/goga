@@ -85,6 +85,7 @@ class TestDocumentRoot:
         root = DocumentRoot()
         assert root.path == ""
         assert root.links == {}
+        assert root.embeddings == []
         assert isinstance(root.header, HeaderNode)
         assert isinstance(root.body, BodyNode)
         assert isinstance(root.footer, FooterNode)
@@ -97,6 +98,23 @@ class TestDocumentRoot:
         assert a.header is not b.header
         assert a.body is not b.body
         assert a.footer is not b.footer
+
+    def test_embeddings_default_empty_list(self) -> None:
+        root = DocumentRoot()
+        assert root.embeddings == []
+        assert isinstance(root.embeddings, list)
+
+    def test_embeddings_is_list_of_tuples(self) -> None:
+        root = DocumentRoot(embeddings=[("key1", "val1"), ("key2", "val2")])
+        assert root.embeddings == [("key1", "val1"), ("key2", "val2")]
+        assert all(isinstance(item, tuple) and len(item) == 2 for item in root.embeddings)
+
+    def test_embeddings_independent_per_instance(self) -> None:
+        a = DocumentRoot()
+        b = DocumentRoot()
+        a.embeddings.append(("x", "y"))
+        assert a.embeddings == [("x", "y")]
+        assert b.embeddings == []
 
 
 # ---------------------------------------------------------------------------

@@ -944,3 +944,434 @@ Description: Test
         assert "MyEntity" in entity_names
         entity = [e for e in child_root.body.entities if e.name == "MyEntity"][0]
         assert entity.embedded is True
+
+    def test_embeddings_populated_for_entity(self, tmp_path):
+        """Factory stores (type_name, from_path) in doc.embeddings for embedded entities with matching imports."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyEntity":
+  location: entity.py
+  annotations: |
+    An entity
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - MyEntity
+    From: ..
+
+---
+"->MyEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        # embeddings list should contain (MyEntity, ..) tuple
+        embedding_names = [name for name, _ in child_root.embeddings]
+        assert "MyEntity" in embedding_names
+        from_paths = [fp for name, fp in child_root.embeddings if name == "MyEntity"]
+        assert from_paths[0] == ".."
+
+    def test_embeddings_populated_for_routine(self, tmp_path):
+        """Factory stores (type_name, from_path) in doc.embeddings for embedded routines with matching imports."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"helper(x: int) -> result:int": |
+  A helper routine
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - helper
+    From: ..
+
+---
+"->helper": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        # embeddings list should contain (helper, ..) tuple
+        embedding_names = [name for name, _ in child_root.embeddings]
+        assert "helper" in embedding_names
+        from_paths = [fp for name, fp in child_root.embeddings if name == "helper"]
+        assert from_paths[0] == ".."
+
+    def test_no_embeddings_without_embedded_types(self, tmp_path):
+        """Document without ->prefix types has empty embeddings list."""
+        doc_dir = tmp_path / "solo"
+        doc_dir.mkdir()
+        (doc_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
+
+        p = Project(str(doc_dir))
+        p.load()
+
+        root = p.codemanifest(str(doc_dir))
+        assert root.embeddings == []
+
+    def test_embedded_entity_has_original_properties_and_methods(self, tmp_path):
+        """Embedded entity copy preserves properties and methods from original definition."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyEntity":
+  location: entity.py
+  annotations: |
+    An entity with props and methods
+  properties:
+    "count -> int": counter value
+  methods:
+    "run() -> void:null": |
+      Runs the entity
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - MyEntity
+    From: ..
+
+---
+"->MyEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        embedded_entities = [e for e in child_root.body.entities if e.name == "MyEntity"]
+        assert len(embedded_entities) == 1
+        ent = embedded_entities[0]
+        assert ent.embedded is True
+        assert len(ent.properties) == 1
+        assert ent.properties[0].name == "count"
+        assert len(ent.methods) == 1
+        assert ent.methods[0].name == "run"
+
+    def test_embedded_routine_has_original_signature(self, tmp_path):
+        """Embedded routine copy preserves signature from original definition."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"compute(x: int, y: int) -> result:int": |
+  A computation routine
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - compute
+    From: ..
+
+---
+"->compute": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        embedded_routines = [r for r in child_root.body.routines if r.name == "compute"]
+        assert len(embedded_routines) == 1
+        routine = embedded_routines[0]
+        assert routine.embedded is True
+        assert routine.signature == "(x: int, y: int) -> result:int"
+
+    def test_multiple_embedded_types_from_same_source(self, tmp_path):
+        """Multiple embedded types from the same parent document are all reclassified correctly."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyEntity":
+  location: entity.py
+  annotations: |
+    An entity
+  methods:
+    "run() -> void:null": |
+      Runs
+"helper(x: int) -> result:int": |
+  A helper routine
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - MyEntity
+      - helper
+    From: ..
+
+---
+"->MyEntity": {}
+"->helper": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        child_root = p.codemanifest(str(child_dir))
+
+        # Both should be in embeddings
+        embedding_names = {name for name, _ in child_root.embeddings}
+        assert "MyEntity" in embedding_names
+        assert "helper" in embedding_names
+
+        # MyEntity should be in entities with embedded=True
+        entity_names = [e.name for e in child_root.body.entities]
+        assert "MyEntity" in entity_names
+        ent = [e for e in child_root.body.entities if e.name == "MyEntity"][0]
+        assert ent.embedded is True
+
+        # helper should be in routines with embedded=True
+        routine_names = [r.name for r in child_root.body.routines]
+        assert "helper" in routine_names
+        rout = [r for r in child_root.body.routines if r.name == "helper"][0]
+        assert rout.embedded is True
+
+    def test_three_level_embedded_chain(self, tmp_path):
+        """Embedded type defined at level 1 is available at level 3 via reclassification."""
+        # Level 1: defines the original entity
+        level1_dir = tmp_path / "level1"
+        level1_dir.mkdir()
+        level1_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"BaseEntity":
+  location: base.py
+  annotations: |
+    Base entity
+  methods:
+    "run() -> void:null": |
+      Runs
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (level1_dir / "CODEMANIFEST").write_text(level1_doc)
+
+        # Level 2: embeds BaseEntity from level 1
+        level2_dir = level1_dir / "level2"
+        level2_dir.mkdir()
+        level2_doc = """\
+Imports:
+  - Types:
+      - BaseEntity
+    From: ..
+
+---
+"->BaseEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (level2_dir / "CODEMANIFEST").write_text(level2_doc)
+
+        # Level 3: embeds BaseEntity from level 2
+        level3_dir = level2_dir / "level3"
+        level3_dir.mkdir()
+        level3_doc = """\
+Imports:
+  - Types:
+      - BaseEntity
+    From: ..
+
+---
+"->BaseEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (level3_dir / "CODEMANIFEST").write_text(level3_doc)
+
+        p = Project(str(level1_dir))
+        p.load()
+
+        # Level 2 should have BaseEntity embedded
+        level2_root = p.codemanifest(str(level2_dir))
+        l2_entities = [e for e in level2_root.body.entities if e.name == "BaseEntity"]
+        assert len(l2_entities) == 1
+        assert l2_entities[0].embedded is True
+
+        # Level 3 should also have BaseEntity embedded
+        level3_root = p.codemanifest(str(level3_dir))
+        l3_entities = [e for e in level3_root.body.entities if e.name == "BaseEntity"]
+        assert len(l3_entities) == 1
+        assert l3_entities[0].embedded is True
+
+    def test_parent_does_not_get_child_embedded_types(self, tmp_path):
+        """Embedding is one-directional: parent does not receive child's embedded types."""
+        parent_dir = tmp_path / "parent"
+        parent_dir.mkdir()
+        parent_doc = """\
+Imports:
+  - Types:
+      - Node
+    From: goga/codemanifest/nodes
+
+---
+"MyEntity":
+  location: entity.py
+  annotations: |
+    An entity
+  methods:
+    "run() -> void:null": |
+      Runs
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (parent_dir / "CODEMANIFEST").write_text(parent_doc)
+
+        child_dir = parent_dir / "child"
+        child_dir.mkdir()
+        child_doc = """\
+Imports:
+  - Types:
+      - MyEntity
+    From: ..
+
+---
+"->MyEntity": {}
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
+"""
+        (child_dir / "CODEMANIFEST").write_text(child_doc)
+
+        p = Project(str(parent_dir))
+        p.load()
+
+        parent_root = p.codemanifest(str(parent_dir))
+
+        # Parent has MyEntity as non-embedded (original definition)
+        parent_entities = [e for e in parent_root.body.entities if e.name == "MyEntity"]
+        assert len(parent_entities) == 1
+        assert parent_entities[0].embedded is False
+
+        # Parent has no embeddings (it doesn't embed anything)
+        assert parent_root.embeddings == []

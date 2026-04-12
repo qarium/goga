@@ -150,6 +150,9 @@ Annotations: |
     - все имена entities и routines не имеют пересечений с именами подключаемых типов в `ImportsNode`
       (конфликт может быть решен через alias для типа)
 
+    Требования:
+    - Встраиваемые типы с флагом embedded=True являются исключением из общего правила
+
 "DocumentRule::MutationExists(name: str = 'mutation_exists')":
   location: document.py
   annotations: |

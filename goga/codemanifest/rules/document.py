@@ -345,6 +345,8 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
 
         # Check entity names
         for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
             if entity.name in active_type_names:
                 errors.append(
                     ManifestRuleError(
@@ -357,6 +359,8 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
 
         # Check routine names
         for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
             if routine.name in active_type_names:
                 errors.append(
                     ManifestRuleError(

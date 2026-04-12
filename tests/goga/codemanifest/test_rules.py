@@ -800,6 +800,74 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
         assert "Bar" in errors[0].message
 
+    def test_positive_embedded_entity_with_conflicting_name_no_error(self):
+        """Embedded entity with name matching an imported type is skipped — no error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Foo", embedded=True)],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntitiesAndRoutinesHasNotConflicts()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_embedded_routine_with_conflicting_name_no_error(self):
+        """Embedded routine with name matching an imported type is skipped — no error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(items=[ImportItemNode(type_name={"Bar"}, from_path="a")]),
+            ),
+            body=BodyNode(
+                routines=[RoutineTypeNode(name="Bar", embedded=True)],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntitiesAndRoutinesHasNotConflicts()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_non_embedded_entity_with_conflicting_name_still_errors(self):
+        """Non-embedded entity with name matching an imported type still produces error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Foo", embedded=False)],
+                routines=[RoutineTypeNode(name="Bar", embedded=False)],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntitiesAndRoutinesHasNotConflicts()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert errors[0].rule == "entities_and_routines_has_not_conflicts"
+        assert "Foo" in errors[0].message
+
+    def test_negative_non_embedded_routine_with_conflicting_name_still_errors(self):
+        """Non-embedded routine with name matching an imported type still produces error."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(items=[ImportItemNode(type_name={"Bar"}, from_path="a")]),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Other", embedded=False)],
+                routines=[RoutineTypeNode(name="Bar", embedded=False)],
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = EntitiesAndRoutinesHasNotConflicts()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ManifestRuleError)
+        assert errors[0].rule == "entities_and_routines_has_not_conflicts"
+        assert "Bar" in errors[0].message
+
 
 # ---------------------------------------------------------------------------
 # 15. MutationExists

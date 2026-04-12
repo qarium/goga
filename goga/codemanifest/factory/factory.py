@@ -57,8 +57,16 @@ class Factory:
             footer_data = {}
 
         header = self._parse_header(header_data, filepath)
-        body = self._parse_body(body_data)
+        body, embedded_entities, embedded_routines = self._parse_body(body_data)
         footer = self._parse_footer(footer_data, filepath)
+
+        # Build embeddings list by matching embedded type names with import source paths
+        # Unmatched embedded types (no matching import) are added directly to body
+        embeddings, unmatched_entities, unmatched_routines = self._build_embeddings(
+            header.imports.items, embedded_entities, embedded_routines
+        )
+        body.entities.extend(unmatched_entities)
+        body.routines.extend(unmatched_routines)
 
         document_root = DocumentRoot(
             parent=parent,
@@ -66,6 +74,7 @@ class Factory:
             header=header,
             body=body,
             footer=footer,
+            embeddings=embeddings,
         )
 
         # Wire root references and parent references for all document nodes
@@ -227,10 +236,20 @@ class Factory:
             return AnnotationsNode(filepath=value, links=self._extract_links(value))
         return AnnotationsNode(text=value, links=self._extract_links(value))
 
-    def _parse_body(self, data: dict) -> BodyNode:
-        """Parse the body section (Section 2) of the CODEMANIFEST."""
+    def _parse_body(
+        self, data: dict
+    ) -> tuple[BodyNode, list[tuple[str, bool, str, dict]], list[tuple[str, bool, str, str, dict]]]:
+        """Parse the body section (Section 2) of the CODEMANIFEST.
+
+        Returns a tuple of:
+        - BodyNode with non-embedded entities and routines
+        - List of embedded entity info: (name, embedded_flag, key, value_dict)
+        - List of embedded routine info: (name, embedded_flag, signature, data_dict_or_text, data_dict)
+        """
         entities: list[EntityTypeNode] = []
         routines: list[RoutineTypeNode] = []
+        embedded_entities: list[tuple[str, bool, str, dict]] = []
+        embedded_routines: list[tuple[str, bool, str, str, dict]] = []
 
         for signature_key, value in data.items():
             key = str(signature_key)
@@ -240,15 +259,18 @@ class Factory:
                 name, signature = self._split_name_and_signature(key)
                 name, is_embedded = self._strip_embedded_prefix(name)
                 value_text = str(value)
-                routines.append(
-                    RoutineTypeNode(
-                        name=name,
-                        signature=signature,
-                        embedded=is_embedded,
-                        annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
-                        data={key: value},
+                if is_embedded:
+                    embedded_routines.append((name, True, signature, value_text, {key: value}))
+                else:
+                    routines.append(
+                        RoutineTypeNode(
+                            name=name,
+                            signature=signature,
+                            embedded=False,
+                            annotations=AnnotationsNode(text=value_text, links=self._extract_links(value_text)),
+                            data={key: value},
+                        )
                     )
-                )
             elif isinstance(value, dict):
                 has_properties = "properties" in value
                 has_methods = "methods" in value
@@ -258,7 +280,10 @@ class Factory:
                 if has_properties or has_methods or has_mutations_in_sig or has_embedded_prefix:
                     # EntityTypeNode
                     entity = self._parse_entity(key, value)
-                    entities.append(entity)
+                    if entity.embedded:
+                        embedded_entities.append((entity.name, True, key, dict(value)))
+                    else:
+                        entities.append(entity)
                 else:
                     # RoutineTypeNode from dict (has location/annotations but no entity features)
                     name, signature = self._split_name_and_signature(key)
@@ -268,21 +293,25 @@ class Factory:
                     if annotations_text is None:
                         annotations_text = ""
                     annotations_text = str(annotations_text)
-                    routines.append(
-                        RoutineTypeNode(
-                            name=name,
-                            signature=signature,
-                            embedded=is_embedded,
-                            location=location,
-                            annotations=AnnotationsNode(
-                                text=annotations_text,
-                                links=self._extract_links(annotations_text),
-                            ),
-                            data=dict(value),
+                    if is_embedded:
+                        embedded_routines.append((name, True, signature, annotations_text, dict(value)))
+                    else:
+                        routines.append(
+                            RoutineTypeNode(
+                                name=name,
+                                signature=signature,
+                                embedded=False,
+                                location=location,
+                                annotations=AnnotationsNode(
+                                    text=annotations_text,
+                                    links=self._extract_links(annotations_text),
+                                ),
+                                data=dict(value),
+                            )
                         )
-                    )
 
-        return BodyNode(entities=entities, routines=routines, data=dict(data))
+        body = BodyNode(entities=entities, routines=routines, data=dict(data))
+        return body, embedded_entities, embedded_routines
 
     def _parse_entity(self, key: str, value: dict) -> EntityTypeNode:
         """Parse a single entity type declaration from the body."""
@@ -497,6 +526,50 @@ class Factory:
                 results.append(content)
             i = close + 1
         return results
+
+    def _build_embeddings(
+        self,
+        import_items: list[ImportItemNode],
+        embedded_entities: list[tuple[str, bool, str, dict]],
+        embedded_routines: list[tuple[str, bool, str, str, dict]],
+    ) -> tuple[list[tuple[str, str]], list[EntityTypeNode], list[RoutineTypeNode]]:
+        """Build the embeddings list by matching embedded type names with import source paths.
+
+        Returns:
+        - list of (type_name, import_from_path) tuples for matched embedded types
+        - list of EntityTypeNode for unmatched embedded entities (no matching import)
+        - list of RoutineTypeNode for unmatched embedded routines (no matching import)
+        """
+        # Build a lookup from type name -> from_path
+        import_lookup: dict[str, str] = {}
+        for item in import_items:
+            for type_name in item.type_name:
+                import_lookup[type_name] = item.from_path
+
+        embeddings: list[tuple[str, str]] = []
+        unmatched_entities: list[EntityTypeNode] = []
+        unmatched_routines: list[RoutineTypeNode] = []
+
+        for name, _embedded, key, value in embedded_entities:
+            if name in import_lookup:
+                embeddings.append((name, import_lookup[name]))
+            else:
+                unmatched_entities.append(self._parse_entity(key, value))
+        for name, _embedded, signature, text, data in embedded_routines:
+            if name in import_lookup:
+                embeddings.append((name, import_lookup[name]))
+            else:
+                unmatched_routines.append(
+                    RoutineTypeNode(
+                        name=name,
+                        signature=signature,
+                        embedded=True,
+                        annotations=AnnotationsNode(text=text, links=self._extract_links(text)),
+                        data=data,
+                    )
+                )
+
+        return embeddings, unmatched_entities, unmatched_routines
 
     def _build_types_dict(self, body: BodyNode) -> dict[str, list]:
         """Build the types mapping from the body node."""

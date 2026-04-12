@@ -999,9 +999,9 @@ Imports: not_a_list
 
 
 class TestEmbeddedEntityType:
-    """Embedded type via -> prefix creates EntityTypeNode with embedded=True."""
+    """Embedded type via -> prefix is deferred to embeddings, not added to body."""
 
-    def test_embedded_entity_empty_dict(self, tmp_path) -> None:
+    def test_embedded_entity_not_in_body(self, tmp_path) -> None:
         yaml_content = """\
 Imports:
   - Types:
@@ -1013,14 +1013,11 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_entity"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 1
+        assert len(root.body.entities) == 0
         assert len(root.body.routines) == 0
-        entity = root.body.entities[0]
-        assert entity.name == "Entity"
-        assert entity.embedded is True
-        assert entity.mutations == []
+        assert ("Entity", "some/folder") in root.embeddings
 
-    def test_embedded_entity_with_methods(self, tmp_path) -> None:
+    def test_embedded_entity_with_methods_in_embeddings(self, tmp_path) -> None:
         yaml_content = """\
 Imports:
   - Types:
@@ -1038,18 +1035,14 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_service"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 1
-        entity = root.body.entities[0]
-        assert entity.name == "Service"
-        assert entity.embedded is True
-        assert entity.mutations == []
-        assert len(entity.methods) == 1
+        assert len(root.body.entities) == 0
+        assert ("Service", "some/folder") in root.embeddings
 
 
 class TestEmbeddedRoutineType:
-    """Embedded routine via -> prefix creates RoutineTypeNode with embedded=True."""
+    """Embedded routine via -> prefix is deferred to embeddings, not added to body."""
 
-    def test_embedded_routine_string_value(self, tmp_path) -> None:
+    def test_embedded_routine_string_value_in_embeddings(self, tmp_path) -> None:
         yaml_content = """\
 Imports:
   - Types:
@@ -1062,15 +1055,12 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_routine"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.routines) == 1
+        assert len(root.body.routines) == 0
         assert len(root.body.entities) == 0
-        routine = root.body.routines[0]
-        assert routine.name == "helper"
-        assert routine.embedded is True
-        assert routine.signature == "(x: int) -> result:int"
+        assert ("helper", "some/folder") in root.embeddings
 
-    def test_embedded_routine_dict_value(self, tmp_path) -> None:
-        """Embedded type with -> prefix is always entity, even without properties/methods."""
+    def test_embedded_routine_dict_value_in_embeddings(self, tmp_path) -> None:
+        """Embedded type with -> prefix is deferred to embeddings."""
         yaml_content = """\
 Imports:
   - Types:
@@ -1085,10 +1075,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_dict_routine"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 1
-        entity = root.body.entities[0]
-        assert entity.name == "setup"
-        assert entity.embedded is True
+        assert len(root.body.entities) == 0
+        assert ("setup", "some/folder") in root.embeddings
 
 
 class TestMutationDoesNotSetEmbedded:
@@ -1117,3 +1105,264 @@ Imports:
         assert entity.name == "Derived"
         assert entity.mutations == ["BaseType"]
         assert entity.embedded is False
+
+
+# ---------------------------------------------------------------------------
+# 11c. Embeddings contract: empty, multiple, unmatched
+# ---------------------------------------------------------------------------
+
+
+class TestEmbeddingsEmpty:
+    """embeddings list is empty when no embedded types are present."""
+
+    def test_no_embedded_types_empty_embeddings(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - SomeType
+    From: some/path
+
+---
+"NormalEntity()":
+  properties:
+    "x -> int": value
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "no_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+        assert len(root.body.entities) == 1
+        assert len(root.body.routines) == 0
+
+    def test_full_manifest_has_no_embeddings(self, tmp_path) -> None:
+        """The standard _FULL_MANIFEST fixture has no -> prefixed types."""
+        pkg = _create_full_manifest(tmp_path)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+
+    def test_minimal_manifest_empty_embeddings(self, tmp_path) -> None:
+        yaml_content = "---\n---\n---\n"
+        pkg = _write_codemanifest(str(tmp_path / "minimal"), yaml_content)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+
+
+class TestMultipleEmbeddedTypes:
+    """Multiple embedded types are all collected correctly into embeddings."""
+
+    def test_multiple_embedded_entities(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - EntityA
+      - EntityB
+    From: shared/module
+
+---
+"->EntityA":
+  location: a.py
+  properties:
+    "x -> int": value
+"->EntityB":
+  location: b.py
+  methods:
+    "run()": runs
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "multi_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 2
+        assert ("EntityA", "shared/module") in root.embeddings
+        assert ("EntityB", "shared/module") in root.embeddings
+        assert len(root.body.entities) == 0
+        assert len(root.body.routines) == 0
+
+    def test_mixed_embedded_entities_and_routines(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - Service
+    From: svc/module
+  - Types:
+      - helper
+    From: util/module
+
+---
+"->Service":
+  location: service.py
+  methods:
+    "start()": starts service
+"->helper(x: int) -> result:int": |
+  An embedded helper
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "mixed_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 2
+        assert ("Service", "svc/module") in root.embeddings
+        assert ("helper", "util/module") in root.embeddings
+        assert len(root.body.entities) == 0
+        assert len(root.body.routines) == 0
+
+    def test_embedded_routines_from_different_sources(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - func_a
+    From: pkg_a
+  - Types:
+      - func_b
+    From: pkg_b
+
+---
+"->func_a()": |
+  Func A description
+"->func_b(x: str)": |
+  Func B description
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "multi_routine_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 2
+        assert ("func_a", "pkg_a") in root.embeddings
+        assert ("func_b", "pkg_b") in root.embeddings
+
+    def test_embedded_entity_from_separate_import_entries(self, tmp_path) -> None:
+        yaml_content = """\
+Imports:
+  - Types:
+      - TypeA
+    From: alpha
+  - Types:
+      - TypeB
+    From: beta
+
+---
+"->TypeA": {}
+"->TypeB": {}
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "sep_imports"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 2
+        assert ("TypeA", "alpha") in root.embeddings
+        assert ("TypeB", "beta") in root.embeddings
+
+
+class TestEmbeddedWithoutImport:
+    """Embedded type without a matching import entry is added to body with embedded=True."""
+
+    def test_embedded_entity_no_import_added_to_body(self, tmp_path) -> None:
+        yaml_content = """\
+---
+---
+"->OrphanEntity()":
+  location: orphan.py
+  properties:
+    "val -> int": some value
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "orphan_entity"), yaml_content)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+        assert len(root.body.entities) == 1
+        entity = root.body.entities[0]
+        assert entity.name == "OrphanEntity"
+        assert entity.embedded is True
+        assert entity.signature == "()"
+
+    def test_embedded_routine_no_import_added_to_body(self, tmp_path) -> None:
+        yaml_content = """\
+---
+---
+"->orphan_helper(x: int) -> int": |
+  An orphan routine
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "orphan_routine"), yaml_content)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+        assert len(root.body.routines) == 1
+        assert len(root.body.entities) == 0
+        routine = root.body.routines[0]
+        assert routine.name == "orphan_helper"
+        assert routine.embedded is True
+        assert routine.signature == "(x: int) -> int"
+
+    def test_embedded_dict_routine_no_import_added_to_body(self, tmp_path) -> None:
+        """Unmatched embedded type with dict value but no entity features is added as entity."""
+        yaml_content = """\
+---
+---
+"->setup(cfg: str)":
+  location: setup.py
+  annotations: |
+    Setup routine
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "orphan_dict_routine"), yaml_content)
+        root = Factory(pkg).create()
+        assert root.embeddings == []
+        # Unmatched embedded dict without properties/methods goes through _parse_entity
+        # because the -> prefix triggers entity classification
+        assert len(root.body.entities) == 1
+        assert len(root.body.routines) == 0
+        entity = root.body.entities[0]
+        assert entity.name == "setup"
+        assert entity.embedded is True
+
+    def test_partial_match_only_matched_in_embeddings(self, tmp_path) -> None:
+        """One embedded type has import, another does not; they route differently."""
+        yaml_content = """\
+Imports:
+  - Types:
+      - Matched
+    From: known/path
+
+---
+"->Matched": {}
+"->Unmatched":
+  location: unmatched.py
+  properties:
+    "x -> str": value
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "partial_match"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 1
+        assert ("Matched", "known/path") in root.embeddings
+        assert len(root.body.entities) == 1
+        entity = root.body.entities[0]
+        assert entity.name == "Unmatched"
+        assert entity.embedded is True
+
+    def test_embedded_and_normal_coexist(self, tmp_path) -> None:
+        """Normal types remain in body alongside embedded types."""
+        yaml_content = """\
+Imports:
+  - Types:
+      - EmbeddedType
+    From: ext/module
+
+---
+"NormalType()":
+  location: normal.py
+  properties:
+    "x -> int": value
+"->EmbeddedType": {}
+
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "mixed_normal_embedded"), yaml_content)
+        root = Factory(pkg).create()
+        assert len(root.embeddings) == 1
+        assert ("EmbeddedType", "ext/module") in root.embeddings
+        assert len(root.body.entities) == 1
+        assert root.body.entities[0].name == "NormalType"
+        assert root.body.entities[0].embedded is False

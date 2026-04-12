@@ -46,22 +46,29 @@ line-length = 120
 src = ["goga"]
 
 [tool.ruff.lint]
+preview = true
+
 select = [
-    "E",    # pycodestyle errors
-    "W",    # pycodestyle warnings
-    "F",    # pyflakes
-    "I",    # isort
-    "UP",   # pyupgrade
-    "B",    # flake8-bugbear
-    "SIM",  # flake8-simplify
-    "C4",   # flake8-comprehensions
-    "DTZ",  # flake8-datetimez
-    "PT",   # flake8-pytest-style
-    "ARG",  # flake8-unused-arguments
+    "E",       # pycodestyle errors
+    "W",       # pycodestyle warnings
+    "F",       # pyflakes
+    "I",       # isort
+    "UP",      # pyupgrade
+    "B",       # flake8-bugbear
+    "SIM",     # flake8-simplify
+    "C4",      # flake8-comprehensions
+    "DTZ",     # flake8-datetimez
+    "PT",      # flake8-pytest-style
+    "ARG",     # flake8-unused-arguments
+    "C90",     # Mccabe: check complexity
+    "PLR6301", # no-self-use
 ]
 ignore = [
     "UP045", # `X | None` — not compatible with Python 3.10 dataclass fields, use `typing.Optional`
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [

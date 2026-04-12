@@ -130,43 +130,57 @@ class Project:
 
     @staticmethod
     def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
-        """Reclassify embedded entities whose original type is a routine.
+        """Route embedded types from doc.embeddings into body.entities or body.routines.
 
-        Factory creates all embedded types as EntityTypeNode. After all documents
-        are loaded, this method finds the original type definition and reclassifies
-        entities whose original is a routine into RoutineTypeNode.
+        Factory stores embedded types as (type_name, from_path) in doc.embeddings
+        instead of placing them in body.entities/body.routines. This method performs
+        deferred routing: for each embedding entry, it finds the original type in
+        another document's body and creates an embedded copy in the correct list.
         """
-        # Build lookup: type name -> (is_routine, is_entity) from non-embedded definitions
-        routine_names: set[str] = set()
-        entity_names: set[str] = set()
+        # Build lookup: type name -> (original_entity | original_routine) from non-embedded definitions
+        entity_by_name: dict[str, EntityTypeNode] = {}
+        routine_by_name: dict[str, RoutineTypeNode] = {}
         for doc in all_documents:
             for entity in doc.body.entities:
-                if not entity.embedded:
-                    entity_names.add(entity.name)
+                if not entity.embedded and entity.name not in entity_by_name:
+                    entity_by_name[entity.name] = entity
             for routine in doc.body.routines:
-                if not routine.embedded:
-                    routine_names.add(routine.name)
+                if not routine.embedded and routine.name not in routine_by_name:
+                    routine_by_name[routine.name] = routine
 
         for doc in all_documents:
-            to_remove: list[EntityTypeNode] = []
-            for entity in doc.body.entities:
-                if entity.embedded and entity.name in routine_names and entity.name not in entity_names:
-                    to_remove.append(entity)
-
-            for entity in to_remove:
-                doc.body.entities.remove(entity)
-                doc.body.routines.append(
-                    RoutineTypeNode(
-                        name=entity.name,
-                        signature=entity.signature,
-                        location=entity.location,
-                        annotations=entity.annotations,
-                        embedded=True,
-                        data=entity.data,
-                        parent=entity.parent,
-                        root=entity.root,
+            for type_name, _from_path in doc.embeddings:
+                if type_name in routine_by_name:
+                    original = routine_by_name[type_name]
+                    doc.body.routines.append(
+                        RoutineTypeNode(
+                            name=original.name,
+                            signature=original.signature,
+                            location=original.location,
+                            annotations=original.annotations,
+                            embedded=True,
+                            data=original.data,
+                            parent=doc.body,
+                            root=doc,
+                        )
                     )
-                )
+                elif type_name in entity_by_name:
+                    original = entity_by_name[type_name]
+                    doc.body.entities.append(
+                        EntityTypeNode(
+                            name=original.name,
+                            signature=original.signature,
+                            location=original.location,
+                            annotations=original.annotations,
+                            properties=original.properties,
+                            methods=original.methods,
+                            embedded=True,
+                            mutations=original.mutations,
+                            data=original.data,
+                            parent=doc.body,
+                            root=doc,
+                        )
+                    )
 
     def codemanifest(self, path: str) -> DocumentRoot:
         """Look up a DocumentRoot by its directory path at O(1)."""
