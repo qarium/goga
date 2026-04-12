@@ -6,7 +6,7 @@ entity/routine classification, location resolution, error handling, and
 deep hierarchy support.
 """
 
-import os
+from pathlib import Path
 
 import pytest
 from goga.codemanifest.errors import ManifestParseError
@@ -33,10 +33,9 @@ def _write_codemanifest(
     content: str,
 ) -> str:
     """Write a CODEMANIFEST file into *directory* and return the dir path."""
-    os.makedirs(directory, exist_ok=True)
-    filepath = os.path.join(directory, "CODEMANIFEST")
-    with open(filepath, "w", encoding="utf-8") as fh:
-        fh.write(content)
+    dir_path = Path(directory)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    (dir_path / "CODEMANIFEST").write_text(content, encoding="utf-8")
     return directory
 
 
@@ -217,7 +216,7 @@ class TestBasicParsingBodyEntity:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
         entity = root.body.entities[0]
-        expected = os.path.join(pkg, "project.py")
+        expected = str(Path(pkg) / "project.py")
         assert entity.location == expected
 
     def test_entity_annotations(self, tmp_path) -> None:
@@ -585,7 +584,7 @@ class TestLocationPathTransformation:
         _write_codemanifest(pkg_dir, yaml_content)
         root = Factory(pkg_dir).create()
         entity = root.body.entities[0]
-        expected = os.path.join(pkg_dir, "base.py")
+        expected = str(Path(pkg_dir) / "base.py")
         assert entity.location == expected
 
     def test_path_with_slash_left_as_is(self, tmp_path) -> None:
@@ -747,7 +746,7 @@ class TestAllNodePropertiesPopulated:
         entity = root.body.entities[0]
         assert entity.name == "Project"
         assert entity.signature == "(path: str)"
-        assert entity.location == os.path.join(pkg, "project.py")
+        assert entity.location == str(Path(pkg) / "project.py")
         assert entity.embedded is False
         assert entity.mutations == []
         assert len(entity.properties) == 2

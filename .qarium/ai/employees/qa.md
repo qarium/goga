@@ -29,11 +29,13 @@ Project test configuration. Used by the `qarium:employees:qa:feature` skill.
 | Helper | Location | Purpose |
 |--------|----------|---------|
 | `_write_codemanifest(directory, content) -> str` | `tests/goga/codemanifest/test_factory.py` | Writes a CODEMANIFEST YAML file into a directory and returns the dir path |
+| `_write_codemanifest(directory, content) -> str` | `tests/goga/codemanifest/test_factory_node_props.py` | Same helper — writes a CODEMANIFEST YAML file into a directory |
 
 ### Conventions
 
 - Naming: `test_<what>_<scenario>`
 - Never mock `builtins.open` — use `tmp_path` fixture
+- Use `pathlib.Path` instead of `os.path` — project enforces PTH rules via ruff
 - Integration tests use `pytest.mark.skipif` when external tools unavailable
 - Python 3.10 compatibility: use `from __future__ import annotations` in source files; use `Optional[X]` not `X | None` in dataclass fields (ruff UP045)
 - `CodemanifestRuleError` is an alias for `ManifestRuleError` — import from `goga.codemanifest.errors`

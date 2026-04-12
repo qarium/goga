@@ -24,7 +24,7 @@ def load_config(project_dir: Path | None = None) -> dict:
     if not config_path.exists():
         return {}
 
-    with open(config_path) as f:
+    with config_path.open() as f:
         return yaml.safe_load(f) or {}
 
 
@@ -48,8 +48,8 @@ def get_build_config(project_dir: Path | None = None) -> dict:
 
 __all__ = [
     "get_build_config",
-    "resolve_config_dir",
     "resolve_agents_source",
+    "resolve_config_dir",
     "resolve_prompts_source",
     "sync_defaults",
 ]

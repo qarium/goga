@@ -46,40 +46,49 @@ line-length = 120
 src = ["goga"]
 
 [tool.ruff.lint]
-preview = true
-
 select = [
-    "E",       # pycodestyle errors
-    "W",       # pycodestyle warnings
-    "F",       # pyflakes
-    "I",       # isort
-    "UP",      # pyupgrade
-    "B",       # flake8-bugbear
-    "SIM",     # flake8-simplify
-    "C4",      # flake8-comprehensions
-    "DTZ",     # flake8-datetimez
-    "PT",      # flake8-pytest-style
-    "ARG",     # flake8-unused-arguments
-    "C90",     # Mccabe: check complexity
-    "PLR6301", # no-self-use
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "PL",  # pylint: deep logic analyze
+    "PLR", # pylint Refactor
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "PT",  # flake8-pytest-style
+    "ARG", # flake8-unused-arguments
+    "RUF", # ruff-specific rules
+    "PTH", # flake8-use-pathlib
+    "C90", # Mccabe: check complexity
 ]
+
 ignore = [
     "UP045", # `X | None` — not compatible with Python 3.10 dataclass fields, use `typing.Optional`
 ]
 
 [tool.ruff.lint.mccabe]
+# threshhold for max function complexity
 max-complexity = 10
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "S101",   # assert allowed in tests
-    "ARG001", # unused function arguments allowed in tests
-    "ARG002", # unused method arguments allowed in tests
+    "S101",    # assert allowed in tests
+    "ARG001",  # unused function arguments allowed in tests
+    "ARG002",  # unused method arguments allowed in tests
+    "PLR2004", # magic value comparisons in assertions are acceptable
 ]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+# auto format lists
+skip-magic-trailing-comma = false
+# Linux (\n)
+line-ending = "lf"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

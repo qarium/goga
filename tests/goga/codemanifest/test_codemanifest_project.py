@@ -1,8 +1,12 @@
 """Contract tests for the codemanifest root package — Project class."""
 
+import os
+from pathlib import Path
+
 import pytest
 from goga.codemanifest import Project
-from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
+from goga.codemanifest.errors import ManifestRuleError
+from goga.codemanifest.nodes import DocumentRoot
 
 # ---------------------------------------------------------------------------
 # 1. Facade availability
@@ -11,9 +15,9 @@ from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
 
 class TestFacadeAvailability:
     def test_import_project_from_codemanifest(self):
-        from goga.codemanifest import Project as P
+        from goga.codemanifest import Project as Reimported  # noqa: PLC0415
 
-        assert P is Project
+        assert Reimported is Project
 
 
 # ---------------------------------------------------------------------------
@@ -387,8 +391,6 @@ class TestCodemanifestLookup:
 
     def test_codemanifest_accepts_str_returns_document_root(self, tmp_path):
         """codemanifest(path) takes a str and returns a DocumentRoot."""
-        from goga.codemanifest.nodes import DocumentRoot
-
         root_dir, _, _ = self._make_three_level_tree(tmp_path)
         p = Project(str(root_dir))
         p.load()
@@ -400,9 +402,7 @@ class TestCodemanifestLookup:
 
     def test_relative_path_with_dot(self, tmp_path):
         """codemanifest('./relative') resolves and finds the document."""
-        import os
-
-        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
         p = Project(str(root_dir))
         p.load()
 
@@ -410,41 +410,39 @@ class TestCodemanifestLookup:
         relative = os.path.relpath(str(level3), str(root_dir))
         dotted_path = "./" + relative
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(str(root_dir))
             doc = p.codemanifest(dotted_path)
         finally:
-            os.chdir(original_cwd)
+            os.chdir(str(original_cwd))
 
-        assert doc.path == os.path.normpath(os.path.abspath(str(level3)))
+        assert doc.path == str(Path(str(level3)).resolve())
 
     # -- 4. Positive — relative path without dot --
 
     def test_relative_path_without_dot(self, tmp_path):
         """codemanifest('path/path') resolves and finds the document."""
-        import os
-
-        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        root_dir, level2, _level3 = self._make_three_level_tree(tmp_path)
         p = Project(str(root_dir))
         p.load()
 
         relative = os.path.relpath(str(level2), str(root_dir))
 
-        original_cwd = os.getcwd()
+        original_cwd = Path.cwd()
         try:
             os.chdir(str(root_dir))
             doc = p.codemanifest(relative)
         finally:
-            os.chdir(original_cwd)
+            os.chdir(str(original_cwd))
 
-        assert doc.path == os.path.normpath(os.path.abspath(str(level2)))
+        assert doc.path == str(Path(str(level2)).resolve())
 
     # -- 5. Positive — absolute path --
 
     def test_absolute_path(self, tmp_path):
         """codemanifest(absolute_path) returns the correct document."""
-        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
         p = Project(str(root_dir))
         p.load()
 
@@ -474,23 +472,19 @@ class TestCodemanifestLookup:
 
     def test_path_normalization(self, tmp_path):
         """codemanifest('path/./subpath/../subpath') resolves via normalization."""
-        import os
-
-        root_dir, level2, level3 = self._make_three_level_tree(tmp_path)
+        root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
         p = Project(str(root_dir))
         p.load()
 
         # Construct a path with . and .. segments
         tricky_path = str(level3) + "/../level3"
         doc = p.codemanifest(tricky_path)
-        assert doc.path == os.path.normpath(os.path.abspath(str(level3)))
+        assert doc.path == str(Path(str(level3)).resolve())
 
     # -- 9. Edge — load() rebuilds index --
 
     def test_load_rebuilds_index(self, tmp_path):
         """Calling load() twice picks up documents from the second load."""
-        import os
-
         root_dir = tmp_path / "rebuild_root"
         root_dir.mkdir()
         (root_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
@@ -504,7 +498,7 @@ class TestCodemanifestLookup:
 
         # root_dir is findable, new_dir is not
         doc = p.codemanifest(str(root_dir))
-        assert doc.path == os.path.normpath(os.path.abspath(str(root_dir)))
+        assert doc.path == str(Path(str(root_dir)).resolve())
 
         with pytest.raises(KeyError):
             p.codemanifest(str(new_dir))
@@ -515,10 +509,10 @@ class TestCodemanifestLookup:
 
         # Both should be findable now
         doc_root = p.codemanifest(str(root_dir))
-        assert doc_root.path == os.path.normpath(os.path.abspath(str(root_dir)))
+        assert doc_root.path == str(Path(str(root_dir)).resolve())
 
         doc_new = p.codemanifest(str(new_dir))
-        assert doc_new.path == os.path.normpath(os.path.abspath(str(new_dir)))
+        assert doc_new.path == str(Path(str(new_dir)).resolve())
 
 
 # ---------------------------------------------------------------------------
@@ -835,7 +829,6 @@ class TestEmbeddedReclassification:
 
     def test_embedded_routine_reclassified_from_entity(self, tmp_path):
         """->MyRoutine pointing to a routine gets reclassified from entity to routine."""
-        from goga.codemanifest.nodes import RoutineTypeNode, EntityTypeNode
 
         # Parent doc defines a routine
         parent_dir = tmp_path / "parent"
@@ -887,7 +880,7 @@ Description: Test
         routine_names = [r.name for r in child_root.body.routines]
         assert "helper" not in entity_names
         assert "helper" in routine_names
-        routine = [r for r in child_root.body.routines if r.name == "helper"][0]
+        routine = next(r for r in child_root.body.routines if r.name == "helper")
         assert routine.embedded is True
 
     def test_embedded_entity_stays_entity(self, tmp_path):
@@ -942,7 +935,7 @@ Description: Test
         # MyEntity should remain as entity
         entity_names = [e.name for e in child_root.body.entities]
         assert "MyEntity" in entity_names
-        entity = [e for e in child_root.body.entities if e.name == "MyEntity"][0]
+        entity = next(e for e in child_root.body.entities if e.name == "MyEntity")
         assert entity.embedded is True
 
     def test_embeddings_populated_for_entity(self, tmp_path):
@@ -1230,13 +1223,13 @@ Description: Test
         # MyEntity should be in entities with embedded=True
         entity_names = [e.name for e in child_root.body.entities]
         assert "MyEntity" in entity_names
-        ent = [e for e in child_root.body.entities if e.name == "MyEntity"][0]
+        ent = next(e for e in child_root.body.entities if e.name == "MyEntity")
         assert ent.embedded is True
 
         # helper should be in routines with embedded=True
         routine_names = [r.name for r in child_root.body.routines]
         assert "helper" in routine_names
-        rout = [r for r in child_root.body.routines if r.name == "helper"][0]
+        rout = next(r for r in child_root.body.routines if r.name == "helper")
         assert rout.embedded is True
 
     def test_three_level_embedded_chain(self, tmp_path):

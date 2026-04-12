@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from goga.codemanifest.errors.base import BaseCodemanifestError
@@ -49,11 +49,5 @@ class ManifestRuleError(BaseCodemanifestError):
         return self._node
 
     def __str__(self) -> str:
-        path = os.path.dirname(self._document.path)
-        return (
-            f"Error: {self.message}\n"
-            f"Rule: {self._rule}\n"
-            f"Path: {path}\n"
-            f"Node:\n"
-            f"  {str(self._node.data)}"
-        )
+        path = Path(self._document.path).parent
+        return f"Error: {self.message}\nRule: {self._rule}\nPath: {path}\nNode:\n  {self._node.data!s}"

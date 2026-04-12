@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from goga.codemanifest.analyzer import Analyzer
 from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
@@ -73,12 +74,12 @@ class Project:
 
             # Find the closest parent that has a CODEMANIFEST
             parent_doc: DocumentRoot | None = None
-            check_dir = os.path.dirname(dirpath_str)
+            check_dir = str(Path(dirpath_str).parent)
             while check_dir >= self._path:
                 if check_dir in loaded:
                     parent_doc = loaded[check_dir]
                     break
-                check_dir = os.path.dirname(check_dir)
+                check_dir = str(Path(check_dir).parent)
 
             factory = Factory(dirpath_str)
             document_root = factory.create(parent=parent_doc)
@@ -93,7 +94,7 @@ class Project:
                 parent_doc.children.append(document_root)
 
         # Build normalized path index for O(1) lookup
-        self._index = {os.path.normpath(os.path.abspath(k)): v for k, v in loaded.items()}
+        self._index = {str(Path(k).resolve()): v for k, v in loaded.items()}
 
         # Deferred routing: reclassify embedded entities whose original type is a routine
         all_documents = _flatten_tree(self._tree)
@@ -184,7 +185,7 @@ class Project:
 
     def codemanifest(self, path: str) -> DocumentRoot:
         """Look up a DocumentRoot by its directory path at O(1)."""
-        resolved = os.path.normpath(os.path.abspath(path))
+        resolved = str(Path(path).resolve())
         if resolved not in self._index:
             raise KeyError(f"Document not found for path: {path}")
         return self._index[resolved]

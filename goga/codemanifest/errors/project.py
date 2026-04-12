@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from goga.codemanifest.errors.base import BaseCodemanifestError
@@ -40,11 +40,11 @@ class ProjectRuleError(BaseCodemanifestError):
         lines = [f"Error: {self.message}", f"Rule: {self._rule}"]
 
         if self._document is not None:
-            path = os.path.dirname(self._document.path)
+            path = str(Path(self._document.path).parent)
             lines.append(f"Path: {path}")
 
         if self._node is not None:
             lines.append("Node:")
-            lines.append(f"  {str(self._node.data)}")
+            lines.append(f"  {self._node.data!s}")
 
         return "\n".join(lines)

@@ -20,20 +20,20 @@ from goga.codemanifest.rules.project import (
 )
 
 __all__ = [
+    "AllUsagesIsUsed",
     "AnnotationLinksExists",
     "DocumentRule",
     "EmbeddedEntityCanNotHasMutations",
     "EmbeddedTypeHasLowLevel",
     "EntitiesAndRoutinesHasNotConflicts",
-    "ImportsCanNotBeEmptyRule",
+    "ImportHasNotDuplicate",
     "ImportHasTypeRule",
     "ImportHasValidFromPathRule",
-    "ImportHasNotDuplicate",
+    "ImportsCanNotBeEmptyRule",
+    "ImportsHasNotCyclicalDepsRule",
     "MutationExists",
     "MutationIsValid",
     "ProjectRule",
-    "ImportsHasNotCyclicalDepsRule",
-    "AllUsagesIsUsed",
     "ReturnTypeHasLink",
     "UsageLinksHasNotConflicts",
 ]

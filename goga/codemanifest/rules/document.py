@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -77,7 +76,7 @@ class ImportHasValidFromPathRule(DocumentRule):
 
     def check(self, node: DocumentNode) -> list[ManifestRuleError]:
         errors: list[ManifestRuleError] = []
-        cwd = Path(os.getcwd()).resolve()
+        cwd = Path.cwd().resolve()
 
         for item in node.root.header.imports.items:
             if not item.from_path:
@@ -254,7 +253,7 @@ class AnnotationLinksExists(DocumentRule):
     def __init__(self) -> None:
         super().__init__(name="annotation_links_exists")
 
-    def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+    def check(self, node: DocumentNode) -> list[ManifestRuleError]:  # noqa: C901
         header = node.root.header
         body = node.root.body
 

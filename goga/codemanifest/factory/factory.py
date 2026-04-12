@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Optional
 
 import yaml
@@ -38,16 +39,17 @@ class Factory:
 
     def create(self, parent: Optional[DocumentRoot] = None) -> DocumentRoot:
         """Load and parse the CODEMANIFEST file, returning a DocumentRoot tree."""
-        filepath = os.path.join(self._path, "CODEMANIFEST")
+        filepath = Path(self._path) / "CODEMANIFEST"
 
-        with open(filepath, encoding="utf-8") as fh:
+        with filepath.open(encoding="utf-8") as fh:
             raw = fh.read()
 
         documents = list(yaml.safe_load_all(raw))
 
+        _num_sections = 3  # header, body, footer
         header_data = documents[0] if len(documents) > 0 and documents[0] else {}
         body_data = documents[1] if len(documents) > 1 and documents[1] else {}
-        footer_data = documents[2] if len(documents) > 2 and documents[2] else {}
+        footer_data = documents[_num_sections - 1] if len(documents) >= _num_sections and documents[2] else {}
 
         if not isinstance(header_data, dict):
             header_data = {}
@@ -56,9 +58,9 @@ class Factory:
         if not isinstance(footer_data, dict):
             footer_data = {}
 
-        header = self._parse_header(header_data, filepath)
+        header = self._parse_header(header_data, str(filepath))
         body, embedded_entities, embedded_routines = self._parse_body(body_data)
-        footer = self._parse_footer(footer_data, filepath)
+        footer = self._parse_footer(footer_data, str(filepath))
 
         # Build embeddings list by matching embedded type names with import source paths
         # Unmatched embedded types (no matching import) are added directly to body
@@ -77,7 +79,24 @@ class Factory:
             embeddings=embeddings,
         )
 
-        # Wire root references and parent references for all document nodes
+        self._wire_references(document_root, header, body, footer)
+
+        # Populate types dict: map type names to their nodes
+        document_root.types = self._build_types_dict(body)
+
+        # Populate links dict: collect all link references from annotations
+        document_root.links = self._collect_links(document_root)
+
+        return document_root
+
+    @staticmethod
+    def _wire_references(
+        document_root: DocumentRoot,
+        header: HeaderNode,
+        body: BodyNode,
+        footer: FooterNode,
+    ) -> None:
+        """Wire root and parent references for all document nodes."""
         header.root = document_root
         header.parent = document_root
         header.imports.root = document_root
@@ -120,14 +139,6 @@ class Factory:
 
         footer.root = document_root
         footer.parent = document_root
-
-        # Populate types dict: map type names to their nodes
-        document_root.types = self._build_types_dict(body)
-
-        # Populate links dict: collect all link references from annotations
-        document_root.links = self._collect_links(document_root)
-
-        return document_root
 
     def _parse_header(self, data: dict, filepath: str) -> HeaderNode:
         """Parse the header section (Section 1) of the CODEMANIFEST."""
@@ -274,7 +285,7 @@ class Factory:
             elif isinstance(value, dict):
                 has_properties = "properties" in value
                 has_methods = "methods" in value
-                has_mutations_in_sig = "::" in key.split("(")[0]
+                has_mutations_in_sig = "::" in key.split("(", maxsplit=1)[0]
                 has_embedded_prefix = key.startswith("->")
 
                 if has_properties or has_methods or has_mutations_in_sig or has_embedded_prefix:
@@ -464,7 +475,7 @@ class Factory:
         if os.sep in location or "/" in location:
             return location
         # Bare filename: prepend self._path
-        return os.path.join(self._path, location)
+        return str(Path(self._path) / location)
 
     @staticmethod
     def _extract_links(text: str) -> list[str]:
@@ -474,8 +485,12 @@ class Factory:
         Only matches exactly one backtick on each side — not ``..`` or ```..```.
         Content inside multi-backtick blocks is excluded entirely.
         """
-        # Strip multi-backtick blocks first: from an opening run of 2+ backticks
-        # to the next run of equal or greater length.
+        stripped = Factory._strip_multibacktick_blocks(text)
+        return Factory._find_single_backtick_names(stripped)
+
+    @staticmethod
+    def _strip_multibacktick_blocks(text: str) -> str:
+        """Remove multi-backtick blocks (``..`` or ```..```), keeping single backticks."""
         cleaned: list[str] = []
         i = 0
         n = len(text)
@@ -484,13 +499,11 @@ class Factory:
                 cleaned.append(text[i])
                 i += 1
                 continue
-            # Count consecutive backticks
             j = i
             while j < n and text[j] == "`":
                 j += 1
             run_len = j - i
             if run_len == 1:
-                # Single backtick — keep as-is
                 cleaned.append("`")
                 i = j
                 continue
@@ -505,23 +518,22 @@ class Factory:
                     break
                 close = k if k > close else close + 1
             i = close
-            # (skip everything between opening and closing runs)
+        return "".join(cleaned)
 
-        stripped = "".join(cleaned)
-
-        # Now find single-backtick pairs in the cleaned text
+    @staticmethod
+    def _find_single_backtick_names(text: str) -> list[str]:
+        """Find names inside single backtick pairs in text."""
         results: list[str] = []
         i = 0
-        n = len(stripped)
+        n = len(text)
         while i < n:
-            if stripped[i] != "`":
+            if text[i] != "`":
                 i += 1
                 continue
-            # Single backtick — find closing
-            close = stripped.find("`", i + 1)
+            close = text.find("`", i + 1)
             if close == -1:
                 break
-            content = stripped[i + 1 : close]
+            content = text[i + 1 : close]
             if "\n" not in content:
                 results.append(content)
             i = close + 1

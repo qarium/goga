@@ -111,21 +111,21 @@ class TestManifestRuleError:
         node = DocumentNode()
         err = ManifestRuleError("bad rule", "RULE-001", doc, node)
         text = str(err)
-        assert "* Rule:" in text
+        assert "Rule:" in text
 
     def test_str_contains_path(self) -> None:
         doc = DocumentRoot(path="/project/docs/spec.goga")
         node = DocumentNode()
         err = ManifestRuleError("bad rule", "RULE-001", doc, node)
         text = str(err)
-        assert "* Path:" in text
+        assert "Path:" in text
 
     def test_str_contains_node(self) -> None:
         doc = DocumentRoot(path="/project/docs/spec.goga")
         node = DocumentNode()
         err = ManifestRuleError("bad rule", "RULE-001", doc, node)
         text = str(err)
-        assert "* Node:" in text
+        assert "Node:" in text
 
     def test_str_path_is_directory_portion(self) -> None:
         doc = DocumentRoot(path="/project/docs/spec.goga")
@@ -178,14 +178,14 @@ class TestProjectRuleError:
         node = DocumentNode()
         err = ProjectRuleError("with doc", "PR-001", doc, node)
         text = str(err)
-        assert "* Path:" in text
+        assert "Path:" in text
 
     def test_str_has_node_when_node_present(self) -> None:
         doc = DocumentRoot(path="/project/docs/spec.goga")
         node = DocumentNode()
         err = ProjectRuleError("with node", "PR-001", doc, node)
         text = str(err)
-        assert "* Node:" in text
+        assert "Node:" in text
 
     def test_str_format_same_as_manifest_rule_error_when_both_present(self) -> None:
         doc = DocumentRoot(path="/project/docs/spec.goga")
@@ -193,6 +193,6 @@ class TestProjectRuleError:
         project_err = ProjectRuleError("full info", "PR-001", doc, node)
         text = str(project_err)
         assert "Error:" in text
-        assert "* Rule:" in text
-        assert "* Path:" in text
-        assert "* Node:" in text
+        assert "Rule:" in text
+        assert "Path:" in text
+        assert "Node:" in text

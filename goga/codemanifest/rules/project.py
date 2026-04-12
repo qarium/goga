@@ -73,7 +73,7 @@ class EmbeddedTypeHasLowLevel(ProjectRule):
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="embedded_type_has_low_level")
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
+    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:  # noqa: C901
         errors: list[ProjectRuleError] = []
         current_path = os.path.normpath(document.path)
 

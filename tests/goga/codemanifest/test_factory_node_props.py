@@ -4,7 +4,7 @@ Verifies that Factory correctly fills `data`, `parent`, and `links` on all
 node types produced during CODEMANIFEST parsing.
 """
 
-import os
+from pathlib import Path
 
 from goga.codemanifest.factory import Factory
 
@@ -15,10 +15,9 @@ from goga.codemanifest.factory import Factory
 
 def _write_codemanifest(directory: str, content: str) -> str:
     """Write a CODEMANIFEST file into *directory* and return the dir path."""
-    os.makedirs(directory, exist_ok=True)
-    filepath = os.path.join(directory, "CODEMANIFEST")
-    with open(filepath, "w", encoding="utf-8") as fh:
-        fh.write(content)
+    dir_path = Path(directory)
+    dir_path.mkdir(parents=True, exist_ok=True)
+    (dir_path / "CODEMANIFEST").write_text(content, encoding="utf-8")
     return directory
 
 
@@ -132,7 +131,7 @@ class TestDataPropertyNode:
         assert isinstance(prop.data, dict)
         assert len(prop.data) == 1
         # Key is "tree -> list[DocumentRoot]", value is the annotation text
-        key = list(prop.data.keys())[0]
+        key = next(iter(prop.data.keys()))
         assert "tree" in key
         assert "DocumentRoot" in prop.data[key]
 
@@ -146,7 +145,7 @@ class TestDataMethodNode:
         method = root.body.entities[0].methods[0]
         assert isinstance(method.data, dict)
         assert len(method.data) == 1
-        key = list(method.data.keys())[0]
+        key = next(iter(method.data.keys()))
         assert "load()" in key
 
 
@@ -171,7 +170,7 @@ class TestDataRoutineTypeNode:
         # String routine: "helper(x: int) -> result:int": A helper...
         routine = root.body.routines[0]
         assert isinstance(routine.data, dict)
-        key = list(routine.data.keys())[0]
+        key = next(iter(routine.data.keys()))
         assert "helper" in key
 
     def test_data_dict_routine(self, tmp_path) -> None:

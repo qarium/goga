@@ -1,21 +1,24 @@
 """Contract tests for the goga.codemanifest.rules package."""
 
-import os
 from pathlib import Path
 
 import pytest
 from goga.codemanifest.errors import ManifestRuleError, ProjectRuleError
 from goga.codemanifest.nodes import (
     AnnotationsNode,
+    BodyNode,
     DocumentNode,
     DocumentRoot,
+    EntityTypeNode,
     HeaderNode,
     ImportItemNode,
     ImportsNode,
+    MethodNode,
+    PropertyNode,
+    RoutineTypeNode,
     UsageItemNode,
     UsagesNode,
 )
-from goga.codemanifest.nodes import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
 from goga.codemanifest.rules import (
     AllUsagesIsUsed,
     AnnotationLinksExists,
@@ -217,7 +220,7 @@ class TestImportHasValidFromPathRule:
         assert rule.name == "import_has_valid_from_path"
 
     def test_positive_valid_existing_path(self, tmp_path: Path):
-        existing_file = Path(os.getcwd()) / "_test_rules_tmp_module.py"
+        existing_file = Path.cwd() / "_test_rules_tmp_module.py"
         existing_file.write_text("# module")
         try:
             root = DocumentRoot(
@@ -261,7 +264,7 @@ class TestImportHasValidFromPathRule:
         assert isinstance(errors[0], ManifestRuleError)
 
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
-        escaping_path = str(Path(os.getcwd()).resolve().parent / "outside")
+        escaping_path = str(Path.cwd().resolve().parent / "outside")
         root = DocumentRoot(
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path=escaping_path)]))
         )

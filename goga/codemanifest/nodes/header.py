@@ -8,8 +8,8 @@ from goga.codemanifest.nodes.document import DocumentNode
 
 @dataclass
 class HeaderNode(DocumentNode):
-    imports: ImportsNode = field(default_factory=lambda: ImportsNode())
-    usages: UsagesNode = field(default_factory=lambda: UsagesNode())
+    imports: ImportsNode = field(default_factory=lambda: ImportsNode())  # noqa: PLW0108
+    usages: UsagesNode = field(default_factory=lambda: UsagesNode())  # noqa: PLW0108
     annotations: AnnotationsNode = field(default_factory=lambda: AnnotationsNode(root=None))
     types: list[str] = field(default_factory=list)
 
