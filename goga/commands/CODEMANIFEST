@@ -6,6 +6,7 @@ Imports:
 Usages:
   click: .usages/tools/click.md
   conventions: .usages/development/conventions.md
+  ralphex: .usages/tools/ralphex.md
   codemanifest: |
     Работать с типом `Project`.
     Загрузить проект с использованием Project.load.
@@ -56,6 +57,97 @@ Annotations: |
       должна так же отступать 6 пробелов
     - [rule_name] необходимо выводить красным цветом
     - В случаи наличия ошибок команда выходит с кодом 1 иначе 0
+
+"build(plan: str = 'docs/plans/plan.md')":
+  location: build.py
+  annotations: |
+    Команда сборки кода через `ralphex`. Подготавливает окружение и запускает `ralphex`.
+
+    `plan`: путь к файлу плана (markdown), опциональный, по умолчанию 'docs/plans/plan.md'
+
+    CLI-опции (все опциональные, переопределяют goga.yml):
+    - --dry-run: показать команду без выполнения
+    - --worktree: включить режим `ralphex` worktree
+    - --skip-finalize: пропустить финализацию
+    - --session-timeout: таймаут сессии
+    - --idle-timeout: таймаут простоя
+    - --wait: время ожидания
+    - --max-iterations: максимум итераций
+    - --review-patience: patience при ревью
+
+    Алгоритм:
+    1. Прочитать goga.yml из корня проекта (секция `build`)
+    2. Создать .claude/settings.json с модельными оверрайдами:
+       - Прочитать существующий .claude/settings.json если есть, сделать merge
+       - Установить env переменные:
+         - ANTHROPIC_DEFAULT_HAIKU_MODEL: из goga.yml или дефолт 'glm-4.7'
+         - ANTHROPIC_DEFAULT_SONNET_MODEL: из goga.yml или дефолт 'glm-5-turbo'
+         - ANTHROPIC_DEFAULT_OPUS_MODEL: из goga.yml или дефолт 'glm-5.1'
+         - ANTHROPIC_BASE_URL: из goga.yml или дефолт 'https://api.z.ai/api/anthropic'
+       - Установить attribution с пустыми commit и pr
+    3. Создать .ralphex/claude-wrapper.sh:
+       ```
+       #!/bin/bash
+       exec env ANTHROPIC_API_KEY="$ZAI_TOKEN" claude "$@"
+       ```
+       - Установить chmod +x на скрипт
+       - Перезаписывать при каждом запуске
+       - Записать ralphex config defaults в .ralphex/config (не перезаписывать существующие ключи):
+         - claude_command = .ralphex/claude-wrapper.sh
+         - claude_args = --dangerously-skip-permissions --output-format stream-json --verbose
+         - codex_enabled = false
+    4. Копировать defaults из пакета goga (goga/config/defaults/) в .ralphex/:
+       - prompts/ → .ralphex/prompts/
+       - agents/ → .ralphex/agents/
+       - Не перезаписывать существующие файлы
+    5. Собрать команду `ralphex`:
+       - `ralphex` {plan} --config-dir .ralphex/
+       - Добавить флаги: --worktree, --skip-finalize, --session-timeout,
+         --idle-timeout, --wait, --max-iterations, --review-patience
+       - Приоритет: CLI-опции > goga.yml > дефолты
+    6. При --dry-run: вывести команду и выйти
+    7. Запустить `ralphex` через subprocess.call, выйти с его кодом возврата
+
+    Конфигурация goga.yml (секция build):
+    ```
+    build:
+      worktree: false
+      skip_finalize: false
+      session_timeout: ""
+      idle_timeout: ""
+      wait: ""
+      max_iterations: 0
+      review_patience: 0
+      prompts_dir: ""
+      agents_dir: ""
+      models:
+        haiku: glm-4.7
+        sonnet: glm-5-turbo
+        opus: glm-5.1
+        base_url: https://api.z.ai/api/anthropic
+    ```
+
+    Формат .claude/settings.json (создаётся/обновляется командой):
+    ```
+    {
+      "attribution": {
+        "commit": "",
+        "pr": ""
+      },
+      "env": {
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "<haiku>",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "<sonnet>",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "<opus>",
+        "ANTHROPIC_BASE_URL": "<base_url>"
+      }
+    }
+    ```
+
+    Требования:
+    - `ralphex` должен быть доступен в PATH, иначе ошибка
+    - Минимальный вывод: что делается на каждом шаге (через click.echo)
+    - Ошибки выводить в stderr (click.echo с err=True)
+    - Код возврата: код `ralphex` при успехе, 1 при ошибке
 
 ---
 

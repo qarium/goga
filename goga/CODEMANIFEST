@@ -1,6 +1,7 @@
 Imports:
   - Types:
       - linter
+      - build
     From: goga/commands
   - Types:
       - Project
@@ -25,6 +26,7 @@ app:
 
     Команды:
     - `linter`
+    - `build`
 
 ---
 
