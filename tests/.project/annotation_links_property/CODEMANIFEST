@@ -1,0 +1,11 @@
+---
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
+  properties:
+    "prop -> str": |
+      Property with `bad_prop_link` and `MyEntity`

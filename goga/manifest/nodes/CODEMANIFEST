@@ -142,8 +142,8 @@ DocumentNode::EntityTypeNode():
     embedded -> bool: |
       Флаг указывает на то является ли сущность встроенной
       в текущий документ из другого документа
-    mutations -> list[str]: |
-      Список имен сущностей от которых мутирует данная сущность
+    mutations -> list[tuple[str, str]]: |
+      Список кортежей (имя_базового_типа, путь_документа_где_объявлена_мутация)
 
 DocumentNode::MethodNode():
   location: body.py

@@ -1,0 +1,11 @@
+Imports:
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
+  methods:
+    "method() -> void:null": |
+      Test method

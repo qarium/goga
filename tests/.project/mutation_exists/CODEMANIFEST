@@ -1,0 +1,11 @@
+---
+
+---
+
+"NonExistentBase::MyEntity":
+  location: entity.py
+  annotations: |
+    Mutation from non-existent type
+  methods:
+    "method() -> void:null": |
+      Test method

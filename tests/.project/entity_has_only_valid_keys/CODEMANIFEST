@@ -1,0 +1,15 @@
+---
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
+  properties:
+    "name -> str": |
+      Name property
+  methods:
+    "method() -> void:null": |
+      Test method
+  invalid_key: some_value

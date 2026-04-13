@@ -63,7 +63,7 @@ class Factory:
         footer = self._parse_footer(footer_data, str(filepath))
 
         # Build embeddings list by matching embedded type names with import source paths
-        # Unmatched embedded types (no matching import) are added directly to body
+        # All embedded types are added to body for rule validation
         embeddings, unmatched_entities, unmatched_routines = self._build_embeddings(
             header.imports.items, embedded_entities, embedded_routines
         )
@@ -333,7 +333,7 @@ class Factory:
         full_name_part = clean_key.split("(")[0]
         segments = full_name_part.split("::")
         actual_name = segments[-1]
-        mutations = segments[:-1]
+        mutations = [(seg, self._path) for seg in segments[:-1]]
         embedded = is_embedded
 
         # Extract signature (everything from the first '(' onwards)
@@ -549,8 +549,8 @@ class Factory:
 
         Returns:
         - list of (type_name, import_from_path) tuples for matched embedded types
-        - list of EntityTypeNode for unmatched embedded entities (no matching import)
-        - list of RoutineTypeNode for unmatched embedded routines (no matching import)
+        - list of EntityTypeNode for all embedded entities
+        - list of RoutineTypeNode for all embedded routines
         """
         # Build a lookup from type name -> from_path
         import_lookup: dict[str, str] = {}
@@ -565,13 +565,11 @@ class Factory:
         for name, _embedded, key, value in embedded_entities:
             if name in import_lookup:
                 embeddings.append((name, import_lookup[name]))
-            else:
-                unmatched_entities.append(self._parse_entity(key, value))
+            unmatched_entities.append(self._parse_entity(key, value))
         for name, _embedded, signature, text, data in embedded_routines:
             if name in import_lookup:
                 embeddings.append((name, import_lookup[name]))
-            else:
-                unmatched_routines.append(
+            unmatched_routines.append(
                     RoutineTypeNode(
                         name=name,
                         signature=signature,

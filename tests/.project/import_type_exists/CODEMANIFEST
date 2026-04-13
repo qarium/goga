@@ -1,0 +1,11 @@
+Imports:
+  - Types:
+      - NonExistentType
+    From: import_type_exists_helper
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

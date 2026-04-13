@@ -420,7 +420,7 @@ Imports:
         assert len(root.body.routines) == 0
         entity = root.body.entities[0]
         assert entity.name == "SomeRule"
-        assert entity.mutations == ["DocumentRule"]
+        assert entity.mutations == [("DocumentRule", pkg)]
         assert entity.embedded is False
         assert entity.properties == []
         assert entity.methods == []
@@ -1012,7 +1012,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_entity"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 0
+        # Matched embedded entity is now in BOTH embeddings AND body
+        assert len(root.body.entities) == 1
         assert len(root.body.routines) == 0
         assert ("Entity", "some/folder") in root.embeddings
 
@@ -1034,7 +1035,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_service"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 0
+        # Matched embedded entity is now in BOTH embeddings AND body
+        assert len(root.body.entities) == 1
         assert ("Service", "some/folder") in root.embeddings
 
 
@@ -1054,7 +1056,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_routine"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.routines) == 0
+        # Matched embedded routine is now in BOTH embeddings AND body
+        assert len(root.body.routines) == 1
         assert len(root.body.entities) == 0
         assert ("helper", "some/folder") in root.embeddings
 
@@ -1074,7 +1077,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "embedded_dict_routine"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.body.entities) == 0
+        # Matched embedded type is now in BOTH embeddings AND body
+        assert len(root.body.entities) == 1
         assert ("setup", "some/folder") in root.embeddings
 
 
@@ -1102,7 +1106,7 @@ Imports:
         assert len(root.body.entities) == 1
         entity = root.body.entities[0]
         assert entity.name == "Derived"
-        assert entity.mutations == ["BaseType"]
+        assert entity.mutations == [("BaseType", pkg)]
         assert entity.embedded is False
 
 
@@ -1175,7 +1179,8 @@ Imports:
         assert len(root.embeddings) == 2
         assert ("EntityA", "shared/module") in root.embeddings
         assert ("EntityB", "shared/module") in root.embeddings
-        assert len(root.body.entities) == 0
+        # Matched embedded entities are now in BOTH embeddings AND body
+        assert len(root.body.entities) == 2
         assert len(root.body.routines) == 0
 
     def test_mixed_embedded_entities_and_routines(self, tmp_path) -> None:
@@ -1203,8 +1208,9 @@ Imports:
         assert len(root.embeddings) == 2
         assert ("Service", "svc/module") in root.embeddings
         assert ("helper", "util/module") in root.embeddings
-        assert len(root.body.entities) == 0
-        assert len(root.body.routines) == 0
+        # Matched embedded types are now in BOTH embeddings AND body
+        assert len(root.body.entities) == 1
+        assert len(root.body.routines) == 1
 
     def test_embedded_routines_from_different_sources(self, tmp_path) -> None:
         yaml_content = """\
@@ -1336,10 +1342,13 @@ Imports:
         root = Factory(pkg).create()
         assert len(root.embeddings) == 1
         assert ("Matched", "known/path") in root.embeddings
-        assert len(root.body.entities) == 1
-        entity = root.body.entities[0]
-        assert entity.name == "Unmatched"
-        assert entity.embedded is True
+        # Both Matched and Unmatched are in body now (matched + unmatched both in body)
+        assert len(root.body.entities) == 2
+        entity_names = [e.name for e in root.body.entities]
+        assert "Unmatched" in entity_names
+        assert "Matched" in entity_names
+        unmatched = next(e for e in root.body.entities if e.name == "Unmatched")
+        assert unmatched.embedded is True
 
     def test_embedded_and_normal_coexist(self, tmp_path) -> None:
         """Normal types remain in body alongside embedded types."""
@@ -1362,6 +1371,10 @@ Imports:
         root = Factory(pkg).create()
         assert len(root.embeddings) == 1
         assert ("EmbeddedType", "ext/module") in root.embeddings
-        assert len(root.body.entities) == 1
-        assert root.body.entities[0].name == "NormalType"
-        assert root.body.entities[0].embedded is False
+        # Both NormalType and EmbeddedType are in body now
+        assert len(root.body.entities) == 2
+        entity_names = [e.name for e in root.body.entities]
+        assert "NormalType" in entity_names
+        assert "EmbeddedType" in entity_names
+        normal = next(e for e in root.body.entities if e.name == "NormalType")
+        assert normal.embedded is False

@@ -1,0 +1,9 @@
+errors:
+- rule: import_type_exists
+  message: Type 'NonExistentType' imported from 'import_type_exists_helper' is not
+    defined in that package's CODEMANIFEST
+  document_path: import_type_exists
+  node_data:
+    Types:
+    - NonExistentType
+    From: import_type_exists_helper

@@ -143,14 +143,17 @@ class Project:
 
     @staticmethod
     def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
-        """Route embedded types from doc.embeddings into body.entities or body.routines.
+        """Resolve embedded types using originals from the document tree.
 
-        Factory stores embedded types as (type_name, from_path) in doc.embeddings
-        instead of placing them in body.entities/body.routines. This method performs
-        deferred routing: for each embedding entry, it finds the original type in
-        another document's body and creates an embedded copy in the correct list.
+        Factory adds embedded entities/routines to body with data from the current document.
+        This method enriches each embedded node with metadata from its original (non-embedded)
+        definition: signature, annotations, properties, methods, and recalculated location.
+        Factory-provided mutations and data are preserved for rule validation.
+
+        If the original type is a different kind (entity vs routine), the embedded node
+        is moved to the correct list.
         """
-        # Build lookup: type name -> (original_entity | original_routine) from non-embedded definitions
+        # Build lookup: type name -> original (non-embedded) node
         entity_by_name: dict[str, EntityTypeNode] = {}
         routine_by_name: dict[str, RoutineTypeNode] = {}
         for doc in all_documents:
@@ -162,38 +165,86 @@ class Project:
                     routine_by_name[routine.name] = routine
 
         for doc in all_documents:
-            for type_name, _from_path in doc.embeddings:
-                if type_name in routine_by_name:
-                    original = routine_by_name[type_name]
-                    doc.body.routines.append(
-                        RoutineTypeNode(
-                            name=original.name,
-                            signature=original.signature,
-                            location=original.location,
-                            annotations=original.annotations,
-                            embedded=True,
-                            data=original.data,
-                            parent=doc.body,
-                            root=doc,
-                        )
+            # Collect entities to move from entities to routines
+            entities_to_move: list[EntityTypeNode] = []
+            entities_to_keep: list[EntityTypeNode] = []
+
+            for entity in doc.body.entities:
+                if not entity.embedded:
+                    entities_to_keep.append(entity)
+                    continue
+                if entity.name in routine_by_name:
+                    # Original is routine, embedded is in entities — move to routines
+                    entities_to_move.append(entity)
+                elif entity.name in entity_by_name:
+                    # Same type — enrich from original
+                    original = entity_by_name[entity.name]
+                    entity.signature = original.signature
+                    entity.annotations = original.annotations
+                    entity.properties = original.properties
+                    entity.methods = original.methods
+                    entity.location = os.path.join(original.root.path, original.location)
+                    entities_to_keep.append(entity)
+                else:
+                    entities_to_keep.append(entity)
+
+            doc.body.entities = entities_to_keep
+
+            for entity in entities_to_move:
+                original = routine_by_name[entity.name]
+                doc.body.routines.append(
+                    RoutineTypeNode(
+                        name=entity.name,
+                        signature=original.signature,
+                        location=os.path.join(original.root.path, original.location),
+                        annotations=original.annotations,
+                        embedded=True,
+                        data=entity.data,
+                        parent=doc.body,
+                        root=doc,
                     )
-                elif type_name in entity_by_name:
-                    original = entity_by_name[type_name]
-                    doc.body.entities.append(
-                        EntityTypeNode(
-                            name=original.name,
-                            signature=original.signature,
-                            location=original.location,
-                            annotations=original.annotations,
-                            properties=original.properties,
-                            methods=original.methods,
-                            embedded=True,
-                            mutations=original.mutations,
-                            data=original.data,
-                            parent=doc.body,
-                            root=doc,
-                        )
+                )
+
+            # Collect routines to move from routines to entities
+            routines_to_move: list[RoutineTypeNode] = []
+            routines_to_keep: list[RoutineTypeNode] = []
+
+            for routine in doc.body.routines:
+                if not routine.embedded:
+                    routines_to_keep.append(routine)
+                    continue
+                if routine.name in entity_by_name:
+                    # Original is entity, embedded is in routines — move to entities
+                    routines_to_move.append(routine)
+                elif routine.name in routine_by_name:
+                    # Same type — enrich from original
+                    original = routine_by_name[routine.name]
+                    routine.signature = original.signature
+                    routine.annotations = original.annotations
+                    routine.location = os.path.join(original.root.path, original.location)
+                    routines_to_keep.append(routine)
+                else:
+                    routines_to_keep.append(routine)
+
+            doc.body.routines = routines_to_keep
+
+            for routine in routines_to_move:
+                original = entity_by_name[routine.name]
+                doc.body.entities.append(
+                    EntityTypeNode(
+                        name=routine.name,
+                        signature=original.signature,
+                        location=os.path.join(original.root.path, original.location),
+                        annotations=original.annotations,
+                        properties=original.properties,
+                        methods=original.methods,
+                        embedded=True,
+                        mutations=[],  # embedded routine has no mutations
+                        data=routine.data,
+                        parent=doc.body,
+                        root=doc,
                     )
+                )
 
     def codemanifest(self, path: str) -> DocumentRoot:
         """Look up a DocumentRoot by its directory path at O(1)."""

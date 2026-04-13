@@ -1,0 +1,8 @@
+---
+
+---
+
+"EntityA":
+  location: entity.py
+  annotations: |
+    Helper entity

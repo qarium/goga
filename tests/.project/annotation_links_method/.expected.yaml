@@ -1,0 +1,9 @@
+errors:
+- rule: annotation_links_exists
+  message: Link `bad_method_link` in MethodNode annotation does not match any import,
+    usage, entity, routine, or signature parameter
+  document_path: annotation_links_method
+  node_data:
+    method() -> void:null: 'Method with `bad_method_link` and `MyEntity`
+
+      '

@@ -1,0 +1,11 @@
+---
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
+  methods:
+    "method() -> void:null": |
+      Method with `bad_method_link` and `MyEntity`

@@ -1,0 +1,13 @@
+---
+
+---
+
+"my_routine() -> result:str":
+  location: routine.py
+  annotations: |
+    Routine with `bad_routine_link` and `MyEntity`
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

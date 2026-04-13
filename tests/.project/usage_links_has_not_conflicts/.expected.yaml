@@ -1,0 +1,6 @@
+errors:
+- rule: usage_links_has_not_conflicts
+  message: Usage key 'SomeType' conflicts with imported type 'SomeType' — rename the
+    usage or use an alias in Imports
+  document_path: usage_links_has_not_conflicts
+  node_data: {}

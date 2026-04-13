@@ -202,12 +202,12 @@ Annotations: |
     Проверяет `EntityTypeNode`.
 
     Одно из правил должно совпасть:
-    - все мутации существуют среди имен entities
-    - все мутации существуют среди имен routines
-    - все мутации существуют среди типов в items `ImportsNode`
+    - все mutation_name (первый элемент кортежа) существуют среди имен entities
+    - все mutation_name (первый элемент кортежа) существуют среди имен routines
+    - все mutation_name (первый элемент кортежа) существуют среди типов в items `ImportsNode`
 
     Шаблоны ошибок:
-    - not_found: "Base type '{mutation}' for mutation of '{entity_name}' not found in imports, entities, or routines of this package"
+    - not_found: "Base type '{mutation_name}' for mutation of '{entity_name}' not found in imports, entities, or routines of this package"
 
 "DocumentRule::MutationIsValid(name: str = 'mutation_is_valid')":
   location: document.py
@@ -215,10 +215,10 @@ Annotations: |
     Проверяет `EntityTypeNode`.
 
     Правила:
-    - имена мутаций не совпадают с именем entity
+    - mutation_name (первый элемент кортежа) не совпадает с именем entity
 
     Шаблоны ошибок:
-    - self_mutation: "Mutation '{mutation}' on '{entity_name}' references itself — a type cannot mutate from its own signature"
+    - self_mutation: "Mutation '{mutation_name}' on '{entity_name}' references itself — a type cannot mutate from its own signature"
 
 "DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
   location: document.py

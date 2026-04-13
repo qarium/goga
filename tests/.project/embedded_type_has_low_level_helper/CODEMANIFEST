@@ -1,0 +1,11 @@
+---
+
+---
+
+"SiblingEntity":
+  location: entity.py
+  annotations: |
+    Source entity at same level
+  methods:
+    "method() -> void:null": |
+      Test method

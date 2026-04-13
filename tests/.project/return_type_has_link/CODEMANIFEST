@@ -1,0 +1,8 @@
+---
+
+---
+
+"my_routine(param: str) -> str":
+  location: routine.py
+  annotations: |
+    Missing link label in return type

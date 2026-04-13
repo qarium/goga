@@ -1,0 +1,14 @@
+Imports:
+  - Types:
+      - ConflictingType
+    From: entities_and_routines_has_not_conflicts_helper
+
+---
+
+"ConflictingType":
+  location: entity.py
+  annotations: |
+    Conflicts with import
+  methods:
+    "method() -> void:null": |
+      Test method

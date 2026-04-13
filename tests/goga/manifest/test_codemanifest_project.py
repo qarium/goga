@@ -828,7 +828,7 @@ class TestEmbeddedReclassification:
     """Embedded types are reclassified based on the original type definition."""
 
     def test_embedded_routine_reclassified_from_entity(self, tmp_path):
-        """->MyRoutine pointing to a routine gets reclassified from entity to routine."""
+        """->helper pointing to a routine: factory puts it in body as entity, _reclassify moves to routines."""
 
         # Parent doc defines a routine
         parent_dir = tmp_path / "parent"
@@ -875,7 +875,7 @@ Description: Test
         # Find the child document
         child_root = p.codemanifest(str(child_dir))
 
-        # helper should be reclassified as a routine, not entity
+        # Factory creates helper as embedded entity; _reclassify moves it to routines
         entity_names = [e.name for e in child_root.body.entities]
         routine_names = [r.name for r in child_root.body.routines]
         assert "helper" not in entity_names
@@ -1053,7 +1053,7 @@ Description: Test
         assert root.embeddings == []
 
     def test_embedded_entity_has_original_properties_and_methods(self, tmp_path):
-        """Embedded entity copy preserves properties and methods from original definition."""
+        """Embedded entity in body has properties/methods from the local definition in child doc."""
         parent_dir = tmp_path / "parent"
         parent_dir.mkdir()
         parent_doc = """\
@@ -1089,7 +1089,15 @@ Imports:
     From: ..
 
 ---
-"->MyEntity": {}
+"->MyEntity":
+  location: embedded.py
+  annotations: |
+    Embedded entity with own data
+  properties:
+    "count -> int": counter value
+  methods:
+    "run() -> void:null": |
+      Runs the entity
 
 ---
 Author: Test
@@ -1113,7 +1121,7 @@ Description: Test
         assert ent.methods[0].name == "run"
 
     def test_embedded_routine_has_original_signature(self, tmp_path):
-        """Embedded routine copy preserves signature from original definition."""
+        """Embedded routine in body preserves signature from child doc definition."""
         parent_dir = tmp_path / "parent"
         parent_dir.mkdir()
         parent_doc = """\
@@ -1142,7 +1150,8 @@ Imports:
     From: ..
 
 ---
-"->compute": {}
+"->compute(x: int, y: int) -> result:int": |
+  A computation routine
 
 ---
 Author: Test
@@ -1156,6 +1165,7 @@ Description: Test
 
         child_root = p.codemanifest(str(child_dir))
 
+        # Factory creates embedded string-value routine as RoutineTypeNode in body
         embedded_routines = [r for r in child_root.body.routines if r.name == "compute"]
         assert len(embedded_routines) == 1
         routine = embedded_routines[0]
@@ -1163,7 +1173,7 @@ Description: Test
         assert routine.signature == "(x: int, y: int) -> result:int"
 
     def test_multiple_embedded_types_from_same_source(self, tmp_path):
-        """Multiple embedded types from the same parent document are all reclassified correctly."""
+        """Multiple embedded types from the same parent document are all in body with embedded=True."""
         parent_dir = tmp_path / "parent"
         parent_dir.mkdir()
         parent_doc = """\
@@ -1220,14 +1230,13 @@ Description: Test
         assert "MyEntity" in embedding_names
         assert "helper" in embedding_names
 
-        # MyEntity should be in entities with embedded=True
+        # MyEntity (original is entity) stays in body.entities; helper (original is routine) moves to routines
         entity_names = [e.name for e in child_root.body.entities]
+        routine_names = [r.name for r in child_root.body.routines]
         assert "MyEntity" in entity_names
         ent = next(e for e in child_root.body.entities if e.name == "MyEntity")
         assert ent.embedded is True
 
-        # helper should be in routines with embedded=True
-        routine_names = [r.name for r in child_root.body.routines]
         assert "helper" in routine_names
         rout = next(r for r in child_root.body.routines if r.name == "helper")
         assert rout.embedded is True

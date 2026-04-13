@@ -1,0 +1,19 @@
+errors:
+- rule: entity_has_only_valid_keys
+  message: 'Entity ''MyEntity'' contains unknown keys [''invalid_key''] — allowed:
+    location, annotations, methods, properties'
+  document_path: entity_has_only_valid_keys
+  node_data:
+    location: entity.py
+    annotations: 'Test entity
+
+      '
+    properties:
+      name -> str: 'Name property
+
+        '
+    methods:
+      method() -> void:null: 'Test method
+
+        '
+    invalid_key: some_value

@@ -1,0 +1,6 @@
+errors:
+- rule: embedded_entity_can_not_has_mutations
+  message: Embedded entity 'MutatedEntity' (->Entity) cannot define mutations — embedded
+    types are included as-is from their source package
+  document_path: embedded_entity_can_not_has_mutations
+  node_data: {}

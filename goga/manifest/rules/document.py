@@ -489,12 +489,12 @@ class MutationExists(DocumentRule):
 
         # Check each entity's mutations
         for entity in node.root.body.entities:
-            for mutation in entity.mutations:
-                if mutation not in valid_names:
+            for mutation_name, _mutation_path in entity.mutations:
+                if mutation_name not in valid_names:
                     errors.append(
                         ManifestRuleError(
                             message=(
-                                f"Base type '{mutation}' for mutation of '{entity.name}'"
+                                f"Base type '{mutation_name}' for mutation of '{entity.name}'"
                                 f" not found in imports, entities, or routines of this package"
                             ),
                             rule=self.name,
@@ -516,12 +516,12 @@ class MutationIsValid(DocumentRule):
         errors: list[ManifestRuleError] = []
 
         for entity in node.root.body.entities:
-            for mutation in entity.mutations:
-                if mutation == entity.name:
+            for mutation_name, _mutation_path in entity.mutations:
+                if mutation_name == entity.name:
                     errors.append(
                         ManifestRuleError(
                             message=(
-                                f"Mutation '{mutation}' on '{entity.name}' references itself"
+                                f"Mutation '{mutation_name}' on '{entity.name}' references itself"
                                 f" — a type cannot mutate from its own signature"
                             ),
                             rule=self.name,

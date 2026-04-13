@@ -1,0 +1,11 @@
+Imports:
+  - Types:
+      - SomeType
+    From: ""
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

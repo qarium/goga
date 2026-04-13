@@ -1,0 +1,8 @@
+---
+
+---
+
+"OtherType":
+  location: entity.py
+  annotations: |
+    Helper entity

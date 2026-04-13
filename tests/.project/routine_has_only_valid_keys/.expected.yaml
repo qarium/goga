@@ -1,0 +1,11 @@
+errors:
+- rule: routine_has_only_valid_keys
+  message: 'Routine ''my_routine'' contains unknown keys [''invalid_key''] — allowed:
+    location, annotations'
+  document_path: routine_has_only_valid_keys
+  node_data:
+    location: routine.py
+    annotations: 'Test routine
+
+      '
+    invalid_key: some_value

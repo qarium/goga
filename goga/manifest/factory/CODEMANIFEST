@@ -57,7 +57,7 @@ Annotations: |
     объединенных в корневую ноду `DocumentRoot`.
 
     Встраиваемые типы (префикс ->) маршрутизируются в embeddings как (name, path),
-    и не попадают в entities и routines — требуют отложенной маршрутизации.
+    и одновременно добавляются в entities/routines с флагом embedded=True.
   methods:
     "create(parent: Node = None) -> document:DocumentRoot": |
       Создает дерево документа
@@ -65,7 +65,7 @@ Annotations: |
       `parent`: родительская нода
       `document`: сущность созданного документа
 
-      ## Заголовок → HeaderNode
+      ## Заголовок → `HeaderNode`
 
       Импорты → `ImportsNode`:
       - Каждый type в item проверяется на alias и парсится с учетом AS
@@ -82,7 +82,7 @@ Annotations: |
 
       Неизвестные ключи → `ManifestParseError`
 
-      ## Тело → BodyNode
+      ## Тело → `BodyNode`
 
       Рутины → `RoutineTypeNode` (только если нет properties, methods и мутаций):
       - Сигнатура сохраняется без имени: "(param: str) -> void:null"
@@ -94,7 +94,7 @@ Annotations: |
       - Префикс -> влияет на embedded флаг, но не является частью имени
       - Если нет свойств и методов, но есть мутация → это сущность
 
-      ## Нижний колонтитул → FooterNode
+      ## Нижний колонтитул → `FooterNode`
 
       Неизвестные ключи → `ManifestParseError`
 

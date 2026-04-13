@@ -1,0 +1,10 @@
+errors:
+- rule: annotation_links_exists
+  message: Link `bad_routine_link` in RoutineTypeNode annotation does not match any
+    import, usage, entity, routine, or signature parameter
+  document_path: annotation_links_routine
+  node_data:
+    location: routine.py
+    annotations: 'Routine with `bad_routine_link` and `MyEntity`
+
+      '

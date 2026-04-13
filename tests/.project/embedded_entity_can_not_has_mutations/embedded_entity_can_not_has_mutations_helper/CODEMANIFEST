@@ -1,0 +1,17 @@
+
+---
+
+---
+
+"BaseEntity":
+  location: entity.py
+  annotations: |
+    Base entity without mutations
+
+"BaseEntity::MutatedEntity":
+  location: entity.py
+  annotations: |
+    Mutated entity in source package
+  methods:
+    "method() -> void:null": |
+      Test method

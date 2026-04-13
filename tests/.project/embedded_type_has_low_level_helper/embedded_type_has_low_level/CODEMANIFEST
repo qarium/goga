@@ -1,0 +1,14 @@
+Imports:
+  - Types:
+      - SiblingEntity
+    From: embedded_type_has_low_level_helper
+
+---
+
+->TestEntity:
+  location: entity.py
+  annotations: |
+    Import invalid `SiblingEntity` from top level
+  methods:
+    "method() -> void:null": |
+      Test method

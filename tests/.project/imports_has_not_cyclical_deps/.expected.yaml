@@ -1,0 +1,9 @@
+errors:
+- rule: imports_has_not_cyclical_deps
+  message: 'Cyclical import: package ''./imports_has_not_cyclical_deps'' and ''./imports_has_not_cyclical_deps_helper''
+    import from each other'
+  document_path: imports_has_not_cyclical_deps
+  node_data:
+    Types:
+    - EntityB
+    From: ./imports_has_not_cyclical_deps_helper

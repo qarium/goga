@@ -1,0 +1,12 @@
+Imports:
+  - Types:
+      - SomeType
+    From: imports_has_only_valid_keys_helper
+    ExtraKey: value
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

@@ -1,0 +1,10 @@
+errors:
+- rule: imports_has_only_valid_keys
+  message: 'Import from ''imports_has_only_valid_keys_helper'' contains unknown keys
+    [''ExtraKey''] — allowed: Types, From'
+  document_path: imports_has_only_valid_keys
+  node_data:
+    Types:
+    - SomeType
+    From: imports_has_only_valid_keys_helper
+    ExtraKey: value

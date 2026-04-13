@@ -909,7 +909,7 @@ class TestMutationExists:
             header=HeaderNode(),
             body=BodyNode(
                 entities=[
-                    EntityTypeNode(name="MyEntity", mutations=["OtherEntity"]),
+                    EntityTypeNode(name="MyEntity", mutations=[("OtherEntity", "path")]),
                     EntityTypeNode(name="OtherEntity"),
                 ],
             ),
@@ -923,7 +923,7 @@ class TestMutationExists:
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", mutations=["do_stuff"])],
+                entities=[EntityTypeNode(name="MyEntity", mutations=[("do_stuff", "path")])],
                 routines=[RoutineTypeNode(name="do_stuff")],
             ),
         )
@@ -938,7 +938,7 @@ class TestMutationExists:
                 imports=ImportsNode(items=[ImportItemNode(type_name={"ImportedType"}, from_path="a")]),
             ),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", mutations=["ImportedType"])],
+                entities=[EntityTypeNode(name="MyEntity", mutations=[("ImportedType", "path")])],
             ),
         )
         node = DocumentNode(root=root)
@@ -952,7 +952,7 @@ class TestMutationExists:
                 imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", mutations=["NonExistent"])],
+                entities=[EntityTypeNode(name="MyEntity", mutations=[("NonExistent", "path")])],
                 routines=[RoutineTypeNode(name="some_func")],
             ),
         )
@@ -980,7 +980,7 @@ class TestMutationIsValid:
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", mutations=["OtherEntity"])],
+                entities=[EntityTypeNode(name="MyEntity", mutations=[("OtherEntity", "path")])],
             ),
         )
         node = DocumentNode(root=root)
@@ -992,7 +992,7 @@ class TestMutationIsValid:
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", mutations=["MyEntity"])],
+                entities=[EntityTypeNode(name="MyEntity", mutations=[("MyEntity", "path")])],
             ),
         )
         node = DocumentNode(root=root)
@@ -1104,7 +1104,7 @@ class TestEmbeddedEntityCanNotHasMutations:
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", embedded=False, mutations=["MutA"])],
+                entities=[EntityTypeNode(name="MyEntity", embedded=False, mutations=[("MutA", "path")])],
             ),
         )
         node = DocumentNode(root=root)
@@ -1116,7 +1116,7 @@ class TestEmbeddedEntityCanNotHasMutations:
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(
-                entities=[EntityTypeNode(name="MyEntity", embedded=True, mutations=["MutA"])],
+                entities=[EntityTypeNode(name="MyEntity", embedded=True, mutations=[("MutA", "path")])],
             ),
         )
         node = DocumentNode(root=root)

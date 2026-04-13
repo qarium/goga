@@ -1,0 +1,15 @@
+Imports:
+  - Types:
+      - SomeType
+    From: usage_links_has_not_conflicts_helper
+
+Usages:
+  SomeType: |
+    Conflicts with import
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity using `SomeType`

@@ -1,0 +1,15 @@
+Usages:
+  used_pattern: |
+    This pattern is referenced
+  unused_pattern: |
+    Some pattern that is never referenced
+
+Annotations: |
+  Use `used_pattern` here
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity without referencing unused_pattern

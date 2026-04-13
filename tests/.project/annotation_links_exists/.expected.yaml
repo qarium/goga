@@ -1,0 +1,9 @@
+errors:
+- rule: annotation_links_exists
+  message: Link `nonexistent_link` in HeaderNode annotation does not match any import,
+    usage, entity, routine, or signature parameter
+  document_path: annotation_links_exists
+  node_data:
+    Annotations: 'See `MyEntity` and `nonexistent_link` for something
+
+      '

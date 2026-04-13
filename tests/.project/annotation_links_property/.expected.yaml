@@ -1,0 +1,9 @@
+errors:
+- rule: annotation_links_exists
+  message: Link `bad_prop_link` in PropertyNode annotation does not match any import,
+    usage, entity, routine, or signature parameter
+  document_path: annotation_links_property
+  node_data:
+    prop -> str: 'Property with `bad_prop_link` and `MyEntity`
+
+      '

@@ -1,0 +1,14 @@
+errors:
+- rule: mutation_exists
+  message: Base type 'NonExistentBase' for mutation of 'MyEntity' not found in imports,
+    entities, or routines of this package
+  document_path: mutation_exists
+  node_data:
+    location: entity.py
+    annotations: 'Mutation from non-existent type
+
+      '
+    methods:
+      method() -> void:null: 'Test method
+
+        '

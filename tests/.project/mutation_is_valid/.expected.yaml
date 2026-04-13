@@ -1,0 +1,14 @@
+errors:
+- rule: mutation_is_valid
+  message: Mutation 'SelfRef' on 'SelfRef' references itself — a type cannot mutate
+    from its own signature
+  document_path: mutation_is_valid
+  node_data:
+    location: entity.py
+    annotations: 'Self-referencing mutation
+
+      '
+    methods:
+      method() -> void:null: 'Test method
+
+        '

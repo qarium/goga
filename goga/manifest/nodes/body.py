@@ -32,7 +32,7 @@ class EntityTypeNode(DocumentNode):
     properties: list[PropertyNode] = field(default_factory=list)
     methods: list[MethodNode] = field(default_factory=list)
     embedded: bool = False
-    mutations: list[str] = field(default_factory=list)
+    mutations: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass

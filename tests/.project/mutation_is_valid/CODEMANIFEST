@@ -1,0 +1,11 @@
+---
+
+---
+
+"SelfRef::SelfRef":
+  location: entity.py
+  annotations: |
+    Self-referencing mutation
+  methods:
+    "method() -> void:null": |
+      Test method

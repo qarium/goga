@@ -1,0 +1,14 @@
+Imports:
+  - Types:
+      - EntityA
+    From: import_has_not_duplicate_helper
+  - Types:
+      - EntityA
+    From: import_has_not_duplicate_helper2
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

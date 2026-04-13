@@ -1,0 +1,9 @@
+---
+
+---
+
+"my_routine() -> result:str":
+  location: routine.py
+  annotations: |
+    Test routine
+  invalid_key: some_value

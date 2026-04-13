@@ -1,0 +1,14 @@
+errors:
+- rule: annotation_links_exists
+  message: Link `bad_entity_link` in EntityTypeNode annotation does not match any
+    import, usage, entity, routine, or signature parameter
+  document_path: annotation_links_entity
+  node_data:
+    location: entity.py
+    annotations: 'Entity with `bad_entity_link` and `OtherEntity`
+
+      '
+    methods:
+      method() -> void:null: 'Test method
+
+        '

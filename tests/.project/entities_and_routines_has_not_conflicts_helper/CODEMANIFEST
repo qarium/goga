@@ -1,0 +1,8 @@
+---
+
+---
+
+"ConflictingType":
+  location: entity.py
+  annotations: |
+    Helper entity

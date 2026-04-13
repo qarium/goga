@@ -1,0 +1,9 @@
+Annotations: |
+  See `MyEntity` and `nonexistent_link` for something
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

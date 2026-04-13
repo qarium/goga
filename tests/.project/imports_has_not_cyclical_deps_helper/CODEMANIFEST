@@ -1,0 +1,11 @@
+Imports:
+  - Types:
+      - EntityA
+    From: ./imports_has_not_cyclical_deps
+
+---
+
+"EntityB":
+  location: entity.py
+  annotations: |
+    Helper entity
