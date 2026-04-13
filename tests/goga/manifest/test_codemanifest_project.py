@@ -90,7 +90,7 @@ class TestLoadSingleDocument:
         p = Project(str(doc_dir))
         p.load()
         assert len(p.tree) == 1
-        assert p.tree[0].path == str(doc_dir)
+        assert p.tree[0].path == os.path.normpath(os.path.relpath(str(doc_dir)))
 
 
 # ---------------------------------------------------------------------------
@@ -119,17 +119,17 @@ class TestLoadNestedDocuments:
         assert len(p.tree) == 1
 
         root_doc = p.tree[0]
-        assert root_doc.path == str(root_dir)
+        assert root_doc.path == os.path.normpath(os.path.relpath(str(root_dir)))
 
         # level2 is child of level1
         assert len(root_doc.children) == 1
         child2 = root_doc.children[0]
-        assert child2.path == str(level2)
+        assert child2.path == os.path.normpath(os.path.relpath(str(level2)))
 
         # level3 is child of level2
         assert len(child2.children) == 1
         child3 = child2.children[0]
-        assert child3.path == str(level3)
+        assert child3.path == os.path.normpath(os.path.relpath(str(level3)))
 
         # level3 has no children
         assert len(child3.children) == 0
@@ -333,7 +333,7 @@ class TestIntermediateDirectoryWithoutCodemanifest:
         # child is a direct child of root (intermediate skipped)
         assert len(root_doc.children) == 1
         child_doc = root_doc.children[0]
-        assert child_doc.path == str(child_dir)
+        assert child_doc.path == os.path.normpath(os.path.relpath(str(child_dir)))
 
     def test_load_clears_previous_state(self, tmp_path):
         """Calling load() twice resets tree and errors."""
@@ -417,7 +417,7 @@ class TestCodemanifestLookup:
         finally:
             os.chdir(str(original_cwd))
 
-        assert doc.path == str(Path(str(level3)).resolve())
+        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level3)).resolve())))
 
     # -- 4. Positive — relative path without dot --
 
@@ -436,7 +436,7 @@ class TestCodemanifestLookup:
         finally:
             os.chdir(str(original_cwd))
 
-        assert doc.path == str(Path(str(level2)).resolve())
+        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level2)).resolve())))
 
     # -- 5. Positive — absolute path --
 
@@ -447,7 +447,7 @@ class TestCodemanifestLookup:
         p.load()
 
         doc = p.codemanifest(str(level3))
-        assert doc.path == str(level3)
+        assert doc.path == os.path.normpath(os.path.relpath(str(level3)))
 
     # -- 6. Negative — nonexistent path --
 
@@ -479,7 +479,7 @@ class TestCodemanifestLookup:
         # Construct a path with . and .. segments
         tricky_path = str(level3) + "/../level3"
         doc = p.codemanifest(tricky_path)
-        assert doc.path == str(Path(str(level3)).resolve())
+        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level3)).resolve())))
 
     # -- 9. Edge — load() rebuilds index --
 
@@ -498,7 +498,7 @@ class TestCodemanifestLookup:
 
         # root_dir is findable, new_dir is not
         doc = p.codemanifest(str(root_dir))
-        assert doc.path == str(Path(str(root_dir)).resolve())
+        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(root_dir)).resolve())))
 
         with pytest.raises(KeyError):
             p.codemanifest(str(new_dir))
@@ -509,10 +509,10 @@ class TestCodemanifestLookup:
 
         # Both should be findable now
         doc_root = p.codemanifest(str(root_dir))
-        assert doc_root.path == str(Path(str(root_dir)).resolve())
+        assert doc_root.path == os.path.normpath(os.path.relpath(str(Path(str(root_dir)).resolve())))
 
         doc_new = p.codemanifest(str(new_dir))
-        assert doc_new.path == str(Path(str(new_dir)).resolve())
+        assert doc_new.path == os.path.normpath(os.path.relpath(str(Path(str(new_dir)).resolve())))
 
 
 # ---------------------------------------------------------------------------

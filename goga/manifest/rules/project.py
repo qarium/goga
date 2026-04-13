@@ -74,7 +74,9 @@ class ImportTypeExists(ProjectRule):
         errors: list[ProjectRuleError] = []
 
         # Build O(1) lookup: doc path -> DocumentRoot
-        path_lookup: dict[str, DocumentRoot] = {doc.path: doc for doc in self._tree}
+        path_lookup: dict[str, DocumentRoot] = {
+            str(Path(doc.path).resolve()): doc for doc in self._tree
+        }
 
         for item in document.header.imports.items:
             from_path = item.from_path
@@ -83,7 +85,7 @@ class ImportTypeExists(ProjectRule):
             if not Path(from_path).exists():
                 continue
 
-            target_doc = path_lookup.get(from_path)
+            target_doc = path_lookup.get(str(Path(from_path).resolve()))
             if target_doc is None:
                 continue
 

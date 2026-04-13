@@ -65,6 +65,7 @@ class Project:
         self._tree = []
         self._errors = []
         self._index = {}
+        self._path = os.path.normpath(os.path.relpath(self._path))
 
         # Map from directory path to its DocumentRoot (for parent-child wiring)
         loaded: dict[str, DocumentRoot] = {}
