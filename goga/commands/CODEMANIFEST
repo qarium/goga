@@ -1,0 +1,63 @@
+Imports:
+  - Types:
+      - Project
+    From: goga/manifest
+
+Usages:
+  click: .usages/tools/click.md
+  conventions: .usages/development/conventions.md
+  codemanifest: |
+    Работать с типом `Project`.
+    Загрузить проект с использованием Project.load.
+    `Project` необходимо создавать с указанием пути в текущий CWD (".").
+    Ошибки брать из Project.errors.
+  beautiful_yaml: |
+    Сделать из python объекта yaml строку с учетом форматирования.
+
+    ```python
+    yaml.dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True, indent=2)
+    ```
+
+    sort_keys: используется только для python 3.7 и выше, сохраняет порядок ключей
+    default_flow_style: заменяет компактный вид [...] на классические списки с дефисом
+    allow_unicode: позволяет выводить Unicode-символы (например, кириллицу) напрямую, а не кодами
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Для создания команд и групп команд использовать практику `click`.
+
+---
+
+"linter(path: str = '.')":
+  location: linter.py
+  annotations: |
+    Команда валидации CODEMANIFEST файлов в проекте.
+
+    `path`: путь для создания контекста CWD
+
+    Алгоритм:
+    - Сменить CWD на указанный `path`
+    - Создать и загрузить проект с использованием практики `codemanifest`
+    - Вывести все ошибки в указанном формате
+
+    Формат ошибки:
+    ```
+    [rule_name] <message>
+      --> <path>
+          <yaml_data>
+    ```
+
+    Требования:
+    - Данный yaml должны выводиться, в yaml формате с использованием практики `beautiful_yaml`
+    - Отступы в формате важны, [rule_name] - с начала строки, --> - на следующей строке через
+      2 пробела от начала строки, данные yaml через 6 проделов от начала строки при этом каждая
+      новая строка yaml должна так же отступать 6 пробелов
+    - [rule_name] необходимо выводить красным цветом
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 13/04/26
+
+Description: |
+  Манифест описывает команды для консольного приложения goga

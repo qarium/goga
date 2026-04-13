@@ -1,0 +1,35 @@
+Imports:
+  - Types:
+      - linter
+    From: goga/commands
+  - Types:
+      - Project
+    From: goga/manifest
+
+Usages:
+  click: .usages/tools/click.md
+  conventions: .usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Приложение должно быть подключено в __main__.py файл для вызова через python -m.
+
+---
+
+->Project: {}
+
+app:
+  location: cli.py
+  annotations: |
+    Для создания корневой группы команд использовать практику `click`.
+
+    Команды:
+    - `linter`
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 13/04/26
+
+Description: |
+  Манифест описывает сборку основного интерфейса приложения goga
