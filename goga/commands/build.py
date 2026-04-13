@@ -103,7 +103,7 @@ RALPHEX_CONFIG_DEFAULTS = {
 
 
 def _create_claude_wrapper() -> None:
-    """Create .ralphex/claude-wrapper.sh with execute permission and set ralphex config defaults. Overwrites on every run."""
+    """Create .ralphex/claude-wrapper.sh and set ralphex config defaults. Overwrites on every run."""
     click.echo("Creating .ralphex/claude-wrapper.sh...")
 
     ralphex_dir = Path(".ralphex")

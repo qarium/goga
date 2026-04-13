@@ -13,13 +13,15 @@ from goga.commands import build
 from goga.commands.build import (
     CLAUDE_WRAPPER_SCRIPT,
     DEFAULT_BUILD_CONFIG,
+)
+from goga.commands.build import (
     build as build_cmd,
 )
 
 
 def _run_build_in_tmp(tmp_path, args=None):
     """Run the build command in tmp_path directory, restoring CWD afterwards."""
-    original_cwd = os.getcwd()
+    original_cwd = str(Path.cwd())
     try:
         os.chdir(tmp_path)
         runner = CliRunner()

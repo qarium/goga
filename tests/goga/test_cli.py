@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import click
 from click.testing import CliRunner
-
 from goga import app
 from goga.cli import app as cli_app
 
