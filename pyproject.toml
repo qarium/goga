@@ -24,6 +24,9 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+goga = "goga.cli:app"
+
 [project.optional-dependencies]
 test = [
     "pytest>=8.0",
