@@ -1,0 +1,91 @@
+# *********************************************** #
+# Манифест описывает посетителя каждого манифеста #
+# *********************************************** #
+
+Imports:
+  - Types:
+      - DocumentRoot
+    From: goga/manifest/nodes
+  - Types:
+      # правила документа
+      - ImportsCanNotBeEmptyRule
+      - ImportHasTypeRule
+      - ImportHasValidFromPathRule
+      - ImportHasNotDuplicate
+      - AllUsagesIsUsed
+      - AnnotationLinksExists
+      - UsageLinksHasNotConflicts
+      - EntitiesAndRoutinesHasNotConflicts
+      - MutationExists
+      - MutationIsValid
+      - ReturnTypeHasLink
+      - EmbeddedEntityCanNotHasMutations
+      # правила проекта
+      - ImportsHasNotCyclicalDepsRule
+      - EmbeddedTypeHasLowLevel
+    From: goga/manifest/rules
+  - Types:
+      - ProjectRuleError
+      - ManifestRuleError
+    From: goga/manifest/errors
+
+Usages:
+  conventions: .usages/development/conventions.md
+  nodes: |
+    Использовать манифест goga/manifest/nodes и его API дл работы с структурой документа
+  factory: |
+    Использовать манифест goga/manifest/factory и его API для создания документа
+  visitor: |
+    Использовать манифест goga/manifest/visitor и его API для анализа одного документа
+  analyzer: |
+    Использовать манифест goga/manifest/analyzer и его API для анализа всего дерева документов
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+"Project(path: str)":
+  location: project.py
+  annotations: |
+    Рекурсивно загружает дерево манифест документов
+
+    `path`: путь из которого необходимо загрузить дерево
+
+    Правила документа и проекта определены в подключенных типах из `goga/manifest/rules`.
+  properties:
+    tree -> list[DocumentRoot]: |
+      Дерево документов в проекте.
+      Вершины графа, спускаться по дереву можно от вершин используя практику `nodes`.
+    errors -> list[ProjectRuleError | ManifestRuleError]: |
+      Список ошибок после анализа
+  methods:
+    load(): |
+      Загружает дерево по указанному пути
+
+      Алгоритм:
+      - Рекурсивно обойти каждую директорию
+      - Обнаружить CODEMANIFEST файл в корне директории и если файл существует выполнить:
+        - создание документа с помощью практики `factory`
+        - добавить вершину в tree если это самый верхний уровень иерархии
+        - добавить ребенка к родительскому документу с помощью практики `nodes`
+      - Маршрутизировать все встраиваемые типы в оригинальный тип из embeddings документа
+      - Выполнить анализ каждого документа с помощью практики `visitor`
+      - Применить глобальный анализ документов с помощью практики `analyzer`
+    "codemanifest(path: str) -> found_document:DocumentRoot": |
+      На основании пути возвращает документ.
+
+      Требования:
+      - Должны обрабатываться любые варианты путей
+        - относительный ./path/path
+        - относительный path/path
+        - полный /path/path
+      - Поиск документа должен соответствовать алгоритмической сложности O(1)
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает проект в котором строится дерево манифест документов
