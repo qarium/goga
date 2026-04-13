@@ -53,9 +53,9 @@ class TestApiShape:
         assert "plan" in param_names
 
     def test_build_plan_default(self) -> None:
-        """The plan argument defaults to 'plan.md'."""
+        """The plan argument defaults to 'docs/plans/plan.md'."""
         plan_param = next(p for p in build_cmd.params if p.name == "plan")
-        assert plan_param.default == "plan.md"
+        assert plan_param.default == "docs/plans/plan.md"
 
     def test_build_has_eight_options(self) -> None:
         """The build command has 8 options (plus 1 argument)."""
@@ -328,7 +328,7 @@ class TestRalphexExecution:
         mock_call.assert_called_once()
         cmd = mock_call.call_args[0][0]
         assert cmd[0] == "ralphex"
-        assert "plan.md" in cmd
+        assert "docs/plans/plan.md" in cmd
         assert "--config-dir" in cmd
         assert ".ralphex/" in cmd
 
