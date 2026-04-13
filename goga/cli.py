@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import click
 
-from .commands.build import build
+from .commands import linter
 
 
 @click.group()
-def main() -> None:
-    """goga — code lifecycle management CLI."""
+def app() -> None:
+    """Goga — CODEMANIFEST validation tool."""
 
 
-main.add_command(build)
+app.add_command(linter)

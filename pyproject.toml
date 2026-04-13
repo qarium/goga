@@ -1,11 +1,103 @@
+[build-system]
+requires = ["setuptools>=61.0", "setuptools-scm>=8.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "goga"
-version = "0.1.0"
+dynamic = ["version"]
+description = "A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["click", "pyyaml"]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+dependencies = [
+    "click",
+    "pyyaml",
+]
 
-[tool.setuptools]
-packages = ["goga", "goga.config", "goga.commands"]
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.15.0",
+]
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+]
 
-[project.scripts]
-goga = "goga.cli:main"
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+include = ["goga*"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["goga"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "PL",  # pylint: deep logic analyze
+    "PLR", # pylint Refactor
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "PT",  # flake8-pytest-style
+    "ARG", # flake8-unused-arguments
+    "RUF", # ruff-specific rules
+    "PTH", # flake8-use-pathlib
+    "C90", # Mccabe: check complexity
+]
+
+ignore = [
+    "UP045", # `X | None` — not compatible with Python 3.10 dataclass fields, use `typing.Optional`
+]
+
+[tool.ruff.lint.mccabe]
+# threshhold for max function complexity
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = [
+    "S101",    # assert allowed in tests
+    "ARG001",  # unused function arguments allowed in tests
+    "ARG002",  # unused method arguments allowed in tests
+    "PLR2004", # magic value comparisons in assertions are acceptable
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+# auto format lists
+skip-magic-trailing-comma = false
+# Linux (\n)
+line-ending = "lf"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.coverage.run]
+source = ["goga"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

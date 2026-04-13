@@ -50,7 +50,7 @@ def build(dry_run: bool) -> None:
     build_cfg = get_build_config()
     config_dir = resolve_config_dir(build_cfg)
 
-    args = ["ralphex"] + build_ralphex_args(build_cfg, config_dir)
+    args = ["ralphex", *build_ralphex_args(build_cfg, config_dir)]
 
     if dry_run:
         click.echo(f"prompts source: {resolve_prompts_source(build_cfg)}")

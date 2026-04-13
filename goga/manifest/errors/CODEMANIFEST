@@ -1,0 +1,104 @@
+# ************************************************************* #
+# Манифест описывает возможные ошибки при работе с CODEMANIFEST #
+# ************************************************************* #
+
+Imports:
+  - Types:
+      - DocumentRoot
+      - DocumentNode
+    From: goga/manifest/nodes
+
+Usages:
+  conventions: .usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+"BaseCodemanifestError(message: str)":
+  location: base.py
+  annotations: |
+    Базовое исключение при работе с CODEMANIFEST
+
+    `message`: текст ошибки
+
+    Требования:
+    - Должен наследоваться от Exception
+    - `message` должен попадать в Exception.args
+  properties:
+    message -> str: |
+      Сообщение с которым была создана ошибка
+
+"BaseCodemanifestError::ManifestParseError(message: str, filepath: str)":
+  location: manifest.py
+  annotations: |
+    Ошибка при парсинге манифеста
+
+    `message`: текст ошибки
+    `filepath`: путь к файлу в котором произошла ошибка
+  properties:
+    filepath -> str: |
+      Путь к файлу с которым была создана ошибка
+
+"BaseCodemanifestError::ManifestRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
+  location: manifest.py
+  annotations: |
+    Ошибка при не соблюдении правила
+
+    `message`: текст ошибки
+    `rule`: имя правила которое было не соблюдено
+    `document`: документ в котором произошла ошибка
+    `node`: нода в которой произошла ошибка
+
+    Требования:
+    - Ошибка должна приводиться к строке по формату
+      ```
+      Error: <message>
+      Rule: <rule>
+      Path: <document path without filename>
+      Node:
+        <beautiful node data>
+      ```
+  properties:
+    rule -> str: |
+      Имя правила с которым была создана ошибка
+    document -> DocumentNode: |
+      Документ в котором произошла ошибка
+    node -> DocumentNode: |
+      Нода с которой была создана ошибка
+
+"BaseCodemanifestError::ProjectRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
+  location: project.py
+  annotations: |
+    Ошибка при не соблюдении правила
+
+    `message`: текст ошибки
+    `rule`: имя правила которое было не соблюдено
+    `document`: документ в котором произошла ошибка
+    `node`: нода в которой произошла ошибка
+
+    Требования:
+    - Ошибка должна приводиться к строке по формату
+      ```
+      Error: <message>
+      Rule: <rule>
+      Path: <document path without filename if document exists>
+      Node:
+        <beautiful node data if node exists>
+      ```
+  properties:
+    rule -> str: |
+      Имя правила с которым была создана ошибка
+    document -> DocumentNode | None: |
+      Документ в котором произошла ошибка
+    node -> DocumentNode | None: |
+      Нода с которой была создана ошибка
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает возможные ошибки при работе с CODEMANIFEST

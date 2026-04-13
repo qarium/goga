@@ -1,0 +1,26 @@
+name: Release docs
+on:
+  push:
+    branches:
+      - '[0-9]+.[0-9]+.x'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.x
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[docs]"
+
+      - name: Build and Deploy
+        run: mkdocs gh-deploy --force

@@ -1,0 +1,46 @@
+# *********************************************** #
+# Манифест описывает посетителя каждого манифеста #
+# *********************************************** #
+
+Imports:
+  - Types:
+      - DocumentRoot
+    From: goga/manifest/nodes
+  - Types:
+      - ManifestParseError
+      - ManifestRuleError
+    From: goga/manifest/errors
+  - Types:
+      - DocumentRule
+    From: goga/manifest/rules
+
+Usages:
+  conventions: .usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+"Visitor(document: DocumentRoot)":
+  location: visitor.py
+  annotations: |
+    Анализирует документ на предмет ошибок
+
+    `document`: документ который необходимо проанализировать
+  properties:
+    document -> DocumentRoot: |
+      Документ с которым создано правило
+  methods:
+    "analyze(rules: list[DocumentRule]) -> errors:list[ManifestRuleError]": |
+      Анализировать правила применяемые к документу
+
+      `errors`: список ошибок после применения правил
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает посетителя который анализирует манифест относительно указанных правил

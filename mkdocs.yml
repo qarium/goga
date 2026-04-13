@@ -1,0 +1,39 @@
+docs_dir: docs
+
+site_name: goga
+site_description: A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow
+site_url: https://qarium.github.io/goga/
+repo_url: https://github.com/qarium/goga
+edit_uri: edit/0.0.x/docs/
+
+theme:
+  name: material
+  custom_dir: docs/overrides
+  logo: https://avatars.githubusercontent.com/u/262344922?s=200&v=4
+  palette:
+    - scheme: default
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+        media: "(prefers-color-scheme: light)"
+    - scheme: slate
+      primary: custom
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+        media: "(prefers-color-scheme: dark)"
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+nav:
+  - Home: index.md
+  - Getting Started: getting-started.md
+  - Examples: examples.md
+  - CLI Reference: cli-reference.md

@@ -1,0 +1,184 @@
+# ********************************************************* #
+# Файл описывает структуры данных нод в документе манифеста #
+# ********************************************************* #
+
+Usages:
+  conventions: .usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+Node():
+  location: base.py
+  properties:
+    parent -> DocumentNode | DocumentRoot:
+      Родительская нода или документ
+    data -> dict[str, Any]: |
+      Исходные данные из которых была сделана нода
+
+Node::DocumentRoot():
+  location: document.py
+  properties:
+    path -> str: |
+      Относительный путь расположения документа
+    links -> dict[str, list[Node]]: |
+      Все ссылки в документе с маппингом на ноды аннотаций в которых они встречаются
+    embeddings -> list[tuple[str, str]]: |
+      Список отношений имени встраиваемого типа к пути из которого он встраивается
+    header -> HeaderNode: |
+      Нода с содержимым заголовка, default=HeaderNode()
+    body -> BodyNode: |
+      Нода с содержимым тела, default=BodyNode()
+    footer -> FooterNode: |
+      Нижний колонтитул документа, default=FooterNode()
+    types -> dict[str, list[Node]]: |
+      Все типы в документе из header и Body с маппингом на ноды типа.
+      Для подключенных типов список нод пустой.
+    children -> list[DocumentRoot]:
+      Дочерние, вложенные документы
+
+Node::DocumentNode():
+  location: document.py
+  properties:
+    root -> DocumentRoot:
+      Основной объект документа
+
+DocumentNode::AnnotationsNode():
+  location: common.py
+  properties:
+    url -> str | None: |
+      ULR из которого нужно загрузить практику
+    filepath -> str | None: |
+      Путь до файла с аннотацией
+    links -> list[str]: |
+      Список ссылок в аннотациях
+    text -> str: |
+      Текст аннотации
+
+DocumentNode::HeaderNode():
+  location: header.py
+  properties:
+    imports -> ImportsNode: |
+      Список импортов содержащийся в документе, default=ImportsNode()
+    usages -> UsagesNode: |
+      Список практик содержащийся в документе, default=UsagesNode()
+    annotations -> AnnotationsNode: |
+      Аннотации содержащийся в документе
+    types -> list[str]: |
+      Список имен типов подключенных через imports
+
+DocumentNode::ImportsNode():
+  location: header.py
+  properties:
+    items -> list[ImportItemNode]: |
+      Список импортов
+
+DocumentNode::ImportItemNode():
+  location: header.py
+  properties:
+    type_name -> set[str]: |
+      Имя типа который нужно импортировать
+    from_path -> str: |
+      Путь откуда импортировать тип
+    alias -> str: |
+      Альяс на имя типа
+
+DocumentNode::UsagesNode():
+  location: header.py
+  properties:
+    items -> list[UsageItemNode]: |
+      Список практик
+
+DocumentNode::UsageItemNode():
+  location: header.py
+  properties:
+    name -> str: |
+      Имя практики
+    annotations -> AnnotationsNode: |
+      Аннотации практики
+
+DocumentNode::BodyNode():
+  location: body.py
+  properties:
+    types -> dict[str, list[Node]]: |
+      Все типы в документе с маппингом на ноды типа.
+    entities -> list[EntityTypeNode]: |
+      Список сущностей в теле документа
+    routines -> list[RoutineTypeNode]: |
+      Список рутин в теле документа
+
+DocumentNode::RoutineTypeNode():
+  location: body.py
+  properties:
+    name -> str: |
+      Имя рутины
+    signature -> str: |
+      Строка с сигнатурой рутины
+    location -> str: |
+      Файл в котором располагается рутина
+    annotations -> AnnotationsNode: |
+      Аннотации рутины
+    embedded -> bool: |
+      Флаг указывает на то является ли рутина встроенной
+      в текущий документ из другого документа
+
+DocumentNode::EntityTypeNode():
+  location: body.py
+  properties:
+    name -> str: |
+      Имя сущности
+    signature -> str: |
+      Строка с сигнатурой сущности
+    location -> str: |
+      Файл в котором располагается сущность
+    annotations -> AnnotationsNode: |
+      Аннотации сущности
+    properties -> list[PropertyNode]: |
+      Свойства сущности
+    methods -> list[MethodNode]: |
+      Список методов сущности
+    embedded -> bool: |
+      Флаг указывает на то является ли сущность встроенной
+      в текущий документ из другого документа
+    mutations -> list[str]: |
+      Список имен сущностей от которых мутирует данная сущность
+
+DocumentNode::MethodNode():
+  location: body.py
+  properties:
+    name -> str: |
+      Имя метода
+    signature -> str: |
+      Строка с сигнатурой метода
+    annotations -> AnnotationsNode: |
+      Аннотации метода
+
+DocumentNode::PropertyNode():
+  location: body.py
+  properties:
+    name -> str: |
+      Имя свойства
+    type -> str: |
+      Тип свойства
+    annotations -> AnnotationsNode: |
+      Аннотации свойства
+
+DocumentNode::FooterNode:
+  location: footer.py
+  properties:
+    author -> str: |
+      Имя автора
+    created_at -> str: |
+      Дата создания документа
+    description -> str: |
+      Описание документа
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает структуры данных нод документа манифеста
