@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import yaml
 
@@ -171,7 +171,7 @@ class Factory:
             data=dict(data),
         )
 
-    def _parse_imports(self, data: object, filepath: str) -> ImportsNode:
+    def _parse_imports(self, data: Any, filepath: str) -> ImportsNode:
         """Parse the Imports section of the header."""
         items: list[ImportItemNode] = []
 
@@ -216,7 +216,7 @@ class Factory:
 
         return ImportsNode(items=items)
 
-    def _parse_usages(self, data: object) -> UsagesNode:
+    def _parse_usages(self, data: Any) -> UsagesNode:
         """Parse the Usages section of the header."""
         items: list[UsageItemNode] = []
 
@@ -363,7 +363,7 @@ class Factory:
             data=dict(value),
         )
 
-    def _parse_properties(self, data: object) -> list[PropertyNode]:
+    def _parse_properties(self, data: Any) -> list[PropertyNode]:
         """Parse the properties dict of an entity."""
         result: list[PropertyNode] = []
 
@@ -391,7 +391,7 @@ class Factory:
 
         return result
 
-    def _parse_methods(self, data: object) -> list[MethodNode]:
+    def _parse_methods(self, data: Any) -> list[MethodNode]:
         """Parse the methods dict of an entity."""
         result: list[MethodNode] = []
 

@@ -52,7 +52,7 @@ Annotations: |
       `node`: нода которую необходимо проверить
       `errors`: список ошибок в результате проверки
 
-"DocumentRule::ImportsCanNotBeEmptyRule(name: str = 'imports_can_not_be_empty')":
+"DocumentRule::ImportsCanNotBeEmpty(name: str = 'imports_can_not_be_empty')":
   location: document.py
   annotations: |
     Проверяет `ImportsNode`.
@@ -79,7 +79,7 @@ Annotations: |
     Шаблоны ошибок:
     - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, From"
 
-"DocumentRule::ImportHasTypeRule(name: str = 'import_has_type')":
+"DocumentRule::ImportHasType(name: str = 'import_has_type')":
   location: document.py
   annotations: |
     Проверяет `ImportItemNode`.
@@ -90,7 +90,7 @@ Annotations: |
     Шаблоны ошибок:
     - no_type: "Import from '{from_path}' has no Types listed — specify at least one type to import"
 
-"DocumentRule::ImportHasValidFromPathRule(name: str = 'import_has_valid_from_path')":
+"DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
   location: document.py
   annotations: |
     Проверяет `ImportItemNode`.
@@ -296,7 +296,7 @@ Annotations: |
       `document`: документ который необходимо проверить
       `errors`: список ошибок в результате проверки
 
-"ProjectRule::ImportsHasNotCyclicalDepsRule(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
+"ProjectRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
   location: project.py
   annotations: |
     Правило - ни один импорт в документе не является циклическим.

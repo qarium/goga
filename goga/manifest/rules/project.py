@@ -29,7 +29,7 @@ class ProjectRule:
         raise NotImplementedError
 
 
-class ImportsHasNotCyclicalDepsRule(ProjectRule):
+class ImportsHasNotCyclicalDeps(ProjectRule):
     """Rule: imports must not form cycles across documents."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
@@ -74,9 +74,7 @@ class ImportTypeExists(ProjectRule):
         errors: list[ProjectRuleError] = []
 
         # Build O(1) lookup: doc path -> DocumentRoot
-        path_lookup: dict[str, DocumentRoot] = {
-            str(Path(doc.path).resolve()): doc for doc in self._tree
-        }
+        path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
 
         for item in document.header.imports.items:
             from_path = item.from_path

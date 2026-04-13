@@ -28,10 +28,10 @@ from goga.manifest.rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
-    ImportHasTypeRule,
-    ImportHasValidFromPathRule,
-    ImportsCanNotBeEmptyRule,
-    ImportsHasNotCyclicalDepsRule,
+    ImportHasType,
+    ImportHasValidFromPath,
+    ImportsCanNotBeEmpty,
+    ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
     ImportTypeExists,
     MutationExists,
@@ -48,10 +48,10 @@ from goga.manifest.rules import (
 
 EXPECTED_RULE_CLASSES = [
     DocumentRule,
-    ImportsCanNotBeEmptyRule,
+    ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
-    ImportHasTypeRule,
-    ImportHasValidFromPathRule,
+    ImportHasType,
+    ImportHasValidFromPath,
     ImportHasNotDuplicate,
     AllUsagesIsUsed,
     AnnotationLinksExists,
@@ -64,7 +64,7 @@ EXPECTED_RULE_CLASSES = [
     EntityHasOnlyValidKeys,
     RoutineHasOnlyValidKeys,
     ProjectRule,
-    ImportsHasNotCyclicalDepsRule,
+    ImportsHasNotCyclicalDeps,
     ImportTypeExists,
     EmbeddedTypeHasLowLevel,
 ]
@@ -94,13 +94,13 @@ class TestDocumentRule:
 
 
 # ---------------------------------------------------------------------------
-# 3. ImportsCanNotBeEmptyRule
+# 3. ImportsCanNotBeEmpty
 # ---------------------------------------------------------------------------
 
 
-class TestImportsCanNotBeEmptyRule:
+class TestImportsCanNotBeEmpty:
     def test_default_name(self):
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         assert rule.name == "imports_can_not_be_empty"
 
     def test_positive_non_empty_imports_returns_empty_errors(self):
@@ -108,14 +108,14 @@ class TestImportsCanNotBeEmptyRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]))
         )
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert errors == []
 
     def test_negative_empty_imports_returns_error(self):
         root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -125,11 +125,11 @@ class TestImportsCanNotBeEmptyRule:
 
 
 # ---------------------------------------------------------------------------
-# 3b. ImportsCanNotBeEmptyRule — conditional behavior
+# 3b. ImportsCanNotBeEmpty — conditional behavior
 # ---------------------------------------------------------------------------
 
 
-class TestImportsCanNotBeEmptyRuleConditional:
+class TestImportsCanNotBeEmptyConditional:
     """Tests for conditional check: rule only applies when Imports is declared in data."""
 
     def test_positive_declared_imports_with_non_empty_items_no_errors(self):
@@ -141,7 +141,7 @@ class TestImportsCanNotBeEmptyRuleConditional:
             )
         )
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert errors == []
 
@@ -154,7 +154,7 @@ class TestImportsCanNotBeEmptyRuleConditional:
             )
         )
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -171,7 +171,7 @@ class TestImportsCanNotBeEmptyRuleConditional:
             )
         )
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert errors == []
 
@@ -185,19 +185,19 @@ class TestImportsCanNotBeEmptyRuleConditional:
             )
         )
         node = DocumentNode(root=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert errors == []
 
 
 # ---------------------------------------------------------------------------
-# 4. ImportHasTypeRule
+# 4. ImportHasType
 # ---------------------------------------------------------------------------
 
 
-class TestImportHasTypeRule:
+class TestImportHasType:
     def test_default_name(self):
-        rule = ImportHasTypeRule()
+        rule = ImportHasType()
         assert rule.name == "import_has_type"
 
     def test_positive_import_with_non_empty_type(self):
@@ -205,7 +205,7 @@ class TestImportHasTypeRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"MyType"}, from_path="foo")]))
         )
         node = DocumentNode(root=root)
-        rule = ImportHasTypeRule()
+        rule = ImportHasType()
         errors = rule.check(node)
         assert errors == []
 
@@ -214,7 +214,7 @@ class TestImportHasTypeRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name=set(), from_path="foo")]))
         )
         node = DocumentNode(root=root)
-        rule = ImportHasTypeRule()
+        rule = ImportHasType()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -224,13 +224,13 @@ class TestImportHasTypeRule:
 
 
 # ---------------------------------------------------------------------------
-# 5. ImportHasValidFromPathRule
+# 5. ImportHasValidFromPath
 # ---------------------------------------------------------------------------
 
 
-class TestImportHasValidFromPathRule:
+class TestImportHasValidFromPath:
     def test_default_name(self):
-        rule = ImportHasValidFromPathRule()
+        rule = ImportHasValidFromPath()
         assert rule.name == "import_has_valid_from_path"
 
     def test_positive_valid_existing_path(self, tmp_path: Path):
@@ -250,7 +250,7 @@ class TestImportHasValidFromPathRule:
                 )
             )
             node = DocumentNode(root=root)
-            rule = ImportHasValidFromPathRule()
+            rule = ImportHasValidFromPath()
             errors = rule.check(node)
             assert errors == []
         finally:
@@ -261,7 +261,7 @@ class TestImportHasValidFromPathRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="")]))
         )
         node = DocumentNode(root=root)
-        rule = ImportHasValidFromPathRule()
+        rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -273,7 +273,7 @@ class TestImportHasValidFromPathRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path=str(missing))]))
         )
         node = DocumentNode(root=root)
-        rule = ImportHasValidFromPathRule()
+        rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -285,7 +285,7 @@ class TestImportHasValidFromPathRule:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path=escaping_path)]))
         )
         node = DocumentNode(root=root)
-        rule = ImportHasValidFromPathRule()
+        rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) >= 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -314,13 +314,13 @@ class TestProjectRule:
 
 
 # ---------------------------------------------------------------------------
-# 7. ImportsHasNotCyclicalDepsRule
+# 7. ImportsHasNotCyclicalDeps
 # ---------------------------------------------------------------------------
 
 
-class TestImportsHasNotCyclicalDepsRule:
+class TestImportsHasNotCyclicalDeps:
     def test_default_name(self):
-        rule = ImportsHasNotCyclicalDepsRule(tree=[])
+        rule = ImportsHasNotCyclicalDeps(tree=[])
         assert rule.name == "imports_has_not_cyclical_deps"
 
     def test_positive_no_cycles(self):
@@ -332,7 +332,7 @@ class TestImportsHasNotCyclicalDepsRule:
             path="/project/b.cm",
             header=HeaderNode(imports=ImportsNode(items=[])),
         )
-        rule = ImportsHasNotCyclicalDepsRule(tree=[doc1, doc2])
+        rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
         assert errors == []
 
@@ -345,7 +345,7 @@ class TestImportsHasNotCyclicalDepsRule:
             path="/project/b.cm",
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
         )
-        rule = ImportsHasNotCyclicalDepsRule(tree=[doc1, doc2])
+        rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
         assert len(errors) == 1
         assert isinstance(errors[0], ProjectRuleError)
@@ -475,7 +475,7 @@ class TestAllUsagesIsUsedLocations:
 
 
 # ---------------------------------------------------------------------------
-# 10. ImportHasValidFromPathRule — existing path outside CWD
+# 10. ImportHasValidFromPath — existing path outside CWD
 # ---------------------------------------------------------------------------
 
 
@@ -504,7 +504,7 @@ class TestImportHasValidFromPathEdgeCases:
             )
         )
         node = DocumentNode(root=root)
-        rule = ImportHasValidFromPathRule()
+        rule = ImportHasValidFromPath()
         errors = rule.check(node)
         # Should find error about pointing outside the project root
         assert len(errors) >= 1
@@ -1544,7 +1544,7 @@ class TestImportTypeExists:
 
 
 # ---------------------------------------------------------------------------
-# 24. ImportHasValidFromPathRule — hierarchy checks
+# 24. ImportHasValidFromPath — hierarchy checks
 # ---------------------------------------------------------------------------
 
 
@@ -1572,7 +1572,7 @@ class TestImportHasValidFromPathHierarchy:
                     ),
                 )
                 node = DocumentNode(root=root)
-                rule = ImportHasValidFromPathRule()
+                rule = ImportHasValidFromPath()
                 errors = rule.check(node)
                 hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
                 assert len(hierarchy_errors) == 0
@@ -1601,7 +1601,7 @@ class TestImportHasValidFromPathHierarchy:
                 ),
             )
             node = DocumentNode(root=root)
-            rule = ImportHasValidFromPathRule()
+            rule = ImportHasValidFromPath()
             errors = rule.check(node)
             hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
             assert len(hierarchy_errors) == 0
@@ -1630,7 +1630,7 @@ class TestImportHasValidFromPathHierarchy:
                 ),
             )
             node = DocumentNode(root=root)
-            rule = ImportHasValidFromPathRule()
+            rule = ImportHasValidFromPath()
             errors = rule.check(node)
             assert len(errors) >= 1
             assert any("must be at the same level or inside" in e.message for e in errors)

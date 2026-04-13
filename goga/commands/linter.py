@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 
 import click
 import yaml
@@ -26,6 +27,7 @@ def linter(path: str) -> None:
             click.echo(f"  --> {doc_path}")
 
         if error.node is not None and hasattr(error.node, "data") and error.node.data is not None:
+            click.echo("      ---")
             yaml_str = yaml.dump(
                 error.node.data,
                 sort_keys=False,
@@ -35,3 +37,5 @@ def linter(path: str) -> None:
             )
             for line in yaml_str.splitlines():
                 click.echo(f"      {line}")
+
+    sys.exit(1 if project.errors else 0)

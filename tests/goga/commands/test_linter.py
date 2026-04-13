@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import click
-import pytest
 from click.testing import CliRunner
-
 from goga.commands import linter
 from goga.commands.linter import linter as linter_cmd
-
 
 VALID_CODEMANIFEST = """\
 Imports:
@@ -33,8 +31,6 @@ Description: Test
 """
 
 CHILD_CODEMANIFEST = """\
-Imports: []
-
 Usages: {}
 
 Annotations: ""
@@ -91,7 +87,7 @@ def _setup_valid_project(tmp_path) -> str:
 
 
 def _run_linter(path: str) -> click.testing.Result:
-    original_cwd = os.getcwd()
+    original_cwd = str(Path.cwd())
     try:
         runner = CliRunner()
         return runner.invoke(linter_cmd, [path])
@@ -118,15 +114,6 @@ class TestApiShape:
     def test_linter_path_default_is_dot(self) -> None:
         path_param = next(p for p in linter_cmd.params if p.name == "path")
         assert path_param.default == "."
-
-
-class TestPositiveRun:
-    def test_valid_project_exits_zero(self, tmp_path) -> None:
-        project_dir = _setup_valid_project(tmp_path)
-
-        result = _run_linter(project_dir)
-
-        assert result.exit_code == 0
 
 
 class TestNegativeRun:
@@ -201,3 +188,42 @@ class TestErrorFormat:
         assert "  -->" in result.output
         yaml_lines = [ln for ln in lines if ln.startswith("      ")]
         assert len(yaml_lines) > 0
+
+    def test_separator_between_arrow_and_yaml(self, tmp_path) -> None:
+        project_dir = tmp_path / "sep_project"
+        project_dir.mkdir()
+        _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
+
+        result = _run_linter(str(project_dir))
+
+        lines = result.output.splitlines()
+        # Find the arrow line, next non-empty line with 6-space indent should be ---
+        arrow_idx = None
+        for i, line in enumerate(lines):
+            if line.startswith("  -->"):
+                arrow_idx = i
+                break
+        assert arrow_idx is not None, "No arrow line found in output"
+        # After arrow, the next line with 6-space indent should be ---
+        after_arrow = lines[arrow_idx + 1 :]
+        sep_line = next((ln for ln in after_arrow if ln.startswith("      ")), None)
+        assert sep_line is not None, "No 6-space indented line after arrow"
+        assert sep_line.strip() == "---", f"Expected '---' separator, got: {sep_line!r}"
+
+
+class TestExitCodes:
+    def test_invalid_project_exits_one(self, tmp_path) -> None:
+        project_dir = tmp_path / "exit_project"
+        project_dir.mkdir()
+        _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
+
+        result = _run_linter(str(project_dir))
+
+        assert result.exit_code == 1
+
+    def test_valid_project_exits_zero(self, tmp_path) -> None:
+        project_dir = _setup_valid_project(tmp_path)
+
+        result = _run_linter(project_dir)
+
+        assert result.exit_code == 0

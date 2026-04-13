@@ -9,7 +9,13 @@ from ..errors import ManifestRuleError
 from ..nodes.common import AnnotationsNode
 
 if TYPE_CHECKING:
-    from ..nodes import DocumentNode
+    from ..nodes import (
+        DocumentNode,
+        EntityTypeNode,
+        MethodNode,
+        PropertyNode,
+        RoutineTypeNode,
+    )
 
 
 class DocumentRule:
@@ -26,7 +32,7 @@ class DocumentRule:
         raise NotImplementedError
 
 
-class ImportsCanNotBeEmptyRule(DocumentRule):
+class ImportsCanNotBeEmpty(DocumentRule):
     """Rule: imports collection must not be empty."""
 
     def __init__(self) -> None:
@@ -51,7 +57,7 @@ class ImportsCanNotBeEmptyRule(DocumentRule):
         return errors
 
 
-class ImportHasTypeRule(DocumentRule):
+class ImportHasType(DocumentRule):
     """Rule: every import must have at least one type name."""
 
     def __init__(self) -> None:
@@ -64,8 +70,7 @@ class ImportHasTypeRule(DocumentRule):
                 errors.append(
                     ManifestRuleError(
                         message=(
-                            f"Import from '{item.from_path}' has no Types listed"
-                            f" — specify at least one type to import"
+                            f"Import from '{item.from_path}' has no Types listed — specify at least one type to import"
                         ),
                         rule=self.name,
                         document=node.root,
@@ -75,7 +80,7 @@ class ImportHasTypeRule(DocumentRule):
         return errors
 
 
-class ImportHasValidFromPathRule(DocumentRule):
+class ImportHasValidFromPath(DocumentRule):
     """Rule: every import must have a valid, existing from_path that does not escape CWD."""
 
     def __init__(self) -> None:
@@ -276,8 +281,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
                 errors.append(
                     ManifestRuleError(
                         message=(
-                            f"Usage key '{name}' conflicts with {kind} '{name}'"
-                            f" — rename the usage to avoid ambiguity"
+                            f"Usage key '{name}' conflicts with {kind} '{name}' — rename the usage to avoid ambiguity"
                         ),
                         rule=self.name,
                         document=node.root,
@@ -288,90 +292,125 @@ class UsageLinksHasNotConflicts(DocumentRule):
         return errors
 
 
+def _collect_valid_names(node: DocumentNode) -> set[str]:
+    """Collect all valid link targets from imports, usages, entities, routines."""
+    header = node.root.header
+    body = node.root.body
+    valid_names: set[str] = set()
+
+    for import_item in header.imports.items:
+        valid_names.update(import_item.type_name)
+        if import_item.alias:
+            valid_names.add(import_item.alias)
+        if import_item.from_path:
+            valid_names.add(import_item.from_path)
+
+    for usage_item in header.usages.items:
+        valid_names.add(usage_item.name)
+
+    for entity in body.entities:
+        valid_names.add(entity.name)
+    for routine in body.routines:
+        valid_names.add(routine.name)
+
+    return valid_names
+
+
 class AnnotationLinksExists(DocumentRule):
     """Rule: every link in AnnotationsNode must resolve to a known name or appear in a signature."""
 
     def __init__(self) -> None:
         super().__init__(name="annotation_links_exists")
 
-    def check(self, node: DocumentNode) -> list[ManifestRuleError]:  # noqa: C901
+    def _check_header_links(self, node: DocumentNode, valid_names: set[str], errors: list[ManifestRuleError]) -> None:
         header = node.root.header
-        body = node.root.body
-
-        # 1. Collect all valid names from imports, usages, entities, routines
-        valid_names: set[str] = set()
-
-        # Import type_names (flatten all), aliases, and from_paths
-        for import_item in header.imports.items:
-            valid_names.update(import_item.type_name)
-            if import_item.alias:
-                valid_names.add(import_item.alias)
-            if import_item.from_path:
-                valid_names.add(import_item.from_path)
-
-        # Usage names
-        for usage_item in header.usages.items:
-            valid_names.add(usage_item.name)
-
-        # Entity and routine names from body
-        for entity in body.entities:
-            valid_names.add(entity.name)
-        for routine in body.routines:
-            valid_names.add(routine.name)
-
-        errors: list[ManifestRuleError] = []
-
-        # Helper: check links for a given node with optional signature
-        def _check_links(
-            owner_node: object,
-            annotations: AnnotationsNode,
-            context: str,
-            signature: str | None = None,
-        ) -> None:
-            for link in annotations.links:
-                if link in valid_names:
-                    continue
-                if signature is not None and signature:
-                    pattern = r"(?<![\w-])" + re.escape(link) + r"(?![\w-])"
-                    if re.search(pattern, signature):
-                        continue
+        for link in header.annotations.links:
+            if link not in valid_names:
                 errors.append(
                     ManifestRuleError(
                         message=(
-                            f"Link `{link}` in {context} annotation does not match any import,"
+                            f"Link `{link}` in HeaderNode annotation does not match any import,"
                             f" usage, entity, routine, or signature parameter"
                         ),
                         rule=self.name,
                         document=node.root,
-                        node=owner_node,
+                        node=header,
                     )
                 )
 
-        # 2. Check annotations for each node type
-
-        # Header annotations
-        _check_links(header, header.annotations, context="HeaderNode")
-
-        # Usage items annotations
         for usage_item in header.usages.items:
-            _check_links(usage_item, usage_item.annotations, context="UsageItemNode")
+            for link in usage_item.annotations.links:
+                if link not in valid_names:
+                    errors.append(
+                        ManifestRuleError(
+                            message=(
+                                f"Link `{link}` in UsageItemNode annotation does not match any import,"
+                                f" usage, entity, routine, or signature parameter"
+                            ),
+                            rule=self.name,
+                            document=node.root,
+                            node=usage_item,
+                        )
+                    )
 
-        # Entity annotations, methods, properties (skip embedded — checked in their own document)
-        for entity in body.entities:
+    def _check_body_links(self, node: DocumentNode, valid_names: set[str], errors: list[ManifestRuleError]) -> None:
+        for entity in node.root.body.entities:
             if entity.embedded:
                 continue
-            _check_links(entity, entity.annotations, context="EntityTypeNode", signature=entity.signature)
-            for method in entity.methods:
-                _check_links(method, method.annotations, context="MethodNode", signature=method.signature)
-            for prop in entity.properties:
-                _check_links(prop, prop.annotations, context="PropertyNode")
+            self._check_entity_links(entity, node, valid_names, errors)
 
-        # Routine annotations (skip embedded — checked in their own document)
-        for routine in body.routines:
+        for routine in node.root.body.routines:
             if routine.embedded:
                 continue
-            _check_links(routine, routine.annotations, context="RoutineTypeNode", signature=routine.signature)
+            self._check_node_links(routine, routine.annotations, node, valid_names, errors)
 
+    def _check_entity_links(
+        self,
+        entity: EntityTypeNode,
+        node: DocumentNode,
+        valid_names: set[str],
+        errors: list[ManifestRuleError],
+    ) -> None:
+        self._check_node_links(entity, entity.annotations, node, valid_names, errors)
+        for method in entity.methods:
+            self._check_node_links(method, method.annotations, node, valid_names, errors)
+        for prop in entity.properties:
+            self._check_node_links(prop, prop.annotations, node, valid_names, errors)
+
+    def _check_node_links(
+        self,
+        owner: EntityTypeNode | MethodNode | PropertyNode | RoutineTypeNode,
+        annotations: AnnotationsNode,
+        node: DocumentNode,
+        valid_names: set[str],
+        errors: list[ManifestRuleError],
+    ) -> None:
+        context = type(owner).__name__
+        signature = getattr(owner, "signature", None)
+        for link in annotations.links:
+            if link in valid_names:
+                continue
+            if signature:
+                pattern = r"(?<![\w-])" + re.escape(link) + r"(?![\w-])"
+                if re.search(pattern, signature):
+                    continue
+            errors.append(
+                ManifestRuleError(
+                    message=(
+                        f"Link `{link}` in {context} annotation does not match any import,"
+                        f" usage, entity, routine, or signature parameter"
+                    ),
+                    rule=self.name,
+                    document=node.root,
+                    node=owner,
+                )
+            )
+
+    def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+        valid_names = _collect_valid_names(node)
+        errors: list[ManifestRuleError] = []
+        self._check_header_links(node, valid_names, errors)
+        self._check_body_links(node, valid_names, errors)
         return errors
 
 
@@ -455,9 +494,9 @@ class MutationExists(DocumentRule):
                     errors.append(
                         ManifestRuleError(
                             message=(
-                            f"Base type '{mutation}' for mutation of '{entity.name}'"
-                            f" not found in imports, entities, or routines of this package"
-                        ),
+                                f"Base type '{mutation}' for mutation of '{entity.name}'"
+                                f" not found in imports, entities, or routines of this package"
+                            ),
                             rule=self.name,
                             document=node.root,
                             node=entity,
@@ -482,9 +521,9 @@ class MutationIsValid(DocumentRule):
                     errors.append(
                         ManifestRuleError(
                             message=(
-                            f"Mutation '{mutation}' on '{entity.name}' references itself"
-                            f" — a type cannot mutate from its own signature"
-                        ),
+                                f"Mutation '{mutation}' on '{entity.name}' references itself"
+                                f" — a type cannot mutate from its own signature"
+                            ),
                             rule=self.name,
                             document=node.root,
                             node=entity,
@@ -517,7 +556,7 @@ class ReturnTypeHasLink(DocumentRule):
     def _check_signature(
         self,
         signature: str,
-        owner_node: object,
+        owner_node: EntityTypeNode | MethodNode | RoutineTypeNode,
         node: DocumentNode,
         errors: list[ManifestRuleError],
     ) -> None:
@@ -532,9 +571,9 @@ class ReturnTypeHasLink(DocumentRule):
             errors.append(
                 ManifestRuleError(
                     message=(
-                f"Return type '{return_part}' in '{signature}'"
-                f" is missing a semantic label — use format '-> label:Type'"
-            ),
+                        f"Return type '{return_part}' in '{signature}'"
+                        f" is missing a semantic label — use format '-> label:Type'"
+                    ),
                     rule=self.name,
                     document=node.root,
                     node=owner_node,
@@ -584,9 +623,9 @@ class ImportsHasOnlyValidKeys(DocumentRule):
                 errors.append(
                     ManifestRuleError(
                         message=(
-                f"Import from '{item.from_path}' contains unknown keys {sorted(unknown_keys)}"
-                f" — allowed: Types, From"
-            ),
+                            f"Import from '{item.from_path}' contains unknown keys {sorted(unknown_keys)}"
+                            f" — allowed: Types, From"
+                        ),
                         rule=self.name,
                         document=node.root,
                         node=item,
@@ -640,9 +679,9 @@ class RoutineHasOnlyValidKeys(DocumentRule):
                 errors.append(
                     ManifestRuleError(
                         message=(
-                f"Routine '{routine.name}' contains unknown keys {sorted(unknown_keys)}"
-                f" — allowed: location, annotations"
-            ),
+                            f"Routine '{routine.name}' contains unknown keys {sorted(unknown_keys)}"
+                            f" — allowed: location, annotations"
+                        ),
                         rule=self.name,
                         document=node.root,
                         node=routine,

@@ -8,7 +8,7 @@ from goga.manifest.nodes import (
     ImportItemNode,
     ImportsNode,
 )
-from goga.manifest.rules import ImportsHasNotCyclicalDepsRule, ProjectRule
+from goga.manifest.rules import ImportsHasNotCyclicalDeps, ProjectRule
 
 # ---------------------------------------------------------------------------
 # 1. Facade: Analyzer is importable
@@ -65,7 +65,7 @@ class TestAnalyzerPassingRules:
             header=HeaderNode(imports=ImportsNode(items=[])),
         )
         tree = [doc1, doc2]
-        rule = ImportsHasNotCyclicalDepsRule(tree=tree)
+        rule = ImportsHasNotCyclicalDeps(tree=tree)
         analyzer = Analyzer(tree=tree)
         result = analyzer.analyze(rules=[rule])
         assert result == []
@@ -87,7 +87,7 @@ class TestAnalyzerFailingRules:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
         )
         tree = [doc1, doc2]
-        rule = ImportsHasNotCyclicalDepsRule(tree=tree)
+        rule = ImportsHasNotCyclicalDeps(tree=tree)
         analyzer = Analyzer(tree=tree)
         result = analyzer.analyze(rules=[rule])
         assert len(result) > 0
@@ -146,8 +146,8 @@ class TestAnalyzerAggregation:
         )
         tree = [doc_no_cycle, doc_unused]
 
-        # ImportsHasNotCyclicalDepsRule passes for doc_no_cycle, no imports in doc_unused
-        cycle_rule = ImportsHasNotCyclicalDepsRule(tree=tree)
+        # ImportsHasNotCyclicalDeps passes for doc_no_cycle, no imports in doc_unused
+        cycle_rule = ImportsHasNotCyclicalDeps(tree=tree)
         always_fail = _AlwaysFailRule(tree=tree)
 
         analyzer = Analyzer(tree=tree)

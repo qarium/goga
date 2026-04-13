@@ -15,10 +15,10 @@ from .rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
-    ImportHasTypeRule,
-    ImportHasValidFromPathRule,
-    ImportsCanNotBeEmptyRule,
-    ImportsHasNotCyclicalDepsRule,
+    ImportHasType,
+    ImportHasValidFromPath,
+    ImportsCanNotBeEmpty,
+    ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
     ImportTypeExists,
     MutationExists,
@@ -110,9 +110,9 @@ class Project:
 
         # Apply document-level rules via Visitor
         document_rules = [
-            ImportsCanNotBeEmptyRule(),
-            ImportHasTypeRule(),
-            ImportHasValidFromPathRule(),
+            ImportsCanNotBeEmpty(),
+            ImportHasType(),
+            ImportHasValidFromPath(),
             ImportHasNotDuplicate(),
             AllUsagesIsUsed(),
             AnnotationLinksExists(),
@@ -133,7 +133,7 @@ class Project:
 
         # Apply project-level rules via Analyzer
         project_rules = [
-            ImportsHasNotCyclicalDepsRule(all_documents),
+            ImportsHasNotCyclicalDeps(all_documents),
             EmbeddedTypeHasLowLevel(all_documents),
             ImportTypeExists(all_documents),
         ]

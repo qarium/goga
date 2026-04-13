@@ -8,7 +8,7 @@ from goga.manifest.nodes import (
     ImportItemNode,
     ImportsNode,
 )
-from goga.manifest.rules import DocumentRule, ImportsCanNotBeEmptyRule
+from goga.manifest.rules import DocumentRule, ImportsCanNotBeEmpty
 from goga.manifest.visitor import Visitor
 
 # ---------------------------------------------------------------------------
@@ -53,14 +53,14 @@ class TestVisitorAnalyze:
             header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]))
         )
         visitor = Visitor(document=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = visitor.analyze(rules=[rule])
         assert errors == []
 
     def test_analyze_with_failing_rule_returns_errors(self):
         root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
         visitor = Visitor(document=root)
-        rule = ImportsCanNotBeEmptyRule()
+        rule = ImportsCanNotBeEmpty()
         errors = visitor.analyze(rules=[rule])
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
@@ -85,7 +85,7 @@ class TestVisitorAnalyze:
                 ]
 
         rule1 = AlwaysFailRule()
-        rule2 = ImportsCanNotBeEmptyRule()
+        rule2 = ImportsCanNotBeEmpty()
         errors = visitor.analyze(rules=[rule1, rule2])
         assert len(errors) == 2
         assert all(isinstance(e, ManifestRuleError) for e in errors)

@@ -8,9 +8,9 @@ Imports:
     From: goga/manifest/nodes
   - Types:
       # правила документа
-      - ImportsCanNotBeEmptyRule
-      - ImportHasTypeRule
-      - ImportHasValidFromPathRule
+      - ImportsCanNotBeEmpty
+      - ImportHasType
+      - ImportHasValidFromPath
       - ImportHasNotDuplicate
       - AllUsagesIsUsed
       - AnnotationLinksExists
@@ -20,8 +20,12 @@ Imports:
       - MutationIsValid
       - ReturnTypeHasLink
       - EmbeddedEntityCanNotHasMutations
+      - ImportsHasOnlyValidKeys
+      - EntityHasOnlyValidKeys
+      - RoutineHasOnlyValidKeys
       # правила проекта
-      - ImportsHasNotCyclicalDepsRule
+      - ImportTypeExists
+      - ImportsHasNotCyclicalDeps
       - EmbeddedTypeHasLowLevel
     From: goga/manifest/rules
   - Types:
@@ -72,6 +76,29 @@ Annotations: |
       - Маршрутизировать все встраиваемые типы в оригинальный тип из embeddings документа
       - Выполнить анализ каждого документа с помощью практики `visitor`
       - Применить глобальный анализ документов с помощью практики `analyzer`
+
+      Правила для каждого документа:
+      - `ImportsCanNotBeEmpty`
+      - `ImportHasType`
+      - `ImportHasValidFromPath`
+      - `ImportHasNotDuplicate`
+      - `AllUsagesIsUsed`
+      - `AnnotationLinksExists`
+      - `UsageLinksHasNotConflicts`
+      - `EntitiesAndRoutinesHasNotConflicts`
+      - `MutationExists`
+      - `MutationIsValid`
+      - `ReturnTypeHasLink`
+      - `EmbeddedEntityCanNotHasMutations`
+      - `ImportsHasOnlyValidKeys`
+      - `EntityHasOnlyValidKeys`
+      - `RoutineHasOnlyValidKeys`
+
+      Правила для всех документов:
+      - `ImportTypeExists`
+      - `ImportsHasNotCyclicalDeps`
+      - `EmbeddedTypeHasLowLevel`
+
     "codemanifest(path: str) -> found_document:DocumentRoot": |
       На основании пути возвращает документ.
 
