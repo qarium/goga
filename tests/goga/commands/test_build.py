@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -91,13 +93,13 @@ class TestHelpOutput:
 
 
 class TestDryRun:
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_dry_run_exit_code_zero(self, mock_which, tmp_path) -> None:
         """Dry-run mode exits with code 0."""
         result = _run_build_in_tmp(tmp_path, ["--dry-run"])
         assert result.exit_code == 0
 
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_dry_run_shows_command(self, mock_which, tmp_path) -> None:
         """Dry-run mode displays the assembled ralphex command."""
         result = _run_build_in_tmp(tmp_path, ["--dry-run"])
@@ -105,17 +107,17 @@ class TestDryRun:
         assert "ralphex" in result.output
         assert "plan.md" in result.output
 
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_dry_run_does_not_call_ralphex(self, mock_which, tmp_path) -> None:
         """Dry-run mode does not invoke subprocess.call."""
-        with mock.patch("goga.commands.build.subprocess.call") as mock_call:
+        with mock.patch.object(subprocess, "call") as mock_call:
             _run_build_in_tmp(tmp_path, ["--dry-run"])
             mock_call.assert_not_called()
 
 
 class TestGogaYmlReading:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_custom_models_in_settings(self, mock_which, mock_call, tmp_path) -> None:
         """Custom models from goga.yml are written to .claude/settings.json."""
         goga_yml = tmp_path / "goga.yml"
@@ -142,8 +144,8 @@ class TestGogaYmlReading:
         assert settings["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"] == "custom-opus"
         assert settings["env"]["ANTHROPIC_BASE_URL"] == "https://custom.api/url"
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_reading_goga_yml_output(self, mock_which, mock_call, tmp_path) -> None:
         """When goga.yml exists, the command outputs 'Reading goga.yml...'."""
         goga_yml = tmp_path / "goga.yml"
@@ -155,8 +157,8 @@ class TestGogaYmlReading:
 
 
 class TestMissingGogaYml:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_default_models_in_settings(self, mock_which, mock_call, tmp_path) -> None:
         """Without goga.yml, settings.json uses default model values."""
         _run_build_in_tmp(tmp_path)
@@ -167,8 +169,8 @@ class TestMissingGogaYml:
         assert settings["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"] == DEFAULT_BUILD_CONFIG["models"]["opus"]
         assert settings["env"]["ANTHROPIC_BASE_URL"] == DEFAULT_BUILD_CONFIG["models"]["base_url"]
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_missing_goga_yml_output(self, mock_which, mock_call, tmp_path) -> None:
         """Without goga.yml, the command outputs 'goga.yml not found, using defaults'."""
         result = _run_build_in_tmp(tmp_path)
@@ -176,8 +178,8 @@ class TestMissingGogaYml:
 
 
 class TestSettingsMerge:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_existing_fields_preserved(self, mock_which, mock_call, tmp_path) -> None:
         """Existing fields in settings.json are preserved during merge."""
         claude_dir = tmp_path / ".claude"
@@ -196,8 +198,8 @@ class TestSettingsMerge:
         assert settings["nested"]["key"] == "value"
         assert settings["env"]["EXISTING_VAR"] == "existing_val"
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_env_vars_added(self, mock_which, mock_call, tmp_path) -> None:
         """Model env vars are added to existing settings.json env section."""
         claude_dir = tmp_path / ".claude"
@@ -213,8 +215,8 @@ class TestSettingsMerge:
         assert "ANTHROPIC_DEFAULT_OPUS_MODEL" in settings["env"]
         assert "ANTHROPIC_BASE_URL" in settings["env"]
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_attribution_set(self, mock_which, mock_call, tmp_path) -> None:
         """The attribution section is set in settings.json."""
         _run_build_in_tmp(tmp_path)
@@ -225,8 +227,8 @@ class TestSettingsMerge:
 
 
 class TestClaudeWrapper:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_created(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh file is created in .ralphex/."""
         _run_build_in_tmp(tmp_path)
@@ -234,8 +236,8 @@ class TestClaudeWrapper:
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         assert wrapper_path.is_file()
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_content(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh has the correct shebang and content."""
         _run_build_in_tmp(tmp_path)
@@ -244,8 +246,8 @@ class TestClaudeWrapper:
         content = wrapper_path.read_text()
         assert content == CLAUDE_WRAPPER_SCRIPT
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_is_executable(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh file has execute permission."""
         _run_build_in_tmp(tmp_path)
@@ -258,8 +260,8 @@ class TestClaudeWrapper:
 
 
 class TestDefaultsCopying:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_prompts_copied(self, mock_which, mock_call, tmp_path) -> None:
         """Default prompt files are copied to .ralphex/prompts/."""
         _run_build_in_tmp(tmp_path)
@@ -271,8 +273,8 @@ class TestDefaultsCopying:
         actual_files = {f.name for f in prompts_dir.iterdir() if f.is_file()}
         assert expected_files.issubset(actual_files)
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_agents_copied(self, mock_which, mock_call, tmp_path) -> None:
         """Default agent files are copied to .ralphex/agents/."""
         _run_build_in_tmp(tmp_path)
@@ -289,8 +291,8 @@ class TestDefaultsCopying:
         actual_files = {f.name for f in agents_dir.iterdir() if f.is_file()}
         assert expected_files.issubset(actual_files)
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_no_overwrite_existing(self, mock_which, mock_call, tmp_path) -> None:
         """Existing files in .ralphex/ are NOT overwritten."""
         ralphex_prompts = tmp_path / ".ralphex" / "prompts"
@@ -307,22 +309,22 @@ class TestDefaultsCopying:
 class TestRalphexNotFound:
     def test_error_message_in_output(self, tmp_path) -> None:
         """When ralphex is not found, error message appears in output."""
-        with mock.patch("goga.commands.build.shutil.which", return_value=None):
+        with mock.patch.object(shutil, "which", return_value=None):
             result = _run_build_in_tmp(tmp_path)
 
         assert "ralphex not found in PATH" in result.output
 
     def test_exit_code_one(self, tmp_path) -> None:
         """When ralphex is not found, exit code is 1."""
-        with mock.patch("goga.commands.build.shutil.which", return_value=None):
+        with mock.patch.object(shutil, "which", return_value=None):
             result = _run_build_in_tmp(tmp_path)
 
         assert result.exit_code == 1
 
 
 class TestRalphexExecution:
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_subprocess_called(self, mock_which, mock_call, tmp_path) -> None:
         """subprocess.call is invoked with the assembled ralphex command."""
         _run_build_in_tmp(tmp_path)
@@ -334,15 +336,15 @@ class TestRalphexExecution:
         assert "--config-dir" in cmd
         assert ".ralphex/" in cmd
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_exit_code_zero_on_success(self, mock_which, mock_call, tmp_path) -> None:
         """Successful ralphex execution yields exit code 0."""
         result = _run_build_in_tmp(tmp_path)
         assert result.exit_code == 0
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_custom_plan_passed(self, mock_which, mock_call, tmp_path) -> None:
         """A custom plan argument is forwarded to the ralphex command."""
         _run_build_in_tmp(tmp_path, ["my-plan.md"])
@@ -350,8 +352,8 @@ class TestRalphexExecution:
         cmd = mock_call.call_args[0][0]
         assert "my-plan.md" in cmd
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_worktree_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --worktree CLI flag is forwarded to ralphex."""
         _run_build_in_tmp(tmp_path, ["--worktree"])
@@ -359,8 +361,8 @@ class TestRalphexExecution:
         cmd = mock_call.call_args[0][0]
         assert "--worktree" in cmd
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_skip_finalize_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --skip-finalize CLI flag is forwarded to ralphex."""
         _run_build_in_tmp(tmp_path, ["--skip-finalize"])
@@ -368,8 +370,8 @@ class TestRalphexExecution:
         cmd = mock_call.call_args[0][0]
         assert "--skip-finalize" in cmd
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=0)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_session_timeout_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --session-timeout CLI option is forwarded to ralphex."""
         _run_build_in_tmp(tmp_path, ["--session-timeout", "30m"])
@@ -378,8 +380,8 @@ class TestRalphexExecution:
         assert "--session-timeout" in cmd
         assert "30m" in cmd
 
-    @mock.patch("goga.commands.build.subprocess.call", return_value=42)
-    @mock.patch("goga.commands.build.shutil.which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=42)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_nonzero_exit_propagated(self, mock_which, mock_call, tmp_path) -> None:
         """Non-zero ralphex return code is propagated as exit code."""
         result = _run_build_in_tmp(tmp_path)
