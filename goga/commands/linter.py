@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import sys
 
 import click
 import yaml
@@ -11,7 +10,8 @@ from ..manifest import Project
 
 @click.command()
 @click.argument("path", default=".")
-def linter(path: str) -> None:
+@click.pass_context
+def linter(ctx: click.Context, path: str) -> None:
     """Validate CODEMANIFEST files in the project."""
     os.chdir(path)
 
@@ -38,4 +38,4 @@ def linter(path: str) -> None:
             for line in yaml_str.splitlines():
                 click.echo(f"      {line}")
 
-    sys.exit(1 if project.errors else 0)
+    ctx.exit(1 if project.errors else 0)
