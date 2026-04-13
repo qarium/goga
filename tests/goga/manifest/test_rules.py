@@ -120,6 +120,8 @@ class TestImportsCanNotBeEmptyRule:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
+        assert "Imports block in" in errors[0].message
+        assert "is empty — each import must specify at least Types and From" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -157,6 +159,8 @@ class TestImportsCanNotBeEmptyRuleConditional:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
+        assert "Imports block in" in errors[0].message
+        assert "is empty — each import must specify at least Types and From" in errors[0].message
 
     def test_positive_no_imports_key_in_data_no_errors(self):
         """Manifest without Imports key in data — rule is skipped, no errors."""
@@ -215,6 +219,8 @@ class TestImportHasTypeRule:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "import_has_type"
+        assert "has no Types listed" in errors[0].message
+        assert "— specify at least one type to import" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +265,7 @@ class TestImportHasValidFromPathRule:
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
+        assert "has empty source path (From field)" in errors[0].message
 
     def test_negative_non_existing_path(self, tmp_path: Path):
         missing = tmp_path / "does_not_exist.py"
@@ -270,6 +277,7 @@ class TestImportHasValidFromPathRule:
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
+        assert "not found on filesystem" in errors[0].message
 
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
         escaping_path = str(Path.cwd().resolve().parent / "outside")
@@ -281,6 +289,9 @@ class TestImportHasValidFromPathRule:
         errors = rule.check(node)
         assert len(errors) >= 1
         assert isinstance(errors[0], ManifestRuleError)
+        assert any(
+            "not found on filesystem" in e.message or "points outside the project root" in e.message for e in errors
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -378,6 +389,7 @@ class TestAllUsagesIsUsed:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "all_usages_is_used"
+        assert "not referenced in any annotation — either use it or remove" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -494,9 +506,9 @@ class TestImportHasValidFromPathEdgeCases:
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPathRule()
         errors = rule.check(node)
-        # Should find error about escaping CWD
+        # Should find error about pointing outside the project root
         assert len(errors) >= 1
-        assert any("escapes CWD" in e.message for e in errors)
+        assert any("points outside the project root" in e.message for e in errors)
 
 
 # ---------------------------------------------------------------------------
@@ -542,7 +554,7 @@ class TestImportHasNotDuplicate:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "import_has_not_duplicate"
-        assert "Duplicate" in errors[0].message
+        assert "is imported more than once: from" in errors[0].message
         assert "Foo" in errors[0].message
 
 
@@ -617,7 +629,7 @@ class TestAnnotationLinksExists:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "annotation_links_exists"
-        assert "Missing" in errors[0].message
+        assert "does not match any import, usage, entity, routine, or signature parameter" in errors[0].message
 
     def test_positive_link_found_in_signature_as_whole_word(self):
         """Link found in entity signature as a whole word (word boundary match)."""
@@ -651,7 +663,7 @@ class TestAnnotationLinksExists:
         errors = rule.check(node)
         assert len(errors) == 1
         assert errors[0].rule == "annotation_links_exists"
-        assert "param" in errors[0].message
+        assert "does not match any import, usage, entity, routine, or signature parameter" in errors[0].message
 
     def test_positive_link_found_in_method_signature(self):
         """Link found in method signature as a whole word."""
@@ -708,7 +720,8 @@ class TestUsageLinksHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "usage_links_has_not_conflicts"
-        assert "Foo" in errors[0].message
+        assert "conflicts with imported type" in errors[0].message
+        assert "rename the usage or use an alias" in errors[0].message
 
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
@@ -735,7 +748,8 @@ class TestUsageLinksHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "usage_links_has_not_conflicts"
-        assert "MyEntity" in errors[0].message
+        assert "conflicts with" in errors[0].message
+        assert "rename the usage to avoid ambiguity" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -778,7 +792,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "Foo" in errors[0].message
+        assert "has the same name as imported type" in errors[0].message
 
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
@@ -809,7 +823,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "Bar" in errors[0].message
+        assert "has the same name as imported type" in errors[0].message
 
     def test_positive_embedded_entity_with_conflicting_name_no_error(self):
         """Embedded entity with name matching an imported type is skipped — no error."""
@@ -858,7 +872,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "Foo" in errors[0].message
+        assert "has the same name as imported type" in errors[0].message
 
     def test_negative_non_embedded_routine_with_conflicting_name_still_errors(self):
         """Non-embedded routine with name matching an imported type still produces error."""
@@ -877,7 +891,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "Bar" in errors[0].message
+        assert "has the same name as imported type" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -948,7 +962,8 @@ class TestMutationExists:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "mutation_exists"
-        assert "NonExistent" in errors[0].message
+        assert "Base type" in errors[0].message
+        assert "not found in imports, entities, or routines" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -986,7 +1001,7 @@ class TestMutationIsValid:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "mutation_is_valid"
-        assert "MyEntity" in errors[0].message
+        assert "references itself" in errors[0].message
 
 
 # ---------------------------------------------------------------------------
@@ -1028,6 +1043,7 @@ class TestReturnTypeHasLink:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "return_type_has_link"
+        assert "is missing a semantic label" in errors[0].message
 
     def test_positive_signature_no_return_type(self):
         """Signature without -> has no return type, so no error."""
@@ -1109,7 +1125,8 @@ class TestEmbeddedEntityCanNotHasMutations:
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
         assert errors[0].rule == "embedded_entity_can_not_has_mutations"
-        assert "MyEntity" in errors[0].message
+        assert "(->Entity)" in errors[0].message
+        assert "cannot define mutations" in errors[0].message
 
     def test_positive_embedded_entity_without_mutations(self):
         root = DocumentRoot(
@@ -1207,7 +1224,7 @@ class TestEmbeddedTypeHasLowLevel:
 class TestImportsHasOnlyValidKeys:
     def test_default_name(self):
         rule = ImportsHasOnlyValidKeys()
-        assert rule.name == "Imports_has_only_valid_keys"
+        assert rule.name == "imports_has_only_valid_keys"
 
     def test_positive_valid_keys(self):
         """Import item with only Types and From keys — no errors."""
@@ -1243,11 +1260,9 @@ class TestImportsHasOnlyValidKeys:
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
-        assert errors[0].rule == "Imports_has_only_valid_keys"
-        assert "Extra" in errors[0].message
-
-    def test_positive_empty_data(self):
-        """Import item with empty data dict — no errors (no unknown keys)."""
+        assert errors[0].rule == "imports_has_only_valid_keys"
+        assert "contains unknown keys" in errors[0].message
+        assert "— allowed: Types, From" in errors[0].message
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
@@ -1279,7 +1294,10 @@ class TestEntityHasOnlyValidKeys:
             header=HeaderNode(),
             body=BodyNode(
                 entities=[
-                    EntityTypeNode(name="MyEntity", data={"location": "a.py", "annotations": "...", "properties": {}, "methods": {}}),
+                    EntityTypeNode(
+                        name="MyEntity",
+                        data={"location": "a.py", "annotations": "...", "properties": {}, "methods": {}},
+                    ),
                 ],
             ),
         )
@@ -1303,7 +1321,7 @@ class TestEntityHasOnlyValidKeys:
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
-        assert "Extra" in errors[0].message
+        assert "— allowed: location, annotations, methods, properties" in errors[0].message
 
     def test_positive_empty_data(self):
         """Entity with empty data — no errors."""
@@ -1357,7 +1375,7 @@ class TestRoutineHasOnlyValidKeys:
         errors = rule.check(node)
         assert len(errors) == 1
         assert isinstance(errors[0], ManifestRuleError)
-        assert "Extra" in errors[0].message
+        assert "— allowed: location, annotations" in errors[0].message
 
     def test_positive_empty_data(self):
         root = DocumentRoot(
@@ -1556,7 +1574,7 @@ class TestImportHasValidFromPathHierarchy:
                 node = DocumentNode(root=root)
                 rule = ImportHasValidFromPathRule()
                 errors = rule.check(node)
-                hierarchy_errors = [e for e in errors if "not at the same level" in e.message]
+                hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
                 assert len(hierarchy_errors) == 0
             finally:
                 doc_dir.rmdir()
@@ -1585,7 +1603,7 @@ class TestImportHasValidFromPathHierarchy:
             node = DocumentNode(root=root)
             rule = ImportHasValidFromPathRule()
             errors = rule.check(node)
-            hierarchy_errors = [e for e in errors if "not at the same level" in e.message]
+            hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
             assert len(hierarchy_errors) == 0
         finally:
             child.rmdir()
@@ -1615,7 +1633,7 @@ class TestImportHasValidFromPathHierarchy:
             rule = ImportHasValidFromPathRule()
             errors = rule.check(node)
             assert len(errors) >= 1
-            assert any("not at the same level" in e.message for e in errors)
+            assert any("must be at the same level or inside" in e.message for e in errors)
         finally:
             (parent_pkg / "CODEMANIFEST").unlink(missing_ok=True)
             doc_dir.rmdir()

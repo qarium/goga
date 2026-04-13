@@ -54,11 +54,7 @@ class ImportsHasNotCyclicalDepsRule(ProjectRule):
             if imported_path in import_map and doc_path in import_map[imported_path]:
                 errors.append(
                     ProjectRuleError(
-                        message=(
-                            f"Cyclical dependency detected: "
-                            f"'{doc_path}' imports from '{imported_path}' "
-                            f"which also imports from '{doc_path}'"
-                        ),
+                        message=f"Cyclical import: package '{doc_path}' and '{imported_path}' import from each other",
                         rule=self.name,
                         document=document,
                         node=item,
@@ -102,8 +98,8 @@ class ImportTypeExists(ProjectRule):
                     errors.append(
                         ProjectRuleError(
                             message=(
-                                f"Imported type '{type_name}' from '{from_path}' "
-                                f"does not exist in the target document"
+                                f"Type '{type_name}' imported from '{from_path}'"
+                                f" is not defined in that package's CODEMANIFEST"
                             ),
                             rule=self.name,
                             document=document,
@@ -146,9 +142,8 @@ class EmbeddedTypeHasLowLevel(ProjectRule):
                     errors.append(
                         ProjectRuleError(
                             message=(
-                                f"Embedded entity '{entity.name}' is defined in "
-                                f"'{source_path}', which is not a subdirectory of "
-                                f"'{current_path}'"
+                                f"Embedded entity '{entity.name}' comes from '{source_path}',"
+                                f" but can only be embedded from packages nested below '{current_path}'"
                             ),
                             rule=self.name,
                             document=document,
@@ -164,9 +159,8 @@ class EmbeddedTypeHasLowLevel(ProjectRule):
                     errors.append(
                         ProjectRuleError(
                             message=(
-                                f"Embedded routine '{routine.name}' is defined in "
-                                f"'{source_path}', which is not a subdirectory of "
-                                f"'{current_path}'"
+                                f"Embedded routine '{routine.name}' comes from '{source_path}',"
+                                f" but can only be embedded from packages nested below '{current_path}'"
                             ),
                             rule=self.name,
                             document=document,

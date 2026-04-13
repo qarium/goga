@@ -13,14 +13,18 @@ from .rules import (
     EmbeddedEntityCanNotHasMutations,
     EmbeddedTypeHasLowLevel,
     EntitiesAndRoutinesHasNotConflicts,
+    EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
     ImportHasTypeRule,
     ImportHasValidFromPathRule,
     ImportsCanNotBeEmptyRule,
     ImportsHasNotCyclicalDepsRule,
+    ImportsHasOnlyValidKeys,
+    ImportTypeExists,
     MutationExists,
     MutationIsValid,
     ReturnTypeHasLink,
+    RoutineHasOnlyValidKeys,
     UsageLinksHasNotConflicts,
 )
 from .visitor import Visitor
@@ -117,6 +121,9 @@ class Project:
             MutationIsValid(),
             ReturnTypeHasLink(),
             EmbeddedEntityCanNotHasMutations(),
+            ImportsHasOnlyValidKeys(),
+            EntityHasOnlyValidKeys(),
+            RoutineHasOnlyValidKeys(),
         ]
 
         for doc in all_documents:
@@ -127,6 +134,7 @@ class Project:
         project_rules = [
             ImportsHasNotCyclicalDepsRule(all_documents),
             EmbeddedTypeHasLowLevel(all_documents),
+            ImportTypeExists(all_documents),
         ]
 
         analyzer = Analyzer(all_documents)
