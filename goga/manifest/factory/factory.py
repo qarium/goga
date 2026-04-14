@@ -194,6 +194,17 @@ class Factory:
             if not isinstance(types_list, list):
                 continue
 
+            if not types_list:
+                items.append(
+                    ImportItemNode(
+                        type_name=set(),
+                        from_path=str(from_path),
+                        alias="",
+                        data=dict(entry),
+                    )
+                )
+                continue
+
             for type_entry in types_list:
                 type_str = str(type_entry)
                 # Check for AS alias (case-sensitive, must be uppercase)
