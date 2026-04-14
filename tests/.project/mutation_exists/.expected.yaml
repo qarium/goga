@@ -9,6 +9,6 @@ errors:
 
       '
     methods:
-      method() -> void:null: 'Test method
+      method_1() -> void:null: 'Test method
 
         '

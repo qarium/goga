@@ -7,3 +7,13 @@ errors:
     Types:
     - EntityA
     From: import_has_not_duplicate_helper2
+- rule: import_has_not_duplicate
+  message: 'Type ''EntityB'' is imported more than once: from ''import_has_not_duplicate_helper''
+    and ''import_has_not_duplicate_helper'''
+  document_path: import_has_not_duplicate
+  node_data:
+    Types:
+    - EntityA
+    - EntityB
+    - EntityB
+    From: import_has_not_duplicate_helper

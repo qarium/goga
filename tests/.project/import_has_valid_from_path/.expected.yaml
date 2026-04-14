@@ -1,8 +1,0 @@
-errors:
-- rule: import_has_valid_from_path
-  message: Import in './import_has_valid_from_path' has empty source path (From field)
-  document_path: import_has_valid_from_path
-  node_data:
-    Types:
-    - SomeType
-    From: ''

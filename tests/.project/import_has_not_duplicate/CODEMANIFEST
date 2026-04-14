@@ -1,6 +1,8 @@
 Imports:
   - Types:
       - EntityA
+      - EntityB
+      - EntityB
     From: import_has_not_duplicate_helper
   - Types:
       - EntityA

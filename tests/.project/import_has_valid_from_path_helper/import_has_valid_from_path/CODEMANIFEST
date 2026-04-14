@@ -1,0 +1,17 @@
+Imports:
+  - Types:
+      - SomeType
+    From: ""
+  - Types:
+      - MyHelperEntity
+    From: import_has_valid_from_path_helper
+  - Types:
+      - MyHelperEntity2
+    From: ../.project/import_has_valid_from_path_helper
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
