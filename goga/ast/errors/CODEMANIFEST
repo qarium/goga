@@ -6,7 +6,7 @@ Imports:
   - Types:
       - DocumentRoot
       - DocumentNode
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 Usages:
   conventions: .usages/development/conventions.md

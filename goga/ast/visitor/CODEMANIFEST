@@ -5,14 +5,14 @@
 Imports:
   - Types:
       - DocumentRoot
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
       - ManifestParseError
       - ManifestRuleError
-    From: goga/manifest/errors
+    From: goga/ast/errors
   - Types:
       - DocumentRule
-    From: goga/manifest/rules
+    From: goga/ast/rules
 
 Usages:
   conventions: .usages/development/conventions.md

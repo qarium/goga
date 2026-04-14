@@ -18,10 +18,10 @@ Imports:
       - MethodNode
       - PropertyNode
       - FooterNode
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
       - ManifestParseError
-    From: goga/manifest/errors
+    From: goga/ast/errors
 
 Usages:
   dsl: .usages/codemanifest/dsl.md

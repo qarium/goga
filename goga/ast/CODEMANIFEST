@@ -69,7 +69,7 @@ Annotations: |
 
 ---
 
-"Project(path: str)":
+"Ast(path: str)":
   location: project.py
   annotations: |
     Рекурсивно загружает дерево манифест документов
