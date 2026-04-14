@@ -1,3 +1,9 @@
+from .ast import (
+    ASTRule,
+    EmbeddedTypeHasLowLevel,
+    ImportsHasNotCyclicalDeps,
+    ImportTypeExists,
+)
 from .document import (
     AllUsagesIsUsed,
     AnnotationLinksExists,
@@ -16,14 +22,9 @@ from .document import (
     RoutineHasOnlyValidKeys,
     UsageLinksHasNotConflicts,
 )
-from .project import (
-    EmbeddedTypeHasLowLevel,
-    ImportsHasNotCyclicalDeps,
-    ImportTypeExists,
-    ProjectRule,
-)
 
 __all__ = [
+    "ASTRule",
     "AllUsagesIsUsed",
     "AnnotationLinksExists",
     "DocumentRule",
@@ -40,7 +41,6 @@ __all__ = [
     "ImportsHasOnlyValidKeys",
     "MutationExists",
     "MutationIsValid",
-    "ProjectRule",
     "ReturnTypeHasLink",
     "RoutineHasOnlyValidKeys",
     "UsageLinksHasNotConflicts",

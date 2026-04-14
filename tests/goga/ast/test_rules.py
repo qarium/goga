@@ -1,10 +1,10 @@
-"""Contract tests for the goga.manifest.rules package."""
+"""Contract tests for the goga.ast.rules package."""
 
 from pathlib import Path
 
 import pytest
-from goga.manifest.errors import ManifestRuleError, ProjectRuleError
-from goga.manifest.nodes import (
+from goga.ast.errors import ASTRuleError, DocumentRuleError
+from goga.ast.nodes import (
     AnnotationsNode,
     BodyNode,
     DocumentNode,
@@ -19,9 +19,10 @@ from goga.manifest.nodes import (
     UsageItemNode,
     UsagesNode,
 )
-from goga.manifest.rules import (
+from goga.ast.rules import (
     AllUsagesIsUsed,
     AnnotationLinksExists,
+    ASTRule,
     DocumentRule,
     EmbeddedEntityCanNotHasMutations,
     EmbeddedTypeHasLowLevel,
@@ -36,7 +37,6 @@ from goga.manifest.rules import (
     ImportTypeExists,
     MutationExists,
     MutationIsValid,
-    ProjectRule,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     UsageLinksHasNotConflicts,
@@ -63,7 +63,7 @@ EXPECTED_RULE_CLASSES = [
     EmbeddedEntityCanNotHasMutations,
     EntityHasOnlyValidKeys,
     RoutineHasOnlyValidKeys,
-    ProjectRule,
+    ASTRule,
     ImportsHasNotCyclicalDeps,
     ImportTypeExists,
     EmbeddedTypeHasLowLevel,
@@ -118,7 +118,7 @@ class TestImportsCanNotBeEmpty:
         rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
         assert "Imports block in" in errors[0].message
         assert "is empty — each import must specify at least Types and From" in errors[0].message
@@ -157,7 +157,7 @@ class TestImportsCanNotBeEmptyConditional:
         rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
         assert "Imports block in" in errors[0].message
         assert "is empty — each import must specify at least Types and From" in errors[0].message
@@ -217,7 +217,7 @@ class TestImportHasType:
         rule = ImportHasType()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "import_has_type"
         assert "has no Types listed" in errors[0].message
         assert "— specify at least one type to import" in errors[0].message
@@ -234,10 +234,15 @@ class TestImportHasValidFromPath:
         assert rule.name == "import_has_valid_from_path"
 
     def test_positive_valid_existing_path(self, tmp_path: Path):
-        existing_file = Path.cwd() / "_test_rules_tmp_module.py"
-        existing_file.write_text("# module")
+        # The rule uses CWD as project root, so create files inside CWD
+        test_dir = Path.cwd() / "_test_rules_valid_path"
+        test_dir.mkdir(exist_ok=True)
         try:
+            existing_file = test_dir / "manifest.py"
+            existing_file.write_text("# module")
+            doc_path = test_dir / "CODEMANIFEST"
             root = DocumentRoot(
+                path=str(doc_path),
                 header=HeaderNode(
                     imports=ImportsNode(
                         items=[
@@ -247,7 +252,7 @@ class TestImportHasValidFromPath:
                             )
                         ]
                     )
-                )
+                ),
             )
             node = DocumentNode(root=root)
             rule = ImportHasValidFromPath()
@@ -255,6 +260,7 @@ class TestImportHasValidFromPath:
             assert errors == []
         finally:
             existing_file.unlink(missing_ok=True)
+            test_dir.rmdir()
 
     def test_negative_empty_path(self):
         root = DocumentRoot(
@@ -264,7 +270,7 @@ class TestImportHasValidFromPath:
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert "has empty source path (From field)" in errors[0].message
 
     def test_negative_non_existing_path(self, tmp_path: Path):
@@ -276,7 +282,7 @@ class TestImportHasValidFromPath:
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert "not found on filesystem" in errors[0].message
 
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
@@ -288,26 +294,26 @@ class TestImportHasValidFromPath:
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
         assert len(errors) >= 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert any(
             "not found on filesystem" in e.message or "points outside the project root" in e.message for e in errors
         )
 
 
 # ---------------------------------------------------------------------------
-# 6. ProjectRule base class
+# 6. ASTRule base class
 # ---------------------------------------------------------------------------
 
 
-class TestProjectRule:
+class TestASTRule:
     def test_name_and_tree_properties(self):
         tree = [DocumentRoot(), DocumentRoot()]
-        rule = ProjectRule(tree=tree, name="my_project_rule")
+        rule = ASTRule(tree=tree, name="my_project_rule")
         assert rule.name == "my_project_rule"
         assert rule.tree is tree
 
     def test_check_raises_not_implemented_error(self):
-        rule = ProjectRule(tree=[], name="base")
+        rule = ASTRule(tree=[], name="base")
         doc = DocumentRoot()
         with pytest.raises(NotImplementedError):
             rule.check(doc)
@@ -348,7 +354,7 @@ class TestImportsHasNotCyclicalDeps:
         rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
         assert len(errors) == 1
-        assert isinstance(errors[0], ProjectRuleError)
+        assert isinstance(errors[0], ASTRuleError)
         assert errors[0].rule == "imports_has_not_cyclical_deps"
 
 
@@ -387,7 +393,7 @@ class TestAllUsagesIsUsed:
         rule = AllUsagesIsUsed()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "all_usages_is_used"
         assert "not referenced in any annotation — either use it or remove" in errors[0].message
 
@@ -552,7 +558,7 @@ class TestImportHasNotDuplicate:
         rule = ImportHasNotDuplicate()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "import_has_not_duplicate"
         assert "is imported more than once: from" in errors[0].message
         assert "Foo" in errors[0].message
@@ -627,7 +633,7 @@ class TestAnnotationLinksExists:
         rule = AnnotationLinksExists()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "annotation_links_exists"
         assert "does not match any import, usage, entity, routine, or signature parameter" in errors[0].message
 
@@ -718,7 +724,7 @@ class TestUsageLinksHasNotConflicts:
         rule = UsageLinksHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "usage_links_has_not_conflicts"
         assert "conflicts with imported type" in errors[0].message
         assert "rename the usage or use an alias" in errors[0].message
@@ -746,7 +752,7 @@ class TestUsageLinksHasNotConflicts:
         rule = UsageLinksHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "usage_links_has_not_conflicts"
         assert "conflicts with" in errors[0].message
         assert "rename the usage to avoid ambiguity" in errors[0].message
@@ -790,7 +796,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         rule = EntitiesAndRoutinesHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
         assert "has the same name as imported type" in errors[0].message
 
@@ -821,7 +827,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         rule = EntitiesAndRoutinesHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
         assert "has the same name as imported type" in errors[0].message
 
@@ -870,7 +876,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         rule = EntitiesAndRoutinesHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
         assert "has the same name as imported type" in errors[0].message
 
@@ -889,7 +895,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         rule = EntitiesAndRoutinesHasNotConflicts()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
         assert "has the same name as imported type" in errors[0].message
 
@@ -960,7 +966,7 @@ class TestMutationExists:
         rule = MutationExists()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "mutation_exists"
         assert "Base type" in errors[0].message
         assert "not found in imports, entities, or routines" in errors[0].message
@@ -999,7 +1005,7 @@ class TestMutationIsValid:
         rule = MutationIsValid()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "mutation_is_valid"
         assert "references itself" in errors[0].message
 
@@ -1041,7 +1047,7 @@ class TestReturnTypeHasLink:
         rule = ReturnTypeHasLink()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "return_type_has_link"
         assert "is missing a semantic label" in errors[0].message
 
@@ -1123,7 +1129,7 @@ class TestEmbeddedEntityCanNotHasMutations:
         rule = EmbeddedEntityCanNotHasMutations()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "embedded_entity_can_not_has_mutations"
         assert "(->Entity)" in errors[0].message
         assert "cannot define mutations" in errors[0].message
@@ -1142,7 +1148,7 @@ class TestEmbeddedEntityCanNotHasMutations:
 
 
 # ---------------------------------------------------------------------------
-# 19. EmbeddedTypeHasLowLevel (ProjectRule)
+# 19. EmbeddedTypeHasLowLevel (ASTRule)
 # ---------------------------------------------------------------------------
 
 
@@ -1190,7 +1196,7 @@ class TestEmbeddedTypeHasLowLevel:
         rule = EmbeddedTypeHasLowLevel(tree=[parent_doc, child_doc])
         errors = rule.check(child_doc)
         assert len(errors) == 1
-        assert isinstance(errors[0], ProjectRuleError)
+        assert isinstance(errors[0], ASTRuleError)
         assert errors[0].rule == "embedded_type_has_low_level"
 
     def test_negative_embedded_from_same_level(self):
@@ -1212,7 +1218,7 @@ class TestEmbeddedTypeHasLowLevel:
         rule = EmbeddedTypeHasLowLevel(tree=[doc_a, doc_b])
         errors = rule.check(doc_a)
         assert len(errors) == 1
-        assert isinstance(errors[0], ProjectRuleError)
+        assert isinstance(errors[0], ASTRuleError)
         assert errors[0].rule == "embedded_type_has_low_level"
 
 
@@ -1259,7 +1265,7 @@ class TestImportsHasOnlyValidKeys:
         rule = ImportsHasOnlyValidKeys()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "imports_has_only_valid_keys"
         assert "contains unknown keys" in errors[0].message
         assert "— allowed: Types, From" in errors[0].message
@@ -1320,7 +1326,7 @@ class TestEntityHasOnlyValidKeys:
         rule = EntityHasOnlyValidKeys()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert "— allowed: location, annotations, methods, properties" in errors[0].message
 
     def test_positive_empty_data(self):
@@ -1374,7 +1380,7 @@ class TestRoutineHasOnlyValidKeys:
         rule = RoutineHasOnlyValidKeys()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert "— allowed: location, annotations" in errors[0].message
 
     def test_positive_empty_data(self):
@@ -1389,7 +1395,7 @@ class TestRoutineHasOnlyValidKeys:
 
 
 # ---------------------------------------------------------------------------
-# 23. ImportTypeExists (ProjectRule)
+# 23. ImportTypeExists (ASTRule)
 # ---------------------------------------------------------------------------
 
 
@@ -1483,7 +1489,7 @@ class TestImportTypeExists:
         rule = ImportTypeExists(tree=[current_doc, target_doc])
         errors = rule.check(current_doc)
         assert len(errors) == 1
-        assert isinstance(errors[0], ProjectRuleError)
+        assert isinstance(errors[0], ASTRuleError)
         assert "MissingType" in errors[0].message
 
     def test_positive_from_path_not_on_filesystem_skipped(self):

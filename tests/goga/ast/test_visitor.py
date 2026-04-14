@@ -1,15 +1,15 @@
-"""Contract tests for the goga.manifest.visitor package."""
+"""Contract tests for the goga.ast.visitor package."""
 
-from goga.manifest.errors import ManifestRuleError
-from goga.manifest.nodes import (
+from goga.ast.errors import DocumentRuleError
+from goga.ast.nodes import (
     DocumentNode,
     DocumentRoot,
     HeaderNode,
     ImportItemNode,
     ImportsNode,
 )
-from goga.manifest.rules import DocumentRule, ImportsCanNotBeEmpty
-from goga.manifest.visitor import Visitor
+from goga.ast.rules import DocumentRule, ImportsCanNotBeEmpty
+from goga.ast.visitor import Visitor
 
 # ---------------------------------------------------------------------------
 # 1. Facade: Visitor is importable from the visitor package
@@ -63,7 +63,7 @@ class TestVisitorAnalyze:
         rule = ImportsCanNotBeEmpty()
         errors = visitor.analyze(rules=[rule])
         assert len(errors) == 1
-        assert isinstance(errors[0], ManifestRuleError)
+        assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "imports_can_not_be_empty"
 
     def test_analyze_with_multiple_rules_aggregates_errors(self):
@@ -74,9 +74,9 @@ class TestVisitorAnalyze:
             def __init__(self) -> None:
                 super().__init__(name="always_fail")
 
-            def check(self, node: DocumentNode) -> list[ManifestRuleError]:
+            def check(self, node: DocumentNode) -> list[DocumentRuleError]:
                 return [
-                    ManifestRuleError(
+                    DocumentRuleError(
                         message="fail",
                         rule=self.name,
                         document=node.root,
@@ -88,4 +88,4 @@ class TestVisitorAnalyze:
         rule2 = ImportsCanNotBeEmpty()
         errors = visitor.analyze(rules=[rule1, rule2])
         assert len(errors) == 2
-        assert all(isinstance(e, ManifestRuleError) for e in errors)
+        assert all(isinstance(e, DocumentRuleError) for e in errors)

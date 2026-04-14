@@ -5,7 +5,7 @@ import os
 import click
 import yaml
 
-from ..manifest import Project
+from ..ast import AST
 
 
 @click.command()
@@ -15,10 +15,10 @@ def linter(ctx: click.Context, path: str) -> None:
     """Validate CODEMANIFEST files in the project."""
     os.chdir(path)
 
-    project = Project(".")
-    project.load()
+    ast_obj = AST(".")
+    ast_obj.load()
 
-    for error in project.errors:
+    for error in ast_obj.errors:
         rule_line = click.style(f"[{error.rule}]", fg="red")
         click.echo(f"{rule_line} {error.message}")
 
@@ -38,4 +38,4 @@ def linter(ctx: click.Context, path: str) -> None:
             for line in yaml_str.splitlines():
                 click.echo(f"      {line}")
 
-    ctx.exit(1 if project.errors else 0)
+    ctx.exit(1 if ast_obj.errors else 0)

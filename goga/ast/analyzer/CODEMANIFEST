@@ -5,14 +5,13 @@
 Imports:
   - Types:
       - DocumentRoot
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
-      - ProjectRuleError
-      - ManifestParseError
-    From: goga/manifest/errors
+      - ASTRuleError
+    From: goga/ast/errors
   - Types:
-      - ProjectRule
-    From: goga/manifest/rules
+      - ASTRule
+    From: goga/ast/rules
 
 Usages:
   conventions: .usages/development/conventions.md
@@ -32,7 +31,7 @@ Annotations: |
     tree -> list[DocumentRoot]: |
       Дерево документов с которым был создан анализатор
   methods:
-    "analyze(rules: list[ProjectRule]) -> errors:list[ProjectRuleError]": |
+    "analyze(rules: list[ASTRule]) -> errors:list[ASTRuleError]": |
       Анализировать правила применяемые ко всем документам
 
       `errors`: список ошибок после применения правил

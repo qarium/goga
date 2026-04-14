@@ -1,4 +1,4 @@
-"""Contract tests for goga.manifest.factory package.
+"""Contract tests for goga.ast.factory package.
 
 Verifies Factory parsing of CODEMANIFEST YAML files into DocumentRoot trees,
 covering header, body, footer parsing, alias handling, usage detection,
@@ -9,9 +9,9 @@ deep hierarchy support.
 from pathlib import Path
 
 import pytest
-from goga.manifest.errors import ManifestParseError
-from goga.manifest.factory import Factory
-from goga.manifest.nodes import (
+from goga.ast.errors import DocumentParseError
+from goga.ast.factory import Factory
+from goga.ast.nodes import (
     AnnotationsNode,
     BodyNode,
     DocumentRoot,
@@ -45,10 +45,10 @@ Imports:
   - Types:
       - DocumentRoot
       - DocumentNode AS Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
-      - ManifestParseError
-    From: goga/manifest/errors
+      - DocumentParseError
+    From: goga/ast/errors
 
 Usages:
   nodes: .usages/nodes.md
@@ -123,7 +123,7 @@ class TestBasicParsingHeaderImports:
         # DocumentRoot — no alias
         assert "DocumentRoot" in item.type_name
         assert item.alias == ""
-        assert item.from_path == "goga/manifest/nodes"
+        assert item.from_path == "goga/ast/nodes"
 
     def test_import_type_with_alias(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
@@ -132,15 +132,15 @@ class TestBasicParsingHeaderImports:
         # DocumentNode AS Node
         assert "DocumentNode" in item.type_name
         assert item.alias == "Node"
-        assert item.from_path == "goga/manifest/nodes"
+        assert item.from_path == "goga/ast/nodes"
 
     def test_import_single_type(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
         item = root.header.imports.items[2]
-        assert "ManifestParseError" in item.type_name
+        assert "DocumentParseError" in item.type_name
         assert item.alias == ""
-        assert item.from_path == "goga/manifest/errors"
+        assert item.from_path == "goga/ast/errors"
 
     def test_header_types_list_populated(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
@@ -148,7 +148,7 @@ class TestBasicParsingHeaderImports:
         types = root.header.types
         assert "DocumentRoot" in types
         assert "DocumentNode" in types
-        assert "ManifestParseError" in types
+        assert "DocumentParseError" in types
 
 
 # ---------------------------------------------------------------------------
@@ -404,7 +404,7 @@ class TestEntityWithMutations:
 Imports:
   - Types:
       - DocumentRule
-    From: goga/manifest/rules
+    From: goga/ast/rules
 
 ---
 "DocumentRule::SomeRule(name: str = 'some_rule')":
@@ -498,7 +498,7 @@ class TestRoutineNoPropertiesNoMethods:
 
 
 # ---------------------------------------------------------------------------
-# 13. Unknown keys in header/footer raise ManifestParseError
+# 13. Unknown keys in header/footer raise DocumentParseError
 # ---------------------------------------------------------------------------
 
 
@@ -511,7 +511,7 @@ UnknownKey: some_value
 ---
 """
         pkg = _write_codemanifest(str(tmp_path / "bad_header"), yaml_content)
-        with pytest.raises(ManifestParseError, match="Unknown keys in header"):
+        with pytest.raises(DocumentParseError, match="Unknown keys in header"):
             Factory(pkg).create()
 
     def test_unknown_keys_in_footer_raises_parse_error(self, tmp_path) -> None:
@@ -522,7 +522,7 @@ UnknownKey: some_value
 BogusFooterKey: oops
 """
         pkg = _write_codemanifest(str(tmp_path / "bad_footer"), yaml_content)
-        with pytest.raises(ManifestParseError, match="Unknown keys in footer"):
+        with pytest.raises(DocumentParseError, match="Unknown keys in footer"):
             Factory(pkg).create()
 
 
@@ -544,7 +544,7 @@ imports:
 ---
 """
         pkg = _write_codemanifest(str(tmp_path / "lower_imports"), yaml_content)
-        with pytest.raises(ManifestParseError, match="Unknown keys in header"):
+        with pytest.raises(DocumentParseError, match="Unknown keys in header"):
             Factory(pkg).create()
 
     def test_uppercase_imports_is_valid(self, tmp_path) -> None:
@@ -791,7 +791,7 @@ class TestAllNodePropertiesPopulated:
         aliased = root.header.imports.items[1]
         assert "DocumentNode" in aliased.type_name
         assert aliased.alias == "Node"
-        assert aliased.from_path == "goga/manifest/nodes"
+        assert aliased.from_path == "goga/ast/nodes"
 
     def test_usage_item_all_fields(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
@@ -978,7 +978,7 @@ Annotations:
 
 
 class TestImportsNotList:
-    """Imports value that is not a list raises ManifestParseError."""
+    """Imports value that is not a list raises DocumentParseError."""
 
     def test_imports_string_raises_error(self, tmp_path) -> None:
         yaml_content = """\
@@ -988,7 +988,7 @@ Imports: not_a_list
 ---
 """
         pkg = _write_codemanifest(str(tmp_path / "import_str"), yaml_content)
-        with pytest.raises(ManifestParseError, match="Imports must be a list"):
+        with pytest.raises(DocumentParseError, match="Imports must be a list"):
             Factory(pkg).create()
 
 

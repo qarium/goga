@@ -7,8 +7,7 @@ Imports:
       - DocumentRoot
     From: goga/ast/nodes
   - Types:
-      - ManifestParseError
-      - ManifestRuleError
+      - DocumentRuleError
     From: goga/ast/errors
   - Types:
       - DocumentRule
@@ -32,7 +31,7 @@ Annotations: |
     document -> DocumentRoot: |
       Документ с которым создано правило
   methods:
-    "analyze(rules: list[DocumentRule]) -> errors:list[ManifestRuleError]": |
+    "analyze(rules: list[DocumentRule]) -> errors:list[DocumentRuleError]": |
       Анализировать правила применяемые к документу
 
       `errors`: список ошибок после применения правил

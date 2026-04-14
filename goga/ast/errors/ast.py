@@ -3,14 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from .base import BaseCodemanifestError
+from .base import BaseASTError
 
 if TYPE_CHECKING:
     from ..nodes.document import DocumentNode, DocumentRoot
 
 
-class ProjectRuleError(BaseCodemanifestError):
-    """Raised when a project violates a rule."""
+class ASTRuleError(BaseASTError):
+    """Raised when an AST violates a rule."""
 
     def __init__(
         self,

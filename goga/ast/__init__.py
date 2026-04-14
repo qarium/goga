@@ -1,5 +1,5 @@
-from .project import Project
+from .ast import AST
 
 __all__ = [
-    "Project",
+    "AST",
 ]

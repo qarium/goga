@@ -20,7 +20,7 @@ Imports:
       - FooterNode
     From: goga/ast/nodes
   - Types:
-      - ManifestParseError
+      - DocumentParseError
     From: goga/ast/errors
 
 Usages:
@@ -39,7 +39,7 @@ Annotations: |
   Соглашения сборки:
     * Каждая созданная нода содержит data — исходные данные, из которых она создана
     * Каждая созданная нода содержит parent — ссылку на родительскую ноду
-    * Неизвестные ключи в header и footer вызывают `ManifestParseError` с перечислением
+    * Неизвестные ключи в header и footer вызывают `DocumentParseError` с перечислением
       всех неизвестных ключей
     * Типы значений проверяются согласно практике `dsl`
 
@@ -80,7 +80,7 @@ Annotations: |
       - Только строковое представление
       - Извлечение ссылок (backtick) согласно практике `dsl`
 
-      Неизвестные ключи → `ManifestParseError`
+      Неизвестные ключи → `DocumentParseError`
 
       ## Тело → `BodyNode`
 
@@ -96,7 +96,7 @@ Annotations: |
 
       ## Нижний колонтитул → `FooterNode`
 
-      Неизвестные ключи → `ManifestParseError`
+      Неизвестные ключи → `DocumentParseError`
 
 ---
 

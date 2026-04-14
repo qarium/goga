@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 
-class BaseCodemanifestError(Exception):
-    """Base exception for all codemanifest errors."""
+class BaseASTError(Exception):
+    """Base exception for all AST errors."""
 
     def __init__(self, message: str) -> None:
         super().__init__(message)

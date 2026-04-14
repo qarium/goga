@@ -5,7 +5,7 @@
 Imports:
   - Types:
       - DocumentRoot
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
       # правила документа
       - ImportsCanNotBeEmpty
@@ -27,24 +27,25 @@ Imports:
       - ImportTypeExists
       - ImportsHasNotCyclicalDeps
       - EmbeddedTypeHasLowLevel
-    From: goga/manifest/rules
+    From: goga/ast/rules
   - Types:
-      - ProjectRuleError
-      - ManifestRuleError
-    From: goga/manifest/errors
+      - ASTRuleError
+      - DocumentRuleError
+      - DocumentNotFound
+    From: goga/ast/errors
 
 Usages:
   conventions: .usages/development/conventions.md
   nodes: |
-    Использовать манифест goga/manifest/nodes и его API дл работы с структурой документа
+    Использовать манифест goga/ast/nodes и его API дл работы с структурой документа
   factory: |
-    Использовать манифест goga/manifest/factory и его API для создания документа
+    Использовать манифест goga/ast/factory и его API для создания документа
   visitor: |
-    Использовать манифест goga/manifest/visitor и его API для анализа одного документа
+    Использовать манифест goga/ast/visitor и его API для анализа одного документа
   analyzer: |
-    Использовать манифест goga/manifest/analyzer и его API для анализа всего дерева документов
+    Использовать манифест goga/ast/analyzer и его API для анализа всего дерева документов
   testing: |
-    Интеграционные тесты правил `Project`.
+    Интеграционные тесты правил `AST`.
 
     Структура:
     - tests/.project/<rule_name>/ — папка кейса для правила с CODEMANIFEST и .expected.yaml
@@ -60,7 +61,7 @@ Usages:
     ```
 
     Один параметризованный тест в test_project_integration.py:
-    - сканирует tests/.project/, загружает Project(cwd=.project/)
+    - сканирует tests/.project/, загружает AST(.project/)
     - сравнивает len(errors) и каждое поле ошибки строго
 
 Annotations: |
@@ -69,19 +70,19 @@ Annotations: |
 
 ---
 
-"Ast(path: str)":
-  location: project.py
+"AST(path: str)":
+  location: ast.py
   annotations: |
     Рекурсивно загружает дерево манифест документов
 
     `path`: путь из которого необходимо загрузить дерево
 
-    Правила документа и проекта определены в подключенных типах из `goga/manifest/rules`.
+    Правила документа и проекта определены в подключенных типах из `goga/ast/rules`.
   properties:
     tree -> list[DocumentRoot]: |
       Дерево документов в проекте.
       Вершины графа, спускаться по дереву можно от вершин используя практику `nodes`.
-    errors -> list[ProjectRuleError | ManifestRuleError]: |
+    errors -> list[ASTRuleError | DocumentRuleError]: |
       Список ошибок после анализа
   methods:
     load(): |
@@ -128,8 +129,12 @@ Annotations: |
       - `ImportsHasNotCyclicalDeps`
       - `EmbeddedTypeHasLowLevel`
 
-    "codemanifest(path: str) -> found_document:DocumentRoot": |
+    "document(path: str) -> found_document:DocumentRoot": |
       На основании пути возвращает документ.
+
+      `path`: путь до папки в которой лежит CODEMANIFEST
+
+      `found_document`: найденный документ
 
       Требования:
       - Должны обрабатываться любые варианты путей
@@ -137,6 +142,7 @@ Annotations: |
         - относительный path/path
         - полный /path/path
       - Поиск документа должен соответствовать алгоритмической сложности O(1)
+      - Документ не найден → `DocumentNotFound`
 
 ---
 

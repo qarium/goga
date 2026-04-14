@@ -17,14 +17,15 @@ Imports:
       - EntityTypeNode
       - MethodNode
       - PropertyNode
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
-      - ManifestRuleError
-    From: goga/manifest/errors
+      - ASTRuleError
+      - DocumentRuleError
+    From: goga/ast/errors
 
 Usages:
   nodes: |
-    Использовать манифест goga/manifest/nodes и его API для работы с структурой документа
+    Использовать манифест goga/ast/nodes и его API для работы с структурой документа
   conventions: .usages/development/conventions.md
 
 Annotations: |
@@ -46,7 +47,7 @@ Annotations: |
     name -> str: |
       Имя с которым было создано правило
   methods:
-    "check(node: DocumentNode) -> errors:list[ManifestRuleError]": |
+    "check(node: DocumentNode) -> errors:list[DocumentRuleError]": |
       Проверяет ноду на соответствие правилу
 
       `node`: нода которую необходимо проверить
@@ -277,8 +278,8 @@ Annotations: |
 # Правила на уровне всех документов #
 # ********************************* #
 
-"ProjectRule(tree: list[DocumentRoot], name: str)":
-  location: project.py
+"ASTRule(tree: list[DocumentRoot], name: str)":
+  location: ast.py
   annotations: |
     Описывает одно конкретное правило которое применяет глобально ко всем документам
 
@@ -290,14 +291,14 @@ Annotations: |
     tree -> list[DocumentRoot]: |
       Дерево документов с которым было создано правило
   methods:
-    "check(document: DocumentRoot) -> errors:list[ManifestRuleError]": |
+    "check(document: DocumentRoot) -> errors:list[ASTRuleError]": |
       Проверяет документ на соответствие правилу
 
       `document`: документ который необходимо проверить
       `errors`: список ошибок в результате проверки
 
-"ProjectRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
-  location: project.py
+"ASTRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
+  location: ast.py
   annotations: |
     Правило - ни один импорт в документе не является циклическим.
 
@@ -310,8 +311,8 @@ Annotations: |
     Шаблоны ошибок:
     - cycle: "Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"
 
-"ProjectRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
-  location: project.py
+"ASTRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
+  location: ast.py
   annotations: |
     Правило - подключаемый тип через Imports существует в указанном в From документе.
 
@@ -321,8 +322,8 @@ Annotations: |
     Шаблоны ошибок:
     - not_found: "Type '{type_name}' imported from '{from_path}' is not defined in that package's CODEMANIFEST"
 
-"ProjectRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
-  location: project.py
+"ASTRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
+  location: ast.py
   annotations: |
     Правило - все embedded типы располагаются ниже в иерархии файловой системы.
 

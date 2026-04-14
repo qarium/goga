@@ -1,10 +1,10 @@
-"""Contract tests for goga.manifest.nodes package.
+"""Contract tests for goga.ast.nodes package.
 
 Verifies facade availability, API shape, defaults, and inheritance
 for all node dataclasses.
 """
 
-from goga.manifest.nodes import (
+from goga.ast.nodes import (
     AnnotationsNode,
     BodyNode,
     DocumentNode,

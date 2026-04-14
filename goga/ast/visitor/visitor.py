@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..errors import ManifestRuleError
+from ..errors import DocumentRuleError
 from ..nodes import DocumentNode
 
 if TYPE_CHECKING:
@@ -20,9 +20,9 @@ class Visitor:
     def document(self) -> DocumentRoot:
         return self._document
 
-    def analyze(self, rules: list[DocumentRule]) -> list[ManifestRuleError]:
+    def analyze(self, rules: list[DocumentRule]) -> list[DocumentRuleError]:
         wrapper = DocumentNode(root=self._document)
-        errors: list[ManifestRuleError] = []
+        errors: list[DocumentRuleError] = []
         for rule in rules:
             errors.extend(rule.check(wrapper))
         return errors

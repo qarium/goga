@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 import yaml
 
-from ..errors import ManifestParseError
+from ..errors import DocumentParseError
 from ..nodes import (
     AnnotationsNode,
     BodyNode,
@@ -145,7 +145,7 @@ class Factory:
         unknown_keys = set(data.keys()) - _VALID_HEADER_KEYS
         if unknown_keys:
             sorted_keys = ", ".join(sorted(unknown_keys))
-            raise ManifestParseError(
+            raise DocumentParseError(
                 f"Unknown keys in header: {sorted_keys}",
                 filepath,
             )
@@ -179,7 +179,7 @@ class Factory:
             return ImportsNode(items=items)
 
         if not isinstance(data, list):
-            raise ManifestParseError(
+            raise DocumentParseError(
                 "Imports must be a list",
                 filepath,
             )
@@ -429,7 +429,7 @@ class Factory:
         unknown_keys = set(data.keys()) - _VALID_FOOTER_KEYS
         if unknown_keys:
             sorted_keys = ", ".join(sorted(unknown_keys))
-            raise ManifestParseError(
+            raise DocumentParseError(
                 f"Unknown keys in footer: {sorted_keys}",
                 filepath,
             )

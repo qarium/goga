@@ -5,13 +5,12 @@ from pathlib import Path
 
 import pytest
 import yaml
-
-from goga.manifest.project import Project
+from goga.ast.ast import AST
 
 
 def _load_expected(case_dir: Path) -> list[dict]:
     expected_file = case_dir / ".expected.yaml"
-    with open(expected_file) as f:
+    with expected_file.open() as f:
         data = yaml.safe_load(f)
     return data["errors"]
 
@@ -30,18 +29,18 @@ def _collect_cases(project_root: Path) -> list[Path]:
     _collect_cases(Path(__file__).parent.parent.parent / ".project"),
     ids=lambda d: str(d.relative_to(Path(__file__).parent.parent.parent / ".project")),
 )
-def test_project_rules(case_dir: Path, project_root: Path) -> None:
-    origin = os.getcwd()
+def test_ast_rules(case_dir: Path, project_root: Path) -> None:
+    origin = Path.cwd()
     os.chdir(str(project_root))
     try:
-        project = Project(path=".")
-        project.load()
+        ast_obj = AST(path=".")
+        ast_obj.load()
 
         expected_errors = _load_expected(case_dir)
 
         case_rel = os.path.normpath(case_dir.relative_to(project_root))
         case_errors = [
-            e for e in project.errors if os.path.normpath(e.document.path) == case_rel
+            e for e in ast_obj.errors if os.path.normpath(e.document.path) == case_rel
         ]
     finally:
         os.chdir(origin)

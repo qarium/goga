@@ -1,12 +1,12 @@
-"""Contract tests for the codemanifest root package — Project class."""
+"""Contract tests for the codemanifest root package — AST class."""
 
 import os
 from pathlib import Path
 
 import pytest
-from goga.manifest import Project
-from goga.manifest.errors import ManifestRuleError
-from goga.manifest.nodes import DocumentRoot
+from goga.ast import AST
+from goga.ast.errors import DocumentNotFoundError, DocumentRuleError
+from goga.ast.nodes import DocumentRoot
 
 # ---------------------------------------------------------------------------
 # 1. Facade availability
@@ -14,10 +14,10 @@ from goga.manifest.nodes import DocumentRoot
 
 
 class TestFacadeAvailability:
-    def test_import_project_from_codemanifest(self):
-        from goga.manifest import Project as Reimported  # noqa: PLC0415
+    def test_import_ast_from_codemanifest(self):
+        from goga.ast import AST as Reimported  # noqa: N811, PLC0415
 
-        assert Reimported is Project
+        assert Reimported is AST
 
 
 # ---------------------------------------------------------------------------
@@ -27,16 +27,16 @@ class TestFacadeAvailability:
 
 class TestInitialState:
     def test_path_property(self):
-        p = Project("/some/path")
-        assert p.path == "/some/path"
+        ast_obj = AST("/some/path")
+        assert ast_obj.path == "/some/path"
 
     def test_tree_initially_empty(self):
-        p = Project("/some/path")
-        assert p.tree == []
+        ast_obj = AST("/some/path")
+        assert ast_obj.tree == []
 
     def test_errors_initially_empty(self):
-        p = Project("/some/path")
-        assert p.errors == []
+        ast_obj = AST("/some/path")
+        assert ast_obj.errors == []
 
 
 # ---------------------------------------------------------------------------
@@ -48,10 +48,10 @@ class TestLoadEmptyDirectory:
     def test_empty_dir_no_tree_no_errors(self, tmp_path):
         empty_dir = tmp_path / "empty"
         empty_dir.mkdir()
-        p = Project(str(empty_dir))
-        p.load()
-        assert p.tree == []
-        assert p.errors == []
+        ast_obj = AST(str(empty_dir))
+        ast_obj.load()
+        assert ast_obj.tree == []
+        assert ast_obj.errors == []
 
 
 # ---------------------------------------------------------------------------
@@ -63,7 +63,7 @@ VALID_SINGLE_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyClass()":
@@ -87,10 +87,10 @@ class TestLoadSingleDocument:
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
-        assert len(p.tree) == 1
-        assert p.tree[0].path == os.path.normpath(os.path.relpath(str(doc_dir)))
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
+        assert len(ast_obj.tree) == 1
+        assert ast_obj.tree[0].path == os.path.normpath(os.path.relpath(str(doc_dir)))
 
 
 # ---------------------------------------------------------------------------
@@ -112,13 +112,13 @@ class TestLoadNestedDocuments:
         level3.mkdir()
         (level3 / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
         # Only one top-level document
-        assert len(p.tree) == 1
+        assert len(ast_obj.tree) == 1
 
-        root_doc = p.tree[0]
+        root_doc = ast_obj.tree[0]
         assert root_doc.path == os.path.normpath(os.path.relpath(str(root_dir)))
 
         # level2 is child of level1
@@ -147,11 +147,11 @@ class TestLoadNestedDocuments:
         child_b.mkdir()
         (child_b / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
-        assert len(p.tree) == 1
-        assert len(p.tree[0].children) == 2
+        assert len(ast_obj.tree) == 1
+        assert len(ast_obj.tree[0].children) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -176,26 +176,26 @@ Description: Test
 
 
 class TestDocumentRuleViolations:
-    def test_empty_imports_produces_manifest_rule_error(self, tmp_path):
+    def test_empty_imports_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "badproject"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        manifest_errors = [e for e in p.errors if isinstance(e, ManifestRuleError)]
-        assert len(manifest_errors) > 0
+        document_errors = [e for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
+        assert len(document_errors) > 0
 
     def test_empty_imports_rule_name(self, tmp_path):
         doc_dir = tmp_path / "badproject"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "imports_can_not_be_empty" in rule_names
 
 
@@ -208,7 +208,7 @@ UNUSED_USAGE_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 Usages:
   NEVER_REFERENCED_ANYWHERE: some value
 
@@ -225,17 +225,17 @@ Description: Test
 """
 
 
-class TestProjectRuleViolations:
-    def test_unused_usage_produces_manifest_rule_error(self, tmp_path):
+class TestASTRuleViolations:
+    def test_unused_usage_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "unusedusage"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(UNUSED_USAGE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        manifest_errors = [e for e in p.errors if isinstance(e, ManifestRuleError)]
-        usage_errors = [e for e in manifest_errors if e.rule == "all_usages_is_used"]
+        document_errors = [e for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
+        usage_errors = [e for e in document_errors if e.rule == "all_usages_is_used"]
         assert len(usage_errors) > 0
 
     def test_unused_usage_rule_name(self, tmp_path):
@@ -243,10 +243,10 @@ class TestProjectRuleViolations:
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(UNUSED_USAGE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "all_usages_is_used" in rule_names
 
 
@@ -274,32 +274,32 @@ Description: Test
 
 
 class TestAccumulatedErrors:
-    def test_both_manifest_rule_errors_from_different_rules(self, tmp_path):
+    def test_both_document_rule_errors_from_different_rules(self, tmp_path):
         doc_dir = tmp_path / "accum"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_AND_UNUSED_USAGE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        manifest_errors = [e for e in p.errors if isinstance(e, ManifestRuleError)]
-        rule_names = {e.rule for e in manifest_errors}
+        document_errors = [e for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
+        rule_names = {e.rule for e in document_errors}
 
-        assert len(manifest_errors) >= 2, "Expected at least two ManifestRuleError"
+        assert len(document_errors) >= 2, "Expected at least two DocumentRuleError"
         assert "imports_can_not_be_empty" in rule_names
         assert "all_usages_is_used" in rule_names
 
-    def test_errors_are_all_manifest_rule_errors(self, tmp_path):
+    def test_errors_are_all_document_rule_errors(self, tmp_path):
         doc_dir = tmp_path / "accum2"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMPTY_IMPORTS_AND_UNUSED_USAGE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        # Both errors are now ManifestRuleError
-        for e in p.errors:
-            assert isinstance(e, ManifestRuleError)
+        # Both errors are now DocumentRuleError
+        for e in ast_obj.errors:
+            assert isinstance(e, DocumentRuleError)
 
 
 # ---------------------------------------------------------------------------
@@ -323,12 +323,12 @@ class TestIntermediateDirectoryWithoutCodemanifest:
         child_dir.mkdir()
         (child_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
         # root is top-level
-        assert len(p.tree) == 1
-        root_doc = p.tree[0]
+        assert len(ast_obj.tree) == 1
+        root_doc = ast_obj.tree[0]
 
         # child is a direct child of root (intermediate skipped)
         assert len(root_doc.children) == 1
@@ -341,24 +341,24 @@ class TestIntermediateDirectoryWithoutCodemanifest:
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
-        assert len(p.tree) == 1
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
+        assert len(ast_obj.tree) == 1
 
         # Remove CODEMANIFEST, load again
         (doc_dir / "CODEMANIFEST").unlink()
-        p.load()
-        assert p.tree == []
-        assert p.errors == []
+        ast_obj.load()
+        assert ast_obj.tree == []
+        assert ast_obj.errors == []
 
 
 # ---------------------------------------------------------------------------
-# 10. codemanifest() lookup by path
+# 10. document() lookup by path
 # ---------------------------------------------------------------------------
 
 
-class TestCodemanifestLookup:
-    """Contract tests for the Project.codemanifest(path) method."""
+class TestDocumentLookup:
+    """Contract tests for the AST.document(path) method."""
 
     # -- helpers --
 
@@ -381,30 +381,30 @@ class TestCodemanifestLookup:
 
     # -- 1. Facade availability --
 
-    def test_project_has_codemanifest_method(self):
-        """Project exposes a codemanifest method."""
-        p = Project("/tmp")
-        assert hasattr(p, "codemanifest")
-        assert callable(p.codemanifest)
+    def test_ast_has_document_method(self):
+        """AST exposes a document method."""
+        ast_obj = AST("/tmp")
+        assert hasattr(ast_obj, "document")
+        assert callable(ast_obj.document)
 
     # -- 2. API shape --
 
-    def test_codemanifest_accepts_str_returns_document_root(self, tmp_path):
-        """codemanifest(path) takes a str and returns a DocumentRoot."""
+    def test_document_accepts_str_returns_document_root(self, tmp_path):
+        """document(path) takes a str and returns a DocumentRoot."""
         root_dir, _, _ = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
-        result = p.codemanifest(str(root_dir))
+        result = ast_obj.document(str(root_dir))
         assert isinstance(result, DocumentRoot)
 
     # -- 3. Positive — relative path with dot --
 
     def test_relative_path_with_dot(self, tmp_path):
-        """codemanifest('./relative') resolves and finds the document."""
+        """document('./relative') resolves and finds the document."""
         root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
         # Build "./" + relative from root_dir, and resolve from root_dir as cwd
         relative = os.path.relpath(str(level3), str(root_dir))
@@ -413,7 +413,7 @@ class TestCodemanifestLookup:
         original_cwd = Path.cwd()
         try:
             os.chdir(str(root_dir))
-            doc = p.codemanifest(dotted_path)
+            doc = ast_obj.document(dotted_path)
         finally:
             os.chdir(str(original_cwd))
 
@@ -422,17 +422,17 @@ class TestCodemanifestLookup:
     # -- 4. Positive — relative path without dot --
 
     def test_relative_path_without_dot(self, tmp_path):
-        """codemanifest('path/path') resolves and finds the document."""
+        """document('path/path') resolves and finds the document."""
         root_dir, level2, _level3 = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
         relative = os.path.relpath(str(level2), str(root_dir))
 
         original_cwd = Path.cwd()
         try:
             os.chdir(str(root_dir))
-            doc = p.codemanifest(relative)
+            doc = ast_obj.document(relative)
         finally:
             os.chdir(str(original_cwd))
 
@@ -441,44 +441,44 @@ class TestCodemanifestLookup:
     # -- 5. Positive — absolute path --
 
     def test_absolute_path(self, tmp_path):
-        """codemanifest(absolute_path) returns the correct document."""
+        """document(absolute_path) returns the correct document."""
         root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
-        doc = p.codemanifest(str(level3))
+        doc = ast_obj.document(str(level3))
         assert doc.path == os.path.normpath(os.path.relpath(str(level3)))
 
     # -- 6. Negative — nonexistent path --
 
-    def test_nonexistent_path_raises_key_error(self, tmp_path):
-        """codemanifest('/nonexistent/path') raises KeyError."""
+    def test_nonexistent_path_raises_document_not_found(self, tmp_path):
+        """document('/nonexistent/path') raises DocumentNotFoundError."""
         root_dir, _, _ = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
-        with pytest.raises(KeyError, match="Document not found for path"):
-            p.codemanifest("/nonexistent/path")
+        with pytest.raises(DocumentNotFoundError, match="Document not found for path"):
+            ast_obj.document("/nonexistent/path")
 
     # -- 7. Negative — call before load() --
 
-    def test_call_before_load_raises_key_error(self):
-        """codemanifest() before load() raises KeyError (index is empty)."""
-        p = Project("/some/path")
-        with pytest.raises(KeyError, match="Document not found for path"):
-            p.codemanifest("any/path")
+    def test_call_before_load_raises_document_not_found(self):
+        """document() before load() raises DocumentNotFoundError (index is empty)."""
+        ast_obj = AST("/some/path")
+        with pytest.raises(DocumentNotFoundError, match="Document not found for path"):
+            ast_obj.document("any/path")
 
     # -- 8. Edge — path normalization --
 
     def test_path_normalization(self, tmp_path):
-        """codemanifest('path/./subpath/../subpath') resolves via normalization."""
+        """document('path/./subpath/../subpath') resolves via normalization."""
         root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
-        p = Project(str(root_dir))
-        p.load()
+        ast_obj = AST(str(root_dir))
+        ast_obj.load()
 
         # Construct a path with . and .. segments
         tricky_path = str(level3) + "/../level3"
-        doc = p.codemanifest(tricky_path)
+        doc = ast_obj.document(tricky_path)
         assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level3)).resolve())))
 
     # -- 9. Edge — load() rebuilds index --
@@ -493,25 +493,25 @@ class TestCodemanifestLookup:
         new_dir.mkdir()
         # No CODEMANIFEST yet
 
-        p = Project(str(tmp_path))
-        p.load()
+        ast_obj = AST(str(tmp_path))
+        ast_obj.load()
 
         # root_dir is findable, new_dir is not
-        doc = p.codemanifest(str(root_dir))
+        doc = ast_obj.document(str(root_dir))
         assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(root_dir)).resolve())))
 
-        with pytest.raises(KeyError):
-            p.codemanifest(str(new_dir))
+        with pytest.raises(DocumentNotFoundError):
+            ast_obj.document(str(new_dir))
 
         # Now add CODEMANIFEST to new_dir and reload
         (new_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
-        p.load()
+        ast_obj.load()
 
         # Both should be findable now
-        doc_root = p.codemanifest(str(root_dir))
+        doc_root = ast_obj.document(str(root_dir))
         assert doc_root.path == os.path.normpath(os.path.relpath(str(Path(str(root_dir)).resolve())))
 
-        doc_new = p.codemanifest(str(new_dir))
+        doc_new = ast_obj.document(str(new_dir))
         assert doc_new.path == os.path.normpath(os.path.relpath(str(Path(str(new_dir)).resolve())))
 
 
@@ -524,10 +524,10 @@ DUPLICATE_IMPORT_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
       - Node
-    From: goga/manifest/other
+    From: goga/ast/other
 
 ---
 "MyClass()":
@@ -543,15 +543,15 @@ Description: Test
 
 
 class TestImportHasNotDuplicateViolation:
-    def test_duplicate_import_produces_manifest_rule_error(self, tmp_path):
+    def test_duplicate_import_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "dupimport"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(DUPLICATE_IMPORT_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "import_has_not_duplicate" in rule_names
 
 
@@ -564,7 +564,7 @@ BROKEN_LINK_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyClass()":
@@ -580,15 +580,15 @@ Description: Test
 
 
 class TestAnnotationLinksExistsViolation:
-    def test_broken_annotation_link_produces_manifest_rule_error(self, tmp_path):
+    def test_broken_annotation_link_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "brokenlink"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(BROKEN_LINK_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "annotation_links_exists" in rule_names
 
 
@@ -601,7 +601,7 @@ USAGE_CONFLICT_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 Usages:
   Node: some value
 
@@ -619,15 +619,15 @@ Description: Test
 
 
 class TestUsageLinksHasNotConflictsViolation:
-    def test_usage_conflicts_with_import_produces_manifest_rule_error(self, tmp_path):
+    def test_usage_conflicts_with_import_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "usageconflict"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(USAGE_CONFLICT_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "usage_links_has_not_conflicts" in rule_names
 
 
@@ -640,7 +640,7 @@ ENTITY_CONFLICT_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "Node()":
@@ -656,15 +656,15 @@ Description: Test
 
 
 class TestEntitiesAndRoutinesHasNotConflictsViolation:
-    def test_entity_name_conflicts_with_import_produces_manifest_rule_error(self, tmp_path):
+    def test_entity_name_conflicts_with_import_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "entityconflict"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(ENTITY_CONFLICT_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "entities_and_routines_has_not_conflicts" in rule_names
 
 
@@ -677,7 +677,7 @@ INVALID_MUTATION_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "FakeMutation::MyClass()":
@@ -693,15 +693,15 @@ Description: Test
 
 
 class TestMutationExistsViolation:
-    def test_nonexistent_mutation_produces_manifest_rule_error(self, tmp_path):
+    def test_nonexistent_mutation_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "badmutation"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(INVALID_MUTATION_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "mutation_exists" in rule_names
 
 
@@ -714,7 +714,7 @@ SELF_MUTATION_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyClass::MyClass()":
@@ -730,15 +730,15 @@ Description: Test
 
 
 class TestMutationIsValidViolation:
-    def test_self_mutation_produces_manifest_rule_error(self, tmp_path):
+    def test_self_mutation_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "selfmutation"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(SELF_MUTATION_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "mutation_is_valid" in rule_names
 
 
@@ -751,7 +751,7 @@ MISSING_RETURN_LABEL_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "do_work() -> str":
@@ -767,15 +767,15 @@ Description: Test
 
 
 class TestReturnTypeHasLinkViolation:
-    def test_missing_return_label_produces_manifest_rule_error(self, tmp_path):
+    def test_missing_return_label_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "noreturnlabel"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(MISSING_RETURN_LABEL_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "return_type_has_link" in rule_names
 
 
@@ -788,7 +788,7 @@ EMBEDDED_WITH_MUTATION_DOC = """\
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "->MutA::EmbeddedClass()":
@@ -807,15 +807,15 @@ Description: Test
 
 
 class TestEmbeddedEntityCanNotHasMutationsViolation:
-    def test_embedded_with_mutation_produces_manifest_rule_error(self, tmp_path):
+    def test_embedded_with_mutation_produces_document_rule_error(self, tmp_path):
         doc_dir = tmp_path / "embeddedmut"
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(EMBEDDED_WITH_MUTATION_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        rule_names = [e.rule for e in p.errors if isinstance(e, ManifestRuleError)]
+        rule_names = [e.rule for e in ast_obj.errors if isinstance(e, DocumentRuleError)]
         assert "embedded_entity_can_not_has_mutations" in rule_names
 
 
@@ -837,7 +837,7 @@ class TestEmbeddedReclassification:
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "helper(x: int) -> result:int": |
@@ -869,11 +869,11 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
         # Find the child document
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # Factory creates helper as embedded entity; _reclassify moves it to routines
         entity_names = [e.name for e in child_root.body.entities]
@@ -891,7 +891,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyEntity":
@@ -927,10 +927,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # MyEntity should remain as entity
         entity_names = [e.name for e in child_root.body.entities]
@@ -946,7 +946,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyEntity":
@@ -979,10 +979,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # embeddings list should contain (MyEntity, ..) tuple
         embedding_names = [name for name, _ in child_root.embeddings]
@@ -998,7 +998,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "helper(x: int) -> result:int": |
@@ -1029,10 +1029,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # embeddings list should contain (helper, ..) tuple
         embedding_names = [name for name, _ in child_root.embeddings]
@@ -1046,10 +1046,10 @@ Description: Test
         doc_dir.mkdir()
         (doc_dir / "CODEMANIFEST").write_text(VALID_SINGLE_DOC)
 
-        p = Project(str(doc_dir))
-        p.load()
+        ast_obj = AST(str(doc_dir))
+        ast_obj.load()
 
-        root = p.codemanifest(str(doc_dir))
+        root = ast_obj.document(str(doc_dir))
         assert root.embeddings == []
 
     def test_embedded_entity_has_original_properties_and_methods(self, tmp_path):
@@ -1060,7 +1060,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyEntity":
@@ -1106,10 +1106,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         embedded_entities = [e for e in child_root.body.entities if e.name == "MyEntity"]
         assert len(embedded_entities) == 1
@@ -1128,7 +1128,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "compute(x: int, y: int) -> result:int": |
@@ -1160,10 +1160,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # Factory creates embedded string-value routine as RoutineTypeNode in body
         embedded_routines = [r for r in child_root.body.routines if r.name == "compute"]
@@ -1180,7 +1180,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyEntity":
@@ -1220,10 +1220,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        child_root = p.codemanifest(str(child_dir))
+        child_root = ast_obj.document(str(child_dir))
 
         # Both should be in embeddings
         embedding_names = {name for name, _ in child_root.embeddings}
@@ -1250,7 +1250,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "BaseEntity":
@@ -1306,17 +1306,17 @@ Description: Test
 """
         (level3_dir / "CODEMANIFEST").write_text(level3_doc)
 
-        p = Project(str(level1_dir))
-        p.load()
+        ast_obj = AST(str(level1_dir))
+        ast_obj.load()
 
         # Level 2 should have BaseEntity embedded
-        level2_root = p.codemanifest(str(level2_dir))
+        level2_root = ast_obj.document(str(level2_dir))
         l2_entities = [e for e in level2_root.body.entities if e.name == "BaseEntity"]
         assert len(l2_entities) == 1
         assert l2_entities[0].embedded is True
 
         # Level 3 should also have BaseEntity embedded
-        level3_root = p.codemanifest(str(level3_dir))
+        level3_root = ast_obj.document(str(level3_dir))
         l3_entities = [e for e in level3_root.body.entities if e.name == "BaseEntity"]
         assert len(l3_entities) == 1
         assert l3_entities[0].embedded is True
@@ -1329,7 +1329,7 @@ Description: Test
 Imports:
   - Types:
       - Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
 
 ---
 "MyEntity":
@@ -1365,10 +1365,10 @@ Description: Test
 """
         (child_dir / "CODEMANIFEST").write_text(child_doc)
 
-        p = Project(str(parent_dir))
-        p.load()
+        ast_obj = AST(str(parent_dir))
+        ast_obj.load()
 
-        parent_root = p.codemanifest(str(parent_dir))
+        parent_root = ast_obj.document(str(parent_dir))
 
         # Parent has MyEntity as non-embedded (original definition)
         parent_entities = [e for e in parent_root.body.entities if e.name == "MyEntity"]

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from .analyzer import Analyzer
-from .errors import ManifestRuleError, ProjectRuleError
+from .errors import ASTRuleError, DocumentNotFoundError, DocumentRuleError
 from .factory import Factory
 from .nodes import DocumentRoot, EntityTypeNode, RoutineTypeNode
 from .rules import (
@@ -39,13 +39,13 @@ def _flatten_tree(tree: list[DocumentRoot]) -> list[DocumentRoot]:
     return result
 
 
-class Project:
-    """Facade for loading and validating a CODEMANIFEST project tree."""
+class AST:
+    """Facade for loading and validating a CODEMANIFEST AST tree."""
 
     def __init__(self, path: str) -> None:
         self._path = path
         self._tree: list[DocumentRoot] = []
-        self._errors: list[ProjectRuleError | ManifestRuleError] = []
+        self._errors: list[ASTRuleError | DocumentRuleError] = []
         self._index: dict[str, DocumentRoot] = {}
 
     @property
@@ -57,7 +57,7 @@ class Project:
         return self._tree
 
     @property
-    def errors(self) -> list[ProjectRuleError | ManifestRuleError]:
+    def errors(self) -> list[ASTRuleError | DocumentRuleError]:
         return self._errors
 
     def load(self) -> None:
@@ -71,7 +71,9 @@ class Project:
         loaded: dict[str, DocumentRoot] = {}
 
         # Walk directories top-down so parents are loaded before children
-        for dirpath, _dirnames, filenames in os.walk(self._path):
+        for dirpath, dirnames, filenames in os.walk(self._path):
+            # Skip .project test fixture directories (exact match, not substring)
+            dirnames[:] = [d for d in dirnames if d != '.project']
             if "CODEMANIFEST" not in filenames:
                 continue
 
@@ -131,15 +133,15 @@ class Project:
             visitor = Visitor(doc)
             self._errors.extend(visitor.analyze(document_rules))
 
-        # Apply project-level rules via Analyzer
-        project_rules = [
+        # Apply AST-level rules via Analyzer
+        ast_rules = [
             ImportsHasNotCyclicalDeps(all_documents),
             EmbeddedTypeHasLowLevel(all_documents),
             ImportTypeExists(all_documents),
         ]
 
         analyzer = Analyzer(all_documents)
-        self._errors.extend(analyzer.analyze(project_rules))
+        self._errors.extend(analyzer.analyze(ast_rules))
 
     @staticmethod
     def _reclassify_embedded_types(all_documents: list[DocumentRoot]) -> None:
@@ -165,90 +167,101 @@ class Project:
                     routine_by_name[routine.name] = routine
 
         for doc in all_documents:
-            # Collect entities to move from entities to routines
-            entities_to_move: list[EntityTypeNode] = []
-            entities_to_keep: list[EntityTypeNode] = []
+            AST._reclassify_entities(doc, entity_by_name, routine_by_name)
+            AST._reclassify_routines(doc, entity_by_name, routine_by_name)
 
-            for entity in doc.body.entities:
-                if not entity.embedded:
-                    entities_to_keep.append(entity)
-                    continue
-                if entity.name in routine_by_name:
-                    # Original is routine, embedded is in entities — move to routines
-                    entities_to_move.append(entity)
-                elif entity.name in entity_by_name:
-                    # Same type — enrich from original
-                    original = entity_by_name[entity.name]
-                    entity.signature = original.signature
-                    entity.annotations = original.annotations
-                    entity.properties = original.properties
-                    entity.methods = original.methods
-                    entity.location = os.path.join(original.root.path, original.location)
-                    entities_to_keep.append(entity)
-                else:
-                    entities_to_keep.append(entity)
+    @staticmethod
+    def _reclassify_entities(
+        doc: DocumentRoot,
+        entity_by_name: dict[str, EntityTypeNode],
+        routine_by_name: dict[str, RoutineTypeNode],
+    ) -> None:
+        """Reclassify embedded entities: enrich from originals or move to routines."""
+        entities_to_move: list[EntityTypeNode] = []
+        entities_to_keep: list[EntityTypeNode] = []
 
-            doc.body.entities = entities_to_keep
+        for entity in doc.body.entities:
+            if not entity.embedded:
+                entities_to_keep.append(entity)
+                continue
+            if entity.name in routine_by_name:
+                entities_to_move.append(entity)
+            elif entity.name in entity_by_name:
+                original = entity_by_name[entity.name]
+                entity.signature = original.signature
+                entity.annotations = original.annotations
+                entity.properties = original.properties
+                entity.methods = original.methods
+                entity.location = str(Path(original.root.path) / original.location)
+                entities_to_keep.append(entity)
+            else:
+                entities_to_keep.append(entity)
 
-            for entity in entities_to_move:
-                original = routine_by_name[entity.name]
-                doc.body.routines.append(
-                    RoutineTypeNode(
-                        name=entity.name,
-                        signature=original.signature,
-                        location=os.path.join(original.root.path, original.location),
-                        annotations=original.annotations,
-                        embedded=True,
-                        data=entity.data,
-                        parent=doc.body,
-                        root=doc,
-                    )
+        doc.body.entities = entities_to_keep
+
+        for entity in entities_to_move:
+            original = routine_by_name[entity.name]
+            doc.body.routines.append(
+                RoutineTypeNode(
+                    name=entity.name,
+                    signature=original.signature,
+                    location=str(Path(original.root.path) / original.location),
+                    annotations=original.annotations,
+                    embedded=True,
+                    data=entity.data,
+                    parent=doc.body,
+                    root=doc,
                 )
+            )
 
-            # Collect routines to move from routines to entities
-            routines_to_move: list[RoutineTypeNode] = []
-            routines_to_keep: list[RoutineTypeNode] = []
+    @staticmethod
+    def _reclassify_routines(
+        doc: DocumentRoot,
+        entity_by_name: dict[str, EntityTypeNode],
+        routine_by_name: dict[str, RoutineTypeNode],
+    ) -> None:
+        """Reclassify embedded routines: enrich from originals or move to entities."""
+        routines_to_move: list[RoutineTypeNode] = []
+        routines_to_keep: list[RoutineTypeNode] = []
 
-            for routine in doc.body.routines:
-                if not routine.embedded:
-                    routines_to_keep.append(routine)
-                    continue
-                if routine.name in entity_by_name:
-                    # Original is entity, embedded is in routines — move to entities
-                    routines_to_move.append(routine)
-                elif routine.name in routine_by_name:
-                    # Same type — enrich from original
-                    original = routine_by_name[routine.name]
-                    routine.signature = original.signature
-                    routine.annotations = original.annotations
-                    routine.location = os.path.join(original.root.path, original.location)
-                    routines_to_keep.append(routine)
-                else:
-                    routines_to_keep.append(routine)
+        for routine in doc.body.routines:
+            if not routine.embedded:
+                routines_to_keep.append(routine)
+                continue
+            if routine.name in entity_by_name:
+                routines_to_move.append(routine)
+            elif routine.name in routine_by_name:
+                original = routine_by_name[routine.name]
+                routine.signature = original.signature
+                routine.annotations = original.annotations
+                routine.location = str(Path(original.root.path) / original.location)
+                routines_to_keep.append(routine)
+            else:
+                routines_to_keep.append(routine)
 
-            doc.body.routines = routines_to_keep
+        doc.body.routines = routines_to_keep
 
-            for routine in routines_to_move:
-                original = entity_by_name[routine.name]
-                doc.body.entities.append(
-                    EntityTypeNode(
-                        name=routine.name,
-                        signature=original.signature,
-                        location=os.path.join(original.root.path, original.location),
-                        annotations=original.annotations,
-                        properties=original.properties,
-                        methods=original.methods,
-                        embedded=True,
-                        mutations=[],  # embedded routine has no mutations
-                        data=routine.data,
-                        parent=doc.body,
-                        root=doc,
-                    )
+        for routine in routines_to_move:
+            original = entity_by_name[routine.name]
+            doc.body.entities.append(
+                EntityTypeNode(
+                    name=routine.name,
+                    signature=original.signature,
+                    location=str(Path(original.root.path) / original.location),
+                    annotations=original.annotations,
+                    properties=original.properties,
+                    methods=original.methods,
+                    embedded=True,
+                    mutations=[],  # embedded routine has no mutations
+                    data=routine.data,
+                    parent=doc.body,
+                    root=doc,
                 )
+            )
 
-    def codemanifest(self, path: str) -> DocumentRoot:
+    def document(self, path: str) -> DocumentRoot:
         """Look up a DocumentRoot by its directory path at O(1)."""
         resolved = str(Path(path).resolve())
         if resolved not in self._index:
-            raise KeyError(f"Document not found for path: {path}")
+            raise DocumentNotFoundError(f"Document not found for path: {path}")
         return self._index[resolved]

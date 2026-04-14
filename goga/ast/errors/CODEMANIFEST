@@ -16,7 +16,7 @@ Annotations: |
 
 ---
 
-"BaseCodemanifestError(message: str)":
+"BaseASTError(message: str)":
   location: base.py
   annotations: |
     Базовое исключение при работе с CODEMANIFEST
@@ -30,10 +30,16 @@ Annotations: |
     message -> str: |
       Сообщение с которым была создана ошибка
 
-"BaseCodemanifestError::ManifestParseError(message: str, filepath: str)":
-  location: manifest.py
+"BaseASTError::DocumentNotFound(message: str)":
+  location: document.py
   annotations: |
-    Ошибка при парсинге манифеста
+    Ошибка поиска документа
+
+
+"BaseASTError::DocumentParseError(message: str, filepath: str)":
+  location: document.py
+  annotations: |
+    Ошибка при парсинге документа
 
     `message`: текст ошибки
     `filepath`: путь к файлу в котором произошла ошибка
@@ -41,10 +47,10 @@ Annotations: |
     filepath -> str: |
       Путь к файлу с которым была создана ошибка
 
-"BaseCodemanifestError::ManifestRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
-  location: manifest.py
+"BaseASTError::DocumentRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
+  location: document.py
   annotations: |
-    Ошибка при не соблюдении правила
+    Ошибка при не соблюдении правила документа
 
     `message`: текст ошибки
     `rule`: имя правила которое было не соблюдено
@@ -68,10 +74,10 @@ Annotations: |
     node -> DocumentNode: |
       Нода с которой была создана ошибка
 
-"BaseCodemanifestError::ProjectRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
-  location: project.py
+"BaseASTError::ASTRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
+  location: ast.py
   annotations: |
-    Ошибка при не соблюдении правила
+    Ошибка при не соблюдении правила в рамках всего дерева
 
     `message`: текст ошибки
     `rule`: имя правила которое было не соблюдено

@@ -3,14 +3,21 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .base import BaseCodemanifestError
+from .base import BaseASTError
 
 if TYPE_CHECKING:
     from ..nodes.document import DocumentNode, DocumentRoot
 
 
-class ManifestParseError(BaseCodemanifestError):
-    """Raised when a manifest file cannot be parsed."""
+class DocumentNotFoundError(BaseASTError):
+    """Raised when a document cannot be found by path."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class DocumentParseError(BaseASTError):
+    """Raised when a document cannot be parsed."""
 
     def __init__(self, message: str, filepath: str) -> None:
         super().__init__(message)
@@ -21,8 +28,8 @@ class ManifestParseError(BaseCodemanifestError):
         return self._filepath
 
 
-class ManifestRuleError(BaseCodemanifestError):
-    """Raised when a manifest document violates a rule."""
+class DocumentRuleError(BaseASTError):
+    """Raised when a document violates a rule."""
 
     def __init__(
         self,

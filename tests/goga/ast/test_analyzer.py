@@ -1,14 +1,14 @@
-"""Contract tests for the goga.manifest.analyzer package."""
+"""Contract tests for the goga.ast.analyzer package."""
 
-from goga.manifest.analyzer import Analyzer
-from goga.manifest.errors import ProjectRuleError
-from goga.manifest.nodes import (
+from goga.ast.analyzer import Analyzer
+from goga.ast.errors import ASTRuleError
+from goga.ast.nodes import (
     DocumentRoot,
     HeaderNode,
     ImportItemNode,
     ImportsNode,
 )
-from goga.manifest.rules import ImportsHasNotCyclicalDeps, ProjectRule
+from goga.ast.rules import ASTRule, ImportsHasNotCyclicalDeps
 
 # ---------------------------------------------------------------------------
 # 1. Facade: Analyzer is importable
@@ -72,7 +72,7 @@ class TestAnalyzerPassingRules:
 
 
 # ---------------------------------------------------------------------------
-# 5. analyze() with failing rules returns ProjectRuleError instances
+# 5. analyze() with failing rules returns ASTRuleError instances
 # ---------------------------------------------------------------------------
 
 
@@ -92,7 +92,7 @@ class TestAnalyzerFailingRules:
         result = analyzer.analyze(rules=[rule])
         assert len(result) > 0
         for error in result:
-            assert isinstance(error, ProjectRuleError)
+            assert isinstance(error, ASTRuleError)
 
 
 # ---------------------------------------------------------------------------
@@ -100,15 +100,15 @@ class TestAnalyzerFailingRules:
 # ---------------------------------------------------------------------------
 
 
-class _AlwaysFailRule(ProjectRule):
+class _AlwaysFailRule(ASTRule):
     """A helper rule that always produces one error per document."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="always_fail")
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
         return [
-            ProjectRuleError(
+            ASTRuleError(
                 message=f"Always fails for {document.path}",
                 rule=self.name,
                 document=document,
@@ -132,7 +132,7 @@ class TestAnalyzerAggregation:
         # 2 rules x 2 documents = 4 errors
         assert len(result) == 4
         for error in result:
-            assert isinstance(error, ProjectRuleError)
+            assert isinstance(error, ASTRuleError)
             assert error.rule == "always_fail"
 
     def test_mixed_pass_fail_aggregates_only_failures(self):
@@ -156,5 +156,5 @@ class TestAnalyzerAggregation:
         # cycle_rule produces 0 errors, always_fail produces 2 errors
         assert len(result) == 2
         for error in result:
-            assert isinstance(error, ProjectRuleError)
+            assert isinstance(error, ASTRuleError)
             assert error.rule == "always_fail"

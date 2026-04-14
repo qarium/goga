@@ -4,14 +4,14 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..errors import ProjectRuleError
+from ..errors import ASTRuleError
 
 if TYPE_CHECKING:
     from ..nodes import DocumentRoot
 
 
-class ProjectRule:
-    """Base class for project-level rules."""
+class ASTRule:
+    """Base class for AST-level rules."""
 
     def __init__(self, tree: list[DocumentRoot], name: str) -> None:
         self._name = name
@@ -25,17 +25,17 @@ class ProjectRule:
     def tree(self) -> list[DocumentRoot]:
         return self._tree
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
         raise NotImplementedError
 
 
-class ImportsHasNotCyclicalDeps(ProjectRule):
+class ImportsHasNotCyclicalDeps(ASTRule):
     """Rule: imports must not form cycles across documents."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="imports_has_not_cyclical_deps")
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
         # Build a map of resolved path -> set of resolved import paths
         import_map: dict[str, set[str]] = {}
         for doc in self._tree:
@@ -45,7 +45,7 @@ class ImportsHasNotCyclicalDeps(ProjectRule):
                 import_paths.add(item.from_path)
             import_map[doc_path] = import_paths
 
-        errors: list[ProjectRuleError] = []
+        errors: list[ASTRuleError] = []
         doc_path = document.path
 
         for item in document.header.imports.items:
@@ -53,7 +53,7 @@ class ImportsHasNotCyclicalDeps(ProjectRule):
             # Check if the imported document also imports from the current document's path
             if imported_path in import_map and doc_path in import_map[imported_path]:
                 errors.append(
-                    ProjectRuleError(
+                    ASTRuleError(
                         message=f"Cyclical import: package '{doc_path}' and '{imported_path}' import from each other",
                         rule=self.name,
                         document=document,
@@ -64,14 +64,14 @@ class ImportsHasNotCyclicalDeps(ProjectRule):
         return errors
 
 
-class ImportTypeExists(ProjectRule):
+class ImportTypeExists(ASTRule):
     """Rule: every imported type must exist in the target document."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="import_type_exists")
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:
-        errors: list[ProjectRuleError] = []
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
+        errors: list[ASTRuleError] = []
 
         # Build O(1) lookup: doc path -> DocumentRoot
         path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
@@ -96,7 +96,7 @@ class ImportTypeExists(ProjectRule):
             for type_name in item.type_name:
                 if type_name not in available_names:
                     errors.append(
-                        ProjectRuleError(
+                        ASTRuleError(
                             message=(
                                 f"Type '{type_name}' imported from '{from_path}'"
                                 f" is not defined in that package's CODEMANIFEST"
@@ -110,14 +110,14 @@ class ImportTypeExists(ProjectRule):
         return errors
 
 
-class EmbeddedTypeHasLowLevel(ProjectRule):
+class EmbeddedTypeHasLowLevel(ASTRule):
     """Rule: embedded types must be defined in documents lower in the file hierarchy."""
 
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="embedded_type_has_low_level")
 
-    def check(self, document: DocumentRoot) -> list[ProjectRuleError]:  # noqa: C901
-        errors: list[ProjectRuleError] = []
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:  # noqa: C901
+        errors: list[ASTRuleError] = []
         current_path = os.path.normpath(document.path)
 
         # Collect all embedded entities and routines from the document body
@@ -140,7 +140,7 @@ class EmbeddedTypeHasLowLevel(ProjectRule):
                 source_path = os.path.normpath(source_doc.path)
                 if not source_path.startswith(current_path + os.sep):
                     errors.append(
-                        ProjectRuleError(
+                        ASTRuleError(
                             message=(
                                 f"Embedded entity '{entity.name}' comes from '{source_path}',"
                                 f" but can only be embedded from packages nested below '{current_path}'"
@@ -157,7 +157,7 @@ class EmbeddedTypeHasLowLevel(ProjectRule):
                 source_path = os.path.normpath(source_doc.path)
                 if not source_path.startswith(current_path + os.sep):
                     errors.append(
-                        ProjectRuleError(
+                        ASTRuleError(
                             message=(
                                 f"Embedded routine '{routine.name}' comes from '{source_path}',"
                                 f" but can only be embedded from packages nested below '{current_path}'"

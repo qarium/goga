@@ -6,7 +6,7 @@ node types produced during CODEMANIFEST parsing.
 
 from pathlib import Path
 
-from goga.manifest.factory import Factory
+from goga.ast.factory import Factory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -27,10 +27,10 @@ Imports:
   - Types:
       - DocumentRoot
       - DocumentNode AS Node
-    From: goga/manifest/nodes
+    From: goga/ast/nodes
   - Types:
-      - ManifestParseError
-    From: goga/manifest/errors
+      - DocumentParseError
+    From: goga/ast/errors
 
 Usages:
   nodes: .usages/nodes.md
@@ -93,7 +93,7 @@ class TestDataImportItemNode:
         # First import entry has Types and From
         assert "Types" in item.data
         assert "From" in item.data
-        assert item.data["From"] == "goga/manifest/nodes"
+        assert item.data["From"] == "goga/ast/nodes"
         assert isinstance(item.data["Types"], list)
 
     def test_data_second_import_entry(self, tmp_path) -> None:
@@ -103,8 +103,8 @@ class TestDataImportItemNode:
 
         # The second entry in Imports list
         item = root.header.imports.items[2]
-        assert "ManifestParseError" in str(item.data["Types"])
-        assert item.data["From"] == "goga/manifest/errors"
+        assert "DocumentParseError" in str(item.data["Types"])
+        assert item.data["From"] == "goga/ast/errors"
 
 
 class TestDataEntityTypeNode:
