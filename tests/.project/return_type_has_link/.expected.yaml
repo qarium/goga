@@ -1,10 +1,14 @@
 errors:
 - rule: return_type_has_link
-  message: 'Return type ''str'' in ''(param: str) -> str'' is missing a semantic label
-    — use format ''-> label:Type'''
+  message: "Return type 'str' in '() -> str' is missing a semantic label — use format\
+    \ '-> label:Type'"
+  document_path: return_type_has_link
+  node_data:
+    "method_name() -> str": ''
+- rule: return_type_has_link
+  message: "Return type 'str' in '(param: str) -> str' is missing a semantic label\
+    \ — use format '-> label:Type'"
   document_path: return_type_has_link
   node_data:
     location: routine.py
-    annotations: 'Missing link label in return type
-
-      '
+    annotations: "Missing link label in return type\n"

@@ -1,0 +1,8 @@
+---
+
+---
+
+"ImportHasType()":
+  location: entity.py
+  annotations: |
+    Test entity

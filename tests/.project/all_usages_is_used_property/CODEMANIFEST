@@ -1,0 +1,13 @@
+Usages:
+  used_pattern: |
+    This pattern is referenced
+  unused_pattern: |
+    Some pattern that is never referenced
+
+---
+
+"MyEntity":
+  location: entity.py
+  properties:
+    prop: |
+      Use `used_pattern` here

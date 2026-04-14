@@ -1,9 +1,0 @@
-errors:
-- rule: import_has_valid_from_path
-  message: Source path 'embedded_type_has_low_level_helper' must be at the same level
-    or inside the current package directory
-  document_path: embedded_type_has_low_level_helper/embedded_type_has_low_level
-  node_data:
-    Types:
-    - SiblingEntity
-    From: embedded_type_has_low_level_helper

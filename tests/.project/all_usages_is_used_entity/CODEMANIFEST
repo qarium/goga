@@ -1,0 +1,14 @@
+Usages:
+  used_pattern: |
+    This pattern is referenced
+  unused_pattern: |
+    Some pattern that is never referenced
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Use `used_pattern` here
+  methods:
+    method_name(): ""

@@ -6,3 +6,11 @@
   location: routine.py
   annotations: |
     Missing link label in return type
+
+
+"MyEntity(param: str)":
+  location: routine.py
+  properties:
+    prop -> str: ""
+  methods:
+    method_name() -> str: ""

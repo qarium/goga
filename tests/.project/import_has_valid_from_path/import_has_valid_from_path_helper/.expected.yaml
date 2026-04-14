@@ -1,0 +1,25 @@
+errors:
+- rule: import_has_valid_from_path
+  message: "Import in './import_has_valid_from_path/import_has_valid_from_path_helper'\
+    \ has empty source path (From field)"
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - SomeType
+    From: ''
+- rule: import_has_valid_from_path
+  message: "Source path 'import_has_valid_from_path_helper' in import of types {'MyHelperEntity'}\
+    \ not found on filesystem"
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - MyHelperEntity
+    From: import_has_valid_from_path_helper
+- rule: import_has_valid_from_path
+  message: "Source path '../.project/import_has_valid_from_path_helper' in import\
+    \ of types {'MyHelperEntity2'} not found on filesystem"
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - MyHelperEntity2
+    From: ../.project/import_has_valid_from_path_helper

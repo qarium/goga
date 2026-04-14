@@ -1,0 +1,6 @@
+errors:
+- rule: all_usages_is_used
+  message: Usage 'unused_pattern' is declared but not referenced in any annotation
+    — either use it or remove the declaration
+  document_path: all_usages_is_used_entity
+  node_data: {}

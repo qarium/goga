@@ -2,7 +2,29 @@
 
 ---
 
-"SelfRef::SelfRef":
+
+SelfRef():
+  location: base.py
+  properties:
+    prop: ""
+
+"SelfRefOne::SelfRefOne":
+  location: entity.py
+  annotations: |
+    Self-referencing mutation
+  methods:
+    "method() -> void:null": |
+      Test method
+
+"SelfRefTwo::SelfRef::SelfRefTwo":
+  location: entity.py
+  annotations: |
+    Self-referencing mutation
+  methods:
+    "method() -> void:null": |
+      Test method
+
+"SelfRef::SelfRefThree::SelfRefThree":
   location: entity.py
   annotations: |
     Self-referencing mutation

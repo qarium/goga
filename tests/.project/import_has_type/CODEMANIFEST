@@ -1,0 +1,9 @@
+Imports:
+    - From: import_has_type/import_has_type_helper
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity

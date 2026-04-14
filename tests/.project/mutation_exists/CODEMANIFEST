@@ -2,7 +2,7 @@
 
 ---
 
-ExistentBase():
+ExistentBaseOne():
   location: base.py
   annotations: |
     Base type for test
@@ -10,7 +10,31 @@ ExistentBase():
     "method() -> void:null": |
       Test method
 
-"NonExistentBase::MyEntity":
+ExistentBaseTwo():
+  location: base.py
+  annotations: |
+    Base type for test
+  methods:
+    "method() -> void:null": |
+      Test method
+
+"NonExistentBaseOne::MyEntityOne":
+  location: entity.py
+  annotations: |
+    Mutation from non-existent type
+  methods:
+    "method_1() -> void:null": |
+      Test method
+
+"ExistentBaseOne::NonExistentBaseTwo::MyEntityTwo":
+  location: entity.py
+  annotations: |
+    Mutation from non-existent type
+  methods:
+    "method_1() -> void:null": |
+      Test method
+
+"ExistentBaseOne::ExistentBaseTwo::NonExistentBaseThree::MyEntityThree":
   location: entity.py
   annotations: |
     Mutation from non-existent type
