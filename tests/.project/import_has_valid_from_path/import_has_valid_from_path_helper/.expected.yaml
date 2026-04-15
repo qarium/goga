@@ -23,3 +23,24 @@ errors:
     Types:
     - MyHelperEntity2
     From: ../.project/import_has_valid_from_path_helper
+- rule: import_is_used
+  message: Type 'SomeType' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - SomeType
+    From: ''
+- rule: import_is_used
+  message: Type 'MyHelperEntity' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - MyHelperEntity
+    From: import_has_valid_from_path_helper
+- rule: import_is_used
+  message: Type 'MyHelperEntity2' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  document_path: import_has_valid_from_path/import_has_valid_from_path_helper
+  node_data:
+    Types:
+    - MyHelperEntity2
+    From: ../.project/import_has_valid_from_path_helper

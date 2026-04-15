@@ -14,14 +14,17 @@ from .document import (
     ImportHasNotDuplicate,
     ImportHasType,
     ImportHasValidFromPath,
+    ImportIsUsed,
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
     MutationExists,
     MutationIsValid,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
+    SignatureIsValid,
     UsageLinksHasNotConflicts,
 )
+from .tools import signature_contains_type_name
 
 __all__ = [
     "ASTRule",
@@ -35,6 +38,7 @@ __all__ = [
     "ImportHasNotDuplicate",
     "ImportHasType",
     "ImportHasValidFromPath",
+    "ImportIsUsed",
     "ImportTypeExists",
     "ImportsCanNotBeEmpty",
     "ImportsHasNotCyclicalDeps",
@@ -43,5 +47,7 @@ __all__ = [
     "MutationIsValid",
     "ReturnTypeHasLink",
     "RoutineHasOnlyValidKeys",
+    "SignatureIsValid",
     "UsageLinksHasNotConflicts",
+    "signature_contains_type_name",
 ]

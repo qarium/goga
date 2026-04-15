@@ -10,13 +10,10 @@ Imports:
       - ImportsNode
       - ImportItemNode
       - UsagesNode
-      - UsageItemNode
       - AnnotationsNode
       - BodyNode
       - RoutineTypeNode
       - EntityTypeNode
-      - MethodNode
-      - PropertyNode
       - FooterNode
     From: goga/ast/nodes
   - Types:

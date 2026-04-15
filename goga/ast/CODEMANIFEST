@@ -23,6 +23,8 @@ Imports:
       - ImportsHasOnlyValidKeys
       - EntityHasOnlyValidKeys
       - RoutineHasOnlyValidKeys
+      - ImportIsUsed
+      - SignatureIsValid
       # правила проекта
       - ImportTypeExists
       - ImportsHasNotCyclicalDeps
@@ -123,6 +125,8 @@ Annotations: |
       - `ImportsHasOnlyValidKeys`
       - `EntityHasOnlyValidKeys`
       - `RoutineHasOnlyValidKeys`
+      - `ImportIsUsed`
+      - `SignatureIsValid`
 
       Правила для всех документов:
       - `ImportTypeExists`

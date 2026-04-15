@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..errors import DocumentRuleError
 from ..nodes.common import AnnotationsNode
+from .tools import signature_contains_type_name
 
 if TYPE_CHECKING:
     from ..nodes import (
@@ -118,7 +119,7 @@ class ImportHasValidFromPath(DocumentRule):
                 )
                 continue
 
-            if not str(resolved).startswith(str(cwd)):
+            if not resolved.is_relative_to(cwd):
                 errors.append(
                     DocumentRuleError(
                         message=f"Source path '{item.from_path}' in import points outside the project root",
@@ -232,6 +233,93 @@ class ImportHasNotDuplicate(DocumentRule):
         return errors
 
 
+class ImportIsUsed(DocumentRule):
+    """Rule: every imported type must be used in at least one annotation link or signature."""
+
+    def __init__(self) -> None:
+        super().__init__(name="import_is_used")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        all_links = self._collect_links(node)
+        all_signatures = self._collect_signatures(node)
+        property_types = self._collect_property_types(node)
+        embedded_names = {name for name, _ in node.root.embeddings}
+        doc_path = node.root.path
+
+        errors: list[DocumentRuleError] = []
+        for item in node.root.header.imports.items:
+            names = [item.alias] if item.alias else list(item.type_name)
+
+            for name in names:
+                if name in all_links:
+                    continue
+                if name in embedded_names:
+                    continue
+                if any(signature_contains_type_name(sig, name) for sig in all_signatures):
+                    continue
+                if any(signature_contains_type_name(pt, name) for pt in property_types):
+                    continue
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Type '{name}' was imported, but not used in '{doc_path}'",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+
+        return errors
+
+    def _collect_links(self, node: DocumentNode) -> set[str]:
+        links: set[str] = set()
+        header = node.root.header
+
+        links.update(header.annotations.links)
+
+        for usage_item in header.usages.items:
+            links.update(usage_item.annotations.links)
+
+        for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
+            links.update(entity.annotations.links)
+            for method in entity.methods:
+                links.update(method.annotations.links)
+            for prop in entity.properties:
+                links.update(prop.annotations.links)
+
+        for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
+            links.update(routine.annotations.links)
+
+        return links
+
+    def _collect_property_types(self, node: DocumentNode) -> set[str]:
+        types: set[str] = set()
+        for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
+            for prop in entity.properties:
+                if prop.type:
+                    types.add(prop.type)
+        return types
+
+    def _collect_signatures(self, node: DocumentNode) -> list[str]:
+        signatures: list[str] = []
+        for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
+            signatures.append(entity.signature)
+            for method in entity.methods:
+                signatures.append(method.signature)
+        for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
+            signatures.append(routine.signature)
+        return signatures
+
+
 class UsageLinksHasNotConflicts(DocumentRule):
     """Rule: usage names must not conflict with import type names (without alias) or entity/routine names."""
 
@@ -239,29 +327,40 @@ class UsageLinksHasNotConflicts(DocumentRule):
         super().__init__(name="usage_links_has_not_conflicts")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
-        errors: list[DocumentRuleError] = []
-
         usage_names = [item.name for item in node.root.header.usages.items]
         if not usage_names:
             return []
 
-        # Collect type names from imports that have no alias (alias resolves the conflict)
-        # Map each type_name to itself so we can look it up per-usage
-        type_names_without_alias: set[str] = set()
+        type_names_without_alias = self._collect_import_type_names(node)
+        entity_names = self._collect_entity_routine_names(node)
+        return self._check_conflicts(node, usage_names, type_names_without_alias, entity_names)
+
+    def _collect_import_type_names(self, node: DocumentNode) -> set[str]:
+        names: set[str] = set()
         for import_item in node.root.header.imports.items:
             if not import_item.alias:
-                type_names_without_alias.update(import_item.type_name)
+                names.update(import_item.type_name)
+        return names
 
-        # Collect entity and routine names from body, tracking kind
-        entity_names: dict[str, str] = {}  # name -> kind
+    def _collect_entity_routine_names(self, node: DocumentNode) -> dict[str, str]:
+        names: dict[str, str] = {}
         for entity in node.root.body.entities:
-            entity_names[entity.name] = "entity"
+            if not entity.embedded:
+                names[entity.name] = "entity"
         for routine in node.root.body.routines:
-            entity_names[routine.name] = "routine"
+            if not routine.embedded:
+                names[routine.name] = "routine"
+        return names
 
-        # Check each usage name individually
+    def _check_conflicts(
+        self,
+        node: DocumentNode,
+        usage_names: list[str],
+        type_names_without_alias: set[str],
+        entity_names: dict[str, str],
+    ) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
         for name in usage_names:
-            # Check conflict with imports
             if name in type_names_without_alias:
                 errors.append(
                     DocumentRuleError(
@@ -274,8 +373,6 @@ class UsageLinksHasNotConflicts(DocumentRule):
                         node=node,
                     )
                 )
-
-            # Check conflict with entity/routine
             if name in entity_names:
                 kind = entity_names[name]
                 errors.append(
@@ -302,8 +399,6 @@ def _collect_valid_names(node: DocumentNode) -> set[str]:
         valid_names.update(import_item.type_name)
         if import_item.alias:
             valid_names.add(import_item.alias)
-        if import_item.from_path:
-            valid_names.add(import_item.from_path)
 
     for usage_item in header.usages.items:
         valid_names.add(usage_item.name)
@@ -322,9 +417,7 @@ class AnnotationLinksExists(DocumentRule):
     def __init__(self) -> None:
         super().__init__(name="annotation_links_exists")
 
-    def _check_header_links(
-        self, node: DocumentNode, valid_names: set[str], errors: list[DocumentRuleError]
-    ) -> None:
+    def _check_header_links(self, node: DocumentNode, valid_names: set[str], errors: list[DocumentRuleError]) -> None:
         header = node.root.header
         for link in header.annotations.links:
             if link not in valid_names:
@@ -392,10 +485,8 @@ class AnnotationLinksExists(DocumentRule):
         for link in annotations.links:
             if link in valid_names:
                 continue
-            if signature:
-                pattern = r"(?<![\w-])" + re.escape(link) + r"(?![\w-])"
-                if re.search(pattern, signature):
-                    continue
+            if signature and signature_contains_type_name(signature, link):
+                continue
             errors.append(
                 DocumentRuleError(
                     message=(
@@ -535,6 +626,51 @@ class MutationIsValid(DocumentRule):
         return errors
 
 
+class SignatureIsValid(DocumentRule):
+    """Rule: entity, routine, and method signatures must match '(...)' or '(...) -> ...' format."""
+
+    def __init__(self) -> None:
+        super().__init__(name="signature_is_valid")
+
+    _PATTERN = re.compile(r"^\([^)]*\)(\s*->.*)?$")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+
+        for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
+            self._check_signature(entity.signature, entity, node, errors)
+            for method in entity.methods:
+                self._check_signature(method.signature, method, node, errors)
+
+        for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
+            self._check_signature(routine.signature, routine, node, errors)
+
+        return errors
+
+    def _check_signature(
+        self,
+        signature: str,
+        owner_node: EntityTypeNode | MethodNode | RoutineTypeNode,
+        node: DocumentNode,
+        errors: list[DocumentRuleError],
+    ) -> None:
+        if not signature:
+            return
+        if not self._PATTERN.match(signature):
+            errors.append(
+                DocumentRuleError(
+                    message=(f"signature '{signature}' has invalid format, use '(...) -> ...' or '(...)'"),
+                    rule=self.name,
+                    document=node.root,
+                    node=owner_node,
+                )
+            )
+
+
 class ReturnTypeHasLink(DocumentRule):
     """Rule: return type in signature must have a link label (-> link:Type, not -> Type)."""
 
@@ -544,13 +680,17 @@ class ReturnTypeHasLink(DocumentRule):
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
 
-        # Check entities and routines
+        # Check entities and routines (skip embedded — they inherit from originals)
         for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
             self._check_signature(entity.signature, entity, node, errors)
             for method in entity.methods:
                 self._check_signature(method.signature, method, node, errors)
 
         for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
             self._check_signature(routine.signature, routine, node, errors)
 
         return errors

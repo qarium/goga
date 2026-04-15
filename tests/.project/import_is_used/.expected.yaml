@@ -1,0 +1,8 @@
+errors:
+- rule: import_is_used
+  message: "Type 'NodeType' was imported, but not used in './import_is_used'"
+  document_path: import_is_used
+  node_data:
+    Types:
+    - NodeType
+    From: import_is_used_helper

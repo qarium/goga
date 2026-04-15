@@ -34,16 +34,19 @@ from goga.ast.rules import (
     ImportsCanNotBeEmpty,
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
+    ImportIsUsed,
     ImportTypeExists,
     MutationExists,
     MutationIsValid,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
+    SignatureIsValid,
     UsageLinksHasNotConflicts,
+    signature_contains_type_name,
 )
 
 # ---------------------------------------------------------------------------
-# 1. Facade: all 20 rule classes are importable
+# 1. Facade: all 22 rule classes are importable
 # ---------------------------------------------------------------------------
 
 EXPECTED_RULE_CLASSES = [
@@ -67,11 +70,13 @@ EXPECTED_RULE_CLASSES = [
     ImportsHasNotCyclicalDeps,
     ImportTypeExists,
     EmbeddedTypeHasLowLevel,
+    SignatureIsValid,
+    ImportIsUsed,
 ]
 
 
 def test_all_rule_classes_importable():
-    """All 20 rule classes must be importable from the rules facade."""
+    """All 22 rule classes must be importable from the rules facade."""
     for cls in EXPECTED_RULE_CLASSES:
         assert isinstance(cls, type), f"{cls.__name__} is not a class"
 
@@ -1644,3 +1649,356 @@ class TestImportHasValidFromPathHierarchy:
             (parent_pkg / "CODEMANIFEST").unlink(missing_ok=True)
             doc_dir.rmdir()
             parent_pkg.rmdir()
+
+
+# ---------------------------------------------------------------------------
+# N. signature_contains_type_name
+# ---------------------------------------------------------------------------
+
+
+class TestSignatureContainsTypeName:
+    def test_facade_availability(self):
+        """signature_contains_type_name must be importable from the rules facade."""
+        assert callable(signature_contains_type_name)
+
+    def test_positive_in_params(self):
+        assert signature_contains_type_name("(param: TypeName)", "TypeName") is True
+
+    def test_positive_in_params_multi(self):
+        assert signature_contains_type_name("(param: TypeName, param_2: Type)", "TypeName") is True
+
+    def test_positive_in_return_type(self):
+        assert signature_contains_type_name("(param: Type) -> rv:TypeName", "TypeName") is True
+
+    def test_negative_partial_suffix(self):
+        assert signature_contains_type_name("(param: TypeNameOne)", "TypeName") is False
+
+    def test_negative_partial_prefix(self):
+        assert signature_contains_type_name("(param: TwoTypeName)", "TypeName") is False
+
+    def test_negative_quoted_string(self):
+        assert signature_contains_type_name('(param: Type: = "TypeName")', "TypeName") is False
+
+    def test_edge_empty_signature(self):
+        assert signature_contains_type_name("", "TypeName") is False
+
+    def test_edge_empty_type_name(self):
+        assert signature_contains_type_name("(param: SomeType)", "") is False
+
+    def test_edge_return_type_after_colon(self):
+        assert signature_contains_type_name("() -> label:TypeName", "TypeName") is True
+
+    def test_positive_type_in_list_brackets(self):
+        assert signature_contains_type_name("(param: list[TypeName])", "TypeName") is True
+
+    def test_positive_type_in_nested_brackets(self):
+        assert signature_contains_type_name("(param: dict[str, TypeName])", "TypeName") is True
+
+    def test_positive_type_in_return_list(self):
+        assert signature_contains_type_name("() -> items:list[TypeName]", "TypeName") is True
+
+    def test_negative_type_as_part_of_other_bracketed(self):
+        assert signature_contains_type_name("(param: list[TypeNameExtra])", "TypeName") is False
+
+
+# ---------------------------------------------------------------------------
+# N+1. SignatureIsValid
+# ---------------------------------------------------------------------------
+
+
+class TestSignatureIsValid:
+    def test_default_name(self):
+        rule = SignatureIsValid()
+        assert rule.name == "signature_is_valid"
+
+    def test_positive_entity_valid_signature_with_return(self):
+        """Entity with signature '(...)' -> ...' produces no errors."""
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="(param: str) -> result:str",
+        )
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_entity_valid_signature_no_return(self):
+        """Entity with signature '(...)' (no return) produces no errors."""
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="()",
+        )
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_routine_valid_signature(self):
+        """Routine with valid signature produces no errors."""
+        routine = RoutineTypeNode(
+            name="run",
+            signature="() -> void:null",
+        )
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(routines=[routine]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_negative_entity_invalid_signature_no_parens(self):
+        """Entity with signature missing parentheses produces an error."""
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="no parens here",
+        )
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], DocumentRuleError)
+        assert errors[0].rule == "signature_is_valid"
+
+    def test_negative_method_invalid_signature(self):
+        """Method with invalid signature produces an error."""
+        method = MethodNode(
+            name="do_stuff",
+            signature="invalid_sig",
+        )
+        entity = EntityTypeNode(name="MyEntity", methods=[method])
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], DocumentRuleError)
+        assert errors[0].rule == "signature_is_valid"
+
+    def test_error_message_format(self):
+        """Error message follows template: signature '{sig}' has invalid format, use '(...) -> ...' or '(...)'."""
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="bad signature",
+        )
+        root = DocumentRoot(
+            header=HeaderNode(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = SignatureIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == "signature 'bad signature' has invalid format, use '(...) -> ...' or '(...)'"
+
+
+# ---------------------------------------------------------------------------
+# N+2. ImportIsUsed
+# ---------------------------------------------------------------------------
+
+
+def _make_import_is_used_doc(
+    *,
+    import_names: set[str] | None = None,
+    import_from: str = "goga/ast/nodes",
+    import_alias: str = "",
+    header_links: list[str] | None = None,
+    usage_links: list[str] | None = None,
+    entities: list[EntityTypeNode] | None = None,
+    routines: list[RoutineTypeNode] | None = None,
+    embeddings: list[tuple[str, str]] | None = None,
+    doc_path: str = "test_doc",
+) -> DocumentNode:
+    """Helper to build a DocumentNode for ImportIsUsed tests."""
+    import_item = ImportItemNode(type_name=import_names or {"Node"}, from_path=import_from, alias=import_alias)
+    header = HeaderNode(
+        imports=ImportsNode(items=[import_item]),
+    )
+    if header_links:
+        header.annotations = AnnotationsNode(links=header_links)
+    if usage_links:
+        usage_item = UsageItemNode(name="some_usage", annotations=AnnotationsNode(links=usage_links))
+        header.usages = UsagesNode(items=[usage_item])
+    body = BodyNode(
+        entities=entities or [],
+        routines=routines or [],
+    )
+    root = DocumentRoot(path=doc_path, header=header, body=body, embeddings=embeddings or [])
+    return DocumentNode(root=root)
+
+
+class TestImportIsUsed:
+    def test_default_name(self):
+        rule = ImportIsUsed()
+        assert rule.name == "import_is_used"
+
+    def test_positive_header_annotations_links(self):
+        """Type referenced in header annotations links -> no errors."""
+        node = _make_import_is_used_doc(header_links=["Node"])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_entity_annotation_links(self):
+        """Type referenced in entity annotation links -> no errors."""
+        entity = EntityTypeNode(name="MyEntity", annotations=AnnotationsNode(links=["Node"]))
+        node = _make_import_is_used_doc(entities=[entity])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_method_annotation_links(self):
+        """Type referenced in method annotation links -> no errors."""
+        method = MethodNode(name="do_it", annotations=AnnotationsNode(links=["Node"]))
+        entity = EntityTypeNode(name="MyEntity", methods=[method])
+        node = _make_import_is_used_doc(entities=[entity])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_property_annotation_links(self):
+        """Type referenced in property annotation links -> no errors."""
+        prop = PropertyNode(name="field", annotations=AnnotationsNode(links=["Node"]))
+        entity = EntityTypeNode(name="MyEntity", properties=[prop])
+        node = _make_import_is_used_doc(entities=[entity])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_routine_annotation_links(self):
+        """Type referenced in routine annotation links -> no errors."""
+        routine = RoutineTypeNode(name="run", annotations=AnnotationsNode(links=["Node"]))
+        node = _make_import_is_used_doc(routines=[routine])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_usage_item_annotation_links(self):
+        """Type referenced in usage item annotation links -> no errors."""
+        node = _make_import_is_used_doc(usage_links=["Node"])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_entity_signature(self):
+        """Type referenced in entity signature -> no errors."""
+        entity = EntityTypeNode(name="MyEntity", signature="(param: Node) -> result:void")
+        node = _make_import_is_used_doc(entities=[entity])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_method_signature(self):
+        """Type referenced in method signature -> no errors."""
+        method = MethodNode(name="do_it", signature="(param: Node)")
+        entity = EntityTypeNode(name="MyEntity", methods=[method])
+        node = _make_import_is_used_doc(entities=[entity])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_routine_signature(self):
+        """Type referenced in routine signature -> no errors."""
+        routine = RoutineTypeNode(name="run", signature="(param: Node) -> void:null")
+        node = _make_import_is_used_doc(routines=[routine])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_alias_used(self):
+        """Alias used in annotations -> no errors (checks alias, not type_name)."""
+        node = _make_import_is_used_doc(import_names={"Node"}, import_alias="N", header_links=["N"])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_negative_imported_type_not_used(self):
+        """Imported type not used anywhere -> error."""
+        node = _make_import_is_used_doc(import_names={"Node"}, doc_path="my_project")
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert isinstance(errors[0], DocumentRuleError)
+        assert errors[0].rule == "import_is_used"
+
+    def test_error_message_format(self):
+        """Error message follows template: Type '{type_name}' was imported, but not used in '{doc_path}'."""
+        node = _make_import_is_used_doc(import_names={"Node"}, doc_path="my_project")
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == "Type 'Node' was imported, but not used in 'my_project'"
+
+    def test_positive_embedded_entity_annotation_links(self):
+        """Imported type used via embedding (->Node) -> no errors."""
+        entity = EntityTypeNode(name="Node", embedded=True)
+        node = _make_import_is_used_doc(entities=[entity], embeddings=[("Node", "goga/ast/nodes")])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_embedded_routine(self):
+        """Imported routine type used via embedding -> no errors."""
+        routine = RoutineTypeNode(name="helper", embedded=True)
+        node = _make_import_is_used_doc(routines=[routine], embeddings=[("Node", "goga/ast/nodes")])
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_negative_property_type_on_embedded_entity_not_counted(self):
+        """Property type on embedded entity should NOT count as usage -> error."""
+        prop = PropertyNode(name="items", type="Node")
+        entity = EntityTypeNode(name="Node", embedded=True, properties=[prop])
+        node = _make_import_is_used_doc(entities=[entity], embeddings=[("Node", "goga/ast/nodes")])
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        # The embedding itself counts as usage, so no error expected
+        assert rule.check(node) == []
+
+    def test_negative_property_type_on_embedded_entity_without_embedding(self):
+        """Property type on embedded entity without embedding match -> error."""
+        prop = PropertyNode(name="items", type="Node")
+        embedded_entity = EntityTypeNode(name="OtherEntity", embedded=True, properties=[prop])
+        node = _make_import_is_used_doc(entities=[embedded_entity], import_names={"Node"})
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_is_used"
+
+    def test_negative_type_not_embedded_and_not_used(self):
+        """Type imported but not embedded and not used anywhere -> error."""
+        node = _make_import_is_used_doc()
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_is_used"
+
+    def test_positive_property_type_usage(self):
+        """Type used as prop.type of an entity property -> no error."""
+        prop = PropertyNode(name="items", type="Node")
+        entity = EntityTypeNode(name="MyEntity", properties=[prop])
+        node = _make_import_is_used_doc(entities=[entity], import_names={"Node"})
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_property_type_not_matching_no_false_positive(self):
+        """Property type does not match imported type and type unused elsewhere -> error."""
+        prop = PropertyNode(name="items", type="OtherType")
+        entity = EntityTypeNode(name="MyEntity", properties=[prop])
+        node = _make_import_is_used_doc(entities=[entity], import_names={"Node"})
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_is_used"
+
+    def test_positive_property_type_with_alias(self):
+        """Alias used as property type -> no error."""
+        prop = PropertyNode(name="items", type="N")
+        entity = EntityTypeNode(name="MyEntity", properties=[prop])
+        node = _make_import_is_used_doc(entities=[entity], import_names={"Node"}, import_alias="N")
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
