@@ -59,10 +59,12 @@ Analyze the linter output. Fix syntax errors in CODEMANIFEST if the linter finds
 
 Based on the collected data, perform analysis:
 - what new contract entities exist and how they interact
-- implementation details not specified by the DSL (patterns, specific libraries from Usages, architectural decisions, error handling, logging, caching, etc.)
+- implementation details not specified by the DSL (patterns, specific libraries from Usages, architectural decisions)
+- cross-cutting concerns (error handling, logging, validation, caching, concurrency)
 - dependencies between entities
 - potential issues and edge cases
 - data flows between entities
+- Usages analysis: what each entry provides, where it is used, why it was chosen, how exactly it is used
 
 ### Step 5: Questions to the user
 

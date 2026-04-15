@@ -31,6 +31,18 @@ If a section cannot be completed because information is unavailable, keep the se
 ### Changes in Annotations
 - `<level>`: <what changed>
 
+## Facts
+
+- <fact directly stated in the contract or observable in the workspace>
+
+## Assumptions
+
+- <Assumption>: <basis> (criticality: <low/medium/high>, safe to proceed without confirmation: <yes/no>)
+
+## Open Questions
+
+- <Question>: <user answer (if any)>
+
 ## Gap Analysis
 
 - Missing contract entities:
@@ -84,10 +96,6 @@ If a section cannot be completed because information is unavailable, keep the se
 - **Where it is used**: <which contract entities use it>
 - **Why this one**: <rationale for the choice — why not an alternative>
 - **How exactly it is used**: <specific APIs, call patterns>
-
-## Open Questions and Answers
-
-- <Question>: <user answer (if any)>
 
 ## Additional Instructions for the Implementation Agent
 
