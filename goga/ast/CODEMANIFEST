@@ -126,7 +126,7 @@ Annotations: |
       - `ImportIsUsed`
       - `SignatureIsValid`
 
-      Правила для всех документов:
+      Правила для всего дерева:
       - `ImportTypeExists`
       - `ImportsHasNotCyclicalDeps`
       - `EmbeddedTypeHasLowLevel`
