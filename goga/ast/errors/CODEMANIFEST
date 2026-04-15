@@ -30,7 +30,7 @@ Annotations: |
     message -> str: |
       Сообщение с которым была создана ошибка
 
-"BaseASTError::DocumentNotFound(message: str)":
+"BaseASTError::DocumentNotFoundError(message: str)":
   location: document.py
   annotations: |
     Ошибка поиска документа
