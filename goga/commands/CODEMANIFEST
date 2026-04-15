@@ -1,17 +1,17 @@
 Imports:
   - Types:
-      - Project
-    From: goga/manifest
+      - AST
+    From: goga/ast
 
 Usages:
   click: .usages/tools/click.md
   conventions: .usages/development/conventions.md
   ralphex: .usages/tools/ralphex.md
   codemanifest: |
-    Работать с типом `Project`.
-    Загрузить проект с использованием Project.load.
-    `Project` необходимо создавать с указанием пути в текущий CWD (".").
-    Ошибки брать из Project.errors.
+    Работать с типом `AST`.
+    Загрузить проект с использованием AST.load.
+    `AST` необходимо создавать с указанием пути в текущий CWD (".").
+    Ошибки брать из AST.errors.
   beautiful_yaml: |
     Сделать из python объекта yaml строку с учетом форматирования.
 

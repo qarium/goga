@@ -1,0 +1,347 @@
+# ************************************************** #
+# Манифест описывает правила применяемые к манифесту #
+# ************************************************** #
+
+Imports:
+  - Types:
+      - DocumentRoot
+      - DocumentNode
+      - ImportsNode
+      - ImportItemNode
+      - AnnotationsNode
+      - HeaderNode
+      - UsagesNode
+      - UsageItemNode
+      - BodyNode
+      - RoutineTypeNode
+      - EntityTypeNode
+      - MethodNode
+      - PropertyNode
+    From: goga/ast/nodes
+  - Types:
+      - ASTRuleError
+      - DocumentRuleError
+    From: goga/ast/errors
+
+Usages:
+  nodes: |
+    Использовать манифест goga/ast/nodes и его API для работы с структурой документа
+  conventions: .usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+# *************************** #
+# Правила на уровне документа #
+# *************************** #
+
+"DocumentRule(name: str)":
+  location: document.py
+  annotations: |
+    Описывает одно конкретное правило документа
+
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+  methods:
+    "check(node: DocumentNode) -> errors:list[DocumentRuleError]": |
+      Проверяет ноду на соответствие правилу
+
+      `node`: нода которую необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+"DocumentRule::ImportsCanNotBeEmpty(name: str = 'imports_can_not_be_empty')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - список импортов не может быть пустым
+
+    Требования:
+    - Правило применяется только в том случаи если импорт декларирован в документе
+
+    Шаблоны ошибок:
+    - empty: "Imports block in '{doc_path}' is empty — each import must specify at least Types and From"
+
+"DocumentRule::ImportsHasOnlyValidKeys(name: str = 'imports_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - каждый item в node.data не содержит ключей отличных от:
+      - Types
+      - From
+
+    Шаблоны ошибок:
+    - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, From"
+
+"DocumentRule::ImportHasType(name: str = 'import_has_type')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportItemNode`.
+
+    Правила:
+    - импорт содержит подключаемый тип
+
+    Шаблоны ошибок:
+    - no_type: "Import from '{from_path}' has no Types listed — specify at least one type to import"
+
+"DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportItemNode`.
+
+    Правила:
+    - импорт содержит путь from откуда подключаются типы
+    - путь существует на файловой системе
+    - путь не выходит на пределы CWD
+    - путь находится на одном уровне или ниже по иерархии на файловой системе
+
+    Шаблоны ошибок:
+    - empty: "Import in '{doc_path}' has empty source path (From field)"
+    - not_found: "Source path '{from_path}' in import of types {type_names} not found on filesystem"
+    - escapes: "Source path '{from_path}' in import points outside the project root"
+    - level: "Source path '{from_path}' must be at the same level or inside the current package directory"
+
+"DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - все имена типов должны быть уникальны в рамках всех подключаемых документов
+
+    Шаблоны ошибок:
+    - duplicate: "Type '{type_name}' is imported more than once: from '{path_a}' and '{path_b}'"
+
+"DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
+  location: document.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все декларированные usages используются в `AnnotationsNode` документа в нодах:
+      - `HeaderNode`
+      - `UsageItemNode`
+      - `RoutineTypeNode`
+      - `EntityTypeNode`
+      - `MethodNode`
+      - `PropertyNode`
+
+    Требования:
+      - ссылка на имя практики должна использоваться хотя бы в одной `AnnotationsNode`
+
+    Шаблоны ошибок:
+    - unused: "Usage '{usage_name}' is declared but not referenced in any annotation — either use it or remove the declaration"
+
+"DocumentRule::AnnotationLinksExists(name: str = 'annotation_links_exists')":
+  location: document.py
+  annotations: |
+    Проверяет ссылки на существование в `AnnotationsNode` для нод:
+    - `HeaderNode`
+    - `UsageItemNode`
+    - `RoutineTypeNode`
+    - `EntityTypeNode`
+    - `MethodNode`
+    - `PropertyNode`
+
+    Одно из правил должно соблюдаться:
+    - Ссылка существует импортах `HeaderNode` в качестве type или alias
+    - Ссылка существует в usages `HeaderNode` в качестве name
+    - Ссылка существует в `BodyNode` в качестве имени entity или routine
+
+    Дополнительные правила:
+    - В `EntityTypeNode`, `RoutineTypeNode`, `MethodNode` ссылка может существовать в сигнатуре
+
+    Требования:
+    - Поиск ссылки в сигнатуре как поиск целого слова, где разделителями могут быть пробелы
+      или пунктуация (например, :), но не символы _ и -. В терминах регулярных выражений это
+      поиск подстроки, которая не окружена символами [\w-], то есть проверка должна падать
+      на param_ или param-, но проходить на param:
+
+    Шаблоны ошибок:
+    - not_found: "Link `{link}` in {context} annotation does not match any import, usage, entity, routine, or signature parameter"
+
+"DocumentRule::UsageLinksHasNotConflicts(name: str = 'usage_links_has_not_conflicts')":
+  location: document.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все имена usage items не имеют пересечений с именами подключаемых типов
+      (конфликт может быть решен через alias для типа)
+    - все имена usage items не имеют пересечений с именами entity и routine
+
+    Шаблоны ошибок:
+    - import_conflict: "Usage key '{name}' conflicts with imported type '{type_name}' — rename the usage or use an alias in Imports"
+    - entity_conflict: "Usage key '{name}' conflicts with {kind} '{entity_name}' — rename the usage to avoid ambiguity"
+
+"DocumentRule::EntitiesAndRoutinesHasNotConflicts(name: str = 'entities_and_routines_has_not_conflicts')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - все имена entities и routines не имеют пересечений с именами подключаемых типов в `ImportsNode`
+      (конфликт может быть решен через alias для типа)
+
+    Требования:
+    - Встраиваемые типы с флагом embedded=True являются исключением из общего правила
+
+    Шаблоны ошибок:
+    - entity_conflict: "Entity '{entity_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
+    - routine_conflict: "Routine '{routine_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
+
+"DocumentRule::MutationExists(name: str = 'mutation_exists')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Одно из правил должно совпасть:
+    - все mutation_name (первый элемент кортежа) существуют среди имен entities
+    - все mutation_name (первый элемент кортежа) существуют среди имен routines
+    - все mutation_name (первый элемент кортежа) существуют среди типов в items `ImportsNode`
+
+    Шаблоны ошибок:
+    - not_found: "Base type '{mutation_name}' for mutation of '{entity_name}' not found in imports, entities, or routines of this package"
+
+"DocumentRule::MutationIsValid(name: str = 'mutation_is_valid')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - mutation_name (первый элемент кортежа) не совпадает с именем entity
+
+    Шаблоны ошибок:
+    - self_mutation: "Mutation '{mutation_name}' on '{entity_name}' references itself — a type cannot mutate from its own signature"
+
+"DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - возвращаемый тип в сигнатуре имеет ссылку, правильно -> link:Type, не правильно -> Type
+
+    Требования:
+    - сигнатура может ничего не возвращать на выходе - это валидная ситуация
+
+    Шаблоны ошибок:
+    - missing_link: "Return type '{return_part}' in '{signature}' is missing a semantic label — use format '-> label:Type'"
+
+"DocumentRule::EmbeddedEntityCanNotHasMutations(name: str = 'embedded_entity_can_not_has_mutations')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - embedded сущность не может иметь мутации
+
+    Шаблоны ошибок:
+    - has_mutations: "Embedded entity '{entity_name}' (->Entity) cannot define mutations — embedded types are included as-is from their source package"
+
+"DocumentRule::EntityHasOnlyValidKeys(name: str = 'entity_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+      - properties
+      - methods
+
+    Шаблоны ошибок:
+    - unknown_keys: "Entity '{entity_name}' contains unknown keys {unknown_keys} — allowed: location, annotations, methods, properties"
+
+"DocumentRule::RoutineHasOnlyValidKeys(name: str = 'routine_has_only_valid_keys')":
+  location: document.py
+  annotations: |
+    Проверяет `RoutineTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+
+    Шаблоны ошибок:
+    - unknown_keys: "Routine '{routine_name}' contains unknown keys {unknown_keys} — allowed: location, annotations"
+
+# ********************************* #
+# Правила на уровне всех документов #
+# ********************************* #
+
+"ASTRule(tree: list[DocumentRoot], name: str)":
+  location: ast.py
+  annotations: |
+    Описывает одно конкретное правило которое применяет глобально ко всем документам
+
+    `tree`: дерево документов к которым необходимо применить правило, дерево можно читать используя практику `nodes`
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+    tree -> list[DocumentRoot]: |
+      Дерево документов с которым было создано правило
+  methods:
+    "check(document: DocumentRoot) -> errors:list[ASTRuleError]": |
+      Проверяет документ на соответствие правилу
+
+      `document`: документ который необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+"ASTRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
+  location: ast.py
+  annotations: |
+    Правило - ни один импорт в документе не является циклическим.
+
+    Если в документе есть импорт из пути и в документе по этому
+    пути тоже есть импорт из текущего документа - это является ошибкой.
+
+    Дополнительные требования:
+    - Алгоритм поиска документа из которого происходит импорт при проверке должен иметь алгоритмическую сложность O(1)
+
+    Шаблоны ошибок:
+    - cycle: "Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"
+
+"ASTRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
+  location: ast.py
+  annotations: |
+    Правило - подключаемый тип через Imports существует в указанном в From документе.
+
+    Требования:
+    - Если путь в From не существует на файловой системе, то проверка игнорируется
+
+    Шаблоны ошибок:
+    - not_found: "Type '{type_name}' imported from '{from_path}' is not defined in that package's CODEMANIFEST"
+
+"ASTRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
+  location: ast.py
+  annotations: |
+    Правило - все embedded типы располагаются ниже в иерархии файловой системы.
+
+    Примеры:
+    - В данном примере level-1 может встраивать level-2, а level-2 не может встраивать level-1
+      root/
+      ├── level-1/
+      │   ├── level-2/
+      │   │   ├── CODEMANIFEST
+      │   └── CODEMANIFEST
+
+    Шаблоны ошибок:
+    - wrong_level: "Embedded {kind} '{name}' comes from '{source_path}', but can only be embedded from packages nested below '{current_path}'"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает свод правил применяемых к манифесту

@@ -3,6 +3,6 @@ from pathlib import Path
 import pytest
 
 
-@pytest.fixture()
+@pytest.fixture
 def project_root() -> Path:
     return Path(__file__).parent / ".project"

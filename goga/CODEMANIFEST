@@ -4,8 +4,8 @@ Imports:
       - build
     From: goga/commands
   - Types:
-      - Project
-    From: goga/manifest
+      - AST
+    From: goga/ast
 
 Usages:
   click: .usages/tools/click.md
@@ -17,7 +17,7 @@ Annotations: |
 
 ---
 
-->Project: {}
+->AST: {}
 
 app:
   location: cli.py

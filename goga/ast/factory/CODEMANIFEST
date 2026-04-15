@@ -1,0 +1,107 @@
+# ******************************************************************* #
+# Манифест описывает фабрику по построению дерева документа манифеста #
+# ******************************************************************* #
+
+Imports:
+  - Types:
+      - Node
+      - DocumentRoot
+      - HeaderNode
+      - ImportsNode
+      - ImportItemNode
+      - UsagesNode
+      - UsageItemNode
+      - AnnotationsNode
+      - BodyNode
+      - RoutineTypeNode
+      - EntityTypeNode
+      - MethodNode
+      - PropertyNode
+      - FooterNode
+    From: goga/ast/nodes
+  - Types:
+      - DocumentParseError
+    From: goga/ast/errors
+
+Usages:
+  dsl: .usages/codemanifest/dsl.md
+  conventions: .usages/development/conventions.md
+  yaml: |
+    Библиотека pyyaml для парсинга yaml документов
+    Библиотека требует указания зависимости в проекте
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+  Использовать практику `yaml` для загрузки документов.
+  Использовать практику `dsl` для ориентации по YAML.
+
+  Соглашения сборки:
+    * Каждая созданная нода содержит data — исходные данные, из которых она создана
+    * Каждая созданная нода содержит parent — ссылку на родительскую ноду
+    * Неизвестные ключи в header и footer вызывают `DocumentParseError` с перечислением
+      всех неизвестных ключей
+    * Типы значений проверяются согласно практике `dsl`
+
+---
+
+"Factory(path: str)":
+  location: factory.py
+  annotations: |
+    Создает дерево документа из YAML файла CODEMANIFEST
+
+    `path`: путь до папки с файлом CODEMANIFEST относительно CWD
+
+    Дерево состоит из заголовка (`HeaderNode`), тела (`BodyNode`) и
+    нижнего колонтитула (`FooterNode`),
+    объединенных в корневую ноду `DocumentRoot`.
+
+    Встраиваемые типы (префикс ->) маршрутизируются в embeddings как (name, path),
+    и одновременно добавляются в entities/routines с флагом embedded=True.
+  methods:
+    "create(parent: Node = None) -> document:DocumentRoot": |
+      Создает дерево документа
+
+      `parent`: родительская нода
+      `document`: сущность созданного документа
+
+      ## Заголовок → `HeaderNode`
+
+      Импорты → `ImportsNode`:
+      - Каждый type в item проверяется на alias и парсится с учетом AS
+      - Каждый импортированный тип → отдельный `ImportItemNode`
+
+      Практики → `UsagesNode`:
+      - Сборка аннотаций в `AnnotationsNode`
+      - Файл: наличие .md в суффиксе → сохранить путь без чтения
+      - URL: префикс http/https → сохранить URL без загрузки
+
+      Аннотации → `AnnotationsNode`:
+      - Только строковое представление
+      - Извлечение ссылок (backtick) согласно практике `dsl`
+
+      Неизвестные ключи → `DocumentParseError`
+
+      ## Тело → `BodyNode`
+
+      Рутины → `RoutineTypeNode` (только если нет properties, methods и мутаций):
+      - Сигнатура сохраняется без имени: "(param: str) -> void:null"
+      - Префикс -> влияет на embedded флаг, но не является частью имени
+
+      Сущности → `EntityTypeNode`:
+      - Сигнатура сохраняется без имени: "(param: str) -> void:null"
+      - Файл преобразуется из имени в относительный путь от CWD
+      - Префикс -> влияет на embedded флаг, но не является частью имени
+      - Если нет свойств и методов, но есть мутация → это сущность
+
+      ## Нижний колонтитул → `FooterNode`
+
+      Неизвестные ключи → `DocumentParseError`
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает фабрику по построению дерева документа манифеста

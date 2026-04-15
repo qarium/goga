@@ -1,0 +1,153 @@
+# *********************************************** #
+# Манифест описывает посетителя каждого манифеста #
+# *********************************************** #
+
+Imports:
+  - Types:
+      - DocumentRoot
+    From: goga/ast/nodes
+  - Types:
+      # правила документа
+      - ImportsCanNotBeEmpty
+      - ImportHasType
+      - ImportHasValidFromPath
+      - ImportHasNotDuplicate
+      - AllUsagesIsUsed
+      - AnnotationLinksExists
+      - UsageLinksHasNotConflicts
+      - EntitiesAndRoutinesHasNotConflicts
+      - MutationExists
+      - MutationIsValid
+      - ReturnTypeHasLink
+      - EmbeddedEntityCanNotHasMutations
+      - ImportsHasOnlyValidKeys
+      - EntityHasOnlyValidKeys
+      - RoutineHasOnlyValidKeys
+      # правила проекта
+      - ImportTypeExists
+      - ImportsHasNotCyclicalDeps
+      - EmbeddedTypeHasLowLevel
+    From: goga/ast/rules
+  - Types:
+      - ASTRuleError
+      - DocumentRuleError
+      - DocumentNotFound
+    From: goga/ast/errors
+
+Usages:
+  conventions: .usages/development/conventions.md
+  nodes: |
+    Использовать манифест goga/ast/nodes и его API дл работы с структурой документа
+  factory: |
+    Использовать манифест goga/ast/factory и его API для создания документа
+  visitor: |
+    Использовать манифест goga/ast/visitor и его API для анализа одного документа
+  analyzer: |
+    Использовать манифест goga/ast/analyzer и его API для анализа всего дерева документов
+  testing: |
+    Интеграционные тесты правил `AST`.
+
+    Структура:
+    - tests/.project/<rule_name>/ — папка кейса для правила с CODEMANIFEST и .expected.yaml
+    - helper-папки создаются рядом если правилу нужны дополнительные файлы с суффиксом "_helper"
+
+    Формат .expected.yaml:
+    ```
+    errors:
+      - rule: <rule_name>
+        message: "<exact error message>"
+        document_path: "<normalized relative path>"
+        node_data: <dict — exact node.data>
+    ```
+
+    Один параметризованный тест в test_project_integration.py:
+    - сканирует tests/.project/, загружает AST(.project/)
+    - сравнивает len(errors) и каждое поле ошибки строго
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  При добавлении нового правила создавать интеграционный тест по практике `testing`.
+
+---
+
+"AST(path: str)":
+  location: ast.py
+  annotations: |
+    Рекурсивно загружает дерево манифест документов
+
+    `path`: путь из которого необходимо загрузить дерево
+
+    Правила документа и проекта определены в подключенных типах из `goga/ast/rules`.
+  properties:
+    tree -> list[DocumentRoot]: |
+      Дерево документов в проекте.
+      Вершины графа, спускаться по дереву можно от вершин используя практику `nodes`.
+    errors -> list[ASTRuleError | DocumentRuleError]: |
+      Список ошибок после анализа
+  methods:
+    load(): |
+      Загружает дерево по указанному пути
+
+      Алгоритм:
+      - Рекурсивно обойти каждую директорию
+      - Обнаружить CODEMANIFEST файл в корне директории и если файл существует выполнить:
+        - создание документа с помощью практики `factory`
+        - добавить вершину в tree если это самый верхний уровень иерархии
+        - добавить ребенка к родительскому документу с помощью практики `nodes`
+      - Разрешить встраиваемые типы по оригинальным типам из дерева документов:
+        для каждого embedded типа в entities/routines найти оригинальный не-embedded тип
+        с таким же именем и выполнить:
+        - Обогатить ноду метаданными оригинала: signature, annotations, properties, methods
+        - Обновить location на путь оригинального документа
+        - Сохранить из фабричной ноды: mutations, data
+        - Если оригинал является routine, а embedded в entities —
+          удалить из entities, создать RoutineTypeNode и добавить в routines
+        - Если оригинал является entity, а embedded в routines —
+          удалить из routines, создать EntityTypeNode и добавить в entities
+      - Выполнить анализ каждого документа с помощью практики `visitor`
+      - Применить глобальный анализ документов с помощью практики `analyzer`
+
+      Правила для каждого документа:
+      - `ImportsCanNotBeEmpty`
+      - `ImportHasType`
+      - `ImportHasValidFromPath`
+      - `ImportHasNotDuplicate`
+      - `AllUsagesIsUsed`
+      - `AnnotationLinksExists`
+      - `UsageLinksHasNotConflicts`
+      - `EntitiesAndRoutinesHasNotConflicts`
+      - `MutationExists`
+      - `MutationIsValid`
+      - `ReturnTypeHasLink`
+      - `EmbeddedEntityCanNotHasMutations`
+      - `ImportsHasOnlyValidKeys`
+      - `EntityHasOnlyValidKeys`
+      - `RoutineHasOnlyValidKeys`
+
+      Правила для всех документов:
+      - `ImportTypeExists`
+      - `ImportsHasNotCyclicalDeps`
+      - `EmbeddedTypeHasLowLevel`
+
+    "document(path: str) -> found_document:DocumentRoot": |
+      На основании пути возвращает документ.
+
+      `path`: путь до папки в которой лежит CODEMANIFEST
+
+      `found_document`: найденный документ
+
+      Требования:
+      - Должны обрабатываться любые варианты путей
+        - относительный ./path/path
+        - относительный path/path
+        - полный /path/path
+      - Поиск документа должен соответствовать алгоритмической сложности O(1)
+      - Документ не найден → `DocumentNotFound`
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 11/04/26
+
+Description: |
+  Манифест описывает проект в котором строится дерево манифест документов
