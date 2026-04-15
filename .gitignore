@@ -216,5 +216,6 @@ __marimo__/
 
 # AI
 .claude/
+.ralphex/
 docs/plans/
 docs/superpowers/

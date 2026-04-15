@@ -31,7 +31,7 @@ Imports:
   - Types:
       - ASTRuleError
       - DocumentRuleError
-      - DocumentNotFound
+      - DocumentNotFoundError
     From: goga/ast/errors
 
 Usages:
@@ -142,7 +142,7 @@ Annotations: |
         - относительный path/path
         - полный /path/path
       - Поиск документа должен соответствовать алгоритмической сложности O(1)
-      - Документ не найден → `DocumentNotFound`
+      - Документ не найден → `DocumentNotFoundError`
 
 ---
 
