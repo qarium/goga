@@ -17,6 +17,7 @@ from .rules import (
     ImportHasNotDuplicate,
     ImportHasType,
     ImportHasValidFromPath,
+    ImportIsUsed,
     ImportsCanNotBeEmpty,
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
@@ -25,6 +26,7 @@ from .rules import (
     MutationIsValid,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
+    SignatureIsValid,
     UsageLinksHasNotConflicts,
 )
 from .visitor import Visitor
@@ -127,6 +129,8 @@ class AST:
             ImportsHasOnlyValidKeys(),
             EntityHasOnlyValidKeys(),
             RoutineHasOnlyValidKeys(),
+            ImportIsUsed(),
+            SignatureIsValid(),
         ]
 
         for doc in all_documents:

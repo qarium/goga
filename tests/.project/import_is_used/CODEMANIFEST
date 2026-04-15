@@ -1,0 +1,16 @@
+Imports:
+  - Types:
+      - NodeType
+    From: import_is_used_helper
+
+---
+
+"MyEntity":
+  location: entity.py
+  annotations: |
+    Test entity
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test

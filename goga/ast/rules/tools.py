@@ -4,10 +4,12 @@ from __future__ import annotations
 def signature_contains_type_name(signature: str, type_name: str) -> bool:
     """Check whether `type_name` appears as an exact match in `signature`.
 
-    Allowed boundary characters adjacent to the match: : > ( ) , space or string edge.
+    Allowed boundary characters adjacent to the match: : > ( ) [ ] , space or string edge.
     Any other character (letter, digit, _, -, ", =, etc.) makes the match invalid.
     """
-    allowed = {":", ">", "(", ")", ",", " "}
+    if not type_name:
+        return False
+    allowed = {":", ">", "(", ")", "[", "]", ",", " "}
     start = 0
     while True:
         idx = signature.find(type_name, start)

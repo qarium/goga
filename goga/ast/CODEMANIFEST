@@ -23,6 +23,8 @@ Imports:
       - ImportsHasOnlyValidKeys
       - EntityHasOnlyValidKeys
       - RoutineHasOnlyValidKeys
+      - ImportIsUsed
+      - SignatureIsValid
       # правила проекта
       - ImportTypeExists
       - ImportsHasNotCyclicalDeps
@@ -76,8 +78,6 @@ Annotations: |
     Рекурсивно загружает дерево манифест документов
 
     `path`: путь из которого необходимо загрузить дерево
-
-    Правила документа и проекта определены в подключенных типах из `goga/ast/rules`.
   properties:
     tree -> list[DocumentRoot]: |
       Дерево документов в проекте.
@@ -123,6 +123,8 @@ Annotations: |
       - `ImportsHasOnlyValidKeys`
       - `EntityHasOnlyValidKeys`
       - `RoutineHasOnlyValidKeys`
+      - `ImportIsUsed`
+      - `SignatureIsValid`
 
       Правила для всех документов:
       - `ImportTypeExists`

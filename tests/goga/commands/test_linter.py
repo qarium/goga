@@ -16,7 +16,8 @@ Imports:
 
 Usages: {}
 
-Annotations: ""
+Annotations: |
+  Uses `MyHelper` here
 
 ---
 "MyClass()":

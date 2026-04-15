@@ -1,0 +1,13 @@
+---
+
+---
+
+"do_work(bad":
+  location: work.py
+  annotations: |
+    Test routine
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test

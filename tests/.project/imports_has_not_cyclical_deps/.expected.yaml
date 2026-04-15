@@ -7,3 +7,10 @@ errors:
     Types:
     - EntityB
     From: ./imports_has_not_cyclical_deps_helper
+- rule: import_is_used
+  message: Type 'EntityB' was imported, but not used in './imports_has_not_cyclical_deps'
+  document_path: imports_has_not_cyclical_deps
+  node_data:
+    Types:
+    - EntityB
+    From: ./imports_has_not_cyclical_deps_helper

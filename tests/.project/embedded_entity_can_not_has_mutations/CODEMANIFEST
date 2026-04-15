@@ -4,6 +4,9 @@ Imports:
       - MutatedEntity
     From: embedded_entity_can_not_has_mutations/embedded_entity_can_not_has_mutations_helper
 
+Annotations: |
+  Base entity `BaseEntity` for testing embedded mutations.
+
 ---
 
 # valid

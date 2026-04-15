@@ -1,0 +1,7 @@
+errors:
+- rule: signature_is_valid
+  message: "signature '(bad' has invalid format, use '(...) -> ...' or '(...)'"
+  document_path: signature_is_valid
+  node_data:
+    location: work.py
+    annotations: "Test routine\n"
