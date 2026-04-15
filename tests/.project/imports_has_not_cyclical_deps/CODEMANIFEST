@@ -5,7 +5,7 @@ Imports:
 
 ---
 
-"EntityA":
+"EntityA()":
   location: entity.py
   annotations: |
     Test entity

@@ -9,7 +9,7 @@ Usages:
 
 ---
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   annotations: |
     Test entity using `SomeType`

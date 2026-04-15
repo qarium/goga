@@ -2,10 +2,28 @@
 
 ---
 
-"do_work(bad":
+"work_bad_1(bad":
   location: work.py
   annotations: |
     Test routine
+
+"work_bad_2)":
+  location: work.py
+  annotations: |
+    Test routine
+
+"work_bad_3":
+  location: work.py
+  annotations: |
+    Test routine
+
+"work_bad_4()":
+  location: work.py
+  annotations: |
+    Test routine
+  methods:
+    method_name: |
+      Test method
 
 ---
 Author: Test

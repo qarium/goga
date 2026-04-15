@@ -283,6 +283,7 @@ Annotations: |
 
     Шаблоны ошибок:
     - format: "signature '{signature_string}' has invalid format, use '(...) -> ...' or '(...)'"
+    - empty: "signature is empty, use '(...) -> ...' or '(...)'"
 
 "DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
   location: document.py

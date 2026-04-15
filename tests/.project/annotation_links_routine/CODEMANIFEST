@@ -7,7 +7,7 @@
   annotations: |
     Routine with `bad_routine_link` and `MyEntity`
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   annotations: |
     Test entity

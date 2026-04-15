@@ -5,7 +5,7 @@ Imports:
 
 ---
 
-"EntityB":
+"EntityB()":
   location: entity.py
   annotations: |
     Helper entity

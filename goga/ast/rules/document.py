@@ -659,6 +659,14 @@ class SignatureIsValid(DocumentRule):
         errors: list[DocumentRuleError],
     ) -> None:
         if not signature:
+            errors.append(
+                DocumentRuleError(
+                    message="signature is empty, use '(...) -> ...' or '(...)'",
+                    rule=self.name,
+                    document=node.root,
+                    node=owner_node,
+                )
+            )
             return
         if not self._PATTERN.match(signature):
             errors.append(

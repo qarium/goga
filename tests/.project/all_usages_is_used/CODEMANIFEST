@@ -9,7 +9,7 @@ Annotations: |
 
 ---
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   annotations: |
     Test entity without referencing unused_pattern

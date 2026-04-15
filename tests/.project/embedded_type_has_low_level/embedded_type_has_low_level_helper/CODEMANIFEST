@@ -8,7 +8,7 @@ Annotations: |
 
 ---
 
-->TestEntity:
+->TestEntity():
   location: entity.py
   annotations: |
     Import invalid `SiblingEntity` from top level

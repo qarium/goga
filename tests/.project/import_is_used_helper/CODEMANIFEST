@@ -2,7 +2,7 @@
 
 ---
 
-"NodeType":
+"NodeType()":
   location: node.py
   annotations: |
     A node type

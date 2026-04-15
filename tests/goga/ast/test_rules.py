@@ -1779,7 +1779,7 @@ class TestSignatureIsValid:
             name="do_stuff",
             signature="invalid_sig",
         )
-        entity = EntityTypeNode(name="MyEntity", methods=[method])
+        entity = EntityTypeNode(name="MyEntity", signature="()", methods=[method])
         root = DocumentRoot(
             header=HeaderNode(),
             body=BodyNode(entities=[entity]),

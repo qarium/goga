@@ -10,10 +10,10 @@ Annotations: |
 ---
 
 # valid
-->MutatedEntity:
+->MutatedEntity():
   location: entity.py
   annotations: |
     Embedded mutated entity
 
 # not valid
-"->BaseEntity::MutatedEntity": {}
+"->BaseEntity::MutatedEntity()": {}

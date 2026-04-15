@@ -2,7 +2,7 @@
 
 ---
 
-"SiblingEntity":
+"SiblingEntity()":
   location: entity.py
   annotations: |
     Source entity at same level

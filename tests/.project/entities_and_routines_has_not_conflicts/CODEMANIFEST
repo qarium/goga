@@ -5,7 +5,7 @@ Imports:
 
 ---
 
-"ConflictingType":
+"ConflictingType()":
   location: entity.py
   annotations: |
     Conflicts with import
