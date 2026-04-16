@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import stat
@@ -34,7 +35,7 @@ DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 def _read_goga_yml() -> dict:
     """Read goga.yml from the project root, return the build section merged with defaults."""
-    config = dict(DEFAULT_BUILD_CONFIG)
+    config = copy.deepcopy(DEFAULT_BUILD_CONFIG)
     goga_yml_path = Path("goga.yml")
     if not goga_yml_path.is_file():
         click.echo("goga.yml not found, using defaults")

@@ -58,12 +58,12 @@ Annotations: |
     - [rule_name] необходимо выводить красным цветом
     - В случаи наличия ошибок команда выходит с кодом 1 иначе 0
 
-"build(plan: str = 'docs/plans/plan.md')":
+"build(plan: str)":
   location: build.py
   annotations: |
     Команда сборки кода через `ralphex`. Подготавливает окружение и запускает `ralphex`.
 
-    `plan`: путь к файлу плана (markdown), опциональный, по умолчанию 'docs/plans/plan.md'
+    `plan`: путь к файлу плана (markdown)
 
     CLI-опции (все опциональные, переопределяют goga.yml):
     - --dry-run: показать команду без выполнения
