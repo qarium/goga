@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import shutil
 import stat
@@ -34,7 +35,7 @@ DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 def _read_goga_yml() -> dict:
     """Read goga.yml from the project root, return the build section merged with defaults."""
-    config = dict(DEFAULT_BUILD_CONFIG)
+    config = copy.deepcopy(DEFAULT_BUILD_CONFIG)
     goga_yml_path = Path("goga.yml")
     if not goga_yml_path.is_file():
         click.echo("goga.yml not found, using defaults")
@@ -182,7 +183,7 @@ def _assemble_command(plan: str, config: dict, cli_options: dict) -> list[str]:
 
 
 @click.command()
-@click.argument("plan", default="docs/plans/plan.md")
+@click.argument("plan")
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
 @click.option("--worktree", is_flag=True, help="Enable ralphex worktree mode")
 @click.option("--skip-finalize", is_flag=True, help="Skip finalization")
