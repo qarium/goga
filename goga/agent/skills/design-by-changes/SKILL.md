@@ -90,6 +90,28 @@ Based on the stack trace results, perform analysis:
 - data flows between entities
 - Usages analysis: what each entry provides, where it is used, why it was chosen, how exactly it is used
 
+**Important — Usages/Practices as interface bridges**: A practice (Usages entry) is a **connecting entity** between packages. If an entity needs to interact with an external library, another package, or a shared interface — it MUST do so through the declared practice. The practice defines the contract of interaction. When designing how entities connect to external systems, always route through the appropriate Usages entry — never bypass a declared practice with a direct dependency.
+
+#### 4c. Test Scenarios
+
+Generate test scenarios for the feature based on the stack trace and analysis results.
+
+Each test case MUST be written out with all 6 elements:
+
+1. **Name**: `test_<what>_<scenario>` — self-documenting
+2. **Setup**: exact fixture setup (tmp_path contents, mocks, patches) — concrete code or description with exact values
+3. **Input**: exact values passed to the function/CLI (arguments, types, structure)
+4. **Trace**: step-by-step execution through the code with this exact input — what each helper receives, what it returns, what side effects occur at each step
+5. **Assertions**: concrete checks with exact expected values (paths, contents, exit codes, output strings) — written as actual assert statements or equivalent
+6. **Sufficiency assessment**: why this test is needed and what regression it prevents
+
+Categories to cover:
+- **Positive tests** — happy path, default values, explicit values, idempotency
+- **Negative tests** — invalid input, unsupported options, missing dependencies
+- **Edge cases** — missing directories, existing files preservation, recursive copying, reinstallation
+
+Reference the project test conventions from the Sources of Truth (Usages specs, employee docs) for test structure, naming, and tooling.
+
 ### Step 5: Questions to the user
 
 Via AskUserQuestion, ask questions about:
@@ -140,6 +162,7 @@ Before completing the response, verify:
 4. Was a brainstorm performed analyzing implementation details not specified by the DSL?
 4b. Was a code stack trace performed for each contract entry point with checkpoints?
 4c. Were issues found during tracing resolved before proceeding?
+4d. Were test scenarios generated using the 6-element format (name, setup, input, trace, assertions, sufficiency)?
 5. Is entity interaction and data flow described?
 6. For each entity: are pattern, state management, error handling, and edge cases described?
 7. Are cross-cutting concerns described (error handling, logging, validation)?

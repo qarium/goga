@@ -81,31 +81,36 @@ For each external call in the chain:
 
 ### Step 3: Test Logic Verification
 
-For **each test scenario** described in the design, trace through the test logic.
+For **each test scenario** described in the design, produce a **detailed test trace** with the following structure for every test case.
 
-#### 3a. Positive test trace
+#### Required format per test case
+
+Each test case MUST be written out with all 6 elements:
+
+1. **Name**: `test_<what>_<scenario>` — self-documenting
+2. **Setup**: exact fixture setup (tmp_path contents, mocks, patches) — concrete code or description with exact values
+3. **Input**: exact values passed to the function/CLI (arguments, types, structure)
+4. **Trace**: step-by-step execution through the code with this exact input — what each helper receives, what it returns, what side effects occur at each step
+5. **Assertions**: concrete checks with exact expected values (paths, contents, exit codes, output strings) — written as actual assert statements or equivalent
+6. **Sufficiency assessment**: why this test is needed and what regression it prevents
+
+#### 3a. Positive test traces
 
 For each positive test:
-
-1. What is the test input? (exact values, types, structure)
-2. Trace through the code path with this input — what happens at each step?
-3. What is the expected output?
-4. Is the expected output **correct** based on the design logic traced in Step 2?
-5. Is the test input sufficient to verify the described behavior, or is it too trivial?
+1. Write the full 6-element trace
+2. Verify the expected output is **correct** based on the design logic traced in Step 2
+3. Verify the test input is sufficient — not too trivial to catch real bugs
 
 #### 3b. Negative test trace
 
 For each negative test:
-
-1. What invalid input is used?
-2. Trace through the code path — where exactly does it fail?
-3. Is the failure handled correctly (right exception type, right error message)?
-4. Does the test verify the **correct** failure mode?
+1. Write the full 6-element trace
+2. Verify where exactly the code fails and that the failure is handled correctly (right error message, right exit code)
+3. Verify the test verifies the **correct** failure mode
 
 #### 3c. Edge case coverage audit
 
 For each entity:
-
 1. List all boundary conditions:
    - empty input, empty collection, empty string
    - None/null values
@@ -113,13 +118,11 @@ For each entity:
    - wrong types
    - concurrent access (if applicable)
    - missing dependencies
-2. For each boundary condition: is there a test that covers it?
-3. If missing — record the gap
+2. For each boundary condition: write a full 6-element test trace, or record the gap if it belongs in Test gaps section
 
 #### 3d. Test data sufficiency
 
 For each test:
-
 1. Is the test data realistic enough to catch real bugs?
 2. Are there enough distinct test cases to cover the described behavior?
 3. Does the test data include typical usage patterns, not just trivial "happy path" cases?
@@ -143,7 +146,7 @@ Present all findings to the user, organized by severity:
 - <finding>
 
 #### Test gaps
-- <missing test scenario with description of what should be tested>
+For each missing test: write the full 6-element trace (name, setup, input, trace, assertions, sufficiency) for the missing scenario, marking it as a gap to be added to the design document.
 
 For each finding, propose a **concrete fix** — not vague advice, but the exact change needed.
 

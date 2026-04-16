@@ -117,6 +117,46 @@ If a section cannot be completed because information is unavailable, keep the se
 - **Why this one**: <rationale for the choice — why not an alternative>
 - **How exactly it is used**: <specific APIs, call patterns>
 
+## Test Scenarios
+
+<!-- For each test category (positive, negative, edge case), generate detailed test cases using the 6-element format -->
+
+### General setup
+<!-- Common test setup: fixtures, mocks, base configuration -->
+
+### Source file registry
+<!-- List exact files from source that tests should verify -->
+
+---
+
+### Positive tests
+
+#### test_<what>_<scenario>
+
+**Setup**: <exact fixture setup>
+
+**Input**: <exact values>
+
+**Trace**:
+1. <step 1>: <what happens>
+2. <step 2>: <what happens>
+...
+
+**Assertions**:
+```
+<assert statements>
+```
+
+**Sufficiency**: <why this test is needed and what regression it prevents>
+
+---
+
+### Negative tests
+<!-- same format per test case -->
+
+### Edge case tests
+<!-- same format per test case -->
+
 ## Additional Instructions for the Implementation Agent
 
 - <instruction>
