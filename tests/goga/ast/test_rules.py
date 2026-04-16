@@ -31,10 +31,10 @@ from goga.ast.rules import (
     ImportHasNotDuplicate,
     ImportHasType,
     ImportHasValidFromPath,
+    ImportIsUsed,
     ImportsCanNotBeEmpty,
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
-    ImportIsUsed,
     ImportTypeExists,
     MutationExists,
     MutationIsValid,
@@ -1813,7 +1813,7 @@ class TestSignatureIsValid:
 # ---------------------------------------------------------------------------
 
 
-def _make_import_is_used_doc(
+def _make_import_is_used_doc(  # noqa: PLR0913
     *,
     import_names: set[str] | None = None,
     import_from: str = "goga/ast/nodes",
@@ -1955,7 +1955,6 @@ class TestImportIsUsed:
         entity = EntityTypeNode(name="Node", embedded=True, properties=[prop])
         node = _make_import_is_used_doc(entities=[entity], embeddings=[("Node", "goga/ast/nodes")])
         rule = ImportIsUsed()
-        errors = rule.check(node)
         # The embedding itself counts as usage, so no error expected
         assert rule.check(node) == []
 
