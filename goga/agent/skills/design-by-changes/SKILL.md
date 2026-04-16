@@ -50,7 +50,7 @@ Compare CODEMANIFEST contracts with current implementation:
 
 Run:
 ```
-docker run --rm -it -v .:/project -w /project goga linter
+docker run --rm -v .:/project -w /project goga linter
 ```
 
 Analyze the linter output. Fix syntax errors in CODEMANIFEST if the linter finds them (the linter validates DSL syntax; semantic content of the contract does not change).
@@ -158,7 +158,7 @@ Before completing the response, verify:
 
 1. Was a git diff of CODEMANIFEST performed between the current branch and the base branch?
 2. Was a gap analysis performed (contract vs current implementation)?
-3. Was the linter run: `docker run --rm -it -v .:/project -w /project goga linter`?
+3. Was the linter run: `docker run --rm -v .:/project -w /project goga linter`?
 4. Was a brainstorm performed analyzing implementation details not specified by the DSL?
 4b. Was a code stack trace performed for each contract entry point with checkpoints?
 4c. Were issues found during tracing resolved before proceeding?

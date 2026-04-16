@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -7,6 +8,8 @@ import click
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import init
+
+_init_module = sys.modules["goga.commands.init"]
 
 
 class TestFacadeAvailability:
@@ -34,7 +37,7 @@ class TestLogicPositive:
     """Positive scenario tests for the init command."""
 
     def test_init_default_agent(self, tmp_path: Path) -> None:
-        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["init"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
@@ -48,7 +51,7 @@ class TestLogicPositive:
         assert "Installed 3 skills" in result.output
 
     def test_init_claude_agent_explicit(self, tmp_path: Path) -> None:
-        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["init", "--agent", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
@@ -60,7 +63,7 @@ class TestLogicNegative:
     """Negative scenario tests for the init command."""
 
     def test_init_unknown_agent(self, tmp_path: Path) -> None:
-        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["init", "--agent", "unknown"])
         assert result.exit_code == 1
         assert "unsupported agent" in result.output
@@ -71,7 +74,7 @@ class TestLogicEdgeCases:
     """Edge case tests for the init command."""
 
     def test_init_creates_target_dir(self, tmp_path: Path) -> None:
-        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["init"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
@@ -81,9 +84,9 @@ class TestLogicEdgeCases:
 
     def test_init_source_missing(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.init.Path.home", return_value=tmp_path),
-            mock.patch(
-                "goga.commands.init._get_source_dir",
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(
+                _init_module, "_get_source_dir",
                 return_value=tmp_path / "nonexistent",
             ),
         ):
@@ -94,9 +97,9 @@ class TestLogicEdgeCases:
 
     def test_init_oserror_during_install(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.init.Path.home", return_value=tmp_path),
-            mock.patch(
-                "goga.commands.init._install_commands",
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(
+                _init_module, "_install_commands",
                 side_effect=OSError("permission denied"),
             ),
         ):
@@ -111,7 +114,7 @@ class TestIntegration:
     SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
 
     def _invoke_init(self, tmp_path: Path) -> click.testing.Result:
-        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             return CliRunner().invoke(app, ["init"])
 
     def test_init_idempotent(self, tmp_path: Path) -> None:
