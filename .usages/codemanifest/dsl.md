@@ -186,7 +186,7 @@ location: loader.py
 Имеет обязательно `methods` и/или `properties`.
 
 ```yaml
-"SomeEntity":
+SomeEntity():
   location: <file.ext>
   annotations: |
     ...
