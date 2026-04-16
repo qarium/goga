@@ -2,6 +2,7 @@ Imports:
   - Types:
       - linter
       - build
+      - init
     From: goga/commands
   - Types:
       - AST
@@ -27,6 +28,7 @@ app():
     Команды:
     - `linter`
     - `build`
+    - `init`
 
 ---
 
