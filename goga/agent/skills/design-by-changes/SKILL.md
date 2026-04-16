@@ -57,12 +57,36 @@ Analyze the linter output. Fix syntax errors in CODEMANIFEST if the linter finds
 
 ### Step 4: Brainstorm
 
-Based on the collected data, perform analysis:
+Based on the collected data, perform analysis in the following order:
+
+#### 4a. Code Stack Trace
+
+For each contract entry point (method, function, constructor), trace the full logical chain through the code from start to finish:
+
+1. **Entry point**: what triggers this code path (constructor call, method call, function call)
+2. **Input**: what data arrives, in what form, from where
+3. **Each intermediate step**: what transformation/validation/lookup happens, what is returned, what is passed forward
+4. **External calls**: what imported types provide, what Usages libraries return, how they are called
+5. **Output**: what the final result is, in what form, where it goes
+
+At each step, set **checkpoints** — verify:
+- does the data type match what the next step expects?
+- is the transformation logically correct?
+- are there missing intermediate steps that the contract assumes but doesn't state?
+- does the external library usage match its actual API (check Usages specs)?
+
+If at any checkpoint the logic breaks — record the issue and resolve it before continuing.
+
+**Important**: do this trace by reading actual source files for existing code and actual library documentation for Usages. Do not assume — verify.
+
+#### 4b. Analysis
+
+Based on the stack trace results, perform analysis:
 - what new contract entities exist and how they interact
 - implementation details not specified by the DSL (patterns, specific libraries from Usages, architectural decisions)
 - cross-cutting concerns (error handling, logging, validation, caching, concurrency)
 - dependencies between entities
-- potential issues and edge cases
+- potential issues and edge cases found during tracing
 - data flows between entities
 - Usages analysis: what each entry provides, where it is used, why it was chosen, how exactly it is used
 
@@ -114,6 +138,8 @@ Before completing the response, verify:
 2. Was a gap analysis performed (contract vs current implementation)?
 3. Was the linter run: `docker run --rm -it -v .:/project -w /project goga linter`?
 4. Was a brainstorm performed analyzing implementation details not specified by the DSL?
+4b. Was a code stack trace performed for each contract entry point with checkpoints?
+4c. Were issues found during tracing resolved before proceeding?
 5. Is entity interaction and data flow described?
 6. For each entity: are pattern, state management, error handling, and edge cases described?
 7. Are cross-cutting concerns described (error handling, logging, validation)?

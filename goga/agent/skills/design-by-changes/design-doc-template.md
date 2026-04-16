@@ -67,6 +67,26 @@ If a section cannot be completed because information is unavailable, keep the se
 ### Dependencies between entities
 <!-- Which entities depend on which, initialization order, circular dependencies (if any) -->
 
+## Code Stack Trace
+
+<!-- For each contract entry point (method, function, constructor), trace the full logical chain -->
+
+### Trace: `<Entity.method>` or `<function>`
+
+#### Chain
+1. **Entry**: <what triggers this path>
+2. **Step**: <what happens, what is passed forward> → checkpoint: <type/logic verified?>
+3. **Step**: <what happens, what is passed forward> → checkpoint: <type/logic verified?>
+4. ... continue until output
+5. **Output**: <final result, form, destination>
+
+#### Checkpoints summary
+- <checkpoint 1>: <verified/issue found — describe>
+- <checkpoint 2>: <verified/issue found — describe>
+
+#### Issues found during tracing
+- <issue>: <resolution>
+
 ## Design Decisions per Entity
 
 <!-- For each contract entity (new and modified): -->
