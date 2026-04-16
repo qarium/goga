@@ -4,9 +4,7 @@ from pathlib import Path
 from unittest import mock
 
 import click
-import pytest
 from click.testing import CliRunner
-
 from goga.cli import app
 from goga.commands import init
 
@@ -15,9 +13,7 @@ class TestFacadeAvailability:
     """Contract tests -- verify init is properly exposed as a click Command."""
 
     def test_init_importable(self) -> None:
-        from goga.commands import init as init_cmd
-
-        assert init_cmd is not None
+        assert init is not None
 
     def test_init_is_click_command(self) -> None:
         assert isinstance(init, click.Command)
@@ -76,7 +72,8 @@ class TestLogicEdgeCases:
 
     def test_init_creates_target_dir(self, tmp_path: Path) -> None:
         with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
-            CliRunner().invoke(app, ["init"])
+            result = CliRunner().invoke(app, ["init"])
+        assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert claude_dir.is_dir()
         assert (claude_dir / "commands" / "goga").is_dir()
@@ -93,9 +90,19 @@ class TestLogicEdgeCases:
             result = CliRunner().invoke(app, ["init"])
         assert result.exit_code == 1
         assert "agent resources not found" in result.output
-        assert (tmp_path / ".claude").is_dir()
-        assert not (tmp_path / ".claude" / "commands").exists()
-        assert not (tmp_path / ".claude" / "skills").exists()
+        assert not (tmp_path / ".claude").exists()
+
+    def test_init_oserror_during_install(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("goga.commands.init.Path.home", return_value=tmp_path),
+            mock.patch(
+                "goga.commands.init._install_commands",
+                side_effect=OSError("permission denied"),
+            ),
+        ):
+            result = CliRunner().invoke(app, ["init"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
 
 
 class TestIntegration:
@@ -160,6 +167,17 @@ class TestIntegration:
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
         assert installed_files == ["clarify.md", "design.md", "plan.md"]
+
+    def test_init_preserves_other_commands(self, tmp_path: Path) -> None:
+        other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"
+        other_cmd.mkdir(parents=True)
+        (other_cmd / "file.md").write_text("my other command content")
+
+        result = self._invoke_init(tmp_path)
+        assert result.exit_code == 0
+
+        assert (other_cmd / "file.md").read_text() == "my other command content"
+        assert (tmp_path / ".claude" / "commands" / "goga" / "clarify.md").is_file()
 
     def test_init_skill_files_recursive(self, tmp_path: Path) -> None:
         result = self._invoke_init(tmp_path)

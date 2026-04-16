@@ -44,9 +44,9 @@ def _install_skills(source: Path, target: Path) -> list[str]:
 
 def _print_summary(commands: list[str], skills: list[str], target: Path) -> None:
     """Print installation summary to stdout."""
-    click.echo(f"Installing goga commands to {target}/commands/goga/...")
+    click.echo(f"Installed goga commands to {target}/commands/goga/")
     click.echo(f"Installed {len(commands)} commands: {', '.join(commands)}")
-    click.echo(f"Installing goga skills to {target}/skills/...")
+    click.echo(f"Installed goga skills to {target}/skills/")
     click.echo(f"Installed {len(skills)} skills: {', '.join(skills)}")
 
 
@@ -61,12 +61,12 @@ def init(ctx: click.Context, agent: str) -> None:
         click.echo(f"Error: unsupported agent '{agent}'", err=True)
         ctx.exit(1)
 
-    target.mkdir(parents=True, exist_ok=True)
-
     source = _get_source_dir()
     if not source.is_dir():
         click.echo(f"Error: agent resources not found at {source}", err=True)
         ctx.exit(1)
+
+    target.mkdir(parents=True, exist_ok=True)
 
     try:
         commands = _install_commands(source, target)
