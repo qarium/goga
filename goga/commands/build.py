@@ -182,7 +182,7 @@ def _assemble_command(plan: str, config: dict, cli_options: dict) -> list[str]:
 
 
 @click.command()
-@click.argument("plan", default="docs/plans/plan.md")
+@click.argument("plan")
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
 @click.option("--worktree", is_flag=True, help="Enable ralphex worktree mode")
 @click.option("--skip-finalize", is_flag=True, help="Skip finalization")

@@ -56,10 +56,17 @@ class TestApiShape:
         param_names = [p.name for p in build_cmd.params]
         assert "plan" in param_names
 
-    def test_build_plan_default(self) -> None:
-        """The plan argument defaults to 'docs/plans/plan.md'."""
+    def test_build_plan_no_default_value(self) -> None:
+        """The plan argument has no default and is required."""
         plan_param = next(p for p in build_cmd.params if p.name == "plan")
-        assert plan_param.default == "docs/plans/plan.md"
+        assert plan_param.default != "docs/plans/plan.md"  # default was removed
+        assert plan_param.required is True
+
+    def test_build_plan_is_required(self, tmp_path) -> None:
+        """Calling build without a plan argument fails with exit code 2."""
+        result = _run_build_in_tmp(tmp_path)
+        assert result.exit_code == 2
+        assert "Missing argument" in result.output
 
     def test_build_has_eight_options(self) -> None:
         """The build command has 8 options (plus 1 argument)."""
@@ -96,13 +103,13 @@ class TestDryRun:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_dry_run_exit_code_zero(self, mock_which, tmp_path) -> None:
         """Dry-run mode exits with code 0."""
-        result = _run_build_in_tmp(tmp_path, ["--dry-run"])
+        result = _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
         assert result.exit_code == 0
 
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_dry_run_shows_command(self, mock_which, tmp_path) -> None:
         """Dry-run mode displays the assembled ralphex command."""
-        result = _run_build_in_tmp(tmp_path, ["--dry-run"])
+        result = _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
         assert "Dry run:" in result.output
         assert "ralphex" in result.output
         assert "plan.md" in result.output
@@ -111,7 +118,7 @@ class TestDryRun:
     def test_dry_run_does_not_call_ralphex(self, mock_which, tmp_path) -> None:
         """Dry-run mode does not invoke subprocess.call."""
         with mock.patch.object(subprocess, "call") as mock_call:
-            _run_build_in_tmp(tmp_path, ["--dry-run"])
+            _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
             mock_call.assert_not_called()
 
 
@@ -136,7 +143,7 @@ class TestGogaYmlReading:
             )
         )
 
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert settings["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "custom-haiku"
@@ -151,7 +158,7 @@ class TestGogaYmlReading:
         goga_yml = tmp_path / "goga.yml"
         goga_yml.write_text(yaml.dump({"build": {"models": {}}}))
 
-        result = _run_build_in_tmp(tmp_path)
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
 
         assert "Reading goga.yml" in result.output
 
@@ -161,7 +168,7 @@ class TestMissingGogaYml:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_default_models_in_settings(self, mock_which, mock_call, tmp_path) -> None:
         """Without goga.yml, settings.json uses default model values."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert settings["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == DEFAULT_BUILD_CONFIG["models"]["haiku"]
@@ -173,7 +180,7 @@ class TestMissingGogaYml:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_missing_goga_yml_output(self, mock_which, mock_call, tmp_path) -> None:
         """Without goga.yml, the command outputs 'goga.yml not found, using defaults'."""
-        result = _run_build_in_tmp(tmp_path)
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert "goga.yml not found, using defaults" in result.output
 
 
@@ -191,7 +198,7 @@ class TestSettingsMerge:
         }
         (claude_dir / "settings.json").write_text(json.dumps(existing_settings))
 
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((claude_dir / "settings.json").read_text())
         assert settings["custom_field"] == "preserved_value"
@@ -207,7 +214,7 @@ class TestSettingsMerge:
         existing_settings = {"env": {"EXISTING_VAR": "existing_val"}}
         (claude_dir / "settings.json").write_text(json.dumps(existing_settings))
 
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((claude_dir / "settings.json").read_text())
         assert "ANTHROPIC_DEFAULT_HAIKU_MODEL" in settings["env"]
@@ -219,7 +226,7 @@ class TestSettingsMerge:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_attribution_set(self, mock_which, mock_call, tmp_path) -> None:
         """The attribution section is set in settings.json."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "attribution" in settings
@@ -231,7 +238,7 @@ class TestClaudeWrapper:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_created(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh file is created in .ralphex/."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         assert wrapper_path.is_file()
@@ -240,7 +247,7 @@ class TestClaudeWrapper:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_content(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh has the correct shebang and content."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         content = wrapper_path.read_text()
@@ -250,7 +257,7 @@ class TestClaudeWrapper:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_wrapper_is_executable(self, mock_which, mock_call, tmp_path) -> None:
         """The claude-wrapper.sh file has execute permission."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         mode = wrapper_path.stat().st_mode
@@ -264,7 +271,7 @@ class TestDefaultsCopying:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_prompts_copied(self, mock_which, mock_call, tmp_path) -> None:
         """Default prompt files are copied to .ralphex/prompts/."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         prompts_dir = tmp_path / ".ralphex" / "prompts"
         assert prompts_dir.is_dir()
@@ -277,7 +284,7 @@ class TestDefaultsCopying:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_agents_copied(self, mock_which, mock_call, tmp_path) -> None:
         """Default agent files are copied to .ralphex/agents/."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         agents_dir = tmp_path / ".ralphex" / "agents"
         assert agents_dir.is_dir()
@@ -301,7 +308,7 @@ class TestDefaultsCopying:
         original_content = "ORIGINAL CONTENT DO NOT OVERWRITE"
         existing_file.write_text(original_content)
 
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         assert existing_file.read_text() == original_content
 
@@ -310,14 +317,14 @@ class TestRalphexNotFound:
     def test_error_message_in_output(self, tmp_path) -> None:
         """When ralphex is not found, error message appears in output."""
         with mock.patch.object(shutil, "which", return_value=None):
-            result = _run_build_in_tmp(tmp_path)
+            result = _run_build_in_tmp(tmp_path, ["plan.md"])
 
         assert "ralphex not found in PATH" in result.output
 
     def test_exit_code_one(self, tmp_path) -> None:
         """When ralphex is not found, exit code is 1."""
         with mock.patch.object(shutil, "which", return_value=None):
-            result = _run_build_in_tmp(tmp_path)
+            result = _run_build_in_tmp(tmp_path, ["plan.md"])
 
         assert result.exit_code == 1
 
@@ -327,12 +334,12 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_subprocess_called(self, mock_which, mock_call, tmp_path) -> None:
         """subprocess.call is invoked with the assembled ralphex command."""
-        _run_build_in_tmp(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
 
         mock_call.assert_called_once()
         cmd = mock_call.call_args[0][0]
         assert cmd[0] == "ralphex"
-        assert "docs/plans/plan.md" in cmd
+        assert "plan.md" in cmd
         assert "--config-dir" in cmd
         assert ".ralphex/" in cmd
 
@@ -340,7 +347,7 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_exit_code_zero_on_success(self, mock_which, mock_call, tmp_path) -> None:
         """Successful ralphex execution yields exit code 0."""
-        result = _run_build_in_tmp(tmp_path)
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 0
 
     @mock.patch.object(subprocess, "call", return_value=0)
@@ -356,7 +363,7 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_worktree_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --worktree CLI flag is forwarded to ralphex."""
-        _run_build_in_tmp(tmp_path, ["--worktree"])
+        _run_build_in_tmp(tmp_path, ["plan.md", "--worktree"])
 
         cmd = mock_call.call_args[0][0]
         assert "--worktree" in cmd
@@ -365,7 +372,7 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_skip_finalize_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --skip-finalize CLI flag is forwarded to ralphex."""
-        _run_build_in_tmp(tmp_path, ["--skip-finalize"])
+        _run_build_in_tmp(tmp_path, ["plan.md", "--skip-finalize"])
 
         cmd = mock_call.call_args[0][0]
         assert "--skip-finalize" in cmd
@@ -374,7 +381,7 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_session_timeout_forwarded(self, mock_which, mock_call, tmp_path) -> None:
         """The --session-timeout CLI option is forwarded to ralphex."""
-        _run_build_in_tmp(tmp_path, ["--session-timeout", "30m"])
+        _run_build_in_tmp(tmp_path, ["plan.md", "--session-timeout", "30m"])
 
         cmd = mock_call.call_args[0][0]
         assert "--session-timeout" in cmd
@@ -384,5 +391,5 @@ class TestRalphexExecution:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_nonzero_exit_propagated(self, mock_which, mock_call, tmp_path) -> None:
         """Non-zero ralphex return code is propagated as exit code."""
-        result = _run_build_in_tmp(tmp_path)
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 42
