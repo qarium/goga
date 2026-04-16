@@ -86,7 +86,8 @@ class TestLogicEdgeCases:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
-                _init_module, "_get_source_dir",
+                _init_module,
+                "_get_source_dir",
                 return_value=tmp_path / "nonexistent",
             ),
         ):
@@ -99,7 +100,8 @@ class TestLogicEdgeCases:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
-                _init_module, "_install_commands",
+                _init_module,
+                "_install_commands",
                 side_effect=OSError("permission denied"),
             ),
         ):
