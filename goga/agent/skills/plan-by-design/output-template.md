@@ -12,9 +12,6 @@ If a section cannot be completed because information is unavailable, keep the se
 
 # Plan: `<feature-name>`
 
-> Output of Phase 1 (structure) + Phase 2 (Usages calibration). Saved to `docs/plans/<feature-name>.md`.
-> This format is compatible with ralphex execution.
-
 ## Goal
 
 Concise statement of what will be implemented or changed.

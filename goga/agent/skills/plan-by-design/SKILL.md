@@ -30,10 +30,14 @@ If the design document does not exist — the agent must stop and ask the user t
 
 2. **Extract the architectural solution** — from the design document extract:
    - contract changes (new/modified/deleted entities)
+   - facts and assumptions — ground the plan in verified context
    - design decisions per entity (pattern, state, errors, edge cases)
    - cross-cutting concerns
    - entity interactions and data flows
    - Usages analysis with rationale
+   - test scenarios — detailed test cases with setup, input, trace, assertions, and sufficiency
+   - additional instructions for the implementation agent
+   - code stack trace checkpoints — verified logic chains that must be preserved
 
 ---
 
@@ -58,8 +62,14 @@ The design document contains a complete architectural solution — Phase 1 decom
 3. **Transfer architecture from design document into tasks** — for each entity from the design document:
    - design decisions (pattern, state management, error handling, edge cases) → instructions in task context
    - cross-cutting concerns → instructions in relevant tasks
-   - data flows and entity interactions → context for tasks implementing these interactions
+   - interaction diagrams → include verbatim in the task context that implements the primary entity (the AI agent uses these diagrams to understand call hierarchy)
+   - data flows and entity interactions → include verbatim in the task context that implements these interactions, with full step-by-step traces showing intermediate values and file paths (the AI agent uses these to write correct assertions and understand state transitions)
+   - facts and assumptions → context in relevant tasks, so the implementation agent works with verified knowledge
+   - test scenarios → specific test instructions in task "Logic tests" and "Contract tests" checkboxes, including exact setup, input values, assertions, AND test traces (step-by-step execution trace from the design document showing what happens at each step during the test) from the design document
+   - additional instructions → appended to relevant task context
+   - code stack trace checkpoints → key verified logic paths included in task context where relevant
    Tasks should reflect the architectural solution from the design document, not restate it entirely — each task receives the relevant portion.
+   **Critical**: the design document's interaction diagrams, data flow traces, and test traces contain verified knowledge about intermediate states, file paths, and execution order. The implementation agent relies on this detail to write correct code and tests. Transfer these verbatim or near-verbatim into the relevant task context rather than summarizing them.
 
 4. **Compile DSL into tasks** — follow all rules from the sections "DSL Compilation Rules", "Execution Planning Rules", "Test Planning Rules".
 
@@ -561,6 +571,11 @@ Before completing the response, verify:
 3. Were changes in Usages relative to the previous state identified?
 4. Was the Annotations drill-down performed (file → entity → method/property)?
 5. Were architectural decisions from the design document transferred into tasks?
+5a. Were interaction diagrams from the design document transferred verbatim into relevant task context?
+5b. Were data flow traces (step-by-step with intermediate values) from the design document transferred into relevant task context?
+5c. Were test scenarios from the design document transferred to task test instructions (setup, input, assertions, AND test traces)?
+5d. Were facts and assumptions from the design document included in relevant task context?
+5e. Were additional instructions from the design document transferred to tasks?
 6. Are all contract entities included (classes and standalone functions)?
 7. Are all `location` obligations and facade availability requirements preserved?
 8. Are semantic requirements from descriptions included in task instructions?
