@@ -7,6 +7,14 @@ Imports:
       - DocumentRoot
     From: goga/ast/nodes
   - Types:
+      - Factory
+    From: goga/ast/factory
+  - Types:
+      - ASTRuleError
+      - DocumentRuleError
+      - DocumentNotFoundError
+    From: goga/ast/errors
+  - Types:
       # правила документа
       - ImportsCanNotBeEmpty
       - ImportHasType
@@ -30,18 +38,20 @@ Imports:
       - ImportsHasNotCyclicalDeps
       - EmbeddedTypeHasLowLevel
     From: goga/ast/rules
-  - Types:
-      - ASTRuleError
-      - DocumentRuleError
-      - DocumentNotFoundError
-    From: goga/ast/errors
 
 Usages:
   conventions: .usages/development/conventions.md
   nodes: |
     Использовать манифест goga/ast/nodes и его API дл работы с структурой документа
   factory: |
-    Использовать манифест goga/ast/factory и его API для создания документа
+    Создать объект CODEMANIFEST файла с использованием `Factory`
+
+    ```python
+    factory = Factory("path/to/dir/with/codemanifest")
+    document = factory.create()
+    ```
+
+    Для ориентации по document использовать api `DocumentRoot`.
   visitor: |
     Использовать манифест goga/ast/visitor и его API для анализа одного документа
   analyzer: |
