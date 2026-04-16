@@ -96,3 +96,87 @@ class TestLogicEdgeCases:
         assert (tmp_path / ".claude").is_dir()
         assert not (tmp_path / ".claude" / "commands").exists()
         assert not (tmp_path / ".claude" / "skills").exists()
+
+
+class TestIntegration:
+    """Integration tests for cross-cutting init command behaviors."""
+
+    SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
+
+    def _invoke_init(self, tmp_path: Path) -> click.testing.Result:
+        with mock.patch("goga.commands.init.Path.home", return_value=tmp_path):
+            return CliRunner().invoke(app, ["init"])
+
+    def test_init_idempotent(self, tmp_path: Path) -> None:
+        first = self._invoke_init(tmp_path)
+        assert first.exit_code == 0
+
+        second = self._invoke_init(tmp_path)
+        assert second.exit_code == 0
+
+        source_clarify = self.SOURCE_DIR / "commands" / "clarify.md"
+        target_clarify = tmp_path / ".claude" / "commands" / "goga" / "clarify.md"
+        assert target_clarify.read_text() == source_clarify.read_text()
+
+    def test_init_preserves_existing_files(self, tmp_path: Path) -> None:
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / "CLAUDE.md").write_text("keep this content")
+        (claude_dir / "settings.json").write_text('{"key": "value"}')
+        (claude_dir / "README.md").write_text("readme content")
+
+        result = self._invoke_init(tmp_path)
+        assert result.exit_code == 0
+
+        assert (claude_dir / "CLAUDE.md").read_text() == "keep this content"
+        assert (claude_dir / "settings.json").read_text() == '{"key": "value"}'
+        assert (claude_dir / "README.md").read_text() == "readme content"
+        assert (claude_dir / "commands" / "goga" / "clarify.md").is_file()
+
+    def test_init_preserves_other_skills(self, tmp_path: Path) -> None:
+        custom = tmp_path / ".claude" / "skills" / "my-custom-skill"
+        custom.mkdir(parents=True)
+        (custom / "SKILL.md").write_text("my custom skill content")
+
+        result = self._invoke_init(tmp_path)
+        assert result.exit_code == 0
+
+        assert (custom / "SKILL.md").read_text() == "my custom skill content"
+        assert (tmp_path / ".claude" / "skills" / "clarify-design" / "SKILL.md").is_file()
+
+    def test_init_replaces_old_commands(self, tmp_path: Path) -> None:
+        goga_cmds = tmp_path / ".claude" / "commands" / "goga"
+        goga_cmds.mkdir(parents=True)
+        (goga_cmds / "old-deleted-command.md").write_text("should be removed")
+        (goga_cmds / "clarify.md").write_text("old version")
+
+        result = self._invoke_init(tmp_path)
+        assert result.exit_code == 0
+
+        assert not (goga_cmds / "old-deleted-command.md").exists()
+
+        source_clarify = self.SOURCE_DIR / "commands" / "clarify.md"
+        assert (goga_cmds / "clarify.md").read_text() == source_clarify.read_text()
+
+        installed_files = sorted(p.name for p in goga_cmds.iterdir())
+        assert installed_files == ["clarify.md", "design.md", "plan.md"]
+
+    def test_init_skill_files_recursive(self, tmp_path: Path) -> None:
+        result = self._invoke_init(tmp_path)
+        assert result.exit_code == 0
+
+        skills_dir = tmp_path / ".claude" / "skills"
+
+        clarify_design = skills_dir / "clarify-design"
+        assert len(list(clarify_design.iterdir())) == 1
+        assert (clarify_design / "SKILL.md").is_file()
+
+        dbc = skills_dir / "design-by-changes"
+        assert len(list(dbc.iterdir())) == 2
+        assert (dbc / "SKILL.md").is_file()
+        assert (dbc / "design-doc-template.md").is_file()
+
+        pbd = skills_dir / "plan-by-design"
+        expected = {"SKILL.md", "README.md", "conventions.md", "dsl-spec.md", "example.md", "output-template.md"}
+        actual = {p.name for p in pbd.iterdir()}
+        assert actual == expected
