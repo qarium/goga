@@ -46,6 +46,10 @@ class TestRegisteredCommands:
         """The 'build' command is registered on the app group."""
         assert "build" in app.commands
 
+    def test_init_command_registered(self) -> None:
+        """The 'init' command is registered on the app group."""
+        assert "init" in app.commands
+
     def test_both_commands_registered(self) -> None:
         """Both 'linter' and 'build' commands are present in app.commands."""
         command_names = set(app.commands.keys())
@@ -70,6 +74,12 @@ class TestHelpOutput:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert "build" in result.output
+
+    def test_help_contains_init(self) -> None:
+        """The --help output lists the 'init' command."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "init" in result.output
 
     def test_help_contains_both_commands(self) -> None:
         """The --help output contains both 'linter' and 'build'."""
