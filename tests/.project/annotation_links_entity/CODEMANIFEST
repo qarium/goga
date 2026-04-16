@@ -2,7 +2,7 @@
 
 ---
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   annotations: |
     Entity with `bad_entity_link` and `OtherEntity`
@@ -10,7 +10,7 @@
     "method() -> void:null": |
       Test method
 
-"OtherEntity":
+"OtherEntity()":
   location: other.py
   annotations: |
     Other entity

@@ -165,7 +165,7 @@ DocumentNode::PropertyNode():
     annotations -> AnnotationsNode: |
       Аннотации свойства
 
-DocumentNode::FooterNode:
+DocumentNode::FooterNode():
   location: footer.py
   properties:
     author -> str: |

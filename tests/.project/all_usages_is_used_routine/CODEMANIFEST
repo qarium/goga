@@ -6,7 +6,7 @@ Usages:
 
 ---
 
-"MyRoutine":
+"MyRoutine()":
   location: entity.py
   annotations: |
     Use `used_pattern` here

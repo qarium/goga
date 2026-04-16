@@ -18,10 +18,7 @@ def _load_expected(case_dir: Path) -> list[dict]:
 def _collect_cases(project_root: Path) -> list[Path]:
     if not project_root.is_dir():
         return []
-    return sorted(
-        d for d in project_root.rglob("*")
-        if d.is_dir() and (d / ".expected.yaml").exists()
-    )
+    return sorted(d for d in project_root.rglob("*") if d.is_dir() and (d / ".expected.yaml").exists())
 
 
 @pytest.mark.parametrize(
@@ -39,9 +36,7 @@ def test_ast_rules(case_dir: Path, project_root: Path) -> None:
         expected_errors = _load_expected(case_dir)
 
         case_rel = os.path.normpath(case_dir.relative_to(project_root))
-        case_errors = [
-            e for e in ast_obj.errors if os.path.normpath(e.document.path) == case_rel
-        ]
+        case_errors = [e for e in ast_obj.errors if os.path.normpath(e.document.path) == case_rel]
     finally:
         os.chdir(origin)
 
@@ -63,11 +58,9 @@ def test_ast_rules(case_dir: Path, project_root: Path) -> None:
         if not found:
             unmatched.append(expected)
 
-    assert not unmatched, (
-        f"Unmatched expected errors ({len(unmatched)}):\n"
-        + "\n".join(f"  rule={e['rule']!r}, message={e['message']!r}" for e in unmatched)
+    assert not unmatched, f"Unmatched expected errors ({len(unmatched)}):\n" + "\n".join(
+        f"  rule={e['rule']!r}, message={e['message']!r}" for e in unmatched
     )
-    assert not remaining, (
-        f"Unexpected actual errors ({len(remaining)}):\n"
-        + "\n".join(f"  rule={e.rule!r}, message={e.message!r}" for e in remaining)
+    assert not remaining, f"Unexpected actual errors ({len(remaining)}):\n" + "\n".join(
+        f"  rule={e.rule!r}, message={e.message!r}" for e in remaining
     )

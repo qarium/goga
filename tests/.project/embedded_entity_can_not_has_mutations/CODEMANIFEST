@@ -4,13 +4,16 @@ Imports:
       - MutatedEntity
     From: embedded_entity_can_not_has_mutations/embedded_entity_can_not_has_mutations_helper
 
+Annotations: |
+  Base entity `BaseEntity` for testing embedded mutations.
+
 ---
 
 # valid
-->MutatedEntity:
+->MutatedEntity():
   location: entity.py
   annotations: |
     Embedded mutated entity
 
 # not valid
-"->BaseEntity::MutatedEntity": {}
+"->BaseEntity::MutatedEntity()": {}

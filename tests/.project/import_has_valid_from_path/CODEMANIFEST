@@ -2,12 +2,12 @@
 
 ---
 
-"MyHelperEntity":
+"MyHelperEntity()":
   location: entity.py
   annotations: |
     Helper entity
 
-"MyHelperEntity2":
+"MyHelperEntity2()":
   location: entity.py
   annotations: |
     Helper entity

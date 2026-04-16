@@ -581,14 +581,14 @@ class Factory:
             if name in import_lookup:
                 embeddings.append((name, import_lookup[name]))
             unmatched_routines.append(
-                    RoutineTypeNode(
-                        name=name,
-                        signature=signature,
-                        embedded=True,
-                        annotations=AnnotationsNode(text=text, links=self._extract_links(text)),
-                        data=data,
-                    )
+                RoutineTypeNode(
+                    name=name,
+                    signature=signature,
+                    embedded=True,
+                    annotations=AnnotationsNode(text=text, links=self._extract_links(text)),
+                    data=data,
                 )
+            )
 
         return embeddings, unmatched_entities, unmatched_routines
 

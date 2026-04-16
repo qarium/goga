@@ -18,7 +18,7 @@ ExistentBaseTwo():
     "method() -> void:null": |
       Test method
 
-"NonExistentBaseOne::MyEntityOne":
+"NonExistentBaseOne::MyEntityOne()":
   location: entity.py
   annotations: |
     Mutation from non-existent type
@@ -26,7 +26,7 @@ ExistentBaseTwo():
     "method_1() -> void:null": |
       Test method
 
-"ExistentBaseOne::NonExistentBaseTwo::MyEntityTwo":
+"ExistentBaseOne::NonExistentBaseTwo::MyEntityTwo()":
   location: entity.py
   annotations: |
     Mutation from non-existent type
@@ -34,7 +34,7 @@ ExistentBaseTwo():
     "method_1() -> void:null": |
       Test method
 
-"ExistentBaseOne::ExistentBaseTwo::NonExistentBaseThree::MyEntityThree":
+"ExistentBaseOne::ExistentBaseTwo::NonExistentBaseThree::MyEntityThree()":
   location: entity.py
   annotations: |
     Mutation from non-existent type

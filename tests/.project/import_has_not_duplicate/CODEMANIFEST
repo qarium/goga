@@ -10,7 +10,7 @@ Imports:
 
 ---
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   annotations: |
     Test entity

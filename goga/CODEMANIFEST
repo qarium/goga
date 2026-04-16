@@ -19,7 +19,7 @@ Annotations: |
 
 ->AST: {}
 
-app:
+app():
   location: cli.py
   annotations: |
     Для создания корневой группы команд использовать практику `click`.

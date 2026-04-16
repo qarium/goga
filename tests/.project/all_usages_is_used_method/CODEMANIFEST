@@ -6,7 +6,7 @@ Usages:
 
 ---
 
-"MyEntity":
+"MyEntity()":
   location: entity.py
   methods:
     method_name(): |

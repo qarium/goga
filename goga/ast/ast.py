@@ -17,6 +17,7 @@ from .rules import (
     ImportHasNotDuplicate,
     ImportHasType,
     ImportHasValidFromPath,
+    ImportIsUsed,
     ImportsCanNotBeEmpty,
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
@@ -25,6 +26,7 @@ from .rules import (
     MutationIsValid,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
+    SignatureIsValid,
     UsageLinksHasNotConflicts,
 )
 from .visitor import Visitor
@@ -73,7 +75,7 @@ class AST:
         # Walk directories top-down so parents are loaded before children
         for dirpath, dirnames, filenames in os.walk(self._path):
             # Skip .project test fixture directories (exact match, not substring)
-            dirnames[:] = [d for d in dirnames if d != '.project']
+            dirnames[:] = [d for d in dirnames if d != ".project"]
             if "CODEMANIFEST" not in filenames:
                 continue
 
@@ -127,6 +129,8 @@ class AST:
             ImportsHasOnlyValidKeys(),
             EntityHasOnlyValidKeys(),
             RoutineHasOnlyValidKeys(),
+            ImportIsUsed(),
+            SignatureIsValid(),
         ]
 
         for doc in all_documents:

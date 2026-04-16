@@ -3,9 +3,12 @@ Imports:
       - SiblingEntity
     From: embedded_type_has_low_level_helper
 
+Annotations: |
+  Import invalid `SiblingEntity` from top level.
+
 ---
 
-->TestEntity:
+->TestEntity():
   location: entity.py
   annotations: |
     Import invalid `SiblingEntity` from top level

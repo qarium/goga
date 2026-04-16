@@ -8,7 +8,7 @@ SelfRef():
   properties:
     prop: ""
 
-"SelfRefOne::SelfRefOne":
+"SelfRefOne::SelfRefOne()":
   location: entity.py
   annotations: |
     Self-referencing mutation
@@ -16,7 +16,7 @@ SelfRef():
     "method() -> void:null": |
       Test method
 
-"SelfRefTwo::SelfRef::SelfRefTwo":
+"SelfRefTwo::SelfRef::SelfRefTwo()":
   location: entity.py
   annotations: |
     Self-referencing mutation
@@ -24,7 +24,7 @@ SelfRef():
     "method() -> void:null": |
       Test method
 
-"SelfRef::SelfRefThree::SelfRefThree":
+"SelfRef::SelfRefThree::SelfRefThree()":
   location: entity.py
   annotations: |
     Self-referencing mutation

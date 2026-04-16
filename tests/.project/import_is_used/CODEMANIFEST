@@ -1,0 +1,35 @@
+Imports:
+  - Types:
+      - NodeType
+      - NodeTypeUsed_1
+      - NodeTypeUsed_2
+      - NodeTypeUsed_3
+      - NodeTypeUsed_4
+      - NodeTypeUsed_5
+    From: import_is_used_helper
+
+Usages:
+  test: |
+    Test use `NodeTypeUsed_1` type
+
+Annotations: |
+  Test use `NodeTypeUsed_2` type
+  Use `test` for testing
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Test use `NodeTypeUsed_3` type
+  properties:
+    prop -> str: |
+      Test use `NodeTypeUsed_4` type
+  methods:
+    method_name(): |
+      Test use `NodeTypeUsed_5` type
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test
