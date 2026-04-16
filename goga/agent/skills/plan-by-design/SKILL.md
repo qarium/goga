@@ -601,6 +601,19 @@ If any answer is "no" — revise the plan before returning it.
 
 ---
 
+## Present Summary
+
+After saving the plan, output a concise summary for the user. The plan is long and the user should not need to read it end-to-end.
+
+The summary must include:
+- **Tasks table**: numbered list of all tasks with type (infrastructure / TDD coding / integration tests) and one-line description
+- **Key design decisions**: 3-5 bullet points max, covering the most important architectural choices
+- **Total test count**: how many test scenarios are planned (contract + logic + integration)
+
+Do NOT repeat the full plan content. Keep it under 20 lines.
+
+---
+
 ## Retrospective
 
 After completing all main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
