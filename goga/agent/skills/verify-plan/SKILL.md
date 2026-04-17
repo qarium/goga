@@ -17,7 +17,8 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 ## Sources of Truth
 
 1. `CODEMANIFEST` files — the contract surface (read **all** hierarchical CODEMANIFEST files)
-2. Design document at `docs/design/<feature-name>.md` — architectural solution
+2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
+3. Design document at `docs/design/<feature-name>.md` — architectural solution
 3. `dsl-spec.md` from the `plan-by-design` skill bundle — DSL reference
 4. `output-template.md` from the `plan-by-design` skill bundle — plan format reference
 
@@ -165,9 +166,11 @@ If ordering is violated — record as **Medium**.
 For each `Usages` entry relevant to the plan's scope (from the design document's affected entities):
 - Find at least one task in the plan that references this Usages entry
 - Verify the task contains specific information (what to use, how to call), not just a name mention
+- If the Usages entry value is a file path — verify the plan reflects the actual content from that file, not just the file path or usage name
 
 If a Usages entry is not present in any task — record as **Medium**.
 If a Usages mention is too vague — record as **Low**.
+If a Usages file path is mentioned but its content is not reflected — record as **Medium**.
 
 ---
 

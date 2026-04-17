@@ -52,6 +52,7 @@ The design document contains a complete architectural solution — Phase 1 decom
    - new external dependencies
    - modified specifications
    - new instructions for the implementation agent
+   - for each Usages entry whose value is a file path — read that file to get the actual specification content
 
 2. **Drill-down Annotations** — process annotations in a cascade:
    - **File level** → context for the entire package, embedded in every task of this package
@@ -210,9 +211,10 @@ You must not plan:
 Use the following sources jointly, when available:
 
 1. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files (e.g., `resq/utils/CODEMANIFEST`). If not found inside the package, check the project root as a fallback. Read **all** `CODEMANIFEST` files to build the complete contract.
-2. current package file tree
-3. current package source files
-4. git change context:
+2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
+3. current package file tree
+4. current package source files
+5. git change context:
    - added files,
    - modified files,
    - deleted files,
@@ -328,6 +330,7 @@ Include import context in task descriptions.
 ### Usages are implementation context and external dependencies
 `Usages` is a general-purpose section for attaching any external knowledge the implementation agent needs. It is not limited to libraries — it may reference external code in other languages, build instructions, protocols, conventions, specifications, or any resource the agent should know about.
 This includes third-party library types used in signatures (e.g., `requests.HTTPError`, `pydantic.BaseModel`), as well as specs explaining how to call a Rust/Go/C++ module, gRPC API definitions, or any external documentation.
+A Usages entry value can be either a **file path** (relative to the `CODEMANIFEST` file location) or **inline text**. When the value is a file path — read that file to get the actual specification content before including it in the plan.
 They provide context for the implementation agent — what each resource does and how to use it.
 Include Usages context in the plan so the AI implementation agent understands the available tools and how to work with them.
 

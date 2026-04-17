@@ -16,11 +16,12 @@ You create an **architectural solution** where every detail has been thought thr
 Use the following sources jointly, when available:
 
 1. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract.
-2. current package file tree
-3. current package source files
-4. git change context (added, modified, deleted files)
-5. `.qarium/ai/employees/lead.md` — project architecture, code patterns, conventions, `default_branch`
-6. `.qarium/ai/employees/developer.md` — project development conventions and build commands
+2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
+3. current package file tree
+4. current package source files
+5. git change context (added, modified, deleted files)
+6. `.qarium/ai/employees/lead.md` — project architecture, code patterns, conventions, `default_branch`
+7. `.qarium/ai/employees/developer.md` — project development conventions and build commands
 
 ---
 
@@ -66,7 +67,7 @@ For each contract entry point (method, function, constructor), trace the full lo
 1. **Entry point**: what triggers this code path (constructor call, method call, function call)
 2. **Input**: what data arrives, in what form, from where
 3. **Each intermediate step**: what transformation/validation/lookup happens, what is returned, what is passed forward
-4. **External calls**: what imported types provide, what Usages libraries return, how they are called
+4. **External calls**: what imported types provide, what Usages libraries return, how they are called. If a Usages entry references a file — read that file to understand the actual API and usage patterns
 5. **Output**: what the final result is, in what form, where it goes
 
 At each step, set **checkpoints** — verify:
@@ -77,7 +78,7 @@ At each step, set **checkpoints** — verify:
 
 If at any checkpoint the logic breaks — record the issue and resolve it before continuing.
 
-**Important**: do this trace by reading actual source files for existing code and actual library documentation for Usages. Do not assume — verify.
+**Important**: do this trace by reading actual source files for existing code and actual library documentation for Usages. If a Usages entry points to a spec file — read that file. Do not assume — verify.
 
 #### 4b. Analysis
 
