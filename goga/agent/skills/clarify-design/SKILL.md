@@ -129,41 +129,50 @@ For each test:
 
 ---
 
-### Step 4: Report findings
+### Step 4: Report and fix findings (interactive)
 
-Present all findings to the user, organized by severity:
+Collect all findings from Steps 2 and 3 before presenting them. Sort by severity: Critical → High → Medium → Low → Test gaps.
 
-#### Critical (blocks implementation)
-- <finding with exact reference to design section and what is wrong>
+Present findings **one at a time**. For each finding:
 
-#### High (will cause bugs)
-- <finding>
+#### 4a. Show the finding
 
-#### Medium (may cause issues in production)
-- <finding>
+Present a single finding with:
 
-#### Low (improvements, minor gaps)
-- <finding>
+- **Severity** (Critical / High / Medium / Low / Test gap)
+- **Location** — exact reference to design section
+- **What is wrong** — clear description of the issue
+- **Proposed fix** — the exact change needed, not vague advice. For test gaps: write the full 6-element trace (name, setup, input, trace, assertions, sufficiency)
 
-#### Test gaps
-For each missing test: write the full 6-element trace (name, setup, input, trace, assertions, sufficiency) for the missing scenario, marking it as a gap to be added to the design document.
+#### 4b. Ask the user for a decision
 
-For each finding, propose a **concrete fix** — not vague advice, but the exact change needed.
+Use AskUserQuestion with options:
 
----
+1. **Apply proposed fix** — apply the fix to the design document immediately
+2. **Skip** — do not fix, move to next finding
+3. **Propose alternative** — user describes a different fix approach
 
-### Step 5: Fix (with user approval)
+#### 4c. Apply the decision
 
-For each finding the user wants to fix:
+- **Apply proposed fix**: update the design document, then re-verify that the fix doesn't break other chains (trace through affected chains again). Report the re-verification result briefly.
+- **Skip**: record the finding as "skipped" and move on.
+- **Propose alternative**: discuss the alternative with the user, agree on the fix, apply it, re-verify affected chains.
 
-- Update the design document
-- Re-verify that the fix doesn't break other chains (trace through affected chains again)
+#### 4d. Move to next finding
+
+Repeat from 4a for the next finding. Show a brief counter: "Finding 3 of 12".
+
+After all findings are processed, show a summary:
+
+- **Fixed**: N findings (list by severity)
+- **Skipped**: N findings (list by severity)
+- **Design document status**: updated / unchanged
 
 ---
 
 ## Output
 
-- List of findings with severity, location, and proposed fix
+- Summary of findings: fixed / skipped counts by severity
 - Updated design document (if fixes were applied)
 
 ---
@@ -177,9 +186,10 @@ Before completing, verify:
 3. Were external dependencies verified against actual documentation?
 4. Was every test scenario traced through (positive, negative, edge)?
 5. Was test data sufficiency checked for each test?
-6. Are findings organized by severity with concrete fixes proposed?
+6. Was each finding presented one by one with a fix decision?
 7. Were approved fixes applied to the design document?
-8. Were affected chains re-traced after fixes?
+8. Were affected chains re-traced after each fix?
+9. Was a summary of fixed/skipped findings provided?
 
 If any answer is "no" — complete the missing verification before returning.
 
