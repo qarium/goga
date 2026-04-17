@@ -393,3 +393,135 @@ class TestRalphexExecution:
         """Non-zero ralphex return code is propagated as exit code."""
         result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 42
+
+
+class TestWrapperScriptEnvVariable:
+    def test_wrapper_script_uses_anthropic_api_token(self) -> None:
+        """Wrapper script constant contains ANTHROPIC_API_TOKEN, not ZAI_TOKEN."""
+        assert "ANTHROPIC_API_TOKEN" in CLAUDE_WRAPPER_SCRIPT
+        assert "ZAI_TOKEN" not in CLAUDE_WRAPPER_SCRIPT
+
+
+class TestCodexEnabledDefault:
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_default_false_in_config(self, mock_which, mock_call, tmp_path) -> None:
+        """Without goga.yml, codex_enabled defaults to false in .ralphex/config."""
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = false" in config_content
+
+
+class TestCodexEnabledFromGogaYml:
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_true_from_goga_yml(self, mock_which, mock_call, tmp_path) -> None:
+        """goga.yml with codex_enabled: true writes codex_enabled = true to config."""
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": True}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = true" in config_content
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_overwritten_on_rerun(self, mock_which, mock_call, tmp_path) -> None:
+        """Existing codex_enabled value is overwritten by new goga.yml value."""
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "config").write_text("codex_enabled = true\n")
+
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": False}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (ralphex_dir / "config").read_text()
+        assert "codex_enabled = false" in config_content
+        assert "codex_enabled = true" not in config_content
+        assert "claude_command = .ralphex/claude-wrapper.sh" in config_content
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_false_explicit_in_goga_yml(self, mock_which, mock_call, tmp_path) -> None:
+        """Explicit codex_enabled: false in goga.yml writes false to config."""
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": False}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = false" in config_content
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_invalid_type_in_goga_yml(self, mock_which, mock_call, tmp_path) -> None:
+        """Non-boolean codex_enabled value (string) is written as-is lowercased."""
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": "yes"}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = yes" in config_content
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_overwrite_preserves_other_keys(self, mock_which, mock_call, tmp_path) -> None:
+        """Overwriting codex_enabled preserves other custom keys."""
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "config").write_text("custom_key = custom_value\ncodex_enabled = false\n")
+
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": True}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (ralphex_dir / "config").read_text()
+        assert "codex_enabled = true" in config_content
+        assert "custom_key = custom_value" in config_content
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_overwrite_preserves_comments(self, mock_which, mock_call, tmp_path) -> None:
+        """Overwriting codex_enabled preserves comment lines."""
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "config").write_text(
+            "# ralphex settings\ncodex_enabled = true\n# other\ncustom_key = val\n"
+            "claude_command = .ralphex/claude-wrapper.sh\n"
+            "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose\n"
+        )
+
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"codex_enabled": False}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (ralphex_dir / "config").read_text()
+        lines = config_content.strip().splitlines()
+        expected = [
+            "# ralphex settings",
+            "codex_enabled = false",
+            "# other",
+            "custom_key = val",
+            "claude_command = .ralphex/claude-wrapper.sh",
+            "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose",
+        ]
+        assert lines == expected
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_enabled_missing_in_goga_yml_build_section(self, mock_which, mock_call, tmp_path) -> None:
+        """Missing codex_enabled in goga.yml build section uses default false."""
+        goga_yml = tmp_path / "goga.yml"
+        goga_yml.write_text(yaml.dump({"build": {"worktree": True}}))
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        config_content = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = false" in config_content
