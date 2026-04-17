@@ -1,6 +1,6 @@
 errors:
 - rule: import_has_valid_from_path
-  message: "Import in './import_has_valid_from_path/import_has_valid_from_path_helper'\
+  message: "Import in 'import_has_valid_from_path/import_has_valid_from_path_helper'\
     \ has empty source path (From field)"
   document_path: import_has_valid_from_path/import_has_valid_from_path_helper
   node_data:
@@ -24,21 +24,21 @@ errors:
     - MyHelperEntity2
     From: ../.project/import_has_valid_from_path_helper
 - rule: import_is_used
-  message: Type 'SomeType' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  message: Type 'SomeType' was imported, but not used in 'import_has_valid_from_path/import_has_valid_from_path_helper'
   document_path: import_has_valid_from_path/import_has_valid_from_path_helper
   node_data:
     Types:
     - SomeType
     From: ''
 - rule: import_is_used
-  message: Type 'MyHelperEntity' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  message: Type 'MyHelperEntity' was imported, but not used in 'import_has_valid_from_path/import_has_valid_from_path_helper'
   document_path: import_has_valid_from_path/import_has_valid_from_path_helper
   node_data:
     Types:
     - MyHelperEntity
     From: import_has_valid_from_path_helper
 - rule: import_is_used
-  message: Type 'MyHelperEntity2' was imported, but not used in './import_has_valid_from_path/import_has_valid_from_path_helper'
+  message: Type 'MyHelperEntity2' was imported, but not used in 'import_has_valid_from_path/import_has_valid_from_path_helper'
   document_path: import_has_valid_from_path/import_has_valid_from_path_helper
   node_data:
     Types:

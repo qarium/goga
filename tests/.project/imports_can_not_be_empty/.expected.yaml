@@ -1,6 +1,6 @@
 errors:
 - rule: imports_can_not_be_empty
-  message: Imports block in './imports_can_not_be_empty' is empty — each import must
+  message: Imports block in 'imports_can_not_be_empty' is empty — each import must
     specify at least Types and From
   document_path: imports_can_not_be_empty
   node_data: {}

@@ -9,7 +9,7 @@ errors:
     From: imports_has_only_valid_keys_helper
     ExtraKey: value
 - rule: import_is_used
-  message: Type 'SomeType' was imported, but not used in './imports_has_only_valid_keys'
+  message: Type 'SomeType' was imported, but not used in 'imports_has_only_valid_keys'
   document_path: imports_has_only_valid_keys
   node_data:
     Types:

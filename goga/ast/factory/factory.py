@@ -188,7 +188,8 @@ class Factory:
             if not isinstance(entry, dict):
                 continue
 
-            from_path = entry.get("From", "")
+            from_path_raw = str(entry.get("From", ""))
+            from_path = os.path.normpath(from_path_raw) if from_path_raw else ""
             types_list = entry.get("Types", [])
 
             if not isinstance(types_list, list):

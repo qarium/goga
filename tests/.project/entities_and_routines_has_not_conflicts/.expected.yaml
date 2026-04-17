@@ -13,7 +13,7 @@ errors:
 
         '
 - rule: import_is_used
-  message: Type 'ConflictingType' was imported, but not used in './entities_and_routines_has_not_conflicts'
+  message: Type 'ConflictingType' was imported, but not used in 'entities_and_routines_has_not_conflicts'
   document_path: entities_and_routines_has_not_conflicts
   node_data:
     Types:

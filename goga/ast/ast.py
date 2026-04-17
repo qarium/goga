@@ -79,7 +79,7 @@ class AST:
             if "CODEMANIFEST" not in filenames:
                 continue
 
-            dirpath_str = dirpath if isinstance(dirpath, str) else str(dirpath)
+            dirpath_str = os.path.normpath(dirpath)
 
             # Find the closest parent that has a CODEMANIFEST
             parent_doc: DocumentRoot | None = None

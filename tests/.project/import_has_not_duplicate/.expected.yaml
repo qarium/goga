@@ -18,7 +18,7 @@ errors:
     - EntityB
     From: import_has_not_duplicate_helper
 - rule: import_is_used
-  message: Type 'EntityA' was imported, but not used in './import_has_not_duplicate'
+  message: Type 'EntityA' was imported, but not used in 'import_has_not_duplicate'
   document_path: import_has_not_duplicate
   node_data:
     Types:
@@ -27,14 +27,14 @@ errors:
     - EntityB
     From: import_has_not_duplicate_helper
 - rule: import_is_used
-  message: Type 'EntityA' was imported, but not used in './import_has_not_duplicate'
+  message: Type 'EntityA' was imported, but not used in 'import_has_not_duplicate'
   document_path: import_has_not_duplicate
   node_data:
     Types:
     - EntityA
     From: import_has_not_duplicate_helper2
 - rule: import_is_used
-  message: Type 'EntityB' was imported, but not used in './import_has_not_duplicate'
+  message: Type 'EntityB' was imported, but not used in 'import_has_not_duplicate'
   document_path: import_has_not_duplicate
   node_data:
     Types:
@@ -43,7 +43,7 @@ errors:
     - EntityB
     From: import_has_not_duplicate_helper
 - rule: import_is_used
-  message: Type 'EntityB' was imported, but not used in './import_has_not_duplicate'
+  message: Type 'EntityB' was imported, but not used in 'import_has_not_duplicate'
   document_path: import_has_not_duplicate
   node_data:
     Types:

@@ -8,7 +8,7 @@ errors:
     - NonExistentType
     From: import_type_exists_helper
 - rule: import_is_used
-  message: Type 'NonExistentType' was imported, but not used in './import_type_exists'
+  message: Type 'NonExistentType' was imported, but not used in 'import_type_exists'
   document_path: import_type_exists
   node_data:
     Types:

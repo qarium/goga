@@ -7,11 +7,25 @@ Usages:
   click: .usages/tools/click.md
   conventions: .usages/development/conventions.md
   ralphex: .usages/tools/ralphex.md
-  codemanifest: |
+  documents: |
     Работать с типом `AST`.
-    Загрузить проект с использованием AST.load.
+
+    - Загрузить проект с использованием AST.load()
+    - Доступ к документам дерева через свойство AST.tree
+    - Ошибки брать из свойства AST.errors
+
     `AST` необходимо создавать с указанием пути в текущий CWD (".").
-    Ошибки брать из AST.errors.
+  beautiful_json: |
+    Сделать из python объекта json строку с учетом форматирования.
+
+    ```python
+    json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
+    ```
+
+    indent: количество отступов
+    sort_keys: упорядочить ключи словаря по алфавиту
+    ensure_ascii: отобразить корректно кириллицу или другие спецсимволы
+
   beautiful_yaml: |
     Сделать из python объекта yaml строку с учетом форматирования.
 
@@ -19,6 +33,7 @@ Usages:
     yaml.dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True, indent=2)
     ```
 
+    indent: количество отступов
     sort_keys: используется только для python 3.7 и выше, сохраняет порядок ключей
     default_flow_style: заменяет компактный вид [...] на классические списки с дефисом
     allow_unicode: позволяет выводить Unicode-символы (например, кириллицу) напрямую, а не кодами
@@ -38,7 +53,7 @@ Annotations: |
 
     Алгоритм:
     - Сменить CWD на указанный `path`
-    - Создать и загрузить проект с использованием практики `codemanifest`
+    - Создать и загрузить проект с использованием практики `documents`
     - Вывести все ошибки в указанном формате
 
     Формат ошибки:
@@ -184,6 +199,44 @@ Annotations: |
     - CLAUDE.md, settings.json, README.md целевого каталога не затрагивать
     - При отсутствии целевого каталога — создать
     - Код возврата: 0 при успехе, 1 при ошибке 
+
+"schema(cells: list[str], max_depth: int = None)":
+  location: schema.py
+  annotations: |
+    Команда выводит текущую схему проекта.
+
+    `cells`: последовательные аргументы командной строки, пути которые необходимо
+             показать в выводе, например "schema cell/path/one cell/path/two"
+    `max_depth`: опция --max-depth ограничивает максимальную вложенность дерева
+
+    Алгоритм:
+    - загрузить дерево документов проекта с помощью навыка `documents`
+    - рекурсивно сформировать дерево в виде json структуры документов с вложенностью в children
+    - вывести дерево json с помощью практики `beautiful_json`
+
+    Формат:
+    ```
+    {
+      "cell": <document path>,
+      "description": <document footer description>,
+      "usages": [<md files from .usage dir>],
+      "relations": [<set of from path of import items>],
+      "children": [<children cells structures>]
+    }
+    ```
+
+    Поля:
+    - cell: нормализованный относительно cwd путь до папки с CODEMANIFEST
+    - description: поле description из footer документа
+    - usages: нормализованные относительно cwd пути до *.md файлов в папке .usages рядом с CODEMANIFEST
+    - relations: уникальный набор путей из секции imports[*].from в header документа
+    - children: такие же вложенные документы согласно иерархии дерева
+
+    Дополнительные требования:
+    - если max_depth не указан - дерево выводится полностью
+    - вывод не должен содержать ничего кроме json структуры
+    - если дерево пустое → []
+    - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
 
 ---
 

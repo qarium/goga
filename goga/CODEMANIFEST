@@ -3,6 +3,7 @@ Imports:
       - linter
       - build
       - init
+      - schema
     From: goga/commands
   - Types:
       - AST
@@ -29,6 +30,7 @@ app():
     - `linter`
     - `build`
     - `init`
+    - `schema`
 
 ---
 
