@@ -88,14 +88,14 @@ Annotations: |
     3. Создать .ralphex/claude-wrapper.sh:
        ```
        #!/bin/bash
-       exec env ANTHROPIC_API_KEY="$ZAI_TOKEN" claude "$@"
+       exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
        ```
        - Установить chmod +x на скрипт
        - Перезаписывать при каждом запуске
        - Записать ralphex config defaults в .ralphex/config (не перезаписывать существующие ключи):
          - claude_command = .ralphex/claude-wrapper.sh
          - claude_args = --dangerously-skip-permissions --output-format stream-json --verbose
-         - codex_enabled = false
+       - Записать codex_enabled в .ralphex/config из goga.yml (по умолчанию false), перезаписывать при каждом запуске
     4. Копировать defaults из пакета goga (goga/config/defaults/) в .ralphex/:
        - prompts/ → .ralphex/prompts/
        - agents/ → .ralphex/agents/
@@ -120,6 +120,7 @@ Annotations: |
       review_patience: 0
       prompts_dir: ""
       agents_dir: ""
+      codex_enabled: false
       models:
         haiku: glm-4.7
         sonnet: glm-5-turbo
