@@ -1,4 +1,4 @@
-FROM ghcr.io/umputun/ralphex:latest
+FROM ghcr.io/umputun/ralphex:2.1.63
 
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
 
