@@ -13,6 +13,7 @@ import yaml
 DEFAULT_BUILD_CONFIG: dict = {
     "worktree": False,
     "skip_finalize": False,
+    "codex_enabled": False,
     "session_timeout": "",
     "idle_timeout": "",
     "wait": "",
@@ -28,7 +29,7 @@ DEFAULT_BUILD_CONFIG: dict = {
     },
 }
 
-CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ZAI_TOKEN" claude "$@"\n'
+CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"\n'
 
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
@@ -99,11 +100,10 @@ def _create_claude_settings(config: dict) -> None:
 RALPHEX_CONFIG_DEFAULTS = {
     "claude_command": ".ralphex/claude-wrapper.sh",
     "claude_args": "--dangerously-skip-permissions --output-format stream-json --verbose",
-    "codex_enabled": "false",
 }
 
 
-def _create_claude_wrapper() -> None:
+def _create_claude_wrapper(config: dict) -> None:
     """Create .ralphex/claude-wrapper.sh and set ralphex config defaults. Overwrites on every run."""
     click.echo("Creating .ralphex/claude-wrapper.sh...")
 
@@ -120,16 +120,26 @@ def _create_claude_wrapper() -> None:
     if config_path.is_file():
         config_lines = config_path.read_text().splitlines()
 
-    existing_keys = set()
-    for line in config_lines:
+    codex_value = str(config["codex_enabled"]).lower()
+    codex_line = f"codex_enabled = {codex_value}"
+
+    existing_keys: set[str] = set()
+    codex_found = False
+    for i, line in enumerate(config_lines):
         stripped = line.strip()
         if stripped and not stripped.startswith("#") and " = " in stripped:
             key = stripped.split(" = ", 1)[0].strip()
             existing_keys.add(key)
+            if key == "codex_enabled":
+                config_lines[i] = codex_line
+                codex_found = True
 
     for key, value in RALPHEX_CONFIG_DEFAULTS.items():
         if key not in existing_keys:
             config_lines.append(f"{key} = {value}")
+
+    if not codex_found:
+        config_lines.append(codex_line)
 
     config_path.write_text("\n".join(config_lines) + "\n")
 
@@ -208,7 +218,7 @@ def build(  # noqa: PLR0913
     """Build code via ralphex. Prepares environment and launches ralphex."""
     config = _read_goga_yml()
     _create_claude_settings(config)
-    _create_claude_wrapper()
+    _create_claude_wrapper(config)
     _copy_defaults(config)
 
     cli_options = {
