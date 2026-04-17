@@ -44,11 +44,13 @@ class TestLogicPositive:
         assert (claude_dir / "commands" / "goga" / "clarify.md").is_file()
         assert (claude_dir / "commands" / "goga" / "design.md").is_file()
         assert (claude_dir / "commands" / "goga" / "plan.md").is_file()
+        assert (claude_dir / "commands" / "goga" / "verify.md").is_file()
         assert (claude_dir / "skills" / "clarify-design" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "design-by-changes" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "plan-by-design" / "SKILL.md").is_file()
-        assert "Installed 3 commands" in result.output
-        assert "Installed 3 skills" in result.output
+        assert (claude_dir / "skills" / "verify-plan" / "SKILL.md").is_file()
+        assert "Installed 4 commands" in result.output
+        assert "Installed 4 skills" in result.output
 
     def test_init_claude_agent_explicit(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
@@ -171,7 +173,7 @@ class TestIntegration:
         assert (goga_cmds / "clarify.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
-        assert installed_files == ["clarify.md", "design.md", "plan.md"]
+        assert installed_files == ["clarify.md", "design.md", "plan.md", "verify.md"]
 
     def test_init_preserves_other_commands(self, tmp_path: Path) -> None:
         other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"
@@ -203,3 +205,7 @@ class TestIntegration:
         expected = {"SKILL.md", "README.md", "conventions.md", "dsl-spec.md", "example.md", "output-template.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
+
+        vp = skills_dir / "verify-plan"
+        assert len(list(vp.iterdir())) == 1
+        assert (vp / "SKILL.md").is_file()
