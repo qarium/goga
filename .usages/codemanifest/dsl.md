@@ -1,9 +1,23 @@
 # Спецификация DSL
 
-DSL документ должен располагаться в папке интерфейс которой он описывает.
-Имя манифест файла строго фиксированное - `CODEMANIFEST`.
+DSL документ (манифест) должен располагаться в папке интерфейс которой он описывает.
+Папка именуется клеткой (cell). Имя манифест файла строго фиксированное - `CODEMANIFEST`.
+
 Регистр ключей в yaml документе **ВАЖЕН**, если в спецификации задаются примеры с ключом с заглавной
 или с маленькой буквы, то ключ должен называться именно так, другое написание должно вести к ошибке структуры документа.
+
+В папке могут храниться usages которые описывают практики по работе к клеткой и ее API,
+usages хранятся в клетке в папке `.usages` но не являются обязательным условием.
+
+## Структура клетки (cell)
+
+cell/
+├── CODEMANIFEST
+└── .usages/*.md
+
+* cell - папка клетки
+* CODEMANIFEST - yaml dsl с описанием контракта API
+* .usages - папка с практиками которые описывают работу с клеткой
 
 ## Структура документа
 
@@ -34,7 +48,7 @@ DSL описывает **контракт пакета** - набор типов
 2. Тело
 3. Нижний колонтитул
 
-**ВАЖНО**: документ не описывает, *как именно реализовать код*, а фиксирует **ожидания к API и поведению**, которые LLM должен реализовать.
+**ВАЖНО**: документ не описывает, *как именно реализовать код*, а фиксирует **ожидания к API и поведению**, которые нужно реализовать.
 
 ---
 
@@ -42,7 +56,7 @@ DSL описывает **контракт пакета** - набор типов
 
 Заголовок задаёт контекст, в котором следует интерпретировать весь файл.
 
-#### Подключение типов
+#### Подключение типов и практик
 
 Типы из других файлов подключаются через `Imports` и далее используются в теле.
 
@@ -51,12 +65,18 @@ Imports:
   - Types:
       - ObjectOne
       - ObjectTwo AS Object
-    From: "folder"
+    Usages:
+      # path/to/cell/.usages/example_one.md
+      - example_one
+      # path/to/cell/.usages/example_two.md
+      - example_two AS example
+    From: path/to/cell
 ```
 
-Подключает доступные типы в рамках проекта.
+Подключает доступные типы и практики в рамках проекта.
 
 - `Types` - список имён типов
+- `Usages` - список имен практик которые хранятся в .usages директории клетки, используется имя файла без расширения `.md` 
 - `From` - источник (папка относительно рабочей директории в которой лежит `CODEMANIFEST` файл)
 - Синтаксис `ObjectTwo AS Object` означает, что `ObjectTwo` импортируется с именем `Object`
 
@@ -67,8 +87,13 @@ Imports:
 - мутировать и расширяться
 - встраиваться в текущий контракт
 
+Импортируемые практики:
+- располагаются в папке клетки в `<cell>/.usages`
+- импортируются по имени файла без расширения `.md`
+- не должны конфликтовать именами с текущими `Usages` в хедере документа (конфликт решается через создание альяса)
+
 Ограничения:
-- Импорты не могут быть перекрестными, то есть файл `A` не может подключать тип из файла `B` если файл `B` подключает тип из файла `A`
+- Импорты не могут быть перекрестными, то есть файл `A` не может подключать тип/практику из файла `B` если файл `B` подключает тип из файла `A`
 
 #### Usages
 
@@ -84,12 +109,18 @@ Imports:
 - ссылка на внешний файл
 - inline-описание
 
-```
+```yaml
+Imports:
+  - Usages:
+      # path/to/cell/.usages/usage.md
+      - usage
+    From: path/to/cell
+
 Usages:
   library: .specs/importlib.md
-  structures: .specs/structures.md
+  structures: http://goga.example/structures.md
   pattern: |
-    ...
+    Usage description here...
 ```
 
 **Ключ** - условная ссылка для описания аннотаций.
@@ -106,7 +137,7 @@ Usages:
 
 Они распространяются на весь документ.
 
-```
+```yaml
 Annotations: |
   Logic of contract here
 ```
@@ -154,6 +185,16 @@ DSL не фиксирует форму реализации - только ож�
 
 ##### Сигнатура
 
+```yaml
+"<Signature>":
+  location: <file.ext>
+  annotations: |
+    ...
+  methods:
+    "<signature>": |
+       ...
+```
+
 Сигнатура записывается в свободной форме, близкой к языкам программирования которую легко сможет ассоциировать LLM.
 
 Она:
@@ -168,8 +209,9 @@ DSL не фиксирует форму реализации - только ож�
 
 ##### location
 
-```
-location: loader.py
+```yaml
+Type():
+  location: file.ext
 ```
 
 Указывает логическое место размещения типа относительно корня текущей директории в формате имени файла.
@@ -234,7 +276,7 @@ SomeEntity():
 
 #### Routine тип
 
-Routine НЕ имеет `methods` и `properties`, она имеет контракт вида вход -> выход(не обязательно если ничего не возвращается).
+Routine НЕ имеет `methods` и `properties`, он имеет контракт вида вход -> выход(не обязательно если ничего не возвращается).
 
 ```yaml
 "some_routine(param: int) -> number:int": |
@@ -252,7 +294,7 @@ Routine НЕ имеет `methods` и `properties`, она имеет контр�
 
 Пример:
 
-```
+```yaml
 "function(n: int) -> number:int":
   location: tools.py
   annotations: |
@@ -265,7 +307,7 @@ DSL не фиксирует форму реализации - только ож�
 
 Для мутации типа используется форма:
 
-```
+```yaml
 "Object::SomeClass()":
   ...
 ```
@@ -296,7 +338,7 @@ DSL не фиксирует форму реализации - только ож�
 
 Кол-во типов к мутации не ограничено
 
-```
+```yaml
 "ObjectOne::ObjectTwo::SomeClass()":
   ...
 ```
@@ -336,7 +378,7 @@ Description: |
 Imports:
   - Types:
       - Entity
-    From: "folder"
+    From: path/to/cell
 
 ---
 
@@ -358,34 +400,45 @@ Imports:
 - какие практики применять
 - какие ограничения соблюдать
 
-Аннотации могут ссылаться на практики из `Usages`.
+Аннотации могут ссылаться на практики из `Usages` в header и в `Imports`.
 
 ```yaml
+Imports:
+  - Usages:
+      # path/to/cell/.usages/example.md
+      - example
+    From: path/to/cell
+
 Usages:
   pattern: |
     Pattern example
 
 Annotations: |
-  Use `pattern` for implementation
+  Use `example` from Imports
+  Use `pattern` from Usages
 
 ---
 
 "Object":
   annotations: |
-    Use `pattern` for implementation
+    Use `example` from Imports
+    Use `pattern` from Usages
   methods:
     "method() ->void:null": |
-      Use `pattern` for implementation
+      Use `example` from Imports
+      Use `pattern` from Usages
   properties:
     "name -> str": |
-      Use `pattern` for implementation
+      Use `example` from Imports
+      Use `pattern` from Usages
 ```
 
 ### Использование ссылок
 
 Ссылки могут быть на:
 - переменные в сигнатуре
-- любые типы которые находятся в контексте текущего `CODEMANIFEST` файла
+- любые типы которые находятся в контексте текущего `CODEMANIFEST` файла, в том числе в `Imports`
+- практики в `Usages` и `Imports`
 
 Ограничения:
 - ссылки обязательно обрамляются косыми кавычками, например - \`link_name\`
@@ -396,11 +449,17 @@ Imports:
   - Types:
       - ObjectOne as Object
       - ObjectTwo
+    Usages:
+      - usage_from_imports
+    From: path/to/cell
+
 Usages:
   usage_link: |
     Pattern example
 
 Annotations: |
+  Use `usage_from_imports` from Imports
+
   Use `usage_link` in this annotations
 
   Use `ObjectTwo` link from imports
@@ -408,14 +467,18 @@ Annotations: |
 
 ---
 
-"Object":
+Object():
   annotations: |
+    Use `usage_from_imports` from Imports
+
     Use `usage_link` in this annotations
 
     Use `Object` link from imports with alias
     Use `ObjectTwo` link from imports
   methods:
     "method(param_link: str) -> return_value_link:str": |
+      Use `usage_from_imports` from Imports
+  
       Use `usage_link` in this annotations
 
       Use `Object` link from imports with alias
@@ -425,6 +488,8 @@ Annotations: |
       Use `return_value_link` in this annotations
   properties:
     "name -> str": |
+      Use `usage_from_imports` from Imports
+
       Use `usage_link` in this annotations
 
       Use `Object` link from imports with alias
@@ -433,19 +498,34 @@ Annotations: |
 
 ### Глобальные аннотации
 
+```yaml
+Annotations: |
+  Global annotations in document header
+```
+
 Определяют общий контекст:
 
 - используемые библиотеки
 - принципы реализации
 - runtime-особенности
+- и тд
 
 Применяются ко всему документу.
 
 ### Аннотации практик
 
+```yaml
+Usages:
+  usage_file: path/to/usage.md
+  usage_url: http://usage.url/usage.md
+  usage_text: |
+    Inline text of usage in document header
+```
+
 Практики могут быть описаны:
 
 - через внешний файл
+- URL
 - inline
 
 Они задают:
@@ -453,6 +533,7 @@ Annotations: |
 - как использовать
 - какие подходы использовать
 - какие ограничения учитывать
+- и тд
 
 ---
 
@@ -487,7 +568,7 @@ Annotations: |
 
 ## Практики
 
-Практики - это внешний слой, определяющий **как реализовывать описанный фасад**.
+Практики - это слой, определяющий **как реализовывать описанный фасад**.
 
 Они не создают сущности, а задают правила реализации.
 
@@ -495,16 +576,23 @@ Annotations: |
 
 ### Подключение практики
 
-```
+```yaml
+Imports:
+  - Usages:
+      - usage_from_cell
+    From: path/to/cell
+
 Usages:
-  - pattern: .specs/pattern.md
+  usage_from_doc: .specs/pattern.md
+  usage_from_url: http://usage.example/usage.md
 
 Annotations: |
-  Use `patternt` for implementation
-
+  Use `usage_from_cell` for implementation
+  Use `usage_from_doc` for implementation
+  Use `usage_from_url` for implementation
 ```
 
-Практика получает локальное имя ссылку, которое может использоваться в аннотациях, как \`pattern\`.
+Практика получает локальное имя ссылку в документе, которое может использоваться в аннотациях, как \`pattern\`.
 
 ---
 
@@ -517,7 +605,7 @@ Annotations: |
 - указание использовать конкретную библиотеку
 - ссылка на паттерн
 - требование следовать определённой структуре
-- И т.д.
+- и т.д.
 
 Таким образом:
 
