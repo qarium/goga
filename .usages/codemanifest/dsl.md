@@ -3,7 +3,7 @@
 DSL документ (манифест) должен располагаться в папке интерфейс которой он описывает.
 Папка именуется клеткой (cell). Имя манифест файла строго фиксированное - `CODEMANIFEST`.
 
-Регистр ключей в yaml документе **ВАЖЕН**, если в спецификации задаются примеры с ключом с заглавной
+Регистр ключей в `yaml` документе **ВАЖЕН**, если в спецификации задаются примеры с ключом с заглавной
 или с маленькой буквы, то ключ должен называться именно так, другое написание должно вести к ошибке структуры документа.
 
 В папке, далее клетке/cell, могут храниться usages которые описывают практики по работе к клеткой и использованию ее API,
@@ -34,12 +34,14 @@ Imports:
 
 Usages:
   conventions: .usages/conventions.md
+  pattern: |
+    Some pattern here
   testing: |
     Requirements to tests
 
 Annotations: |
-  Must use `conventions` for write code.
-  Must use `testing` for write tests. 
+  Use `conventions` for write code.
+  Use `testing` for write tests. 
 
 ---
 
@@ -49,7 +51,8 @@ Annotations: |
 
     `param`: description of param
 
-    Requirements to routine ...
+    Use `pattern` for implementation
+    Next requirements to routine ...
 
 "ExampleEntity(param: str)":
   annotations: |
@@ -57,17 +60,19 @@ Annotations: |
 
     `param`: description of param
 
-    Requirements to entity ...
+    Use `pattern` for implementation
+    Next requirements to entity ...
   properties:
     example_property -> str: |
       Description of property
   methods:
     "example_method(method_param: str) -> result:str": |
-       Description of method.
+      Description of method.
 
-        `method_param`: description of method_param
-    
-        Requirements to method ...
+      `method_param`: description of method_param
+
+      Use `pattern` for implementation
+      Next requirements to method ...
 
 ---
 
@@ -75,9 +80,7 @@ Author: FirstName LastName
 CreatedAt: 01/01/26
 Description: |
   Description of CODEMANIFEST file
-
 ```
-
 
 ## Структура CODEMANIFEST документа
 
@@ -187,6 +190,8 @@ Usages:
 ```
 
 **Ключ** - условная ссылка для описания аннотаций.
+
+**ВАЖНО**: практики не могут быть связаны на прямую с интерфейсами контракта, но влияют на реализацию интерфейсов.
 
 #### Annotations
 
@@ -631,7 +636,7 @@ ExampleType():
       Property annotations here
   methods:
     example_method(): |
-      Method annotation here
+      Method annotations here
 ```
 
 Используются для уточнения:
@@ -671,7 +676,7 @@ Annotations: |
   Use `usage_from_url` for implementation
 ```
 
-Практика получает локальное имя ссылку в документе, которое может использоваться в аннотациях, как \`pattern\`.
+**ВАЖНО**: практика получает локальное имя ссылку в документе, которое может использоваться в аннотациях, как \`pattern\`.
 
 Практики используются внутри аннотаций.
 
