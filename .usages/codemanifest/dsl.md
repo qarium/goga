@@ -6,8 +6,8 @@ DSL документ (манифест) должен располагаться 
 Регистр ключей в yaml документе **ВАЖЕН**, если в спецификации задаются примеры с ключом с заглавной
 или с маленькой буквы, то ключ должен называться именно так, другое написание должно вести к ошибке структуры документа.
 
-В папке (клетке/cell) могут храниться usages которые описывают практики по работе к клеткой и использованию ее API,
-usages хранятся в клетке в папке `.usages` но не являются обязательным условием.
+В папке, далее клетке/cell, могут храниться usages которые описывают практики по работе к клеткой и использованию ее API,
+usages хранятся внутри клетке в папке `.usages` но не являются обязательными.
 
 ## Структура клетки (cell)
 
@@ -15,13 +15,74 @@ cell/
 ├── CODEMANIFEST
 └── .usages/*.md
 
-* cell - папка клетки
+* cell - папка с именем клетки
 * CODEMANIFEST - yaml dsl с описанием контракта API
 * .usages - папка с практиками которые описывают работу с клеткой
 
-## Структура документа
+**ВАЖНО**: каждая клетка/cell хранит в `.usages` описания своих практик которые объясняют как использовать клетку, но
+не хранят и не являются источником требований к клетке и ее контракту
 
-DSL описывает **контракт пакета** - набор типов и их ожидаемый API, без привязки к конкретному языку программирования и способу реализации на основе yaml.
+## Пример CODEMANIFEST файла
+
+```yaml
+Imports:
+  - Types:
+      - AnotherCellType
+    Usages:
+      - another_cell_usage
+    From: path/to/another_cell
+
+Usages:
+  conventions: .usages/conventions.md
+  testing: |
+    Requirements to tests
+
+Annotations: |
+  Must use `conventions` for write code.
+  Must use `testing` for write tests. 
+
+---
+
+"example_routine(param: str) -> return_value:str":
+  annotations: |
+    Description of routine.
+
+    `param`: description of param
+
+    Requirements to routine ...
+
+"ExampleEntity(param: str)":
+  annotations: |
+    Description of entity.
+
+    `param`: description of param
+
+    Requirements to entity ...
+  properties:
+    example_property -> str: |
+      Description of property
+  methods:
+    "example_method(method_param: str) -> result:str": |
+       Description of method.
+
+        `method_param`: description of method_param
+    
+        Requirements to method ...
+
+---
+
+Author: FirstName LastName
+CreatedAt: 01/01/26
+Description: |
+  Description of CODEMANIFEST file
+
+```
+
+
+## Структура CODEMANIFEST документа
+
+DSL описывает **контракт клетки/cell** - набор типов и их ожидаемый API, без привязки к конкретному
+языку программирования и способу реализации, на основе `yaml`.
 
 Документ делится на две логические части:
 
@@ -37,7 +98,7 @@ DSL описывает **контракт пакета** - набор типов
    - дата создания документа (`CreatedAt`)
    - описание манифеста (`Description`)
 
-Разделение выполняется по стандарту yaml через:
+Разделение выполняется по стандарту `yaml` через:
 
 ```yaml
 ---
@@ -592,7 +653,7 @@ ExampleType():
 
 ---
 
-### Подключение практики
+### Подключение и использование практики
 
 ```yaml
 Imports:
@@ -611,10 +672,6 @@ Annotations: |
 ```
 
 Практика получает локальное имя ссылку в документе, которое может использоваться в аннотациях, как \`pattern\`.
-
----
-
-### Использование практик
 
 Практики используются внутри аннотаций.
 
