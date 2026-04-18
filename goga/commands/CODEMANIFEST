@@ -229,7 +229,7 @@ Annotations: |
     - cell: нормализованный относительно cwd путь до папки с CODEMANIFEST
     - description: поле description из footer документа
     - usages: нормализованные относительно cwd пути до *.md файлов в папке .usages рядом с CODEMANIFEST
-    - relations: уникальный набор путей из секции imports[*].from в header документа
+    - relations: уникальный набор нормализованных путей из секции imports[*].from в header документа
     - children: такие же вложенные документы согласно иерархии дерева
 
     Дополнительные требования:
