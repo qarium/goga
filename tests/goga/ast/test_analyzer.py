@@ -5,7 +5,7 @@ from goga.ast.errors import ASTRuleError
 from goga.ast.nodes import (
     DocumentRoot,
     HeaderNode,
-    ImportItemNode,
+    ImportTypeItemNode,
     ImportsNode,
 )
 from goga.ast.rules import ASTRule, ImportsHasNotCyclicalDeps
@@ -58,7 +58,7 @@ class TestAnalyzerPassingRules:
     def test_analyze_passing_rules_returns_empty(self):
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
@@ -80,11 +80,11 @@ class TestAnalyzerFailingRules:
     def test_analyze_failing_rules_returns_errors(self):
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
         )
         tree = [doc1, doc2]
         rule = ImportsHasNotCyclicalDeps(tree=tree)
@@ -138,7 +138,7 @@ class TestAnalyzerAggregation:
     def test_mixed_pass_fail_aggregates_only_failures(self):
         doc_no_cycle = DocumentRoot(
             path="/project/x.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"X"}, from_path="/project/y.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/y.cm")])),
         )
         doc_unused = DocumentRoot(
             path="/project/y.cm",

@@ -15,7 +15,6 @@ from .rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
-    ImportHasType,
     ImportHasValidFromPath,
     ImportIsUsed,
     ImportsCanNotBeEmpty,
@@ -115,7 +114,6 @@ class AST:
         # Apply document-level rules via Visitor
         document_rules = [
             ImportsCanNotBeEmpty(),
-            ImportHasType(),
             ImportHasValidFromPath(),
             ImportHasNotDuplicate(),
             AllUsagesIsUsed(),

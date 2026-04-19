@@ -27,6 +27,9 @@ def _collect_cases(project_root: Path) -> list[Path]:
     ids=lambda d: str(d.relative_to(Path(__file__).parent.parent.parent / ".project")),
 )
 def test_ast_rules(case_dir: Path, project_root: Path) -> None:
+    case_name = str(case_dir.name)
+    if case_name == "import_has_type":
+        pytest.skip("import_has_type rule removed; will be migrated to import_item_is_valid in Task 3")
     origin = Path.cwd()
     os.chdir(str(project_root))
     try:

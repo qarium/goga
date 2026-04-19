@@ -11,7 +11,7 @@ from goga.ast.nodes import (
     DocumentRoot,
     EntityTypeNode,
     HeaderNode,
-    ImportItemNode,
+    ImportTypeItemNode,
     ImportsNode,
     MethodNode,
     PropertyNode,
@@ -29,7 +29,6 @@ from goga.ast.rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     ImportHasNotDuplicate,
-    ImportHasType,
     ImportHasValidFromPath,
     ImportIsUsed,
     ImportsCanNotBeEmpty,
@@ -53,7 +52,6 @@ EXPECTED_RULE_CLASSES = [
     DocumentRule,
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
-    ImportHasType,
     ImportHasValidFromPath,
     ImportHasNotDuplicate,
     AllUsagesIsUsed,
@@ -110,7 +108,7 @@ class TestImportsCanNotBeEmpty:
 
     def test_positive_non_empty_imports_returns_empty_errors(self):
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]))
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]))
         )
         node = DocumentNode(root=root)
         rule = ImportsCanNotBeEmpty()
@@ -142,7 +140,7 @@ class TestImportsCanNotBeEmptyConditional:
         root = DocumentRoot(
             header=HeaderNode(
                 data={"Imports": [{"Foo": {"from": "bar"}}]},
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]),
             )
         )
         node = DocumentNode(root=root)
@@ -196,39 +194,6 @@ class TestImportsCanNotBeEmptyConditional:
 
 
 # ---------------------------------------------------------------------------
-# 4. ImportHasType
-# ---------------------------------------------------------------------------
-
-
-class TestImportHasType:
-    def test_default_name(self):
-        rule = ImportHasType()
-        assert rule.name == "import_has_type"
-
-    def test_positive_import_with_non_empty_type(self):
-        root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"MyType"}, from_path="foo")]))
-        )
-        node = DocumentNode(root=root)
-        rule = ImportHasType()
-        errors = rule.check(node)
-        assert errors == []
-
-    def test_negative_import_with_empty_type(self):
-        root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name=set(), from_path="foo")]))
-        )
-        node = DocumentNode(root=root)
-        rule = ImportHasType()
-        errors = rule.check(node)
-        assert len(errors) == 1
-        assert isinstance(errors[0], DocumentRuleError)
-        assert errors[0].rule == "import_has_type"
-        assert "has no Types listed" in errors[0].message
-        assert "— specify at least one type to import" in errors[0].message
-
-
-# ---------------------------------------------------------------------------
 # 5. ImportHasValidFromPath
 # ---------------------------------------------------------------------------
 
@@ -251,7 +216,7 @@ class TestImportHasValidFromPath:
                 header=HeaderNode(
                     imports=ImportsNode(
                         items=[
-                            ImportItemNode(
+                            ImportTypeItemNode(
                                 type_name={"Foo"},
                                 from_path=str(existing_file),
                             )
@@ -269,7 +234,7 @@ class TestImportHasValidFromPath:
 
     def test_negative_empty_path(self):
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="")]))
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="")]))
         )
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
@@ -281,7 +246,7 @@ class TestImportHasValidFromPath:
     def test_negative_non_existing_path(self, tmp_path: Path):
         missing = tmp_path / "does_not_exist.py"
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path=str(missing))]))
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path=str(missing))]))
         )
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
@@ -293,7 +258,7 @@ class TestImportHasValidFromPath:
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
         escaping_path = str(Path.cwd().resolve().parent / "outside")
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path=escaping_path)]))
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path=escaping_path)]))
         )
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
@@ -337,7 +302,7 @@ class TestImportsHasNotCyclicalDeps:
     def test_positive_no_cycles(self):
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
@@ -350,11 +315,11 @@ class TestImportsHasNotCyclicalDeps:
     def test_negative_circular_imports(self):
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
         )
         rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
@@ -506,7 +471,7 @@ class TestImportHasValidFromPathEdgeCases:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(
+                        ImportTypeItemNode(
                             type_name={"Foo"},
                             from_path=resolved_outside,
                         )
@@ -537,8 +502,8 @@ class TestImportHasNotDuplicate:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"Foo"}, from_path="a"),
-                        ImportItemNode(type_name={"Bar"}, from_path="b"),
+                        ImportTypeItemNode(type_name={"Foo"}, from_path="a"),
+                        ImportTypeItemNode(type_name={"Bar"}, from_path="b"),
                     ]
                 )
             )
@@ -553,8 +518,8 @@ class TestImportHasNotDuplicate:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"Foo"}, from_path="a"),
-                        ImportItemNode(type_name={"Foo"}, from_path="b"),
+                        ImportTypeItemNode(type_name={"Foo"}, from_path="a"),
+                        ImportTypeItemNode(type_name={"Foo"}, from_path="b"),
                     ]
                 )
             )
@@ -582,7 +547,7 @@ class TestAnnotationLinksExists:
     def test_positive_link_found_in_imports(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"MyType"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
                 annotations=AnnotationsNode(text="uses `MyType`", links=["MyType"]),
             )
         )
@@ -630,7 +595,7 @@ class TestAnnotationLinksExists:
     def test_negative_link_not_found_anywhere(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"OtherType"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"OtherType"}, from_path="a")]),
                 annotations=AnnotationsNode(text="uses `Missing`", links=["Missing"]),
             )
         )
@@ -686,7 +651,7 @@ class TestAnnotationLinksExists:
         entity = EntityTypeNode(name="MyClass", methods=[method])
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"MyType"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
             ),
             body=BodyNode(entities=[entity]),
         )
@@ -709,7 +674,7 @@ class TestUsageLinksHasNotConflicts:
     def test_positive_no_conflicts(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
                 usages=UsagesNode(items=[UsageItemNode(name="mypract")]),
             )
         )
@@ -721,7 +686,7 @@ class TestUsageLinksHasNotConflicts:
     def test_negative_usage_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
                 usages=UsagesNode(items=[UsageItemNode(name="Foo")]),
             )
         )
@@ -737,7 +702,7 @@ class TestUsageLinksHasNotConflicts:
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
                 usages=UsagesNode(items=[UsageItemNode(name="Foo")]),
             )
         )
@@ -776,7 +741,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_positive_no_conflicts(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity")],
@@ -791,7 +756,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_negative_entity_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo")],
@@ -808,7 +773,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo")],
@@ -822,7 +787,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_negative_routine_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 routines=[RoutineTypeNode(name="Bar")],
@@ -840,7 +805,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Embedded entity with name matching an imported type is skipped — no error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo", embedded=True)],
@@ -855,7 +820,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Embedded routine with name matching an imported type is skipped — no error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 routines=[RoutineTypeNode(name="Bar", embedded=True)],
@@ -870,7 +835,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Non-embedded entity with name matching an imported type still produces error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo", embedded=False)],
@@ -889,7 +854,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Non-embedded routine with name matching an imported type still produces error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Other", embedded=False)],
@@ -946,7 +911,7 @@ class TestMutationExists:
     def test_positive_mutation_found_among_import_types(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"ImportedType"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"ImportedType"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity", mutations=[("ImportedType", "path")])],
@@ -960,7 +925,7 @@ class TestMutationExists:
     def test_negative_mutation_not_found(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity", mutations=[("NonExistent", "path")])],
@@ -1243,7 +1208,7 @@ class TestImportsHasOnlyValidKeys:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a"}),
+                        ImportTypeItemNode(type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a"}),
                     ],
                 ),
             ),
@@ -1259,7 +1224,7 @@ class TestImportsHasOnlyValidKeys:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(
+                        ImportTypeItemNode(
                             type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a", "Extra": True}
                         ),
                     ],
@@ -1278,7 +1243,7 @@ class TestImportsHasOnlyValidKeys:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"Foo"}, from_path="a", data={}),
+                        ImportTypeItemNode(type_name={"Foo"}, from_path="a", data={}),
                     ],
                 ),
             ),
@@ -1421,7 +1386,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"MyType"}, from_path="target_pkg"),
+                        ImportTypeItemNode(type_name={"MyType"}, from_path="target_pkg"),
                     ],
                 ),
             ),
@@ -1442,7 +1407,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"MyFunc"}, from_path="target_pkg"),
+                        ImportTypeItemNode(type_name={"MyFunc"}, from_path="target_pkg"),
                     ],
                 ),
             ),
@@ -1462,7 +1427,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"ReExportedType"}, from_path="target_pkg"),
+                        ImportTypeItemNode(type_name={"ReExportedType"}, from_path="target_pkg"),
                     ],
                 ),
             ),
@@ -1486,7 +1451,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"MissingType"}, from_path=str(target_dir)),
+                        ImportTypeItemNode(type_name={"MissingType"}, from_path=str(target_dir)),
                     ],
                 ),
             ),
@@ -1504,7 +1469,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"MyType"}, from_path="/nonexistent/path"),
+                        ImportTypeItemNode(type_name={"MyType"}, from_path="/nonexistent/path"),
                     ],
                 ),
             ),
@@ -1520,7 +1485,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"MyType"}, from_path="missing_pkg"),
+                        ImportTypeItemNode(type_name={"MyType"}, from_path="missing_pkg"),
                     ],
                 ),
             ),
@@ -1544,7 +1509,7 @@ class TestImportTypeExists:
             header=HeaderNode(
                 imports=ImportsNode(
                     items=[
-                        ImportItemNode(type_name={"Missing"}, from_path=str(target_dir)),
+                        ImportTypeItemNode(type_name={"Missing"}, from_path=str(target_dir)),
                     ],
                 ),
             ),
@@ -1577,7 +1542,7 @@ class TestImportHasValidFromPathHierarchy:
                     header=HeaderNode(
                         imports=ImportsNode(
                             items=[
-                                ImportItemNode(type_name={"Foo"}, from_path=str(sibling)),
+                                ImportTypeItemNode(type_name={"Foo"}, from_path=str(sibling)),
                             ],
                         ),
                     ),
@@ -1606,7 +1571,7 @@ class TestImportHasValidFromPathHierarchy:
                 header=HeaderNode(
                     imports=ImportsNode(
                         items=[
-                            ImportItemNode(type_name={"Foo"}, from_path=str(child)),
+                            ImportTypeItemNode(type_name={"Foo"}, from_path=str(child)),
                         ],
                     ),
                 ),
@@ -1635,7 +1600,7 @@ class TestImportHasValidFromPathHierarchy:
                 header=HeaderNode(
                     imports=ImportsNode(
                         items=[
-                            ImportItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
+                            ImportTypeItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
                         ],
                     ),
                 ),
@@ -1826,7 +1791,7 @@ def _make_import_is_used_doc(  # noqa: PLR0913
     doc_path: str = "test_doc",
 ) -> DocumentNode:
     """Helper to build a DocumentNode for ImportIsUsed tests."""
-    import_item = ImportItemNode(type_name=import_names or {"Node"}, from_path=import_from, alias=import_alias)
+    import_item = ImportTypeItemNode(type_name=import_names or {"Node"}, from_path=import_from, alias=import_alias)
     header = HeaderNode(
         imports=ImportsNode(items=[import_item]),
     )

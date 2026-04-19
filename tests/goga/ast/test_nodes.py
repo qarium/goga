@@ -12,7 +12,8 @@ from goga.ast.nodes import (
     EntityTypeNode,
     FooterNode,
     HeaderNode,
-    ImportItemNode,
+    ImportTypeItemNode,
+    ImportUsageItemNode,
     ImportsNode,
     MethodNode,
     Node,
@@ -38,7 +39,8 @@ class TestFacadeAvailability:
             AnnotationsNode,
             HeaderNode,
             ImportsNode,
-            ImportItemNode,
+            ImportTypeItemNode,
+            ImportUsageItemNode,
             UsagesNode,
             UsageItemNode,
             BodyNode,
@@ -178,20 +180,36 @@ class TestImportsNode:
         assert node.items == []
 
 
-class TestImportItemNode:
+class TestImportTypeItemNode:
     def test_extends_document_node(self) -> None:
-        assert issubclass(ImportItemNode, DocumentNode)
+        assert issubclass(ImportTypeItemNode, DocumentNode)
 
     def test_defaults(self) -> None:
-        node = ImportItemNode()
+        node = ImportTypeItemNode()
         assert node.type_name == set()
         assert node.from_path == ""
         assert node.alias == ""
 
     def test_type_name_is_set(self) -> None:
-        node = ImportItemNode(type_name={"Foo", "Bar"})
+        node = ImportTypeItemNode(type_name={"Foo", "Bar"})
         assert isinstance(node.type_name, set)
         assert node.type_name == {"Foo", "Bar"}
+
+
+class TestImportUsageItemNode:
+    def test_extends_document_node(self) -> None:
+        assert issubclass(ImportUsageItemNode, DocumentNode)
+
+    def test_defaults(self) -> None:
+        node = ImportUsageItemNode()
+        assert node.usage_name == set()
+        assert node.from_path == ""
+        assert node.alias == ""
+
+    def test_usage_name_is_set(self) -> None:
+        node = ImportUsageItemNode(usage_name={"foo", "bar"})
+        assert isinstance(node.usage_name, set)
+        assert node.usage_name == {"foo", "bar"}
 
 
 # ---------------------------------------------------------------------------

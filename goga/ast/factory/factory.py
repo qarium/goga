@@ -14,8 +14,8 @@ from ..nodes import (
     EntityTypeNode,
     FooterNode,
     HeaderNode,
-    ImportItemNode,
     ImportsNode,
+    ImportTypeItemNode,
     MethodNode,
     PropertyNode,
     RoutineTypeNode,
@@ -173,7 +173,7 @@ class Factory:
 
     def _parse_imports(self, data: Any, filepath: str) -> ImportsNode:
         """Parse the Imports section of the header."""
-        items: list[ImportItemNode] = []
+        items: list[ImportTypeItemNode] = []
 
         if data is None:
             return ImportsNode(items=items)
@@ -197,7 +197,7 @@ class Factory:
 
             if not types_list:
                 items.append(
-                    ImportItemNode(
+                    ImportTypeItemNode(
                         type_name=set(),
                         from_path=str(from_path),
                         alias="",
@@ -218,7 +218,7 @@ class Factory:
                     alias = ""
 
                 items.append(
-                    ImportItemNode(
+                    ImportTypeItemNode(
                         type_name={type_name},
                         from_path=str(from_path),
                         alias=alias,
@@ -553,7 +553,7 @@ class Factory:
 
     def _build_embeddings(
         self,
-        import_items: list[ImportItemNode],
+        import_items: list[ImportTypeItemNode],
         embedded_entities: list[tuple[str, bool, str, dict]],
         embedded_routines: list[tuple[str, bool, str, str, dict]],
     ) -> tuple[list[tuple[str, str]], list[EntityTypeNode], list[RoutineTypeNode]]:

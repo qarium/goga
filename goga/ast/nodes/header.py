@@ -16,12 +16,19 @@ class HeaderNode(DocumentNode):
 
 @dataclass
 class ImportsNode(DocumentNode):
-    items: list[ImportItemNode] = field(default_factory=list)
+    items: list[ImportTypeItemNode | ImportUsageItemNode] = field(default_factory=list)
 
 
 @dataclass
-class ImportItemNode(DocumentNode):
+class ImportTypeItemNode(DocumentNode):
     type_name: set[str] = field(default_factory=set)
+    from_path: str = ""
+    alias: str = ""
+
+
+@dataclass
+class ImportUsageItemNode(DocumentNode):
+    usage_name: set[str] = field(default_factory=set)
     from_path: str = ""
     alias: str = ""
 

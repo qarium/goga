@@ -3,7 +3,7 @@ from .body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTyp
 from .common import AnnotationsNode
 from .document import DocumentNode, DocumentRoot
 from .footer import FooterNode
-from .header import HeaderNode, ImportItemNode, ImportsNode, UsageItemNode, UsagesNode
+from .header import HeaderNode, ImportsNode, ImportTypeItemNode, ImportUsageItemNode, UsageItemNode, UsagesNode
 
 __all__ = [
     "AnnotationsNode",
@@ -13,7 +13,8 @@ __all__ = [
     "EntityTypeNode",
     "FooterNode",
     "HeaderNode",
-    "ImportItemNode",
+    "ImportTypeItemNode",
+    "ImportUsageItemNode",
     "ImportsNode",
     "MethodNode",
     "Node",

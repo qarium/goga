@@ -5,7 +5,7 @@ from goga.ast.nodes import (
     DocumentNode,
     DocumentRoot,
     HeaderNode,
-    ImportItemNode,
+    ImportTypeItemNode,
     ImportsNode,
 )
 from goga.ast.rules import DocumentRule, ImportsCanNotBeEmpty
@@ -50,7 +50,7 @@ class TestVisitorAnalyze:
 
     def test_analyze_with_passing_rules_returns_empty_list(self):
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportItemNode(type_name={"Foo"}, from_path="bar")]))
+            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]))
         )
         visitor = Visitor(document=root)
         rule = ImportsCanNotBeEmpty()

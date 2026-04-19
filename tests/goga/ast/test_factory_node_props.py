@@ -82,9 +82,9 @@ def _create_full_manifest(tmp_path, subdir: str = "pkg") -> str:
 # ---------------------------------------------------------------------------
 
 
-class TestDataImportItemNode:
+class TestDataImportTypeItemNode:
     def test_data_contains_raw_import_entry(self, tmp_path) -> None:
-        """ImportItemNode.data is a copy of the raw import entry dict."""
+        """ImportTypeItemNode.data is a copy of the raw import entry dict."""
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
 
@@ -245,9 +245,9 @@ class TestParentImportsNode:
         assert root.header.imports.parent is root.header
 
 
-class TestParentImportItemNode:
-    def test_import_item_parent_is_imports(self, tmp_path) -> None:
-        """ImportItemNode.parent is ImportsNode."""
+class TestParentImportTypeItemNode:
+    def test_import_type_item_parent_is_imports(self, tmp_path) -> None:
+        """ImportTypeItemNode.parent is ImportsNode."""
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
         for item in root.header.imports.items:
