@@ -16,6 +16,7 @@ from ..nodes import (
     HeaderNode,
     ImportsNode,
     ImportTypeItemNode,
+    ImportUsageItemNode,
     MethodNode,
     PropertyNode,
     RoutineTypeNode,
@@ -158,10 +159,11 @@ class Factory:
         annotations_text = str(annotations_text)
         annotations_node = AnnotationsNode(text=annotations_text, links=self._extract_links(annotations_text))
 
-        # Collect imported type names
+        # Collect imported type names (only from ImportTypeItemNode)
         types: list[str] = []
         for item in imports_node.items:
-            types.extend(item.type_name)
+            if isinstance(item, ImportTypeItemNode):
+                types.extend(item.type_name)
 
         return HeaderNode(
             imports=imports_node,
@@ -173,7 +175,7 @@ class Factory:
 
     def _parse_imports(self, data: Any, filepath: str) -> ImportsNode:
         """Parse the Imports section of the header."""
-        items: list[ImportTypeItemNode] = []
+        items: list[ImportTypeItemNode | ImportUsageItemNode] = []
 
         if data is None:
             return ImportsNode(items=items)
@@ -190,12 +192,14 @@ class Factory:
 
             from_path_raw = str(entry.get("From", ""))
             from_path = os.path.normpath(from_path_raw) if from_path_raw else ""
-            types_list = entry.get("Types", [])
 
-            if not isinstance(types_list, list):
-                continue
+            types_raw = entry.get("Types")
+            usages_raw = entry.get("Usages")
 
-            if not types_list:
+            items.extend(self._parse_type_entries(types_raw, from_path, entry))
+            items.extend(self._parse_usage_entries(usages_raw, from_path, entry))
+
+            if types_raw is None and usages_raw is None:
                 items.append(
                     ImportTypeItemNode(
                         type_name=set(),
@@ -204,29 +208,50 @@ class Factory:
                         data=dict(entry),
                     )
                 )
-                continue
-
-            for type_entry in types_list:
-                type_str = str(type_entry)
-                # Check for AS alias (case-sensitive, must be uppercase)
-                if " AS " in type_str:
-                    parts = type_str.split(" AS ", 1)
-                    type_name = parts[0].strip()
-                    alias = parts[1].strip()
-                else:
-                    type_name = type_str.strip()
-                    alias = ""
-
-                items.append(
-                    ImportTypeItemNode(
-                        type_name={type_name},
-                        from_path=str(from_path),
-                        alias=alias,
-                        data=dict(entry),
-                    )
-                )
 
         return ImportsNode(items=items)
+
+    @staticmethod
+    def _split_alias(raw: str) -> tuple[str, str]:
+        """Split "Name AS Alias" into (name, alias). Returns (raw, "") if no AS."""
+        if " AS " in raw:
+            parts = raw.split(" AS ", 1)
+            return parts[0].strip(), parts[1].strip()
+        return raw.strip(), ""
+
+    def _parse_type_entries(
+        self, types_raw: Any, from_path: str, entry: dict
+    ) -> list[ImportTypeItemNode]:
+        """Parse Types list from an import entry."""
+        items: list[ImportTypeItemNode] = []
+        if not isinstance(types_raw, list):
+            return items
+        if not types_raw:
+            items.append(ImportTypeItemNode(type_name=set(), from_path=str(from_path), alias="", data=dict(entry)))
+            return items
+        for type_entry in types_raw:
+            type_name, alias = self._split_alias(str(type_entry))
+            items.append(
+                ImportTypeItemNode(type_name={type_name}, from_path=str(from_path), alias=alias, data=dict(entry)),
+            )
+        return items
+
+    def _parse_usage_entries(
+        self, usages_raw: Any, from_path: str, entry: dict
+    ) -> list[ImportUsageItemNode]:
+        """Parse Usages list from an import entry."""
+        items: list[ImportUsageItemNode] = []
+        if not isinstance(usages_raw, list):
+            return items
+        if not usages_raw:
+            items.append(ImportUsageItemNode(usage_name=set(), from_path=str(from_path), alias="", data=dict(entry)))
+            return items
+        for usage_entry in usages_raw:
+            usage_name, alias = self._split_alias(str(usage_entry))
+            items.append(
+                ImportUsageItemNode(usage_name={usage_name}, from_path=str(from_path), alias=alias, data=dict(entry)),
+            )
+        return items
 
     def _parse_usages(self, data: Any) -> UsagesNode:
         """Parse the Usages section of the header."""
@@ -553,7 +578,7 @@ class Factory:
 
     def _build_embeddings(
         self,
-        import_items: list[ImportTypeItemNode],
+        import_items: list[ImportTypeItemNode | ImportUsageItemNode],
         embedded_entities: list[tuple[str, bool, str, dict]],
         embedded_routines: list[tuple[str, bool, str, str, dict]],
     ) -> tuple[list[tuple[str, str]], list[EntityTypeNode], list[RoutineTypeNode]]:
@@ -564,11 +589,12 @@ class Factory:
         - list of EntityTypeNode for all embedded entities
         - list of RoutineTypeNode for all embedded routines
         """
-        # Build a lookup from type name -> from_path
+        # Build a lookup from type name -> from_path (only ImportTypeItemNode)
         import_lookup: dict[str, str] = {}
         for item in import_items:
-            for type_name in item.type_name:
-                import_lookup[type_name] = item.from_path
+            if isinstance(item, ImportTypeItemNode):
+                for type_name in item.type_name:
+                    import_lookup[type_name] = item.from_path
 
         embeddings: list[tuple[str, str]] = []
         unmatched_entities: list[EntityTypeNode] = []

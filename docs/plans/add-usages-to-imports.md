@@ -141,7 +141,7 @@ CODEMANIFEST YAML (Imports with Types+Usages+From)
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: написать тесты в `tests/goga/ast/factory/test_parse_imports_usages.py`:
+- [x] **Contract tests**: написать тесты в `tests/goga/ast/factory/test_parse_imports_usages.py`:
   - test_parse_imports_with_types_and_usages: YAML с Types+Usages+From → items содержит ImportTypeItemNode и ImportUsageItemNode
   - test_parse_imports_usages_only: YAML только с Usages → только ImportUsageItemNode
   - test_parse_imports_types_only: YAML только с Types → только ImportTypeItemNode (как раньше)
@@ -150,22 +150,22 @@ CODEMANIFEST YAML (Imports with Types+Usages+From)
   - test_parse_imports_no_types_no_usages: только From → ImportTypeItemNode с type_name=set()
   - test_parse_imports_usage_alias: Usages=["long_name AS short"] → usage_name={"long_name"}, alias="short"
   - (expected to fail at this stage)
-- [ ] **Code**: переписать `_parse_imports` в `factory.py`:
+- [x] **Code**: переписать `_parse_imports` в `factory.py`:
   - Для каждого entry: извлечь `from_path` через `os.path.normpath`
   - `types_raw = entry.get("Types")`: если None → skip; если list → парсить каждый элемент (AS split), создавать ImportTypeItemNode; если пустой list → ImportTypeItemNode(type_name=set())
   - `usages_raw = entry.get("Usages")`: если None → skip; если list → парсить каждый (AS split), создавать ImportUsageItemNode; если пустой list → ImportUsageItemNode(usage_name=set())
   - Если оба None → ImportTypeItemNode(type_name=set())
-- [ ] **Code**: обновить `_wire_references` — цикл по `header.imports.items` уже обходит оба типа нод (type_name и usage_name не используются здесь, только root/parent wiring) — проверить что wire работает корректно
-- [ ] **Code**: обновить `_build_embeddings` — `import_lookup` строится только из ImportTypeItemNode (isinstance check): `for type_name in item.type_name: import_lookup[type_name] = item.from_path`
-- [ ] **Code**: обновить `_parse_header` — сбор `types: list[str]` только из ImportTypeItemNode (isinstance check): `for item in imports_node.items: if isinstance(item, ImportTypeItemNode): types.extend(item.type_name)`
-- [ ] **Verify interfaces**: `pytest tests/goga/ast/factory/test_parse_imports_usages.py -v` — all must pass
-- [ ] **Logic tests**: добавить поведенческие тесты:
+- [x] **Code**: обновить `_wire_references` — цикл по `header.imports.items` уже обходит оба типа нод (type_name и usage_name не используются здесь, только root/parent wiring) — проверить что wire работает корректно
+- [x] **Code**: обновить `_build_embeddings` — `import_lookup` строится только из ImportTypeItemNode (isinstance check): `for type_name in item.type_name: import_lookup[type_name] = item.from_path`
+- [x] **Code**: обновить `_parse_header` — сбор `types: list[str]` только из ImportTypeItemNode (isinstance check): `for item in imports_node.items: if isinstance(item, ImportTypeItemNode): types.extend(item.type_name)`
+- [x] **Verify interfaces**: `pytest tests/goga/ast/factory/test_parse_imports_usages.py -v` — all must pass
+- [x] **Logic tests**: добавить поведенческие тесты:
   - test_parse_imports_multiple_entries: несколько YAML-записей с разными From
   - test_parse_imports_invalid_usages_type: Usages="not_a_list" → skip (не падает)
   - test_parse_imports_mixed_types_and_usages: одна запись с Types+Usages, другая только с Types
-- [ ] **Debug**: `pytest tests/ -x` — fix implementation until all pass
-- [ ] **Re-check contracts**: verify ImportsNode.items содержит оба типа нод, data dict сохранён для каждого
-- [ ] **Lint**: `ruff check goga/` — fix formatting
+- [x] **Debug**: `pytest tests/ -x` — fix implementation until all pass
+- [x] **Re-check contracts**: verify ImportsNode.items содержит оба типа нод, data dict сохранён для каждого
+- [x] **Lint**: `ruff check goga/` — fix formatting
 
 ### Task 3: Implement ImportItemIsValid rule (replace ImportHasType)
 
