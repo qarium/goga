@@ -96,6 +96,37 @@ class ImportItemIsValid(DocumentRule):
         return errors
 
 
+class ImportUsageExists(DocumentRule):
+    """Rule: every imported usage must exist as a .md file in the .usages/ directory of the referenced cell."""
+
+    def __init__(self) -> None:
+        super().__init__(name="import_usage_exists")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+
+        for item in node.root.header.imports.items:
+            if not isinstance(item, ImportUsageItemNode):
+                continue
+
+            for name in item.usage_name:
+                usage_md_file_path = str(Path(item.from_path) / ".usages" / f"{name}.md")
+                if not Path(usage_md_file_path).exists():
+                    errors.append(
+                        DocumentRuleError(
+                            message=(
+                                f"Usage '{name}' does not exists on filesystem"
+                                f" by path '{usage_md_file_path}'"
+                            ),
+                            rule=self.name,
+                            document=node.root,
+                            node=item,
+                        )
+                    )
+
+        return errors
+
+
 class ImportHasValidFromPath(DocumentRule):
     """Rule: every import must have a valid, existing from_path that does not escape CWD."""
 

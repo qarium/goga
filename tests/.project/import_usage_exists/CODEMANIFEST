@@ -1,0 +1,11 @@
+Imports:
+    - Types: [MyType]
+      Usages: [existing_usage, missing_usage]
+      From: import_usage_exists/import_usage_exists_helper
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Test entity

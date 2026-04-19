@@ -1,0 +1,11 @@
+errors:
+- rule: import_usage_exists
+  message: "Usage 'missing_usage' does not exists on filesystem by path 'import_usage_exists/import_usage_exists_helper/.usages/missing_usage.md'"
+  document_path: import_usage_exists
+  node_data:
+    Types:
+      - MyType
+    Usages:
+      - existing_usage
+      - missing_usage
+    From: import_usage_exists/import_usage_exists_helper
