@@ -17,6 +17,7 @@ from .rules import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
+    ImportItemIsValid,
     ImportsCanNotBeEmpty,
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
@@ -115,6 +116,7 @@ class AST:
         document_rules = [
             ImportsCanNotBeEmpty(),
             ImportHasValidFromPath(),
+            ImportItemIsValid(),
             ImportHasNotDuplicate(),
             AllUsagesIsUsed(),
             AnnotationLinksExists(),

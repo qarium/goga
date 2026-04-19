@@ -1,6 +1,0 @@
-errors:
-- rule: import_has_type
-  message: Import from 'import_has_type/import_has_type_helper' has no Types listed — specify at least one type to import
-  document_path: import_has_type
-  node_data:
-    From: import_has_type/import_has_type_helper

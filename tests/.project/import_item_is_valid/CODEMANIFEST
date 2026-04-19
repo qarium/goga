@@ -1,5 +1,5 @@
 Imports:
-    - From: import_has_type/import_has_type_helper
+    - From: import_item_is_valid/import_item_is_valid_helper
 
 ---
 

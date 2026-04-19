@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from ..errors import DocumentRuleError
 from ..nodes.common import AnnotationsNode
+from ..nodes.header import ImportTypeItemNode, ImportUsageItemNode
 from .tools import signature_contains_type_name
 
 if TYPE_CHECKING:
@@ -58,26 +59,40 @@ class ImportsCanNotBeEmpty(DocumentRule):
         return errors
 
 
-class ImportHasType(DocumentRule):
-    """Rule: every import must have at least one type name."""
+class ImportItemIsValid(DocumentRule):
+    """Rule: every import item must have at least one type name or usage name."""
 
     def __init__(self) -> None:
-        super().__init__(name="import_has_type")
+        super().__init__(name="import_item_is_valid")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
         for item in node.root.header.imports.items:
-            if not item.type_name:
-                errors.append(
-                    DocumentRuleError(
-                        message=(
-                            f"Import from '{item.from_path}' has no Types listed — specify at least one type to import"
-                        ),
-                        rule=self.name,
-                        document=node.root,
-                        node=item,
+            if isinstance(item, ImportTypeItemNode):
+                if not item.type_name:
+                    errors.append(
+                        DocumentRuleError(
+                            message=(
+                                f"Import from '{item.from_path}' has no Types listed"
+                                f" — specify at least one type to import"
+                            ),
+                            rule=self.name,
+                            document=node.root,
+                            node=item,
+                        )
                     )
-                )
+            elif isinstance(item, ImportUsageItemNode) and not item.usage_name:
+                    errors.append(
+                        DocumentRuleError(
+                            message=(
+                                f"Import from '{item.from_path}' has no Usages listed"
+                                f" — specify at least one type to import"
+                            ),
+                            rule=self.name,
+                            document=node.root,
+                            node=item,
+                        )
+                    )
         return errors
 
 

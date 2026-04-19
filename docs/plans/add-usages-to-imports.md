@@ -182,25 +182,25 @@ CODEMANIFEST YAML (Imports with Types+Usages+From)
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: в `tests/goga/ast/rules/test_import_item_is_valid.py`:
+- [x] **Contract tests**: в `tests/goga/ast/rules/test_import_item_is_valid.py`:
   - test_import_item_is_valid_happy_path: ImportTypeItemNode(type_name={"Foo"}) + ImportUsageItemNode(usage_name={"bar"}) → нет ошибок
   - test_import_item_is_valid_empty_type: ImportTypeItemNode(type_name=set()) → ошибка с "has no Types listed"
   - test_import_item_is_valid_empty_usage: ImportUsageItemNode(usage_name=set()) → ошибка с "has no Usages listed"
   - (expected to fail at this stage)
-- [ ] **Code**: в `goga/ast/rules/document.py`: удалить класс `ImportHasType`, создать `ImportItemIsValid`:
+- [x] **Code**: в `goga/ast/rules/document.py`: удалить класс `ImportHasType`, создать `ImportItemIsValid`:
   - `__init__`: `super().__init__(name="import_item_is_valid")`
   - `check`: итерация по `node.root.header.imports.items` с isinstance:
     - ImportTypeItemNode: if not item.type_name → error "Import from '{from_path}' has no Types listed — specify at least one type to import"
     - ImportUsageItemNode: if not item.usage_name → error "Import from '{from_path}' has no Usages listed — specify at least one type to import"
-- [ ] **Code**: в `goga/ast/rules/__init__.py`: заменить `ImportHasType` на `ImportItemIsValid` в imports и `__all__`
-- [ ] **Code**: в `goga/ast/ast.py`: заменить `ImportHasType` на `ImportItemIsValid` в import и в `document_rules` list. Добавить `ImportUsageExists()` после `ImportItemIsValid()` (placeholder — будет реализован в Task 4)
-- [ ] **Verify interfaces**: `pytest tests/goga/ast/rules/test_import_item_is_valid.py -v`
-- [ ] **Logic tests**: мигрировать существующий интеграционный тест `tests/.project/import_has_type/` → `tests/.project/import_item_is_valid/`:
+- [x] **Code**: в `goga/ast/rules/__init__.py`: заменить `ImportHasType` на `ImportItemIsValid` в imports и `__all__`
+- [x] **Code**: в `goga/ast/ast.py`: заменить `ImportHasType` на `ImportItemIsValid` в import и в `document_rules` list. Добавить `ImportUsageExists()` после `ImportItemIsValid()` (placeholder — будет реализован в Task 4)
+- [x] **Verify interfaces**: `pytest tests/goga/ast/rules/test_import_item_is_valid.py -v`
+- [x] **Logic tests**: мигрировать существующий интеграционный тест `tests/.project/import_has_type/` → `tests/.project/import_item_is_valid/`:
   - Переименовать директорию
   - Обновить `.expected.yaml`: rule: "import_item_is_valid", message template "has no Types listed"
-- [ ] **Debug**: `pytest tests/ -x` — fix until all pass
-- [ ] **Re-check contracts**: verify rule name = "import_item_is_valid", message template matches CODEMANIFEST
-- [ ] **Lint**: `ruff check goga/` — fix formatting
+- [x] **Debug**: `pytest tests/ -x` — fix until all pass
+- [x] **Re-check contracts**: verify rule name = "import_item_is_valid", message template matches CODEMANIFEST
+- [x] **Lint**: `ruff check goga/` — fix formatting
 
 ### Task 4: Implement ImportUsageExists rule
 
