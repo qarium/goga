@@ -49,6 +49,14 @@ Determine:
 
 If there is no git context — work with the current CODEMANIFEST files as the complete contract.
 
+#### 1a. Schema — dependency impact map
+
+Run `docker run --rm -v .:/project -w /project goga schema --help` to understand the command capabilities and output structure.
+
+Then run `docker run --rm -v .:/project -w /project goga schema` to get the full project cell hierarchy. Use `--depends-on <cell_path>` (repeatable) with paths from Step 1 git diff to find all cells affected by the changes — what types and usages they import from changed cells.
+
+This dependency map focuses gap analysis (Step 2) and contract consistency audit (Step 2a) only on affected cells instead of reading all CODEMANIFESTs.
+
 ### Step 2: Gap analysis
 
 #### 2-pre. Usages reference resolution

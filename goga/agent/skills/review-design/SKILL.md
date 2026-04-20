@@ -45,7 +45,8 @@ Use the same sources as `design-by-changes`:
 1. Read the design document from `docs/design/<feature-name>.md`
 2. Read all relevant CODEMANIFEST files referenced in the design
 3. Read existing source files referenced in the design (if any)
-4. **Read Usages specs by reference**: determine which Usages to read based on reference links:
+4. Run `docker run --rm -v .:/project -w /project goga schema --help` to understand the command, then run `docker run --rm -v .:/project -w /project goga schema` to get the full project dependency graph. Use `--depends-on <cell_path>` to find cells that depend on cells changed by the design. This ensures the review covers all affected cells.
+5. **Read Usages specs by reference**: determine which Usages to read based on reference links:
    - **Always read root Usages** — Usages referenced by global `Annotations` in CODEMANIFEST header (via backtick syntax) are always read
    - **Always read changed entities' Usages** — for each entity covered by the design, scan its annotations for backtick references to Usages. All referenced Usages are read
    - **Skip unreferenced Usages** — Usages entries not referenced by global `Annotations` AND not referenced by any covered entity's annotations are not read
