@@ -193,19 +193,22 @@ class TestIntegration:
         skills_dir = tmp_path / ".claude" / "skills"
 
         clarify_design = skills_dir / "review-design"
-        assert len(list(clarify_design.iterdir())) == 1
+        assert len(list(clarify_design.iterdir())) == 2
         assert (clarify_design / "SKILL.md").is_file()
+        assert (clarify_design / "dsl.md").is_file()
 
         dbc = skills_dir / "design-by-changes"
-        assert len(list(dbc.iterdir())) == 2
+        assert len(list(dbc.iterdir())) == 3
         assert (dbc / "SKILL.md").is_file()
         assert (dbc / "design-doc-template.md").is_file()
+        assert (dbc / "dsl.md").is_file()
 
         pbd = skills_dir / "plan-by-design"
-        expected = {"SKILL.md", "README.md", "conventions.md", "example.md", "output-template.md"}
+        expected = {"SKILL.md", "README.md", "conventions.md", "example.md", "output-template.md", "dsl.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
 
         vp = skills_dir / "verify-plan"
-        assert len(list(vp.iterdir())) == 1
+        assert len(list(vp.iterdir())) == 2
         assert (vp / "SKILL.md").is_file()
+        assert (vp / "dsl.md").is_file()

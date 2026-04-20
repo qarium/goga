@@ -189,7 +189,7 @@ When ralphex executes a coding task, the AI agent follows these checkboxes:
 - Entity names use constructor signatures (e.g., `ClassName()`, `ClassName(arg: Type)`). Constructor parameters are documentation for the implementation agent; the entity as a whole is the contract unit, not individual parameters.
 - All contract entities must be preserved in the plan.
 - Contract entities must not be silently removed, merged, renamed, or replaced with unrelated abstractions.
-- Entities may declare interface mutations via `Type::` syntax (e.g., `Object::pydantic.BaseModel::ClassName()`). Each `Type::` segment means the entity extends an existing type. The mutation does **not** prescribe a specific mechanism (inheritance, composition, monkey-patching, etc.) — this is left to the implementation agent's discretion. See `goga/.usages/cell/dsl.md` → *Мутация типа* for the full conceptual explanation and reading rules.
+- Entities may declare interface mutations via `Type::` syntax (e.g., `Object::pydantic.BaseModel::ClassName()`). Each `Type::` segment means the entity extends an existing type. The mutation does **not** prescribe a specific mechanism (inheritance, composition, monkey-patching, etc.) — this is left to the implementation agent's discretion. See `dsl.md` → *Мутация типа* for the full conceptual explanation and reading rules.
 
 ### Location model
 - Each contract entity has a `location`.
@@ -278,7 +278,7 @@ Any architectural choice not explicitly stated in the contract must be recorded 
 
 ## DSL Compilation Rules
 
-Read the detailed syntax rules from `goga/.usages/cell/dsl.md`.
+Read the detailed syntax rules from `dsl.md`.
 Follow the project conventions from `conventions.md`.
 Refer to `example.md` for a complete DSL-to-plan compilation example.
 
@@ -371,7 +371,7 @@ Re-exports can reference names from `Imports` (internal) or `Usages` (external).
 When planning re-exports from child CODEMANIFEST files, import specific objects — not entire subpackages or modules. For example, plan `from package.http import HTTPClient`, not `import package.http`. There is no `Module` concept in the DSL; each facade-level name is a separate entity or re-export.
 
 ### Mutation declarations are interface obligations
-The `Type::` syntax in entity names declares interface mutations — the entity extends an existing type. The mechanism (inheritance, composition, etc.) is not prescribed by the DSL. See `goga/.usages/cell/dsl.md` → *Мутация типа* for the conceptual explanation.
+The `Type::` syntax in entity names declares interface mutations — the entity extends an existing type. The mechanism (inheritance, composition, etc.) is not prescribed by the DSL. See `dsl.md` → *Мутация типа* for the conceptual explanation.
 - `TypeName::` — mutates an existing type. Types from `Imports` use simple names — the alias name if defined via `AS` (e.g., `DocumentRootNode::` for `DocumentRoot AS DocumentRootNode`), or the original type name otherwise (e.g., `Object::`). Types from `Usages` use qualified names: `usage.Type::` (e.g., `pydantic.BaseModel::`).
 - Multiple `Type::` segments indicate multiple mutations. Read left to right as layers of extension: `A::B::Cls()` means Cls extends B which extends A.
 The planning agent must create tasks for implementing the mutation mechanism.
@@ -659,5 +659,5 @@ Do NOT repeat the full plan content. Keep it under 20 lines.
 After completing all main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
 
 Related skills for improvement: `design-by-changes` (provider of the design document read in Phase 0).
-Related files within the bundle: `goga/.usages/cell/dsl.md`, `output-template.md`, `conventions.md`, `example.md`.
+Related files within the bundle: `dsl.md`, `output-template.md`, `conventions.md`, `example.md`.
 Provider skills: `design-by-changes` (creates the design document read in Phase 0).
