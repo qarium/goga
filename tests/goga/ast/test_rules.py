@@ -13,6 +13,7 @@ from goga.ast.nodes import (
     HeaderNode,
     ImportsNode,
     ImportTypeItemNode,
+    ImportUsageItemNode,
     MethodNode,
     PropertyNode,
     RoutineTypeNode,
@@ -112,7 +113,17 @@ class TestImportsCanNotBeEmpty:
 
     def test_positive_non_empty_imports_returns_empty_errors(self):
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]))
+            header=HeaderNode(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]))
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmpty()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_non_empty_usages_returns_empty_errors(self):
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="bar")
+        root = DocumentRoot(
+            header=HeaderNode(imports=ImportsNode(usages=[usage_item])),
         )
         node = DocumentNode(root=root)
         rule = ImportsCanNotBeEmpty()
@@ -120,7 +131,7 @@ class TestImportsCanNotBeEmpty:
         assert errors == []
 
     def test_negative_empty_imports_returns_error(self):
-        root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode(items=[])))
+        root = DocumentRoot(header=HeaderNode(data={"Imports": []}, imports=ImportsNode()))
         node = DocumentNode(root=root)
         rule = ImportsCanNotBeEmpty()
         errors = rule.check(node)
@@ -144,7 +155,7 @@ class TestImportsCanNotBeEmptyConditional:
         root = DocumentRoot(
             header=HeaderNode(
                 data={"Imports": [{"Foo": {"from": "bar"}}]},
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]),
             )
         )
         node = DocumentNode(root=root)
@@ -157,7 +168,7 @@ class TestImportsCanNotBeEmptyConditional:
         root = DocumentRoot(
             header=HeaderNode(
                 data={"Imports": []},
-                imports=ImportsNode(items=[]),
+                imports=ImportsNode(),
             )
         )
         node = DocumentNode(root=root)
@@ -174,7 +185,7 @@ class TestImportsCanNotBeEmptyConditional:
         root = DocumentRoot(
             header=HeaderNode(
                 data={},
-                imports=ImportsNode(items=[]),
+                imports=ImportsNode(),
             )
         )
         node = DocumentNode(root=root)
@@ -219,7 +230,7 @@ class TestImportHasValidFromPath:
                 path=str(doc_path),
                 header=HeaderNode(
                     imports=ImportsNode(
-                        items=[
+                        types=[
                             ImportTypeItemNode(
                                 type_name={"Foo"},
                                 from_path=str(existing_file),
@@ -238,7 +249,7 @@ class TestImportHasValidFromPath:
 
     def test_negative_empty_path(self):
         root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="")]))
+            header=HeaderNode(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="")]))
         )
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
@@ -250,7 +261,7 @@ class TestImportHasValidFromPath:
     def test_negative_non_existing_path(self, tmp_path: Path):
         missing = tmp_path / "does_not_exist.py"
         imp = ImportTypeItemNode(type_name={"Foo"}, from_path=str(missing))
-        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[imp])))
+        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(types=[imp])))
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
@@ -261,7 +272,7 @@ class TestImportHasValidFromPath:
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
         escaping_path = str(Path.cwd().resolve().parent / "outside")
         imp = ImportTypeItemNode(type_name={"Foo"}, from_path=escaping_path)
-        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[imp])))
+        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(types=[imp])))
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
@@ -305,11 +316,11 @@ class TestImportsHasNotCyclicalDeps:
         imp_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[imp_x])),
+            header=HeaderNode(imports=ImportsNode(types=[imp_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[])),
+            header=HeaderNode(imports=ImportsNode()),
         )
         rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
@@ -320,11 +331,11 @@ class TestImportsHasNotCyclicalDeps:
         imp_y = ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[imp_x])),
+            header=HeaderNode(imports=ImportsNode(types=[imp_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[imp_y])),
+            header=HeaderNode(imports=ImportsNode(types=[imp_y])),
         )
         rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
@@ -475,7 +486,7 @@ class TestImportHasValidFromPathEdgeCases:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(
                             type_name={"Foo"},
                             from_path=resolved_outside,
@@ -506,7 +517,7 @@ class TestImportHasNotDuplicate:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Foo"}, from_path="a"),
                         ImportTypeItemNode(type_name={"Bar"}, from_path="b"),
                     ]
@@ -522,7 +533,7 @@ class TestImportHasNotDuplicate:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Foo"}, from_path="a"),
                         ImportTypeItemNode(type_name={"Foo"}, from_path="b"),
                     ]
@@ -552,7 +563,7 @@ class TestAnnotationLinksExists:
     def test_positive_link_found_in_imports(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
                 annotations=AnnotationsNode(text="uses `MyType`", links=["MyType"]),
             )
         )
@@ -600,7 +611,7 @@ class TestAnnotationLinksExists:
     def test_negative_link_not_found_anywhere(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"OtherType"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"OtherType"}, from_path="a")]),
                 annotations=AnnotationsNode(text="uses `Missing`", links=["Missing"]),
             )
         )
@@ -656,7 +667,7 @@ class TestAnnotationLinksExists:
         entity = EntityTypeNode(name="MyClass", methods=[method])
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MyType"}, from_path="a")]),
             ),
             body=BodyNode(entities=[entity]),
         )
@@ -679,7 +690,7 @@ class TestUsageLinksHasNotConflicts:
     def test_positive_no_conflicts(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
                 usages=UsagesNode(items=[UsageItemNode(name="mypract")]),
             )
         )
@@ -691,7 +702,7 @@ class TestUsageLinksHasNotConflicts:
     def test_negative_usage_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
                 usages=UsagesNode(items=[UsageItemNode(name="Foo")]),
             )
         )
@@ -707,7 +718,7 @@ class TestUsageLinksHasNotConflicts:
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
                 usages=UsagesNode(items=[UsageItemNode(name="Foo")]),
             )
         )
@@ -746,7 +757,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_positive_no_conflicts(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity")],
@@ -761,7 +772,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_negative_entity_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo")],
@@ -778,7 +789,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a", alias="FooAlias")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo")],
@@ -792,7 +803,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
     def test_negative_routine_name_conflicts_with_type_name(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 routines=[RoutineTypeNode(name="Bar")],
@@ -810,7 +821,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Embedded entity with name matching an imported type is skipped — no error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo", embedded=True)],
@@ -825,7 +836,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Embedded routine with name matching an imported type is skipped — no error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 routines=[RoutineTypeNode(name="Bar", embedded=True)],
@@ -840,7 +851,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Non-embedded entity with name matching an imported type still produces error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Foo", embedded=False)],
@@ -859,7 +870,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         """Non-embedded routine with name matching an imported type still produces error."""
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Bar"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="Other", embedded=False)],
@@ -916,7 +927,7 @@ class TestMutationExists:
     def test_positive_mutation_found_among_import_types(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"ImportedType"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"ImportedType"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity", mutations=[("ImportedType", "path")])],
@@ -930,7 +941,7 @@ class TestMutationExists:
     def test_negative_mutation_not_found(self):
         root = DocumentRoot(
             header=HeaderNode(
-                imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="a")]),
             ),
             body=BodyNode(
                 entities=[EntityTypeNode(name="MyEntity", mutations=[("NonExistent", "path")])],
@@ -1212,7 +1223,7 @@ class TestImportsHasOnlyValidKeys:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a"}),
                     ],
                 ),
@@ -1228,7 +1239,7 @@ class TestImportsHasOnlyValidKeys:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(
                             type_name={"Foo"}, from_path="a", data={"Types": ["Foo"], "From": "a", "Extra": True}
                         ),
@@ -1247,7 +1258,7 @@ class TestImportsHasOnlyValidKeys:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Foo"}, from_path="a", data={}),
                     ],
                 ),
@@ -1390,7 +1401,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"MyType"}, from_path="target_pkg"),
                     ],
                 ),
@@ -1411,7 +1422,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"MyFunc"}, from_path="target_pkg"),
                     ],
                 ),
@@ -1431,7 +1442,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"ReExportedType"}, from_path="target_pkg"),
                     ],
                 ),
@@ -1455,7 +1466,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"MissingType"}, from_path=str(target_dir)),
                     ],
                 ),
@@ -1473,7 +1484,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"MyType"}, from_path="/nonexistent/path"),
                     ],
                 ),
@@ -1489,7 +1500,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"MyType"}, from_path="missing_pkg"),
                     ],
                 ),
@@ -1513,7 +1524,7 @@ class TestImportTypeExists:
             path="current_pkg",
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Missing"}, from_path=str(target_dir)),
                     ],
                 ),
@@ -1546,7 +1557,7 @@ class TestImportHasValidFromPathHierarchy:
                     path=str(doc_dir),
                     header=HeaderNode(
                         imports=ImportsNode(
-                            items=[
+                            types=[
                                 ImportTypeItemNode(type_name={"Foo"}, from_path=str(sibling)),
                             ],
                         ),
@@ -1575,7 +1586,7 @@ class TestImportHasValidFromPathHierarchy:
                 path=str(doc_dir),
                 header=HeaderNode(
                     imports=ImportsNode(
-                        items=[
+                        types=[
                             ImportTypeItemNode(type_name={"Foo"}, from_path=str(child)),
                         ],
                     ),
@@ -1604,7 +1615,7 @@ class TestImportHasValidFromPathHierarchy:
                 path=str(doc_dir),
                 header=HeaderNode(
                     imports=ImportsNode(
-                        items=[
+                        types=[
                             ImportTypeItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
                         ],
                     ),
@@ -1798,7 +1809,7 @@ def _make_import_is_used_doc(  # noqa: PLR0913
     """Helper to build a DocumentNode for ImportIsUsed tests."""
     import_item = ImportTypeItemNode(type_name=import_names or {"Node"}, from_path=import_from, alias=import_alias)
     header = HeaderNode(
-        imports=ImportsNode(items=[import_item]),
+        imports=ImportsNode(types=[import_item]),
     )
     if header_links:
         header.annotations = AnnotationsNode(links=header_links)
@@ -1969,5 +1980,48 @@ class TestImportIsUsed:
         prop = PropertyNode(name="items", type="N")
         entity = EntityTypeNode(name="MyEntity", properties=[prop])
         node = _make_import_is_used_doc(entities=[entity], import_names={"Node"}, import_alias="N")
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_usage_import_used_in_usage_links(self):
+        """ImportUsageItemNode referenced in usage links -> no error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="my_usage", annotations=AnnotationsNode(links=["my_usage"]))]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_negative_usage_import_not_used(self):
+        """ImportUsageItemNode not referenced in any usage links -> error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="other_usage")]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_is_used"
+        assert "my_usage" in errors[0].message
+        assert "test_doc" in errors[0].message
+
+    def test_positive_usage_import_alias_used(self):
+        """ImportUsageItemNode alias referenced in usage links -> no error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path", alias="mu")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="my_usage", annotations=AnnotationsNode(links=["mu"]))]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
         rule = ImportIsUsed()
         assert rule.check(node) == []

@@ -200,7 +200,7 @@ Annotations: |
     - При отсутствии целевого каталога — создать
     - Код возврата: 0 при успехе, 1 при ошибке 
 
-"schema(cells: list[str], max_depth: int = None)":
+"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
   location: schema.py
   annotations: |
     Команда выводит текущую схему проекта.
@@ -208,6 +208,7 @@ Annotations: |
     `cells`: последовательные аргументы командной строки, пути которые необходимо
              показать в выводе, например "schema cell/path/one cell/path/two"
     `max_depth`: опция --max-depth ограничивает максимальную вложенность дерева
+    `depends_on`: опция --depends-on устанавливает cells для фильтрации через deps
 
     Алгоритм:
     - загрузить дерево документов проекта с помощью навыка `documents`
@@ -219,8 +220,14 @@ Annotations: |
     {
       "cell": <document path>,
       "description": <document footer description>,
+      "types": [<routines and nodes from cell body>],
       "usages": [<md files from .usage dir>],
-      "relations": [<set of from path of import items>],
+      "dependencies": {
+        "<imported cell path>": {
+          "types": [<list of imported types>],
+          "usages": [<list of imported usages>]
+        }
+      },
       "children": [<children cells structures>]
     }
     ```
@@ -228,12 +235,15 @@ Annotations: |
     Поля:
     - cell: нормализованный относительно cwd путь до папки с CODEMANIFEST
     - description: поле description из footer документа
-    - usages: нормализованные относительно cwd пути до *.md файлов в папке .usages рядом с CODEMANIFEST
-    - relations: уникальный набор нормализованных путей из секции imports[*].from в header документа
-    - children: такие же вложенные документы согласно иерархии дерева
+    - types: список имен routines и entities которые предоставляет клетка
+    - usages: список *.md файлов в папке .usages рядом с CODEMANIFEST
+    - dependencies: ключи - уникальный набор нормализованных путей из секции imports[*].from в header документа
+                    значения types и usages берутся из imports[<cell>].types и imports[<cell>].usages 
+    - children: такие же вложенные cell согласно иерархии дерева
 
     Дополнительные требования:
     - если max_depth не указан - дерево выводится полностью
+    - если depends_on не указан - дерево выводится полностью
     - вывод не должен содержать ничего кроме json структуры
     - если дерево пустое → []
     - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов

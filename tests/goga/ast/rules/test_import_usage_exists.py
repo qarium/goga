@@ -31,7 +31,7 @@ class TestImportUsageExistsFound:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"my_usage"},
                             from_path=str(tmp_path / "some_cell"),
@@ -55,7 +55,7 @@ class TestImportUsageExistsFound:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"usage_a", "usage_b"},
                             from_path=str(tmp_path / "cell"),
@@ -77,7 +77,7 @@ class TestImportUsageExistsNotFound:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"missing_usage"},
                             from_path=str(tmp_path / "some_cell"),
@@ -102,7 +102,7 @@ class TestImportUsageExistsNotFound:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"missing"},
                             from_path=str(tmp_path / "some_cell"),
@@ -128,7 +128,7 @@ class TestImportUsageExistsNotFound:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"found_usage", "missing_usage"},
                             from_path=str(tmp_path / "cell"),
@@ -150,7 +150,7 @@ class TestImportUsageExistsSkipsTypeItems:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"SomeType"}, from_path="some/path"),
                     ],
                 ),
@@ -167,8 +167,10 @@ class TestImportUsageExistsSkipsTypeItems:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"SomeType"}, from_path=str(tmp_path)),
+                    ],
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"some_usage"},
                             from_path=str(tmp_path / "nonexistent"),
@@ -190,7 +192,7 @@ class TestImportUsageExistsSkipsNonExistentFromPath:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"some_usage"},
                             from_path=str(tmp_path / "nonexistent_path"),
@@ -209,7 +211,7 @@ class TestImportUsageExistsSkipsNonExistentFromPath:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    usages=[
                         ImportUsageItemNode(
                             usage_name={"some_usage"},
                             from_path="",

@@ -59,11 +59,11 @@ class TestAnalyzerPassingRules:
         import_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[import_x])),
+            header=HeaderNode(imports=ImportsNode(types=[import_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[])),
+            header=HeaderNode(imports=ImportsNode()),
         )
         tree = [doc1, doc2]
         rule = ImportsHasNotCyclicalDeps(tree=tree)
@@ -83,11 +83,11 @@ class TestAnalyzerFailingRules:
         import_y = ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[import_x])),
+            header=HeaderNode(imports=ImportsNode(types=[import_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[import_y])),
+            header=HeaderNode(imports=ImportsNode(types=[import_y])),
         )
         tree = [doc1, doc2]
         rule = ImportsHasNotCyclicalDeps(tree=tree)
@@ -142,11 +142,11 @@ class TestAnalyzerAggregation:
         import_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/y.cm")
         doc_no_cycle = DocumentRoot(
             path="/project/x.cm",
-            header=HeaderNode(imports=ImportsNode(items=[import_x])),
+            header=HeaderNode(imports=ImportsNode(types=[import_x])),
         )
         doc_unused = DocumentRoot(
             path="/project/y.cm",
-            header=HeaderNode(imports=ImportsNode(items=[])),
+            header=HeaderNode(imports=ImportsNode()),
         )
         tree = [doc_no_cycle, doc_unused]
 
