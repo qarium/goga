@@ -66,7 +66,7 @@ class Factory:
         # Build embeddings list by matching embedded type names with import source paths
         # All embedded types are added to body for rule validation
         embeddings, unmatched_entities, unmatched_routines = self._build_embeddings(
-            header.imports.items, embedded_entities, embedded_routines
+            header.imports.types, embedded_entities, embedded_routines
         )
         body.entities.extend(unmatched_entities)
         body.routines.extend(unmatched_routines)
@@ -102,7 +102,10 @@ class Factory:
         header.parent = document_root
         header.imports.root = document_root
         header.imports.parent = header
-        for item in header.imports.items:
+        for item in header.imports.types:
+            item.root = document_root
+            item.parent = header.imports
+        for item in header.imports.usages:
             item.root = document_root
             item.parent = header.imports
         header.usages.root = document_root
@@ -161,9 +164,8 @@ class Factory:
 
         # Collect imported type names (only from ImportTypeItemNode)
         types: list[str] = []
-        for item in imports_node.items:
-            if isinstance(item, ImportTypeItemNode):
-                types.extend(item.type_name)
+        for item in imports_node.types:
+            types.extend(item.type_name)
 
         return HeaderNode(
             imports=imports_node,
@@ -175,10 +177,11 @@ class Factory:
 
     def _parse_imports(self, data: Any, filepath: str) -> ImportsNode:
         """Parse the Imports section of the header."""
-        items: list[ImportTypeItemNode | ImportUsageItemNode] = []
+        type_items: list[ImportTypeItemNode] = []
+        usage_items: list[ImportUsageItemNode] = []
 
         if data is None:
-            return ImportsNode(items=items)
+            return ImportsNode(types=type_items, usages=usage_items)
 
         if not isinstance(data, list):
             raise DocumentParseError(
@@ -196,11 +199,11 @@ class Factory:
             types_raw = entry.get("Types")
             usages_raw = entry.get("Usages")
 
-            items.extend(self._parse_type_entries(types_raw, from_path, entry))
-            items.extend(self._parse_usage_entries(usages_raw, from_path, entry))
+            type_items.extend(self._parse_type_entries(types_raw, from_path, entry))
+            usage_items.extend(self._parse_usage_entries(usages_raw, from_path, entry))
 
             if types_raw is None and usages_raw is None:
-                items.append(
+                type_items.append(
                     ImportTypeItemNode(
                         type_name=set(),
                         from_path=from_path,
@@ -208,8 +211,16 @@ class Factory:
                         data=dict(entry),
                     )
                 )
+                usage_items.append(
+                    ImportUsageItemNode(
+                        usage_name=set(),
+                        from_path=from_path,
+                        alias="",
+                        data=dict(entry),
+                    )
+                )
 
-        return ImportsNode(items=items)
+        return ImportsNode(types=type_items, usages=usage_items)
 
     @staticmethod
     def _split_alias(raw: str) -> tuple[str, str]:
@@ -578,7 +589,7 @@ class Factory:
 
     def _build_embeddings(
         self,
-        import_items: list[ImportTypeItemNode | ImportUsageItemNode],
+        import_items: list[ImportTypeItemNode],
         embedded_entities: list[tuple[str, bool, str, dict]],
         embedded_routines: list[tuple[str, bool, str, str, dict]],
     ) -> tuple[list[tuple[str, str]], list[EntityTypeNode], list[RoutineTypeNode]]:
@@ -589,12 +600,11 @@ class Factory:
         - list of EntityTypeNode for all embedded entities
         - list of RoutineTypeNode for all embedded routines
         """
-        # Build a lookup from type name -> from_path (only ImportTypeItemNode)
+        # Build a lookup from type name -> from_path
         import_lookup: dict[str, str] = {}
         for item in import_items:
-            if isinstance(item, ImportTypeItemNode):
-                for type_name in item.type_name:
-                    import_lookup[type_name] = item.from_path
+            for type_name in item.type_name:
+                import_lookup[type_name] = item.from_path
 
         embeddings: list[tuple[str, str]] = []
         unmatched_entities: list[EntityTypeNode] = []

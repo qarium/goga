@@ -23,7 +23,7 @@ class TestImportItemIsValidHappyPath:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")],
+                    types=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")],
                 ),
             ),
         )
@@ -36,7 +36,7 @@ class TestImportItemIsValidHappyPath:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportUsageItemNode(usage_name={"my_usage"}, from_path="baz")],
+                    usages=[ImportUsageItemNode(usage_name={"my_usage"}, from_path="baz")],
                 ),
             ),
         )
@@ -49,8 +49,10 @@ class TestImportItemIsValidHappyPath:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name={"Foo"}, from_path="bar"),
+                    ],
+                    usages=[
                         ImportUsageItemNode(usage_name={"my_usage"}, from_path="baz"),
                     ],
                 ),
@@ -67,7 +69,7 @@ class TestImportItemIsValidEmptyType:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportTypeItemNode(type_name=set(), from_path="bar")],
+                    types=[ImportTypeItemNode(type_name=set(), from_path="bar")],
                 ),
             ),
         )
@@ -84,7 +86,7 @@ class TestImportItemIsValidEmptyType:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportTypeItemNode(type_name=set(), from_path="some/path")],
+                    types=[ImportTypeItemNode(type_name=set(), from_path="some/path")],
                 ),
             ),
         )
@@ -102,7 +104,7 @@ class TestImportItemIsValidEmptyUsage:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportUsageItemNode(usage_name=set(), from_path="baz")],
+                    usages=[ImportUsageItemNode(usage_name=set(), from_path="baz")],
                 ),
             ),
         )
@@ -119,7 +121,7 @@ class TestImportItemIsValidEmptyUsage:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[ImportUsageItemNode(usage_name=set(), from_path="some/path")],
+                    usages=[ImportUsageItemNode(usage_name=set(), from_path="some/path")],
                 ),
             ),
         )
@@ -137,8 +139,10 @@ class TestImportItemIsValidMultipleErrors:
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
-                    items=[
+                    types=[
                         ImportTypeItemNode(type_name=set(), from_path="a"),
+                    ],
+                    usages=[
                         ImportUsageItemNode(usage_name=set(), from_path="b"),
                     ],
                 ),

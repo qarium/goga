@@ -177,7 +177,8 @@ class TestImportsNode:
 
     def test_defaults(self) -> None:
         node = ImportsNode()
-        assert node.items == []
+        assert node.types == []
+        assert node.usages == []
 
 
 class TestImportTypeItemNode:

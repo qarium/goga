@@ -115,7 +115,7 @@ Imports:
         assert usage_items[0].usage_name == set()
 
     def test_parse_imports_no_types_no_usages(self, tmp_path) -> None:
-        """Only From (no Types, no Usages) creates ImportTypeItemNode with type_name=set()."""
+        """Only From (no Types, no Usages) creates both empty type and usage items."""
         imports = """\
 Imports:
   - From: path/to/cell
@@ -123,9 +123,13 @@ Imports:
         pkg = _write_codemanifest(str(tmp_path / "no_types_no_usages"), _manifest(imports))
         root = Factory(pkg).create()
         type_items = root.header.imports.types
+        usage_items = root.header.imports.usages
         assert len(type_items) == 1
         assert isinstance(type_items[0], ImportTypeItemNode)
         assert type_items[0].type_name == set()
+        assert len(usage_items) == 1
+        assert isinstance(usage_items[0], ImportUsageItemNode)
+        assert usage_items[0].usage_name == set()
 
     def test_parse_imports_usage_alias(self, tmp_path) -> None:
         """Usages=["long_name AS short"] -> usage_name={"long_name"}, alias="short"."""
@@ -272,3 +276,50 @@ Imports:
         root = Factory(pkg).create()
         assert "Foo" in root.header.types
         assert "my_usage" not in root.header.types
+
+
+# ---------------------------------------------------------------------------
+# No imports — both lists empty
+# ---------------------------------------------------------------------------
+
+
+class TestNoImports:
+    def test_no_imports_both_lists_empty(self, tmp_path) -> None:
+        """When Imports section is absent, both types and usages lists are empty."""
+        manifest = """\
+
+---
+---
+"""
+        pkg = _write_codemanifest(str(tmp_path / "no_imports"), manifest)
+        root = Factory(pkg).create()
+        assert root.header.imports.types == []
+        assert root.header.imports.usages == []
+
+
+# ---------------------------------------------------------------------------
+# _wire_references sets parent for both lists
+# ---------------------------------------------------------------------------
+
+
+class TestWireReferencesBothLists:
+    def test_wire_references_sets_parent_for_both_lists(self, tmp_path) -> None:
+        """_wire_references sets root and parent on items in both types and usages lists."""
+        imports = """\
+Imports:
+  - Types:
+      - Foo
+    Usages:
+      - my_usage
+    From: path/to/cell
+"""
+        pkg = _write_codemanifest(str(tmp_path / "wire_refs"), _manifest(imports))
+        root = Factory(pkg).create()
+
+        type_item = root.header.imports.types[0]
+        assert type_item.root is root
+        assert type_item.parent is root.header.imports
+
+        usage_item = root.header.imports.usages[0]
+        assert usage_item.root is root
+        assert usage_item.parent is root.header.imports
