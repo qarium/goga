@@ -14,9 +14,10 @@ class HeaderNode(DocumentNode):
     types: list[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ImportsNode(DocumentNode):
-    items: list[ImportTypeItemNode | ImportUsageItemNode] = field(default_factory=list)
+    types: list[ImportTypeItemNode] = field(default_factory=list)
+    usages: list[ImportUsageItemNode] = field(default_factory=list)
 
 
 @dataclass
