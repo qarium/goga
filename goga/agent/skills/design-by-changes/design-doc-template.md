@@ -52,6 +52,36 @@ If a section cannot be completed because information is unavailable, keep the se
 - Existing code that can be reused:
 - Test coverage gaps:
 
+## Contract Consistency
+
+<!-- Track cross-entity contract interaction issues found during analysis -->
+
+### Interface ↔ Type consistency
+<!-- For each entity that accepts/returns imported types: does the type shape match expected usage? -->
+- <entity> ↔ <type>: <consistency status or issue found>
+
+### Type ↔ Mutation consistency
+<!-- For each Type:: mutation: is the base type resolvable, is the mutation target compatible? -->
+- <mutation>: <consistency status or issue found>
+
+### Interface ↔ Interface consistency
+<!-- For interacting entities: do output/input types match, do shared references agree? -->
+- <entity A> ↔ <entity B>: <consistency status or issue found>
+
+### Annotations ↔ Entity consistency
+<!-- Do annotations reference types/usages/parameters that exist in current CODEMANIFEST context? -->
+- <entity> annotations: <consistency status or issue found>
+
+## CODEMANIFEST Changes
+
+<!-- Document all CODEMANIFEST edits made during design with justification -->
+
+### Applied changes
+- `<file>`: <what changed — before → after> (reason: <insufficient/inconsistent/interaction error>)
+
+### Skipped issues
+- `<file>`: <issue description> (reason for skipping: <user decision>)
+
 ## Implementation Detail Decisions
 
 - <Topic>: <decision> (source: brainstorm / confirmed by user)
@@ -116,6 +146,24 @@ If a section cannot be completed because information is unavailable, keep the se
 - **Where it is used**: <which contract entities use it>
 - **Why this one**: <rationale for the choice — why not an alternative>
 - **How exactly it is used**: <specific APIs, call patterns>
+
+## Planned Usages Structure
+
+<!-- For each cell being designed, describe the planned local .usages/ structure -->
+<!-- This section is populated after usages calibration with the user (Step 4d) -->
+
+### Cell: `<cell path>`
+- **Granularity**: <one per cell / one per entity / combined>
+- **Planned usages files**:
+  - `.usages/<name>.md` — <what this practice covers>
+  - `.usages/<name>.md` — <what this practice covers>
+- **Rationale**: <why this structure was chosen>
+- **Calibration decision**: <what was proposed and what the user confirmed>
+
+### Imported usages from other cells
+<!-- List usages imported from other cells via Imports → Usages -->
+- `<usage name>` from `<cell path>` — <why this usage is imported, what it provides>
+- Path: `<cell path>/.usages/<usage name>.md`
 
 ## Test Scenarios
 

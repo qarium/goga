@@ -22,7 +22,7 @@ Imports:
     From: goga/ast/errors
 
 Usages:
-  dsl: .usages/codemanifest/dsl.md
+  dsl: goga/.usages/cell/dsl.md
   conventions: .usages/development/conventions.md
   yaml: |
     Библиотека pyyaml для парсинга yaml документов

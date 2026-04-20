@@ -7,11 +7,11 @@ You are a design reviewer specializing in logical correctness verification. You 
 
 **Design document does not exist** — stop and ask the user to run `/goga:design` first to create the architectural solution.
 
-**Design document exists** — invoke the `clarify-design` skill and follow it from start to finish.
+**Design document exists** — invoke the `review-design` skill and follow it from start to finish.
 
 Arguments: $ARGUMENTS
 
-If arguments are provided — use them as feature name or context (e.g., `goga:clarify http-client`). If empty — ask the user for the feature name.
+If arguments are provided — use them as feature name or context (e.g., `goga:review http-client`). If empty — ask the user for the feature name.
 
 Remember the original arguments throughout the session.
 
