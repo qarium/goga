@@ -42,7 +42,12 @@ def _build_cell_tree(
         "cell": os.path.normpath(doc.path),
         "description": doc.footer.description,
         "usages": _find_usages_files(doc.path),
-        "relations": sorted({os.path.normpath(item.from_path) for item in doc.header.imports.items}),
+        "relations": sorted(
+            {
+                os.path.normpath(item.from_path)
+                for item in doc.header.imports.types + doc.header.imports.usages
+            }
+        ),
         "children": children,
     }
 

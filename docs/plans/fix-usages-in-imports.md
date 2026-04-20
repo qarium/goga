@@ -246,9 +246,9 @@ Factory._parse_imports
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Code**: в `_build_cell_tree` заменить `{os.path.normpath(item.from_path) for item in doc.header.imports.items}` на `{os.path.normpath(item.from_path) for item in doc.header.imports.types + doc.header.imports.usages}`
-- [ ] Verify: `pytest tests/ -x` — все тесты проходят
-- [ ] Lint: `ruff check goga/commands/` — fix formatting
+- [x] **Code**: в `_build_cell_tree` заменить `{os.path.normpath(item.from_path) for item in doc.header.imports.items}` на `{os.path.normpath(item.from_path) for item in doc.header.imports.types + doc.header.imports.usages}`
+- [x] Verify: `pytest tests/ -x` — все тесты проходят
+- [x] Lint: `ruff check goga/commands/` — fix formatting
 
 ### Task 7: Integration tests — полная верификация
 
