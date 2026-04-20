@@ -983,3 +983,98 @@ Description: Combined
 
     data = json.loads(result.output)
     assert data[0]["types"] == ["MyEntity", "my_routine"]
+
+
+def test_schema_depends_on_with_max_depth(tmp_path) -> None:
+    """--depends-on must find transitive deps beyond --max-depth limit."""
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    mid_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MidEntity()":
+  location: mid.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Mid
+"""
+    leaf_manifest = """\
+Imports:
+  - Types:
+      - HelperType
+    From: mid/lib
+
+Usages: {}
+
+Annotations: |
+  Uses `HelperType` here
+
+---
+"LeafEntity()":
+  location: leaf.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf with dep
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"HelperType()":
+  location: helper.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    mid = tmp_path / "mid"
+    mid.mkdir()
+    _write_codemanifest(mid, mid_manifest)
+    leaf = mid / "leaf"
+    leaf.mkdir()
+    _write_codemanifest(leaf, leaf_manifest)
+    lib = mid / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "mid/lib", "--max-depth", "1")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root passes because descendant leaf depends on mid/lib, even though
+    # --max-depth 1 prunes leaf from the output tree
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    # mid is at depth 1, so it's included but leaf (depth 2) is pruned
+    assert len(data[0]["children"]) == 1
+    assert data[0]["children"][0]["cell"] == "mid"
+    assert data[0]["children"][0]["children"] == []
