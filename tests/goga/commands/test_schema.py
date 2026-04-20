@@ -187,6 +187,14 @@ class TestApiShape:
         max_depth_param = next(p for p in schema_cmd.params if p.name == "max_depth")
         assert max_depth_param.type is click.INT
 
+    def test_schema_has_depends_on_option(self) -> None:
+        param_names = [p.name for p in schema_cmd.params]
+        assert "depends_on" in param_names
+
+    def test_schema_depends_on_is_multiple(self) -> None:
+        depends_on_param = next(p for p in schema_cmd.params if p.name == "depends_on")
+        assert depends_on_param.multiple is True
+
 
 # --- Behavioural tests ---
 
@@ -668,3 +676,178 @@ def test_schema_dependencies_multiple_from_paths(tmp_path) -> None:
     assert dep_keys == sorted(dep_keys)
     assert deps["lib_a"]["types"] == ["Alpha"]
     assert deps["lib_b"]["types"] == ["Beta"]
+
+
+CELL_A = """\
+Imports:
+  - Types:
+      - BType
+    From: B
+
+Usages: {}
+
+Annotations: |
+  Uses `BType` here
+
+---
+"AType()":
+  location: a.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell A depends on B
+"""
+
+CELL_B = """\
+Imports:
+  - Types:
+      - CType
+    From: C
+
+Usages: {}
+
+Annotations: |
+  Uses `CType` here
+
+---
+"BType()":
+  location: b.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell B depends on C
+"""
+
+CELL_C = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"CType()":
+  location: c.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell C no deps
+"""
+
+
+def test_schema_depends_on_filter_basic(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # B depends on C directly, so B is kept
+    # A depends on B but B is a sibling (not a child), so A is not kept
+    # C has no dependency on C, so C is excluded
+    cells = [d["cell"] for d in data]
+    assert cells == ["B"]
+
+
+def test_schema_depends_on_empty_no_filter(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+
+
+def test_schema_depends_on_no_match(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "nonexistent")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert data == []
+
+
+def test_schema_depends_on_recursive(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "subpkg")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root depends on subpkg (has subpkg in dependencies), so root is kept
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    assert "subpkg" in data[0]["dependencies"]
+
+
+def test_schema_cells_and_depends_on_combined(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("A", "--depends-on", "B")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # cells filter picks only A, depends_on keeps A (A depends on B)
+    assert len(data) == 1
+    assert data[0]["cell"] == "A"
+
+
+def test_schema_depends_on_with_non_normalized_path(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "./subpkg")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # ./subpkg normalizes to subpkg, root depends on subpkg
+    assert len(data) == 1
+    assert data[0]["cell"] == "."

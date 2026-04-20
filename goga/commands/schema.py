@@ -88,14 +88,29 @@ def _filter_tree(tree: list[DocumentRoot], cells: tuple[str, ...]) -> list[Docum
     return [root for root in tree if _root_matches(root)]
 
 
+def _has_dependency(cell_dict: dict, dep_paths: frozenset[str]) -> bool:
+    if any(key in dep_paths for key in cell_dict.get("dependencies", {})):
+        return True
+    return any(_has_dependency(child, dep_paths) for child in cell_dict.get("children", []))
+
+
+def _filter_by_depends_on(result: list[dict], depends_on: tuple[str, ...]) -> list[dict]:
+    if not depends_on:
+        return result
+    dep_paths = frozenset(os.path.normpath(p) for p in depends_on)
+    return [cell for cell in result if _has_dependency(cell, dep_paths)]
+
+
 @click.command()
 @click.argument("cells", nargs=-1)
 @click.option("--max-depth", type=int, default=None)
+@click.option("--depends-on", multiple=True, help="Filter cells by dependency on specified cell paths")
 @click.pass_context
 def schema(
     ctx: click.Context,
     cells: tuple[str, ...],
     max_depth: int | None,
+    depends_on: tuple[str, ...],
 ) -> None:
     """Output project CODEMANIFEST schema as JSON tree.
 
@@ -116,6 +131,7 @@ def schema(
     Options:
       cells          - zero or more cell paths to filter output (variadic)
       --max-depth N  - limit nesting depth of children (default: unlimited)
+      --depends-on   - filter cells by dependency on specified cell paths (repeatable)
 
     Exit codes: 0 on success, 1 if AST parsing errors found.
     """
@@ -126,6 +142,7 @@ def schema(
 
     allowed = frozenset(os.path.normpath(c) for c in cells) if cells else None
     result = [_build_cell_tree(doc, max_depth, 0, allowed) for doc in tree]
+    result = _filter_by_depends_on(result, depends_on)
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)
 
