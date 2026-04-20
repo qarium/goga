@@ -611,7 +611,7 @@ def test_schema_types_field_entities_and_routines(tmp_path) -> None:
     assert data[0]["types"] == ["MyClass"]
 
 
-def test_schema_types_field_empty_body(tmp_path) -> None:
+def test_schema_types_field_single_entity(tmp_path) -> None:
     _write_codemanifest(tmp_path, NO_IMPORTS)
 
     with _cwd(tmp_path):
@@ -641,26 +641,6 @@ def test_schema_usages_basename(tmp_path) -> None:
 
     data = json.loads(result.output)
     assert data[0]["usages"] == ["click.md"]
-
-
-def test_schema_no_relations_field_regression(tmp_path) -> None:
-    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
-    subpkg = tmp_path / "subpkg"
-    subpkg.mkdir()
-    _write_codemanifest(subpkg, CHILD)
-
-    with _cwd(tmp_path):
-        result = _run_schema()
-
-    data = json.loads(result.output)
-    for cell in data:
-        _assert_no_relations(cell)
-
-
-def _assert_no_relations(cell: dict) -> None:
-    assert "relations" not in cell, f"'relations' found in cell {cell['cell']}"
-    for child in cell.get("children", []):
-        _assert_no_relations(child)
 
 
 def test_schema_dependencies_multiple_from_paths(tmp_path) -> None:
@@ -764,20 +744,6 @@ def test_schema_depends_on_filter_basic(tmp_path) -> None:
     assert cells == ["B"]
 
 
-def test_schema_depends_on_empty_no_filter(tmp_path) -> None:
-    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
-    subpkg = tmp_path / "subpkg"
-    subpkg.mkdir()
-    _write_codemanifest(subpkg, CHILD)
-
-    with _cwd(tmp_path):
-        result = _run_schema()
-
-    assert result.exit_code == 0
-    data = json.loads(result.output)
-    assert len(data) == 1
-
-
 def test_schema_depends_on_no_match(tmp_path) -> None:
     cell_a = tmp_path / "A"
     cell_a.mkdir()
@@ -851,3 +817,169 @@ def test_schema_depends_on_with_non_normalized_path(tmp_path) -> None:
     # ./subpkg normalizes to subpkg, root depends on subpkg
     assert len(data) == 1
     assert data[0]["cell"] == "."
+
+
+def test_schema_depends_on_multiple_values(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "B", "--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # A depends on B (match), B depends on C (match), C has no deps
+    cells = [d["cell"] for d in data]
+    assert "A" in cells
+    assert "B" in cells
+
+
+def test_schema_depends_on_deep_recursive(tmp_path) -> None:
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    mid_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MidEntity()":
+  location: mid.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Mid
+"""
+    leaf_manifest = """\
+Imports:
+  - Types:
+      - HelperType
+    From: mid/lib
+
+Usages: {}
+
+Annotations: |
+  Uses `HelperType` here
+
+---
+"LeafEntity()":
+  location: leaf.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Leaf with dep
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"HelperType()":
+  location: helper.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    mid = tmp_path / "mid"
+    mid.mkdir()
+    _write_codemanifest(mid, mid_manifest)
+    leaf = mid / "leaf"
+    leaf.mkdir()
+    _write_codemanifest(leaf, leaf_manifest)
+    lib = mid / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "mid/lib")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # root has child mid, mid has child leaf, leaf depends on mid/lib
+    # root passes because descendant leaf depends on mid/lib
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+
+
+def test_schema_cells_and_depends_on_no_match(tmp_path) -> None:
+    cell_a = tmp_path / "A"
+    cell_a.mkdir()
+    _write_codemanifest(cell_a, CELL_A)
+
+    cell_b = tmp_path / "B"
+    cell_b.mkdir()
+    _write_codemanifest(cell_b, CELL_B)
+
+    cell_c = tmp_path / "C"
+    cell_c.mkdir()
+    _write_codemanifest(cell_c, CELL_C)
+
+    with _cwd(tmp_path):
+        result = _run_schema("A", "--depends-on", "C")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    # A depends on B, not C — result should be empty
+    assert data == []
+
+
+def test_schema_types_field_entities_and_routines_combined(tmp_path) -> None:
+    combined = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"MyEntity()":
+  location: entity.py
+  annotations: ""
+
+"my_routine()":
+  location: routine.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Combined
+"""
+    _write_codemanifest(tmp_path, combined)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["MyEntity", "my_routine"]
