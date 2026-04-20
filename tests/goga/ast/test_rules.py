@@ -1240,7 +1240,7 @@ class TestImportsHasOnlyValidKeys:
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "imports_has_only_valid_keys"
         assert "contains unknown keys" in errors[0].message
-        assert "— allowed: Types, From" in errors[0].message
+        assert "— allowed: Types, Usages, From" in errors[0].message
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(

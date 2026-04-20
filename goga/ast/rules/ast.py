@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..errors import ASTRuleError
+from ..nodes.header import ImportTypeItemNode
 
 if TYPE_CHECKING:
     from ..nodes import DocumentRoot
@@ -77,6 +78,9 @@ class ImportTypeExists(ASTRule):
         path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
 
         for item in document.header.imports.items:
+            if not isinstance(item, ImportTypeItemNode):
+                continue
+
             from_path = item.from_path
 
             # Skip if from_path does not exist on filesystem

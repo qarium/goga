@@ -218,25 +218,25 @@ CODEMANIFEST YAML (Imports with Types+Usages+From)
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Contract tests**: в `tests/goga/ast/rules/test_import_usage_exists.py`:
+- [x] **Contract tests**: в `tests/goga/ast/rules/test_import_usage_exists.py`:
   - test_usage_exists_found: ImportUsageItemNode + файл существует → нет ошибок
   - test_usage_exists_not_found: ImportUsageItemNode + файл не существует → ошибка
   - test_usage_exists_skips_type_items: ImportTypeItemNode → правило не проверяет
   - (expected to fail at this stage)
-- [ ] **Code**: в `goga/ast/rules/document.py`: создать класс `ImportUsageExists(DocumentRule)`:
+- [x] **Code**: в `goga/ast/rules/document.py`: создать класс `ImportUsageExists(DocumentRule)`:
   - `__init__`: `super().__init__(name="import_usage_exists")`
   - `check`: фильтрация `isinstance(item, ImportUsageItemNode)`, для каждого `name` в `item.usage_name`:
     `Path(item.from_path) / ".usages" / f"{name}.md"` → exists check
-- [ ] **Code**: в `goga/ast/rules/__init__.py`: добавить `ImportUsageExists` в imports и `__all__`
-- [ ] **Code**: в `goga/ast/ast.py`: убедиться что `ImportUsageExists()` добавлен в `document_rules` (после ImportItemIsValid)
-- [ ] **Verify interfaces**: `pytest tests/goga/ast/rules/test_import_usage_exists.py -v`
-- [ ] **Logic tests**: создать интеграционный тест `tests/.project/import_usage_exists/`:
+- [x] **Code**: в `goga/ast/rules/__init__.py`: добавить `ImportUsageExists` в imports и `__all__`
+- [x] **Code**: в `goga/ast/ast.py`: убедиться что `ImportUsageExists()` добавлен в `document_rules` (после ImportItemIsValid)
+- [x] **Verify interfaces**: `pytest tests/goga/ast/rules/test_import_usage_exists.py -v`
+- [x] **Logic tests**: создать интеграционный тест `tests/.project/import_usage_exists/`:
   - CODEMANIFEST с `Imports: [{"Usages": ["missing_usage"], "From": "helper"}]` и helper с .usages/
   - .expected.yaml с ошибкой import_usage_exists
   - Создать helper-папку с .usages/ и одним .md файлом для позитивного кейса
-- [ ] **Debug**: `pytest tests/ -x` — fix until all pass
-- [ ] **Re-check contracts**: verify rule name, message template, isinstance filter
-- [ ] **Lint**: `ruff check goga/` — fix formatting
+- [x] **Debug**: `pytest tests/ -x` — fix until all pass (integration test passes after Task 5 fixes other rules; all unit tests pass)
+- [x] **Re-check contracts**: verify rule name, message template, isinstance filter
+- [x] **Lint**: `ruff check goga/` — fix formatting
 
 ### Task 5: Update existing rules for ImportUsageItemNode compatibility
 
@@ -258,23 +258,23 @@ CODEMANIFEST YAML (Imports with Types+Usages+From)
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] **Code**: `ImportsHasOnlyValidKeys` — `valid_keys = {"Types", "Usages", "From"}` (строка 768)
-- [ ] **Code**: `ImportHasNotDuplicate` — переписать check(): isinstance для каждого item, ImportTypeItemNode → type_name, ImportUsageItemNode → usage_name. Шаблон ошибки: `"Type '{name}' is imported more than once..."` или `"Usage '{name}' is imported more than once..."`
-- [ ] **Code**: `ImportIsUsed` — в check() добавить isinstance ветвление: для ImportTypeItemNode — как раньше (links + signatures + property_types + embeddings); для ImportUsageItemNode — только all_links (include_embedded=True). Расширить `_collect_links` параметром `include_embedded=False`
-- [ ] **Code**: `_collect_valid_names` (module-level в document.py) — для ImportUsageItemNode: `valid_names.update(item.usage_name); if item.alias: valid_names.add(item.alias)`
-- [ ] **Code**: `EntitiesAndRoutinesHasNotConflicts.check` — для ImportUsageItemNode без alias: `active_type_names.update(item.usage_name)`
-- [ ] **Code**: `UsageLinksHasNotConflicts._collect_import_type_names` — для ImportUsageItemNode без alias: `names.update(item.usage_name)`
-- [ ] **Code**: `MutationExists.check` — isinstance ImportTypeItemNode при сборе valid_names из imports
-- [ ] **Code**: `ImportTypeExists.check` (ast.py) — isinstance ImportTypeItemNode при итерации imports.items
-- [ ] **Verify interfaces**: `python -c "from goga.ast import AST"` — импорт работает
-- [ ] **Logic tests**: обновить существующие .expected.yaml файлы:
+- [x] **Code**: `ImportsHasOnlyValidKeys` — `valid_keys = {"Types", "Usages", "From"}` (строка 768)
+- [x] **Code**: `ImportHasNotDuplicate` — переписать check(): isinstance для каждого item, ImportTypeItemNode → type_name, ImportUsageItemNode → usage_name. Шаблон ошибки: `"Type '{name}' is imported more than once..."` или `"Usage '{name}' is imported more than once..."`
+- [x] **Code**: `ImportIsUsed` — в check() добавить isinstance ветвление: для ImportTypeItemNode — как раньше (links + signatures + property_types + embeddings); для ImportUsageItemNode — только all_links (include_embedded=True). Расширить `_collect_links` параметром `include_embedded=False`
+- [x] **Code**: `_collect_valid_names` (module-level в document.py) — для ImportUsageItemNode: `valid_names.update(item.usage_name); if item.alias: valid_names.add(item.alias)`
+- [x] **Code**: `EntitiesAndRoutinesHasNotConflicts.check` — для ImportUsageItemNode без alias: `active_type_names.update(item.usage_name)`
+- [x] **Code**: `UsageLinksHasNotConflicts._collect_import_type_names` — для ImportUsageItemNode без alias: `names.update(item.usage_name)`
+- [x] **Code**: `MutationExists.check` — isinstance ImportTypeItemNode при сборе valid_names из imports
+- [x] **Code**: `ImportTypeExists.check` (ast.py) — isinstance ImportTypeItemNode при итерации imports.items
+- [x] **Verify interfaces**: `python -c "from goga.ast import AST"` — импорт работает
+- [x] **Logic tests**: обновить существующие .expected.yaml файлы:
   - `tests/.project/imports_has_only_valid_keys/.expected.yaml` — если rule name или message изменились
   - `tests/.project/import_has_not_duplicate/.expected.yaml` — если rule name или message изменились
   - `tests/.project/import_is_used/.expected.yaml` — если message изменился
   - Создать `tests/.project/import_has_not_duplicate_usage/` для проверки дублирования usage names
-- [ ] **Debug**: `pytest tests/ -x` — fix until all pass
-- [ ] **Re-check contracts**: verify все правила корректно работают с обоими типами нод
-- [ ] **Lint**: `ruff check goga/` — fix formatting
+- [x] **Debug**: `pytest tests/ -x` — fix until all pass
+- [x] **Re-check contracts**: verify все правила корректно работают с обоими типами нод
+- [x] **Lint**: `ruff check goga/` — fix formatting
 
 ### Task 6: Integration tests for usages-in-imports
 
