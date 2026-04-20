@@ -111,8 +111,8 @@ class TestPythonContractNegative:
         with pytest.raises(ModuleNotFoundError):
             python_contract("nonexistent/module/path")
 
-    def test_python_contract_skips_non_function_class_objects(self, tmp_path, monkeypatch):
-        """Skips constants and type aliases, includes functions and builtin-type aliases."""
+    def test_python_contract_skips_non_callable_objects(self, tmp_path, monkeypatch):
+        """Skips non-callable objects, includes functions and callable types."""
         pkg_init = tmp_path / "testpkg_skip"
         pkg_init.mkdir()
         (pkg_init / "__init__.py").write_text(
@@ -126,11 +126,30 @@ class TestPythonContractNegative:
 
         names = [item.name for item in result]
         assert "CONSTANT" not in names
+        assert "an_alias" in names  # str is callable (class)
         assert "foo" in names
-        assert len(result) == 2
+        assert len(result) == 2  # an_alias + foo
 
 
 class TestPythonContractEdgeCases:
+    """Edge case tests for python_contract."""
+
+    def test_python_contract_module_in_all_not_included(self, tmp_path, monkeypatch):
+        """Module listed in __all__ is not included in contract."""
+        pkg = tmp_path / "testpkg_mod"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "import os\n"
+            "def foo() -> None: ...\n"
+            "__all__ = ['os', 'foo']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_mod")
+
+        names = [item.name for item in result]
+        assert "os" not in names  # module — not callable
+        assert "foo" in names
+        assert len(result) == 1
     """Edge case tests for python_contract."""
 
     def test_python_contract_nested_path(self, tmp_path, monkeypatch):

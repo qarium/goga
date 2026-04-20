@@ -28,7 +28,7 @@ def python_contract(cell_path: str) -> list[ContractItem]:
     result: list[ContractItem] = []
     for name in all_names:
         obj = getattr(module, name)
-        if not (inspect.isfunction(obj) or inspect.isclass(obj)):
+        if not (callable(obj) and not inspect.ismodule(obj)):
             continue
         if inspect.isclass(obj):
             sig = inspect.signature(obj.__init__)
