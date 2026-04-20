@@ -22,10 +22,21 @@ def _find_usages_files(doc_path: str) -> list[str]:
     return sorted(os.path.normpath(str(f)) for f in entries if f.suffix == ".md")
 
 
-def _build_cell_tree(doc: DocumentRoot, max_depth: int | None, current_depth: int) -> dict:
+def _cell_in_set(doc: DocumentRoot, cells: frozenset[str]) -> bool:
+    if os.path.normpath(doc.path) in cells:
+        return True
+    return any(_cell_in_set(child, cells) for child in doc.children)
+
+
+def _build_cell_tree(
+    doc: DocumentRoot, max_depth: int | None, current_depth: int, allowed_cells: frozenset[str] | None = None,
+) -> dict:
     children: list[dict] = []
     if max_depth is None or current_depth < max_depth:
-        children = [_build_cell_tree(child, max_depth, current_depth + 1) for child in doc.children]
+        for child in doc.children:
+            if allowed_cells is not None and not _cell_in_set(child, allowed_cells):
+                continue
+            children.append(_build_cell_tree(child, max_depth, current_depth + 1, allowed_cells))
 
     return {
         "cell": os.path.normpath(doc.path),
@@ -94,7 +105,8 @@ def schema(
 
     tree = _filter_tree(ast_obj.tree, cells)
 
-    result = [_build_cell_tree(doc, max_depth, 0) for doc in tree]
+    allowed = frozenset(os.path.normpath(c) for c in cells) if cells else None
+    result = [_build_cell_tree(doc, max_depth, 0, allowed) for doc in tree]
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)
 

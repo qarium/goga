@@ -73,6 +73,7 @@ class TestImportUsageExistsFound:
 class TestImportUsageExistsNotFound:
     def test_usage_file_not_found_produces_error(self, tmp_path):
         """ImportUsageItemNode + .usages/{name}.md missing -> error."""
+        (tmp_path / "some_cell").mkdir()
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
@@ -96,6 +97,7 @@ class TestImportUsageExistsNotFound:
 
     def test_error_message_template(self, tmp_path):
         """Error message matches the contract template exactly."""
+        (tmp_path / "some_cell").mkdir()
         expected_path = str(Path(tmp_path / "some_cell" / ".usages" / "missing.md"))
         root = DocumentRoot(
             header=HeaderNode(
@@ -161,6 +163,7 @@ class TestImportUsageExistsSkipsTypeItems:
 
     def test_mixed_items_type_skipped(self, tmp_path):
         """Mixed items: type item skipped, usage item checked."""
+        (tmp_path / "nonexistent").mkdir()
         root = DocumentRoot(
             header=HeaderNode(
                 imports=ImportsNode(
@@ -179,3 +182,43 @@ class TestImportUsageExistsSkipsTypeItems:
         errors = rule.check(node)
         assert len(errors) == 1
         assert errors[0].rule == "import_usage_exists"
+
+
+class TestImportUsageExistsSkipsNonExistentFromPath:
+    def test_nonexistent_from_path_skipped(self, tmp_path):
+        """Usage item with non-existent from_path -> skipped (ImportHasValidFromPath handles it)."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportUsageItemNode(
+                            usage_name={"some_usage"},
+                            from_path=str(tmp_path / "nonexistent_path"),
+                        ),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_empty_from_path_skipped(self):
+        """Usage item with empty from_path -> skipped."""
+        root = DocumentRoot(
+            header=HeaderNode(
+                imports=ImportsNode(
+                    items=[
+                        ImportUsageItemNode(
+                            usage_name={"some_usage"},
+                            from_path="",
+                        ),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        errors = rule.check(node)
+        assert errors == []

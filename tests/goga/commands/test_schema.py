@@ -314,6 +314,51 @@ Description: Pkg root
     assert "pkg/sub" in child_cells
 
 
+def test_schema_with_cells_filter_prunes_siblings(tmp_path) -> None:
+    """Filtering for one cell must not include sibling cells at the same level."""
+    _write_codemanifest(
+        tmp_path,
+        """\
+Usages: {}
+
+Annotations: ""
+
+---
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+""",
+    )
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    _write_codemanifest(pkg, STANDALONE)
+
+    sub_a = pkg / "sub_a"
+    sub_a.mkdir()
+    _write_codemanifest(sub_a, CHILD)
+
+    sub_b = pkg / "sub_b"
+    sub_b.mkdir()
+    _write_codemanifest(sub_b, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema("pkg/sub_a")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    pkg_node = data[0]["children"][0]
+    assert pkg_node["cell"] == "pkg"
+    child_cells = [c["cell"] for c in pkg_node["children"]]
+    assert child_cells == ["pkg/sub_a"]
+
+
 def test_schema_empty_tree(tmp_path) -> None:
     with _cwd(tmp_path):
         result = _run_schema()

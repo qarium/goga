@@ -111,6 +111,8 @@ class ImportUsageExists(DocumentRule):
 
             if not item.from_path:
                 continue
+            if not Path(item.from_path).exists():
+                continue  # ImportHasValidFromPath will report the missing path
             for name in item.usage_name:
                 usage_path = Path(item.from_path) / ".usages" / f"{name}.md"
                 if not usage_path.exists():
