@@ -72,8 +72,10 @@ DocumentNode::HeaderNode():
 DocumentNode::ImportsNode():
   location: header.py
   properties:
-    types -> list[ImportItemNode]: |
+    types -> list[ImportTypeItemNode]: |
       Список импортов типов
+    usages -> list[ImportUsageItemNode]: |
+      Список импортов практик
 
 DocumentNode::ImportTypeItemNode():
   location: header.py
