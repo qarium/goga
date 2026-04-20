@@ -72,16 +72,26 @@ DocumentNode::HeaderNode():
 DocumentNode::ImportsNode():
   location: header.py
   properties:
-    items -> list[ImportItemNode]: |
-      Список импортов
+    types -> list[ImportItemNode]: |
+      Список импортов типов
 
-DocumentNode::ImportItemNode():
+DocumentNode::ImportTypeItemNode():
   location: header.py
   properties:
     type_name -> set[str]: |
       Имя типа который нужно импортировать
     from_path -> str: |
-      Путь откуда импортировать тип
+      Путь к клетке из которой импортировать тип
+    alias -> str: |
+      Альяс на имя типа
+
+DocumentNode::ImportUsageItemNode():
+  location: header.py
+  properties:
+    usage_name -> set[str]: |
+      Имя практики которую нужно импортировать
+    from_path -> str: |
+      Путь к клетке из которой импортировать практику
     alias -> str: |
       Альяс на имя типа
 

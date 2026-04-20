@@ -7,7 +7,8 @@ Imports:
       - DocumentRoot
       - DocumentNode
       - ImportsNode
-      - ImportItemNode
+      - ImportTypeItemNode
+      - ImportUsageItemNode
       - AnnotationsNode
       - HeaderNode
       - UsagesNode
@@ -106,24 +107,41 @@ Annotations: |
     Шаблоны ошибок:
     - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, From"
 
-"DocumentRule::ImportHasType(name: str = 'import_has_type')":
+"DocumentRule::ImportItemIsValid(name: str = 'import_item_is_valid')":
   location: document.py
   annotations: |
-    Проверяет `ImportItemNode`.
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 
     Правила:
-    - импорт содержит подключаемый тип
+    - импорт содержит подключаемый тип или практику
+
+    Требования:
+    - проверяется конкретный Item и ловит случаи когда оставили пустую строку или null в списке
 
     Шаблоны ошибок:
-    - no_type: "Import from '{from_path}' has no Types listed — specify at least one type to import"
+    - no_type: "Import from '{from_path}' has no {Types | Usages} listed — specify at least one type to import"
+
+"DocumentRule::ImportUsageExists(name: str = 'import_usage_exists')":
+  location: document.py
+  annotations: |
+    Проверяет `ImportUsageItemNode`.
+
+    Правила:
+    - подключаемая практика существует по пути "{item.from_path}/.usages/{item.usage_name}.md"
+
+    Требования:
+    - проверяется каждый Item отдельно
+
+    Шаблоны ошибок:
+    - not_found: "Usage '{usage_name}' does not exists on filesystem by path '{usage_md_file_path}'"
 
 "DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
   location: document.py
   annotations: |
-    Проверяет `ImportItemNode`.
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 
     Правила:
-    - импорт содержит путь from откуда подключаются типы
+    - импорт содержит путь from откуда подключаются типы или практики
     - путь существует на файловой системе
     - путь не выходит на пределы CWD
     - путь находится на одном уровне или ниже по иерархии на файловой системе
@@ -140,21 +158,21 @@ Annotations: |
     Проверяет `ImportsNode`.
 
     Правила:
-    - все имена типов должны быть уникальны в рамках всех подключаемых документов
+    - все имена типов и практик должны быть уникальны в рамках всех подключаемых документов
 
     Шаблоны ошибок:
-    - duplicate: "Type '{type_name}' is imported more than once: from '{path_a}' and '{path_b}'"
+    - duplicate: "{Type || Usage} '{type_name || usage_name}' is imported more than once: from '{path_a}' and '{path_b}'"
 
 "DocumentRule::ImportIsUsed(name: str = 'import_is_used')":
   location: document.py
   annotations: |
-    Проверяет `ImportItemNode`.
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 
-    Правила:
+    Правила для типа:
     - type или alias (если указан) используется в документе хотя бы в одном из мест:
       - аннотации:
         - в заголовке документа (header.annotations)
-        - в практиках (usages.item[<name>])
+        - в практиках (header.usages.item[<name>])
         - сущности (body[*].annotations), включая встраиваемые (embedded=True)
         - рутины (body[*].annotations), включая встраиваемые (embedded=True)
         - методы (entity.methods[*].annotations)
@@ -164,12 +182,23 @@ Annotations: |
         - рутины, включая встраиваемые (embedded=True)
         - методы
 
+    Правила для практики:
+    - usage или alias (если указан) используется в документе хотя бы в одном из мест:
+      - аннотации:
+        - в заголовке документа (header.annotations)
+        - в практиках (header.usages.item[<name>])
+        - сущности (body[*].annotations), включая встраиваемые (embedded=True)
+        - рутины (body[*].annotations), включая встраиваемые (embedded=True)
+        - методы (entity.methods[*].annotations)
+        - свойства (entity.properties[*].annotations)
+
     Требования:
-    - проверяем на вхождение в сигнатуру с использованием `signature_contains_type_name`
+    - проверяем типы на вхождение в сигнатуру с использованием `signature_contains_type_name`
     - встраивание (embedded) должно учитываться как использование и не вызывать ошибки
+    - usage (практика) не проверяется в сигнатурах
 
     Шаблоны ошибок:
-    - unused: "Type '{type_name}' was imported, but not used in '{doc_path}'"
+    - unused: "{Type || Usage} '{type_name || usage_name}' was imported, but not used in '{doc_path}'"
 
 "DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
   location: document.py

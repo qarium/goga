@@ -17,7 +17,8 @@ Imports:
   - Types:
       # правила документа
       - ImportsCanNotBeEmpty
-      - ImportHasType
+      - ImportItemIsValid
+      - ImportUsageExists
       - ImportHasValidFromPath
       - ImportHasNotDuplicate
       - AllUsagesIsUsed
@@ -119,7 +120,8 @@ Annotations: |
 
       Правила для каждого документа:
       - `ImportsCanNotBeEmpty`
-      - `ImportHasType`
+      - `ImportItemIsValid`
+      - `ImportUsageExists`
       - `ImportHasValidFromPath`
       - `ImportHasNotDuplicate`
       - `AllUsagesIsUsed`

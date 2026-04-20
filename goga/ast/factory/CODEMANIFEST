@@ -8,7 +8,8 @@ Imports:
       - DocumentRoot
       - HeaderNode
       - ImportsNode
-      - ImportItemNode
+      - ImportTypeItemNode
+      - ImportUsageItemNode
       - UsagesNode
       - AnnotationsNode
       - BodyNode
@@ -65,8 +66,9 @@ Annotations: |
       ## Заголовок → `HeaderNode`
 
       Импорты → `ImportsNode`:
-      - Каждый type в item проверяется на alias и парсится с учетом AS
-      - Каждый импортированный тип → отдельный `ImportItemNode`
+      - Каждый type и usage в item проверяется на alias и парсится с учетом AS
+      - Каждый импортированный тип → отдельный `ImportTypeItemNode`
+      - Каждая импортированная практика → отдельный `ImportUsageItemNode`
 
       Практики → `UsagesNode`:
       - Сборка аннотаций в `AnnotationsNode`
