@@ -2,16 +2,14 @@
 
 from pathlib import Path
 
-import pytest
-
 from goga.ast.errors import DocumentRuleError
 from goga.ast.nodes import (
     DocumentNode,
     DocumentRoot,
     HeaderNode,
+    ImportsNode,
     ImportTypeItemNode,
     ImportUsageItemNode,
-    ImportsNode,
 )
 from goga.ast.rules import ImportUsageExists
 

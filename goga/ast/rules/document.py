@@ -82,17 +82,17 @@ class ImportItemIsValid(DocumentRule):
                         )
                     )
             elif isinstance(item, ImportUsageItemNode) and not item.usage_name:
-                    errors.append(
-                        DocumentRuleError(
-                            message=(
-                                f"Import from '{item.from_path}' has no Usages listed"
-                                f" — specify at least one type to import"
-                            ),
-                            rule=self.name,
-                            document=node.root,
-                            node=item,
-                        )
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Import from '{item.from_path}' has no Usages listed"
+                            f" — specify at least one usage to import"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
                     )
+                )
         return errors
 
 
@@ -109,14 +109,16 @@ class ImportUsageExists(DocumentRule):
             if not isinstance(item, ImportUsageItemNode):
                 continue
 
+            if not item.from_path:
+                continue
             for name in item.usage_name:
-                usage_md_file_path = str(Path(item.from_path) / ".usages" / f"{name}.md")
-                if not Path(usage_md_file_path).exists():
+                usage_path = Path(item.from_path) / ".usages" / f"{name}.md"
+                if not usage_path.exists():
                     errors.append(
                         DocumentRuleError(
                             message=(
                                 f"Usage '{name}' does not exists on filesystem"
-                                f" by path '{usage_md_file_path}'"
+                                f" by path '{usage_path}'"
                             ),
                             rule=self.name,
                             document=node.root,
@@ -263,15 +265,16 @@ class ImportHasNotDuplicate(DocumentRule):
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
-        seen: dict[str, str] = {}  # name -> from_path where first seen
+        seen_types: dict[str, str] = {}  # type name -> from_path where first seen
+        seen_usages: dict[str, str] = {}  # usage name -> from_path where first seen
 
         for item in node.root.header.imports.items:
             if isinstance(item, ImportTypeItemNode):
-                names = item.type_name
-                kind = "Type"
+                names, kind, seen = item.type_name, "Type", seen_types
+            elif isinstance(item, ImportUsageItemNode):
+                names, kind, seen = item.usage_name, "Usage", seen_usages
             else:
-                names = item.usage_name
-                kind = "Usage"
+                continue
             for name in names:
                 if name in seen:
                     errors.append(
@@ -302,6 +305,7 @@ class ImportIsUsed(DocumentRule):
         all_signatures = self._collect_signatures(node)
         property_types = self._collect_property_types(node)
         embedded_names = {name for name, _ in node.root.embeddings}
+        usage_links = self._collect_links(node, include_embedded=True)
         doc_path = node.root.path
 
         errors: list[DocumentRuleError] = []
@@ -311,7 +315,7 @@ class ImportIsUsed(DocumentRule):
                     self._check_type_item(item, doc_path, all_links, embedded_names, all_signatures, property_types),
                 )
             elif isinstance(item, ImportUsageItemNode):
-                errors.extend(self._check_usage_item(item, doc_path, node))
+                errors.extend(self._check_usage_item(item, doc_path, usage_links))
 
         return errors
 
@@ -349,10 +353,9 @@ class ImportIsUsed(DocumentRule):
         self,
         item: ImportUsageItemNode,
         doc_path: str,
-        node: DocumentNode,
+        usage_links: set[str],
     ) -> list[DocumentRuleError]:
         names = [item.alias] if item.alias else list(item.usage_name)
-        usage_links = self._collect_links(node, include_embedded=True)
         errors: list[DocumentRuleError] = []
         for name in names:
             if name in usage_links:
@@ -466,7 +469,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
                 errors.append(
                     DocumentRuleError(
                         message=(
-                            f"Usage key '{name}' conflicts with imported type '{name}'"
+                            f"Usage key '{name}' conflicts with imported name '{name}'"
                             f" — rename the usage or use an alias in Imports"
                         ),
                         rule=self.name,
@@ -631,7 +634,7 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
                 errors.append(
                     DocumentRuleError(
                         message=(
-                            f"Entity '{entity.name}' has the same name as imported type '{entity.name}'"
+                            f"Entity '{entity.name}' has the same name as imported name '{entity.name}'"
                             f" — use an alias in Imports to resolve"
                         ),
                         rule=self.name,
@@ -647,7 +650,7 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
                 errors.append(
                     DocumentRuleError(
                         message=(
-                            f"Routine '{routine.name}' has the same name as imported type '{routine.name}'"
+                            f"Routine '{routine.name}' has the same name as imported name '{routine.name}'"
                             f" — use an alias in Imports to resolve"
                         ),
                         rule=self.name,

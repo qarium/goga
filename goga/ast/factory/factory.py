@@ -190,8 +190,8 @@ class Factory:
             if not isinstance(entry, dict):
                 continue
 
-            from_path_raw = str(entry.get("From", ""))
-            from_path = os.path.normpath(from_path_raw) if from_path_raw else ""
+            from_path_raw = entry.get("From", "")
+            from_path = os.path.normpath(str(from_path_raw)) if from_path_raw else ""
 
             types_raw = entry.get("Types")
             usages_raw = entry.get("Usages")
@@ -203,7 +203,7 @@ class Factory:
                 items.append(
                     ImportTypeItemNode(
                         type_name=set(),
-                        from_path=str(from_path),
+                        from_path=from_path,
                         alias="",
                         data=dict(entry),
                     )
@@ -227,12 +227,12 @@ class Factory:
         if not isinstance(types_raw, list):
             return items
         if not types_raw:
-            items.append(ImportTypeItemNode(type_name=set(), from_path=str(from_path), alias="", data=dict(entry)))
+            items.append(ImportTypeItemNode(type_name=set(), from_path=from_path, alias="", data=dict(entry)))
             return items
         for type_entry in types_raw:
             type_name, alias = self._split_alias(str(type_entry))
             items.append(
-                ImportTypeItemNode(type_name={type_name}, from_path=str(from_path), alias=alias, data=dict(entry)),
+                ImportTypeItemNode(type_name={type_name}, from_path=from_path, alias=alias, data=dict(entry)),
             )
         return items
 
@@ -244,12 +244,12 @@ class Factory:
         if not isinstance(usages_raw, list):
             return items
         if not usages_raw:
-            items.append(ImportUsageItemNode(usage_name=set(), from_path=str(from_path), alias="", data=dict(entry)))
+            items.append(ImportUsageItemNode(usage_name=set(), from_path=from_path, alias="", data=dict(entry)))
             return items
         for usage_entry in usages_raw:
             usage_name, alias = self._split_alias(str(usage_entry))
             items.append(
-                ImportUsageItemNode(usage_name={usage_name}, from_path=str(from_path), alias=alias, data=dict(entry)),
+                ImportUsageItemNode(usage_name={usage_name}, from_path=from_path, alias=alias, data=dict(entry)),
             )
         return items
 

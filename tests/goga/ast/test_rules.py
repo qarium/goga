@@ -11,8 +11,8 @@ from goga.ast.nodes import (
     DocumentRoot,
     EntityTypeNode,
     HeaderNode,
-    ImportTypeItemNode,
     ImportsNode,
+    ImportTypeItemNode,
     MethodNode,
     PropertyNode,
     RoutineTypeNode,
@@ -36,6 +36,7 @@ from goga.ast.rules import (
     ImportsHasNotCyclicalDeps,
     ImportsHasOnlyValidKeys,
     ImportTypeExists,
+    ImportUsageExists,
     MutationExists,
     MutationIsValid,
     ReturnTypeHasLink,
@@ -72,11 +73,12 @@ EXPECTED_RULE_CLASSES = [
     EmbeddedTypeHasLowLevel,
     SignatureIsValid,
     ImportIsUsed,
+    ImportUsageExists,
 ]
 
 
 def test_all_rule_classes_importable():
-    """All 22 rule classes must be importable from the rules facade."""
+    """All 23 rule classes must be importable from the rules facade."""
     for cls in EXPECTED_RULE_CLASSES:
         assert isinstance(cls, type), f"{cls.__name__} is not a class"
 
@@ -247,9 +249,8 @@ class TestImportHasValidFromPath:
 
     def test_negative_non_existing_path(self, tmp_path: Path):
         missing = tmp_path / "does_not_exist.py"
-        root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path=str(missing))]))
-        )
+        imp = ImportTypeItemNode(type_name={"Foo"}, from_path=str(missing))
+        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[imp])))
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
@@ -259,9 +260,8 @@ class TestImportHasValidFromPath:
 
     def test_negative_path_escaping_cwd(self, tmp_path: Path):
         escaping_path = str(Path.cwd().resolve().parent / "outside")
-        root = DocumentRoot(
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Foo"}, from_path=escaping_path)]))
-        )
+        imp = ImportTypeItemNode(type_name={"Foo"}, from_path=escaping_path)
+        root = DocumentRoot(header=HeaderNode(imports=ImportsNode(items=[imp])))
         node = DocumentNode(root=root)
         rule = ImportHasValidFromPath()
         errors = rule.check(node)
@@ -302,9 +302,10 @@ class TestImportsHasNotCyclicalDeps:
         assert rule.name == "imports_has_not_cyclical_deps"
 
     def test_positive_no_cycles(self):
+        imp_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[imp_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
@@ -315,13 +316,15 @@ class TestImportsHasNotCyclicalDeps:
         assert errors == []
 
     def test_negative_circular_imports(self):
+        imp_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
+        imp_y = ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[imp_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[imp_y])),
         )
         rule = ImportsHasNotCyclicalDeps(tree=[doc1, doc2])
         errors = rule.check(doc1)
@@ -698,7 +701,7 @@ class TestUsageLinksHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "usage_links_has_not_conflicts"
-        assert "conflicts with imported type" in errors[0].message
+        assert "conflicts with imported name" in errors[0].message
         assert "rename the usage or use an alias" in errors[0].message
 
     def test_positive_conflict_resolved_through_alias(self):
@@ -770,7 +773,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "has the same name as imported type" in errors[0].message
+        assert "has the same name as imported name" in errors[0].message
 
     def test_positive_conflict_resolved_through_alias(self):
         root = DocumentRoot(
@@ -801,7 +804,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "has the same name as imported type" in errors[0].message
+        assert "has the same name as imported name" in errors[0].message
 
     def test_positive_embedded_entity_with_conflicting_name_no_error(self):
         """Embedded entity with name matching an imported type is skipped — no error."""
@@ -850,7 +853,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "has the same name as imported type" in errors[0].message
+        assert "has the same name as imported name" in errors[0].message
 
     def test_negative_non_embedded_routine_with_conflicting_name_still_errors(self):
         """Non-embedded routine with name matching an imported type still produces error."""
@@ -869,7 +872,7 @@ class TestEntitiesAndRoutinesHasNotConflicts:
         assert len(errors) == 1
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "entities_and_routines_has_not_conflicts"
-        assert "has the same name as imported type" in errors[0].message
+        assert "has the same name as imported name" in errors[0].message
 
 
 # ---------------------------------------------------------------------------

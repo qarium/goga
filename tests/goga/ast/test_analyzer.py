@@ -5,8 +5,8 @@ from goga.ast.errors import ASTRuleError
 from goga.ast.nodes import (
     DocumentRoot,
     HeaderNode,
-    ImportTypeItemNode,
     ImportsNode,
+    ImportTypeItemNode,
 )
 from goga.ast.rules import ASTRule, ImportsHasNotCyclicalDeps
 
@@ -56,9 +56,10 @@ class TestAnalyzerNoRules:
 
 class TestAnalyzerPassingRules:
     def test_analyze_passing_rules_returns_empty(self):
+        import_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[import_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
@@ -78,13 +79,15 @@ class TestAnalyzerPassingRules:
 
 class TestAnalyzerFailingRules:
     def test_analyze_failing_rules_returns_errors(self):
+        import_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")
+        import_y = ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")
         doc1 = DocumentRoot(
             path="/project/a.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/b.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[import_x])),
         )
         doc2 = DocumentRoot(
             path="/project/b.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"Y"}, from_path="/project/a.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[import_y])),
         )
         tree = [doc1, doc2]
         rule = ImportsHasNotCyclicalDeps(tree=tree)
@@ -136,9 +139,10 @@ class TestAnalyzerAggregation:
             assert error.rule == "always_fail"
 
     def test_mixed_pass_fail_aggregates_only_failures(self):
+        import_x = ImportTypeItemNode(type_name={"X"}, from_path="/project/y.cm")
         doc_no_cycle = DocumentRoot(
             path="/project/x.cm",
-            header=HeaderNode(imports=ImportsNode(items=[ImportTypeItemNode(type_name={"X"}, from_path="/project/y.cm")])),
+            header=HeaderNode(imports=ImportsNode(items=[import_x])),
         )
         doc_unused = DocumentRoot(
             path="/project/y.cm",

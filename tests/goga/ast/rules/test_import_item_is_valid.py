@@ -5,9 +5,9 @@ from goga.ast.nodes import (
     DocumentNode,
     DocumentRoot,
     HeaderNode,
+    ImportsNode,
     ImportTypeItemNode,
     ImportUsageItemNode,
-    ImportsNode,
 )
 from goga.ast.rules import ImportItemIsValid
 
@@ -128,7 +128,7 @@ class TestImportItemIsValidEmptyUsage:
         errors = rule.check(node)
         assert len(errors) == 1
         assert errors[0].message == (
-            "Import from 'some/path' has no Usages listed — specify at least one type to import"
+            "Import from 'some/path' has no Usages listed — specify at least one usage to import"
         )
 
 

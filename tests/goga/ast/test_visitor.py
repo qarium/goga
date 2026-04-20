@@ -5,8 +5,8 @@ from goga.ast.nodes import (
     DocumentNode,
     DocumentRoot,
     HeaderNode,
-    ImportTypeItemNode,
     ImportsNode,
+    ImportTypeItemNode,
 )
 from goga.ast.rules import DocumentRule, ImportsCanNotBeEmpty
 from goga.ast.visitor import Visitor

@@ -1,6 +1,6 @@
 errors:
 - rule: entities_and_routines_has_not_conflicts
-  message: Entity 'ConflictingType' has the same name as imported type 'ConflictingType'
+  message: Entity 'ConflictingType' has the same name as imported name 'ConflictingType'
     — use an alias in Imports to resolve
   document_path: entities_and_routines_has_not_conflicts
   node_data:

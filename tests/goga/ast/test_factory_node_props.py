@@ -466,7 +466,7 @@ class TestExtractLinks:
 
 class TestDataImportsNode:
     def test_imports_node_data_is_copy_of_raw_imports_list(self, tmp_path) -> None:
-        """ImportsNode.data is not set by factory (empty dict) — data is on ImportItemNode."""
+        """ImportsNode.data is not set by factory (empty dict) — data is on import item nodes."""
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
 
