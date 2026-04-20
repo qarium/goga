@@ -19,13 +19,29 @@ def _find_usages_files(doc_path: str) -> list[str]:
         entries = list(usages_dir.iterdir())
     except OSError:
         return []
-    return sorted(os.path.normpath(str(f)) for f in entries if f.suffix == ".md")
+    return sorted(f.name for f in entries if f.suffix == ".md")
 
 
 def _cell_in_set(doc: DocumentRoot, cells: frozenset[str]) -> bool:
     if os.path.normpath(doc.path) in cells:
         return True
     return any(_cell_in_set(child, cells) for child in doc.children)
+
+
+def _build_dependencies(doc: DocumentRoot) -> dict:
+    deps: dict[str, dict] = {}
+    for item in doc.header.imports.types:
+        path = os.path.normpath(item.from_path)
+        deps.setdefault(path, {"types": set(), "usages": set()})
+        deps[path]["types"].update(item.type_name)
+    for item in doc.header.imports.usages:
+        path = os.path.normpath(item.from_path)
+        deps.setdefault(path, {"types": set(), "usages": set()})
+        deps[path]["usages"].update(item.usage_name)
+    return {
+        path: {"types": sorted(data["types"]), "usages": sorted(data["usages"])}
+        for path, data in sorted(deps.items())
+    }
 
 
 def _build_cell_tree(
@@ -41,13 +57,9 @@ def _build_cell_tree(
     return {
         "cell": os.path.normpath(doc.path),
         "description": doc.footer.description,
+        "types": sorted([e.name for e in doc.body.entities] + [r.name for r in doc.body.routines]),
         "usages": _find_usages_files(doc.path),
-        "relations": sorted(
-            {
-                os.path.normpath(item.from_path)
-                for item in doc.header.imports.types + doc.header.imports.usages
-            }
-        ),
+        "dependencies": _build_dependencies(doc),
         "children": children,
     }
 
@@ -92,11 +104,13 @@ def schema(
 
     \b
     JSON structure per root cell:
-      cell         - normalized path to the CODEMANIFEST folder
-      description  - text from the footer Description section
-      usages       - list of .md files found in <path>/.usages/
-      relations    - sorted unique normalized import paths (from Imports)
-      children     - nested child cells (same structure, recursively)
+      cell          - normalized path to the CODEMANIFEST folder
+      description   - text from the footer Description section
+      types         - sorted list of entity and routine names from body
+      usages        - list of .md filenames found in <path>/.usages/
+      dependencies  - dict grouping imports by normalized from_path,
+                      each value has "types" and "usages" lists
+      children      - nested child cells (same structure, recursively)
 
     \b
     Options:

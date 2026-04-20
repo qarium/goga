@@ -211,9 +211,12 @@ def test_schema_full_tree(tmp_path) -> None:
     assert data[0]["cell"] == "."
     assert len(data[0]["children"]) == 1
     assert data[0]["children"][0]["cell"] == "subpkg"
-    assert ".usages/spec.md" in data[0]["usages"]
-    assert "subpkg" in data[0]["relations"]
-    assert "subpkg/.usages/helper.md" in data[0]["children"][0]["usages"]
+    assert "spec.md" in data[0]["usages"]
+    assert "subpkg" in data[0]["dependencies"]
+    assert data[0]["dependencies"]["subpkg"]["types"] == ["Helper"]
+    assert data[0]["dependencies"]["subpkg"]["usages"] == []
+    assert data[0]["types"] == ["MyClass"]
+    assert "helper.md" in data[0]["children"][0]["usages"]
 
 
 def test_schema_with_max_depth(tmp_path) -> None:
@@ -377,7 +380,7 @@ def test_schema_output_is_only_json(tmp_path) -> None:
     data = json.loads(result.output)
     assert isinstance(data, list)
     assert len(data) == 1
-    assert set(data[0].keys()) == {"cell", "children", "description", "relations", "usages"}
+    assert set(data[0].keys()) == {"cell", "children", "dependencies", "description", "types", "usages"}
 
 
 def test_schema_multiple_roots(tmp_path) -> None:
@@ -446,7 +449,7 @@ def test_schema_unicode_in_description(tmp_path) -> None:
     assert "\\u" not in result.output
 
 
-def test_schema_relations_deduplicated(tmp_path) -> None:
+def test_schema_dependencies_deduplicated(tmp_path) -> None:
     _write_codemanifest(tmp_path, DEDUP_ROOT)
     subpkg = tmp_path / "subpkg"
     subpkg.mkdir()
@@ -457,5 +460,211 @@ def test_schema_relations_deduplicated(tmp_path) -> None:
 
     assert result.exit_code == 0
     data = json.loads(result.output)
-    relations = data[0]["relations"]
-    assert len(relations) == len(set(relations))
+    deps = data[0]["dependencies"]
+    assert "subpkg" in deps
+    assert len(deps) == 1
+    assert set(deps["subpkg"]["types"]) == {"HelperA", "HelperB"}
+
+
+WITH_USAGE_IMPORT = """\
+Imports:
+  - Types:
+      - Foo
+    From: lib
+  - Usages:
+      - bar
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `Foo` and `bar` here
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell with type and usage imports
+"""
+
+LIB_WITH_FOO = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Foo()":
+  location: foo.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib with Foo
+"""
+
+NO_IMPORTS = """\
+Usages: {}
+
+Annotations: ""
+
+---
+"Plain()":
+  location: plain.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: No imports
+"""
+
+MULTI_IMPORTS = """\
+Imports:
+  - Types:
+      - Alpha
+    From: lib_a
+  - Types:
+      - Beta
+    From: lib_b
+
+Usages: {}
+
+Annotations: ""
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Multiple import sources
+"""
+
+
+def test_schema_dependencies_basic(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "subpkg" in data[0]["dependencies"]
+    assert data[0]["dependencies"]["subpkg"]["types"] == ["Helper"]
+    assert data[0]["dependencies"]["subpkg"]["usages"] == []
+
+
+def test_schema_dependencies_with_types_and_usages(tmp_path) -> None:
+    _write_codemanifest(tmp_path, WITH_USAGE_IMPORT)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, LIB_WITH_FOO)
+    (lib / ".usages").mkdir()
+    (lib / ".usages" / "bar.md").write_text("test", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    deps = data[0]["dependencies"]
+    assert "lib" in deps
+    assert deps["lib"]["types"] == ["Foo"]
+    assert deps["lib"]["usages"] == ["bar"]
+
+
+def test_schema_dependencies_empty_imports(tmp_path) -> None:
+    _write_codemanifest(tmp_path, NO_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["dependencies"] == {}
+
+
+def test_schema_types_field_entities_and_routines(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["MyClass"]
+
+
+def test_schema_types_field_empty_body(tmp_path) -> None:
+    _write_codemanifest(tmp_path, NO_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["Plain"]
+
+
+def test_schema_types_field_routine(tmp_path) -> None:
+    _write_codemanifest(tmp_path, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["types"] == ["Helper"]
+
+
+def test_schema_usages_basename(tmp_path) -> None:
+    _write_codemanifest(tmp_path, STANDALONE)
+    (tmp_path / ".usages").mkdir()
+    (tmp_path / ".usages" / "click.md").write_text("test", encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    assert data[0]["usages"] == ["click.md"]
+
+
+def test_schema_no_relations_field_regression(tmp_path) -> None:
+    _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    for cell in data:
+        _assert_no_relations(cell)
+
+
+def _assert_no_relations(cell: dict) -> None:
+    assert "relations" not in cell, f"'relations' found in cell {cell['cell']}"
+    for child in cell.get("children", []):
+        _assert_no_relations(child)
+
+
+def test_schema_dependencies_multiple_from_paths(tmp_path) -> None:
+    _write_codemanifest(tmp_path, MULTI_IMPORTS)
+
+    with _cwd(tmp_path):
+        result = _run_schema()
+
+    data = json.loads(result.output)
+    deps = data[0]["dependencies"]
+    assert len(deps) == 2
+    dep_keys = list(deps.keys())
+    assert dep_keys == sorted(dep_keys)
+    assert deps["lib_a"]["types"] == ["Alpha"]
+    assert deps["lib_b"]["types"] == ["Beta"]
