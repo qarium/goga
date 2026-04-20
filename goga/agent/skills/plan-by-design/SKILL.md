@@ -52,8 +52,9 @@ The design document contains a complete architectural solution — Phase 1 decom
    - new external dependencies
    - modified specifications
    - new instructions for the implementation agent
-   - for each Usages entry whose value is a file path — read that file to get the actual specification content
-   - imported usages from `Imports` → `Usages` — read the referenced files at `{from_path}/.usages/{usage_name}.md`
+   - **Read Usages by reference**: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity/method/property annotations via backtick syntax), skip Usages not referenced by any covered entity
+   - for each relevant Usages entry whose value is a file path — read that file to get the actual specification content
+   - imported usages from `Imports` → `Usages` — read the referenced files at `{from_path}/.usages/{usage_name}.md` (only for imports referenced by covered entities)
    - planned local usages structure from the design document — which `.usages/` files will be created inside the cell
 
 2. **Drill-down Annotations** — process annotations in a cascade:
@@ -219,7 +220,7 @@ You must not plan:
 - replacement of contract entities with internally-only accessible abstractions,
 - violation of facade availability requirements,
 - ignoring `location`,
-- modification of `CODEMANIFEST` files — they are **read-only** contract definitions. The implementation agent must adapt the code to the contract, never the reverse. The only exception: fixing DSL syntax errors detected during the design phase (`design-by-changes` Step 3) — the contract must be syntactically correct, but semantic content of the contract does not change.
+- modification of `CODEMANIFEST` files — they are **read-only** for the implementation agent. CODEMANIFEST may have been edited during design (`design-by-changes`) or review (`review-design`) phases to fix insufficient/inconsistent requirements or contract interaction errors. By the time the plan is created, CODEMANIFEST is final — the implementation agent must adapt the code to the contract, never the reverse.
 
 ---
 
@@ -228,7 +229,7 @@ You must not plan:
 Use the following sources jointly, when available:
 
 1. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files (e.g., `resq/utils/CODEMANIFEST`). If not found inside the package, check the project root as a fallback. Read **all** `CODEMANIFEST` files to build the complete contract.
-2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
+2. Usages spec files — read by reference: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity annotations via backtick syntax), skip Usages not referenced by any covered entity. When a Usages entry value is a file path (relative to the `CODEMANIFEST` file location), read that file. Usages values can be file paths or inline text.
 3. current package file tree
 4. current package source files
 5. git change context:

@@ -17,7 +17,7 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 ## Sources of Truth
 
 1. `CODEMANIFEST` files — the contract surface (read **all** hierarchical CODEMANIFEST files)
-2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
+2. Usages spec files — read by reference: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity annotations via backtick syntax), skip Usages not referenced by any covered entity. When a Usages entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
 3. Design document at `docs/design/<feature-name>.md` — architectural solution
 3. `goga/.usages/cell/dsl.md` — DSL reference
 4. `output-template.md` from the `plan-by-design` skill bundle — plan format reference
