@@ -44,7 +44,7 @@ class ImportsCanNotBeEmpty(DocumentRule):
         if "Imports" not in node.root.header.data:
             return []
         errors: list[DocumentRuleError] = []
-        if not node.root.header.imports.items:
+        if not node.root.header.imports.types and not node.root.header.imports.usages:
             errors.append(
                 DocumentRuleError(
                     message=(
@@ -67,21 +67,21 @@ class ImportItemIsValid(DocumentRule):
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
-        for item in node.root.header.imports.items:
-            if isinstance(item, ImportTypeItemNode):
-                if not item.type_name:
-                    errors.append(
-                        DocumentRuleError(
-                            message=(
-                                f"Import from '{item.from_path}' has no Types listed"
-                                f" — specify at least one type to import"
-                            ),
-                            rule=self.name,
-                            document=node.root,
-                            node=item,
-                        )
+        for item in node.root.header.imports.types:
+            if not item.type_name:
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Import from '{item.from_path}' has no Types listed"
+                            f" — specify at least one type to import"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
                     )
-            elif isinstance(item, ImportUsageItemNode) and not item.usage_name:
+                )
+        for item in node.root.header.imports.usages:
+            if not item.usage_name:
                 errors.append(
                     DocumentRuleError(
                         message=(
@@ -105,10 +105,7 @@ class ImportUsageExists(DocumentRule):
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
 
-        for item in node.root.header.imports.items:
-            if not isinstance(item, ImportUsageItemNode):
-                continue
-
+        for item in node.root.header.imports.usages:
             if not item.from_path:
                 continue
             if not Path(item.from_path).exists():
@@ -141,7 +138,7 @@ class ImportHasValidFromPath(DocumentRule):
         errors: list[DocumentRuleError] = []
         cwd = Path.cwd().resolve()
 
-        for item in node.root.header.imports.items:
+        for item in node.root.header.imports.types + node.root.header.imports.usages:
             if not item.from_path:
                 errors.append(
                     DocumentRuleError(
@@ -270,7 +267,7 @@ class ImportHasNotDuplicate(DocumentRule):
         seen_types: dict[str, str] = {}  # type name -> from_path where first seen
         seen_usages: dict[str, str] = {}  # usage name -> from_path where first seen
 
-        for item in node.root.header.imports.items:
+        for item in node.root.header.imports.types + node.root.header.imports.usages:
             if isinstance(item, ImportTypeItemNode):
                 names, kind, seen = item.type_name, "Type", seen_types
             elif isinstance(item, ImportUsageItemNode):
@@ -311,7 +308,7 @@ class ImportIsUsed(DocumentRule):
         doc_path = node.root.path
 
         errors: list[DocumentRuleError] = []
-        for item in node.root.header.imports.items:
+        for item in node.root.header.imports.types + node.root.header.imports.usages:
             if isinstance(item, ImportTypeItemNode):
                 errors.extend(
                     self._check_type_item(item, doc_path, all_links, embedded_names, all_signatures, property_types),
@@ -439,7 +436,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
 
     def _collect_import_type_names(self, node: DocumentNode) -> set[str]:
         names: set[str] = set()
-        for import_item in node.root.header.imports.items:
+        for import_item in node.root.header.imports.types + node.root.header.imports.usages:
             if import_item.alias:
                 continue
             if isinstance(import_item, ImportTypeItemNode):
@@ -501,11 +498,12 @@ def _collect_valid_names(node: DocumentNode) -> set[str]:
     body = node.root.body
     valid_names: set[str] = set()
 
-    for import_item in header.imports.items:
-        if isinstance(import_item, ImportTypeItemNode):
-            valid_names.update(import_item.type_name)
-        elif isinstance(import_item, ImportUsageItemNode):
-            valid_names.update(import_item.usage_name)
+    for import_item in header.imports.types:
+        valid_names.update(import_item.type_name)
+        if import_item.alias:
+            valid_names.add(import_item.alias)
+    for import_item in header.imports.usages:
+        valid_names.update(import_item.usage_name)
         if import_item.alias:
             valid_names.add(import_item.alias)
 
@@ -667,7 +665,7 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
     def _collect_active_import_names(node: DocumentNode) -> set[str]:
         """Collect import names that have no alias (alias resolves conflicts)."""
         names: set[str] = set()
-        for import_item in node.root.header.imports.items:
+        for import_item in node.root.header.imports.types + node.root.header.imports.usages:
             if import_item.alias:
                 continue
             if isinstance(import_item, ImportTypeItemNode):
@@ -692,9 +690,8 @@ class MutationExists(DocumentRule):
             valid_names.add(entity.name)
         for routine in node.root.body.routines:
             valid_names.add(routine.name)
-        for import_item in node.root.header.imports.items:
-            if isinstance(import_item, ImportTypeItemNode):
-                valid_names.update(import_item.type_name)
+        for import_item in node.root.header.imports.types:
+            valid_names.update(import_item.type_name)
 
         # Check each entity's mutations
         for entity in node.root.body.entities:
@@ -883,7 +880,7 @@ class ImportsHasOnlyValidKeys(DocumentRule):
         errors: list[DocumentRuleError] = []
         valid_keys = {"Types", "Usages", "From"}
 
-        for item in node.root.header.imports.items:
+        for item in node.root.header.imports.types + node.root.header.imports.usages:
             unknown_keys = set(item.data.keys()) - valid_keys
             if unknown_keys:
                 errors.append(
