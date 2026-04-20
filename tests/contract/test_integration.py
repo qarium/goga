@@ -43,7 +43,4 @@ class TestSignatureFormatMatchesContractFormat:
         data = [{"name": item.name, "signature": item.signature} for item in result]
         serialized = json.dumps(data)
         parsed = json.loads(serialized)
-        assert isinstance(parsed, list)
-        for entry in parsed:
-            assert "name" in entry
-            assert "signature" in entry
+        assert parsed == data

@@ -1,9 +1,9 @@
 """Contract tests for goga.contract package."""
 
-import dataclasses
 import importlib
 import inspect
 from dataclasses import fields
+from typing import get_origin
 
 import pytest
 from goga.contract import ContractItem, python_contract
@@ -34,7 +34,6 @@ class TestFacadeAvailability:
         assert field_map["signature"] is str
 
     def test_contract_item_kw_only(self):
-        assert dataclasses.fields(ContractItem)
         with pytest.raises(TypeError):
             ContractItem("positional_name", "positional_sig")
 
@@ -42,7 +41,8 @@ class TestFacadeAvailability:
         sig = inspect.signature(python_contract)
         params = list(sig.parameters.keys())
         assert "cell_path" in params
-        assert sig.return_annotation is not inspect.Parameter.empty
+        assert sig.parameters["cell_path"].annotation is str
+        assert get_origin(sig.return_annotation) is list
 
 
 class TestContractItemCreation:
@@ -208,3 +208,32 @@ class TestPythonContractEdgeCases:
 
         assert len(result) == 1
         assert result[0].name == "func"
+
+    def test_python_contract_class_without_explicit_init(self, tmp_path, monkeypatch):
+        """Class with no explicit __init__ gets object.__init__ signature."""
+        pkg_init = tmp_path / "testpkg_plain"
+        pkg_init.mkdir()
+        (pkg_init / "__init__.py").write_text(
+            "class Plain:\n    pass\n"
+            "__all__ = ['Plain']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_plain")
+
+        assert len(result) == 1
+        assert result[0].name == "Plain"
+        assert "*args" in result[0].signature or result[0].signature == "()"
+
+    def test_python_contract_empty_cell_path_raises(self):
+        """Empty string cell_path raises an exception."""
+        with pytest.raises(ValueError, match="Empty module name"):
+            python_contract("")
+
+    def test_python_contract_all_contains_nonexistent_name_raises(self, tmp_path, monkeypatch):
+        """AttributeError when __all__ references a name not on the module."""
+        pkg_init = tmp_path / "testpkg_stale"
+        pkg_init.mkdir()
+        (pkg_init / "__init__.py").write_text("__all__ = ['missing_name']\n")
+        monkeypatch.syspath_prepend(str(tmp_path))
+        with pytest.raises(AttributeError):
+            python_contract("testpkg_stale")
