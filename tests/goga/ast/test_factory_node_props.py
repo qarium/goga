@@ -88,7 +88,7 @@ class TestDataImportTypeItemNode:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
 
-        item = root.header.imports.items[0]
+        item = root.header.imports.types[0]
         assert isinstance(item.data, dict)
         # First import entry has Types and From
         assert "Types" in item.data
@@ -102,7 +102,7 @@ class TestDataImportTypeItemNode:
         root = Factory(pkg).create()
 
         # The second entry in Imports list
-        item = root.header.imports.items[2]
+        item = root.header.imports.types[2]
         assert "DocumentParseError" in str(item.data["Types"])
         assert item.data["From"] == "goga/ast/errors"
 
@@ -250,7 +250,7 @@ class TestParentImportTypeItemNode:
         """ImportTypeItemNode.parent is ImportsNode."""
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        for item in root.header.imports.items:
+        for item in root.header.imports.types + root.header.imports.usages:
             assert item.parent is root.header.imports
 
 
@@ -473,9 +473,9 @@ class TestDataImportsNode:
         imports = root.header.imports
         assert isinstance(imports.data, dict)
         # ImportsNode is created without explicit data — items carry the data
-        assert isinstance(imports.items, list)
-        assert len(imports.items) == 3
-        for item in imports.items:
+        assert isinstance(imports.types, list)
+        assert len(imports.types) == 3
+        for item in imports.types:
             assert "Types" in item.data
             assert "From" in item.data
 

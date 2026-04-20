@@ -114,12 +114,12 @@ class TestBasicParsingHeaderImports:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
         assert isinstance(root.header.imports, ImportsNode)
-        assert len(root.header.imports.items) == 3
+        assert len(root.header.imports.types) == 3
 
     def test_import_type_without_alias(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        item = root.header.imports.items[0]
+        item = root.header.imports.types[0]
         # DocumentRoot — no alias
         assert "DocumentRoot" in item.type_name
         assert item.alias == ""
@@ -128,7 +128,7 @@ class TestBasicParsingHeaderImports:
     def test_import_type_with_alias(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        item = root.header.imports.items[1]
+        item = root.header.imports.types[1]
         # DocumentNode AS Node
         assert "DocumentNode" in item.type_name
         assert item.alias == "Node"
@@ -137,7 +137,7 @@ class TestBasicParsingHeaderImports:
     def test_import_single_type(self, tmp_path) -> None:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
-        item = root.header.imports.items[2]
+        item = root.header.imports.types[2]
         assert "DocumentParseError" in item.type_name
         assert item.alias == ""
         assert item.from_path == "goga/ast/errors"
@@ -324,7 +324,7 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "alias_ok"), yaml_content)
         root = Factory(pkg).create()
-        item = root.header.imports.items[0]
+        item = root.header.imports.types[0]
         assert "MyType" in item.type_name
         assert item.alias == "MyAlias"
 
@@ -341,7 +341,7 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "alias_lower"), yaml_content)
         root = Factory(pkg).create()
-        item = root.header.imports.items[0]
+        item = root.header.imports.types[0]
         assert "TypeWithAs" in item.type_name
         assert item.alias == ""
 
@@ -362,7 +362,7 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "alias_nospace"), yaml_content)
         root = Factory(pkg).create()
-        item = root.header.imports.items[0]
+        item = root.header.imports.types[0]
         # No trailing space after AS -> " AS " not present -> whole string is type
         assert "TypeWithout AS" in item.type_name
         assert item.alias == ""
@@ -560,7 +560,7 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "upper_imports"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.header.imports.items) == 1
+        assert len(root.header.imports.types) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -709,7 +709,7 @@ class TestAllNodePropertiesPopulated:
 
         assert root.header.root is root
         assert root.header.imports.root is root
-        for item in root.header.imports.items:
+        for item in root.header.imports.types + root.header.imports.usages:
             assert item.root is root
         assert root.header.usages.root is root
         for item in root.header.usages.items:
@@ -788,7 +788,7 @@ class TestAllNodePropertiesPopulated:
         pkg = _create_full_manifest(tmp_path)
         root = Factory(pkg).create()
         # Item with alias
-        aliased = root.header.imports.items[1]
+        aliased = root.header.imports.types[1]
         assert "DocumentNode" in aliased.type_name
         assert aliased.alias == "Node"
         assert aliased.from_path == "goga/ast/nodes"
@@ -816,7 +816,7 @@ class TestNonDictSections:
         yaml_content = "just a string\n---\n---\n"
         pkg = _write_codemanifest(str(tmp_path / "str_header"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.header.imports.items) == 0
+        assert len(root.header.imports.types) == 0
 
     def test_non_dict_body_treated_as_empty(self, tmp_path) -> None:
         """If the second YAML document is a plain string, body becomes empty."""
@@ -852,8 +852,8 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "non_dict_import"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.header.imports.items) == 1
-        assert "ValidType" in root.header.imports.items[0].type_name
+        assert len(root.header.imports.types) == 1
+        assert "ValidType" in root.header.imports.types[0].type_name
 
 
 class TestNonListTypes:
@@ -870,7 +870,7 @@ Imports:
 """
         pkg = _write_codemanifest(str(tmp_path / "non_list_types"), yaml_content)
         root = Factory(pkg).create()
-        assert len(root.header.imports.items) == 0
+        assert len(root.header.imports.types) == 0
 
 
 class TestNonDictUsages:
