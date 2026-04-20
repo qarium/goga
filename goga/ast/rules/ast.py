@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..errors import ASTRuleError
-from ..nodes.header import ImportTypeItemNode
 
 if TYPE_CHECKING:
     from ..nodes import DocumentRoot
@@ -42,14 +41,14 @@ class ImportsHasNotCyclicalDeps(ASTRule):
         for doc in self._tree:
             doc_path = doc.path
             import_paths: set[str] = set()
-            for item in doc.header.imports.items:
+            for item in doc.header.imports.types + doc.header.imports.usages:
                 import_paths.add(item.from_path)
             import_map[doc_path] = import_paths
 
         errors: list[ASTRuleError] = []
         doc_path = document.path
 
-        for item in document.header.imports.items:
+        for item in document.header.imports.types + document.header.imports.usages:
             imported_path = item.from_path
             # Check if the imported document also imports from the current document's path
             if imported_path in import_map and doc_path in import_map[imported_path]:
@@ -77,10 +76,7 @@ class ImportTypeExists(ASTRule):
         # Build O(1) lookup: doc path -> DocumentRoot
         path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
 
-        for item in document.header.imports.items:
-            if not isinstance(item, ImportTypeItemNode):
-                continue
-
+        for item in document.header.imports.types:
             from_path = item.from_path
 
             # Skip if from_path does not exist on filesystem

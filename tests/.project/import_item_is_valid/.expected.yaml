@@ -4,3 +4,8 @@ errors:
   document_path: import_item_is_valid
   node_data:
     From: import_item_is_valid/import_item_is_valid_helper
+- rule: import_item_is_valid
+  message: Import from 'import_item_is_valid/import_item_is_valid_helper' has no Usages listed — specify at least one usage to import
+  document_path: import_item_is_valid
+  node_data:
+    From: import_item_is_valid/import_item_is_valid_helper
