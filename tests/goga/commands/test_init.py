@@ -202,7 +202,7 @@ class TestIntegration:
         assert (dbc / "design-doc-template.md").is_file()
 
         pbd = skills_dir / "plan-by-design"
-        expected = {"SKILL.md", "README.md", "conventions.md", "dsl-spec.md", "example.md", "output-template.md"}
+        expected = {"SKILL.md", "README.md", "conventions.md", "example.md", "output-template.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
 
