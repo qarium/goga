@@ -70,6 +70,7 @@ Imports:
         assert len(usage_items) == 2
         assert "some_usage" in usage_items[0].usage_name
         assert "another" in usage_items[1].usage_name
+        assert len(root.header.imports.types) == 0
 
     def test_parse_imports_types_only(self, tmp_path) -> None:
         """YAML with only Types produces only ImportTypeItemNode (as before)."""
@@ -85,6 +86,7 @@ Imports:
         type_items = root.header.imports.types
         assert all(isinstance(i, ImportTypeItemNode) for i in type_items)
         assert len(type_items) == 2
+        assert len(root.header.imports.usages) == 0
 
     def test_parse_imports_empty_types_creates_empty_item(self, tmp_path) -> None:
         """Types=[] creates ImportTypeItemNode with type_name=set()."""

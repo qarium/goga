@@ -13,6 +13,7 @@ from goga.ast.nodes import (
     HeaderNode,
     ImportsNode,
     ImportTypeItemNode,
+    ImportUsageItemNode,
     MethodNode,
     PropertyNode,
     RoutineTypeNode,
@@ -113,6 +114,16 @@ class TestImportsCanNotBeEmpty:
     def test_positive_non_empty_imports_returns_empty_errors(self):
         root = DocumentRoot(
             header=HeaderNode(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"Foo"}, from_path="bar")]))
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsCanNotBeEmpty()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_positive_non_empty_usages_returns_empty_errors(self):
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="bar")
+        root = DocumentRoot(
+            header=HeaderNode(imports=ImportsNode(usages=[usage_item])),
         )
         node = DocumentNode(root=root)
         rule = ImportsCanNotBeEmpty()
@@ -1969,5 +1980,48 @@ class TestImportIsUsed:
         prop = PropertyNode(name="items", type="N")
         entity = EntityTypeNode(name="MyEntity", properties=[prop])
         node = _make_import_is_used_doc(entities=[entity], import_names={"Node"}, import_alias="N")
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_positive_usage_import_used_in_usage_links(self):
+        """ImportUsageItemNode referenced in usage links -> no error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="my_usage", annotations=AnnotationsNode(links=["my_usage"]))]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_negative_usage_import_not_used(self):
+        """ImportUsageItemNode not referenced in any usage links -> error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="other_usage")]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_is_used"
+        assert "my_usage" in errors[0].message
+        assert "test_doc" in errors[0].message
+
+    def test_positive_usage_import_alias_used(self):
+        """ImportUsageItemNode alias referenced in usage links -> no error."""
+        usage_item = ImportUsageItemNode(usage_name={"my_usage"}, from_path="some/path", alias="mu")
+        header = HeaderNode(
+            imports=ImportsNode(usages=[usage_item]),
+            usages=UsagesNode(items=[UsageItemNode(name="my_usage", annotations=AnnotationsNode(links=["mu"]))]),
+        )
+        body = BodyNode(entities=[], routines=[])
+        root = DocumentRoot(path="test_doc", header=header, body=body, embeddings=[])
+        node = DocumentNode(root=root)
         rule = ImportIsUsed()
         assert rule.check(node) == []
