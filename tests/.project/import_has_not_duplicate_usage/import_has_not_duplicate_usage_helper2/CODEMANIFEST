@@ -1,0 +1,8 @@
+Imports: []
+
+---
+
+"MyOtherType()":
+  location: types.py
+  annotations: |
+    Another helper type

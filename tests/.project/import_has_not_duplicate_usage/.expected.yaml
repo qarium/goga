@@ -1,0 +1,22 @@
+errors:
+- rule: import_has_not_duplicate
+  message: "Usage 'shared_usage' is imported more than once: from 'import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper' and 'import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper2'"
+  document_path: import_has_not_duplicate_usage
+  node_data:
+    Usages:
+      - shared_usage
+    From: import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper2
+- rule: import_is_used
+  message: "Usage 'shared_usage' was imported, but not used in 'import_has_not_duplicate_usage'"
+  document_path: import_has_not_duplicate_usage
+  node_data:
+    Usages:
+      - shared_usage
+    From: import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper
+- rule: import_is_used
+  message: "Usage 'shared_usage' was imported, but not used in 'import_has_not_duplicate_usage'"
+  document_path: import_has_not_duplicate_usage
+  node_data:
+    Usages:
+      - shared_usage
+    From: import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper2

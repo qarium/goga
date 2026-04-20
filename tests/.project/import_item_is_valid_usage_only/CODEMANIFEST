@@ -1,0 +1,13 @@
+Imports:
+    - Usages: [my_usage]
+      From: import_item_is_valid_usage_only/import_item_is_valid_usage_only_helper
+
+Annotations: |
+  Test use `my_usage` import
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Test entity

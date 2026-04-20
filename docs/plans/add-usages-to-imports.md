@@ -312,20 +312,20 @@ Edge cases:
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
 
-- [ ] Создать интеграционные тестовые фикстуры в `tests/.project/` для новых правил:
+- [x] Создать интеграционные тестовые фикстуры в `tests/.project/` для новых правил:
   - `import_item_is_valid/` — CODEMANIFEST + .expected.yaml (мигрировано из import_has_type)
   - `import_usage_exists/` — CODEMANIFEST + .expected.yaml + helper с .usages/
   - `import_item_is_valid_usage_only/` — Imports только с Usages
   - `import_item_is_valid_empty_usage/` — Usages: []
   - `import_has_not_duplicate_usage/` — дублирование usage names
-- [ ] Создать/обновить `tests/goga/commands/test_schema.py` — тесты для schema команды:
+- [x] Создать/обновить `tests/goga/commands/test_schema.py` — тесты для schema команды:
   - test_schema_output_structure
   - test_schema_empty_tree
   - test_schema_with_max_depth
   - test_schema_with_cells_filter
-- [ ] Обновить `tests/.project/import_is_used/.expected.yaml` если message изменился
-- [ ] Run full integration: `pytest tests/ -x -v`
-- [ ] Run project linter: `docker run --rm -v .:/project -w /project goga linter` — 0 errors expected
+- [x] Обновить `tests/.project/import_is_used/.expected.yaml` если message изменился
+- [x] Run full integration: `pytest tests/ -x -v`
+- [x] Run project linter: `docker run --rm -v .:/project -w /project goga linter` — 0 errors expected (docker unavailable; ran `goga linter` directly — 0 errors)
 
 ---
 
@@ -342,18 +342,18 @@ Edge cases:
 
 ## Done Criteria
 
-- [ ] `ImportTypeItemNode` реализован в `goga/ast/nodes/header.py` с полями type_name, from_path, alias
-- [ ] `ImportUsageItemNode` реализован в `goga/ast/nodes/header.py` с полями usage_name, from_path, alias
-- [ ] Оба класса доступны из `goga/ast/nodes` facade
-- [ ] `ImportItemIsValid` реализован в `goga/ast/rules/document.py`, заменяет ImportHasType
-- [ ] `ImportUsageExists` реализован в `goga/ast/rules/document.py`
-- [ ] Оба правила доступны из `goga/ast/rules` facade и подключены в AST.load()
-- [ ] `Factory._parse_imports` парсит Types и Usages из Imports YAML
-- [ ] Все существующие правила обновлены для работы с обоими типами нод
-- [ ] `schema` команда работает корректно с обоими типами нод
-- [ ] `ImportItemNode` и `ImportHasType` полностью удалены из кодовой базы
-- [ ] Все интеграционные тесты проходят (tests/.project/)
-- [ ] Все unit-тесты проходят
-- [ ] CODEMANIFEST linter — 0 errors
-- [ ] Ruff — 0 errors
-- [ ] CODEMANIFEST файлы не были изменены
+- [x] `ImportTypeItemNode` реализован в `goga/ast/nodes/header.py` с полями type_name, from_path, alias
+- [x] `ImportUsageItemNode` реализован в `goga/ast/nodes/header.py` с полями usage_name, from_path, alias
+- [x] Оба класса доступны из `goga/ast/nodes` facade
+- [x] `ImportItemIsValid` реализован в `goga/ast/rules/document.py`, заменяет ImportHasType
+- [x] `ImportUsageExists` реализован в `goga/ast/rules/document.py`
+- [x] Оба правила доступны из `goga/ast/rules` facade и подключены в AST.load()
+- [x] `Factory._parse_imports` парсит Types и Usages из Imports YAML
+- [x] Все существующие правила обновлены для работы с обоими типами нод
+- [x] `schema` команда работает корректно с обоими типами нод
+- [x] `ImportItemNode` и `ImportHasType` полностью удалены из кодовой базы
+- [x] Все интеграционные тесты проходят (tests/.project/)
+- [x] Все unit-тесты проходят
+- [x] CODEMANIFEST linter — 0 errors
+- [x] Ruff — 0 errors
+- [x] CODEMANIFEST файлы не были изменены

@@ -1,0 +1,12 @@
+Imports:
+    - Usages: [shared_usage]
+      From: import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper
+    - Usages: [shared_usage]
+      From: import_has_not_duplicate_usage/import_has_not_duplicate_usage_helper2
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Test entity

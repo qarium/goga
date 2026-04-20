@@ -1,0 +1,10 @@
+Imports:
+    - Usages: []
+      From: import_item_is_valid_empty_usage/import_item_is_valid_empty_usage_helper
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Test entity

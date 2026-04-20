@@ -1,0 +1,7 @@
+errors:
+- rule: import_item_is_valid
+  message: "Import from 'import_item_is_valid_empty_usage/import_item_is_valid_empty_usage_helper' has no Usages listed — specify at least one type to import"
+  document_path: import_item_is_valid_empty_usage
+  node_data:
+    Usages: []
+    From: import_item_is_valid_empty_usage/import_item_is_valid_empty_usage_helper
