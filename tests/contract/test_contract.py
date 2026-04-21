@@ -3,12 +3,13 @@
 import importlib
 import inspect
 from dataclasses import fields
-from typing import get_origin
 
 import pytest
 from goga.contract import (
     BaseContract,
     EntityContract,
+    MethodContract,
+    PropertyContract,
     RoutineContract,
     python_contract,
 )
@@ -34,12 +35,13 @@ class TestFacadeAvailability:
         assert hasattr(BaseContract, "signature")
 
     def test_base_contract_has_contract_field(self):
-        assert hasattr(BaseContract, "contract")
+        item = BaseContract()
+        assert hasattr(item, "contract")
 
     def test_base_contract_fields_are_str(self):
         field_map = {f.name: f.type for f in fields(BaseContract)}
-        assert field_map["name"] is str
-        assert field_map["signature"] is str
+        assert field_map["name"] == "str"
+        assert field_map["signature"] == "str"
 
     def test_base_contract_kw_only(self):
         with pytest.raises(TypeError):
@@ -55,12 +57,41 @@ class TestFacadeAvailability:
         assert hasattr(mod, "RoutineContract")
         assert mod.RoutineContract is RoutineContract
 
+    def test_property_contract_importable_from_facade(self):
+        mod = importlib.import_module("goga.contract")
+        assert hasattr(mod, "PropertyContract")
+        assert mod.PropertyContract is PropertyContract
+
+    def test_method_contract_importable_from_facade(self):
+        mod = importlib.import_module("goga.contract")
+        assert hasattr(mod, "MethodContract")
+        assert mod.MethodContract is MethodContract
+
     def test_python_contract_accepts_cell_path(self):
         sig = inspect.signature(python_contract)
         params = list(sig.parameters.keys())
         assert "cell_path" in params
-        assert sig.parameters["cell_path"].annotation is str
-        assert get_origin(sig.return_annotation) is list
+        assert sig.parameters["cell_path"].annotation == "str"
+        # With from __future__ import annotations, return_annotation is a string
+        ret = sig.return_annotation
+        assert "list" in str(ret)
+
+    def test_python_contract_returns_entity_or_routine(self, tmp_path, monkeypatch):
+        """python_contract returns EntityContract for classes and RoutineContract for functions."""
+        pkg = tmp_path / "testpkg_types"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "def my_func() -> None: ...\n"
+            "class MyClass:\n    def __init__(self) -> None: ...\n"
+            "__all__ = ['my_func', 'MyClass']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_types")
+
+        assert isinstance(result[0], RoutineContract)
+        assert isinstance(result[1], EntityContract)
+        assert not isinstance(result[0], EntityContract)
+        assert not isinstance(result[1], RoutineContract)
 
 
 class TestBaseContractCreation:
@@ -276,3 +307,179 @@ class TestPythonContractEdgeCases:
         monkeypatch.syspath_prepend(str(tmp_path))
         with pytest.raises(AttributeError):
             python_contract("testpkg_stale")
+
+
+class TestEntityContractExtraction:
+    """Tests for EntityContract property and method extraction."""
+
+    def test_entity_contract_has_properties_and_methods(self, tmp_path, monkeypatch):
+        """EntityContract extracts public properties, methods, and staticmethods; skips private."""
+        pkg = tmp_path / "testpkg_entity"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "class Service:\n"
+            "    def __init__(self) -> None: ...\n"
+            "    @property\n"
+            "    def name(self) -> str:\n"
+            "        return ''\n"
+            "    @property\n"
+            "    def _hidden(self) -> str:\n"
+            "        return ''\n"
+            "    def run(self) -> None: ...\n"
+            "    @staticmethod\n"
+            "    def helper() -> int:\n"
+            "        return 0\n"
+            "__all__ = ['Service']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_entity")
+
+        assert len(result) == 1
+        entity = result[0]
+        assert isinstance(entity, EntityContract)
+        assert len(entity.properties) == 1
+        assert entity.properties[0].name == "name"
+        assert entity.properties[0].signature == "str"
+        assert len(entity.methods) == 2
+        method_names = [m.name for m in entity.methods]
+        assert "run" in method_names
+        assert "helper" in method_names
+        assert "_hidden" not in [p.name for p in entity.properties]
+
+    def test_entity_contract_classmethod(self, tmp_path, monkeypatch):
+        """classmethod has cls removed from signature."""
+        pkg = tmp_path / "testpkg_clsmethod"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "class Builder:\n"
+            "    def __init__(self) -> None: ...\n"
+            "    @classmethod\n"
+            "    def create(cls, value: int) -> 'Builder':\n"
+            "        return cls()\n"
+            "__all__ = ['Builder']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_clsmethod")
+
+        entity = result[0]
+        method = entity.methods[0]
+        assert method.name == "create"
+        assert "cls" not in method.signature
+        assert "value: int" in method.signature
+
+    def test_entity_without_public_members(self, tmp_path, monkeypatch):
+        """Class with only _private members has empty properties and methods."""
+        pkg = tmp_path / "testpkg_private"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "class Secret:\n"
+            "    def __init__(self) -> None: ...\n"
+            "    def _internal(self) -> None: ...\n"
+            "    @property\n"
+            "    def _val(self) -> int:\n"
+            "        return 0\n"
+            "__all__ = ['Secret']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_private")
+
+        entity = result[0]
+        assert len(entity.properties) == 0
+        assert len(entity.methods) == 0
+
+    def test_property_without_return_annotation(self, tmp_path, monkeypatch):
+        """@property without return type annotation has empty signature."""
+        pkg = tmp_path / "testpkg_propannot"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "class Lazy:\n"
+            "    def __init__(self) -> None: ...\n"
+            "    @property\n"
+            "    def data(self):\n"
+            "        return None\n"
+            "__all__ = ['Lazy']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_propannot")
+
+        entity = result[0]
+        assert len(entity.properties) == 1
+        assert entity.properties[0].name == "data"
+        assert entity.properties[0].signature == ""
+
+    def test_entity_contract_inherits_base_contract(self):
+        """EntityContract is an instance of BaseContract."""
+        entity = EntityContract(name="Test", signature="()")
+        assert isinstance(entity, BaseContract)
+
+    def test_dataclass_fields_not_treated_as_properties(self, tmp_path, monkeypatch):
+        """@dataclass class fields are not extracted as PropertyContract."""
+        pkg = tmp_path / "testpkg_dcfields"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "from dataclasses import dataclass\n"
+            "\n"
+            "@dataclass\n"
+            "class Record:\n"
+            "    x: int\n"
+            "    y: str = ''\n"
+            "__all__ = ['Record']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_dcfields")
+
+        entity = result[0]
+        assert isinstance(entity, EntityContract)
+        assert len(entity.properties) == 0
+        # __init__ from dataclass should be the entity signature
+        assert "x" in entity.signature
+
+    def test_dataclass_with_property_over_field(self, tmp_path, monkeypatch):
+        """@dataclass class with @property extracts the property into PropertyContract."""
+        pkg = tmp_path / "testpkg_dcprop"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "from dataclasses import dataclass\n"
+            "\n"
+            "@dataclass\n"
+            "class Config:\n"
+            "    name: str = ''\n"
+            "    @property\n"
+            "    def display_name(self) -> str:\n"
+            "        return self.name.upper()\n"
+            "__all__ = ['Config']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_dcprop")
+
+        entity = result[0]
+        assert len(entity.properties) == 1
+        assert entity.properties[0].name == "display_name"
+        assert entity.properties[0].signature == "str"
+
+    def test_entity_contract_inherited_methods_and_properties(self, tmp_path, monkeypatch):
+        """Inherited public methods and properties are included via MRO walk."""
+        pkg = tmp_path / "testpkg_inherit"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(
+            "class Base:\n"
+            "    def __init__(self) -> None: ...\n"
+            "    def base_method(self) -> None: ...\n"
+            "    @property\n"
+            "    def base_prop(self) -> int:\n"
+            "        return 0\n"
+            "\n"
+            "class Child(Base):\n"
+            "    def child_method(self) -> str:\n"
+            "        return ''\n"
+            "__all__ = ['Child']\n"
+        )
+        monkeypatch.syspath_prepend(str(tmp_path))
+        result = python_contract("testpkg_inherit")
+
+        entity = result[0]
+        method_names = [m.name for m in entity.methods]
+        assert "base_method" in method_names
+        assert "child_method" in method_names
+        prop_names = [p.name for p in entity.properties]
+        assert "base_prop" in prop_names
