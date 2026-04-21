@@ -107,7 +107,10 @@ def python_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
                 )
             )
         else:
-            sig = inspect.signature(obj)
+            try:
+                sig = inspect.signature(obj)
+            except (ValueError, TypeError):
+                sig = inspect.Signature()
             result.append(RoutineContract(name=name, signature=str(sig)))
 
     return result
