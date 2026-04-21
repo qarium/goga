@@ -6,13 +6,13 @@ Ask the user:
 
 > What do you want to do?
 > - **changes** — architectural design based on CODEMANIFEST changes (git diff)
-> - **from scratch** — architectural design from current CODEMANIFEST (not yet supported)
+> - **brainstorm** — design CODEMANIFESTs through brainstorming and exploration
 
 Based on the user's choice:
 
 - **changes** — invoke the `design-by-changes` skill and follow it from start to finish.
 
-- **from scratch** — not yet supported. Inform the user and suggest using `changes` for now.
+- **brainstorm** — invoke the `design-by-brainstorm` skill and follow it from start to finish.
 
 Arguments: $ARGUMENTS
 
