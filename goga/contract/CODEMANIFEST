@@ -22,7 +22,7 @@ Annotations: |
 
 ---
 
-ContractItem():
+BaseContract():
   location: contract.py
   annotations: |
     Использовать формат `contract_format`.
@@ -31,8 +31,35 @@ ContractItem():
       Имя объекта/функции и тд
     signature -> str: |
       Сигнатура вызова с входными и выходными данными
+    contract -> str: |
+      Имя и сигнатура "{{ name }}{{ signature }}"
 
-"python_contract(cell_path: str) -> contract:list[ContractItem]":
+BaseContract::EntityContract():
+  location: contract.py
+  annotations: |
+    Описание контракта сущности
+  properties:
+    properties -> list[PropertyContract]: |
+      Контракт свойства сущности
+    methods -> list[MethodContract]: |
+      Контракт метода сущности
+
+BaseContract::RoutineContract():
+  location: contract.py
+  annotations: |
+    Описание контракта рутины
+
+BaseContract::PropertyContract():
+  location: contract.py
+  annotations: |
+    Описание контракта свойства сущности
+
+BaseContract::MethodContract():
+  location: contract.py
+  annotations: |
+    Описание контракта метода сущности
+
+"python_contract(cell_path: str) -> contract:list[EntityContract | RoutineContract]":
   location: python.py
   annotations: |
     Собрать все объекты с фасада пакета по указанному пути.
@@ -42,7 +69,8 @@ ContractItem():
     Алгоритм:
     - импортировать пакет (__init__.py) по указанному пути
     - взять все объекты из секции __all__
-    - определить имя и сигнатуру
+    - определить тип, имя и сигнатуру
+    - для сущности найти все публичные методы и свойства, определить имя и сигнатуру
 
     Требования:
     - аннотации типов входят контракт
@@ -50,6 +78,8 @@ ContractItem():
     - дефолтные значения аргументов важны
     - тип аргументов (позиционные, именованные) важны
     - self исключается из сигнатуры
+    - сущностями являются классы остальные объекты - это рутины
+    - для свойств сигнатура - возвращаемый тип данных, если нет - пустая строка
 
 ---
 
