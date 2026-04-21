@@ -44,6 +44,13 @@ class TestRealPackageExtraction:
             assert item.name != ""
             assert item.signature != ""
 
+    def test_ast_factory_is_entity_with_members(self):
+        result = python_contract("goga/ast/factory")
+        factory = next(item for item in result if item.name == "Factory")
+        assert isinstance(factory, EntityContract)
+        # Factory has at least one method or property
+        assert len(factory.methods) > 0 or len(factory.properties) > 0
+
 
 class TestSignatureFormatMatchesContractFormat:
     """Result is serializable to contract_format: [{"name": "...", "signature": "..."}]."""
@@ -51,6 +58,37 @@ class TestSignatureFormatMatchesContractFormat:
     def test_result_serializable_to_json(self):
         result = python_contract("goga/contract")
         data = [{"name": item.name, "signature": item.signature} for item in result]
+        serialized = json.dumps(data)
+        parsed = json.loads(serialized)
+        assert parsed == data
+
+    def test_entity_with_properties_and_methods_serializable(self):
+        result = python_contract("goga/ast/factory")
+        factory = next(item for item in result if item.name == "Factory")
+        # Verify each property has name and signature
+        for prop in factory.properties:
+            assert prop.name != ""
+            assert isinstance(prop.signature, str)
+            assert json.dumps({"name": prop.name, "signature": prop.signature})
+        # Verify each method has name and signature
+        for method in factory.methods:
+            assert method.name != ""
+            assert isinstance(method.signature, str)
+            assert json.dumps({"name": method.name, "signature": method.signature})
+
+    def test_full_entity_serializable_with_members(self):
+        result = python_contract("goga/ast/factory")
+        factory = next(item for item in result if item.name == "Factory")
+        data = {
+            "name": factory.name,
+            "signature": factory.signature,
+            "properties": [
+                {"name": p.name, "signature": p.signature} for p in factory.properties
+            ],
+            "methods": [
+                {"name": m.name, "signature": m.signature} for m in factory.methods
+            ],
+        }
         serialized = json.dumps(data)
         parsed = json.loads(serialized)
         assert parsed == data
