@@ -115,9 +115,7 @@ class TestImportUsageExistsNotFound:
         rule = ImportUsageExists()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert errors[0].message == (
-            f"Usage 'missing' does not exists on filesystem by path '{expected_path}'"
-        )
+        assert errors[0].message == (f"Usage 'missing' does not exists on filesystem by path '{expected_path}'")
 
     def test_one_missing_one_found(self, tmp_path):
         """One usage exists, one doesn't -> error only for the missing one."""

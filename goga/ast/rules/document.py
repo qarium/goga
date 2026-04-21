@@ -72,8 +72,7 @@ class ImportItemIsValid(DocumentRule):
                 errors.append(
                     DocumentRuleError(
                         message=(
-                            f"Import from '{item.from_path}' has no Types listed"
-                            f" — specify at least one type to import"
+                            f"Import from '{item.from_path}' has no Types listed — specify at least one type to import"
                         ),
                         rule=self.name,
                         document=node.root,
@@ -115,10 +114,7 @@ class ImportUsageExists(DocumentRule):
                 if not usage_path.exists():
                     errors.append(
                         DocumentRuleError(
-                            message=(
-                                f"Usage '{name}' does not exists on filesystem"
-                                f" by path '{usage_path}'"
-                            ),
+                            message=(f"Usage '{name}' does not exists on filesystem by path '{usage_path}'"),
                             rule=self.name,
                             document=node.root,
                             node=item,
@@ -161,10 +157,7 @@ class ImportHasValidFromPath(DocumentRule):
                     names = item.usage_name
                 errors.append(
                     DocumentRuleError(
-                        message=(
-                            f"Source path '{item.from_path}' in import of {kind} {names}"
-                            f" not found on filesystem"
-                        ),
+                        message=(f"Source path '{item.from_path}' in import of {kind} {names} not found on filesystem"),
                         rule=self.name,
                         document=node.root,
                         node=item,

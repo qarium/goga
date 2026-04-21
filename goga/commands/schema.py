@@ -39,8 +39,7 @@ def _build_dependencies(doc: DocumentRoot) -> dict:
         deps.setdefault(path, {"types": set(), "usages": set()})
         deps[path]["usages"].update(item.usage_name)
     return {
-        path: {"types": sorted(data["types"]), "usages": sorted(data["usages"])}
-        for path, data in sorted(deps.items())
+        path: {"types": sorted(data["types"]), "usages": sorted(data["usages"])} for path, data in sorted(deps.items())
     }
 
 
