@@ -1,7 +1,5 @@
 """Python contract extraction — extracts facade from Python packages."""
 
-from __future__ import annotations
-
 import inspect
 import types
 from importlib import import_module
@@ -24,7 +22,12 @@ def _extract_properties(
             continue
         if not isinstance(attr, property):
             continue
-        sig_str = str(inspect.signature(attr.fget))
+        if attr.fget is None:
+            continue
+        try:
+            sig_str = str(inspect.signature(attr.fget))
+        except (ValueError, TypeError):
+            continue
         sig = sig_str.rsplit("->", 1)[-1].strip() if "->" in sig_str else ""
         properties.append(PropertyContract(name=name, signature=sig))
     return properties

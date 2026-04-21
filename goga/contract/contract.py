@@ -1,7 +1,5 @@
 """Contract item dataclass hierarchy."""
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 
 
@@ -18,6 +16,16 @@ class BaseContract:
 
 
 @dataclass(kw_only=True)
+class PropertyContract(BaseContract):
+    """Contract for a class property."""
+
+
+@dataclass(kw_only=True)
+class MethodContract(BaseContract):
+    """Contract for a class method."""
+
+
+@dataclass(kw_only=True)
 class EntityContract(BaseContract):
     """Contract for a class entity with properties and methods."""
 
@@ -28,13 +36,3 @@ class EntityContract(BaseContract):
 @dataclass(kw_only=True)
 class RoutineContract(BaseContract):
     """Contract for a routine (function)."""
-
-
-@dataclass(kw_only=True)
-class PropertyContract(BaseContract):
-    """Contract for a class property."""
-
-
-@dataclass(kw_only=True)
-class MethodContract(BaseContract):
-    """Contract for a class method."""

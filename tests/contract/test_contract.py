@@ -3,6 +3,7 @@
 import importlib
 import inspect
 from dataclasses import fields
+from typing import get_origin
 
 import pytest
 from goga.contract import (
@@ -40,8 +41,8 @@ class TestFacadeAvailability:
 
     def test_base_contract_fields_are_str(self):
         field_map = {f.name: f.type for f in fields(BaseContract)}
-        assert field_map["name"] == "str"
-        assert field_map["signature"] == "str"
+        assert field_map["name"] is str
+        assert field_map["signature"] is str
 
     def test_base_contract_kw_only(self):
         with pytest.raises(TypeError):
@@ -71,10 +72,8 @@ class TestFacadeAvailability:
         sig = inspect.signature(python_contract)
         params = list(sig.parameters.keys())
         assert "cell_path" in params
-        assert sig.parameters["cell_path"].annotation == "str"
-        # With from __future__ import annotations, return_annotation is a string
-        ret = sig.return_annotation
-        assert "list" in str(ret)
+        assert sig.parameters["cell_path"].annotation is str
+        assert get_origin(sig.return_annotation) is list
 
     def test_python_contract_returns_entity_or_routine(self, tmp_path, monkeypatch):
         """python_contract returns EntityContract for classes and RoutineContract for functions."""
@@ -88,10 +87,12 @@ class TestFacadeAvailability:
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_types")
 
-        assert isinstance(result[0], RoutineContract)
-        assert isinstance(result[1], EntityContract)
-        assert not isinstance(result[0], EntityContract)
-        assert not isinstance(result[1], RoutineContract)
+        func = next(r for r in result if r.name == "my_func")
+        cls = next(r for r in result if r.name == "MyClass")
+        assert isinstance(func, RoutineContract)
+        assert not isinstance(func, EntityContract)
+        assert isinstance(cls, EntityContract)
+        assert not isinstance(cls, RoutineContract)
 
 
 class TestBaseContractCreation:
@@ -201,7 +202,6 @@ class TestPythonContractEdgeCases:
         assert "os" not in names  # module — not callable
         assert "foo" in names
         assert len(result) == 1
-    """Edge case tests for python_contract."""
 
     def test_python_contract_nested_path(self, tmp_path, monkeypatch):
         """Handles nested package paths like a/b/c."""
