@@ -364,7 +364,8 @@ class TestEntityContractExtraction:
         entity = result[0]
         method = entity.methods[0]
         assert method.name == "create"
-        assert "cls" not in method.signature
+        # cls is auto-removed by getattr for classmethod — verify it's not a parameter
+        assert not method.signature.startswith("(cls")
         assert "value: int" in method.signature
 
     def test_entity_without_public_members(self, tmp_path, monkeypatch):

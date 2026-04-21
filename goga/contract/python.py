@@ -25,8 +25,8 @@ def _extract_properties(
         if attr.fget is None:
             continue
         try:
-            sig_str = str(inspect.signature(attr.fget))
-        except (ValueError, TypeError):
+            sig_str = str(inspect.signature(attr.fget, eval_str=True))
+        except (ValueError, TypeError, NameError):
             continue
         sig = sig_str.rsplit("->", 1)[-1].strip() if "->" in sig_str else ""
         properties.append(PropertyContract(name=name, signature=sig))
@@ -51,8 +51,8 @@ def _extract_methods(
                 seen.add(name)
                 try:
                     bound = getattr(cls, name)
-                    sig = inspect.signature(bound)
-                except (ValueError, TypeError):
+                    sig = inspect.signature(bound, eval_str=True)
+                except (ValueError, TypeError, NameError):
                     continue
                 params = list(sig.parameters.values())
                 # Remove self for regular methods (getattr returns unbound for plain functions)
@@ -89,12 +89,12 @@ def python_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
             continue
         if inspect.isclass(obj):
             try:
-                sig = inspect.signature(obj.__init__)
+                sig = inspect.signature(obj.__init__, eval_str=True)
                 params = list(sig.parameters.values())
                 if params and params[0].name == "self":
                     params = params[1:]
                 sig = sig.replace(parameters=params)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, NameError):
                 sig = inspect.Signature()
             properties = _extract_properties(obj)
             methods = _extract_methods(obj)
@@ -108,8 +108,8 @@ def python_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
             )
         else:
             try:
-                sig = inspect.signature(obj)
-            except (ValueError, TypeError):
+                sig = inspect.signature(obj, eval_str=True)
+            except (ValueError, TypeError, NameError):
                 sig = inspect.Signature()
             result.append(RoutineContract(name=name, signature=str(sig)))
 
