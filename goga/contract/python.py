@@ -88,11 +88,14 @@ def python_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
         if not (callable(obj) and not inspect.ismodule(obj)):
             continue
         if inspect.isclass(obj):
-            sig = inspect.signature(obj.__init__)
-            params = list(sig.parameters.values())
-            if params and params[0].name == "self":
-                params = params[1:]
-            sig = sig.replace(parameters=params)
+            try:
+                sig = inspect.signature(obj.__init__)
+                params = list(sig.parameters.values())
+                if params and params[0].name == "self":
+                    params = params[1:]
+                sig = sig.replace(parameters=params)
+            except (ValueError, TypeError):
+                sig = inspect.Signature()
             properties = _extract_properties(obj)
             methods = _extract_methods(obj)
             result.append(
