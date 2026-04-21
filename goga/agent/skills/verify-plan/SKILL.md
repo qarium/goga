@@ -176,8 +176,9 @@ For each imported usage from `Imports` → `Usages` relevant to the plan's scope
 - Verify the task contains specific information from the imported usage, not just a name mention
 
 For each planned local `.usages/` file specified in the design document:
-- Find a task or step that creates the `.usages/<name>.md` file
+- Find a task or step that creates or extends the `.usages/<category-name>.md` file
 - Verify the task specifies the expected content of the file
+- If the file extends an existing category — verify the plan specifies appending, not replacing
 - Verify the file creation is planned together with code, not as a separate phase
 
 If a Usages entry is not present in any task — record as **Medium**.

@@ -168,8 +168,10 @@ Based on the stack trace results, perform analysis:
 - Document the tracable dependency in the design (imported usages create tracable links between cells but not contractual obligations)
 
 **Local usages design**: For each cell being designed, determine what local `.usages/` files are needed:
-- What practices are specific to this cell and should have their own files?
+- What distinct functional domains exist within this cell's logic?
+- For each domain: what practices does it require?
 - What practices are already covered by global usages or imported usages?
+- Do any existing `.usages/` files in the cell already cover a similar functional domain?
 - How do local usages relate to imported usages (do they extend, combine, or replace them?)
 
 #### 4c. Test Scenarios
@@ -192,24 +194,42 @@ Categories to cover:
 
 Reference the project test conventions from the Sources of Truth (Usages specs, employee docs) for test structure, naming, and tooling.
 
-### Step 4d: Usages calibration
+### Step 4d: Usages categorization
 
-For each cell being designed, conduct an interactive calibration with the user about usages structure.
+For each cell being designed, propose a functional categorization of usages.
 
-**Calibration is mandatory** — the agent must ask the user about usages granularity before saving the design.
+**Categorization is mandatory** — the agent must propose how practices are organized within the cell's `.usages/` before saving the design.
 
-Via AskUserQuestion, ask about:
+#### Functional categories
 
-1. **Granularity**: one usage per cell or one per entity/function?
-2. **Which practices** to extract into separate `.usages/` files?
-3. **Which practices** to describe inline in CODEMANIFEST?
+A cell implements logic that can be divided into **functional categories** by meaning — not by entity or by file, but by semantic domain. For example, a cell that parses DSL may have categories: "parsing rules", "validation rules", "AST traversal". A cell that provides CLI may have categories: "command registration", "output formatting", "state management".
 
-Present the user with options:
-- **Option A**: single `.usages/<cell-name>.md` — one practice for the entire cell
-- **Option B**: separate `.usages/<entity-name>.md` — one practice per entity
-- **Option C**: combined — shared practices in one file, specific ones in separate files
+Each category becomes a `.usages/<category-name>.md` file describing the practice for that functional area.
 
-Propose an option with rationale, let the user confirm or adjust.
+#### Categorization process
+
+1. **Analyze cell logic** — identify distinct functional domains within the cell based on entity responsibilities, data flows, and interaction patterns from Step 4b
+
+2. **Check existing `.usages/`** — if the cell already has `.usages/` files:
+   - Read each existing file to understand its functional category
+   - Map new practices to existing categories where they fit
+   - New practices that match an existing category → **extend** that file
+   - New practices that don't match any existing category → **create** a new file
+
+3. **Propose categorization** — present to the user:
+   - List of functional categories identified
+   - For each category: which practices it covers, which entities it relates to
+   - Which are new files, which extend existing files
+   - Which practices should remain inline in CODEMANIFEST (short, entity-specific, not reusable)
+
+4. **Get user confirmation** — via AskUserQuestion, present the proposal and let the user confirm or adjust category boundaries and names
+
+#### Decision rules
+
+- Practice used by entities from **multiple functional domains** → separate category file
+- Practice specific to **one entity's internals** and short → inline in CODEMANIFEST
+- Practice that describes **how to work with the cell's API** → category file (consumable by importers)
+- Existing `.usages/` file with matching domain → **extend**, do not create parallel files for the same domain
 
 If the cell has no local usages (all usages are global or imported) — still confirm with the user that no local usages are needed.
 
@@ -285,7 +305,7 @@ Before completing the response, verify:
 6. For each entity: are pattern, state management, error handling, and edge cases described?
 7. Are cross-cutting concerns described (error handling, logging, validation)?
 8. For each Usages entry: is it described what it provides, where it is used, why it was chosen, how it is used?
-9. Was usages calibration performed with the user (Step 4d)?
+9. Was usages categorization performed with the user (Step 4d) — functional categories proposed, existing files checked, new vs extend decisions made?
 10. Were questions asked to the user about unclear aspects and implementation details?
 11. Are facts, assumptions, and open questions separated?
 12. For each imported usage from `Imports` → `Usages`: was the source file read and analyzed?

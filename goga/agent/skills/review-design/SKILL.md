@@ -125,6 +125,12 @@ For each imported usage from `Imports` → `Usages`:
 - Verify the imported usage is used correctly (it provides practice guidance, not contractual obligations)
 - Check that the design does not treat an imported usage as a type contract
 
+For local usages categorization in the design document:
+
+- Verify that functional categories are semantically distinct — no two categories should cover the same domain
+- Verify that practices placed in the same category file are actually related by function
+- Verify that existing `.usages/` files in the cell were checked and matched categories were extended, not duplicated
+
 ---
 
 ### Step 3: Test Logic Verification

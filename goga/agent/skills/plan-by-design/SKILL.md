@@ -107,9 +107,11 @@ Goal: distribute each Usages entry (local, global, and imported) to specific pla
    - include the source path reference for traceability
 
 3. **Plan local usages creation** — for each planned local `.usages/` file from the design document:
-   - create a task (or add steps to an existing task) that creates the `.usages/` directory and practice files
+   - For each functional category in the design document's "Planned Usages Structure":
+     - If the file is new — create a task (or add steps to an existing task) that creates the `.usages/` directory and the category file
+     - If the file extends an existing category — add steps to the relevant task that append new practices to the existing file
    - local usages are written together with code — not as a separate phase
-   - specify the expected content of each `.usages/<name>.md` file
+   - specify the expected content of each `.usages/<category-name>.md` file
 
 4. **Completeness check** — ensure that:
    - every Usages entry is present in at least one task
@@ -361,7 +363,7 @@ Include Usages context in the plan so the AI implementation agent understands th
 - **Local usages** — located inside the cell's `.usages/` directory, also referenced by file path in the `Usages` section
 - **Imported usages** — from other cells via `Imports` → `Usages`, available at `{from_path}/.usages/{usage_name}.md`
 
-When the design document specifies planned local `.usages/` files, the plan must include tasks (or steps within coding tasks) to create these files. Local usages are written **together with code**, not as a separate phase.
+When the design document specifies planned local `.usages/` files, the plan must include tasks (or steps within coding tasks) to create these files. Local usages are organized by **functional categories** — each category covers a semantic domain of the cell's logic. If a `.usages/` file already exists for a matching category, the plan extends it rather than creating a parallel file. Local usages are written **together with code**, not as a separate phase.
 
 ### Re-exports are facade obligations
 Re-export blocks (`->Name: {}` for internal types, `->usage.Type: {}` for external types) define names that must be available on the facade without local implementation.

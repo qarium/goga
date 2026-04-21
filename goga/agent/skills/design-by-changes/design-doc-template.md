@@ -149,16 +149,24 @@ If a section cannot be completed because information is unavailable, keep the se
 
 ## Planned Usages Structure
 
-<!-- For each cell being designed, describe the planned local .usages/ structure -->
-<!-- This section is populated after usages calibration with the user (Step 4d) -->
+<!-- For each cell being designed, describe the functional categorization of usages -->
+<!-- This section is populated after usages categorization with the user (Step 4d) -->
 
 ### Cell: `<cell path>`
-- **Granularity**: <one per cell / one per entity / combined>
-- **Planned usages files**:
-  - `.usages/<name>.md` — <what this practice covers>
-  - `.usages/<name>.md` — <what this practice covers>
-- **Rationale**: <why this structure was chosen>
-- **Calibration decision**: <what was proposed and what the user confirmed>
+
+#### Functional categories
+- **`<category name>`** → `.usages/<category-name>.md`
+  - Covers: <what functional domain this category represents>
+  - Related entities: <which entities use practices from this category>
+  - Status: <new file / extends existing>
+  - Content: <what practices this file describes>
+
+#### Inline practices
+- `<practice name>` in CODEMANIFEST `Usages` — <why inline: short, entity-specific, not reusable>
+
+#### Categorization rationale
+- <why these category boundaries were chosen>
+- <which existing files are extended and why>
 
 ### Imported usages from other cells
 <!-- List usages imported from other cells via Imports → Usages -->

@@ -66,8 +66,11 @@ For each imported usage from `Imports` → `Usages`:
 ### Local Usages
 
 For each planned local usage file (from design document):
-- File path: `.usages/<name>.md`
-- Description: <what this practice covers>
+- File path: `.usages/<category-name>.md`
+- Functional category: <what semantic domain this category covers>
+- Status: <new file / extends existing>
+- Related entities: <which entities use practices from this category>
+- Description: <what practices this file describes>
 - Creation task reference: <Task N>
 
 ### External Dependencies

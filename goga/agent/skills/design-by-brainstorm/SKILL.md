@@ -150,7 +150,12 @@ Based on the chosen approach, present the **concrete proposal** progressively:
 1. **Cell structure** — which cells, where located, boundaries
 2. **Entity definitions** — interfaces, types, their methods, properties, annotations
 3. **Usages and Imports** — practices used, cross-cell dependencies
-4. **Data flow diagram** — mermaid diagram of entity interactions
+4. **Usages categorization** — for each cell, propose functional categories:
+   - Identify distinct functional domains within the cell's logic
+   - Propose which practices belong to which category
+   - If the cell already has `.usages/` files — map new practices to existing categories where they fit, propose new files only for new domains
+   - Inline practices for short, entity-specific, non-reusable instructions
+5. **Data flow diagram** — mermaid diagram of entity interactions
 
 Pause after each section for user feedback. Fix issues before continuing to the next. Do not dump the entire proposal at once.
 
