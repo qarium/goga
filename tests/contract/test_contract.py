@@ -168,10 +168,7 @@ class TestPythonContractNegative:
         pkg_init = tmp_path / "testpkg_skip"
         pkg_init.mkdir()
         (pkg_init / "__init__.py").write_text(
-            "CONSTANT = 42\n"
-            "an_alias = str\n"
-            "def foo(): ...\n"
-            "__all__ = ['CONSTANT', 'an_alias', 'foo']\n"
+            "CONSTANT = 42\nan_alias = str\ndef foo(): ...\n__all__ = ['CONSTANT', 'an_alias', 'foo']\n"
         )
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_skip")
@@ -190,11 +187,7 @@ class TestPythonContractEdgeCases:
         """Module listed in __all__ is not included in contract."""
         pkg = tmp_path / "testpkg_mod"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "import os\n"
-            "def foo() -> None: ...\n"
-            "__all__ = ['os', 'foo']\n"
-        )
+        (pkg / "__init__.py").write_text("import os\ndef foo() -> None: ...\n__all__ = ['os', 'foo']\n")
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_mod")
 
@@ -207,10 +200,7 @@ class TestPythonContractEdgeCases:
         """Handles nested package paths like a/b/c."""
         nested = tmp_path / "nested_a" / "b" / "c"
         nested.mkdir(parents=True)
-        (nested / "__init__.py").write_text(
-            "def deep_func() -> int:\n    return 0\n"
-            "__all__ = ['deep_func']\n"
-        )
+        (nested / "__init__.py").write_text("def deep_func() -> int:\n    return 0\n__all__ = ['deep_func']\n")
         (tmp_path / "nested_a" / "__init__.py").write_text("")
         (tmp_path / "nested_a" / "b" / "__init__.py").write_text("")
         monkeypatch.syspath_prepend(str(tmp_path))
@@ -224,9 +214,7 @@ class TestPythonContractEdgeCases:
         pkg_init = tmp_path / "testpkg_args"
         pkg_init.mkdir()
         (pkg_init / "__init__.py").write_text(
-            "class Flexible:\n"
-            "    def __init__(self, *args: int, **kwargs: str): ...\n"
-            "__all__ = ['Flexible']\n"
+            "class Flexible:\n    def __init__(self, *args: int, **kwargs: str): ...\n__all__ = ['Flexible']\n"
         )
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_args")
@@ -240,8 +228,7 @@ class TestPythonContractEdgeCases:
         pkg_init = tmp_path / "testpkg_defaults"
         pkg_init.mkdir()
         (pkg_init / "__init__.py").write_text(
-            "def func(a: int, b: str = 'hello', c: float = 3.14): ...\n"
-            "__all__ = ['func']\n"
+            "def func(a: int, b: str = 'hello', c: float = 3.14): ...\n__all__ = ['func']\n"
         )
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_defaults")
@@ -255,10 +242,7 @@ class TestPythonContractEdgeCases:
         """Preserves argument order in signature."""
         pkg_init = tmp_path / "testpkg_order"
         pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "def func(z: int, a: str, m: float): ...\n"
-            "__all__ = ['func']\n"
-        )
+        (pkg_init / "__init__.py").write_text("def func(z: int, a: str, m: float): ...\n__all__ = ['func']\n")
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_order")
 
@@ -269,10 +253,7 @@ class TestPythonContractEdgeCases:
         """Handles paths with leading/trailing slashes."""
         pkg_init = tmp_path / "testpkg_slash"
         pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "def func(): ...\n"
-            "__all__ = ['func']\n"
-        )
+        (pkg_init / "__init__.py").write_text("def func(): ...\n__all__ = ['func']\n")
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("/testpkg_slash/")
 
@@ -283,10 +264,7 @@ class TestPythonContractEdgeCases:
         """Class with no explicit __init__ gets object.__init__ signature."""
         pkg_init = tmp_path / "testpkg_plain"
         pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "class Plain:\n    pass\n"
-            "__all__ = ['Plain']\n"
-        )
+        (pkg_init / "__init__.py").write_text("class Plain:\n    pass\n__all__ = ['Plain']\n")
         monkeypatch.syspath_prepend(str(tmp_path))
         result = python_contract("testpkg_plain")
 
