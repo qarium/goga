@@ -82,12 +82,8 @@ class TestSignatureFormatMatchesContractFormat:
         data = {
             "name": factory.name,
             "signature": factory.signature,
-            "properties": [
-                {"name": p.name, "signature": p.signature} for p in factory.properties
-            ],
-            "methods": [
-                {"name": m.name, "signature": m.signature} for m in factory.methods
-            ],
+            "properties": [{"name": p.name, "signature": p.signature} for p in factory.properties],
+            "methods": [{"name": m.name, "signature": m.signature} for m in factory.methods],
         }
         serialized = json.dumps(data)
         parsed = json.loads(serialized)
