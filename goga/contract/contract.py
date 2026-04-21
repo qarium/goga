@@ -19,6 +19,9 @@ class BaseContract:
 class PropertyContract(BaseContract):
     """Contract for a class property."""
 
+    def __post_init__(self) -> None:
+        self.contract = f"{self.name} -> {self.signature}"
+
 
 @dataclass(kw_only=True)
 class MethodContract(BaseContract):
