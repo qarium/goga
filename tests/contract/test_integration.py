@@ -2,21 +2,31 @@
 
 import json
 
-from goga.contract import python_contract
+from goga.contract import EntityContract, RoutineContract, python_contract
 
 
 class TestSelfReference:
     """python_contract extracts the facade of its own package."""
 
-    def test_self_contract_contains_contract_item(self):
+    def test_self_contract_contains_base_contract(self):
         result = python_contract("goga/contract")
         names = [item.name for item in result]
-        assert "ContractItem" in names
+        assert "BaseContract" in names
 
     def test_self_contract_contains_python_contract(self):
         result = python_contract("goga/contract")
         names = [item.name for item in result]
         assert "python_contract" in names
+
+    def test_self_contract_base_contract_is_entity(self):
+        result = python_contract("goga/contract")
+        base = next(item for item in result if item.name == "BaseContract")
+        assert isinstance(base, EntityContract)
+
+    def test_self_contract_python_contract_is_routine(self):
+        result = python_contract("goga/contract")
+        fn = next(item for item in result if item.name == "python_contract")
+        assert isinstance(fn, RoutineContract)
 
 
 class TestRealPackageExtraction:

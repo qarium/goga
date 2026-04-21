@@ -6,36 +6,54 @@ from dataclasses import fields
 from typing import get_origin
 
 import pytest
-from goga.contract import ContractItem, python_contract
+from goga.contract import (
+    BaseContract,
+    EntityContract,
+    RoutineContract,
+    python_contract,
+)
 
 
 class TestFacadeAvailability:
     """Contract: entities must be importable from the package facade."""
 
-    def test_contract_item_importable_from_facade(self):
+    def test_base_contract_importable_from_facade(self):
         mod = importlib.import_module("goga.contract")
-        assert hasattr(mod, "ContractItem")
-        assert mod.ContractItem is ContractItem
+        assert hasattr(mod, "BaseContract")
+        assert mod.BaseContract is BaseContract
 
     def test_python_contract_importable_from_facade(self):
         mod = importlib.import_module("goga.contract")
         assert hasattr(mod, "python_contract")
         assert mod.python_contract is python_contract
 
-    def test_contract_item_has_name_field(self):
-        assert hasattr(ContractItem, "name")
+    def test_base_contract_has_name_field(self):
+        assert hasattr(BaseContract, "name")
 
-    def test_contract_item_has_signature_field(self):
-        assert hasattr(ContractItem, "signature")
+    def test_base_contract_has_signature_field(self):
+        assert hasattr(BaseContract, "signature")
 
-    def test_contract_item_fields_are_str(self):
-        field_map = {f.name: f.type for f in fields(ContractItem)}
+    def test_base_contract_has_contract_field(self):
+        assert hasattr(BaseContract, "contract")
+
+    def test_base_contract_fields_are_str(self):
+        field_map = {f.name: f.type for f in fields(BaseContract)}
         assert field_map["name"] is str
         assert field_map["signature"] is str
 
-    def test_contract_item_kw_only(self):
+    def test_base_contract_kw_only(self):
         with pytest.raises(TypeError):
-            ContractItem("positional_name", "positional_sig")
+            BaseContract("positional_name", "positional_sig")
+
+    def test_entity_contract_importable_from_facade(self):
+        mod = importlib.import_module("goga.contract")
+        assert hasattr(mod, "EntityContract")
+        assert mod.EntityContract is EntityContract
+
+    def test_routine_contract_importable_from_facade(self):
+        mod = importlib.import_module("goga.contract")
+        assert hasattr(mod, "RoutineContract")
+        assert mod.RoutineContract is RoutineContract
 
     def test_python_contract_accepts_cell_path(self):
         sig = inspect.signature(python_contract)
@@ -45,18 +63,20 @@ class TestFacadeAvailability:
         assert get_origin(sig.return_annotation) is list
 
 
-class TestContractItemCreation:
-    """Behavioral: ContractItem dataclass creation and defaults."""
+class TestBaseContractCreation:
+    """Behavioral: BaseContract dataclass creation and defaults."""
 
-    def test_contract_item_creation_with_values(self):
-        item = ContractItem(name="test", signature="(x: int) -> str")
+    def test_base_contract_creation_with_values(self):
+        item = BaseContract(name="test", signature="(x: int) -> str")
         assert item.name == "test"
         assert item.signature == "(x: int) -> str"
+        assert item.contract == "test(x: int) -> str"
 
-    def test_contract_item_default_values(self):
-        item = ContractItem()
+    def test_base_contract_default_values(self):
+        item = BaseContract()
         assert item.name == ""
         assert item.signature == ""
+        assert item.contract == ""
 
 
 class TestPythonContractPositive:
