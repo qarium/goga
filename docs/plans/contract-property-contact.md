@@ -240,10 +240,10 @@ result = python_contract("path/to/cell")
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them.**
 
-- [ ] Create directory `goga/contract/.usages/` if not exists
-- [ ] Create file `goga/contract/.usages/python_contract.md` with usage practice for `python_contract` function
-- [ ] Verify file exists: `ls goga/contract/.usages/python_contract.md`
-- [ ] Lint: `ruff check goga/contract/` — no issues expected (markdown file)
+- [x] Create directory `goga/contract/.usages/` if not exists
+- [x] Create file `goga/contract/.usages/python_contract.md` with usage practice for `python_contract` function
+- [x] Verify file exists: `ls goga/contract/.usages/python_contract.md`
+- [x] Lint: `ruff check goga/contract/` — no issues expected (markdown file)
 
 ---
 
