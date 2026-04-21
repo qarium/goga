@@ -207,13 +207,13 @@
 
 **CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them.**
 
-- [ ] Create integration test file with `tmp_path` fixture setup for temporary Python packages
-- [ ] Test: `test_classmethod_excludes_cls_from_signature` — cls automatically removed by inspect.signature for classmethod
-- [ ] Test: `test_regular_method_excludes_self` — self removed for regular methods
-- [ ] Test: `test_staticmethod_keeps_all_params` — staticmethod params preserved
-- [ ] Test: `test_classmethod_with_self_named_param` — edge case: self as regular param name in classmethod
-- [ ] Test: `test_property_contract_format_through_python_contract` — PropertyContract gets `"name -> type"` format via _extract_properties
-- [ ] Run validation: `pytest tests/ -x -v`
+- [x] Create integration test file with `tmp_path` fixture setup for temporary Python packages
+- [x] Test: `test_classmethod_excludes_cls_from_signature` — cls automatically removed by inspect.signature for classmethod
+- [x] Test: `test_regular_method_excludes_self` — self removed for regular methods
+- [x] Test: `test_staticmethod_keeps_all_params` — staticmethod params preserved
+- [x] Test: `test_classmethod_with_self_named_param` — edge case: self as regular param name in classmethod
+- [x] Test: `test_property_contract_format_through_python_contract` — PropertyContract gets `"name -> type"` format via _extract_properties
+- [x] Run validation: `pytest tests/ -x -v`
 
 ---
 
