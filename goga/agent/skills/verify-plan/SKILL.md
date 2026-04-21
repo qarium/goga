@@ -17,9 +17,9 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 ## Sources of Truth
 
 1. `CODEMANIFEST` files — the contract surface (read **all** hierarchical CODEMANIFEST files)
-2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
+2. Usages spec files — read by reference: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity annotations via backtick syntax), skip Usages not referenced by any covered entity. When a Usages entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
 3. Design document at `docs/design/<feature-name>.md` — architectural solution
-3. `dsl-spec.md` from the `plan-by-design` skill bundle — DSL reference
+3. `dsl.md` — DSL reference
 4. `output-template.md` from the `plan-by-design` skill bundle — plan format reference
 
 ## Artifact Under Verification
@@ -35,7 +35,7 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 1. Read the plan from `docs/plans/<feature-name>.md`
 2. Read the design document from `docs/design/<feature-name>.md`
 3. Read all relevant `CODEMANIFEST` files referenced in the design document
-4. Read `dsl-spec.md`, `output-template.md`, and `conventions.md` from the `plan-by-design` skill bundle (same parent directory as this skill)
+4. Read `dsl.md` for DSL reference, `output-template.md` and `conventions.md` from the `plan-by-design` skill bundle (same parent directory as this skill)
 
 ---
 
@@ -43,7 +43,7 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 
 Run:
 ```
-docker run --rm -v .:/project -w /project goga linter
+docker run --rm -v .:/project -w /project qarium/goga:latest linter
 ```
 
 If the linter reports errors — record each error as a **Critical** finding. The CODEMANIFEST syntax must be valid before the plan can be considered correct.
@@ -74,7 +74,9 @@ For each `annotations` declaration relevant to the plan's scope (file-level, ent
 
 For each `Imports` entry relevant to the plan's scope:
 - Verify the plan tasks reference the imported types with correct names (including `AS` aliases)
+- For imported usages from `Imports` → `Usages`: verify plan tasks reference the imported usage content correctly, including the source path `{from_path}/.usages/{usage_name}.md`
 - If import context is missing from tasks that use the imported types — record as **High**
+- If imported usage context is missing from tasks that depend on the imported practice — record as **High**
 
 #### 3d. Re-export coverage
 
@@ -168,9 +170,21 @@ For each `Usages` entry relevant to the plan's scope (from the design document's
 - Verify the task contains specific information (what to use, how to call), not just a name mention
 - If the Usages entry value is a file path — verify the plan reflects the actual content from that file, not just the file path or usage name
 
+For each imported usage from `Imports` → `Usages` relevant to the plan's scope:
+- Find at least one task referencing this imported usage
+- Verify the task references the correct source path `{from_path}/.usages/{usage_name}.md`
+- Verify the task contains specific information from the imported usage, not just a name mention
+
+For each planned local `.usages/` file specified in the design document:
+- Find a task or step that creates the `.usages/<name>.md` file
+- Verify the task specifies the expected content of the file
+- Verify the file creation is planned together with code, not as a separate phase
+
 If a Usages entry is not present in any task — record as **Medium**.
 If a Usages mention is too vague — record as **Low**.
 If a Usages file path is mentioned but its content is not reflected — record as **Medium**.
+If an imported usage is not present in any task — record as **Medium**.
+If a planned local `.usages/` file has no creation task — record as **Medium**.
 
 ---
 
@@ -228,14 +242,16 @@ Before completing, verify:
 
 1. Were all relevant CODEMANIFEST files read and every plan entity checked for correctness against the contract (names, locations, descriptions, annotations, imports)?
 2. Was the design document read and every entity/design decision/test scenario traced into the plan? Were orphan tasks identified?
-3. Was `goga linter` run and results analyzed?
+3. Was `docker run --rm -v .:/project -w /project qarium/goga:latest linter` run and results analyzed?
 4. Was every coding task checked for TDD completeness (all 7 steps)?
 5. Was every task checked for self-contained context?
 6. Was task ordering verified against the convention?
 7. Was every Usages entry checked for coverage in the plan?
-8. Was every task checked for CODEMANIFEST read-only compliance?
-9. Are findings organized by severity with concrete fixes proposed?
-10. Were approved fixes applied and re-verified?
+8. Was every imported usage from `Imports` → `Usages` checked for coverage and correct source path reference?
+9. Was every planned local `.usages/` file checked for a creation task with expected content?
+10. Was every task checked for CODEMANIFEST read-only compliance?
+11. Are findings organized by severity with concrete fixes proposed?
+12. Were approved fixes applied and re-verified?
 
 If any answer is "no" — complete the missing verification before returning.
 

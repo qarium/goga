@@ -41,11 +41,11 @@ class TestLogicPositive:
             result = CliRunner().invoke(app, ["init"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
-        assert (claude_dir / "commands" / "goga" / "clarify.md").is_file()
+        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
         assert (claude_dir / "commands" / "goga" / "design.md").is_file()
         assert (claude_dir / "commands" / "goga" / "plan.md").is_file()
         assert (claude_dir / "commands" / "goga" / "verify.md").is_file()
-        assert (claude_dir / "skills" / "clarify-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "review-design" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "design-by-changes" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "plan-by-design" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "verify-plan" / "SKILL.md").is_file()
@@ -57,8 +57,8 @@ class TestLogicPositive:
             result = CliRunner().invoke(app, ["init", "--agent", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
-        assert (claude_dir / "commands" / "goga" / "clarify.md").is_file()
-        assert (claude_dir / "skills" / "clarify-design" / "SKILL.md").is_file()
+        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
+        assert (claude_dir / "skills" / "review-design" / "SKILL.md").is_file()
 
 
 class TestLogicNegative:
@@ -128,8 +128,8 @@ class TestIntegration:
         second = self._invoke_init(tmp_path)
         assert second.exit_code == 0
 
-        source_clarify = self.SOURCE_DIR / "commands" / "clarify.md"
-        target_clarify = tmp_path / ".claude" / "commands" / "goga" / "clarify.md"
+        source_clarify = self.SOURCE_DIR / "commands" / "review.md"
+        target_clarify = tmp_path / ".claude" / "commands" / "goga" / "review.md"
         assert target_clarify.read_text() == source_clarify.read_text()
 
     def test_init_preserves_existing_files(self, tmp_path: Path) -> None:
@@ -145,7 +145,7 @@ class TestIntegration:
         assert (claude_dir / "CLAUDE.md").read_text() == "keep this content"
         assert (claude_dir / "settings.json").read_text() == '{"key": "value"}'
         assert (claude_dir / "README.md").read_text() == "readme content"
-        assert (claude_dir / "commands" / "goga" / "clarify.md").is_file()
+        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
 
     def test_init_preserves_other_skills(self, tmp_path: Path) -> None:
         custom = tmp_path / ".claude" / "skills" / "my-custom-skill"
@@ -156,24 +156,24 @@ class TestIntegration:
         assert result.exit_code == 0
 
         assert (custom / "SKILL.md").read_text() == "my custom skill content"
-        assert (tmp_path / ".claude" / "skills" / "clarify-design" / "SKILL.md").is_file()
+        assert (tmp_path / ".claude" / "skills" / "review-design" / "SKILL.md").is_file()
 
     def test_init_replaces_old_commands(self, tmp_path: Path) -> None:
         goga_cmds = tmp_path / ".claude" / "commands" / "goga"
         goga_cmds.mkdir(parents=True)
         (goga_cmds / "old-deleted-command.md").write_text("should be removed")
-        (goga_cmds / "clarify.md").write_text("old version")
+        (goga_cmds / "review.md").write_text("old version")
 
         result = self._invoke_init(tmp_path)
         assert result.exit_code == 0
 
         assert not (goga_cmds / "old-deleted-command.md").exists()
 
-        source_clarify = self.SOURCE_DIR / "commands" / "clarify.md"
-        assert (goga_cmds / "clarify.md").read_text() == source_clarify.read_text()
+        source_clarify = self.SOURCE_DIR / "commands" / "review.md"
+        assert (goga_cmds / "review.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
-        assert installed_files == ["clarify.md", "design.md", "plan.md", "verify.md"]
+        assert installed_files == ["design.md", "plan.md", "review.md", "verify.md"]
 
     def test_init_preserves_other_commands(self, tmp_path: Path) -> None:
         other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"
@@ -184,7 +184,7 @@ class TestIntegration:
         assert result.exit_code == 0
 
         assert (other_cmd / "file.md").read_text() == "my other command content"
-        assert (tmp_path / ".claude" / "commands" / "goga" / "clarify.md").is_file()
+        assert (tmp_path / ".claude" / "commands" / "goga" / "review.md").is_file()
 
     def test_init_skill_files_recursive(self, tmp_path: Path) -> None:
         result = self._invoke_init(tmp_path)
@@ -192,20 +192,23 @@ class TestIntegration:
 
         skills_dir = tmp_path / ".claude" / "skills"
 
-        clarify_design = skills_dir / "clarify-design"
-        assert len(list(clarify_design.iterdir())) == 1
+        clarify_design = skills_dir / "review-design"
+        assert len(list(clarify_design.iterdir())) == 2
         assert (clarify_design / "SKILL.md").is_file()
+        assert (clarify_design / "dsl.md").is_file()
 
         dbc = skills_dir / "design-by-changes"
-        assert len(list(dbc.iterdir())) == 2
+        assert len(list(dbc.iterdir())) == 3
         assert (dbc / "SKILL.md").is_file()
         assert (dbc / "design-doc-template.md").is_file()
+        assert (dbc / "dsl.md").is_file()
 
         pbd = skills_dir / "plan-by-design"
-        expected = {"SKILL.md", "README.md", "conventions.md", "dsl-spec.md", "example.md", "output-template.md"}
+        expected = {"SKILL.md", "README.md", "conventions.md", "example.md", "output-template.md", "dsl.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
 
         vp = skills_dir / "verify-plan"
-        assert len(list(vp.iterdir())) == 1
+        assert len(list(vp.iterdir())) == 2
         assert (vp / "SKILL.md").is_file()
+        assert (vp / "dsl.md").is_file()

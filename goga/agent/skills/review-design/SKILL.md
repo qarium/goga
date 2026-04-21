@@ -1,4 +1,4 @@
-# Clarify Design
+# Review Design
 
 ## Purpose
 
@@ -12,6 +12,17 @@ You **trace** every logical chain and **find** where logic breaks.
 ## Key Principle
 
 **Trace, don't assume.** For every logical chain, mentally execute the code path step by step. Read actual source files and library documentation to verify correctness. If a step cannot be verified because information is missing — this itself is a finding.
+
+### CODEMANIFEST Editing
+
+When tracing reveals errors **in the contract itself** (not in the design's interpretation of the contract), you **must** propose CODEMANIFEST edits. These are not design-level findings — they are contract-level errors that block correct implementation regardless of how the design is structured.
+
+Conditions requiring CODEMANIFEST editing:
+- **Insufficient requirements**: missing type declarations, incomplete signatures, absent method/property descriptions
+- **Inconsistent requirements**: contradictions between entity interfaces, type mismatches between interacting entities
+- **Contract interaction errors**: broken type chains across interfaces, `Type::` mutations referencing non-existent or incompatible types, interface contracts that disagree on data shapes
+
+All CODEMANIFEST edits must be **proposed to the user** before applying.
 
 ---
 
@@ -34,7 +45,11 @@ Use the same sources as `design-by-changes`:
 1. Read the design document from `docs/design/<feature-name>.md`
 2. Read all relevant CODEMANIFEST files referenced in the design
 3. Read existing source files referenced in the design (if any)
-4. Read Usages specs referenced in CODEMANIFEST
+4. Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command, then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project dependency graph. Use `--depends-on <cell_path>` to find cells that depend on cells changed by the design. This ensures the review covers all affected cells.
+5. **Read Usages specs by reference**: determine which Usages to read based on reference links:
+   - **Always read root Usages** — Usages referenced by global `Annotations` in CODEMANIFEST header (via backtick syntax) are always read
+   - **Always read changed entities' Usages** — for each entity covered by the design, scan its annotations for backtick references to Usages. All referenced Usages are read
+   - **Skip unreferenced Usages** — Usages entries not referenced by global `Annotations` AND not referenced by any covered entity's annotations are not read
 
 ---
 
@@ -56,6 +71,25 @@ Follow the logical chain from entry to output, step by step:
 
 **Trace rule**: at each step, write out explicitly what data exists and what form it takes. Do not skip steps — "and then it works" is not a valid trace.
 
+**Contract interaction tracing** — for each step where entities interact across boundaries:
+
+1. **Interface ↔ Type interaction**: when entity A receives or returns a type from `Imports`/`Usages`, verify:
+   - the type is declared in the source CODEMANIFEST
+   - the type's shape (fields, methods, properties) matches what the entity expects
+   - if mismatch — record as a **CODEMANIFEST issue** (severity: Critical)
+
+2. **Type ↔ Mutation interaction**: for each `Type::` mutation in the chain:
+   - verify the base type exists with correct name (alias from `Imports` or qualified name from `Usages`)
+   - verify the mutation target's declared methods/properties are compatible with the base type
+   - for multi-level mutations (`A::B::Cls`), verify each segment is resolvable and compatible
+   - if any segment is broken — record as a **CODEMANIFEST issue** (severity: Critical)
+
+3. **Interface ↔ Interface interaction**: when entity A calls entity B or passes data to it:
+   - verify output type of A matches input type expected by B at the **contract level** (not just implementation)
+   - verify error types are compatible
+   - verify shared type references resolve to the same actual type
+   - if mismatch — record as a **CODEMANIFEST issue** (severity: High or Critical depending on impact)
+
 #### 2b. Checkpoint verification
 
 At **each step** in the chain, verify:
@@ -68,6 +102,13 @@ At **each step** in the chain, verify:
 
 If a checkpoint fails — record the issue: exact location in the chain, what is wrong, what should happen instead.
 
+**Contract consistency checkpoints** — additionally verify:
+- **Cross-entity type continuity**: if step N in entity A outputs type T and step M in entity B expects type T, does T mean the same thing in both contexts? (same `Imports` source, same alias, same shape)
+- **Mutation contract alignment**: if a `Type::` mutation produces a type used elsewhere, does the mutated contract satisfy all consumers?
+- **Annotation ↔ entity consistency**: do annotations reference types/usages/parameters that actually exist in the CODEMANIFEST?
+
+If a contract consistency checkpoint fails — classify as a **CODEMANIFEST issue** (the contract itself has an error), not a design issue. Propose a fix to the CODEMANIFEST.
+
 #### 2c. External dependency verification
 
 For each external call in the chain:
@@ -76,6 +117,13 @@ For each external call in the chain:
 - Verify that the called method/function exists and returns what the design assumes
 - Verify the calling convention is correct (arguments order, kwargs, etc.)
 - Verify the return type matches what the next step expects
+
+For each imported usage from `Imports` → `Usages`:
+
+- Verify the referenced file exists at `{from_path}/.usages/{usage_name}.md`
+- Read the imported usage file and verify its content matches what the design assumes
+- Verify the imported usage is used correctly (it provides practice guidance, not contractual obligations)
+- Check that the design does not treat an imported usage as a type contract
 
 ---
 
@@ -131,7 +179,11 @@ For each test:
 
 ### Step 4: Report and fix findings (interactive)
 
-Collect all findings from Steps 2 and 3 before presenting them. Sort by severity: Critical → High → Medium → Low → Test gaps.
+Collect all findings from Steps 2 and 3 before presenting them. Sort by severity: Critical → High → Medium → Low → Test gaps → CODEMANIFEST issues.
+
+Separate findings into two categories:
+- **Design findings** — issues in the design document (logic errors, missing edge cases, test gaps)
+- **CODEMANIFEST findings** — issues in the contract itself (insufficient/inconsistent requirements, broken type chains, missing declarations)
 
 Present findings **one at a time**. For each finding:
 
@@ -139,22 +191,24 @@ Present findings **one at a time**. For each finding:
 
 Present a single finding with:
 
+- **Category** (Design / CODEMANIFEST)
 - **Severity** (Critical / High / Medium / Low / Test gap)
-- **Location** — exact reference to design section
+- **Location** — exact reference to design section or CODEMANIFEST file/entity
 - **What is wrong** — clear description of the issue
-- **Proposed fix** — the exact change needed, not vague advice. For test gaps: write the full 6-element trace (name, setup, input, trace, assertions, sufficiency)
+- **Proposed fix** — the exact change needed, not vague advice. For CODEMANIFEST issues: show the exact DSL change. For test gaps: write the full 6-element trace (name, setup, input, trace, assertions, sufficiency)
 
 #### 4b. Ask the user for a decision
 
 Use AskUserQuestion with options:
 
-1. **Apply proposed fix** — apply the fix to the design document immediately
+1. **Apply proposed fix** — apply the fix to the design document or CODEMANIFEST immediately
 2. **Skip** — do not fix, move to next finding
 3. **Propose alternative** — user describes a different fix approach
 
 #### 4c. Apply the decision
 
-- **Apply proposed fix**: update the design document, then re-verify that the fix doesn't break other chains (trace through affected chains again). Report the re-verification result briefly.
+- **Apply proposed fix (design)**: update the design document, then re-verify that the fix doesn't break other chains (trace through affected chains again). Report the re-verification result briefly.
+- **Apply proposed fix (CODEMANIFEST)**: edit the CODEMANIFEST file, re-run the linter: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`. If linter reports errors — fix DSL syntax. Re-verify affected design chains against the updated contract.
 - **Skip**: record the finding as "skipped" and move on.
 - **Propose alternative**: discuss the alternative with the user, agree on the fix, apply it, re-verify affected chains.
 
@@ -164,9 +218,10 @@ Repeat from 4a for the next finding. Show a brief counter: "Finding 3 of 12".
 
 After all findings are processed, show a summary:
 
-- **Fixed**: N findings (list by severity)
-- **Skipped**: N findings (list by severity)
+- **Fixed**: N findings (list by severity, split by design/CODEMANIFEST)
+- **Skipped**: N findings (list by severity, split by design/CODEMANIFEST)
 - **Design document status**: updated / unchanged
+- **CODEMANIFEST status**: updated (list files) / unchanged
 
 ---
 
@@ -183,13 +238,17 @@ Before completing, verify:
 
 1. Was every entry point in the design traced through the full code stack?
 2. Was every checkpoint in each chain verified (type, logic, error, edge)?
+2a. Were contract interaction checkpoints verified (interface ↔ type, type ↔ mutation, interface ↔ interface)?
 3. Were external dependencies verified against actual documentation?
-4. Was every test scenario traced through (positive, negative, edge)?
-5. Was test data sufficiency checked for each test?
-6. Was each finding presented one by one with a fix decision?
-7. Were approved fixes applied to the design document?
-8. Were affected chains re-traced after each fix?
-9. Was a summary of fixed/skipped findings provided?
+4. Were imported usages from `Imports` → `Usages` verified (file exists, content matches design assumptions)?
+5. Was every test scenario traced through (positive, negative, edge)?
+6. Was test data sufficiency checked for each test?
+7. Was each finding presented one by one with a fix decision?
+8. Were approved fixes applied to the design document or CODEMANIFEST?
+8a. Were CODEMANIFEST changes re-verified with the linter?
+9. Were affected chains re-traced after each fix?
+10. Was a summary of fixed/skipped findings provided (split by design/CODEMANIFEST)?
+11. Were CODEMANIFEST issues separated from design issues and proposed with concrete DSL fixes?
 
 If any answer is "no" — complete the missing verification before returning.
 
