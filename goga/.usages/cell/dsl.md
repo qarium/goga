@@ -170,17 +170,18 @@ Imports:
 - соглашение
 - или любая спецификация
 
-Форматы:
-- путь к md файлу
+Форматы значения в разделе `Usages`:
+- путь к md файлу (относительно рабочей директории проекта)
 - URL
 - inline-описание
+
+Формат в `Imports` — имя файла без расширения `.md`, путь собирается как `{From}/.usages/{name}.md`
 
 ```yaml
 Imports:
   - Usages:
-      # path/to/cell/.usages/usage.md
       - usage
-    From: path/to/cell
+    From: library/path/to/cell
 
 Usages:
   library: .specs/importlib.md
