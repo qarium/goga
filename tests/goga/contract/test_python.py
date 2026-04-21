@@ -9,17 +9,14 @@ from goga.contract import python_contract
 def _write_and_import(tmp_path: Path, source: str) -> list:
     """Write source to tmp_path/__init__.py, register on sys.path, and extract contract."""
     (tmp_path / "__init__.py").write_text(source)
-    sys.path.insert(0, str(tmp_path.parent))
+    parent = str(tmp_path.parent)
     module_name = tmp_path.name
-    return python_contract(module_name)
-
-
-def _first_param(sig_str: str) -> str | None:
-    """Extract the first parameter name from a signature string like '(x: int, y: int) -> str'."""
-    inner = sig_str[sig_str.index("(") + 1 : sig_str.index(")")]
-    if not inner.strip():
-        return None
-    return inner.strip().split(":")[0].strip()
+    sys.path.insert(0, parent)
+    try:
+        return python_contract(module_name)
+    finally:
+        sys.path.remove(parent)
+        sys.modules.pop(module_name, None)
 
 
 class TestClassmethodExcludesCls:
@@ -42,7 +39,6 @@ class TestClassmethodExcludesCls:
         methods = [m for m in entity.methods if m.name == "create"]
         assert len(methods) == 1
         method = methods[0]
-        assert _first_param(method.signature) != "cls"
         assert method.signature == "(x: int) -> int"
 
 
@@ -65,7 +61,6 @@ class TestRegularMethodExcludesSelf:
         methods = [m for m in entity.methods if m.name == "process"]
         assert len(methods) == 1
         method = methods[0]
-        assert _first_param(method.signature) != "self"
         assert method.signature == "(data: str) -> bool"
 
 
@@ -112,7 +107,6 @@ class TestClassmethodWithSelfNamedParam:
         methods = [m for m in entity.methods if m.name == "method"]
         assert len(methods) == 1
         method = methods[0]
-        assert _first_param(method.signature) != "cls"
         assert method.signature == "(self: int) -> None"
 
 

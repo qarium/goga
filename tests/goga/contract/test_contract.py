@@ -12,10 +12,6 @@ from goga.contract import (
 class TestPropertyContractFacade:
     """Contract tests: facade availability and contract format."""
 
-    def test_property_contract_importable(self) -> None:
-        """PropertyContract must be importable from goga.contract."""
-        assert PropertyContract is not None
-
     def test_property_contract_format_arrow(self) -> None:
         """PropertyContract.contract must be 'name -> signature'."""
         pc = PropertyContract(name="items", signature="list[str]")
@@ -61,10 +57,3 @@ class TestPropertyContractLogic:
         """Empty signature produces 'name -> '."""
         pc = PropertyContract(name="value", signature="")
         assert pc.contract == "value -> "
-
-    def test_base_post_init_not_called(self) -> None:
-        """PropertyContract must NOT use BaseContract format."""
-        pc = PropertyContract(name="x", signature="int")
-        # Base format would be "xint"; arrow format is "x -> int"
-        assert pc.contract != f"{pc.name}{pc.signature}"
-        assert " -> " in pc.contract
