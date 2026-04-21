@@ -51,9 +51,9 @@ If there is no git context — work with the current CODEMANIFEST files as the c
 
 #### 1a. Schema — dependency impact map
 
-Run `docker run --rm -v .:/project -w /project goga schema --help` to understand the command capabilities and output structure.
+Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command capabilities and output structure.
 
-Then run `docker run --rm -v .:/project -w /project goga schema` to get the full project cell hierarchy. Use `--depends-on <cell_path>` (repeatable) with paths from Step 1 git diff to find all cells affected by the changes — what types and usages they import from changed cells.
+Then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project cell hierarchy. Use `--depends-on <cell_path>` (repeatable) with paths from Step 1 git diff to find all cells affected by the changes — what types and usages they import from changed cells.
 
 This dependency map focuses gap analysis (Step 2) and contract consistency audit (Step 2a) only on affected cells instead of reading all CODEMANIFESTs.
 
@@ -111,7 +111,7 @@ Present all CODEMANIFEST issues to the user via AskUserQuestion (grouped by file
 
 Run:
 ```
-docker run --rm -v .:/project -w /project goga linter
+docker run --rm -v .:/project -w /project qarium/goga:latest linter
 ```
 
 Analyze the linter output. Fix syntax errors in CODEMANIFEST if the linter finds them (the linter validates DSL syntax; semantic content of the contract does not change).
@@ -229,7 +229,7 @@ If there are no questions — skip this step.
 
 For each CODEMANIFEST change the user approved in Steps 2a or 5:
 1. Apply the edit to the CODEMANIFEST file
-2. Re-run the linter: `docker run --rm -v .:/project -w /project goga linter`
+2. Re-run the linter: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
 3. If the linter reports errors — fix DSL syntax and re-run
 4. Re-verify that the change doesn't introduce new inconsistencies with other entities
 
@@ -273,7 +273,7 @@ Before completing the response, verify:
 1. Was a git diff of CODEMANIFEST performed between the current branch and the base branch?
 2. Was a gap analysis performed (contract vs current implementation)?
 2a. Was a contract consistency audit performed (interface ↔ type, type ↔ mutation, interface ↔ interface, annotations ↔ entity)?
-3. Was the linter run: `docker run --rm -v .:/project -w /project goga linter`?
+3. Was the linter run: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`?
 3a. Were all CODEMANIFEST issues (insufficient/inconsistent requirements) proposed to the user and resolved?
 3b. Were approved CODEMANIFEST changes applied and re-verified with the linter?
 4. Was a brainstorm performed analyzing implementation details not specified by the DSL?

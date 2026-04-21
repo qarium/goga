@@ -45,7 +45,7 @@ Use the same sources as `design-by-changes`:
 1. Read the design document from `docs/design/<feature-name>.md`
 2. Read all relevant CODEMANIFEST files referenced in the design
 3. Read existing source files referenced in the design (if any)
-4. Run `docker run --rm -v .:/project -w /project goga schema --help` to understand the command, then run `docker run --rm -v .:/project -w /project goga schema` to get the full project dependency graph. Use `--depends-on <cell_path>` to find cells that depend on cells changed by the design. This ensures the review covers all affected cells.
+4. Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command, then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project dependency graph. Use `--depends-on <cell_path>` to find cells that depend on cells changed by the design. This ensures the review covers all affected cells.
 5. **Read Usages specs by reference**: determine which Usages to read based on reference links:
    - **Always read root Usages** — Usages referenced by global `Annotations` in CODEMANIFEST header (via backtick syntax) are always read
    - **Always read changed entities' Usages** — for each entity covered by the design, scan its annotations for backtick references to Usages. All referenced Usages are read
@@ -208,7 +208,7 @@ Use AskUserQuestion with options:
 #### 4c. Apply the decision
 
 - **Apply proposed fix (design)**: update the design document, then re-verify that the fix doesn't break other chains (trace through affected chains again). Report the re-verification result briefly.
-- **Apply proposed fix (CODEMANIFEST)**: edit the CODEMANIFEST file, re-run the linter: `docker run --rm -v .:/project -w /project goga linter`. If linter reports errors — fix DSL syntax. Re-verify affected design chains against the updated contract.
+- **Apply proposed fix (CODEMANIFEST)**: edit the CODEMANIFEST file, re-run the linter: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`. If linter reports errors — fix DSL syntax. Re-verify affected design chains against the updated contract.
 - **Skip**: record the finding as "skipped" and move on.
 - **Propose alternative**: discuss the alternative with the user, agree on the fix, apply it, re-verify affected chains.
 

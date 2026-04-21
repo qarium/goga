@@ -43,7 +43,7 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 
 Run:
 ```
-docker run --rm -v .:/project -w /project goga linter
+docker run --rm -v .:/project -w /project qarium/goga:latest linter
 ```
 
 If the linter reports errors — record each error as a **Critical** finding. The CODEMANIFEST syntax must be valid before the plan can be considered correct.
@@ -242,7 +242,7 @@ Before completing, verify:
 
 1. Were all relevant CODEMANIFEST files read and every plan entity checked for correctness against the contract (names, locations, descriptions, annotations, imports)?
 2. Was the design document read and every entity/design decision/test scenario traced into the plan? Were orphan tasks identified?
-3. Was `goga linter` run and results analyzed?
+3. Was `docker run --rm -v .:/project -w /project qarium/goga:latest linter` run and results analyzed?
 4. Was every coding task checked for TDD completeness (all 7 steps)?
 5. Was every task checked for self-contained context?
 6. Was task ordering verified against the convention?
