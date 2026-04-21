@@ -1,0 +1,32 @@
+# VCS
+.git
+.gitignore
+
+# CI/CD
+.github
+
+# IDE
+.idea
+.vscode
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+.ruff_cache
+.pytest_cache
+
+# AI tools
+.claude
+.qarium
+.ralphex
+
+# Development files
+.usages
+.strictacode.yml
+tests
+docs
+plans
+mkdocs.yml
+README.md
