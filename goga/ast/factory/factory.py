@@ -230,9 +230,7 @@ class Factory:
             return parts[0].strip(), parts[1].strip()
         return raw.strip(), ""
 
-    def _parse_type_entries(
-        self, types_raw: Any, from_path: str, entry: dict
-    ) -> list[ImportTypeItemNode]:
+    def _parse_type_entries(self, types_raw: Any, from_path: str, entry: dict) -> list[ImportTypeItemNode]:
         """Parse Types list from an import entry."""
         items: list[ImportTypeItemNode] = []
         if not isinstance(types_raw, list):
@@ -247,9 +245,7 @@ class Factory:
             )
         return items
 
-    def _parse_usage_entries(
-        self, usages_raw: Any, from_path: str, entry: dict
-    ) -> list[ImportUsageItemNode]:
+    def _parse_usage_entries(self, usages_raw: Any, from_path: str, entry: dict) -> list[ImportUsageItemNode]:
         """Parse Usages list from an import entry."""
         items: list[ImportUsageItemNode] = []
         if not isinstance(usages_raw, list):

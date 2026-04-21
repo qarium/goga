@@ -52,7 +52,10 @@ The design document contains a complete architectural solution — Phase 1 decom
    - new external dependencies
    - modified specifications
    - new instructions for the implementation agent
-   - for each Usages entry whose value is a file path — read that file to get the actual specification content
+   - **Read Usages by reference**: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity/method/property annotations via backtick syntax), skip Usages not referenced by any covered entity
+   - for each relevant Usages entry whose value is a file path — read that file to get the actual specification content
+   - imported usages from `Imports` → `Usages` — read the referenced files at `{from_path}/.usages/{usage_name}.md` (only for imports referenced by covered entities)
+   - planned local usages structure from the design document — which `.usages/` files will be created inside the cell
 
 2. **Drill-down Annotations** — process annotations in a cascade:
    - **File level** → context for the entire package, embedded in every task of this package
@@ -69,6 +72,8 @@ The design document contains a complete architectural solution — Phase 1 decom
    - test scenarios → specific test instructions in task "Logic tests" and "Contract tests" checkboxes, including exact setup, input values, assertions, AND test traces (step-by-step execution trace from the design document showing what happens at each step during the test) from the design document
    - additional instructions → appended to relevant task context
    - code stack trace checkpoints → key verified logic paths included in task context where relevant
+   - planned usages structure → tasks for creating `.usages/` files within cells (if the design document specifies local usages). These tasks create the `.usages/` directory and practice files as part of the coding phase — usages are written together with code
+   - imported usages from `Imports` → `Usages` → context in relevant tasks referencing the source path `{from_path}/.usages/{usage_name}.md`
    Tasks should reflect the architectural solution from the design document, not restate it entirely — each task receives the relevant portion.
    **Critical**: the design document's interaction diagrams, data flow traces, and test traces contain verified knowledge about intermediate states, file paths, and execution order. The implementation agent relies on this detail to write correct code and tests. Transfer these verbatim or near-verbatim into the relevant task context rather than summarizing them.
 
@@ -86,7 +91,7 @@ The design document contains a complete architectural solution — Phase 1 decom
 
 ### Phase 2: Usages Calibration
 
-Goal: distribute each Usages entry to specific plan tasks so the implementation agent has precise context.
+Goal: distribute each Usages entry (local, global, and imported) to specific plan tasks so the implementation agent has precise context.
 
 #### Steps:
 
@@ -95,12 +100,25 @@ Goal: distribute each Usages entry to specific plan tasks so the implementation 
    - add specific Usages context to the corresponding task descriptions
    - if an entry is relevant to multiple tasks — add it to each one
 
-2. **Completeness check** — ensure that:
+2. **Map imported usages → Tasks** — for each imported usage from `Imports` → `Usages`:
+   - read the referenced file at `{from_path}/.usages/{usage_name}.md`
+   - determine which plan tasks it is relevant to
+   - add specific context from the imported usage to the corresponding task descriptions
+   - include the source path reference for traceability
+
+3. **Plan local usages creation** — for each planned local `.usages/` file from the design document:
+   - create a task (or add steps to an existing task) that creates the `.usages/` directory and practice files
+   - local usages are written together with code — not as a separate phase
+   - specify the expected content of each `.usages/<name>.md` file
+
+4. **Completeness check** — ensure that:
    - every Usages entry is present in at least one task
+   - every imported usage from `Imports` → `Usages` is referenced in at least one task
+   - every planned local `.usages/` file has a creation task or step
    - no task references a Usages not declared in the contract
    - the Usages context in tasks contains specific information (what to use, how to call), not just a name mention
 
-3. **Update the plan** — overwrite `docs/plans/<feature-name>.md` with calibrated task descriptions.
+5. **Update the plan** — overwrite `docs/plans/<feature-name>.md` with calibrated task descriptions.
 
 #### Phase 2 Output:
 - Updated plan file `docs/plans/<feature-name>.md` with Usages context in each task
@@ -171,7 +189,7 @@ When ralphex executes a coding task, the AI agent follows these checkboxes:
 - Entity names use constructor signatures (e.g., `ClassName()`, `ClassName(arg: Type)`). Constructor parameters are documentation for the implementation agent; the entity as a whole is the contract unit, not individual parameters.
 - All contract entities must be preserved in the plan.
 - Contract entities must not be silently removed, merged, renamed, or replaced with unrelated abstractions.
-- Entities may declare interface mutations via `Type::` syntax (e.g., `Object::pydantic.BaseModel::ClassName()`). Each `Type::` segment means the entity extends an existing type. The mutation does **not** prescribe a specific mechanism (inheritance, composition, monkey-patching, etc.) — this is left to the implementation agent's discretion. See `dsl-spec.md` → *Mutation Syntax `Type::`* for the full conceptual explanation and reading rules.
+- Entities may declare interface mutations via `Type::` syntax (e.g., `Object::pydantic.BaseModel::ClassName()`). Each `Type::` segment means the entity extends an existing type. The mutation does **not** prescribe a specific mechanism (inheritance, composition, monkey-patching, etc.) — this is left to the implementation agent's discretion. See `dsl.md` → *Мутация типа* for the full conceptual explanation and reading rules.
 
 ### Location model
 - Each contract entity has a `location`.
@@ -202,7 +220,7 @@ You must not plan:
 - replacement of contract entities with internally-only accessible abstractions,
 - violation of facade availability requirements,
 - ignoring `location`,
-- modification of `CODEMANIFEST` files — they are **read-only** contract definitions. The implementation agent must adapt the code to the contract, never the reverse. The only exception: fixing DSL syntax errors detected during the design phase (`design-by-changes` Step 3) — the contract must be syntactically correct, but semantic content of the contract does not change.
+- modification of `CODEMANIFEST` files — they are **read-only** for the implementation agent. CODEMANIFEST may have been edited during design (`design-by-changes`) or review (`review-design`) phases to fix insufficient/inconsistent requirements or contract interaction errors. By the time the plan is created, CODEMANIFEST is final — the implementation agent must adapt the code to the contract, never the reverse.
 
 ---
 
@@ -211,7 +229,7 @@ You must not plan:
 Use the following sources jointly, when available:
 
 1. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files (e.g., `resq/utils/CODEMANIFEST`). If not found inside the package, check the project root as a fallback. Read **all** `CODEMANIFEST` files to build the complete contract.
-2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
+2. Usages spec files — read by reference: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity annotations via backtick syntax), skip Usages not referenced by any covered entity. When a Usages entry value is a file path (relative to the `CODEMANIFEST` file location), read that file. Usages values can be file paths or inline text.
 3. current package file tree
 4. current package source files
 5. git change context:
@@ -260,7 +278,7 @@ Any architectural choice not explicitly stated in the contract must be recorded 
 
 ## DSL Compilation Rules
 
-Read the detailed syntax rules from `dsl-spec.md`.
+Read the detailed syntax rules from `dsl.md`.
 Follow the project conventions from `conventions.md`.
 Refer to `example.md` for a complete DSL-to-plan compilation example.
 
@@ -271,9 +289,10 @@ The DSL is compiled into plan tasks as follows:
 | DSL Element              | Result in Plan                                                                                                                                                                                                                                               |
 |--------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `Types Import`           | Context section — internal types from another `CODEMANIFEST`, grouped under a single `From`. Types may use `AS` alias syntax (e.g., `DocumentRoot AS DocumentRootNode`). Alias names must be used in signatures and re-exports. |
-| `Usages`                 | Context section with implementation guidance for the AI agent, including external library types                                                                                                                                                                     |
+| `Usages Import`          | Context section — imported practice from another cell's `.usages/` directory. File read from `{from_path}/.usages/{usage_name}.md`. Creates tracable but non-contractual dependency. |
+| `Usages`                 | Context section with implementation guidance for the AI agent, including external library types. Local usages may also generate tasks for creating `.usages/` files. |
 | `Annotations`            | Contextual hints embedded in task descriptions                                                                                                                                                                                                              |
-| `->Re-exports`           | Task: ensure the name is importable from the package `__init__.py`                                                                                                                                                                                        |
+| `->Re-exports`           | Task: ensure the name is importable from the cell `__init__.py`                                                                                                                                                                                        |
 | `Entity` with `properties`  | Task: create entity in `location`, implement properties                                                                                                                                                                                                     |
 | `Entity` with `methods`     | Task: implement methods in `location` with behavior from descriptions                                                                                                                                                                                                |
 | `Standalone function`    | Task: implement function in `location`                                                                                                                                                                                                                        |
@@ -319,13 +338,16 @@ They define:
 
 These requirements must appear in task instructions so the AI implementation agent understands what needs to be created.
 
-### Imports are internal contract dependencies
-Imports define internal contract dependencies — types from other `CODEMANIFEST` files in the same project.
-Types are grouped in `Types:` lists with a shared `From:` source. Each type may use `AS` alias syntax (e.g., `DocumentRoot AS DocumentRootNode`) to define a local name.
-External library types are described in `Usages`.
+### Imports are internal contract dependencies and tracable practice links
+Imports define two types of internal dependencies:
+1. **Contract dependencies** — types from other `CODEMANIFEST` files in the same project, declared in `Types:` lists with a shared `From:` source. Each type may use `AS` alias syntax (e.g., `DocumentRoot AS DocumentRootNode`) to define a local name.
+2. **Practice dependencies** — usages from other cells' `.usages/` directories, declared in `Usages:` lists with a shared `From:` source. Imported usages create **tracable dependencies** (consumers can be found via import graph) but **not contractual obligations** (they remain at the level of implementation practice).
+
+External library types are described in `Usages`, not in `Imports`.
 Do not redefine imported contract types locally unless the contract explicitly requires it.
 If a type has an alias, use the alias name in signatures, re-exports, and `Type::` mutations.
-Include import context in task descriptions.
+Include import context (both types and usages) in task descriptions.
+For imported usages, include the source path `{from_path}/.usages/{usage_name}.md` and the content of the referenced file.
 
 ### Usages are implementation context and external dependencies
 `Usages` is a general-purpose section for attaching any external knowledge the implementation agent needs. It is not limited to libraries — it may reference external code in other languages, build instructions, protocols, conventions, specifications, or any resource the agent should know about.
@@ -333,6 +355,13 @@ This includes third-party library types used in signatures (e.g., `requests.HTTP
 A Usages entry value can be either a **file path** (relative to the `CODEMANIFEST` file location) or **inline text**. When the value is a file path — read that file to get the actual specification content before including it in the plan.
 They provide context for the implementation agent — what each resource does and how to use it.
 Include Usages context in the plan so the AI implementation agent understands the available tools and how to work with them.
+
+**Two-level usages model**:
+- **Global usages** — located in the project root `.usages/` directory, referenced by file path in the `Usages` section
+- **Local usages** — located inside the cell's `.usages/` directory, also referenced by file path in the `Usages` section
+- **Imported usages** — from other cells via `Imports` → `Usages`, available at `{from_path}/.usages/{usage_name}.md`
+
+When the design document specifies planned local `.usages/` files, the plan must include tasks (or steps within coding tasks) to create these files. Local usages are written **together with code**, not as a separate phase.
 
 ### Re-exports are facade obligations
 Re-export blocks (`->Name: {}` for internal types, `->usage.Type: {}` for external types) define names that must be available on the facade without local implementation.
@@ -342,7 +371,7 @@ Re-exports can reference names from `Imports` (internal) or `Usages` (external).
 When planning re-exports from child CODEMANIFEST files, import specific objects — not entire subpackages or modules. For example, plan `from package.http import HTTPClient`, not `import package.http`. There is no `Module` concept in the DSL; each facade-level name is a separate entity or re-export.
 
 ### Mutation declarations are interface obligations
-The `Type::` syntax in entity names declares interface mutations — the entity extends an existing type. The mechanism (inheritance, composition, etc.) is not prescribed by the DSL. See `dsl-spec.md` → *Mutation Syntax `Type::`* for the conceptual explanation.
+The `Type::` syntax in entity names declares interface mutations — the entity extends an existing type. The mechanism (inheritance, composition, etc.) is not prescribed by the DSL. See `dsl.md` → *Мутация типа* for the conceptual explanation.
 - `TypeName::` — mutates an existing type. Types from `Imports` use simple names — the alias name if defined via `AS` (e.g., `DocumentRootNode::` for `DocumentRoot AS DocumentRootNode`), or the original type name otherwise (e.g., `Object::`). Types from `Usages` use qualified names: `usage.Type::` (e.g., `pydantic.BaseModel::`).
 - Multiple `Type::` segments indicate multiple mutations. Read left to right as layers of extension: `A::B::Cls()` means Cls extends B which extends A.
 The planning agent must create tasks for implementing the mutation mechanism.
@@ -572,6 +601,8 @@ Before completing the response, verify:
 
 ### Phase 1
 3. Were changes in Usages relative to the previous state identified?
+3a. Were imported usages from `Imports` → `Usages` analyzed and their source files read?
+3b. Was the planned local usages structure from the design document analyzed?
 4. Was the Annotations drill-down performed (file → entity → method/property)?
 5. Were architectural decisions from the design document transferred into tasks?
 5a. Were interaction diagrams from the design document transferred verbatim into relevant task context?
@@ -579,6 +610,8 @@ Before completing the response, verify:
 5c. Were test scenarios from the design document transferred to task test instructions (setup, input, assertions, AND test traces)?
 5d. Were facts and assumptions from the design document included in relevant task context?
 5e. Were additional instructions from the design document transferred to tasks?
+5f. Were planned local `.usages/` files from the design document included as tasks or task steps?
+5g. Were imported usages context included in relevant task descriptions?
 6. Are all contract entities included (classes and standalone functions)?
 7. Are all `location` obligations and facade availability requirements preserved?
 8. Are semantic requirements from descriptions included in task instructions?
@@ -586,19 +619,23 @@ Before completing the response, verify:
 ### Phase 2
 9. Is every Usages entry distributed to at least one plan task?
 10. Does the Usages context in tasks contain specific information (what to use, how to call)?
+11. Is every imported usage from `Imports` → `Usages` distributed to at least one plan task?
+12. Does the imported usages context include the source path and content from the referenced file?
+13. Does every planned local `.usages/` file from the design document have a creation task or step?
+14. Are local `.usages/` files planned to be written together with code (not as a separate phase)?
 
 ### General checks
-11. Are facts, assumptions, and open questions separated?
-12. Was planning of new packages avoided? Are all changes within current package boundaries?
-13. Is the ralphex format used (`### Task N:` headers, `- [ ]` checkboxes)?
-14. Is every task atomic and self-contained for AI execution?
-15. Are validation commands defined? Is the `## Validation Commands` section included?
-16. Does every coding task follow the TDD workflow (contract tests → code → verify → logic tests → debug → re-check → lint)?
-17. Are integration test tasks included for cross-entity scenarios where needed?
-18. Are all obligations included: re-exports, `Usages` context, annotations, `Type::` mutations? Are all hierarchical `CODEMANIFEST` files processed?
-19. Are constructor parameters treated as documentation, not as individual contract obligations?
-20. Is the absence of workspace or git context mentioned when they are unavailable?
-21. Does the plan contain no tasks modifying `CODEMANIFEST` files, and does it explicitly instruct the AI agent not to modify them (read-only contract)?
+15. Are facts, assumptions, and open questions separated?
+16. Was planning of new cells avoided? Are all changes within current cell boundaries?
+17. Is the ralphex format used (`### Task N:` headers, `- [ ]` checkboxes)?
+18. Is every task atomic and self-contained for AI execution?
+19. Are validation commands defined? Is the `## Validation Commands` section included?
+20. Does every coding task follow the TDD workflow (contract tests → code → verify → logic tests → debug → re-check → lint)?
+21. Are integration test tasks included for cross-entity scenarios where needed?
+22. Are all obligations included: re-exports, `Usages` context (local + imported), annotations, `Type::` mutations? Are all hierarchical `CODEMANIFEST` files processed?
+23. Are constructor parameters treated as documentation, not as individual contract obligations?
+24. Is the absence of workspace or git context mentioned when they are unavailable?
+25. Does the plan contain no tasks modifying `CODEMANIFEST` files, and does it explicitly instruct the AI agent not to modify them (read-only contract)?
 
 If any answer is "no" — revise the plan before returning it.
 
@@ -622,5 +659,5 @@ Do NOT repeat the full plan content. Keep it under 20 lines.
 After completing all main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
 
 Related skills for improvement: `design-by-changes` (provider of the design document read in Phase 0).
-Related files within the bundle: `dsl-spec.md`, `output-template.md`, `conventions.md`, `example.md`.
+Related files within the bundle: `dsl.md`, `output-template.md`, `conventions.md`, `example.md`.
 Provider skills: `design-by-changes` (creates the design document read in Phase 0).

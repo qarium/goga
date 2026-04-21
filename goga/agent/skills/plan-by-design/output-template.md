@@ -54,6 +54,22 @@ For each usage entry:
 - Description or spec reference:
 - Relevance to implementation:
 
+### Imported Usages
+
+For each imported usage from `Imports` → `Usages`:
+- Name:
+- From cell:
+- Source path: `{from_path}/.usages/{usage_name}.md`
+- Description or spec content:
+- Relevance to implementation:
+
+### Local Usages
+
+For each planned local usage file (from design document):
+- File path: `.usages/<name>.md`
+- Description: <what this practice covers>
+- Creation task reference: <Task N>
+
 ### External Dependencies
 
 List all external dependencies the implementation relies on:

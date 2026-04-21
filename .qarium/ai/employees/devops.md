@@ -18,6 +18,7 @@
 | Tests       | tests.yml          | push/PR to 0.0.x           | Pytest via reusable workflow   |
 | Docs        | docs.yml           | push to 0.0.x              | MkDocs deploy to GitHub Pages  |
 | Strictacode | strictacode.yml    | push/PR to 0.0.x           | Code quality analysis          |
+| Docker Publish | docker-publish.yml | workflow_dispatch          | Push `qarium/goga:latest` to Docker Hub |
 
 ### Conventions
 
