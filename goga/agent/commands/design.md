@@ -6,7 +6,7 @@ Ask the user:
 
 > What do you want to do?
 > - **changes** — architectural design based on CODEMANIFEST changes (git diff)
-> - **brainstorm** — design CODEMANIFESTs through brainstorming and exploration
+> - **brainstorm** — design CODEMANIFESTs through brainstorming, then generate a design document
 
 Based on the user's choice:
 

@@ -206,13 +206,31 @@ Then perform a **self-review** of the saved CODEMANIFEST:
 
 Fix issues inline. Present the final result to the user for confirmation.
 
+### Step 7: Generate design document
+
+Now that CODEMANIFEST files are saved and validated, generate a design document by invoking the `design-by-changes` skill.
+
+Inform the user:
+
+> CODEMANIFEST files saved and validated. Now generating the design document based on these contracts...
+
+Then invoke the `design-by-changes` skill and follow it from **Step 1** through completion. The skill will:
+- Detect CODEMANIFEST changes via git diff (the files just saved in Step 5)
+- Perform gap analysis between contract and current implementation
+- Trace code stack for each entry point
+- Analyze usages and cross-cutting concerns
+- Generate test scenarios
+- Save the design document to `docs/design/<feature-name>.md`
+
+The feature name for the design document should be derived from the original brainstorm description or confirmed with the user.
+
 ---
 
 ## Output
 
 - CODEMANIFEST file(s) with the designed contract
+- Design document at `docs/design/<feature-name>.md`
 - No implementation code
-- No design document (the CODEMANIFEST itself is the output of this skill)
 
 ---
 
@@ -244,6 +262,7 @@ Before completing the response, verify:
 11. Was a self-review performed (no placeholders, cross-cell consistency, scope, clarity)?
 12. Are facts, assumptions, and open questions separated?
 13. Was the contract kept minimal — no unnecessary entities or features?
+14. Was the design document generated via `design-by-changes` after saving CODEMANIFESTs?
 
 If any answer is "no" — resolve before completing.
 
