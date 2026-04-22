@@ -18,6 +18,7 @@ Annotations: |
   location: entity.py
   annotations: |
     Entity with valid location
+  properties: {}
 
 # Positive: routine with location
 "good_routine() -> result:str":
@@ -29,6 +30,7 @@ Annotations: |
 "BadEntity()":
   annotations: |
     Entity without location
+  properties: {}
 
 # Negative: routine without location
 "bad_routine() -> result:str":
@@ -40,6 +42,7 @@ Annotations: |
   location: ""
   annotations: |
     Entity with empty location
+  properties: {}
 
 # Edge: embedded entity (skip)
 ->SomeEntity: {}
