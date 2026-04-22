@@ -30,7 +30,7 @@ def _install_commands(source: Path, target: Path) -> list[str]:
 
 def _get_dsl_source() -> Path:
     """Return the path to the DSL spec file."""
-    return Path(__file__).parent.parent / ".usages" / "cell" / "dsl.md"
+    return Path(__file__).parent.parent / ".usages" / "dsl.md"
 
 
 def _install_skills(source: Path, target: Path, dsl_source: Path) -> list[str]:

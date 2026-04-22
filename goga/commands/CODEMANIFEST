@@ -190,7 +190,7 @@ Annotations: |
     2. Скопировать из исходного каталога в целевой:
        - goga/agent/commands/* → ~/.claude/commands/goga/
        - goga/agent/skills/* → ~/.claude/skills/
-    3. Скопировать goga/.usages/cell/dsl.md в каждый установленный скилл как dsl.md
+    3. Скопировать goga/.usages/dsl.md в каждый установленный скилл как dsl.md
     4. Вывести список установленных скиллов и команд
 
     Требования:
