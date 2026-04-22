@@ -44,6 +44,41 @@ Annotations: |
     Entity with empty location
   properties: {}
 
+# Negative: location with directory path
+"FormatEntity()":
+  location: dir/file.py
+  annotations: |
+    Entity with path in location
+  properties: {}
+
+# Negative: location without extension
+"NoExtEntity()":
+  location: entityfile
+  annotations: |
+    Entity without file extension
+  properties: {}
+
+# Negative: location with trailing dot
+"DotEntity()":
+  location: "entity."
+  annotations: |
+    Entity with trailing dot in location
+  properties: {}
+
+# Negative: location with path and no extension
+"PathNoExtEntity()":
+  location: dir/file
+  annotations: |
+    Entity with path and no extension
+  properties: {}
+
+# Positive: dotfile location (valid)
+"DotfileEntity()":
+  location: .gitignore
+  annotations: |
+    Entity with dotfile location
+  properties: {}
+
 # Edge: embedded entity (skip)
 ->SomeEntity: {}
 

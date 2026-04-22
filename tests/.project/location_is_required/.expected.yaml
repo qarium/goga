@@ -17,3 +17,40 @@ errors:
       location: ""
       annotations: "Entity with empty location\n"
       properties: {}
+    # contains_path errors
+  - rule: location_is_required
+    message: "Type 'FormatEntity' in 'location_is_required' has location 'dir/file.py' containing directory path — use a plain filename without directories"
+    document_path: location_is_required
+    node_data:
+      location: dir/file.py
+      annotations: "Entity with path in location\n"
+      properties: {}
+  - rule: location_is_required
+    message: "Type 'PathNoExtEntity' in 'location_is_required' has location 'dir/file' containing directory path — use a plain filename without directories"
+    document_path: location_is_required
+    node_data:
+      location: dir/file
+      annotations: "Entity with path and no extension\n"
+      properties: {}
+    # no_extension errors
+  - rule: location_is_required
+    message: "Type 'NoExtEntity' in 'location_is_required' has location 'entityfile' without file extension — use format 'filename.ext'"
+    document_path: location_is_required
+    node_data:
+      location: entityfile
+      annotations: "Entity without file extension\n"
+      properties: {}
+  - rule: location_is_required
+    message: "Type 'DotEntity' in 'location_is_required' has location 'entity.' without file extension — use format 'filename.ext'"
+    document_path: location_is_required
+    node_data:
+      location: "entity."
+      annotations: "Entity with trailing dot in location\n"
+      properties: {}
+  - rule: location_is_required
+    message: "Type 'PathNoExtEntity' in 'location_is_required' has location 'dir/file' without file extension — use format 'filename.ext'"
+    document_path: location_is_required
+    node_data:
+      location: dir/file
+      annotations: "Entity with path and no extension\n"
+      properties: {}
