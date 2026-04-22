@@ -239,8 +239,6 @@ Use the following sources jointly, when available:
    - modified files,
    - deleted files,
    - implementation divergence from the contract
-5. `.qarium/ai/employees/lead.md` — project architecture, code patterns, conventions
-6. `.qarium/ai/employees/developer.md` — project development conventions and build commands
 
 If some sources are unavailable, proceed with best effort and explicitly state what is unavailable.
 

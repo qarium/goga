@@ -33,8 +33,7 @@ Use the same sources as `design-by-changes`:
 1. `CODEMANIFEST` files
 2. Current package source files
 3. Usages specs and external library documentation
-4. `.qarium/ai/employees/lead.md` and `developer.md`
-5. Design document at `docs/design/<feature-name>.md`
+4. Design document at `docs/design/<feature-name>.md`
 
 ---
 
