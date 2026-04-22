@@ -962,7 +962,11 @@ class LocationIsRequired(DocumentRule):
             if "location" not in entity.data or not entity.data.get("location"):
                 errors.append(
                     DocumentRuleError(
-                        message=f"Type '{entity.name}' in '{node.root.path}' is missing required 'location' — specify the source file",
+                        message=(
+                            f"Type '{entity.name}' in '{node.root.path}'"
+                            " is missing required 'location'"
+                            " — specify the source file"
+                        ),
                         rule=self.name,
                         document=node.root,
                         node=entity,
@@ -975,7 +979,11 @@ class LocationIsRequired(DocumentRule):
             if "location" not in routine.data or not routine.data.get("location"):
                 errors.append(
                     DocumentRuleError(
-                        message=f"Type '{routine.name}' in '{node.root.path}' is missing required 'location' — specify the source file",
+                        message=(
+                            f"Type '{routine.name}' in '{node.root.path}'"
+                            " is missing required 'location'"
+                            " — specify the source file"
+                        ),
                         rule=self.name,
                         document=node.root,
                         node=routine,
