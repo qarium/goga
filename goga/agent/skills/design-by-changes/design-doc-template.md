@@ -89,7 +89,7 @@ If a section cannot be completed because information is unavailable, keep the se
 ## Entity Interaction and Data Flow
 
 ### Interaction diagram
-<!-- Describe or present as mermaid/ASCII how contract entities interact with each other -->
+<!-- If drawing diagrams, draw ASCII diagrams. Describe how contract entities interact with each other -->
 
 ### Data flows
 <!-- For each significant scenario: which entities participate, what data is passed, in what order -->
