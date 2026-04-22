@@ -1,0 +1,17 @@
+errors:
+  - rule: location_is_required
+    message: "Type 'BadEntity' in 'location_is_required' is missing required 'location' — specify the source file"
+    document_path: location_is_required
+    node_data:
+      annotations: "Entity without location\n"
+  - rule: location_is_required
+    message: "Type 'bad_routine' in 'location_is_required' is missing required 'location' — specify the source file"
+    document_path: location_is_required
+    node_data:
+      annotations: "Routine without location\n"
+  - rule: location_is_required
+    message: "Type 'MyEntity' in 'location_is_required' is missing required 'location' — specify the source file"
+    document_path: location_is_required
+    node_data:
+      location: ""
+      annotations: "Entity with empty location\n"

@@ -1,0 +1,55 @@
+Imports:
+  - Types:
+      - SomeEntity
+      - SomeRoutine
+    From: location_is_required/location_is_required_helper
+
+Annotations: |
+  Test LocationIsRequired rule.
+
+  Good cases: GoodEntity, good_routine.
+  Bad cases: BadEntity, bad_routine, MyEntity (empty location).
+  Skip cases: embedded SomeEntity, SomeRoutine.
+
+---
+
+# Positive: entity with location
+"GoodEntity()":
+  location: entity.py
+  annotations: |
+    Entity with valid location
+
+# Positive: routine with location
+"good_routine() -> result:str":
+  location: tools.py
+  annotations: |
+    Routine with valid location
+
+# Negative: entity without location
+"BadEntity()":
+  annotations: |
+    Entity without location
+
+# Negative: routine without location
+"bad_routine() -> result:str":
+  annotations: |
+    Routine without location
+
+# Edge: entity with empty location
+"MyEntity()":
+  location: ""
+  annotations: |
+    Entity with empty location
+
+# Edge: embedded entity (skip)
+->SomeEntity: {}
+
+# Edge: embedded routine (skip)
+"->SomeRoutine() -> result:str":
+  annotations: |
+    Embedded routine without location
+
+---
+Author: Test
+CreatedAt: 11/04/26
+Description: Test for LocationIsRequired rule
