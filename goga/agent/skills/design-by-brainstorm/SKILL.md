@@ -129,7 +129,7 @@ During discussion, actively use diagrams to visualize:
 - **Data flows** — how data moves through the system
 - **Cell boundaries** — where contracts split across packages
 
-Use mermaid diagrams inline in the conversation. Update diagrams as understanding evolves.
+If drawing diagrams, draw ASCII diagrams. Update diagrams as understanding evolves.
 
 Every response follows the response format. One question per message. Wait for the user's answer before asking the next question.
 
@@ -153,7 +153,7 @@ Based on the chosen approach, present the **concrete proposal** progressively:
    - Propose which practices belong to which category
    - If the cell already has `.usages/` files — map new practices to existing categories where they fit, propose new files only for new domains
    - Inline practices for short, entity-specific, non-reusable instructions
-5. **Data flow diagram** — mermaid diagram of entity interactions
+5. **Data flow diagram** — ASCII diagram of entity interactions
 
 Pause after each section for user feedback. Fix issues before continuing to the next. Do not dump the entire proposal at once.
 
