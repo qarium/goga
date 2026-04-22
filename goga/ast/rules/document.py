@@ -1014,7 +1014,7 @@ class LocationIsRequired(DocumentRule):
                 )
             else:
                 self._check_location_format(
-                    entity.data["location"],
+                    str(entity.data["location"]),
                     entity.name,
                     node.root.path,
                     entity,
@@ -1039,7 +1039,7 @@ class LocationIsRequired(DocumentRule):
                 )
             else:
                 self._check_location_format(
-                    routine.data["location"],
+                    str(routine.data["location"]),
                     routine.name,
                     node.root.path,
                     routine,
