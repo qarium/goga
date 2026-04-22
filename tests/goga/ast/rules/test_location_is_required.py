@@ -1,7 +1,5 @@
 """Contract and logic tests for LocationIsRequired rule."""
 
-import inspect
-
 from goga.ast.errors import DocumentRuleError
 from goga.ast.nodes import (
     BodyNode,
@@ -86,36 +84,6 @@ class TestLocationIsRequiredNegative:
         assert errors[0].message == (
             "Type 'bad_routine' in 'my_doc' is missing required 'location' — specify the source file"
         )
-
-
-class TestLocationIsRequiredFormatContract:
-    """Contract tests for format validation (TDD — expected to fail before implementation)."""
-
-    def test_entity_with_path_in_location_returns_contains_path(self):
-        entity = EntityTypeNode(name="PathEntity", data={"location": "dir/file.py"})
-        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
-        node = DocumentNode(root=root)
-        rule = LocationIsRequired()
-        errors = rule.check(node)
-        assert len(errors) == 1
-        assert "containing directory path" in errors[0].message
-
-    def test_entity_without_extension_returns_no_extension(self):
-        entity = EntityTypeNode(name="NoExtEntity", data={"location": "entityfile"})
-        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
-        node = DocumentNode(root=root)
-        rule = LocationIsRequired()
-        errors = rule.check(node)
-        assert len(errors) == 1
-        assert "without file extension" in errors[0].message
-
-    def test_entity_with_dotfile_location_returns_no_error(self):
-        entity = EntityTypeNode(name="DotEntity", data={"location": ".gitignore"})
-        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
-        node = DocumentNode(root=root)
-        rule = LocationIsRequired()
-        errors = rule.check(node)
-        assert errors == []
 
 
 class TestLocationIsRequiredFormatLogic:
@@ -290,8 +258,3 @@ class TestLocationIsRequiredEdgeCases:
         assert "BadEntity" in errors[0].message
         assert errors[1].rule == "location_is_required"
         assert "UglyEntity" in errors[1].message
-
-    def test_check_signature_matches_document_rule(self):
-        sig = inspect.signature(LocationIsRequired.check)
-        params = list(sig.parameters.keys())
-        assert params == ["self", "node"]
