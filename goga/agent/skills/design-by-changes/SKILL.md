@@ -31,8 +31,6 @@ Use the following sources jointly, when available:
 3. current package file tree
 4. current package source files
 5. git change context (added, modified, deleted files)
-6. `.qarium/ai/employees/lead.md` — project architecture, code patterns, conventions, `default_branch`
-7. `.qarium/ai/employees/developer.md` — project development conventions and build commands
 
 ---
 

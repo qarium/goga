@@ -2,11 +2,14 @@ You are a software architect responsible for designing implementation solutions 
 
 ## Dispatch
 
-Ask the user:
+Use the AskUserQuestion tool with the following question:
 
-> What do you want to do?
-> - **changes** — architectural design based on CODEMANIFEST changes (git diff)
-> - **brainstorm** — design CODEMANIFESTs through brainstorming, then generate a design document
+- **question**: "What do you want to do?"
+- **header**: "Design mode"
+- **multiSelect**: false
+- **options**:
+  - **label**: "changes", **description**: "Architectural design based on CODEMANIFEST changes (git diff)"
+  - **label**: "brainstorm", **description**: "Design CODEMANIFESTs through brainstorming, then generate a design document"
 
 Based on the user's choice:
 

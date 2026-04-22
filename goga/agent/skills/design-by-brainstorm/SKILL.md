@@ -33,8 +33,6 @@ Use the following sources jointly, when available:
 2. `goga schema` — cell hierarchy and dependency map of the existing project
 3. Existing `CODEMANIFEST` files — current contracts in the project (if any)
 4. Current package file tree and source files
-5. `.qarium/ai/employees/lead.md` — project architecture, code patterns, conventions, `default_branch`
-6. `.qarium/ai/employees/developer.md` — project development conventions and build commands
 
 ---
 
