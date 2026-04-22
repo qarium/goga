@@ -88,6 +88,153 @@ class TestLocationIsRequiredNegative:
         )
 
 
+class TestLocationIsRequiredFormatContract:
+    """Contract tests for format validation (TDD — expected to fail before implementation)."""
+
+    def test_entity_with_path_in_location_returns_contains_path(self):
+        entity = EntityTypeNode(name="PathEntity", data={"location": "dir/file.py"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "containing directory path" in errors[0].message
+
+    def test_entity_without_extension_returns_no_extension(self):
+        entity = EntityTypeNode(name="NoExtEntity", data={"location": "entityfile"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    def test_entity_with_dotfile_location_returns_no_error(self):
+        entity = EntityTypeNode(name="DotEntity", data={"location": ".gitignore"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert errors == []
+
+
+class TestLocationIsRequiredFormatLogic:
+    """Logic tests for format validation — positive, negative, and edge cases."""
+
+    # Positive
+    def test_dotfile_location_valid(self):
+        entity = EntityTypeNode(name="DotEntity", data={"location": ".gitignore"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_multi_dot_location_valid(self):
+        entity = EntityTypeNode(
+            name="CompEntity", data={"location": "my.component.py"}
+        )
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert errors == []
+
+    # Negative
+    def test_path_in_location_contains_path_error(self):
+        entity = EntityTypeNode(name="PathEntity", data={"location": "dir/entity.py"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (
+            "Type 'PathEntity' in 'my_doc' has location 'dir/entity.py'"
+            " containing directory path"
+            " — use a plain filename without directories"
+        )
+
+    def test_no_extension_error(self):
+        entity = EntityTypeNode(name="NoExtEntity", data={"location": "entityfile"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (
+            "Type 'NoExtEntity' in 'my_doc' has location 'entityfile'"
+            " without file extension"
+            " — use format 'filename.ext'"
+        )
+
+    def test_trailing_dot_error(self):
+        entity = EntityTypeNode(name="DotEntity", data={"location": "entity."})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (
+            "Type 'DotEntity' in 'my_doc' has location 'entity.'"
+            " without file extension"
+            " — use format 'filename.ext'"
+        )
+
+    def test_path_and_no_extension_both_errors(self):
+        entity = EntityTypeNode(name="PathNoExtEntity", data={"location": "dir/file"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 2
+        assert "containing directory path" in errors[0].message
+        assert "without file extension" in errors[1].message
+
+    def test_only_dot_error(self):
+        entity = EntityTypeNode(name="DotOnlyEntity", data={"location": "."})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    # Edge: routines
+    def test_routine_with_path_contains_path_error(self):
+        routine = RoutineTypeNode(
+            name="sub_tools", data={"location": "sub/tools.py"}
+        )
+        root = DocumentRoot(path="my_doc", body=BodyNode(routines=[routine]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "containing directory path" in errors[0].message
+
+    def test_routine_without_extension_error(self):
+        routine = RoutineTypeNode(
+            name="routinescript", data={"location": "routinescript"}
+        )
+        root = DocumentRoot(path="my_doc", body=BodyNode(routines=[routine]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    # Edge: parent directory
+    def test_parent_directory_path_contains_path_error(self):
+        entity = EntityTypeNode(
+            name="ParentEntity", data={"location": "../entity.py"}
+        )
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "containing directory path" in errors[0].message
+
+
 class TestLocationIsRequiredEdgeCases:
     def test_entity_with_empty_string_location_returns_error(self):
         entity = EntityTypeNode(name="MyEntity", data={"location": ""})
