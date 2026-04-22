@@ -92,26 +92,48 @@ Ask the user to confirm before proceeding.
 
 ### Step 4: Analysis 2 — Requirements vs Code and Usages
 
-**Question: Are the CODEMANIFEST requirements accurate relative to the actual code and usages?**
+**Questions: Are the CODEMANIFEST requirements accurate relative to the actual code and usages? Is the CODEMANIFEST well-written?**
 
-The contract may be incomplete, incorrect, or outdated compared to what the code actually does and what usages describe.
+The contract may be incomplete, incorrect, outdated, or poorly written compared to what the code actually does and what usages describe.
 
-#### 4a. Checks
+#### 4a. Checks: Accuracy
 
 - **Undocumented entities**: Are there public classes/functions in code not declared in CODEMANIFEST?
 - **Undocumented methods/properties**: Are there public API members on documented classes not in CODEMANIFEST?
 - **Contract vs usages accuracy**: Do annotations reference usages that are actually applicable? Are usages used in code but unreferenced in annotations?
 - **Requirements accuracy**: Do described signatures, types, and behaviors match what the code actually does? If the code is correct and the contract is wrong — the contract needs fixing.
 
-#### 4b. Present findings
+#### 4b. Checks: Writing quality
+
+For each entity and routine in CODEMANIFEST, verify annotations follow the established writing standards. Even if the contract is technically correct, poorly written annotations degrade the quality of the entire contract.
+
+**Annotation structure standard** — each annotation should contain:
+
+1. **Описание** (mandatory): краткое назначение сущности/рутины/метода/свойства. Для методов и рутин со параметрами — описание каждого параметра через `` `param`: описание ``
+2. **Алгоритм:** (required for non-trivial logic): пошаговое описание алгоритма работы. Использовать нумерованный или маркированный список
+3. **Требования:** (if applicable): конкретные требования к реализации — краевые случаи, ограничения, форматы
+
+Checks:
+
+- **Annotation completeness**: Does each entity/routine have a substantive annotation (not a one-liner)? For entities with complex behavior, is the annotation detailed enough to implement from?
+- **Algorithm section**: For routines and methods with non-trivial logic — is there an `Алгоритм:` section with step-by-step description?
+- **Requirements section**: For routines and methods that have constraints, edge cases, or specific behavioral rules — is there a `Требования:` section?
+- **Parameter descriptions**: For each method/routine parameter — is it described with `` `param`: описание `` syntax?
+- **Return value description**: For methods/routines with return values — is the return value described?
+- **Error templates**: For validators and rules — are error message templates (`Шаблоны ошибок:`) documented?
+- **Grammar and clarity**: Are annotations written in clear, correct language without ambiguity? No typos, no incomplete sentences, no vague wording?
+- **Structure consistency**: Are annotations across the same CODEMANIFEST written in a consistent style and structure?
+
+#### 4c. Present findings
 
 If any issues found — present each finding to the user with:
 - Exact location in CODEMANIFEST (entity, method/property, section)
-- What is wrong: missing declaration, inaccurate description, wrong type, stale reference
+- What is wrong: missing declaration, inaccurate description, wrong type, stale reference, poor annotation quality
+- For writing quality issues: specific recommendation on how to improve (e.g., "add `Алгоритм:` section", "describe parameter `path`", "restructure annotation with `Алгоритм:` and `Требования:` sections")
 
-#### 4c. Proposed action
+#### 4d. Proposed action
 
-**Edit CODEMANIFEST** to fix the inaccuracies, then call `/goga:design` with **changes** mode to update the design document based on the corrected contract.
+**Edit CODEMANIFEST** to fix the inaccuracies and improve writing quality, then call `/goga:design` with **changes** mode to update the design document based on the corrected contract.
 
 Ask the user to confirm before proceeding.
 
@@ -188,7 +210,7 @@ Before completing, verify:
 4. Was `goga linter` run?
 5. Was `goga schema` run?
 6. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
-7. Was Analysis 2 (Requirements vs Code/Usages) completed with clear findings and proposed action?
+7. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
 8. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
 9. Was each finding clearly classified into the correct analysis category before proposing an action?
 10. Were all actions confirmed by the user before execution?
