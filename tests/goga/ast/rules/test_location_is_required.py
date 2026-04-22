@@ -100,8 +100,10 @@ class TestLocationIsRequiredEdgeCases:
         errors = rule.check(node)
         assert len(errors) == 1
         assert errors[0].rule == "location_is_required"
-        assert "MyEntity" in errors[0].message
-        assert "my_doc" in errors[0].message
+        assert errors[0].message == (
+            "Type 'MyEntity' in 'my_doc' is missing required 'location'"
+            " — specify the source file"
+        )
 
     def test_embedded_entity_without_location_skipped(self):
         entity = EntityTypeNode(name="SomeEntity", embedded=True)
