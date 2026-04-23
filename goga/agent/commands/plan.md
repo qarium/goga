@@ -9,7 +9,9 @@ Check if design document exists:
 
 **Design document does not exist** — stop and ask the user to run `/goga:design` first to create the architectural solution.
 
-**Design document exists** — invoke the `plan-by-design` skill and follow it from start to finish.
+**Design document exists** — use the **Skill tool** to invoke `plan-by-design` with the feature name as argument.
+
+IMPORTANT: Your only action after confirming the design document exists is to invoke the `plan-by-design` skill. Do NOT read CODEMANIFEST files, do NOT explore the codebase, do NOT write the plan yourself. All of that is handled by `plan-by-design`.
 
 Arguments: $ARGUMENTS
 

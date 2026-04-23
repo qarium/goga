@@ -13,9 +13,11 @@ Use the AskUserQuestion tool with the following question:
 
 Based on the user's choice:
 
-- **changes** — invoke the `design-by-changes` skill and follow it from start to finish.
+- **changes** — use the **Skill tool** to invoke `design-by-changes` with arguments as context.
 
-- **brainstorm** — invoke the `design-by-brainstorm` skill and follow it from start to finish.
+- **brainstorm** — use the **Skill tool** to invoke `design-by-brainstorm` with arguments as context.
+
+IMPORTANT: After the user selects a mode, your only action is to invoke the corresponding skill via the Skill tool. Do NOT read CODEMANIFEST files, do NOT explore the codebase, do NOT create the design yourself.
 
 Arguments: $ARGUMENTS
 

@@ -148,7 +148,7 @@ Ask the user to confirm before proceeding.
 - **Existence**: For each `Usages` entry with a file path — does the file exist? Does `.usages/` directory exist?
 - **Referenced in annotations**: Is each declared usage referenced in some annotation via backtick syntax?
 - **Imported usages exist**: For each imported usage from `Imports` → `Usages` — does `{from_path}/.usages/{usage_name}.md` exist?
-- **Fitness**: Does each `.usages/*.md` file describe a practice actually used in the implementation? Is the content accurate and detailed enough?
+- **Fitness**: Does each `.usages/*.md` file describe how to use the cell's API? Is the content accurate and detailed enough for consumers?
 - **Missing usages**: Are there external library imports, recurring patterns, or conventions in code not covered by any Usages entry?
 - **Categorization**: Are `.usages/` functional categories well-defined and non-overlapping? Should inline usages be moved to category files?
 
@@ -187,7 +187,7 @@ For each action the user approved across all three analyses:
 #### 6c. Usages (Step 5)
 
 1. Create or update the relevant `.usages/*.md` files
-2. Ensure the content accurately describes the practice with enough detail for implementation
+2. Ensure the content accurately describes how to use the cell's API, with enough detail for consumers (implementation details may be present but are secondary)
 
 ---
 

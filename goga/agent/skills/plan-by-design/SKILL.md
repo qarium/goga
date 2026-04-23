@@ -341,7 +341,7 @@ These requirements must appear in task instructions so the AI implementation age
 ### Imports are internal contract dependencies and tracable practice links
 Imports define two types of internal dependencies:
 1. **Contract dependencies** — types from other `CODEMANIFEST` files in the same project, declared in `Types:` lists with a shared `From:` source. Each type may use `AS` alias syntax (e.g., `DocumentRoot AS DocumentRootNode`) to define a local name.
-2. **Practice dependencies** — usages from other cells' `.usages/` directories, declared in `Usages:` lists with a shared `From:` source. Imported usages create **tracable dependencies** (consumers can be found via import graph) but **not contractual obligations** (they remain at the level of implementation practice).
+2. **Practice dependencies** — usages from other cells' `.usages/` directories, declared in `Usages:` lists with a shared `From:` source. Imported usages create **tracable dependencies** (consumers can be found via import graph) but **not contractual obligations** (they remain at the level of documentation for consumers of the cell's API, implementation details may be present but are secondary).
 
 External library types are described in `Usages`, not in `Imports`.
 Do not redefine imported contract types locally unless the contract explicitly requires it.
@@ -349,12 +349,12 @@ If a type has an alias, use the alias name in signatures, re-exports, and `Type:
 Include import context (both types and usages) in task descriptions.
 For imported usages, include the source path `{from_path}/.usages/{usage_name}.md` and the content of the referenced file.
 
-### Usages are implementation context and external dependencies
-`Usages` is a general-purpose section for attaching any external knowledge the implementation agent needs. It is not limited to libraries — it may reference external code in other languages, build instructions, protocols, conventions, specifications, or any resource the agent should know about.
+### Usages are documentation for consumers of the cell's API
+`Usages` is a general-purpose section for documentation that explains how to use the cell's API. It primarily describes how consumers should interact with the cell — what each resource does, how to call it, what to expect. Implementation details may be present but are secondary.
 This includes third-party library types used in signatures (e.g., `requests.HTTPError`, `pydantic.BaseModel`), as well as specs explaining how to call a Rust/Go/C++ module, gRPC API definitions, or any external documentation.
 A Usages entry value can be either a **file path** (relative to the `CODEMANIFEST` file location) or **inline text**. When the value is a file path — read that file to get the actual specification content before including it in the plan.
-They provide context for the implementation agent — what each resource does and how to use it.
-Include Usages context in the plan so the AI implementation agent understands the available tools and how to work with them.
+They provide context for consumers — how to use the cell's API, what each resource does, what constraints apply.
+Include Usages context in the plan so the AI implementation agent understands the available API and how to work with it.
 
 **Two-level usages model**:
 - **Global usages** — located in the project root `.usages/` directory, referenced by file path in the `Usages` section
