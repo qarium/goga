@@ -21,6 +21,7 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 3. Usages files — `.usages/*.md` inside the cell (if they exist)
 4. `goga schema` — project cell hierarchy for context
 5. `goga linter` — CODEMANIFEST DSL syntax validation
+6. `goga contract` — CODEMANIFEST vs source code comparison
 
 ---
 
@@ -55,6 +56,19 @@ docker run --rm -v .:/project -w /project qarium/goga:latest schema
 
 Extract the cell's position in the project hierarchy for context.
 
+#### 2c. Run contract comparison
+
+```
+docker run --rm -v .:/project -w /project qarium/goga:latest contract <cell-path>
+```
+
+Extract the codemanifest vs source comparison for the target cell. The JSON output contains two sides for each entity/routine:
+
+- **codemanifest** — what CODEMANIFEST declares
+- **source** — what Python source code actually implements
+
+Use discrepancies between the two sides as primary inputs for Analysis 1 (Step 3).
+
 ---
 
 ### Step 3: Analysis 1 — Code vs Requirements
@@ -65,12 +79,20 @@ For each entity declared in CODEMANIFEST, verify the implementation matches the 
 
 #### 3a. Checks
 
-For each entity:
+Using the `goga contract` output from Step 2c, compare codemanifest vs source for the target cell:
 
-- **Location**: Does the file exist at `<cell-path>/<location>`?
-- **Entity existence**: Does a matching class/function exist in the declared `location` file?
-- **Method/property signatures**: Does each declared method/property exist? Do parameters and return types match?
-- **Facade exposure**: Is the entity importable from `__init__.py`? Are re-exports (`->Name: {}`) available?
+For each entity:
+- **Signature match**: Compare `"()"` (constructor signature) between codemanifest and source sides
+- **Methods coverage**: Compare `"methods"` dict — missing, extra, or mismatched method signatures
+- **Properties coverage**: Compare `"properties"` dict — missing, extra, or mismatched property types
+- **Facade exposure**: Is the entity listed in both sides? Missing from source means it's not exported via `__all__`
+
+For each routine:
+- **Signature match**: Compare the signature string between codemanifest and source sides
+- **Existence**: Missing from source means not exported via `__all__`
+
+Additional checks not covered by `goga contract`:
+- **Location**: Does the source file exist at `<cell-path>/<location>`?
 - **Behavioral compliance**: Does the implementation reflect behavioral requirements from annotations?
 - **Import usage**: Are imported types from `Imports` actually used in the source code?
 
@@ -172,9 +194,10 @@ For each action the user approved across all three analyses:
 
 #### 6a. Code vs Requirements (Step 3)
 
-1. Formulate a clear task description of what needs to be redesigned
-2. Call `/goga:design` and select **brainstorm** mode
-3. Pass the task as context — the design command will handle the redesign
+1. Summarize discrepancies from `goga contract` output
+2. Formulate a clear task description of what needs to be redesigned
+3. Call `/goga:design` and select **brainstorm** mode
+4. Pass the task as context — the design command will handle the redesign
 
 #### 6b. Requirements vs Code/Usages (Step 4)
 
@@ -209,12 +232,13 @@ Before completing, verify:
 3. Were all `.usages/` files analyzed?
 4. Was `goga linter` run?
 5. Was `goga schema` run?
-6. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
-7. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
-8. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
-9. Was each finding clearly classified into the correct analysis category before proposing an action?
-10. Were all actions confirmed by the user before execution?
-11. Were approved actions executed correctly?
+6. Was `goga contract <cell-path>` run?
+7. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
+8. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
+9. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
+10. Was each finding clearly classified into the correct analysis category before proposing an action?
+11. Were all actions confirmed by the user before execution?
+12. Were approved actions executed correctly?
 
 If any answer is "no" — complete the missing work before returning.
 
