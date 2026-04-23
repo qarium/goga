@@ -1,0 +1,74 @@
+Imports:
+  - Types:
+      - DocumentRoot
+    From: goga/ast/nodes
+  - Types:
+      - python_contract
+    From: goga/contract
+
+Usages:
+  conventions: .usages/development/conventions.md
+  compare_usage: .usages/compare.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+"compare(tree: list[DocumentRoot], paths: list[str] = []) -> result:dict":
+  location: comparator.py
+  annotations: |
+    Сравнивает контракты CODEMANIFEST с реализацией для каждой клетки.
+    Для использования практики `compare_usage` обращаться к инструкции.
+
+    `tree`: дерево документов проекта
+    `paths`: опциональные пути клеток для фильтрации,
+             если пусто — обрабатываются все клетки
+
+    Алгоритм:
+    - Построить плоский словарь path -> DocumentRoot из дерева
+      для поиска документов при разрешении мутаций
+    - Для каждой клетки в дереве (или по указанным paths):
+      1. Извлечь контракт из CODEMANIFEST:
+         - Пройти по body.entities и body.routines
+         - Для entity: извлечь итоговое имя (последнее в цепочке мутаций)
+         - Разрешить мутации рекурсивно:
+           собрать методы и свойства из базовых типов (mutations),
+           методы/свойства текущего entity перекрывают базовые
+         - Сформировать вложенную структуру:
+           * entity: { "()": signature, "methods": {name: sig}, "properties": {name: sig} }
+           * routine: signature (строка)
+      2. Извлечь контракт из исходного кода через `python_contract`:
+         - Преобразовать EntityContract/RoutineContract в тот же вложенный формат
+         - Python MRO разрешает наследование — все публичные методы и свойства
+           включая унаследованные доступны через `python_contract`
+         - Если `python_contract` падает (нет Python-пакета) — source: {}
+      3. Собрать JSON вида:
+         { "cell/path": { "codemanifest": {...}, "source": {...} } }
+
+    Формат entity:
+    ```
+    "EntityName": {
+      "()": "constructor_signature",
+      "methods": { "method_name": "signature" },
+      "properties": { "prop_name": "type_signature" }
+    }
+    ```
+
+    Формат routine:
+    ```
+    "routine_name": "full_signature"
+    ```
+
+    Требования:
+    - Разрешение мутаций рекурсивно обходит всю цепочку
+    - Пустые methods/properties включаются в вывод для консистентности
+    - Порядок ключей не важен
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 22/04/26
+
+Description: |
+  Манифест описывает компаратор контрактов CODEMANIFEST и реализации
