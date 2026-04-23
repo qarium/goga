@@ -367,6 +367,22 @@ Annotations: |
     Шаблоны ошибок:
     - unknown_keys: "Routine '{routine_name}' contains unknown keys {unknown_keys} — allowed: location, annotations"
 
+"DocumentRule::LocationIsRequired(name: str = 'location_is_required')":
+  location: document.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - entity/routine содержит location — имя файла с расширением, без директорий
+    - location содержит расширение: есть '.' и хотя бы один символ после '.'
+    - location не содержит '/'
+    - embedded типы пропускаются
+
+    Шаблоны ошибок:
+    - missing: "Type '{type_name}' in '{doc_path}' is missing required 'location' — specify the source file"
+    - no_extension: "Type '{type_name}' in '{doc_path}' has location '{location_value}' without file extension — use format 'filename.ext'"
+    - contains_path: "Type '{type_name}' in '{doc_path}' has location '{location_value}' containing directory path — use a plain filename without directories"
+
 # ********************************* #
 # Правила на уровне всех документов #
 # ********************************* #

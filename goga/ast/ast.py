@@ -23,6 +23,7 @@ from .rules import (
     ImportsHasOnlyValidKeys,
     ImportTypeExists,
     ImportUsageExists,
+    LocationIsRequired,
     MutationExists,
     MutationIsValid,
     ReturnTypeHasLink,
@@ -133,6 +134,7 @@ class AST:
             RoutineHasOnlyValidKeys(),
             ImportIsUsed(),
             SignatureIsValid(),
+            LocationIsRequired(),
         ]
 
         for doc in all_documents:

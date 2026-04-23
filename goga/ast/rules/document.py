@@ -945,3 +945,105 @@ class RoutineHasOnlyValidKeys(DocumentRule):
                 )
 
         return errors
+
+
+class LocationIsRequired(DocumentRule):
+    """Rule: every non-embedded entity and routine must have a non-empty location."""
+
+    def __init__(self) -> None:
+        super().__init__(name="location_is_required")
+
+    def _check_location_format(
+        self,
+        location_value: str,
+        type_name: str,
+        doc_path: str,
+        node: EntityTypeNode | RoutineTypeNode,
+        errors: list[DocumentRuleError],
+    ) -> None:
+        if "/" in location_value:
+            errors.append(
+                DocumentRuleError(
+                    message=(
+                        f"Type '{type_name}' in '{doc_path}'"
+                        f" has location '{location_value}' containing"
+                        " directory path"
+                        " — use a plain filename without directories"
+                    ),
+                    rule=self.name,
+                    document=node.root,
+                    node=node,
+                )
+            )
+        if (
+            "." not in location_value
+            or not location_value.rsplit(".", 1)[-1]
+        ):
+            errors.append(
+                DocumentRuleError(
+                    message=(
+                        f"Type '{type_name}' in '{doc_path}'"
+                        f" has location '{location_value}' without"
+                        " file extension"
+                        " — use format 'filename.ext'"
+                    ),
+                    rule=self.name,
+                    document=node.root,
+                    node=node,
+                )
+            )
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+
+        for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
+            if "location" not in entity.data or not entity.data.get("location"):
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Type '{entity.name}' in '{node.root.path}'"
+                            " is missing required 'location'"
+                            " — specify the source file"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=entity,
+                    )
+                )
+            else:
+                self._check_location_format(
+                    str(entity.data["location"]),
+                    entity.name,
+                    node.root.path,
+                    entity,
+                    errors,
+                )
+
+        for routine in node.root.body.routines:
+            if routine.embedded:
+                continue
+            if "location" not in routine.data or not routine.data.get("location"):
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Type '{routine.name}' in '{node.root.path}'"
+                            " is missing required 'location'"
+                            " — specify the source file"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=routine,
+                    )
+                )
+            else:
+                self._check_location_format(
+                    str(routine.data["location"]),
+                    routine.name,
+                    node.root.path,
+                    routine,
+                    errors,
+                )
+
+        return errors
