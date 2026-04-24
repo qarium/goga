@@ -698,7 +698,7 @@ class TestManifestCheck:
         result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
-        assert "Error" in result.output
+        assert "git status failed" in result.output
 
     def test_manifest_check_no_codemanifest_files_proceeds(self, tmp_path) -> None:
         """Empty repo with no CODEMANIFEST files proceeds normally."""

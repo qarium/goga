@@ -34,6 +34,28 @@ CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 
+def _parse_porcelain_path(line: str) -> str | None:
+    """Extract file path from a git status --porcelain line.
+
+    Handles quoted paths (spaces, special chars) and rename entries (old -> new).
+    """
+    # git porcelain format: XY<space>path (minimum 4 chars)
+    if len(line) < len("XY "):
+        return None
+    raw = line[3:]  # skip two-char status (XY) + space
+    if not raw:
+        return None
+    # Quoted path: "path with spaces" or "old -> new"
+    if raw.startswith('"'):
+        # git uses C-style quoting; find closing quote
+        end = raw.index('"', 1)
+        return raw[1:end].replace('\\"', '"').replace("\\\\", "\\")
+    # Rename entry: old_path -> new_path
+    if " -> " in raw:
+        return raw.split(" -> ", 1)[1]
+    return raw
+
+
 def _find_uncommitted_manifests() -> list[str]:
     """Find uncommitted CODEMANIFEST files via git status --porcelain."""
     result = subprocess.run(
@@ -43,16 +65,12 @@ def _find_uncommitted_manifests() -> list[str]:
         check=False,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            "Not a git repository (or any of the parent directories): .git"
-        )
+        detail = result.stderr.strip() or "unknown error"
+        raise click.ClickException(f"git status failed: {detail}")
     uncommitted: list[str] = []
     for line in result.stdout.splitlines():
-        parts = line.split()
-        if not parts:
-            continue
-        path = parts[-1]
-        if Path(path).name == "CODEMANIFEST":
+        path = _parse_porcelain_path(line)
+        if path and Path(path).name == "CODEMANIFEST":
             uncommitted.append(path)
     return uncommitted
 
