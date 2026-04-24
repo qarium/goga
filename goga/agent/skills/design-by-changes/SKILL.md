@@ -26,8 +26,9 @@ All CODEMANIFEST edits must be **proposed to the user** before applying. Never s
 
 Use the following sources jointly, when available:
 
-1. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract.
-2. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
+1. `dsl.md` — DSL specification (in skill directory). Read before analyzing or editing CODEMANIFEST to ensure correct DSL syntax and semantics
+2. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract.
+3. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
 3. current package file tree
 4. current package source files
 5. git change context (added, modified, deleted files)
@@ -35,6 +36,10 @@ Use the following sources jointly, when available:
 ---
 
 ## Steps
+
+### Step 0: Read DSL spec
+
+Read `dsl.md` (in skill directory) to understand CODEMANIFEST DSL rules before analyzing or editing contracts.
 
 ### Step 1: Git diff CODEMANIFEST
 
@@ -288,6 +293,7 @@ Never mix them.
 
 Before completing the response, verify:
 
+0. Was `dsl.md` read before analyzing or editing contracts?
 1. Was a git diff of CODEMANIFEST performed between the current branch and the base branch?
 2. Was a gap analysis performed (contract vs current implementation)?
 2a. Was a contract consistency audit performed (interface ↔ type, type ↔ mutation, interface ↔ interface, annotations ↔ entity)?

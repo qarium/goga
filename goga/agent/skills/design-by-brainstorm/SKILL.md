@@ -29,8 +29,9 @@ You create **CODEMANIFEST files** that define the contract for the feature.
 
 Use the following sources jointly, when available:
 
-1. Root `Usages` — read **all** root Usages entries to understand available practices and tools
-2. `goga schema` — cell hierarchy and dependency map of the existing project
+1. `dsl.md` — DSL specification (in skill directory). Read before creating CODEMANIFEST to ensure correct DSL syntax and semantics
+2. Root `Usages` — read **all** root Usages entries to understand available practices and tools
+3. `goga schema` — cell hierarchy and dependency map of the existing project
 3. Existing `CODEMANIFEST` files — current contracts in the project (if any)
 4. Current package file tree and source files
 
@@ -52,7 +53,11 @@ Remember the original description throughout the session.
 
 ### Step 2: Architecture discovery
 
-#### 2a. Read Usages
+#### 2a. Read DSL spec
+
+Read `dsl.md` (in skill directory) to understand CODEMANIFEST DSL rules before designing contracts.
+
+#### 2b. Read Usages
 
 Read all root-level `Usages` entries from all CODEMANIFEST files in the project. This provides the catalog of available practices, libraries, and tools that the new design can reference.
 
@@ -64,13 +69,13 @@ If a Usages entry value is a file path (relative to the CODEMANIFEST location, e
 
 During brainstorm, if a question arises about a specific practice that wasn't fully read — go back and read the spec file at that point.
 
-#### 2b. Run schema
+#### 2c. Run schema
 
 Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command capabilities.
 
 Then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project cell hierarchy.
 
-#### 2c. Relevance analysis
+#### 2d. Relevance analysis
 
 Based on the schema output and the user's description, determine:
 
@@ -247,7 +252,7 @@ Never mix them.
 
 Before completing the response, verify:
 
-1. Were all root Usages read?
+1. Was `dsl.md` read before creating CODEMANIFEST?
 2. Was `goga schema` run to understand existing architecture?
 3. Was relevance to existing architecture analyzed?
 4. Was scope checked — split if too large?

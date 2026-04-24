@@ -27,8 +27,9 @@ You update **CODEMANIFEST files** to make the contract precise enough to prevent
 
 Use the following sources jointly, when available:
 
-1. `CODEMANIFEST` — read **all** relevant CODEMANIFEST files to understand the current contract
-2. Source code — read actual implementation files related to the bug
+1. `dsl.md` — DSL specification (in skill directory). Read before analyzing or editing CODEMANIFEST to ensure correct DSL syntax and semantics
+2. `CODEMANIFEST` — read **all** relevant CODEMANIFEST files to understand the current contract
+3. Source code — read actual implementation files related to the bug
 3. `goga schema` — cell hierarchy and dependency map
 4. Root `Usages` — practices and conventions referenced in the project
 5. Git context — recent changes that may have introduced the bug
@@ -36,6 +37,10 @@ Use the following sources jointly, when available:
 ---
 
 ## Steps
+
+### Step 0: Read DSL spec
+
+Read `dsl.md` (in skill directory) to understand CODEMANIFEST DSL rules before analyzing or editing contracts.
 
 ### Step 1: Collect input
 
@@ -210,6 +215,7 @@ Never mix them.
 
 Before completing the response, verify:
 
+0. Was `dsl.md` read before analyzing or editing contracts?
 1. Was the bug description collected?
 2. Were relevant CODEMANIFEST files read?
 3. Was `goga schema` run to understand cell dependencies?

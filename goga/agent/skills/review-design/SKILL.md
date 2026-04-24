@@ -28,10 +28,11 @@ All CODEMANIFEST edits must be **proposed to the user** before applying.
 
 ## Sources of Truth
 
-Use the same sources as `design-by-changes`:
+Use the following sources jointly, when available:
 
-1. `CODEMANIFEST` files
-2. Current package source files
+1. `dsl.md` — DSL specification (in skill directory). Read before reviewing contracts to understand DSL rules and detect contract errors
+2. `CODEMANIFEST` files
+3. Current package source files
 3. Usages specs and external library documentation
 4. Design document at `docs/design/<feature-name>.md`
 
@@ -41,7 +42,8 @@ Use the same sources as `design-by-changes`:
 
 ### Step 1: Load context
 
-1. Read the design document from `docs/design/<feature-name>.md`
+1. Read `dsl.md` (in skill directory) to understand CODEMANIFEST DSL rules before reviewing contracts.
+2. Read the design document from `docs/design/<feature-name>.md`
 2. Read all relevant CODEMANIFEST files referenced in the design
 3. Read existing source files referenced in the design (if any)
 4. Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command, then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project dependency graph. Use `--depends-on <cell_path>` to find cells that depend on cells changed by the design. This ensures the review covers all affected cells.
@@ -241,6 +243,7 @@ After all findings are processed, show a summary:
 
 Before completing, verify:
 
+0. Was `dsl.md` read before reviewing contracts?
 1. Was every entry point in the design traced through the full code stack?
 2. Was every checkpoint in each chain verified (type, logic, error, edge)?
 2a. Were contract interaction checkpoints verified (interface ↔ type, type ↔ mutation, interface ↔ interface)?
