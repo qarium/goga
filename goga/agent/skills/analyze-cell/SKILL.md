@@ -17,11 +17,12 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 ## Sources of Truth
 
 1. `CODEMANIFEST` — the cell's contract (located at `<cell-path>/CODEMANIFEST`)
-2. Source files — implementation code in the cell directory
-3. Usages files — `.usages/*.md` inside the cell (if they exist)
-4. `goga schema` — project cell hierarchy for context
-5. `goga linter` — CODEMANIFEST DSL syntax validation
-6. `goga contract` — CODEMANIFEST vs source code comparison
+2. DSL specification — `dsl.md` (in skill directory) — defines the CODEMANIFEST DSL syntax rules (see Step 1)
+3. Source files — implementation code in the cell directory
+4. Usages files — `.usages/*.md` inside the cell (if they exist)
+5. `goga schema` — project cell hierarchy for context
+6. `goga linter` — CODEMANIFEST DSL syntax validation
+7. `goga contract` — CODEMANIFEST vs source code comparison
 
 ---
 
@@ -29,12 +30,16 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 
 ### Step 1: Load context
 
-1. Read the cell's `CODEMANIFEST` file
-2. Parse all entities, methods, properties, imports, usages, annotations, re-exports, and locations
-3. List all source files in the cell directory (excluding `.usages/`, `__pycache__/`, tests, and other non-contract files)
-4. Read all source files that match declared `location` values
-5. Read all `.usages/*.md` files if the `.usages/` directory exists
-6. Check if `__init__.py` exists (facade file)
+1. Read the DSL specification at `dsl.md` (located in the skill directory)
+   - Defines CODEMANIFEST DSL syntax, structure rules, and semantics
+   - **Critical for correct analysis**: without understanding the DSL rules, you will misinterpret CODEMANIFEST entries (e.g. path resolution rules, signature format semantics, import constraints)
+   - Refer to the spec when in doubt about whether a CODEMANIFEST entry is valid
+2. Read the cell's `CODEMANIFEST` file
+3. Parse all entities, methods, properties, imports, usages, annotations, re-exports, and locations
+4. List all source files in the cell directory (excluding `.usages/`, `__pycache__/`, tests, and other non-contract files)
+5. Read all source files that match declared `location` values
+6. Read all `.usages/*.md` files if the `.usages/` directory exists
+7. Check if `__init__.py` exists (facade file)
 
 ---
 
@@ -227,18 +232,19 @@ For each action the user approved across all three analyses:
 
 Before completing, verify:
 
-1. Was the cell's CODEMANIFEST fully parsed?
-2. Were all source files checked against the contract?
-3. Were all `.usages/` files analyzed?
-4. Was `goga linter` run?
-5. Was `goga schema` run?
-6. Was `goga contract <cell-path>` run?
-7. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
-8. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
-9. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
-10. Was each finding clearly classified into the correct analysis category before proposing an action?
-11. Were all actions confirmed by the user before execution?
-12. Were approved actions executed correctly?
+1. Was the DSL specification (`dsl.md` in skill directory) read before analysis?
+2. Was the cell's CODEMANIFEST fully parsed?
+3. Were all source files checked against the contract?
+4. Were all `.usages/` files analyzed?
+5. Was `goga linter` run?
+6. Was `goga schema` run?
+7. Was `goga contract <cell-path>` run?
+8. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
+9. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
+10. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
+11. Was each finding clearly classified into the correct analysis category before proposing an action?
+12. Were all actions confirmed by the user before execution?
+13. Were approved actions executed correctly?
 
 If any answer is "no" — complete the missing work before returning.
 
