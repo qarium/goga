@@ -132,24 +132,21 @@ The contract may be incomplete, incorrect, outdated, or poorly written compared 
 
 #### 4b. Checks: Writing quality
 
-For each entity and routine in CODEMANIFEST, verify annotations follow the established writing standards. Even if the contract is technically correct, poorly written annotations degrade the quality of the entire contract.
+For each entity and routine in CODEMANIFEST, verify annotations follow these writing quality criteria. Even if the contract is technically correct, poorly written annotations degrade the quality of the entire contract.
 
-**Annotation structure standard** — each annotation should contain:
+**Content recommendations:**
+- Begin each annotation with a clear statement of purpose — what this entity/routine/method does and why it exists
+- For every parameter, provide a description using `` `param_name`: description `` syntax
+- When logic is non-trivial (multi-step transformations, conditional flows, state transitions), include an `Algorithm:` section with numbered steps that trace the execution flow
+- When there are constraints, edge cases, format requirements, or preconditions — include a `Requirements:` section describing them explicitly
+- Document the return value format when the semantics are not obvious from the signature alone (e.g., when the meaning differs from the type, or when the structure is complex)
+- Include usage examples when they help clarify the contract — configuration examples for builders, input/output pairs for parsers, call patterns for facades
 
-1. **Описание** (mandatory): краткое назначение сущности/рутины/метода/свойства. Для методов и рутин со параметрами — описание каждого параметра через `` `param`: описание ``
-2. **Алгоритм:** (required for non-trivial logic): пошаговое описание алгоритма работы. Использовать нумерованный или маркированный список
-3. **Требования:** (if applicable): конкретные требования к реализации — краевые случаи, ограничения, форматы
-
-Checks:
-
-- **Annotation completeness**: Does each entity/routine have a substantive annotation (not a one-liner)? For entities with complex behavior, is the annotation detailed enough to implement from?
-- **Algorithm section**: For routines and methods with non-trivial logic — is there an `Алгоритм:` section with step-by-step description?
-- **Requirements section**: For routines and methods that have constraints, edge cases, or specific behavioral rules — is there a `Требования:` section?
-- **Parameter descriptions**: For each method/routine parameter — is it described with `` `param`: описание `` syntax?
-- **Return value description**: For methods/routines with return values — is the return value described?
-- **Error templates**: For validators and rules — are error message templates (`Шаблоны ошибок:`) documented?
-- **Grammar and clarity**: Are annotations written in clear, correct language without ambiguity? No typos, no incomplete sentences, no vague wording?
-- **Structure consistency**: Are annotations across the same CODEMANIFEST written in a consistent style and structure?
+**Quality recommendations:**
+- Each annotation must be concrete enough to implement from — no TBD, TODO, or vague wording
+- Each annotation should have exactly one possible interpretation — if you can read it two ways, rewrite it
+- Maintain consistent style and structure across all annotations within the same CODEMANIFEST file
+- All backtick references (`` `name` ``) must point to entities that actually exist in the current CODEMANIFEST context — types from `Imports`, practices from `Usages`, or parameters from the signature
 
 #### 4c. Present findings
 

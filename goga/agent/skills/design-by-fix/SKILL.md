@@ -153,6 +153,17 @@ Apply the approved changes to CODEMANIFEST file(s).
 
 - Ensure all entities, usages, imports, and annotations are properly formatted per the DSL.
 - Do not modify implementation code.
+- Follow annotation writing recommendations when writing or updating annotations:
+  - Begin each annotation with a clear statement of purpose
+  - Describe every parameter with `` `param_name`: description `` syntax
+  - For non-trivial logic, include `Algorithm:` with numbered steps
+  - For constraints and edge cases, include `Requirements:` section
+  - Document return value format when not obvious from signature
+  - Include usage examples when they help clarify the contract
+  - No placeholders (TBD, TODO) — every instruction must be concrete
+  - Each annotation must have exactly one interpretation
+  - Keep consistent style across the CODEMANIFEST file
+  - All backtick references must point to existing entities in the current context
 
 ### Step 6: Run linter + self-review
 

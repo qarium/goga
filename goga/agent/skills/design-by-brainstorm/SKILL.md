@@ -162,6 +162,24 @@ Based on the chosen approach, present the **concrete proposal** progressively:
 
 Pause after each section for user feedback. Fix issues before continuing to the next. Do not dump the entire proposal at once.
 
+#### Writing annotations
+
+When writing or updating annotations, follow these recommendations:
+
+**Content recommendations:**
+- Begin each annotation with a clear statement of purpose — what this entity/routine/method does and why it exists
+- For every parameter, provide a description using `` `param_name`: description `` syntax
+- When logic is non-trivial (multi-step transformations, conditional flows, state transitions), include an `Algorithm:` section with numbered steps that trace the execution flow
+- When there are constraints, edge cases, format requirements, or preconditions — include a `Requirements:` section describing them explicitly
+- Document the return value format when the semantics are not obvious from the signature alone (e.g., when the meaning differs from the type, or when the structure is complex)
+- Include usage examples when they help clarify the contract — configuration examples for builders, input/output pairs for parsers, call patterns for facades
+
+**Quality recommendations:**
+- Each annotation must be concrete enough to implement from — no TBD, TODO, or vague wording
+- Each annotation should have exactly one possible interpretation — if you can read it two ways, rewrite it
+- Maintain consistent style and structure across all annotations within the same CODEMANIFEST file
+- All backtick references (`` `name` ``) must point to entities that actually exist in the current CODEMANIFEST context — types from `Imports`, practices from `Usages`, or parameters from the signature
+
 #### 3e. Loop or proceed
 
 After all sections are approved:
