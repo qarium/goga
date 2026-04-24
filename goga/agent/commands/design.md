@@ -10,6 +10,7 @@ Use the AskUserQuestion tool with the following question:
 - **options**:
   - **label**: "changes", **description**: "Architectural design based on CODEMANIFEST changes (git diff)"
   - **label**: "brainstorm", **description**: "Design CODEMANIFESTs through brainstorming, then generate a design document"
+  - **label**: "fix", **description**: "Diagnose a bug, update CODEMANIFEST to close the gap, then generate a design document"
 
 Based on the user's choice:
 
@@ -17,11 +18,13 @@ Based on the user's choice:
 
 - **brainstorm** — use the **Skill tool** to invoke `design-by-brainstorm` with arguments as context.
 
+- **fix** — use the **Skill tool** to invoke `design-by-fix` with arguments as context.
+
 IMPORTANT: After the user selects a mode, your only action is to invoke the corresponding skill via the Skill tool. Do NOT read CODEMANIFEST files, do NOT explore the codebase, do NOT create the design yourself.
 
 Arguments: $ARGUMENTS
 
-If arguments are provided — use them as context (e.g., feature name, specific CODEMANIFEST paths). If empty — analyze all CODEMANIFEST changes.
+If arguments are provided — use them as context (e.g., feature name, specific CODEMANIFEST paths, bug description). If empty — analyze all CODEMANIFEST changes.
 
 Remember the original arguments throughout the session.
 
