@@ -34,6 +34,16 @@ CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 
+def _unquote_git_path(raw: str) -> str | None:
+    """Unquote a git C-style quoted path."""
+    if not raw.startswith('"'):
+        return raw
+    end = raw.find('"', 1)
+    if end == -1:
+        return None
+    return raw[1:end].replace('\\"', '"').replace("\\\\", "\\")
+
+
 def _parse_porcelain_path(line: str) -> str | None:
     """Extract file path from a git status --porcelain line.
 
@@ -45,16 +55,13 @@ def _parse_porcelain_path(line: str) -> str | None:
     raw = line[3:]  # skip two-char status (XY) + space
     if not raw:
         return None
-    # Quoted path: "path with spaces" or "old -> new"
-    if raw.startswith('"'):
-        # git uses C-style quoting; find closing quote
-        end = raw.find('"', 1)
-        if end == -1:
-            return None
-        return raw[1:end].replace('\\"', '"').replace("\\\\", "\\")
     # Rename entry: old_path -> new_path
     if " -> " in raw:
-        return raw.split(" -> ", 1)[1]
+        new_path = raw.split(" -> ", 1)[1]
+        return _unquote_git_path(new_path)
+    # Quoted path: "path with spaces"
+    if raw.startswith('"'):
+        return _unquote_git_path(raw)
     return raw
 
 
