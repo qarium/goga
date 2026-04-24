@@ -48,7 +48,9 @@ def _parse_porcelain_path(line: str) -> str | None:
     # Quoted path: "path with spaces" or "old -> new"
     if raw.startswith('"'):
         # git uses C-style quoting; find closing quote
-        end = raw.index('"', 1)
+        end = raw.find('"', 1)
+        if end == -1:
+            return None
         return raw[1:end].replace('\\"', '"').replace("\\\\", "\\")
     # Rename entry: old_path -> new_path
     if " -> " in raw:
