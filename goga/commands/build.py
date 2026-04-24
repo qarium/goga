@@ -34,7 +34,7 @@ CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 
-def _read_goga_yml() -> dict:
+def _read_goga_yml() -> dict:  # noqa: C901
     """Read goga.yml from the project root, return the build section merged with defaults."""
     config = copy.deepcopy(DEFAULT_BUILD_CONFIG)
     goga_yml_path = Path("goga.yml")
@@ -44,7 +44,10 @@ def _read_goga_yml() -> dict:
 
     click.echo("Reading goga.yml...")
     with goga_yml_path.open() as f:
-        data = yaml.safe_load(f)
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError:
+            raise click.ClickException(f"Failed to parse {goga_yml_path}: invalid YAML") from None
 
     if not isinstance(data, dict) or "build" not in data:
         click.echo("No 'build' section in goga.yml, using defaults")
@@ -145,10 +148,14 @@ def _create_claude_wrapper(config: dict) -> None:
 
 
 def _copy_defaults(config: dict) -> None:
-    """Copy default prompts and agents from goga package to .ralphex/. Does NOT overwrite existing files."""
+    """Copy default prompts and agents from goga package to .ralphex/. Overwrites existing files."""
     click.echo("Copying defaults...")
 
     defaults_dir = DEFAULTS_PACKAGE_DIR.resolve()
+
+    if not defaults_dir.is_dir():
+        raise click.ClickException(f"defaults directory not found: {defaults_dir}")
+
     ralphex_dir = Path(".ralphex")
 
     prompts_src = Path(config["prompts_dir"]) if config.get("prompts_dir") else defaults_dir / "prompts"
@@ -163,8 +170,7 @@ def _copy_defaults(config: dict) -> None:
             if not src_file.is_file():
                 continue
             dest_file = dest_dir / src_file.name
-            if not dest_file.exists():
-                shutil.copy2(src_file, dest_file)
+            shutil.copy2(src_file, dest_file)
 
 
 def _assemble_command(plan: str, config: dict, cli_options: dict) -> list[str]:

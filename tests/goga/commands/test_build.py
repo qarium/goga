@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -19,6 +21,11 @@ from goga.commands.build import (
 from goga.commands.build import (
     build as build_cmd,
 )
+
+# goga.commands.__init__ re-exports the Click command as "build", shadowing the
+# module.  Retrieve the actual module from sys.modules so that mock.patch can
+# reach module-level attributes like DEFAULTS_PACKAGE_DIR.
+_build_module = sys.modules["goga.commands.build"]
 
 
 def _run_build_in_tmp(tmp_path, args=None):
@@ -300,17 +307,93 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_no_overwrite_existing(self, mock_which, mock_call, tmp_path) -> None:
-        """Existing files in .ralphex/ are NOT overwritten."""
+    def test_overwrite_existing_files(self, mock_which, mock_call, tmp_path) -> None:
+        """Existing files in .ralphex/ are overwritten with defaults."""
         ralphex_prompts = tmp_path / ".ralphex" / "prompts"
         ralphex_prompts.mkdir(parents=True)
         existing_file = ralphex_prompts / "task.txt"
-        original_content = "ORIGINAL CONTENT DO NOT OVERWRITE"
-        existing_file.write_text(original_content)
+        existing_file.write_text("ORIGINAL CONTENT DO NOT OVERWRITE")
 
         _run_build_in_tmp(tmp_path, ["plan.md"])
 
-        assert existing_file.read_text() == original_content
+        # File was overwritten — content no longer matches original
+        assert existing_file.read_text() != "ORIGINAL CONTENT DO NOT OVERWRITE"
+        # All default files present
+        expected_files = {"task.txt", "codex.txt", "review_first.txt", "review_second.txt"}
+        actual_files = {f.name for f in ralphex_prompts.iterdir() if f.is_file()}
+        assert expected_files.issubset(actual_files)
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_defaults_subdir_empty_no_error(self, mock_which, mock_call, tmp_path) -> None:
+        """Empty prompts/ and agents/ subdirectories under defaults_dir cause no error."""
+        fake_defaults = tmp_path / "fake_defaults"
+        (fake_defaults / "prompts").mkdir(parents=True)
+        (fake_defaults / "agents").mkdir(parents=True)
+
+        with mock.patch.object(_build_module, "DEFAULTS_PACKAGE_DIR", fake_defaults):
+            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        assert result.exit_code == 0
+        prompts_dir = tmp_path / ".ralphex" / "prompts"
+        assert prompts_dir.is_dir()
+        assert list(prompts_dir.iterdir()) == []
+        agents_dir = tmp_path / ".ralphex" / "agents"
+        assert agents_dir.is_dir()
+        assert list(agents_dir.iterdir()) == []
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_overwrite_agents_existing_files(self, mock_which, mock_call, tmp_path) -> None:
+        """Existing agent files in .ralphex/agents/ are overwritten with defaults."""
+        ralphex_agents = tmp_path / ".ralphex" / "agents"
+        ralphex_agents.mkdir(parents=True)
+        existing_file = ralphex_agents / "quality.txt"
+        existing_file.write_text("ORIGINAL AGENT CONTENT")
+
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        assert existing_file.read_text() != "ORIGINAL AGENT CONTENT"
+        expected_files = {
+            "quality.txt",
+            "implementation.txt",
+            "testing.txt",
+            "simplification.txt",
+            "documentation.txt",
+        }
+        actual_files = {f.name for f in ralphex_agents.iterdir() if f.is_file()}
+        assert expected_files.issubset(actual_files)
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_repeated_build_overwrites_every_time(self, mock_which, mock_call, tmp_path) -> None:
+        """Running build twice restores defaults even if files were modified between runs."""
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        # Modify file between runs
+        prompts_dir = tmp_path / ".ralphex" / "prompts"
+        modified_file = prompts_dir / "task.txt"
+        modified_file.write_text("USER MODIFICATION BETWEEN RUNS")
+
+        # Second run should overwrite back to defaults
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        assert modified_file.read_text() != "USER MODIFICATION BETWEEN RUNS"
+
+
+class TestDefaultsDirNotFound:
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_defaults_dir_not_found_exits_with_error(self, mock_which, mock_call, tmp_path) -> None:
+        """When defaults directory is missing, build exits with code 1 and error in stderr."""
+        with mock.patch.object(
+            _build_module, "DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")
+        ):
+            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        assert result.exit_code == 1
+        assert "Error" in result.stderr
+        assert "defaults" in result.stderr
+        assert "nonexistent" in result.stderr
 
 
 class TestRalphexNotFound:

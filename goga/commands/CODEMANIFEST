@@ -116,7 +116,7 @@ Annotations: |
     4. Копировать defaults из пакета goga (goga/config/defaults/) в .ralphex/:
        - prompts/ → .ralphex/prompts/
        - agents/ → .ralphex/agents/
-       - Не перезаписывать существующие файлы
+       - Перезаписывать существующие файлы
     5. Собрать команду `ralphex`:
        - `ralphex` {plan} --config-dir .ralphex/
        - Добавить флаги: --worktree, --skip-finalize, --session-timeout,
@@ -163,6 +163,7 @@ Annotations: |
 
     Требования:
     - `ralphex` должен быть доступен в PATH, иначе ошибка
+    - Директории config/defaults/, agent/ должны быть включены в дистрибутив пакета
     - Минимальный вывод: что делается на каждом шаге (через click.echo)
     - Ошибки выводить в stderr (click.echo с err=True)
     - Код возврата: код `ralphex` при успехе, 1 при ошибке
