@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -19,6 +21,11 @@ from goga.commands.build import (
 from goga.commands.build import (
     build as build_cmd,
 )
+
+# goga.commands.__init__ re-exports the Click command as "build", shadowing the
+# module.  Retrieve the actual module from sys.modules so that mock.patch can
+# reach module-level attributes like DEFAULTS_PACKAGE_DIR.
+_build_module = sys.modules["goga.commands.build"]
 
 
 def _run_build_in_tmp(tmp_path, args=None):
@@ -324,7 +331,7 @@ class TestDefaultsCopying:
         (fake_defaults / "prompts").mkdir(parents=True)
         (fake_defaults / "agents").mkdir(parents=True)
 
-        with mock.patch("goga.commands.build.DEFAULTS_PACKAGE_DIR", fake_defaults):
+        with mock.patch.object(_build_module, "DEFAULTS_PACKAGE_DIR", fake_defaults):
             result = _run_build_in_tmp(tmp_path, ["plan.md"])
 
         assert result.exit_code == 0
@@ -379,8 +386,8 @@ class TestDefaultsDirNotFound:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_defaults_dir_not_found_exits_with_error(self, mock_which, mock_call, tmp_path) -> None:
         """When defaults directory is missing, build exits with code 1 and error in stderr."""
-        with mock.patch(
-            "goga.commands.build.DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")
+        with mock.patch.object(
+            _build_module, "DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")
         ):
             result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 1
