@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib
 import json
 import os
 import shutil
@@ -28,13 +27,16 @@ from goga.commands.build import (
 _build_module = sys.modules["goga.commands.build"]
 
 
-def _run_build_in_tmp(tmp_path, args=None):
+def _run_build_in_tmp(tmp_path, args=None, *, skip_manifest_check=True):
     """Run the build command in tmp_path directory, restoring CWD afterwards."""
     original_cwd = str(Path.cwd())
     try:
         os.chdir(tmp_path)
         runner = CliRunner()
-        return runner.invoke(build_cmd, args or [])
+        full_args = list(args or [])
+        if skip_manifest_check:
+            full_args = ["--skip-manifest-check", *full_args]
+        return runner.invoke(build_cmd, full_args)
     finally:
         os.chdir(original_cwd)
 
@@ -75,10 +77,10 @@ class TestApiShape:
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
-    def test_build_has_eight_options(self) -> None:
-        """The build command has 8 options (plus 1 argument)."""
+    def test_build_has_nine_options(self) -> None:
+        """The build command has 9 options (plus 1 argument)."""
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 8
+        assert len(options) == 9
 
 
 class TestHelpOutput:
@@ -89,7 +91,7 @@ class TestHelpOutput:
         assert result.exit_code == 0
 
     def test_help_contains_all_options(self) -> None:
-        """The --help output lists all 8 CLI options."""
+        """The --help output lists all 9 CLI options."""
         runner = CliRunner()
         result = runner.invoke(build_cmd, ["--help"])
         output = result.output
@@ -97,6 +99,7 @@ class TestHelpOutput:
             "--dry-run",
             "--worktree",
             "--skip-finalize",
+            "--skip-manifest-check",
             "--session-timeout",
             "--idle-timeout",
             "--wait",
@@ -608,3 +611,130 @@ class TestCodexEnabledFromGogaYml:
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_content
+
+
+def _init_git_repo(path: Path) -> None:
+    """Initialize a git repo with user config in the given path."""
+    subprocess.run(["git", "init"], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.email", "test@test.com"], cwd=path, capture_output=True, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=path, capture_output=True, check=True)
+
+
+class TestManifestCheck:
+    def test_manifest_check_all_committed_proceeds(self, tmp_path) -> None:
+        """When all CODEMANIFEST files are committed, build proceeds normally."""
+        _init_git_repo(tmp_path)
+        manifest = tmp_path / "CODEMANIFEST"
+        manifest.write_text("content")
+        subprocess.run(["git", "add", "CODEMANIFEST"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+
+        with (
+            mock.patch.object(subprocess, "call", return_value=0),
+            mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
+            result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 0
+        assert "Error" not in result.output
+
+    def test_manifest_check_skip_flag_skips_check(self, tmp_path) -> None:
+        """When --skip-manifest-check is set, uncommitted CODEMANIFEST is ignored."""
+        _init_git_repo(tmp_path)
+        manifest = tmp_path / "CODEMANIFEST"
+        manifest.write_text("content")
+
+        with (
+            mock.patch.object(subprocess, "call", return_value=0),
+            mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
+            result = _run_build_in_tmp(
+                tmp_path, ["--skip-manifest-check", "plan.md"], skip_manifest_check=False
+            )
+
+        assert result.exit_code == 0
+        assert "Uncommitted" not in result.output
+
+    def test_manifest_check_uncommitted_unstaged_exit_1(self, tmp_path) -> None:
+        """Uncommitted (unstaged) CODEMANIFEST causes exit 1 with error."""
+        _init_git_repo(tmp_path)
+        manifest = tmp_path / "CODEMANIFEST"
+        manifest.write_text("initial")
+        subprocess.run(["git", "add", "CODEMANIFEST"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+        manifest.write_text("modified")
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 1
+        assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
+        assert "CODEMANIFEST" in result.output
+
+    def test_manifest_check_untracked_exit_1(self, tmp_path) -> None:
+        """Untracked CODEMANIFEST causes exit 1 with error."""
+        _init_git_repo(tmp_path)
+        manifest = tmp_path / "CODEMANIFEST"
+        manifest.write_text("content")
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 1
+        assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
+
+    def test_manifest_check_staged_not_committed_exit_1(self, tmp_path) -> None:
+        """Staged but not committed CODEMANIFEST causes exit 1."""
+        _init_git_repo(tmp_path)
+        manifest = tmp_path / "CODEMANIFEST"
+        manifest.write_text("content")
+        subprocess.run(["git", "add", "CODEMANIFEST"], cwd=tmp_path, capture_output=True, check=True)
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 1
+        assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
+
+    def test_manifest_check_not_git_repo_exit_1(self, tmp_path) -> None:
+        """When not in a git repo, build exits with code 1."""
+        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 1
+        assert "git status failed" in result.output
+
+    def test_manifest_check_no_codemanifest_files_proceeds(self, tmp_path) -> None:
+        """Empty repo with no CODEMANIFEST files proceeds normally."""
+        _init_git_repo(tmp_path)
+
+        with (
+            mock.patch.object(subprocess, "call", return_value=0),
+            mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
+            result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 0
+        assert "Error" not in result.output
+
+    def test_manifest_check_multiple_uncommitted_lists_all(self, tmp_path) -> None:
+        """Multiple uncommitted CODEMANIFEST files are all listed in the error."""
+        _init_git_repo(tmp_path)
+        (tmp_path / ".gitkeep").write_text("")
+        subprocess.run(["git", "add", ".gitkeep"], cwd=tmp_path, capture_output=True, check=True)
+        subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
+        for d in ("a", "b", "c"):
+            subdir = tmp_path / d
+            subdir.mkdir()
+            (subdir / "CODEMANIFEST").write_text(f"content {d}")
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+
+        assert result.exit_code == 1
+        assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
+        assert "a/CODEMANIFEST" in result.output
+        assert "b/CODEMANIFEST" in result.output
+        assert "c/CODEMANIFEST" in result.output
+
+    def test_manifest_check_new_option_in_help(self) -> None:
+        """The --skip-manifest-check option appears in --help output."""
+        runner = CliRunner()
+        result = runner.invoke(build_cmd, ["--help"])
+        assert result.exit_code == 0
+        assert "--skip-manifest-check" in result.output

@@ -1,6 +1,5 @@
 # VCS
 .git
-.gitignore
 
 # CI/CD
 .github

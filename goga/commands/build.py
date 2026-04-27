@@ -34,6 +34,56 @@ CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 
+def _unquote_git_path(raw: str) -> str | None:
+    """Unquote a git C-style quoted path."""
+    if not raw.startswith('"'):
+        return raw
+    end = raw.find('"', 1)
+    if end == -1:
+        return None
+    return raw[1:end].replace('\\"', '"').replace("\\\\", "\\")
+
+
+def _parse_porcelain_path(line: str) -> str | None:
+    """Extract file path from a git status --porcelain line.
+
+    Handles quoted paths (spaces, special chars) and rename entries (old -> new).
+    """
+    # git porcelain format: XY<space>path (minimum 4 chars)
+    if len(line) < len("XY "):
+        return None
+    raw = line[3:]  # skip two-char status (XY) + space
+    if not raw:
+        return None
+    # Rename entry: old_path -> new_path
+    if " -> " in raw:
+        new_path = raw.split(" -> ", 1)[1]
+        return _unquote_git_path(new_path)
+    # Quoted path: "path with spaces"
+    if raw.startswith('"'):
+        return _unquote_git_path(raw)
+    return raw
+
+
+def _find_uncommitted_manifests() -> list[str]:
+    """Find uncommitted CODEMANIFEST files via git status --porcelain."""
+    result = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "unknown error"
+        raise click.ClickException(f"git status failed: {detail}")
+    uncommitted: list[str] = []
+    for line in result.stdout.splitlines():
+        path = _parse_porcelain_path(line)
+        if path and Path(path).name == "CODEMANIFEST":
+            uncommitted.append(path)
+    return uncommitted
+
+
 def _read_goga_yml() -> dict:  # noqa: C901
     """Read goga.yml from the project root, return the build section merged with defaults."""
     config = copy.deepcopy(DEFAULT_BUILD_CONFIG)
@@ -203,6 +253,7 @@ def _assemble_command(plan: str, config: dict, cli_options: dict) -> list[str]:
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
 @click.option("--worktree", is_flag=True, help="Enable ralphex worktree mode")
 @click.option("--skip-finalize", is_flag=True, help="Skip finalization")
+@click.option("--skip-manifest-check", is_flag=True, help="Skip CODEMANIFEST uncommitted check")
 @click.option("--session-timeout", type=str, default=None, help="Session timeout")
 @click.option("--idle-timeout", type=str, default=None, help="Idle timeout")
 @click.option("--wait", type=str, default=None, help="Wait time")
@@ -215,6 +266,7 @@ def build(  # noqa: PLR0913
     dry_run: bool,
     worktree: bool,
     skip_finalize: bool,
+    skip_manifest_check: bool,
     session_timeout: str | None,
     idle_timeout: str | None,
     wait: str | None,
@@ -222,6 +274,14 @@ def build(  # noqa: PLR0913
     review_patience: int | None,
 ) -> None:
     """Build code via ralphex. Prepares environment and launches ralphex."""
+    if not skip_manifest_check:
+        uncommitted = _find_uncommitted_manifests()
+        if uncommitted:
+            click.echo("Error: Uncommitted CODEMANIFEST files found:", err=True)
+            for path in uncommitted:
+                click.echo(f"  {path}", err=True)
+            ctx.exit(1)
+
     config = _read_goga_yml()
     _create_claude_settings(config)
     _create_claude_wrapper(config)

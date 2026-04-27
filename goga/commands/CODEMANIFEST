@@ -86,6 +86,7 @@ Annotations: |
     - --dry-run: показать команду без выполнения
     - --worktree: включить режим `ralphex` worktree
     - --skip-finalize: пропустить финализацию
+    - --skip-manifest-check: пропустить проверку незакоммиченных CODEMANIFEST файлов
     - --session-timeout: таймаут сессии
     - --idle-timeout: таймаут простоя
     - --wait: время ожидания
@@ -93,6 +94,9 @@ Annotations: |
     - --review-patience: patience при ревью
 
     Алгоритм:
+    0. (pre-check) Если --skip-manifest-check не установлен:
+       - Проверить что все CODEMANIFEST файлы проекта закоммичены в git
+       - При обнаружении незакоммиченных — вывести ошибку в stderr и выйти с кодом 1
     1. Прочитать goga.yml из корня проекта (секция `build`)
     2. Создать .claude/settings.json с модельными оверрайдами:
        - Прочитать существующий .claude/settings.json если есть, сделать merge
