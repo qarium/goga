@@ -22,7 +22,6 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 4. Usages files — `.usages/*.md` inside the cell (if they exist)
 5. `goga schema` — project cell hierarchy for context
 6. `goga linter` — CODEMANIFEST DSL syntax validation
-7. `goga contract` — CODEMANIFEST vs source code comparison
 
 ---
 
@@ -61,19 +60,6 @@ docker run --rm -v .:/project -w /project qarium/goga:latest schema
 
 Extract the cell's position in the project hierarchy for context.
 
-#### 2c. Run contract comparison
-
-```
-docker run --rm -v .:/project -w /project qarium/goga:latest contract <cell-path>
-```
-
-Extract the codemanifest vs source comparison for the target cell. The JSON output contains two sides for each entity/routine:
-
-- **codemanifest** — what CODEMANIFEST declares
-- **source** — what Python source code actually implements
-
-Use discrepancies between the two sides as primary inputs for Analysis 1 (Step 3).
-
 ---
 
 ### Step 3: Analysis 1 — Code vs Requirements
@@ -83,8 +69,6 @@ Use discrepancies between the two sides as primary inputs for Analysis 1 (Step 3
 For each entity declared in CODEMANIFEST, verify the implementation matches the contract.
 
 #### 3a. Checks
-
-Using the `goga contract` output from Step 2c, compare codemanifest vs source for the target cell:
 
 For each entity:
 - **Signature match**: Compare `"()"` (constructor signature) between codemanifest and source sides
@@ -96,7 +80,7 @@ For each routine:
 - **Signature match**: Compare the signature string between codemanifest and source sides
 - **Existence**: Missing from source means not exported via `__all__`
 
-Additional checks not covered by `goga contract`:
+Additional checks:
 - **Location**: Does the source file exist at `<cell-path>/<location>`?
 - **Behavioral compliance**: Does the implementation reflect behavioral requirements from annotations?
 - **Import usage**: Are imported types from `Imports` actually used in the source code?
@@ -196,10 +180,9 @@ For each action the user approved across all three analyses:
 
 #### 6a. Code vs Requirements (Step 3)
 
-1. Summarize discrepancies from `goga contract` output
-2. Formulate a clear task description of what needs to be redesigned
-3. Call `/goga:design` and select **brainstorm** mode
-4. Pass the task as context — the design command will handle the redesign
+1. Formulate a clear task description of what needs to be redesigned
+2. Call `/goga:design` and select **brainstorm** mode
+3. Pass the task as context — the design command will handle the redesign
 
 #### 6b. Requirements vs Code/Usages (Step 4)
 
@@ -235,13 +218,12 @@ Before completing, verify:
 4. Were all `.usages/` files analyzed?
 5. Was `goga linter` run?
 6. Was `goga schema` run?
-7. Was `goga contract <cell-path>` run?
-8. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
-9. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
-10. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
-11. Was each finding clearly classified into the correct analysis category before proposing an action?
-12. Were all actions confirmed by the user before execution?
-13. Were approved actions executed correctly?
+7. Was Analysis 1 (Code vs Requirements) completed with clear findings and proposed action?
+8. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy checks and writing quality checks?
+9. Was Analysis 3 (Usages existence and fitness) completed with clear findings and proposed action?
+10. Was each finding clearly classified into the correct analysis category before proposing an action?
+11. Were all actions confirmed by the user before execution?
+12. Were approved actions executed correctly?
 
 If any answer is "no" — complete the missing work before returning.
 

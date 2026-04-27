@@ -12,7 +12,7 @@ def test_no_contract_command_registered() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["contract"])
     assert result.exit_code != 0
-    assert "No such command" in result.output or "Error" in result.output
+    assert "No such command" in result.output
 
 
 def test_no_contract_in_help() -> None:
@@ -30,5 +30,6 @@ def test_remaining_commands_still_work() -> None:
 
 
 def test_comparator_directory_removed() -> None:
-    assert not pathlib.Path("goga/comparator").exists()
-    assert not pathlib.Path("tests/goga/comparator").exists()
+    root = pathlib.Path(__file__).resolve().parent.parent.parent
+    assert not (root / "goga" / "comparator").exists()
+    assert not (root / "tests" / "goga" / "comparator").exists()
