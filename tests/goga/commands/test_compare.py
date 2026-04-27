@@ -316,3 +316,40 @@ Description: Empty
     data = json.loads(result.output)
     assert "cell_one" in data
     assert data["cell_one"] == {}
+
+
+# --- Integration tests ---
+
+
+class TestCompareIntegration:
+    def test_compare_cli_registered_in_app(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["compare", "--help"])
+        assert result.exit_code == 0
+        assert "compare" in result.output.lower()
+        assert "codemanifest" in result.output.lower()
+
+    def test_compare_output_is_only_json(self, tmp_path) -> None:
+        cell = tmp_path / "cell_one"
+        cell.mkdir()
+        _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+        (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+        with _cwd(tmp_path):
+            with _sys_path(str(tmp_path)):
+                result = _run_compare("cell_one")
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+        assert "cell_one" in data
+
+    def test_compare_with_real_project_cwd(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        with _cwd(project_root):
+            result = _run_compare("goga/contract")
+
+        assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert isinstance(data, dict)
+        assert "goga/contract" in data
