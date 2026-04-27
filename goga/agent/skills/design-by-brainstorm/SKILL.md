@@ -15,7 +15,7 @@ You create **CODEMANIFEST files** that define the contract for the feature.
 
 2. **Work through hypotheses.** Instead of open-ended questions ("how should this work?"), propose concrete hypotheses ("It seems you need UserService with CRUD and auth. Is that right?").
 
-3. **Ask one question per message via `AskUserQuestion`.** One focused question with 2-4 concrete answer options presented as interactive checkboxes — wait for the user's selection, then ask the next. Do not batch questions. Never ask open-ended questions without proposing selectable variants.
+3. **Ask one question per message.** One focused question with 2-4 concrete answer options — wait for the user's selection, then ask the next. Do not batch questions. Never ask open-ended questions without proposing selectable variants.
 
 4. **Structure every response** in the brainstorm phase using the response format below. This discipline prevents chaotic or unfocused discussion.
 
@@ -23,7 +23,7 @@ You create **CODEMANIFEST files** that define the contract for the feature.
 
 6. **Split large scopes.** If the user's description spans multiple independent subsystems — flag this, propose splitting into separate CODEMANIFEST passes, then brainstorm the first one.
 
-7. **Always use `AskUserQuestion` with interactive checkbox options.** When asking the user anything — a clarification, confirmation, or decision — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
+7. **Always propose answer options.** When asking the user anything — a clarification, confirmation, or decision — always present 2-4 concrete answer options. Never ask open-ended questions without proposing selectable variants.
 
 ---
 

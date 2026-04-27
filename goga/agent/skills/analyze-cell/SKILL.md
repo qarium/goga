@@ -14,7 +14,7 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 
 ### User Interaction Rule
 
-**Always use `AskUserQuestion` with interactive checkbox options.** When asking the user for confirmation, decision, or clarification — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
+**Always propose answer options.** When asking the user for confirmation, decision, or clarification — always present 2-4 concrete answer options. Never ask open-ended questions without proposing selectable variants.
 
 ---
 
