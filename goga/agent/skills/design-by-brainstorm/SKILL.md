@@ -97,15 +97,13 @@ This is the core iterative process. The loop continues until the user confirms t
 
 #### Response format
 
-**Every response in the brainstorm phase** (3a, 3b) MUST follow this structure:
+**Every response in the brainstorm phase** (3a, 3b) MUST be a question with answer options. The question is the primary deliverable — not context, not analysis.
 
-1. **Understanding** — what is known so far from user input and architectural context
-2. **Unclear** — what remains underspecified or ambiguous
-3. **Hypotheses** — concrete assumptions about design decisions (with rationale)
-4. **Questions** — one targeted question with 2-4 concrete answer options presented as interactive checkboxes (use `AskUserQuestion`)
-5. **Next step** — what will be done next once the question is resolved
+Before the question, state briefly (1-2 lines total):
+- **Context**: what is being decided right now
+- **Hypothesis**: what you assume the answer is
 
-This format is mandatory. Do not skip sections. If a section is empty — state "None" explicitly.
+Then ask the question with 2-4 concrete answer options.
 
 #### 3a. Initial analysis
 

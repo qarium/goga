@@ -89,15 +89,13 @@ This is the core iterative process. The loop continues until the root cause is c
 
 #### Response format
 
-**Every response in the diagnostic phase** MUST follow this structure:
+**Every response in the diagnostic phase** MUST be a question with answer options. The question is the primary deliverable — not context, not analysis.
 
-1. **Understanding** — what is known so far from the bug description and code analysis
-2. **Unclear** — what remains underspecified or untraced
-3. **Hypotheses** — concrete assumptions about the root cause (with rationale)
-4. **Questions** — one targeted question with 2-4 concrete answer options presented as interactive checkboxes (use `AskUserQuestion`)
-5. **Next step** — what will be done next once the question is resolved
+Before the question, state briefly (1-2 lines total):
+- **Context**: what is being investigated or decided right now
+- **Hypothesis**: what you think the root cause or answer is
 
-This format is mandatory. Do not skip sections. If a section is empty — state "None" explicitly.
+Then ask the question with 2-4 concrete answer options.
 
 #### 3a. Initial analysis
 
