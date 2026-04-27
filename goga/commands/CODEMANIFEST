@@ -2,6 +2,9 @@ Imports:
   - Types:
       - AST
     From: goga/ast
+  - Usages:
+      - python_contract
+    From: goga/contract
 
 Usages:
   click: .usages/tools/click.md
@@ -252,6 +255,60 @@ Annotations: |
     - вывод не должен содержать ничего кроме json структуры
     - если дерево пустое → []
     - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
+
+"compare(cells: list[str], lang: str = 'python')":
+  location: compare.py
+  annotations: |
+    Команда сравнения контракта CODEMANIFEST с реализацией.
+
+    `cells`: пути к клеткам для сравнения, один или несколько
+    `lang`: язык реализации, по умолчанию 'python'
+
+    Алгоритм:
+    - Создать и загрузить проект с использованием практики `documents`
+    - Для каждого пути из `cells`:
+      - Найти документ в дереве с использованием практики `documents`
+      - Извлечь типы из body документа: entities и routines
+      - Получить реализованный контракт через практику `python_contract`
+      - Для каждого типа из CODEMANIFEST найти соответствие в реализации по имени
+      - Построить структуру сравнения (CODEMANIFEST первичен)
+
+    Ключевой принцип: CODEMANIFEST — источник истины. Обход идёт по типам,
+    методам и свойствам из контракта. Реализация заполняет поле implementation
+    или null если не найдена.
+
+    Для entity:
+    - signature: параметры конструктора из codemanifest и implementation
+    - properties: для каждого свойства из codemanifest найти в реализации
+    - methods: для каждого метода из codemanifest найти в реализации
+
+    Для routine:
+    - signature: полная сигнатура из codemanifest и implementation
+
+    Вывести результат через практику `beautiful_json`.
+
+    Формат вывода:
+    ```
+    {
+      "norm/path/to/cell": {
+        "TypeName": {
+          "signature": { "codemanifest": "...", "implementation": "..." },
+          "properties": { "name": { "codemanifest": "...", "implementation": "..." } },
+          "methods": { "name": { "codemanifest": "...", "implementation": "..." } }
+        },
+        "RoutineName": {
+          "signature": { "codemanifest": "...", "implementation": "..." }
+        }
+      }
+    }
+    ```
+
+    Требования:
+    - `lang` зарезервирован для расширения поддержки других языков
+    - вывод не должен содержать ничего кроме json структуры
+    - если путь к клетке не найден → вывести ошибку в stderr и выйти с кодом 1
+    - ошибки выводить в stderr (click.echo с err=True)
+    - код возврата: 0 при успехе, 1 при ошибке
 
 ---
 
