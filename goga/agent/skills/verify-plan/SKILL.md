@@ -257,9 +257,3 @@ Before completing, verify:
 If any answer is "no" — complete the missing verification before returning.
 
 ---
-
-## Retrospective
-
-After completing the main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
-
-Related skills for improvement: `plan-by-design` (producer of the plan being verified).

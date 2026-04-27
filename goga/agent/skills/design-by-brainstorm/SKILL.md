@@ -288,9 +288,3 @@ Before completing the response, verify:
 If any answer is "no" — resolve before completing.
 
 ---
-
-## Retrospective
-
-After completing the main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
-
-Related skills for improvement: `design-by-changes` (alternative design flow), `plan-by-design` (consumer of CODEMANIFEST contracts), `review-design` (reviewer of design documents).

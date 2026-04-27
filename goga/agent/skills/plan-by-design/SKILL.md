@@ -653,11 +653,3 @@ The summary must include:
 Do NOT repeat the full plan content. Keep it under 20 lines.
 
 ---
-
-## Retrospective
-
-After completing all main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
-
-Related skills for improvement: `design-by-changes` (provider of the design document read in Phase 0).
-Related files within the bundle: `dsl.md`, `output-template.md`, `conventions.md`, `example.md`.
-Provider skills: `design-by-changes` (creates the design document read in Phase 0).

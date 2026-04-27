@@ -338,10 +338,3 @@ Before completing the response, verify:
 If any answer is "no" — revise the design document before returning it.
 
 ---
-
-## Retrospective
-
-After completing the main work, perform a retrospective as defined in CLAUDE.md → Skill Retrospective.
-
-Related skills for improvement: `review-design` (consumer of the design document), `plan-by-design` (consumer of the design document).
-Related files within the bundle: `design-doc-template.md`.
