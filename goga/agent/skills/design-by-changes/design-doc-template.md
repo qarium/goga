@@ -151,6 +151,7 @@ If a section cannot be completed because information is unavailable, keep the se
 
 <!-- For each cell being designed, describe the functional categorization of usages -->
 <!-- This section is populated after usages categorization with the user (Step 4d) -->
+<!-- .usages/ files are implementation artifacts created during the plan phase -->
 
 ### Cell: `<cell path>`
 
@@ -159,7 +160,7 @@ If a section cannot be completed because information is unavailable, keep the se
   - Covers: <what functional domain this category represents>
   - Related entities: <which entities use practices from this category>
   - Status: <new file / extends existing>
-  - Content: <what practices this file describes>
+  - Content: <concrete API usage specification — call patterns, parameters, return values, behavior, error handling, usage examples>
 
 #### Inline practices
 - `<practice name>` in CODEMANIFEST `Usages` — <why inline: short, entity-specific, not reusable>

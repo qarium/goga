@@ -188,12 +188,13 @@ Based on the stack trace results, perform analysis:
 - Trace the dependency: which entities depend on which imported usages
 - Document the tracable dependency in the design (imported usages create tracable links between cells but not contractual obligations)
 
-**Local usages design**: For each cell being designed, determine what local `.usages/` files are needed:
-- What distinct functional domains exist within this cell's logic?
-- For each domain: what practices does it require?
-- What practices are already covered by global usages or imported usages?
+**Local usages design**: For each cell being designed, determine what `.usages/` files are needed for consumers:
+- What distinct functional domains does the cell's API expose to consumers?
+- For each domain: what integration practices would help a consumer use the cell correctly?
+- What practices are already covered by imported usages from other cells?
 - Do any existing `.usages/` files in the cell already cover a similar functional domain?
-- How do local usages relate to imported usages (do they extend, combine, or replace them?)
+- How do local `.usages/` files relate to imported usages (do they extend, combine, or replace them?)
+- Note: `.usages/` files describe how consumers interact with this cell's API — they are independent of the `Usages` directive which describes the cell's internal practices
 
 #### 4c. Test Scenarios
 
@@ -242,17 +243,33 @@ Each category becomes a `.usages/<category-name>.md` file describing the practic
    - For each category: which practices it covers, which entities it relates to
    - Which are new files, which extend existing files
    - Which practices should remain inline in CODEMANIFEST (short, entity-specific, not reusable)
+   - **Content** for each `.usages/` file MUST be a concrete API usage specification — not an abstract description. It must include:
+     - **Call patterns**: exact function/class signatures and how to invoke them
+     - **Parameters**: what each parameter means, expected types and values
+     - **Return values**: what is returned, in what format, what it represents
+     - **Behavior**: what happens in different scenarios (success, error, edge cases)
+     - **Error handling**: what exceptions/errors can occur and how to handle them
+     - **Usage examples**: concrete code snippets showing typical usage
 
 4. **Get user confirmation** — via AskUserQuestion, present the proposal and let the user confirm or adjust category boundaries and names
+
+**Critical distinction — `Usages` directive vs `.usages/` directory**:
+
+These are **independent** concepts that must not be conflated:
+- **`Usages` directive** (in CODEMANIFEST header) — internal practices that the cell's entities use (libraries, patterns, conventions). These stay in the CODEMANIFEST file.
+- **`.usages/` directory** (in the cell folder) — external-facing documentation for consumers who import this cell. Describes how to work with the cell's API, call patterns, integration examples.
+
+A cell with many `Usages` directive entries may need no `.usages/` files (if its API is simple and self-explanatory). A cell with no `Usages` directive entries may need `.usages/` files (if consumers would benefit from integration documentation). The decision is based entirely on the cell's **consumer-facing API complexity**, not on its internal practices count.
 
 #### Decision rules
 
 - Practice used by entities from **multiple functional domains** → separate category file
-- Practice specific to **one entity's internals** and short → inline in CODEMANIFEST
-- Practice that describes **how to work with the cell's API** → category file (consumable by importers)
+- Practice specific to **one entity's internals** and short → inline in CODEMANIFEST `Usages` directive
+- Practice that describes **how to work with the cell's API** → `.usages/` category file (consumable by importers)
+- **Do NOT add CODEMANIFEST `Usages` references to the cell's own `.usages/` files** — per DSL spec, `.usages/` are documentation for consumers and are NOT a source of contract requirements. Consumers discover `.usages/` files via `Imports` → `Usages` when they import from this cell. The CODEMANIFEST `Usages` section should only contain practices that the cell's entities use internally (libraries, patterns, conventions), not practices that describe the cell's own API.
 - Existing `.usages/` file with matching domain → **extend**, do not create parallel files for the same domain
 
-If the cell has no local usages (all usages are global or imported) — still confirm with the user that no local usages are needed.
+Always propose `.usages/` categorization based on the cell's API surface. If the cell has no consumer-facing complexity — confirm with the user that no `.usages/` files are needed, but do NOT base this decision on the count or nature of `Usages` directive entries.
 
 **Important**: design does NOT create or modify files — it only describes the expected result in the design document.
 
