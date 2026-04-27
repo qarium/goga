@@ -4,7 +4,6 @@ Imports:
       - build
       - init
       - schema
-      - contract
     From: goga/commands
   - Types:
       - AST
@@ -32,7 +31,6 @@ app():
     - `build`
     - `init`
     - `schema`
-    - `contract`
 
 ---
 
