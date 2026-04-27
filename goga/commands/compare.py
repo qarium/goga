@@ -110,4 +110,3 @@ def compare(ctx: click.Context, cells: tuple[str, ...], lang: str) -> None:
 
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)
-    ctx.exit(0)

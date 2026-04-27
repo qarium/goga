@@ -134,9 +134,8 @@ def test_compare_single_cell_entity(tmp_path) -> None:
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -149,6 +148,7 @@ def test_compare_single_cell_entity(tmp_path) -> None:
     assert data["cell_one"]["MyClass"]["properties"]["name"]["implementation"] == "str"
     assert "do_it" in data["cell_one"]["MyClass"]["methods"]
     assert data["cell_one"]["MyClass"]["methods"]["do_it"]["codemanifest"] == "(x: int) -> str"
+    assert data["cell_one"]["MyClass"]["methods"]["do_it"]["implementation"] == "(x: int) -> str"
 
 
 def test_compare_single_cell_routine(tmp_path) -> None:
@@ -157,9 +157,8 @@ def test_compare_single_cell_routine(tmp_path) -> None:
     _write_codemanifest(cell, ROUTINE_CODEMANIFEST)
     (cell / "__init__.py").write_text(ROUTINE_IMPL, encoding="utf-8")
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -180,9 +179,8 @@ def test_compare_multiple_cells(tmp_path) -> None:
     _write_codemanifest(cell_b, ROUTINE_CODEMANIFEST)
     (cell_b / "__init__.py").write_text(ROUTINE_IMPL, encoding="utf-8")
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_a", "cell_b")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_a", "cell_b")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -221,9 +219,8 @@ def test_compare_entity_missing_in_implementation(tmp_path) -> None:
         "class OtherClass:\n    pass\n\n__all__ = ['OtherClass']\n", encoding="utf-8"
     )
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -243,9 +240,8 @@ def test_compare_property_method_missing_in_implementation(tmp_path) -> None:
         "class MyClass:\n    pass\n\n__all__ = ['MyClass']\n", encoding="utf-8"
     )
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -254,6 +250,60 @@ def test_compare_property_method_missing_in_implementation(tmp_path) -> None:
     assert my_class["properties"]["name"]["implementation"] is None
     assert my_class["methods"]["do_it"]["codemanifest"] == "(x: int) -> str"
     assert my_class["methods"]["do_it"]["implementation"] is None
+
+
+def test_compare_routine_missing_in_implementation(tmp_path) -> None:
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ROUTINE_CODEMANIFEST)
+    (cell / "__init__.py").write_text(
+        "def other_func() -> int:\n    return 0\n\n__all__ = ['other_func']\n", encoding="utf-8"
+    )
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "cell_one" in data
+    assert "my_func" in data["cell_one"]
+    assert data["cell_one"]["my_func"]["signature"]["codemanifest"] == "(x: int) -> int"
+    assert data["cell_one"]["my_func"]["signature"]["implementation"] is None
+
+
+def test_compare_signature_mismatch(tmp_path) -> None:
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(
+        "class MyClass:\n"
+        "    def __init__(self, x: int):\n"
+        "        self._x = x\n"
+        "    @property\n"
+        "    def name(self) -> int:\n"
+        "        return self._x\n"
+        "    def do_it(self) -> str:\n"
+        "        return ''\n"
+        "\n"
+        "__all__ = ['MyClass']\n",
+        encoding="utf-8",
+    )
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    my_class = data["cell_one"]["MyClass"]
+    # Entity signature mismatch: codemanifest says (), implementation says (x: int)
+    assert my_class["signature"]["codemanifest"] == "()"
+    assert my_class["signature"]["implementation"] == "(x: int)"
+    # Property type mismatch: codemanifest says str, implementation says int
+    assert my_class["properties"]["name"]["codemanifest"] == "str"
+    assert my_class["properties"]["name"]["implementation"] == "int"
+    # Method signature mismatch: codemanifest says (x: int) -> str, implementation says () -> str
+    assert my_class["methods"]["do_it"]["codemanifest"] == "(x: int) -> str"
+    assert my_class["methods"]["do_it"]["implementation"] == "() -> str"
 
 
 def test_compare_extra_in_implementation_ignored(tmp_path) -> None:
@@ -267,9 +317,8 @@ def test_compare_extra_in_implementation_ignored(tmp_path) -> None:
         encoding="utf-8",
     )
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -308,9 +357,8 @@ Description: Empty
     )
     (cell / "__init__.py").write_text("", encoding="utf-8")
 
-    with _cwd(tmp_path):
-        with _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_compare("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -335,9 +383,8 @@ class TestCompareIntegration:
         _write_codemanifest(cell, ENTITY_CODEMANIFEST)
         (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
 
-        with _cwd(tmp_path):
-            with _sys_path(str(tmp_path)):
-                result = _run_compare("cell_one")
+        with _cwd(tmp_path), _sys_path(str(tmp_path)):
+            result = _run_compare("cell_one")
 
         assert result.exit_code == 0
         data = json.loads(result.output)
