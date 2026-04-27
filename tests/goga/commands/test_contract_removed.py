@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pathlib
+import re
 
 from click.testing import CliRunner
 from goga.cli import app
@@ -15,11 +16,12 @@ def test_no_contract_command_registered() -> None:
     assert "No such command" in result.output
 
 
-def test_no_contract_in_help() -> None:
+def test_no_contract_command_in_help() -> None:
     runner = CliRunner()
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "contract" not in result.output
+    command_lines = re.findall(r"^\s{2,}(\S+)", result.output, re.MULTILINE)
+    assert "contract" not in command_lines
 
 
 def test_remaining_commands_still_work() -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from .commands import build, init, linter, schema
+from .commands import build, compare, init, linter, schema
 
 
 @click.group()
@@ -14,3 +14,4 @@ app.add_command(build)
 app.add_command(init)
 app.add_command(linter)
 app.add_command(schema)
+app.add_command(compare)
