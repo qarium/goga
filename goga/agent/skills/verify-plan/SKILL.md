@@ -12,6 +12,10 @@ You **verify** the plan, **report** findings, and **fix** the plan when issues a
 
 **Every affected contract obligation and design decision must be traceable into the plan.** The plan covers only the entities affected by the current feature (as defined in the design document). For everything the plan claims to cover — it must be correct against the contract and complete against the design. If the plan contains tasks that don't trace back to any contract or design — this is also a finding.
 
+### User Interaction Rule
+
+**Always use `AskUserQuestion` with interactive checkbox options.** When asking the user for a decision or confirmation — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
+
 ---
 
 ## Sources of Truth

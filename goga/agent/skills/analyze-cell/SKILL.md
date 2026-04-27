@@ -12,6 +12,10 @@ You **identify** problems, **propose** solutions, and **execute** approved actio
 
 **Identify the exact problem before proposing a solution.** The three analysis dimensions target different root causes and require different fixes. Do not mix them — each finding must be clearly classified into one of the three categories before any action is proposed.
 
+### User Interaction Rule
+
+**Always use `AskUserQuestion` with interactive checkbox options.** When asking the user for confirmation, decision, or clarification — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
+
 ---
 
 ## Sources of Truth

@@ -13,6 +13,10 @@ You **trace** every logical chain and **find** where logic breaks.
 
 **Trace, don't assume.** For every logical chain, mentally execute the code path step by step. Read actual source files and library documentation to verify correctness. If a step cannot be verified because information is missing — this itself is a finding.
 
+### User Interaction Rule
+
+**Always use `AskUserQuestion` with interactive checkbox options.** When asking the user for a decision or confirmation — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
+
 ### CODEMANIFEST Editing
 
 When tracing reveals errors **in the contract itself** (not in the design's interpretation of the contract), you **must** propose CODEMANIFEST edits. These are not design-level findings — they are contract-level errors that block correct implementation regardless of how the design is structured.

@@ -15,11 +15,13 @@ You update **CODEMANIFEST files** to make the contract precise enough to prevent
 
 2. **Work through root cause, not symptoms.** Do not propose fixes for the surface behavior — trace the code to find the underlying cause.
 
-3. **Ask one question per message.** One focused question — wait for the answer, then ask the next. Do not batch questions.
+3. **Ask one question per message via `AskUserQuestion`.** One focused question with 2-4 concrete answer options presented as interactive checkboxes — wait for the user's selection, then ask the next. Do not batch questions. Never ask open-ended questions without proposing selectable variants.
 
 4. **Structure every response** using the response format below. This discipline prevents jumping to conclusions.
 
 5. **Every bug implies a CODEMANIFEST gap.** If code behaves incorrectly, the contract was not precise enough to prevent it. Find what detail is missing or ambiguous.
+
+6. **Always use `AskUserQuestion` with interactive checkbox options.** When asking the user anything — a clarification, confirmation, or decision — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
 
 ---
 
@@ -92,7 +94,7 @@ This is the core iterative process. The loop continues until the root cause is c
 1. **Understanding** — what is known so far from the bug description and code analysis
 2. **Unclear** — what remains underspecified or untraced
 3. **Hypotheses** — concrete assumptions about the root cause (with rationale)
-4. **Questions** — one targeted question to resolve the most critical unclear point
+4. **Questions** — one targeted question with 2-4 concrete answer options presented as interactive checkboxes (use `AskUserQuestion`)
 5. **Next step** — what will be done next once the question is resolved
 
 This format is mandatory. Do not skip sections. If a section is empty — state "None" explicitly.

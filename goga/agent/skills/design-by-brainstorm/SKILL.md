@@ -15,13 +15,15 @@ You create **CODEMANIFEST files** that define the contract for the feature.
 
 2. **Work through hypotheses.** Instead of open-ended questions ("how should this work?"), propose concrete hypotheses ("It seems you need UserService with CRUD and auth. Is that right?").
 
-3. **Ask one question per message.** One focused question — wait for the answer, then ask the next. Do not batch questions.
+3. **Ask one question per message via `AskUserQuestion`.** One focused question with 2-4 concrete answer options presented as interactive checkboxes — wait for the user's selection, then ask the next. Do not batch questions. Never ask open-ended questions without proposing selectable variants.
 
 4. **Structure every response** in the brainstorm phase using the response format below. This discipline prevents chaotic or unfocused discussion.
 
 5. **Minimal viable contract first.** If the user describes more than needed — propose a minimal version and let them expand.
 
 6. **Split large scopes.** If the user's description spans multiple independent subsystems — flag this, propose splitting into separate CODEMANIFEST passes, then brainstorm the first one.
+
+7. **Always use `AskUserQuestion` with interactive checkbox options.** When asking the user anything — a clarification, confirmation, or decision — always present 2-4 concrete answer options as interactive checkboxes. Never ask open-ended questions without proposing selectable variants.
 
 ---
 
@@ -100,7 +102,7 @@ This is the core iterative process. The loop continues until the user confirms t
 1. **Understanding** — what is known so far from user input and architectural context
 2. **Unclear** — what remains underspecified or ambiguous
 3. **Hypotheses** — concrete assumptions about design decisions (with rationale)
-4. **Questions** — one targeted question to resolve the most critical unclear point
+4. **Questions** — one targeted question with 2-4 concrete answer options presented as interactive checkboxes (use `AskUserQuestion`)
 5. **Next step** — what will be done next once the question is resolved
 
 This format is mandatory. Do not skip sections. If a section is empty — state "None" explicitly.
