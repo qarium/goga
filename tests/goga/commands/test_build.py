@@ -22,13 +22,6 @@ from goga.commands.build import (
 # reach module-level attributes like DEFAULTS_PACKAGE_DIR.
 _build_module = sys.modules["goga.commands.build"]
 
-MINIMAL_GOGA_YML = yaml.dump(
-    {
-        "language": "python",
-        "build": {"task_executor": {"agent": "claude"}},
-    }
-)
-
 TEST_ENV_VARS = {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
     "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5-turbo",
@@ -68,36 +61,26 @@ class TestFacadeAvailability:
         assert build_cmd is not None
 
     def test_build_is_click_command(self) -> None:
-        """The build object is a click Command instance."""
-
-
+        """The build object is a click.Command instance."""
         assert isinstance(build_cmd, click.Command)
 
 
 class TestApiShape:
     def test_build_has_callback(self) -> None:
         """The build command has a callback (the actual function)."""
-
-
         assert build_cmd.callback is not None
 
     def test_build_name(self) -> None:
         """The command name is 'build'."""
-
-
         assert build_cmd.name == "build"
 
     def test_build_has_plan_argument(self) -> None:
         """The build command accepts a 'plan' argument."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "plan" in param_names
 
     def test_build_plan_no_default_value(self) -> None:
         """The plan argument has no default and is required."""
-
-
         plan_param = next(p for p in build_cmd.params if p.name == "plan")
         assert plan_param.required is True
 
@@ -110,71 +93,51 @@ class TestApiShape:
 
     def test_build_has_nine_options(self) -> None:
         """The build command has 9 options (plus 1 argument)."""
-
-
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
         assert len(options) == 9
 
     def test_build_has_dry_run_option(self) -> None:
         """The build command has a --dry-run option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "dry_run" in param_names
 
     def test_build_has_worktree_option(self) -> None:
         """The build command has a --worktree option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "worktree" in param_names
 
     def test_build_has_skip_finalize_option(self) -> None:
         """The build command has a --skip-finalize option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "skip_finalize" in param_names
 
     def test_build_has_skip_manifest_check_option(self) -> None:
         """The build command has a --skip-manifest-check option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "skip_manifest_check" in param_names
 
     def test_build_has_session_timeout_option(self) -> None:
         """The build command has a --session-timeout option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "session_timeout" in param_names
 
     def test_build_has_idle_timeout_option(self) -> None:
         """The build command has a --idle-timeout option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "idle_timeout" in param_names
 
     def test_build_has_wait_option(self) -> None:
         """The build command has a --wait option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "wait" in param_names
 
     def test_build_has_max_iterations_option(self) -> None:
         """The build command has a --max-iterations option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "max_iterations" in param_names
 
     def test_build_has_review_patience_option(self) -> None:
         """The build command has a --review-patience option."""
-
-
         param_names = [p.name for p in build_cmd.params]
         assert "review_patience" in param_names
 
@@ -182,16 +145,12 @@ class TestApiShape:
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
         """The --help flag produces exit code 0."""
-
-
         runner = CliRunner()
         result = runner.invoke(build_cmd, ["--help"])
         assert result.exit_code == 0
 
     def test_help_contains_all_options(self) -> None:
         """The --help output lists all 9 CLI options."""
-
-
         runner = CliRunner()
         result = runner.invoke(build_cmd, ["--help"])
         output = result.output
@@ -245,10 +204,7 @@ class TestBuildUsesLoadConfigFromGogaConfig:
             extra={
                 "task_executor": {
                     "agent": "claude",
-                    "env": {
-                        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "custom-haiku",
-                        "CUSTOM_VAR": "custom-value",
-                    },
+                    "env": TEST_ENV_VARS,
                 }
             },
         )
@@ -256,8 +212,8 @@ class TestBuildUsesLoadConfigFromGogaConfig:
         _run_build_in_tmp(tmp_path, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
-        assert settings["env"]["ANTHROPIC_DEFAULT_HAIKU_MODEL"] == "custom-haiku"
-        assert settings["env"]["CUSTOM_VAR"] == "custom-value"
+        for key, value in TEST_ENV_VARS.items():
+            assert settings["env"][key] == value
         assert settings["attribution"] == {"commit": "", "pr": ""}
 
     @mock.patch.object(subprocess, "call", return_value=0)
@@ -839,8 +795,6 @@ class TestManifestCheck:
 
     def test_manifest_check_new_option_in_help(self) -> None:
         """The --skip-manifest-check option appears in --help output."""
-
-
         runner = CliRunner()
         result = runner.invoke(build_cmd, ["--help"])
         assert result.exit_code == 0
@@ -860,7 +814,7 @@ class TestBuildNegativeCases:
         assert "is required in .goga.yml" in result.output or "must be" in result.output
 
     def test_build_invalid_existing_settings_json_raises_error(self, tmp_path) -> None:
-        """Invalid JSON in existing .claude/settings.json causes non-zero exit."""
+        """Invalid JSON in existing .claude/settings.json causes non-zero exit with error."""
         _write_goga_yml(tmp_path)
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
@@ -868,6 +822,7 @@ class TestBuildNegativeCases:
 
         result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code != 0
+        assert "Invalid JSON" in result.output or "settings.json" in result.output
 
 
 class TestBuildConfigFlags:

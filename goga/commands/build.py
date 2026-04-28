@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 
 import click
+import yaml
 
 from goga.config import Config, load_config
 
@@ -92,8 +93,11 @@ def _create_claude_settings(config: Config) -> None:
     settings_path = claude_dir / "settings.json"
     settings: dict = {}
     if settings_path.is_file():
-        with settings_path.open() as f:
-            settings = json.load(f)
+        try:
+            with settings_path.open() as f:
+                settings = json.load(f)
+        except json.JSONDecodeError as exc:
+            raise click.ClickException(f"Invalid JSON in .claude/settings.json: {exc}") from exc
 
     settings.setdefault("env", {})
     for key, value in config.build.task_executor.env.items():
@@ -130,8 +134,8 @@ def _create_claude_wrapper(config: Config) -> None:
     codex_found = False
     for i, line in enumerate(config_lines):
         stripped = line.strip()
-        if stripped and not stripped.startswith("#") and " = " in stripped:
-            key = stripped.split(" = ", 1)[0].strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            key = stripped.split("=", 1)[0].strip()
             existing_keys.add(key)
             if key == "codex_enabled":
                 config_lines[i] = codex_line
@@ -242,7 +246,7 @@ def build(  # noqa: PLR0913
 
     try:
         config = load_config()
-    except (FileNotFoundError, KeyError, ValueError) as exc:
+    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     _run_precondition(config)
