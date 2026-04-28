@@ -4,7 +4,7 @@
 
 Creates a **design document** — a complete architectural solution based on changes in `CODEMANIFEST`.
 
-The design document describes **what** and **how** needs to be implemented, but not **in what order** (order is determined by the plan in `plan-by-design`).
+The design document describes **what** and **how** needs to be implemented.
 
 You do **not** write implementation code and **not** create an execution plan.
 You create an **architectural solution** where every detail has been thought through.
@@ -22,9 +22,7 @@ Conditions requiring CODEMANIFEST editing:
 - **Inconsistent requirements**: contradictions between entity interfaces, type mismatches between interacting entities, conflicting annotations
 - **Contract interaction errors**: broken type chains across interfaces, incorrect `Imports` references, `Type::` mutations referencing non-existent or incompatible types
 
-All CODEMANIFEST edits must be **proposed to the user** before applying. Never silently modify the contract.
-
-#### Writing annotations
+### Writing annotations
 
 When writing or updating annotations, follow these recommendations:
 
@@ -49,11 +47,11 @@ When writing or updating annotations, follow these recommendations:
 Use the following sources jointly, when available:
 
 1. `dsl.md` — DSL specification (in skill directory). Read before analyzing or editing CODEMANIFEST to ensure correct DSL syntax and semantics
-2. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract.
-3. Usages spec files — when a `Usages` entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to get the actual specification content. Usages values can be file paths or inline text.
-3. current package file tree
-4. current package source files
-5. git change context (added, modified, deleted files)
+2. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract
+3. `.usages` spec files — when a `Usages` entry value is a file path, read that file to get the actual specification content. Usages values can be file paths or inline text
+4. current package file tree
+5. current package source files
+6. git change context (added, modified, deleted files)
 
 ---
 
@@ -61,7 +59,7 @@ Use the following sources jointly, when available:
 
 ### Step 0: Read DSL spec
 
-Read `dsl.md` (in skill directory) to understand CODEMANIFEST DSL rules before analyzing or editing contracts.
+Read `dsl.md` (in skill directory) — this is the key document for understanding CODEMANIFEST DSL rules before analyzing or editing contracts.
 
 ### Step 1: Git diff CODEMANIFEST
 
@@ -101,7 +99,7 @@ Compare CODEMANIFEST contracts with current implementation:
 - missing re-exports
 - signature and behavior mismatches
 - existing code that can be reused
-- existing local `.usages/` directories and their contents (if any, only for referenced usages)
+- existing local `<current_cell_path>/.usages/` directories and their contents (if any, only for referenced usages)
 - imported usages from other cells via `Imports` → `Usages` — verify referenced files exist at `{from_path}/.usages/{usage_name}.md` (only for referenced imports)
 
 #### 2a. Contract consistency audit
@@ -192,13 +190,11 @@ Based on the stack trace results, perform analysis:
 - Trace the dependency: which entities depend on which imported usages
 - Document the tracable dependency in the design (imported usages create tracable links between cells but not contractual obligations)
 
-**Local usages design**: For each cell being designed, determine what `.usages/` files are needed for consumers:
+**Local usages design**: For each cell being designed, determine what `<current_cell_path>/.usages/` files are needed for consumers:
 - What distinct functional domains does the cell's API expose to consumers?
 - For each domain: what integration practices would help a consumer use the cell correctly?
-- What practices are already covered by imported usages from other cells?
-- Do any existing `.usages/` files in the cell already cover a similar functional domain?
-- How do local `.usages/` files relate to imported usages (do they extend, combine, or replace them?)
-- Note: `.usages/` files describe how consumers interact with this cell's API — they are independent of the `Usages` directive which describes the cell's internal practices
+- Do any existing `<current_cell_path>/.usages/` files in the cell already cover a similar functional domain?
+- Note: `<current_cell_path>/.usages/` files describe how consumers interact with this cell's API — they are independent of the `Usages` directive which describes the cell's internal practices
 
 #### 4c. Test Scenarios
 
@@ -220,34 +216,34 @@ Categories to cover:
 
 Reference the project test conventions from the Sources of Truth (Usages specs, employee docs) for test structure, naming, and tooling.
 
-### Step 4d: Usages categorization
+#### 4d. Usages categorization
 
 For each cell being designed, propose a functional categorization of usages.
 
-`.usages/*.md` files are created in the development cell: `<current_cell_path>/.usages/*.md`.
+`<current_cell_path>/.usages/*.md` files are created in the development cell.
 
-**Before proposing new `.usages/` files, read existing `<current_cell_path>/.usages/*.md` files to check if the usage already exists.**
+**Before proposing new `<current_cell_path>/.usages/` files, read existing `<current_cell_path>/.usages/*.md` files to check if the usage already exists.**
 
-Before performing categorization, check if the cell already has a `.usages/` directory:
+Before performing categorization, check if the cell already has a `<current_cell_path>/.usages/` directory:
 
-1. **If `.usages/` exists** — proceed with the standard categorization process below
-2. **If `.usages/` does not exist** — ask the user whether to create usages files for this cell:
-   - Option: "Yes, create usages" — proceed with categorization and propose `.usages/` files
+1. **If `<current_cell_path>/.usages/` exists** — proceed with the standard categorization process below
+2. **If `<current_cell_path>/.usages/` does not exist** — ask the user whether to create usages files for this cell:
+   - Option: "Yes, create usages" — proceed with categorization and propose `<current_cell_path>/.usages/` files
    - Option: "No, skip usages" — skip categorization for this cell, document in design that no usages files will be created
 
-**Categorization is mandatory** — if the user confirmed usages creation or `.usages/` already exists, the agent must propose how practices are organized within the cell's `.usages/` before saving the design.
+**Categorization is mandatory** — if the user confirmed usages creation or `<current_cell_path>/.usages/` already exists, the agent must propose how practices are organized within the cell's `<current_cell_path>/.usages/` before saving the design.
 
 #### Functional categories
 
 A cell implements logic that can be divided into **functional categories** by meaning — not by entity or by file, but by semantic domain. For example, a cell that parses DSL may have categories: "parsing rules", "validation rules", "AST traversal". A cell that provides CLI may have categories: "command registration", "output formatting", "state management".
 
-Each category becomes a `.usages/<category-name>.md` file describing the practice for that functional area.
+Each category becomes a `<current_cell_path>/.usages/<category-name>.md` file describing the practice for that functional area.
 
 #### Categorization process
 
 1. **Analyze cell logic** — identify distinct functional domains within the cell based on entity responsibilities, data flows, and interaction patterns from Step 4b
 
-2. **Check existing `.usages/`** — read all files in `<current_cell_path>/.usages/*.md`. For each existing file:
+2. **Check existing `<current_cell_path>/.usages/`** — read all files in `<current_cell_path>/.usages/*.md`. For each existing file:
    - Read each existing file to understand its functional category
    - Map new practices to existing categories where they fit
    - New practices that match an existing category → **extend** that file
@@ -258,41 +254,39 @@ Each category becomes a `.usages/<category-name>.md` file describing the practic
    - For each category: which practices it covers, which entities it relates to
    - Which are new files, which extend existing files
    - Which practices should remain inline in CODEMANIFEST (short, entity-specific, not reusable)
-   - **Content** for each `.usages/` file MUST be a concrete API usage specification — not an abstract description. It must include:
+   - **Content** for each `<current_cell_path>/.usages/` file MUST be a concrete API usage specification — not an abstract description. It must include:
      - **Call patterns**: exact function/class signatures and how to invoke them
+     - **Usage examples**: concrete code snippets showing typical usage
      - **Parameters**: what each parameter means, expected types and values
      - **Return values**: what is returned, in what format, what it represents
      - **Behavior**: what happens in different scenarios (success, error, edge cases)
      - **Error handling**: what exceptions/errors can occur and how to handle them
-     - **Usage examples**: concrete code snippets showing typical usage
 
-4. **Get user confirmation** — via AskUserQuestion, present the proposal and let the user confirm or adjust category boundaries and names
+4. **Get user confirmation** — present the proposal and let the user confirm or adjust category boundaries and names
 
-5. **Print usages content** — after the user confirms categorization, print the **full content** of each proposed `.usages/` file directly in the conversation. For each file:
+5. **Print usages content** — after the user confirms categorization, print the **full content** of each proposed `<current_cell_path>/.usages/` file directly in the conversation. For each file:
    - Print the file path as a header
    - Print the complete file content — not a summary, not a description, but the actual markdown that would be written to disk
 
-6. **Get content approval** — via AskUserQuestion, ask the user to review the printed content:
+6. **Get content approval** — ask the user to review the printed content:
    - Option: "Content approved, continue"
    - Option: "Need adjustments" — user describes what to change, agent updates content and re-prints
 
-**Critical distinction — `Usages` directive vs `.usages/` directory**:
+**Critical distinction — `Usages` directive vs `<current_cell_path>/.usages/` directory**:
 
 These are **independent** concepts that must not be conflated:
-- **`Usages` directive** (in CODEMANIFEST header) — internal practices that the cell's entities use (libraries, patterns, conventions). These stay in the CODEMANIFEST file.
-- **`.usages/` directory** (in the cell folder) — external-facing documentation for consumers who import this cell. Describes how to work with the cell's API, call patterns, integration examples.
-
-A cell with many `Usages` directive entries may need no `.usages/` files (if its API is simple and self-explanatory). A cell with no `Usages` directive entries may need `.usages/` files (if consumers would benefit from integration documentation). The decision is based entirely on the cell's **consumer-facing API complexity**, not on its internal practices count.
+- **`Usages` directive** (in CODEMANIFEST header) — internal practices that the cell's entities use (libraries, patterns, conventions). These stay in the CODEMANIFEST file
+- **`<current_cell_path>/.usages/` directory** (in the cell folder) — external-facing documentation for consumers who import this cell. Describes how to work with the cell's API, call patterns, integration examples
 
 #### Decision rules
 
 - Practice used by entities from **multiple functional domains** → separate category file
 - Practice specific to **one entity's internals** and short → inline in CODEMANIFEST `Usages` directive
-- Practice that describes **how to work with the cell's API** → `.usages/` category file (consumable by importers)
-- **Do NOT add CODEMANIFEST `Usages` references to the cell's own `.usages/` files** — per DSL spec, `.usages/` are documentation for consumers and are NOT a source of contract requirements. Consumers discover `.usages/` files via `Imports` → `Usages` when they import from this cell. The CODEMANIFEST `Usages` section should only contain practices that the cell's entities use internally (libraries, patterns, conventions), not practices that describe the cell's own API.
-- Existing `.usages/` file with matching domain → **extend**, do not create parallel files for the same domain
+- Practice that describes **how to work with the cell's API** → `<current_cell_path>/.usages/` category file (consumable by importers)
+- **Do NOT add CODEMANIFEST `Usages` references to the cell's own `<current_cell_path>/.usages/` files** — per DSL spec, `<current_cell_path>/.usages/` are documentation for consumers and are NOT a source of contract requirements. Consumers discover `<current_cell_path>/.usages/` files via `Imports` → `Usages` when they import from this cell. The CODEMANIFEST `Usages` section should only contain practices that the cell's entities use internally (libraries, patterns, conventions), not practices that describe the cell's own API
+- Existing `<current_cell_path>/.usages/` file with matching domain → **extend**, do not create parallel files for the same domain
 
-Always propose `.usages/` categorization based on the cell's API surface. If the cell has no consumer-facing complexity — confirm with the user that no `.usages/` files are needed, but do NOT base this decision on the count or nature of `Usages` directive entries.
+Always propose `<current_cell_path>/.usages/` categorization based on the cell's API surface.
 
 **Important**: design does NOT create or modify files — it only describes the expected result in the design document.
 
@@ -359,21 +353,22 @@ Before completing the response, verify:
 3a. Were all CODEMANIFEST issues (insufficient/inconsistent requirements) proposed to the user and resolved?
 3b. Were approved CODEMANIFEST changes applied and re-verified with the linter?
 4. Was a brainstorm performed analyzing implementation details not specified by the DSL?
-4b. Was a code stack trace performed for each contract entry point with checkpoints?
-4b-ct. Were contract interaction checkpoints verified (type flow, mutation compatibility, interface alignment)?
-4c. Were issues found during tracing resolved before proceeding?
-4d. Were test scenarios generated using the 6-element format (name, setup, input, trace, assertions, sufficiency)?
-5. Is entity interaction and data flow described?
-6. For each entity: are pattern, state management, error handling, and edge cases described?
-7. Are cross-cutting concerns described (error handling, logging, validation)?
-8. For each Usages entry: is it described what it provides, where it is used, why it was chosen, how it is used?
-9. Was usages categorization performed with the user (Step 4d) — functional categories proposed, existing files checked, new vs extend decisions made?
-10. Were questions asked to the user about unclear aspects and implementation details?
-11. Are facts, assumptions, and open questions separated?
-12. For each imported usage from `Imports` → `Usages`: was the source file read and analyzed?
-13. Is the planned local usages structure documented (which `.usages/` files will be created)?
-14. Is the design document saved using the template from `design-doc-template.md`?
-15. Are all CODEMANIFEST changes documented in the design document (what changed, why)?
+4a. Was a code stack trace performed for each contract entry point with checkpoints?
+4a-ct. Were contract interaction checkpoints verified (type flow, mutation compatibility, interface alignment)?
+4a-res. Were issues found during tracing resolved before proceeding?
+4b. Was a full analysis performed (Step 4b)?
+    - Is entity interaction and data flow described?
+    - For each entity: are pattern, state management, error handling, and edge cases described?
+    - Are cross-cutting concerns described (error handling, logging, validation)?
+    - For each Usages entry: is it described what it provides, where it is used, why it was chosen, how it is used?
+    - For each imported usage from `Imports` → `Usages`: was the source file read and analyzed?
+4c. Were test scenarios generated using the 6-element format (name, setup, input, trace, assertions, sufficiency)?
+4d. Was usages categorization performed — functional categories proposed, existing files checked, new vs extend decisions made? Is the planned local usages structure documented?
+5. Were questions asked to the user about unclear aspects and implementation details?
+5a. Were approved CODEMANIFEST changes applied and re-verified with the linter?
+6. Are facts, assumptions, and open questions separated?
+7. Is the design document saved using the template from `design-doc-template.md`?
+8. Are all CODEMANIFEST changes documented in the design document (what changed, why)?
 
 If any answer is "no" — revise the design document before returning it.
 

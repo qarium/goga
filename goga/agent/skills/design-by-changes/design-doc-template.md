@@ -3,7 +3,7 @@
 Output of Phase 0 (Analysis & Design).
 Saved to `docs/design/<feature-name>.md`.
 
-This is a **complete architectural solution** — everything is thought through to the smallest detail, but not yet planned how to code (that's the Plan artifact from Phase 1 + 2).
+This is a **complete architectural solution** — everything is thought through to the smallest detail.
 
 If a section cannot be completed because information is unavailable, keep the section and explicitly state what is unavailable.
 
@@ -151,12 +151,12 @@ If a section cannot be completed because information is unavailable, keep the se
 
 <!-- For each cell being designed, describe the functional categorization of usages -->
 <!-- This section is populated after usages categorization with the user (Step 4d) -->
-<!-- .usages/ files are implementation artifacts created during the plan phase -->
+<!-- `<cell path>/.usages/` files are implementation artifacts created during the plan phase -->
 
 ### Cell: `<cell path>`
 
 #### Functional categories
-- **`<category name>`** → `.usages/<category-name>.md`
+- **`<category name>`** → `<cell path>/.usages/<category-name>.md`
   - Covers: <what functional domain this category represents>
   - Related entities: <which entities use practices from this category>
   - Status: <new file / extends existing>
