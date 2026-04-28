@@ -104,7 +104,7 @@ def compare(ctx: click.Context, cells: tuple[str, ...], lang: str) -> None:
       cells          - one or more cell paths to compare (variadic)
       --lang         - implementation language (default: python)
 
-    Exit codes: 0 on success, 1 on error (cell not found, package not importable).
+    Exit codes: 0 on success, 1 on error (cell not found, package not importable, or other failure).
     """
     _ = lang  # reserved for future use
     ast_obj = AST(".")

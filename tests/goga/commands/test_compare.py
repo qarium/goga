@@ -399,7 +399,7 @@ class TestCompareIntegration:
         assert "json" in output.lower()
         assert "cells" in output.lower()
         assert "--lang" in output
-        assert "0" in output
+        assert "exit codes" in output.lower()
         assert "implementation" in output.lower()
 
     def test_compare_help_mentions_entity_and_routine_format(self) -> None:
