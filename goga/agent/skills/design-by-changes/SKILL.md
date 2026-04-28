@@ -228,7 +228,14 @@ For each cell being designed, propose a functional categorization of usages.
 
 **Before proposing new `.usages/` files, read existing `<current_cell_path>/.usages/*.md` files to check if the usage already exists.**
 
-**Categorization is mandatory** — the agent must propose how practices are organized within the cell's `.usages/` before saving the design.
+Before performing categorization, check if the cell already has a `.usages/` directory:
+
+1. **If `.usages/` exists** — proceed with the standard categorization process below
+2. **If `.usages/` does not exist** — ask the user whether to create usages files for this cell:
+   - Option: "Yes, create usages" — proceed with categorization and propose `.usages/` files
+   - Option: "No, skip usages" — skip categorization for this cell, document in design that no usages files will be created
+
+**Categorization is mandatory** — if the user confirmed usages creation or `.usages/` already exists, the agent must propose how practices are organized within the cell's `.usages/` before saving the design.
 
 #### Functional categories
 
