@@ -2,9 +2,9 @@ Imports:
   - Types:
       - linter
       - build
-      - init
+      - install
       - schema
-      - compare
+      - contract
     From: goga/commands
   - Types:
       - AST
@@ -30,9 +30,9 @@ app():
     Команды:
     - `linter`
     - `build`
-    - `init`
+    - `install`
     - `schema`
-    - `compare`
+    - `contract`
 
 ---
 

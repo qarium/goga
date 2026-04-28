@@ -8,19 +8,25 @@ from pathlib import Path
 import click
 from click.testing import CliRunner
 from goga.cli import app
-from goga.commands import compare
-from goga.commands.compare import compare as compare_cmd
+from goga.commands import contract
+from goga.commands.contract import contract as contract_cmd
 
 from tests.conftest import cwd as _cwd
 
 
-def _run_compare(*args):
+def _run_contract(*args):
     runner = CliRunner()
-    return runner.invoke(app, ["compare", *args])
+    return runner.invoke(app, ["contract", *args])
 
 
 def _write_codemanifest(directory: Path, content: str) -> None:
     (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
+
+
+def _write_goga_yml(directory: Path) -> None:
+    (directory / ".goga.yml").write_text(
+        "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
+    )
 
 
 @contextmanager
@@ -39,32 +45,35 @@ def _sys_path(path: str):
 
 
 class TestFacadeAvailability:
-    def test_import_compare_from_commands(self) -> None:
-        assert compare is not None
+    def test_import_contract_from_commands(self) -> None:
+        assert contract is not None
 
-    def test_compare_is_click_command(self) -> None:
-        assert isinstance(compare_cmd, click.Command)
+    def test_contract_is_click_command(self) -> None:
+        assert isinstance(contract_cmd, click.Command)
+
+    def test_contract_command_name_is_contract(self) -> None:
+        assert contract_cmd.name == "contract"
 
 
 class TestApiShape:
-    def test_compare_has_callback(self) -> None:
-        assert compare_cmd.callback is not None
+    def test_contract_has_callback(self) -> None:
+        assert contract_cmd.callback is not None
 
-    def test_compare_has_cells_argument(self) -> None:
-        param_names = [p.name for p in compare_cmd.params]
+    def test_contract_has_cells_argument(self) -> None:
+        param_names = [p.name for p in contract_cmd.params]
         assert "cells" in param_names
 
-    def test_compare_cells_has_nargs_minus_one(self) -> None:
-        cells_param = next(p for p in compare_cmd.params if p.name == "cells")
+    def test_contract_cells_has_nargs_minus_one(self) -> None:
+        cells_param = next(p for p in contract_cmd.params if p.name == "cells")
         assert cells_param.nargs == -1
 
-    def test_compare_has_lang_option(self) -> None:
-        param_names = [p.name for p in compare_cmd.params]
+    def test_contract_has_lang_option(self) -> None:
+        param_names = [p.name for p in contract_cmd.params]
         assert "lang" in param_names
 
-    def test_compare_lang_default_is_python(self) -> None:
-        lang_param = next(p for p in compare_cmd.params if p.name == "lang")
-        assert lang_param.default == "python"
+    def test_contract_lang_default_is_none(self) -> None:
+        lang_param = next(p for p in contract_cmd.params if p.name == "lang")
+        assert lang_param.default is None
 
 
 # --- Logic tests ---
@@ -128,14 +137,15 @@ ROUTINE_IMPL = (
 )
 
 
-def test_compare_single_cell_entity(tmp_path) -> None:
+def test_contract_single_cell_entity(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -151,14 +161,15 @@ def test_compare_single_cell_entity(tmp_path) -> None:
     assert data["cell_one"]["MyClass"]["methods"]["do_it"]["implementation"] == "(x: int) -> str"
 
 
-def test_compare_single_cell_routine(tmp_path) -> None:
+def test_contract_single_cell_routine(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ROUTINE_CODEMANIFEST)
     (cell / "__init__.py").write_text(ROUTINE_IMPL, encoding="utf-8")
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -168,7 +179,7 @@ def test_compare_single_cell_routine(tmp_path) -> None:
     assert data["cell_one"]["my_func"]["signature"]["implementation"] == "(x: int) -> int"
 
 
-def test_compare_multiple_cells(tmp_path) -> None:
+def test_contract_multiple_cells(tmp_path) -> None:
     cell_a = tmp_path / "cell_a"
     cell_a.mkdir()
     _write_codemanifest(cell_a, ENTITY_CODEMANIFEST)
@@ -178,9 +189,10 @@ def test_compare_multiple_cells(tmp_path) -> None:
     cell_b.mkdir()
     _write_codemanifest(cell_b, ROUTINE_CODEMANIFEST)
     (cell_b / "__init__.py").write_text(ROUTINE_IMPL, encoding="utf-8")
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_a", "cell_b")
+        result = _run_contract("cell_a", "cell_b")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -190,37 +202,41 @@ def test_compare_multiple_cells(tmp_path) -> None:
     assert "my_func" in data["cell_b"]
 
 
-def test_compare_cell_not_found(tmp_path) -> None:
+def test_contract_cell_not_found(tmp_path) -> None:
+    _write_goga_yml(tmp_path)
+
     with _cwd(tmp_path):
-        result = _run_compare("nonexistent/path")
+        result = _run_contract("nonexistent/path")
 
     assert result.exit_code == 1
     assert "document not found" in result.stderr.lower()
 
 
-def test_compare_package_not_importable(tmp_path) -> None:
+def test_contract_package_not_importable(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     # No __init__.py — package not importable
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 1
     assert "not importable" in result.stderr.lower()
 
 
-def test_compare_entity_missing_in_implementation(tmp_path) -> None:
+def test_contract_entity_missing_in_implementation(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     (cell / "__init__.py").write_text(
         "class OtherClass:\n    pass\n\n__all__ = ['OtherClass']\n", encoding="utf-8"
     )
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -232,16 +248,17 @@ def test_compare_entity_missing_in_implementation(tmp_path) -> None:
     assert data["cell_one"]["MyClass"]["methods"]["do_it"]["implementation"] is None
 
 
-def test_compare_property_method_missing_in_implementation(tmp_path) -> None:
+def test_contract_property_method_missing_in_implementation(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     (cell / "__init__.py").write_text(
         "class MyClass:\n    pass\n\n__all__ = ['MyClass']\n", encoding="utf-8"
     )
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -252,16 +269,17 @@ def test_compare_property_method_missing_in_implementation(tmp_path) -> None:
     assert my_class["methods"]["do_it"]["implementation"] is None
 
 
-def test_compare_routine_missing_in_implementation(tmp_path) -> None:
+def test_contract_routine_missing_in_implementation(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ROUTINE_CODEMANIFEST)
     (cell / "__init__.py").write_text(
         "def other_func() -> int:\n    return 0\n\n__all__ = ['other_func']\n", encoding="utf-8"
     )
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -271,7 +289,7 @@ def test_compare_routine_missing_in_implementation(tmp_path) -> None:
     assert data["cell_one"]["my_func"]["signature"]["implementation"] is None
 
 
-def test_compare_signature_mismatch(tmp_path) -> None:
+def test_contract_signature_mismatch(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
@@ -288,9 +306,10 @@ def test_compare_signature_mismatch(tmp_path) -> None:
         "__all__ = ['MyClass']\n",
         encoding="utf-8",
     )
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -306,7 +325,7 @@ def test_compare_signature_mismatch(tmp_path) -> None:
     assert my_class["methods"]["do_it"]["implementation"] == "() -> str"
 
 
-def test_compare_extra_in_implementation_ignored(tmp_path) -> None:
+def test_contract_extra_in_implementation_ignored(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
@@ -316,9 +335,10 @@ def test_compare_extra_in_implementation_ignored(tmp_path) -> None:
         + "class ExtraClass:\n    pass\n\n__all__ = ['MyClass', 'ExtraClass']\n",
         encoding="utf-8",
     )
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -327,16 +347,18 @@ def test_compare_extra_in_implementation_ignored(tmp_path) -> None:
     assert "MyClass" in data["cell_one"]
 
 
-def test_compare_empty_cells(tmp_path) -> None:
+def test_contract_empty_cells(tmp_path) -> None:
+    _write_goga_yml(tmp_path)
+
     with _cwd(tmp_path):
-        result = _run_compare()
+        result = _run_contract()
 
     assert result.exit_code == 0
     data = json.loads(result.output)
     assert data == {}
 
 
-def test_compare_cell_with_empty_body(tmp_path) -> None:
+def test_contract_cell_with_empty_body(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(
@@ -356,9 +378,10 @@ Description: Empty
 """,
     )
     (cell / "__init__.py").write_text("", encoding="utf-8")
+    _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
-        result = _run_compare("cell_one")
+        result = _run_contract("cell_one")
 
     assert result.exit_code == 0
     data = json.loads(result.output)
@@ -366,34 +389,96 @@ Description: Empty
     assert data["cell_one"] == {}
 
 
+def test_contract_lang_from_config(tmp_path) -> None:
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+    _write_goga_yml(tmp_path)
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "cell_one" in data
+
+
+def test_contract_lang_cli_overrides_config(tmp_path) -> None:
+    (tmp_path / ".goga.yml").write_text(
+        "language: go\nbuild:\n  task_executor:\n    agent: claude\n"
+    )
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_contract("cell_one", "--lang", "python")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "cell_one" in data
+
+
+def test_contract_config_missing(tmp_path) -> None:
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code != 0
+    assert ".goga.yml" in result.output.lower() or ".goga.yml" in result.stderr.lower()
+
+
+def test_contract_config_invalid_language(tmp_path) -> None:
+    (tmp_path / ".goga.yml").write_text(
+        "language: \"\"\nbuild:\n  task_executor:\n    agent: claude\n"
+    )
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+    with _cwd(tmp_path):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code != 0
+    assert "language" in result.output.lower() or "language" in result.stderr.lower()
+
+
 # --- Integration tests ---
 
 
-class TestCompareIntegration:
-    def test_compare_cli_registered_in_app(self) -> None:
+class TestContractIntegration:
+    def test_contract_cli_registered_in_app(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["compare", "--help"])
+        result = runner.invoke(app, ["contract", "--help"])
         assert result.exit_code == 0
-        assert "compare" in result.output.lower()
+        assert "contract" in result.output.lower()
         assert "codemanifest" in result.output.lower()
 
-    def test_compare_output_is_only_json(self, tmp_path) -> None:
+    def test_contract_output_is_only_json(self, tmp_path) -> None:
         cell = tmp_path / "cell_one"
         cell.mkdir()
         _write_codemanifest(cell, ENTITY_CODEMANIFEST)
         (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+        _write_goga_yml(tmp_path)
 
         with _cwd(tmp_path), _sys_path(str(tmp_path)):
-            result = _run_compare("cell_one")
+            result = _run_contract("cell_one")
 
         assert result.exit_code == 0
         data = json.loads(result.output)
         assert isinstance(data, dict)
         assert "cell_one" in data
 
-    def test_compare_help_describes_output_structure(self) -> None:
+    def test_contract_help_describes_output_structure(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["compare", "--help"])
+        result = runner.invoke(app, ["contract", "--help"])
         assert result.exit_code == 0
         output = result.output
         assert "json" in output.lower()
@@ -402,9 +487,9 @@ class TestCompareIntegration:
         assert "exit codes" in output.lower()
         assert "implementation" in output.lower()
 
-    def test_compare_help_mentions_entity_and_routine_format(self) -> None:
+    def test_contract_help_mentions_entity_and_routine_format(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["compare", "--help"])
+        result = runner.invoke(app, ["contract", "--help"])
         assert result.exit_code == 0
         output = result.output
         assert "signature" in output.lower()
@@ -414,10 +499,10 @@ class TestCompareIntegration:
         assert "entity" in output.lower()
         assert "routine" in output.lower()
 
-    def test_compare_with_real_project_cwd(self) -> None:
+    def test_contract_with_real_project_cwd(self) -> None:
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         with _cwd(project_root):
-            result = _run_compare("goga/contract")
+            result = _run_contract("goga/contract")
 
         assert result.exit_code == 0
         data = json.loads(result.output)

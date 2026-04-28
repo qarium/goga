@@ -5,9 +5,11 @@ import os
 from typing import TYPE_CHECKING
 
 import click
+import yaml
 
 from ..ast import AST
 from ..ast.errors import DocumentNotFoundError
+from ..config import load_config
 from ..contract import EntityContract, MethodContract, PropertyContract, RoutineContract
 from ..contract.python import python_contract
 
@@ -79,9 +81,9 @@ def _build_cell_compare(
 
 @click.command()
 @click.argument("cells", nargs=-1)
-@click.option("--lang", default="python")
+@click.option("--lang", default=None)
 @click.pass_context
-def compare(ctx: click.Context, cells: tuple[str, ...], lang: str) -> None:
+def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> None:
     """Compare CODEMANIFEST contract with implementation.
 
     For each specified cell, loads the CODEMANIFEST definitions and
@@ -102,10 +104,16 @@ def compare(ctx: click.Context, cells: tuple[str, ...], lang: str) -> None:
     \b
     Options:
       cells          - one or more cell paths to compare (variadic)
-      --lang         - implementation language (default: python)
+      --lang         - implementation language (default: from .goga.yml config.lang)
 
     Exit codes: 0 on success, 1 on error (cell not found, package not importable, or other failure).
     """
+    try:
+        config = load_config()
+    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    lang = lang if lang is not None else config.lang
     _ = lang  # reserved for future use
     ast_obj = AST(".")
     ast_obj.load()

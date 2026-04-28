@@ -4,6 +4,9 @@ import shutil
 from pathlib import Path
 
 import click
+import yaml
+
+from goga.config import load_config
 
 AGENT_DIRS: dict[str, str] = {"claude": ".claude"}
 
@@ -58,10 +61,17 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
 
 
 @click.command()
-@click.option("--agent", default="claude", help="Target AI agent")
+@click.option("--agent", default=None, help="Target AI agent")
 @click.pass_context
-def init(ctx: click.Context, agent: str) -> None:
+def install(ctx: click.Context, agent: str | None) -> None:
     """Install goga skills and commands into the target AI agent configuration."""
+    try:
+        config = load_config()
+    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    agent = agent if agent is not None else config.build.task_executor.agent
+
     try:
         target = _resolve_target_dir(agent)
     except ValueError:
