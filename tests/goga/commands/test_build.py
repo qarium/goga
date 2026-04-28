@@ -260,6 +260,17 @@ class TestBuildUsesLoadConfigFromGogaConfig:
         assert settings["env"]["CUSTOM_VAR"] == "custom-value"
         assert settings["attribution"] == {"commit": "", "pr": ""}
 
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_empty_env_dict_creates_empty_env_section(self, mock_which, mock_call, tmp_path) -> None:
+        """.goga.yml without env section creates empty env dict in settings.json."""
+        _write_goga_yml(tmp_path)
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        assert settings["env"] == {}
+        assert settings["attribution"] == {"commit": "", "pr": ""}
+
 
 class TestBuildUnsupportedAgentRaisesError:
     def test_build_unsupported_agent_raises_error(self, tmp_path) -> None:
@@ -834,3 +845,72 @@ class TestManifestCheck:
         result = runner.invoke(build_cmd, ["--help"])
         assert result.exit_code == 0
         assert "--skip-manifest-check" in result.output
+
+
+class TestBuildNegativeCases:
+    def test_build_invalid_goga_yml_raises_config_error(self, tmp_path) -> None:
+        """Invalid .goga.yml (missing required field) causes exit code 1."""
+        data = {
+            "build": {"task_executor": {"agent": "claude"}},
+        }
+        (tmp_path / ".goga.yml").write_text(yaml.dump(data))
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        assert result.exit_code == 1
+        assert "is required in .goga.yml" in result.output or "must be" in result.output
+
+    def test_build_invalid_existing_settings_json_raises_error(self, tmp_path) -> None:
+        """Invalid JSON in existing .claude/settings.json causes non-zero exit."""
+        _write_goga_yml(tmp_path)
+        claude_dir = tmp_path / ".claude"
+        claude_dir.mkdir()
+        (claude_dir / "settings.json").write_text("{broken json")
+
+        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        assert result.exit_code != 0
+
+
+class TestBuildConfigFlags:
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_worktree_from_config_when_no_cli_flag(self, mock_which, mock_call, tmp_path) -> None:
+        """worktree: true in .goga.yml adds --worktree to command without CLI flag."""
+        _write_goga_yml(tmp_path, extra={"worktree": True})
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        cmd = mock_call.call_args[0][0]
+        assert "--worktree" in cmd
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_cli_worktree_overrides_config(self, mock_which, mock_call, tmp_path) -> None:
+        """--worktree CLI flag overrides worktree: false in config."""
+        _write_goga_yml(tmp_path, extra={"worktree": False})
+        _run_build_in_tmp(tmp_path, ["plan.md", "--worktree"])
+
+        cmd = mock_call.call_args[0][0]
+        assert "--worktree" in cmd
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_custom_prompts_dir_from_config(self, mock_which, mock_call, tmp_path) -> None:
+        """Custom prompts_dir and agents_dir from config copy files to .ralphex/."""
+        custom_prompts = tmp_path / "custom" / "prompts"
+        custom_agents = tmp_path / "custom" / "agents"
+        custom_prompts.mkdir(parents=True)
+        custom_agents.mkdir(parents=True)
+        (custom_prompts / "custom_task.txt").write_text("custom task content")
+        (custom_agents / "custom_agent.txt").write_text("custom agent content")
+
+        _write_goga_yml(
+            tmp_path,
+            extra={"prompts_dir": str(custom_prompts), "agents_dir": str(custom_agents)},
+        )
+        _run_build_in_tmp(tmp_path, ["plan.md"])
+
+        assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").is_file()
+        assert (tmp_path / ".ralphex" / "agents" / "custom_agent.txt").is_file()
+        assert (
+            (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text()
+            == "custom task content"
+        )
