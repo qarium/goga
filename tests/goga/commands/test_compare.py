@@ -391,6 +391,29 @@ class TestCompareIntegration:
         assert isinstance(data, dict)
         assert "cell_one" in data
 
+    def test_compare_help_describes_output_structure(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["compare", "--help"])
+        assert result.exit_code == 0
+        output = result.output
+        assert "json" in output.lower()
+        assert "cells" in output.lower()
+        assert "--lang" in output
+        assert "0" in output
+        assert "implementation" in output.lower()
+
+    def test_compare_help_mentions_entity_and_routine_format(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["compare", "--help"])
+        assert result.exit_code == 0
+        output = result.output
+        assert "signature" in output.lower()
+        assert "properties" in output.lower() or "property" in output.lower()
+        assert "methods" in output.lower() or "method" in output.lower()
+        assert "codemanifest" in output.lower()
+        assert "entity" in output.lower()
+        assert "routine" in output.lower()
+
     def test_compare_with_real_project_cwd(self) -> None:
         project_root = Path(__file__).resolve().parent.parent.parent.parent
         with _cwd(project_root):

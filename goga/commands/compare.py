@@ -82,7 +82,30 @@ def _build_cell_compare(
 @click.option("--lang", default="python")
 @click.pass_context
 def compare(ctx: click.Context, cells: tuple[str, ...], lang: str) -> None:
-    """Compare CODEMANIFEST contract with implementation."""
+    """Compare CODEMANIFEST contract with implementation.
+
+    For each specified cell, loads the CODEMANIFEST definitions and
+    the Python implementation, then outputs a JSON object with
+    codemanifest/implementation pairs for every signature, property,
+    and method.
+
+    \b
+    JSON output per cell:
+      <cell_path>          - normalized cell path as key
+        <EntityName>       - entity with:
+          signature        - {codemanifest, implementation} pair
+          properties       - dict of {name: {codemanifest, implementation}}
+          methods          - dict of {name: {codemanifest, implementation}}
+        <RoutineName>      - routine with:
+          signature        - {codemanifest, implementation} pair
+
+    \b
+    Options:
+      cells          - one or more cell paths to compare (variadic)
+      --lang         - implementation language (default: python)
+
+    Exit codes: 0 on success, 1 on error (cell not found, package not importable).
+    """
     _ = lang  # reserved for future use
     ast_obj = AST(".")
     ast_obj.load()
