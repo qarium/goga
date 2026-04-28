@@ -93,13 +93,13 @@ class TestConfigAPIShape:
 
 class TestKwOnlyEnforced:
     def test_task_executor_kw_only(self):
-        assert TaskExecutor.__dataclass_params__.kw_only is True
+        assert all(f.kw_only for f in dataclasses.fields(TaskExecutor))
 
     def test_build_config_kw_only(self):
-        assert BuildConfig.__dataclass_params__.kw_only is True
+        assert all(f.kw_only for f in dataclasses.fields(BuildConfig))
 
     def test_config_kw_only(self):
-        assert Config.__dataclass_params__.kw_only is True
+        assert all(f.kw_only for f in dataclasses.fields(Config))
 
     def test_task_executor_positional_args_rejected(self):
         with pytest.raises(TypeError):
