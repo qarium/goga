@@ -5,6 +5,14 @@ Imports:
   - Usages:
       - python_contract
     From: goga/contract
+  - Types:
+      - Config
+      - BuildConfig
+      - TaskExecutor
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
 
 Usages:
   click: .usages/tools/click.md
@@ -79,10 +87,11 @@ Annotations: |
   location: build.py
   annotations: |
     Команда сборки кода через `ralphex`. Подготавливает окружение и запускает `ralphex`.
+    Конфигурация загружается через `load_config` (практика `configuration`).
 
     `plan`: путь к файлу плана (markdown)
 
-    CLI-опции (все опциональные, переопределяют goga.yml):
+    CLI-опции (все опциональные, переопределяют .goga.yml):
     - --dry-run: показать команду без выполнения
     - --worktree: включить режим `ralphex` worktree
     - --skip-finalize: пропустить финализацию
@@ -97,75 +106,86 @@ Annotations: |
     0. (pre-check) Если --skip-manifest-check не установлен:
        - Проверить что все CODEMANIFEST файлы проекта закоммичены в git
        - При обнаружении незакоммиченных — вывести ошибку в stderr и выйти с кодом 1
-    1. Прочитать goga.yml из корня проекта (секция `build`)
-    2. Создать .claude/settings.json с модельными оверрайдами:
-       - Прочитать существующий .claude/settings.json если есть, сделать merge
-       - Установить env переменные:
-         - ANTHROPIC_DEFAULT_HAIKU_MODEL: из goga.yml или дефолт 'glm-4.7'
-         - ANTHROPIC_DEFAULT_SONNET_MODEL: из goga.yml или дефолт 'glm-5-turbo'
-         - ANTHROPIC_DEFAULT_OPUS_MODEL: из goga.yml или дефолт 'glm-5.1'
-         - ANTHROPIC_BASE_URL: из goga.yml или дефолт 'https://api.z.ai/api/anthropic'
-       - Установить attribution с пустыми commit и pr
-    3. Создать .ralphex/claude-wrapper.sh:
-       ```
-       #!/bin/bash
-       exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
-       ```
-       - Установить chmod +x на скрипт
-       - Перезаписывать при каждом запуске
-       - Записать ralphex config defaults в .ralphex/config (не перезаписывать существующие ключи):
-         - claude_command = .ralphex/claude-wrapper.sh
-         - claude_args = --dangerously-skip-permissions --output-format stream-json --verbose
-       - Записать codex_enabled в .ralphex/config из goga.yml (по умолчанию false), перезаписывать при каждом запуске
-    4. Копировать defaults из пакета goga (goga/config/defaults/) в .ralphex/:
-       - prompts/ → .ralphex/prompts/
-       - agents/ → .ralphex/agents/
-       - Перезаписывать существующие файлы
-    5. Собрать команду `ralphex`:
-       - `ralphex` {plan} --config-dir .ralphex/
-       - Добавить флаги: --worktree, --skip-finalize, --session-timeout,
-         --idle-timeout, --wait, --max-iterations, --review-patience
-       - Приоритет: CLI-опции > goga.yml > дефолты
-    6. При --dry-run: вывести команду и выйти
-    7. Запустить `ralphex` через subprocess.call, выйти с его кодом возврата
+    1. Загрузить конфигурацию через `load_config` → `Config`
+    2. Вызвать _run_precondition(config) — диспетчеризация по агенту:
+       - Прочитать agent из `TaskExecutor`
+       - Если agent == "claude" → вызвать _precondition_claude(config)
+       - Иначе → ошибка "Unsupported agent: {agent}", exit 1
+    3. Вызвать _copy_defaults(config) — копирование prompts/agents
+    4. Собрать команду ralphex через _assemble_command(plan, config, cli_options)
+    5. При --dry-run: вывести команду и выйти
+    6. Запустить `ralphex` через subprocess.call, выйти с его кодом возврата
 
-    Конфигурация goga.yml (секция build):
-    ```
-    build:
-      worktree: false
-      skip_finalize: false
-      session_timeout: ""
-      idle_timeout: ""
-      wait: ""
-      max_iterations: 0
-      review_patience: 0
-      prompts_dir: ""
-      agents_dir: ""
-      codex_enabled: false
-      models:
-        haiku: glm-4.7
-        sonnet: glm-5-turbo
-        opus: glm-5.1
-        base_url: https://api.z.ai/api/anthropic
-    ```
+    Внутренние функции:
 
-    Формат .claude/settings.json (создаётся/обновляется командой):
-    ```
-    {
-      "attribution": {
-        "commit": "",
-        "pr": ""
-      },
-      "env": {
-        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "<haiku>",
-        "ANTHROPIC_DEFAULT_SONNET_MODEL": "<sonnet>",
-        "ANTHROPIC_DEFAULT_OPUS_MODEL": "<opus>",
-        "ANTHROPIC_BASE_URL": "<base_url>"
-      }
-    }
-    ```
+    _run_precondition(config: Config):
+      Диспетчер прекондишенов по значению agent из `TaskExecutor`.
+      Поддерживаемые агенты: "claude".
+      При неизвестном агенте — выбросить click.ClickException.
 
-    Требования:
+    _precondition_claude(config: Config):
+      Прекондишен для Claude AI-агента. Вызывает:
+      1. _create_claude_settings(config) — создаёт .claude/settings.json
+      2. _create_claude_wrapper(config) — создаёт .ralphex/claude-wrapper.sh и .ralphex/config
+
+    _create_claude_settings(config: Config):
+      Создаёт или обновляет .claude/settings.json.
+      Algorithm:
+      1. Создать директорию .claude/ (если не существует)
+      2. Прочитать существующий .claude/settings.json если есть, сделать merge
+      3. Установить все пары из env свойства `TaskExecutor` в секцию settings["env"]
+      4. Установить settings["attribution"] = {"commit": "", "pr": ""} (перезаписать)
+      5. Записать JSON в .claude/settings.json
+
+      Requirements:
+      - Все env-переменные из env свойства `TaskExecutor` попадают в settings["env"] как есть
+      - Существующие ключи в settings["env"] перезаписываются
+      - Attribution перезаписывается при каждом запуске
+
+    _create_claude_wrapper(config: Config):
+      Создаёт .ralphex/claude-wrapper.sh и обновляет .ralphex/config.
+      Algorithm:
+      1. Создать директорию .ralphex/ (если не существует)
+      2. Записать .ralphex/claude-wrapper.sh:
+         ```
+         #!/bin/bash
+         exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
+         ```
+      3. Установить chmod +x на скрипт. Перезаписывать при каждом запуске
+      4. Обновить .ralphex/config:
+         - Добавить defaults только если ключ отсутствует:
+           claude_command = .ralphex/claude-wrapper.sh
+           claude_args = --dangerously-skip-permissions --output-format stream-json --verbose
+         - Перезаписать codex_enabled из codex_review свойства `BuildConfig` при каждом запуске
+
+      Requirements:
+      - Defaults для claude_command и claude_args не перезаписывают существующие ключи
+      - codex_enabled перезаписывается при каждом запуске
+
+    _copy_defaults(config: Config):
+      Копирует prompts и agents из пакета goga в .ralphex/.
+      Algorithm:
+      1. Определить исходные каталоги:
+         - Если prompts_dir из `BuildConfig` задан — использовать его, иначе goga/config/defaults/prompts
+         - Если agents_dir из `BuildConfig` задан — использовать его, иначе goga/config/defaults/agents
+      2. Копировать файлы из каждого src_dir в .ralphex/{prompts,agents}/
+         - Перезаписывать существующие файлы
+
+    _assemble_command(plan: str, config: Config, cli_options: dict) -> list[str]:
+      Собирает команду ralphex с флагами.
+      Algorithm:
+      1. Базовая команда: ["ralphex", plan, "--config-dir", ".ralphex/"]
+      2. Добавить флаги с приоритетом: CLI-опции > `Config` > пропуск (None/""):
+         - --worktree (флаг, если CLI или worktree из `BuildConfig`)
+         - --skip-finalize (флаг, если CLI или skip_finalize из `BuildConfig`)
+         - --session-timeout, --idle-timeout, --wait (строка, если не None и не "")
+         - --max-iterations, --review-patience (число, если не None и не 0)
+
+      `plan`: путь к файлу плана
+      config: загруженная конфигурация проекта
+      cli_options: словарь CLI-опций от click
+
+    Requirements:
     - `ralphex` должен быть доступен в PATH, иначе ошибка
     - Директории config/defaults/, agent/ должны быть включены в дистрибутив пакета
     - Минимальный вывод: что делается на каждом шаге (через click.echo)
