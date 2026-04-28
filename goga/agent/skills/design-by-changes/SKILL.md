@@ -224,6 +224,10 @@ Reference the project test conventions from the Sources of Truth (Usages specs, 
 
 For each cell being designed, propose a functional categorization of usages.
 
+`.usages/*.md` files are created in the development cell: `<current_cell_path>/.usages/*.md`.
+
+**Before proposing new `.usages/` files, read existing `<current_cell_path>/.usages/*.md` files to check if the usage already exists.**
+
 **Categorization is mandatory** — the agent must propose how practices are organized within the cell's `.usages/` before saving the design.
 
 #### Functional categories
@@ -236,7 +240,7 @@ Each category becomes a `.usages/<category-name>.md` file describing the practic
 
 1. **Analyze cell logic** — identify distinct functional domains within the cell based on entity responsibilities, data flows, and interaction patterns from Step 4b
 
-2. **Check existing `.usages/`** — if the cell already has `.usages/` files:
+2. **Check existing `.usages/`** — read all files in `<current_cell_path>/.usages/*.md`. For each existing file:
    - Read each existing file to understand its functional category
    - Map new practices to existing categories where they fit
    - New practices that match an existing category → **extend** that file
@@ -256,6 +260,14 @@ Each category becomes a `.usages/<category-name>.md` file describing the practic
      - **Usage examples**: concrete code snippets showing typical usage
 
 4. **Get user confirmation** — via AskUserQuestion, present the proposal and let the user confirm or adjust category boundaries and names
+
+5. **Print usages content** — after the user confirms categorization, print the **full content** of each proposed `.usages/` file directly in the conversation. For each file:
+   - Print the file path as a header
+   - Print the complete file content — not a summary, not a description, but the actual markdown that would be written to disk
+
+6. **Get content approval** — via AskUserQuestion, ask the user to review the printed content:
+   - Option: "Content approved, continue"
+   - Option: "Need adjustments" — user describes what to change, agent updates content and re-prints
 
 **Critical distinction — `Usages` directive vs `.usages/` directory**:
 

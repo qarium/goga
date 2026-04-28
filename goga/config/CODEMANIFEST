@@ -1,0 +1,128 @@
+Usages:
+  yaml: |
+    Использовать yaml.safe_load() для парсинга .goga.yml.
+    Библиотека PyYAML.
+
+---
+
+"load_config() -> config:Config":
+  location: loader.py
+  annotations: |
+    Читает и парсит .goga.yml из корня проекта, возвращает объект `Config`.
+
+    Algorithm:
+    1. Сформировать путь: ./.goga.yml
+    2. Прочитать и распарсить YAML с использованием практики `yaml`
+    3. Если файл не существует или пустой (yaml.safe_load вернул None) —
+       выбросить FileNotFoundError с сообщением ".goga.yml not found in project root"
+    4. Если YAML невалиден — выбросить исключение с описанием ошибки парсинга
+    5. Если результат yaml.safe_load не dict —
+       выбросить ValueError с сообщением ".goga.yml must be a YAML mapping"
+    6. Извлечь language: data["language"]
+       Если KeyError — выбросить KeyError("language is required in .goga.yml")
+    7. Извлечь commands: data.get("commands", {})
+    8. Извлечь build dict: data["build"]
+       Если KeyError — выбросить KeyError("build is required in .goga.yml")
+    9. Извлечь task_executor dict: build_data["task_executor"]
+       Если KeyError — выбросить KeyError("build.task_executor is required in .goga.yml")
+    10. Извлечь agent: task_executor_data.get("agent")
+       Если None или пустая строка — выбросить ValueError("build.task_executor.agent is required in .goga.yml")
+    11. Извлечь env: task_executor_data.get("env", {})
+    12. Создать `TaskExecutor`(agent=agent, env=env)
+    13. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
+    14. Создать `BuildConfig`(task_executor=task_executor, worktree=..., ...)
+    15. Вернуть Config(lang=lang, build=build, commands=commands)
+
+    Requirements:
+    - Файл конфигурации: .goga.yml (скрытый, с точкой) в корне проекта
+    - Файл обязателен — при отсутствии или пустом содержимом выбрасывается FileNotFoundError
+    - Корневой элемент YAML должен быть mapping (dict) — иначе ValueError
+    - Если YAML невалиден — выбрасывает исключение с описанием ошибки парсинга
+    - language — обязательное поле, при отсутствии выбрасывается KeyError
+    - build — обязательная секция, при отсутствии выбрасывается KeyError
+    - task_executor — обязательная секция внутри build, при отсутствии выбрасывается KeyError
+    - agent — обязательное поле, не может быть None или пустой строкой — ValueError
+    - Raw-данные без мёржа с дефолтами — потребитель сам мержит
+
+"Config(lang: str, build: BuildConfig, commands: dict)":
+  location: config.py
+  annotations: |
+    Объект конфигурации проекта. Создаётся `load_config`.
+
+    `lang`: секция language
+    `build`: секция build как `BuildConfig`
+    `commands`: секция commands — заготовка на будущее для кастомизации промптов
+  properties:
+    lang -> str: |
+      Язык проекта. Значение из корневой директивы language в .goga.yml.
+    build -> BuildConfig: |
+      Секция build из .goga.yml. Экземпляр `BuildConfig`.
+    commands -> dict: |
+      Секция commands из .goga.yml.
+      Заготовка на будущее для кастомизации промптов, пока не используется.
+      Пустой dict если секция отсутствует.
+
+"BuildConfig(task_executor: TaskExecutor, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
+  location: config.py
+  annotations: |
+    Конфигурация сборки. Создаётся внутри `load_config` из секции build файла .goga.yml.
+
+    `task_executor`: конфигурация AI-агента. Обязательное поле.
+    Остальные параметры — опциональные, по умолчанию None.
+
+    Requirements:
+    - task_executor — обязательное поле
+    - остальные поля могут быть None
+  properties:
+    task_executor -> TaskExecutor: |
+      Конфигурация AI-агента. Экземпляр `TaskExecutor`.
+      Обязательное поле.
+    worktree -> bool | None: |
+      Использовать изолированный git worktree.
+    skip_finalize -> bool | None: |
+      Пропустить шаг финализации ralphex.
+    session_timeout -> str | None: |
+      Таймаут сессии. Формат Go duration ("30m", "1h").
+    idle_timeout -> str | None: |
+      Таймаут простоя сессии. Формат Go duration.
+    wait -> str | None: |
+      Время ожидания при rate limit. Формат Go duration.
+    max_iterations -> int | None: |
+      Максимум итераций задач.
+    review_patience -> int | None: |
+      Остановить ревью после N неизменённых раундов.
+    prompts_dir -> str | None: |
+      Путь к кастомным промптам ralphex.
+    agents_dir -> str | None: |
+      Путь к кастомным агентам ralphex.
+    codex_review -> bool | None: |
+      Включить внешнее codex ревью.
+
+"TaskExecutor(agent: str, env: dict)":
+  location: config.py
+  annotations: |
+    Конфигурация AI-агента для выполнения задач.
+    Создаётся внутри `load_config` из секции task_executor.
+
+    `agent`: AI-executor
+    `env`: словарь переменных окружения
+
+    Requirements:
+    - agent — обязательное поле, не может быть None или пустой строкой
+    - env — опциональное поле, по умолчанию пустой dict
+  properties:
+    agent -> str: |
+      AI-executor. Значения: claude, codex, copilot, gemini, custom:/path/to/script.
+      Обязательное поле — не может быть пустой строкой.
+    env -> dict: |
+      Словарь переменных окружения {str: str}.
+      Передаются AI-executor при запуске для конфигурации моделей и endpoint-ов.
+      Опциональное поле — по умолчанию пустой dict.
+
+---
+
+Author: Serge Nikitin
+CreatedAt: 28/04/26
+
+Description: |
+  Манифест описывает единый доступ к конфигурации проекта через .goga.yml
