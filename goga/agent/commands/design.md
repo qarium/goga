@@ -9,18 +9,14 @@ Use the AskUserQuestion tool with the following question:
 - **multiSelect**: false
 - **options**:
   - **label**: "changes", **description**: "Architectural design based on CODEMANIFEST changes (git diff)"
-  - **label**: "brainstorm", **description**: "Design CODEMANIFESTs through brainstorming, then generate a design document"
   - **label**: "fix", **description**: "Diagnose a bug, update CODEMANIFEST to close the gap, then generate a design document"
 
 Based on the user's choice:
 
 - **changes** — use the **Skill tool** to invoke `design-by-changes` with arguments as context.
-
-- **brainstorm** — use the **Skill tool** to invoke `design-by-brainstorm` with arguments as context.
-
 - **fix** — use the **Skill tool** to invoke `design-by-fix` with arguments as context.
 
-IMPORTANT: After the user selects a mode, your only action is to invoke the corresponding skill via the Skill tool. Do NOT read CODEMANIFEST files, do NOT explore the codebase, do NOT create the design yourself.
+IMPORTANT: After the user selects a mode, your only action is to invoke the corresponding skill via the Skill tool.
 
 Arguments: $ARGUMENTS
 

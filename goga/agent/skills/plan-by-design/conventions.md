@@ -1,297 +1,297 @@
-# General Project Conventions for Contract-Driven Package Implementation
+# Общие конвенции проекта для контракт-ориентированной реализации пакетов
 
-## Purpose
+## Назначение
 
-This file defines **general, language-agnostic project conventions** for implementing code from package contracts.
+Этот файл определяет **общие, не зависящие от языка конвенции проекта** для реализации кода из контрактов пакетов.
 
-These conventions are not tied to a specific programming language.
-They define how implementation should be organized relative to:
-- package contracts,
-- facade boundaries,
-- internal decomposition,
-- traceability,
-- testing.
+Эти конвенции не привязаны к конкретному языку программирования.
+Они определяют, как должна быть организована реализация относительно:
+- контрактов пакета,
+- границ фасада,
+- внутренней декомпозиции,
+- трассируемости,
+- тестирования.
 
-Language-specific conventions such as syntax, typing style, exception style, or naming mechanics should be defined separately in a language-specific conventions file.
-
----
-
-## Rule Types
-
-This file contains:
-- **Required rules** — must be followed unless an explicit contract or project directive says otherwise
-- **Recommended rules** — should be followed when they improve clarity and consistency
-
-When a project contains both general and language-specific conventions:
-1. obey the contract first,
-2. obey package boundary and facade obligations second,
-3. obey explicit project conventions next,
-4. obey target-language idioms next.
+Языково-специфичные конвенции, такие как синтаксис, стиль типизации, стиль исключений или механика именования, должны быть определены отдельно в файле конвенций для конкретного языка.
 
 ---
 
-## Scope
+## Типы правил
 
-These conventions apply inside a single user-defined package.
+Этот файл содержит:
+- **Обязательные правила** — должны соблюдаться, если явный контракт или директива проекта не указывает иное
+- **Рекомендуемые правила** — следует соблюдать, когда они повышают ясность и согласованность
 
-They govern:
-- internal code organization,
-- public surface vs internal implementation,
-- traceability from contract to code and tests,
-- test classification,
-- project consistency.
-
-These conventions do **not** authorize:
-- creation of new packages,
-- redefinition of package boundaries,
-- changes to user-defined facade contracts.
+Когда проект содержит как общие, так и языково-специфичные конвенции:
+1. соблюдайте контракт в первую очередь,
+2. соблюдайте границы пакета и обязательства фасада во вторую очередь,
+3. соблюдайте явные конвенции проекта далее,
+4. соблюдайте идиомы целевого языка далее.
 
 ---
 
-## Package Internal Structure
+## Область действия
 
-### Required
-- Implementation may be decomposed into additional internal files and modules inside the current package.
-- Internal helper elements may be extracted into dedicated internal modules when this improves clarity, cohesion, reuse, or testability.
-- Public facade code and internal support code should remain clearly distinguishable.
-- Internal decomposition must preserve the contract surface and required `location` placement.
+Эти конвенции применяются внутри одного пользовательского пакета.
 
-### Recommended
-- Group implementation by responsibility so that contract-facing code remains easy to locate.
-- Keep facade-related assembly logic near the package surface, while placing reusable internal details deeper in internal modules.
-- Prefer decomposition that makes contract coverage and testing easier to follow.
+Они регулируют:
+- внутреннюю организацию кода,
+- публичную поверхность vs внутреннюю реализацию,
+- трассируемость от контракта к коду и тестам,
+- классификацию тестов,
+- согласованность проекта.
 
-### Clarification
-There is **no** general rule that one public contract entity must map to one implementation file.
-Multiple contract entities may validly point to the same `location` if the contract says so.
-
----
-
-## Public Surface vs Internal Implementation
-
-### Required
-- The public contract surface must remain explicit and stable.
-- Internal support code may be introduced freely as long as it does not replace or obscure contract entities.
-- Internal implementation details must not be treated as a substitute for facade-level contract behavior.
-- Planning and coding should clearly distinguish:
-  - public contract-facing elements,
-  - internal implementation elements.
-
-### Recommended
-- Keep contract-facing entry points easy to identify.
-- Avoid unnecessary mixing of facade-oriented behavior and private implementation details in the same place when separation improves clarity.
+Эти конвенции **не** разрешают:
+- создание новых пакетов,
+- переопределение границ пакетов,
+- изменение пользовательских контрактов фасада.
 
 ---
 
-## Naming Principles
+## Внутренняя структура пакета
 
-### Required
-- Use naming conventions idiomatic for the target language and consistent with the existing project.
-- Keep naming aligned with contract vocabulary wherever possible.
-- Use naming that makes public entities, internal support elements, and tests distinguishable by role.
+### Обязательно
+- Реализация может быть декомпозирована на дополнительные внутренние файлы и модули внутри текущего пакета.
+- Внутренние вспомогательные элементы могут быть выделены в отдельные внутренние модули, если это улучшает ясность, связность, повторное использование или тестируемость.
+- Публичный код фасада и внутренний вспомогательный код должны оставаться чётко различимыми.
+- Внутренняя декомпозиция должна сохранять поверхность контракта и требуемое размещение в `location`.
 
-### If the project already has code
-- Follow existing project naming patterns unless they directly conflict with the contract.
+### Рекомендуется
+- Группируйте реализацию по ответственности, чтобы код, обращённый к контракту, оставался легко обнаружимым.
+- Держите логику сборки фасада рядом с поверхностью пакета, а повторно используемые внутренние детали — глубже во внутренних модулях.
+- Предпочитайте декомпозицию, которая упрощает отслеживание покрытия контракта и тестирования.
 
-### If the project has no code yet
-- Use naming idiomatic for the target language.
-- Use contract vocabulary as the semantic baseline.
-- Keep naming consistent across entities, helpers, and tests so the emerging project style starts from a coherent base.
-
-### Recommended
-- Prefer names that reflect responsibility and relation to the contract.
-- Let internal helper names communicate support intent rather than facade intent.
-- Let test names communicate covered entity, scenario, and expected behavior.
+### Уточнение
+**Нет** общего правила, что одна публичная сущность контракта должна отображаться в один файл реализации.
+Несколько сущностей контракта могут правомерно указывать на один и тот же `location`, если контракт это предусматривает.
 
 ---
 
-## Traceability Rules
+## Публичная поверхность vs внутренняя реализация
 
-### Required
-Implementation and tests must be traceable back to the contract.
+### Обязательно
+- Публичная поверхность контракта должна оставаться явной и стабильной.
+- Внутренний вспомогательный код может свободно добавляться, если он не заменяет и не затеняет сущности контракта.
+- Детали внутренней реализации не должны рассматриваться как замена поведения контракта на уровне фасада.
+- Планирование и кодирование должны чётко различать:
+  - публичные элементы, обращённые к контракту,
+  - элементы внутренней реализации.
 
-For any meaningful implementation unit or test, it should be possible to determine:
-- which contract entity it supports,
-- which contract property or method it covers,
-- whether it supports facade behavior or internal behavior,
-- which described requirement it validates.
-
-### Recommended
-- Preserve clear mapping from contract entity → implementation location → validation → tests.
-- Make it easy to inspect whether each contract requirement has corresponding implementation and corresponding tests.
-
----
-
-## Contract-to-Test Mapping
-
-### Required
-Every contract element must have explicit test coverage.
-
-At minimum, for each meaningful contract entity and each meaningful contract behavior:
-- facade availability must be tested,
-- declared API shape must be tested,
-- behavior described in the contract must be tested.
-
-Descriptions in the contract are not optional.
-If a behavior or constraint is described there, test coverage must reflect it.
-
-### Recommended
-- Make contract test coverage easy to audit by grouping tests around entities, methods, or behaviors in a way natural for the target language and project.
+### Рекомендуется
+- Держите точки входа, обращённые к контракту, легко идентифицируемыми.
+- Избегайте ненужного смешивания поведения фасада и деталей приватной реализации в одном месте, когда разделение улучшает ясность.
 
 ---
 
-## Test Classification
+## Принципы именования
 
-Tests are classified into three categories.
+### Обязательно
+- Используйте конвенции именования, идиоматичные для целевого языка и согласованные с существующим проектом.
+- Держите именование согласованным со словарём контракта везде, где это возможно.
+- Используйте именование, которое делает публичные сущности, внутренние вспомогательные элементы и тесты различимыми по роли.
 
-### 1. Contract tests
-These verify the package contract surface.
+### Если в проекте уже есть код
+- Следуйте существующим паттернам именования проекта, если они не противоречат контракту напрямую.
 
-They should cover:
-- facade availability,
-- public API shape,
-- method/property signatures.
+### Если в проекте ещё нет кода
+- Используйте именование, идиоматичное для целевого языка.
+- Используйте словарь контракта как смысловую основу.
+- Держите именование согласованным между сущностями, помощниками и тестами, чтобы формирующийся стиль проекта начинался с согласованной базы.
 
-These tests are written FIRST within each coding task (TDD approach) and are expected to fail initially.
-
-These tests are mandatory.
-
-### 2. Logic tests
-These verify behavioral requirements from contract descriptions.
-
-They should cover:
-- positive scenarios,
-- negative scenarios,
-- edge cases.
-
-These tests are written AFTER implementation within each coding task.
-
-These tests are mandatory.
-
-### 3. Integration tests
-These verify cross-entity interactions and end-to-end scenarios.
-
-They are written as dedicated tasks after all coding tasks for a package.
-
-They are created when internal complexity or cross-entity interactions justify direct verification.
-
-### Required rule
-Integration tests do **not** replace contract or logic tests.
-
-A package is not sufficiently covered if only integration tests exist while per-entity contract and logic tests are missing.
+### Рекомендуется
+- Предпочитайте имена, отражающие ответственность и отношение к контракту.
+- Пусть имена внутренних помощников отражают намерение поддержки, а не намерение фасада.
+- Пусть имена тестов отражают тестируемую сущность, сценарий и ожидаемое поведение.
 
 ---
 
-## Test Naming Principles
+## Правила трассируемости
 
-### Required
-Test names should make clear:
-- the contract entity or internal element under test,
-- the scenario,
-- the expected behavior or result.
+### Обязательно
+Реализация и тесты должны быть трассируемы обратно к контракту.
 
-### Language-agnostic rule
-Do not enforce a specific casing style here.
-Instead:
-- use the naming mechanics natural to the target language and test framework,
-- preserve clarity of covered subject, scenario, and expectation.
+Для любой значимой единицы реализации или теста должна быть возможность определить:
+- какую сущность контракта она поддерживает,
+- какое свойство или метод контракта она покрывает,
+- поддерживает ли она поведение фасада или внутреннее поведение,
+- какое описанное требование она проверяет.
 
-### Recommended
-A good test name should communicate:
-- **who/what** is under test,
-- **under which condition**,
-- **what should happen**.
+### Рекомендуется
+- Сохраняйте чёткое отображение: сущность контракта → расположение реализации → валидация → тесты.
+- Сделайте лёгкой проверку того, имеет ли каждое требование контракта соответствующую реализацию и соответствующие тесты.
 
 ---
 
-## Recommendations for Internal Decomposition
+## Отображение контракта в тесты
 
-### Recommended
-- Introduce internal helpers when they reduce duplication or isolate behavior cleanly.
-- Decompose internal logic when doing so improves contract traceability, readability, or testability.
-- Prefer internal structure that makes future contract changes easier to absorb.
+### Обязательно
+Каждый элемент контракта должен иметь явное тестовое покрытие.
 
-### Required boundary
-Internal decomposition must remain inside the current package and must not create new packages.
+Как минимум, для каждой значимой сущности контракта и каждого значимого поведения контракта:
+- доступность фасада должна быть протестирована,
+- объявленная форма API должна быть протестирована,
+- поведение, описанное в контракте, должно быть протестировано.
 
----
+Описания в контракте не являются опциональными.
+Если поведение или ограничение описано там, тестовое покрытие должно это отражать.
 
-## Relationship to Language-Specific Conventions
-
-This file intentionally avoids language-specific rules such as:
-- exact naming casing,
-- typing mechanics,
-- exception mechanics,
-- async/sync details,
-- import syntax,
-- file naming syntax,
-- language-specific test framework rules.
-
-Those should be defined in an additional language-specific conventions file when needed.
-
-This general convention layer defines **structural and traceability expectations**, not language syntax policy.
+### Рекомендуется
+- Сделайте тестовое покрытие контракта легко аудируемым, группируя тесты вокруг сущностей, методов или поведений способом, естественным для целевого языка и проекта.
 
 ---
 
-## Ralphex Task Design Conventions
+## Классификация тестов
 
-### Task atomicity
-Each task in the plan must be **atomic** — completable by an AI agent in a single Claude Code session without requiring context from other tasks.
+Тесты классифицируются на три категории.
 
-Rules:
-- One task covers one logical unit of work (one entity skeleton, one method implementation, one test suite).
-- Tasks sharing the same `location` file may be grouped if they are small enough for one session.
-- A task must not require the AI to read other tasks for implementation context.
-- Each task restates relevant imports, usages, and annotations needed for implementation.
+### 1. Контрактные тесты
+Проверяют поверхность контракта пакета.
 
-### Task ordering
-Tasks must be ordered **per-package**: each package is completed (coding + testing) before moving to the next.
+Они должны покрывать:
+- доступность фасада,
+- форму публичного API,
+- сигнатуры методов/свойств.
 
-Within a single package, tasks follow this order:
-1. Infrastructure (package structure, `__init__.py`, re-exports)
-2. Entity skeletons (classes and functions in correct `location` files)
-3. Property implementations
-4. Method implementations (one per method or grouped by entity)
-5. Interface mutations (`Type::` mutation)
-6. Integration/edge case tests — **placed after all coding tasks for this package**
+Эти тесты пишутся ПЕРВЫМИ в каждой задаче кодирования (подход TDD) и ожидаемо изначально падают.
 
-When the plan covers multiple packages (e.g., subpackages):
-- Process leaf packages first (no child dependencies), then parent packages
-- Respect dependency order: if package A imports from package B, complete B first
-- Each package's test tasks follow directly after its coding tasks
+Эти тесты обязательны.
 
-### Checkbox granularity
-Each `- [ ]` checkbox in a task must be:
-- A specific, verifiable action (e.g., "Create file `service.py`", "Implement method `load()` returning `list[Any]`")
-- Verifiable by running a command or checking file existence
-- Not a vague goal (e.g., avoid "Implement the service" without specifics)
+### 2. Логические тесты
+Проверяют поведенческие требования из описаний контракта.
 
-### Validation command placement
-- Each task must include at least one inline validation step (a `- [ ]` checkbox with a verification command).
-- The `## Validation Commands` section at the plan level lists all global validation commands.
-- Task-level validation commands verify the specific task outcome.
-- Plan-level validation commands verify overall contract compliance.
+Они должны покрывать:
+- позитивные сценарии,
+- негативные сценарии,
+- граничные случаи.
 
-### TDD workflow rule
-Every **coding task** (entity skeleton, property implementation, method implementation, interface mutation) must follow the TDD workflow with these checkboxes:
-1. `- [ ] **Contract tests**: <specific tests>` — write contract tests first (expected to fail)
-2. `- [ ] **Code**: <steps>` — implement the entity/method/property
-3. `- [ ] **Verify interfaces**: <command>` — run contract tests, all must pass
-4. `- [ ] **Logic tests**: <specific tests>` — write behavioral tests
-5. `- [ ] **Debug**: pytest tests/ -x` — fix implementation until all tests pass (do NOT fix test code)
-6. `- [ ] **Re-check contracts**: verify contract obligations`
-7. `- [ ] **Lint**: ruff check src/` — fix formatting, decompose if needed
+Эти тесты пишутся ПОСЛЕ реализации в каждой задаче кодирования.
 
-Infrastructure tasks (package structure, `__init__.py`, re-exports) follow a simplified workflow: code → verify → lint.
+Эти тесты обязательны.
 
-Integration test tasks (cross-entity scenarios) validate via their own `pytest tests/test_<scope>.py -v` step.
+### 3. Интеграционные тесты
+Проверяют межсущностные взаимодействия и сквозные сценарии.
 
-### Self-contained task context
-Each task must include:
-- What contract entities it covers
-- What `location` files are involved
-- Relevant imports and usages
-- Behavioral requirements from descriptions
-- Annotations as prescriptive instructions for the implementation agent
+Они пишутся как отдельные задачи после всех задач кодирования для пакета.
 
-This ensures ralphex can send any single task to Claude Code and the AI has sufficient context to implement it correctly.
+Они создаются, когда внутренняя сложность или межсущностные взаимодействия оправдывают прямую верификацию.
+
+### Обязательное правило
+Интеграционные тесты **не** заменяют контрактные или логические тесты.
+
+Пакет не имеет достаточного покрытия, если существуют только интеграционные тесты, при этом отсутствуют контрактные и логические тесты по каждой сущности.
+
+---
+
+## Принципы именования тестов
+
+### Обязательно
+Имена тестов должны ясно указывать:
+- сущность контракта или внутренний элемент, подвергаемый тестированию,
+- сценарий,
+- ожидаемое поведение или результат.
+
+### Языково-независимое правило
+Не навязывайте здесь конкретный стиль регистра.
+Вместо этого:
+- используйте механику именования, естественную для целевого языка и тестового фреймворка,
+- сохраняйте ясность покрываемого субъекта, сценария и ожидания.
+
+### Рекомендуется
+Хорошее имя теста должно сообщать:
+- **кто/что** тестируется,
+- **при каком условии**,
+- **что должно произойти**.
+
+---
+
+## Рекомендации по внутренней декомпозиции
+
+### Рекомендуется
+- Вводите внутренних помощников, когда они уменьшают дублирование или чисто изолируют поведение.
+- Декомпозируйте внутреннюю логику, когда это улучшает трассируемость контракта, читаемость или тестируемость.
+- Предпочитайте внутреннюю структуру, которая облегчает поглощение будущих изменений контракта.
+
+### Обязательная граница
+Внутренняя декомпозиция должна оставаться внутри текущего пакета и не должна создавать новые пакеты.
+
+---
+
+## Отношение к языково-специфичным конвенциям
+
+Этот файл намеренно избегает языково-специфичных правил, таких как:
+- точный регистр именования,
+- механика типизации,
+- механика исключений,
+- детали async/sync,
+- синтаксис импортов,
+- синтаксис именования файлов,
+- языково-специфичные правила тестовых фреймворков.
+
+Они должны быть определены в дополнительном файле языково-специфичных конвенций при необходимости.
+
+Этот слой общих конвенций определяет **структурные ожидания и ожидания трассируемости**, а не политику синтаксиса языка.
+
+---
+
+## Конвенции проектирования задач Ralphex
+
+### Атомарность задач
+Каждая задача в плане должна быть **атомарной** — выполнимой ИИ-агентом за одну сессию Claude Code без необходимости контекста из других задач.
+
+Правила:
+- Одна задача покрывает одну логическую единицу работы (один каркас сущности, одна реализация метода, один набор тестов).
+- Задачи, использующие один и тот же файл `location`, могут быть сгруппированы, если они достаточно малы для одной сессии.
+- Задача не должна требовать от ИИ чтения других задач для контекста реализации.
+- Каждая задача повторяет релевантные импорты, использования и аннотации, необходимые для реализации.
+
+### Порядок задач
+Задачи должны быть упорядочены **по пакетам**: каждый пакет завершается (кодирование + тестирование) перед переходом к следующему.
+
+Внутри одного пакета задачи следуют в таком порядке:
+1. Инфраструктура (структура пакета, `__init__.py`, реэкспорты)
+2. Каркасы сущностей (классы и функции в правильных файлах `location`)
+3. Реализация свойств
+4. Реализация методов (по одному на метод или сгруппированные по сущности)
+5. Мутации интерфейсов (мутация `Type::`)
+6. Интеграционные/граничные тесты — **размещаются после всех задач кодирования для этого пакета**
+
+Когда план охватывает несколько пакетов (например, подпакеты):
+- Обрабатывайте листовые пакеты первыми (без дочерних зависимостей), затем родительские пакеты
+- Уважайте порядок зависимостей: если пакет A импортирует из пакета B, завершите B первым
+- Тестовые задачи каждого пакета следуют сразу за его задачами кодирования
+
+### Гранулярность чекбоксов
+Каждый чекбокс `- [ ]` в задаче должен быть:
+- Конкретным, проверяемым действием (например, "Создать файл `service.py`", "Реализовать метод `load()`, возвращающий `list[Any]`")
+- Проверяемым запуском команды или проверкой наличия файла
+- Не размытой целью (например, избегайте "Реализовать сервис" без конкретики)
+
+### Размещение команд валидации
+- Каждая задача должна включать как минимум один встроенный шаг валидации (чекбокс `- [ ]` с командой проверки).
+- Раздел `## Validation Commands` на уровне плана перечисляет все глобальные команды валидации.
+- Команды валидации на уровне задачи проверяют результат конкретной задачи.
+- Команды валидации на уровне плана проверяют общее соответствие контракту.
+
+### Правило рабочего процесса TDD
+Каждая **задача кодирования** (каркас сущности, реализация свойства, реализация метода, мутация интерфейса) должна следовать рабочему процессу TDD с этими чекбоксами:
+1. `- [ ] **Контрактные тесты**: <конкретные тесты>` — напишите контрактные тесты первыми (ожидаемо падают)
+2. `- [ ] **Код**: <шаги>` — реализуйте сущность/метод/свойство
+3. `- [ ] **Верификация интерфейсов**: <команда>` — запустите контрактные тесты, все должны пройти
+4. `- [ ] **Логические тесты**: <конкретные тесты>` — напишите поведенческие тесты
+5. `- [ ] **Отладка**: pytest tests/ -x` — исправляйте реализацию, пока все тесты не пройдут (НЕ исправляйте тестовый код)
+6. `- [ ] **Перепроверка контрактов**: проверьте обязательства контракта`
+7. `- [ ] **Линт**: ruff check src/` — исправьте форматирование, декомпозируйте при необходимости
+
+Инфраструктурные задачи (структура пакета, `__init__.py`, реэкспорты) следуют упрощённому рабочему процессу: код → верификация → линт.
+
+Задачи интеграционных тестов (межсущностные сценарии) валидируются через собственный шаг `pytest tests/test_<scope>.py -v`.
+
+### Самодостаточный контекст задачи
+Каждая задача должна включать:
+- Какие сущности контракта она покрывает
+- Какие файлы `location` задействованы
+- Релевантные импорты и использования
+- Поведенческие требования из описаний
+- Аннотации как предписывающие инструкции для агента реализации
+
+Это гарантирует, что ralphex может отправить любую отдельную задачу в Claude Code, и у ИИ будет достаточно контекста для корректной реализации.

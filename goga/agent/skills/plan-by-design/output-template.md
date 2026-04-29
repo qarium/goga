@@ -1,199 +1,195 @@
-# Output Template for Plan
+# Шаблон вывода плана
 
-Output of Phase 1 (structure) + Phase 2 (Usages calibration).
-Saved to `docs/plans/<feature-name>.md`.
-This format is compatible with ralphex execution.
-
-Design Document template is in `design-doc-template.md`.
-
-If a section cannot be completed because information is unavailable, keep the section and explicitly state what is unavailable.
+Результат Фазы 1 (структура) + Фаза 2 (калибровка Usages).
+Сохраняется в `docs/plans/<feature-name>.md`.
+Этот формат совместим с выполнением через ralphex.
 
 ---
 
-# Plan: `<feature-name>`
+# План: `<имя-фичи>`
 
-## Goal
+## Цель
 
-Concise statement of what will be implemented or changed.
-Cover:
-- what the package must provide after implementation,
-- the most important contract-to-code gaps,
-- the overall implementation strategy.
+Краткое утверждение о том, что будет реализовано или изменено.
+Покрыть:
+- что пакет должен предоставлять после реализации,
+- наиболее важные разрывы между контрактом и кодом,
+- общую стратегию реализации.
 
-## Context
+## Контекст
 
-### Contract Surface
+### Поверхность контракта
 
-For each contract entity:
+Для каждой сущности контракта:
 
-**Entity: `<entity name>`**
-- Kind: `<class | function | re-export>`
-- Declared `location`: `<file path>`
-- Facade obligation: must be importable from `<package>`
-- Mutations: `Type::` declarations (if any)
-- Properties: (list with types and descriptions)
-- Methods: (list with signatures and descriptions)
-- Semantic requirements from descriptions: (key behavioral expectations)
-- Imported dependencies: (types from `Imports` used by this entity)
-- Annotations context: (if present, include file-level → entity-level → method-level cascade)
+**Сущность: `<имя сущности>`**
+- Тип: `<class | function | re-export>`
+- Объявленный `location`: `<путь к файлу>`
+- Обязанность фасада: должна быть импортируема из `<пакет>`
+- Мутации: объявления `Type::` (если есть)
+- Свойства: (список с типами и описаниями)
+- Методы: (список с сигнатурами и описаниями)
+- Семантические требования из описаний: (ключевые поведенческие ожидания)
+- Импортированные зависимости: (типы из `Imports`, используемые данной сущностью)
+- Контекст аннотаций: (если присутствует, включить каскад: уровень файла → уровень сущности → уровень метода)
 
-Repeat for every contract entity.
+Повторить для каждой сущности контракта.
 
-### Re-exports
+### Реэкспорты
 
-For each re-export block (`->Name: {}` or `->usage.Type: {}`):
-- Name:
-- Source: corresponding `Imports` entry (for internal types, resolved from `Types` list with optional `AS` aliases) or `Usages` entry (for external types)
-- Facade obligation: must be importable from `__init__.py`
-- Hierarchy constraint (for `Imports` only): source must be at a lower filesystem level
+Для каждого блока реэкспорта (`->Name: {}` или `->usage.Type: {}`):
+- Имя:
+- Источник: соответствующая запись из `Imports` (для внутренних типов, разрешённая из списка `Types` с опциональными алиасами `AS`) или запись из `Usages` (для внешних типов)
+- Обязанность фасада: должен быть импортируем из `__init__.py`
+- Ограничение иерархии (только для `Imports`): источник должен быть на более низком уровне файловой системы
 
-### Usages Context
+### Контекст Usages
 
-For each usage entry:
-- Name:
-- Description or spec reference:
-- Relevance to implementation:
+Для каждой записи использования:
+- Имя:
+- Описание или ссылка на спецификацию:
+- Релевантность для реализации:
 
-### Imported Usages
+### Импортированные Usages
 
-For each imported usage from `Imports` → `Usages`:
-- Name:
-- From cell:
-- Source path: `{from_path}/.usages/{usage_name}.md`
-- Description or spec content:
-- Relevance to implementation:
+Для каждого импортированного использования из `Imports` → `Usages`:
+- Имя:
+- Из ячейки:
+- Путь источника: `{from_path}/.usages/{usage_name}.md`
+- Описание или содержимое спецификации:
+- Релевантность для реализации:
 
-### Local Usages
+### Локальные Usages
 
-For each planned local usage file (from design document):
-- File path: `.usages/<category-name>.md`
-- Functional category: <what semantic domain this category covers>
-- Status: <new file / extends existing>
-- Related entities: <which entities use practices from this category>
-- Description: <what practices this file describes>
-- Creation task reference: <Task N>
+Для каждого запланированного файла локальных использований (из документа дизайна):
+- Путь к файлу: `.usages/<category-name>.md`
+- Функциональная категория: <какую смысловую область покрывает эта категория>
+- Статус: <новый файл / расширяет существующий>
+- Связанные сущности: <какие сущности используют практики из этой категории>
+- Описание: <какие практики описывает этот файл>
+- Ссылка на задачу создания: <Задача N>
 
-### External Dependencies
+### Внешние зависимости
 
-List all external dependencies the implementation relies on:
-- External library types from `Usages` (third-party packages)
-- Pattern/convention references from `Usages`
-- Required tools or frameworks
+Перечислить все внешние зависимости, от которых зависит реализация:
+- Типы внешних библиотек из `Usages` (сторонние пакеты)
+- Ссылки на паттерны/конвенции из `Usages`
+- Необходимые инструменты или фреймворки
 
-## Facts
+## Факты
 
-List all facts directly stated in the contract or observed in the workspace:
+Перечислить все факты, прямо указанные в контракте или наблюдаемые в рабочем пространстве:
 - ...
 
-## Assumptions
+## Допущения
 
-List every non-explicit planning inference:
-- Assumption:
-- Basis:
-- Criticality:
-- Safe to proceed without confirmation: `<yes | no>`
+Перечислить каждый неявный вывод планирования:
+- Допущение:
+- Основание:
+- Критичность:
+- Безопасно продолжить без подтверждения: `<да | нет>`
 
-## Open Questions
+## Открытые вопросы
 
-List unresolved questions:
-- Question:
-- Why it matters:
-- Blocking in strict mode: `<yes | no>`
+Перечислить неразрешённые вопросы:
+- Вопрос:
+- Почему это важно:
+- Блокирует в строгом режиме: `<да | нет>`
 
-## Gap Analysis
+## Анализ разрывов
 
-Compare the contract with the current visible package state:
-- Missing contract entities:
-- Missing facade exposure:
-- Wrong `location` placement:
-- API mismatches:
-- Behavioral mismatches:
-- Existing code that can be reused:
-- Test coverage gaps:
-- Missing workspace or git visibility:
-
----
-
-## Tasks
-
-> **Per-package ordering rule**: Each package's coding tasks are completed before starting the next. Within each coding task, contract tests are written first (TDD workflow).
-
-<!-- For each package, repeat this block: -->
-
-### Task 1: `<descriptive title>` (infrastructure)
-
-<Context paragraph: what this task does — package structure, `__init__.py`, re-exports. Provide enough context for an AI agent to implement this task independently.>
-
-**Usages relevant to this task:**
-- `<usage name>`: <specific information — what to use, how to call it, what it provides>
-  (This section is populated during Phase 2 calibration. If no Usages are relevant to this task, omit this section.)
-
-**CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
-
-- [ ] <specific implementation step 1 — e.g., "Create file `path/to/location.py`">
-- [ ] <specific implementation step 2 — e.g., "Add `EntityName` to `package/__init__.py`">
-- [ ] Verify facade availability: `python -c "from package import EntityName"`
-- [ ] Lint: `ruff check src/` — fix formatting if needed
-
-### Task 2: `<descriptive title>`
-
-<Context paragraph: what this task does, which contract entities it covers, relevant imports/annotations. Provide enough context for an AI agent to implement this task independently.>
-
-**Usages relevant to this task:**
-- `<usage name>`: <specific information>
-
-**CRITICAL: `CODEMANIFEST` files are read-only contract definitions. Do NOT modify them. If the implementation does not match the contract, fix the implementation — never fix the contract.**
-
-- [ ] **Contract tests**: <specific tests — facade availability, API shape, method signatures for entities in this task> (expected to fail at this stage)
-- [ ] **Code**: <specific implementation step 1>
-- [ ] **Code**: <specific implementation step 2>
-- [ ] **Code**: <specific implementation step N>
-- [ ] **Verify interfaces**: run contract tests from above — `pytest tests/test_<entity>.py -v` — all must pass
-- [ ] **Logic tests**: <specific behavioral tests — positive, negative, edge cases from plan>
-- [ ] **Debug**: `pytest tests/ -x` — fix implementation code until all tests pass (do NOT fix test code)
-- [ ] **Re-check contracts**: verify all contract obligations — facade, API shape, behavior
-- [ ] **Lint**: `ruff check src/` — fix formatting, apply decomposition if needed
-
-Continue for all coding tasks **for this package**.
-
-### Task N: Integration tests for `<scope>`
-
-<Context: what cross-entity scenarios are being tested for this package>
-
-**Usages relevant to this task:**
-- `<usage name>`: <specific information — e.g., mocking instructions, test fixtures>
-
-- [ ] Create test file `tests/test_<scope>.py`
-- [ ] Test cross-entity interaction: <specific scenario>
-- [ ] Test edge case: <specific boundary condition>
-- [ ] Run validation: `pytest tests/test_<scope>.py -v`
-
-<!-- Repeat the entire block (coding tasks + integration tests) for the next package -->
+Сравнить контракт с текущим видимым состоянием пакета:
+- Отсутствующие сущности контракта:
+- Отсутствующее раскрытие фасада:
+- Неверное размещение в `location`:
+- Несоответствия API:
+- Поведенческие несоответствия:
+- Существующий код, который можно переиспользовать:
+- Разрывы в тестовом покрытии:
+- Отсутствующая видимость в рабочем пространстве или git:
 
 ---
 
-## Validation Commands
+## Задачи
 
-- `<command>`: <what it verifies>
-- `<command>`: <what it verifies>
-- `pytest tests/ -x`: Run all tests
-- `python -c "from package import Entity1, Entity2"`: Verify all facade entities are importable
+> **Правило упорядочивания по пакетам**: задачи кодирования каждого пакета завершаются перед началом следующего. Внутри каждой задачи кодирования контрактные тесты пишутся первыми (рабочий процесс TDD).
+
+<!-- Для каждого пакета повторить этот блок: -->
+
+### Задача 1: `<описательное название>` (инфраструктура)
+
+<Абзац контекста: что делает эта задача — структура пакета, `__init__.py`, реэкспорты. Предоставить достаточно контекста для ИИ-агента, чтобы реализовать эту задачу независимо.>
+
+**Usages, релевантные для этой задачи:**
+- `<имя использования>`: <конкретная информация — что использовать, как вызывать, что это предоставляет>
+  (Этот раздел заполняется во время калибровки Фазы 2. Если для этой задачи нет релевантных Usages, опустите этот раздел.)
+
+**КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их. Если реализация не соответствует контракту, исправляйте реализацию — никогда не исправляйте контракт.**
+
+- [ ] <конкретный шаг реализации 1 — например, "Создать файл `path/to/location.py`">
+- [ ] <конкретный шаг реализации 2 — например, "Добавить `EntityName` в `package/__init__.py`">
+- [ ] Проверить доступность фасада: `python -c "from package import EntityName"`
+- [ ] Линт: `ruff check src/` — исправить форматирование при необходимости
+
+### Задача 2: `<описательное название>`
+
+<Абзац контекста: что делает эта задача, какие сущности контракта она покрывает, релевантные импорты/аннотации. Предоставить достаточно контекста для ИИ-агента, чтобы реализовать эту задачу независимо.>
+
+**Usages, релевантные для этой задачи:**
+- `<имя использования>`: <конкретная информация>
+
+**КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их. Если реализация не соответствует контракту, исправляйте реализацию — никогда не исправляйте контракт.**
+
+- [ ] **Контрактные тесты**: <конкретные тесты — доступность фасада, форма API, сигнатуры методов для сущностей в этой задаче> (ожидаемо падают на этом этапе)
+- [ ] **Код**: <конкретный шаг реализации 1>
+- [ ] **Код**: <конкретный шаг реализации 2>
+- [ ] **Код**: <конкретный шаг реализации N>
+- [ ] **Верификация интерфейсов**: запустить контрактные тесты выше — `pytest tests/test_<entity>.py -v` — все должны пройти
+- [ ] **Логические тесты**: <конкретные поведенческие тесты — позитивные, негативные, граничные случаи из плана>
+- [ ] **Отладка**: `pytest tests/ -x` — исправлять код реализации, пока все тесты не пройдут (НЕ исправлять тестовый код)
+- [ ] **Перепроверка контрактов**: проверить все обязательства контракта — фасад, форма API, поведение
+- [ ] **Линт**: `ruff check src/` — исправить форматирование, применить декомпозицию при необходимости
+
+Продолжить для всех задач кодирования **для этого пакета**.
+
+### Задача N: Интеграционные тесты для `<область>`
+
+<Контекст: какие межсущностные сценарии тестируются для этого пакета>
+
+**Usages, релевантные для этой задачи:**
+- `<имя использования>`: <конкретная информация — например, инструкции по мокированию, тестовые фикстуры>
+
+- [ ] Создать файл тестов `tests/test_<scope>.py`
+- [ ] Протестировать межсущностное взаимодействие: <конкретный сценарий>
+- [ ] Протестировать граничный случай: <конкретное граничное условие>
+- [ ] Запустить валидацию: `pytest tests/test_<scope>.py -v`
+
+<!-- Повторить весь блок (задачи кодирования + интеграционные тесты) для следующего пакета -->
 
 ---
 
-## Done Criteria
+## Команды валидации
 
-- [ ] Every contract entity is implemented in the correct `location`
-- [ ] Every contract entity is available from the package facade
-- [ ] Properties and methods match the declared API
-- [ ] Descriptions are reflected in behavior
-- [ ] Contract dependencies are respected
-- [ ] Re-exports are available from facade
-- [ ] Every coding task followed the TDD workflow (contract tests → code → verify → logic tests → debug → re-check → lint)
-- [ ] Contract tests and logic tests cover facade, API, and behavior within each coding task
-- [ ] Integration tests exist where cross-entity scenarios require them
-- [ ] No package boundary has been expanded
-- [ ] No `CODEMANIFEST` files were modified (read-only contract)
-- [ ] All validation commands pass
-- [ ] Assumptions and open questions are explicitly documented
-- [ ] Every Usages entry is referenced in at least one task (Phase 2 calibration)
+- `<команда>`: <что она проверяет>
+- `<команда>`: <что она проверяет>
+- `pytest tests/ -x`: Запустить все тесты
+- `python -c "from package import Entity1, Entity2"`: Проверить, что все сущности фасада импортируемы
+
+---
+
+## Критерии завершения
+
+- [ ] Каждая сущность контракта реализована в правильном `location`
+- [ ] Каждая сущность контракта доступна из фасада пакета
+- [ ] Свойства и методы соответствуют объявленному API
+- [ ] Описания отражены в поведении
+- [ ] Зависимости контракта соблюдены
+- [ ] Реэкспорты доступны из фасада
+- [ ] Каждая задача кодирования следовала рабочему процессу TDD (контрактные тесты → код → верификация → логические тесты → отладка → перепроверка → линт)
+- [ ] Контрактные тесты и логические тесты покрывают фасад, API и поведение в рамках каждой задачи кодирования
+- [ ] Интеграционные тесты существуют там, где межсущностные сценарии их требуют
+- [ ] Ни одна граница пакета не была расширена
+- [ ] Файлы `CODEMANIFEST` не были изменены (контракт только для чтения)
+- [ ] Все команды валидации проходят
+- [ ] Допущения и открытые вопросы явно задокументированы
+- [ ] Каждая запись Usages упомянута как минимум в одной задаче (калибровка Фазы 2)
