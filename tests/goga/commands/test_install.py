@@ -56,7 +56,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "arch-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "cells-by-brainstorm" / "SKILL.md").is_file()
         assert "Installed 6 commands" in result.output
-        assert "Installed 9 skills" in result.output
+        assert "Installed 11 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
