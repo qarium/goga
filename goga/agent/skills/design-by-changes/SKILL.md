@@ -1,375 +1,334 @@
-# Design by Changes
+# Проектирование по изменениям
 
-## Purpose
+## Назначение
 
-Creates a **design document** — a complete architectural solution based on changes in `CODEMANIFEST`.
+Создаёт **дизайн-документ** — полное архитектурное решение на основе изменений в `CODEMANIFEST`.
 
-The design document describes **what** and **how** needs to be implemented.
+Дизайн-документ описывает **что** и **как** нужно реализовать.
 
-You do **not** write implementation code and **not** create an execution plan.
-You create an **architectural solution** where every detail has been thought through.
-
-### User Interaction Rule
-
-**Always propose answer options.** When asking the user for confirmation, decision, or clarification — always present 2-4 concrete answer options. Never ask open-ended questions without proposing selectable variants.
-
-### CODEMANIFEST Editing
-
-`CODEMANIFEST` is the primary contract source, but it may contain **insufficient** or **inconsistent** requirements. When gaps, contradictions, or logical errors are found during analysis — you **must** propose and apply corrections to CODEMANIFEST files (with user approval).
-
-Conditions requiring CODEMANIFEST editing:
-- **Insufficient requirements**: missing type declarations, incomplete signatures, absent method/property descriptions that block design
-- **Inconsistent requirements**: contradictions between entity interfaces, type mismatches between interacting entities, conflicting annotations
-- **Contract interaction errors**: broken type chains across interfaces, incorrect `Imports` references, `Type::` mutations referencing non-existent or incompatible types
-
-### Writing annotations
-
-When writing or updating annotations, follow these recommendations:
-
-**Content recommendations:**
-- Begin each annotation with a clear statement of purpose — what this entity/routine/method does and why it exists
-- For every parameter, provide a description using `` `param_name`: description `` syntax
-- When logic is non-trivial (multi-step transformations, conditional flows, state transitions), include an `Algorithm:` section with numbered steps that trace the execution flow
-- When there are constraints, edge cases, format requirements, or preconditions — include a `Requirements:` section describing them explicitly
-- Document the return value format when the semantics are not obvious from the signature alone (e.g., when the meaning differs from the type, or when the structure is complex)
-- Include usage examples when they help clarify the contract — configuration examples for builders, input/output pairs for parsers, call patterns for facades
-
-**Quality recommendations:**
-- Each annotation must be concrete enough to implement from — no TBD, TODO, or vague wording
-- Each annotation should have exactly one possible interpretation — if you can read it two ways, rewrite it
-- Maintain consistent style and structure across all annotations within the same CODEMANIFEST file
-- All backtick references (`` `name` ``) must point to entities that actually exist in the current CODEMANIFEST context — types from `Imports`, practices from `Usages`, or parameters from the signature
+Вы **не** пишете код реализации и **не** создаёте план выполнения.
+Вы создаёте **архитектурное решение**, в котором каждая деталь проработана.
 
 ---
 
-## Sources of Truth
+### Фаза 1: Загрузка DSL
 
-Use the following sources jointly, when available:
+#### Шаг 1: Загрузите DSL спецификацию
 
-1. `dsl.md` — DSL specification (in skill directory). Read before analyzing or editing CODEMANIFEST to ensure correct DSL syntax and semantics
-2. `CODEMANIFEST` — located **inside the package directory** (e.g., `resq/CODEMANIFEST`). Subpackages may have their own CODEMANIFEST files. Read **all** CODEMANIFEST files to build the complete contract
-3. `.usages` spec files — when a `Usages` entry value is a file path, read that file to get the actual specification content. Usages values can be file paths or inline text
-4. current package file tree
-5. current package source files
-6. git change context (added, modified, deleted files)
+Используйте **Skill tool** для вызова `goga-cell`.
+
+Используйте для:
+- Понимания структуры ячейки (CODEMANIFEST, `.usages/`)
+- Понимания директив (Imports, Usages, Annotations, типы, мутации, встраивания)
+- Проверки синтаксической корректности
+
+#### Шаг 2: Загрузите принципы применения DSL
+
+Используйте **Skill tool** для вызова `goga-cookbook`.
+
+Используйте для:
+- Выбора между Entity и Routine
+- Определения гранулярности ячеек
+- Выбора формы подключения Usages (файл / inline / URL)
+- Принципов написания usage файлов в `.usages/`
 
 ---
 
-## Steps
+### Фаза 2: Сбор изменений
 
-### Step 0: Read DSL spec
+#### Шаг 1: Git diff CODEMANIFEST
 
-Read `dsl.md` (in skill directory) — this is the key document for understanding CODEMANIFEST DSL rules before analyzing or editing contracts.
+Сравните все файлы CODEMANIFEST между текущей веткой и базовой веткой.
 
-### Step 1: Git diff CODEMANIFEST
+Определите:
+- добавленные/удалённые/изменённые сущности контракта
+- изменения в Usages, Imports, Annotations, реэкспортах
+- новые или удалённые файлы CODEMANIFEST
 
-Compare all CODEMANIFEST files between the current branch and the base branch (default from `lead.md` → `default_branch`, fallback `0.0.x`).
+Результат: список изменённых CODEMANIFEST файлов с детализацией по сущностям.
 
-Determine:
-- added/removed/modified contract entities
-- changes in Usages, Imports, Annotations, re-exports
-- new or deleted CODEMANIFEST files
+#### Шаг 2: Schema — карта зависимостей
 
-If there is no git context — work with the current CODEMANIFEST files as the complete contract.
+Выполните `docker run --rm -v .:/project -w /project qarium/goga:latest schema` для получения иерархии ячеек.
 
-#### 1a. Schema — dependency impact map
+Используйте `--depends-on <cell_path>` с путями из Шага 1 для поиска затронутых ячеек.
 
-Run `docker run --rm -v .:/project -w /project qarium/goga:latest schema --help` to understand the command capabilities and output structure.
-
-Then run `docker run --rm -v .:/project -w /project qarium/goga:latest schema` to get the full project cell hierarchy. Use `--depends-on <cell_path>` (repeatable) with paths from Step 1 git diff to find all cells affected by the changes — what types and usages they import from changed cells.
-
-This dependency map focuses gap analysis (Step 2) and contract consistency audit (Step 2a) only on affected cells instead of reading all CODEMANIFESTs.
-
-### Step 2: Gap analysis
-
-#### 2-pre. Usages reference resolution
-
-Determine which Usages entries need to be read based on reference links from annotations:
-
-1. **Collect changed entities** — from Step 1 (added/modified entities from git diff, or all entities if no git context)
-2. **Always read root Usages** — global `Annotations` in the CODEMANIFEST header may reference Usages via backtick syntax. All Usages referenced by global `Annotations` are always read
-3. **Always read changed entities' Usages** — for each changed/created entity, scan its entity-level `annotations` and method/property-level annotations. All Usages referenced by these annotations are always read
-4. **Skip unreferenced Usages** — Usages entries not referenced by global `Annotations` AND not referenced by any changed entity's annotations are not read
-
-This means: if a Usages entry exists in the header but no changed entity and no global annotation references it — skip it.
-
-Compare CODEMANIFEST contracts with current implementation:
-- missing contract entities
-- incorrect locations
-- missing re-exports
-- signature and behavior mismatches
-- existing code that can be reused
-- existing local `<current_cell_path>/.usages/` directories and their contents (if any, only for referenced usages)
-- imported usages from other cells via `Imports` → `Usages` — verify referenced files exist at `{from_path}/.usages/{usage_name}.md` (only for referenced imports)
-
-#### 2a. Contract consistency audit
-
-Trace cross-entity interactions to detect contract-level errors:
-
-1. **Interface ↔ Type consistency**: for each entity that accepts or returns a type from `Imports` or `Usages`, verify the type is actually declared and its shape matches the expected usage (fields, methods, properties referenced in annotations actually exist in the source type)
-
-2. **Type ↔ Mutation consistency**: for each `Type::` mutation, verify:
-   - the base type exists in `Imports` (with correct name/alias) or `Usages` (with qualified name)
-   - the mutation target has methods/properties that are compatible with the base type's contract
-   - multi-level mutations (`A::B::Cls`) form a valid chain — each segment is resolvable
-
-3. **Interface ↔ Interface consistency**: for entities that interact (one calls another's methods, passes data to another):
-   - verify output types of entity A match input types expected by entity B
-   - verify method signatures are compatible at the contract level (not just implementation)
-   - verify shared type references point to the same actual type
-
-4. **Annotations ↔ Entity consistency**: verify that annotations reference types, usages, and parameters that actually exist in the current CODEMANIFEST context
-
-For each inconsistency found — record it as a **CODEMANIFEST issue** with:
-- exact location in CODEMANIFEST (file, entity, method/property)
-- what is inconsistent
-- proposed fix
-
-Present all CODEMANIFEST issues to the user via AskUserQuestion (grouped by file), offering to:
-1. **Apply proposed fix** — edit the CODEMANIFEST file
-2. **Skip** — leave as-is, record in design document as a known issue
-3. **Propose alternative** — user describes a different fix
-
-### Step 3: Contract validation via linter
-
-Run:
-```
-docker run --rm -v .:/project -w /project qarium/goga:latest linter
-```
-
-Analyze the linter output. Fix syntax errors in CODEMANIFEST if the linter finds them (the linter validates DSL syntax; semantic content of the contract does not change).
-
-### Step 4: Brainstorm
-
-Based on the collected data, perform analysis in the following order:
-
-#### 4a. Code Stack Trace
-
-For each contract entry point (method, function, constructor), trace the full logical chain through the code from start to finish:
-
-1. **Entry point**: what triggers this code path (constructor call, method call, function call)
-2. **Input**: what data arrives, in what form, from where
-3. **Each intermediate step**: what transformation/validation/lookup happens, what is returned, what is passed forward
-4. **External calls**: what imported types provide, what Usages libraries return, how they are called. If a Usages entry references a file — read that file to understand the actual API and usage patterns
-5. **Output**: what the final result is, in what form, where it goes
-
-At each step, set **checkpoints** — verify:
-- does the data type match what the next step expects?
-- is the transformation logically correct?
-- are there missing intermediate steps that the contract assumes but doesn't state?
-- does the external library usage match its actual API (check Usages specs)?
-
-**Contract interaction checkpoints** — additionally verify at each step where entities interact:
-- **Type flow**: if entity A passes data to entity B, does the type declared in A's output match the type declared in B's input? If not — this is a CODEMANIFEST consistency error
-- **Mutation compatibility**: if a `Type::` mutation is involved, does the mutated type still satisfy the contract expectations of the consumer? If not — record as a CODEMANIFEST issue
-- **Interface contract alignment**: when one entity's method calls another entity's method, do the contracts agree on the data shape (parameter types, return types, error types)?
-
-If a contract interaction checkpoint fails — the issue is in CODEMANIFEST, not in implementation. Propose a fix to the user. Do not work around contract errors in the design.
-
-If at any checkpoint the logic breaks — record the issue and resolve it before continuing.
-
-**Important**: do this trace by reading actual source files for existing code and actual library documentation for Usages. If a Usages entry points to a spec file — read that file. Do not assume — verify.
-
-#### 4b. Analysis
-
-Based on the stack trace results, perform analysis:
-- what new contract entities exist and how they interact
-- implementation details not specified by the DSL (patterns, specific libraries from Usages, architectural decisions)
-- cross-cutting concerns (error handling, logging, validation, caching, concurrency)
-- dependencies between entities
-- potential issues and edge cases found during tracing
-- data flows between entities
-- Usages analysis: what each entry provides, where it is used, why it was chosen, how exactly it is used
-- **Contract interaction errors**: type mismatches between interacting interfaces, broken type chains in mutations, inconsistencies between entity contracts that interact with each other
-
-**Important — Usages/Practices as interface bridges**: A practice (Usages entry) is a **connecting entity** between cells. If an entity needs to interact with an external library, another cell, or a shared interface — it MUST do so through the declared practice. The practice defines the contract of interaction. When designing how entities connect to external systems, always route through the appropriate Usages entry — never bypass a declared practice with a direct dependency.
-
-**Usages import analysis**: When `Imports` contains `Usages:` groups, the design must:
-- Read each imported usage file at `{from_path}/.usages/{usage_name}.md`
-- Analyze how the imported practice applies to the current cell's entities
-- Trace the dependency: which entities depend on which imported usages
-- Document the tracable dependency in the design (imported usages create tracable links between cells but not contractual obligations)
-
-**Local usages design**: For each cell being designed, determine what `<current_cell_path>/.usages/` files are needed for consumers:
-- What distinct functional domains does the cell's API expose to consumers?
-- For each domain: what integration practices would help a consumer use the cell correctly?
-- Do any existing `<current_cell_path>/.usages/` files in the cell already cover a similar functional domain?
-- Note: `<current_cell_path>/.usages/` files describe how consumers interact with this cell's API — they are independent of the `Usages` directive which describes the cell's internal practices
-
-#### 4c. Test Scenarios
-
-Generate test scenarios for the feature based on the stack trace and analysis results.
-
-Each test case MUST be written out with all 6 elements:
-
-1. **Name**: `test_<what>_<scenario>` — self-documenting
-2. **Setup**: exact fixture setup (tmp_path contents, mocks, patches) — concrete code or description with exact values
-3. **Input**: exact values passed to the function/CLI (arguments, types, structure)
-4. **Trace**: step-by-step execution through the code with this exact input — what each helper receives, what it returns, what side effects occur at each step
-5. **Assertions**: concrete checks with exact expected values (paths, contents, exit codes, output strings) — written as actual assert statements or equivalent
-6. **Sufficiency assessment**: why this test is needed and what regression it prevents
-
-Categories to cover:
-- **Positive tests** — happy path, default values, explicit values, idempotency
-- **Negative tests** — invalid input, unsupported options, missing dependencies
-- **Edge cases** — missing directories, existing files preservation, recursive copying, reinstallation
-
-Reference the project test conventions from the Sources of Truth (Usages specs, employee docs) for test structure, naming, and tooling.
-
-#### 4d. Usages categorization
-
-For each cell being designed, propose a functional categorization of usages.
-
-`<current_cell_path>/.usages/*.md` files are created in the development cell.
-
-**Before proposing new `<current_cell_path>/.usages/` files, read existing `<current_cell_path>/.usages/*.md` files to check if the usage already exists.**
-
-Before performing categorization, check if the cell already has a `<current_cell_path>/.usages/` directory:
-
-1. **If `<current_cell_path>/.usages/` exists** — proceed with the standard categorization process below
-2. **If `<current_cell_path>/.usages/` does not exist** — ask the user whether to create usages files for this cell:
-   - Option: "Yes, create usages" — proceed with categorization and propose `<current_cell_path>/.usages/` files
-   - Option: "No, skip usages" — skip categorization for this cell, document in design that no usages files will be created
-
-**Categorization is mandatory** — if the user confirmed usages creation or `<current_cell_path>/.usages/` already exists, the agent must propose how practices are organized within the cell's `<current_cell_path>/.usages/` before saving the design.
-
-#### Functional categories
-
-A cell implements logic that can be divided into **functional categories** by meaning — not by entity or by file, but by semantic domain. For example, a cell that parses DSL may have categories: "parsing rules", "validation rules", "AST traversal". A cell that provides CLI may have categories: "command registration", "output formatting", "state management".
-
-Each category becomes a `<current_cell_path>/.usages/<category-name>.md` file describing the practice for that functional area.
-
-#### Categorization process
-
-1. **Analyze cell logic** — identify distinct functional domains within the cell based on entity responsibilities, data flows, and interaction patterns from Step 4b
-
-2. **Check existing `<current_cell_path>/.usages/`** — read all files in `<current_cell_path>/.usages/*.md`. For each existing file:
-   - Read each existing file to understand its functional category
-   - Map new practices to existing categories where they fit
-   - New practices that match an existing category → **extend** that file
-   - New practices that don't match any existing category → **create** a new file
-
-3. **Propose categorization** — present to the user:
-   - List of functional categories identified
-   - For each category: which practices it covers, which entities it relates to
-   - Which are new files, which extend existing files
-   - Which practices should remain inline in CODEMANIFEST (short, entity-specific, not reusable)
-   - **Content** for each `<current_cell_path>/.usages/` file MUST be a concrete API usage specification — not an abstract description. It must include:
-     - **Call patterns**: exact function/class signatures and how to invoke them
-     - **Usage examples**: concrete code snippets showing typical usage
-     - **Parameters**: what each parameter means, expected types and values
-     - **Return values**: what is returned, in what format, what it represents
-     - **Behavior**: what happens in different scenarios (success, error, edge cases)
-     - **Error handling**: what exceptions/errors can occur and how to handle them
-
-4. **Get user confirmation** — present the proposal and let the user confirm or adjust category boundaries and names
-
-5. **Print usages content** — after the user confirms categorization, print the **full content** of each proposed `<current_cell_path>/.usages/` file directly in the conversation. For each file:
-   - Print the file path as a header
-   - Print the complete file content — not a summary, not a description, but the actual markdown that would be written to disk
-
-6. **Get content approval** — ask the user to review the printed content:
-   - Option: "Content approved, continue"
-   - Option: "Need adjustments" — user describes what to change, agent updates content and re-prints
-
-**Critical distinction — `Usages` directive vs `<current_cell_path>/.usages/` directory**:
-
-These are **independent** concepts that must not be conflated:
-- **`Usages` directive** (in CODEMANIFEST header) — internal practices that the cell's entities use (libraries, patterns, conventions). These stay in the CODEMANIFEST file
-- **`<current_cell_path>/.usages/` directory** (in the cell folder) — external-facing documentation for consumers who import this cell. Describes how to work with the cell's API, call patterns, integration examples
-
-#### Decision rules
-
-- Practice used by entities from **multiple functional domains** → separate category file
-- Practice specific to **one entity's internals** and short → inline in CODEMANIFEST `Usages` directive
-- Practice that describes **how to work with the cell's API** → `<current_cell_path>/.usages/` category file (consumable by importers)
-- **Do NOT add CODEMANIFEST `Usages` references to the cell's own `<current_cell_path>/.usages/` files** — per DSL spec, `<current_cell_path>/.usages/` are documentation for consumers and are NOT a source of contract requirements. Consumers discover `<current_cell_path>/.usages/` files via `Imports` → `Usages` when they import from this cell. The CODEMANIFEST `Usages` section should only contain practices that the cell's entities use internally (libraries, patterns, conventions), not practices that describe the cell's own API
-- Existing `<current_cell_path>/.usages/` file with matching domain → **extend**, do not create parallel files for the same domain
-
-Always propose `<current_cell_path>/.usages/` categorization based on the cell's API surface.
-
-**Important**: design does NOT create or modify files — it only describes the expected result in the design document.
-
-### Step 5: Questions to the user
-
-Via AskUserQuestion, ask questions about:
-- unclear aspects of CODEMANIFEST (contract ambiguities)
-- implementation details not determined by the DSL (pattern choices, specific approaches, error handling)
-- critical assumptions requiring confirmation
-- **CODEMANIFEST changes**: proposed fixes for insufficient/inconsistent requirements collected during Steps 2 and 4
-
-If there are no questions — skip this step.
-
-### Step 5a: Apply approved CODEMANIFEST changes
-
-For each CODEMANIFEST change the user approved in Steps 2a or 5:
-1. Apply the edit to the CODEMANIFEST file
-2. Re-run the linter: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
-3. If the linter reports errors — fix DSL syntax and re-run
-4. Re-verify that the change doesn't introduce new inconsistencies with other entities
-
-After all CODEMANIFEST changes are applied, continue to Step 6 with the updated contract.
-
-### Step 6: Save the design document
-
-Write the results to a file using the template from `design-doc-template.md`.
-Path: `docs/design/<feature-name>.md`.
-
-- Ask the user for the feature name if it is not obvious from context.
-- Create the `docs/design/` directory if it does not exist.
-- If a file with the same name already exists, overwrite it.
+Результат: карта зависимостей, фокусирующая анализ на затронутых ячейках.
 
 ---
 
-## Output
+### Фаза 3: Валидация контрактов
 
-- Design document file at `docs/design/<feature-name>.md`
-- Understanding of all contract changes
-- Resolved questions about implementation details
-- Complete architectural solution ready for decomposition into a plan (`plan-by-design`)
+Цель фазы — получить **чистый CODEMANIFEST** до начала глубокой трассировки. Все статические проблемы контракта
+должны быть обнаружены и исправлены здесь.
+
+#### Шаг 1: Разрешение ссылок Usages
+
+Определите, какие записи Usages нужно прочитать:
+
+1. **Собрать изменённые сущности** — из Фазы 2
+2. **Всегда читать корневые Usages** — на которые ссылаются глобальные `Annotations`
+3. **Всегда читать Usages изменённых сущностей** — на которые ссылаются annotations сущности/метода/свойства
+4. **Пропускать нессылаемые Usages** — если ни одна изменённая сущность и ни одна глобальная аннотация не ссылается
+
+Для каждого Usages со значением-путём — прочитайте файл.
+Для каждого импортированного usage из `Imports` → `Usages` — прочитайте `{from_path}/.usages/{usage_name}.md`.
+
+Результат: набор прочитанных спецификаций Usages.
+
+#### Шаг 2: Gap analysis
+
+Сравните контракты CODEMANIFEST с текущей реализацией.
+
+Используйте `goga-cell` для проверки:
+- Синтаксиса сигнатур, мутаций `::`, встраиваний `->`, директив `Imports`
+- Корректности `location` (файл на том же уровне, с расширением, без подъёма наверх)
+- Регистра ключей и структуры yaml-документа (заголовок → тело → подвал)
+
+Используйте `goga-cookbook` для проверки:
+- Выбора между Entity и Routine (есть ли `methods`/`properties` там где нужно, нет ли их там где не нужно)
+- Формы подключения Usages (файл / inline / URL — соответствует ли критериям выбора)
+- Гранулярности ячеек (не слишком мелко, не слишком крупно)
+
+Проверяемые аспекты:
+- Отсутствующие сущности контракта
+- Некорректные расположения (`location`)
+- Отсутствующие реэкспорты
+- Несовпадения сигнатур и поведения
+- Существующий код для переиспользования
+- Существующие локальные каталоги `<current_cell_path>/.usages/` и их содержимое (если есть, только для ссылочных usages)
+- Импортированные usages из других ячеек через `Imports` → `Usages` — проверьте, что ссылочные файлы существуют по пути `{from_path}/.usages/{usage_name}.md`
+- Пробелы в тестовом покрытии
+
+Результат: список пробелов с конкретными файлами и сущностями.
+
+#### Шаг 3: Аудит согласованности контрактов
+
+Проверьте 4 вида согласованности.
+
+Используйте `goga-cell` для валидации DSL-правил при каждой проверке:
+- Правила мутаций `::` (базовый тип, многоуровневые цепочки)
+- Правила встраиваний `->` (тип должен быть в `Imports`)
+- Правила ссылок в аннотациях (обратные кавычки, разрешимость в контексте документа)
+- Правила `Imports` (нет перекрёстных зависимостей, только на том же уровне или ниже)
+
+Используйте `goga-cookbook` для валидации архитектурных решений:
+- Когда оправдана мутация vs обычная зависимость через `Imports`
+- Когда оправдано встраивание vs просто импорт
+- Корректность подключения практик (каждая подключённая практика используется хотя бы в одной аннотации)
+
+Проверяемые виды согласованности:
+
+1. **Согласованность Interface ↔ Type**: для каждой сущности, которая принимает или возвращает тип из `Imports` или `Usages`, проверьте, что тип действительно объявлен и его форма соответствует ожидаемому использованию (поля, методы, свойства, на которые ссылаются аннотации, реально существуют в исходном типе)
+
+2. **Согласованность Type ↔ Mutation**: для каждой мутации `Type::` проверьте:
+   - базовый тип существует в `Imports` (с корректным именем/алиасом) или `Usages` (с квалифицированным именем)
+   - цель мутации имеет методы/свойства, совместимые с контрактом базового типа
+   - многоуровневые мутации (`A::B::Cls`) образуют корректную цепочку — каждый сегмент разрешим
+
+3. **Согласованность Interface ↔ Interface**: для взаимодействующих сущностей (одна вызывает методы другой, передаёт данные другой):
+   - проверьте, что типы вывода сущности A соответствуют типам ввода, ожидаемым сущностью B
+   - проверьте, что сигнатуры методов совместимы на уровне контракта (не только реализации)
+   - проверьте, что общие ссылки на типы указывают на один и тот же фактический тип
+
+4. **Согласованность Annotations ↔ Entity**: проверьте, что аннотации ссылаются на типы, usages и параметры, которые реально существуют в текущем контексте CODEMANIFEST
+
+Для каждой обнаруженной несогласованности — зафиксируйте её как **проблему CODEMANIFEST** с указанием:
+- точного расположения в CODEMANIFEST (файл, сущность, метод/свойство)
+- в чём заключается несогласованность
+- предлагаемого исправления
+
+#### Шаг 4: Утверждение правок с пользователем
+
+Представьте все проблемы CODEMANIFEST пользователю через AskUserQuestion (сгруппированные по файлу), предложив:
+1. **Применить предлагаемое исправление** — отредактировать файл CODEMANIFEST
+2. **Предложить альтернативу** — пользователь описывает другое исправление
+
+Также задайте вопросы о:
+- Неясных аспектах CODEMANIFEST
+- Детали реализации, не определённых DSL
+- Критических допущениях
+
+Если проблем и вопросов нет — пропустите этот шаг.
+
+#### Шаг 5: Применение правок и валидация
+
+Для каждого одобренного изменения:
+
+1. Примените правку к CODEMANIFEST
+2. Используйте `goga-cell` для проверки синтаксической корректности изменения (мутации `::`, встраивания `->`, структура `Imports`, регистр ключей)
+3. Используйте `goga-cookbook` для валидации решений по Usages (форма подключения, Entity vs Routine, гранулярность)
+4. Перезапустите линтер: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+5. Если линтер сообщает об ошибках — исправьте синтаксис и перезапустите
+6. Проверьте, что изменение не вносит новых несогласованностей
+7. Проверьте usages на необходимость изменений
+
+Результат: чистый CODEMANIFEST, готовый к трассировке.
 
 ---
 
-## Reasoning Discipline
+### Фаза 4: Трассировка и алгоритмизация
 
-Separate:
-- **Facts** — directly stated in the contract or observable in the workspace
-- **Assumptions** — cautious inferences necessary for design
-- **Open questions** — unresolved ambiguities
+**Ядро дизайн-документа.** На основе чистого CODEMANIFEST из Фазы 3 выполните детальную проработку.
 
-Never mix them.
+Используйте скиллы `goga-cell` и `goga-cookbook` для проверки проектных решений на каждом шаге.
+
+Фаза работает как **цикл с самокоррекцией** — любой шаг может обнаружить проблему в CODEMANIFEST,
+которую статический анализ из Фазы 3 не выявил. Каждый шаг содержит явные условия перехода.
+
+#### Шаг 1: Code Stack Trace
+
+Для каждой точки входа контракта (метод, функция, конструктор) отследите полную логическую цепочку через код от начала до конца:
+
+1. **Точка входа**: что инициирует этот путь кода (вызов конструктора, вызов метода, вызов функции)
+2. **Вход**: какие данные поступают, в какой форме, откуда
+3. **Каждый промежуточный шаг**: какое преобразование/валидация/поиск происходит, что возвращается, что передаётся дальше
+4. **Внешние вызовы**: что предоставляют импортированные типы, что возвращают библиотеки Usages, как они вызываются. Если запись Usages ссылается на файл — прочитайте этот файл для понимания фактического API и паттернов использования
+5. **Выход**: каков конечный результат, в какой форме, куда он направляется
+
+На каждом шаге устанавливайте **контрольные точки** — проверяйте:
+- совпадает ли тип данных с тем, что ожидает следующий шаг?
+- является ли преобразование логически корректным?
+- есть ли пропущенные промежуточные шаги, которые контракт предполагает, но не указывает?
+- соответствует ли использование внешней библиотеки её фактическому API (проверьте спецификации Usages)?
+
+**Контрольные точки взаимодействия контрактов** — дополнительно проверяйте на каждом шаге, где сущности взаимодействуют:
+- **Поток типов**: если сущность A передаёт данные сущности B, совпадает ли тип, объявленный в выводе A, с типом, объявленным во входе B? Если нет — это ошибка согласованности CODEMANIFEST
+- **Совместимость мутаций**: если задействована мутация `Type::`, удовлетворяет ли мутированный тип контрактным ожиданиям потребителя? Если нет — зафиксируйте как проблему CODEMANIFEST
+- **Согласование интерфейсных контрактов**: когда метод одной сущности вызывает метод другой сущности, согласованы ли контракты по форме данных (типы параметров, типы возврата, типы ошибок)?
+
+**Важно**: выполняйте эту трассировку, читая фактические исходные файлы существующего кода и фактическую документацию библиотек для Usages. Если запись Usages указывает на файл спецификации — прочитайте этот файл. Не предполагайте — проверяйте.
+
+- **Контрольная точка OK** → записывайте трассировку, переходите к следующей точке входа
+- **Контрольная точка не пройдена** → зафиксируйте проблему, предложите исправление пользователю через AskUserQuestion.
+  После одобрения — примените правку к CODEMANIFEST, валидируйте (`goga-cell`, `goga-cookbook`, линтер), проверьте usages,
+  **перетрассируйте** текущую точку входа. Затем продолжайте.
+
+Не обходите ошибки контракта — проблема в CODEMANIFEST, а не в реализации.
+
+Все точки входа оттрассированы → переходите к Шагу 2.
+
+#### Шаг 2: Анализ
+
+На основе результатов трассировки стека выполните анализ:
+- какие новые сущности контракта существуют и как они взаимодействуют
+- детали реализации, не указанные DSL (паттерны, конкретные библиотеки из Usages, архитектурные решения)
+- сквозные проблемы (обработка ошибок, логирование, валидация, кэширование, параллельность)
+- зависимости между сущностями
+- потенциальные проблемы и краевые случаи, обнаруженные при трассировке
+- потоки данных между сущностями
+
+**Usages/Practices как мосты интерфейсов**: практика (запись Usages) — это **связующая сущность** между ячейками. Если сущности нужно взаимодействовать с внешней библиотекой, другой ячейкой или общим интерфейсом — она ДОЛЖНА делать это через объявленную практику. Практика определяет контракт взаимодействия. При проектировании того, как сущности подключаются к внешним системам, всегда направляйте через соответствующую запись Usages — никогда не обходите объявленную практику прямой зависимостью.
+
+**Анализ импорта Usages**: Когда `Imports` содержит группы `Usages:`, дизайн должен:
+- Прочитать каждый импортированный файл usages по пути `{from_path}/.usages/{usage_name}.md`
+- Проанализировать, как импортированная практика применяется к сущностям текущей ячейки
+- Отследить зависимость: какие сущности зависят от каких импортированных usages
+- Задокументировать отслеживаемую зависимость в дизайне (импортированные usages создают отслеживаемые связи между ячейками, но не контрактные обязательства)
+
+- **Анализ завершён без проблем** → переходите к Шагу 3
+- **Обнаружена проблема контракта** → предложите исправление пользователю через AskUserQuestion.
+  После одобрения — примените правку, валидируйте (`goga-cell`, `goga-cookbook`, линтер), проверьте usages,
+  **вернитесь на Шаг 1** для перетрассировки затронутых точек входа.
+
+#### Шаг 3: Usages analysis
+
+Для каждой записи Usages:
+
+- **Что предоставляет**: краткое описание
+- **Где используется**: какие сущности контракта
+- **Почему выбран**: обоснование
+- **Как именно**: конкретные API, паттерны вызова
+
+Для каждого импортированного usage из `Imports` → `Usages`:
+- Прочитайте файл по пути `{from_path}/.usages/{usage_name}.md`
+- Задокументируйте отслеживаемую зависимость
+
+- **Все практики используются корректно** → переходите к Шагу 4
+- **Практика не используется ни в одной аннотации** → предложите исправление (добавить ссылку в аннотации или убрать практику).
+  После одобрения — примените правку, валидируйте (`goga-cell`, `goga-cookbook`, линтер),
+  **вернитесь на Шаг 1** для перетрассировки затронутых точек входа.
+
+#### Шаг 4: Cross-cutting concerns
+
+Опишите сквозные проблемы:
+- **Обработка ошибок**: глобальная стратегия
+- **Валидация**: где, какие правила, что при некорректных данных
+- **Логирование**: что логируется, уровень, какие данные
+- **Кэширование**: что кэшируется, стратегия (если применимо)
+- **Параллельность**: потокобезопасность (если применимо)
+
+- **Сквозные проблемы согласуются с контрактом** → переходите к Шагу 5
+- **Обнаружена проблема контракта** (например, стратегия ошибок противоречит сигнатурам) → предложите исправление пользователю через AskUserQuestion.
+  После одобрения — примените правку, валидируйте (`goga-cell`, `goga-cookbook`, линтер), проверьте usages,
+  **вернитесь на Шаг 1** для перетрассировки затронутых точек входа.
+
+#### Шаг 5: Тестовые сценарии
+
+Сгенерируйте и **запишите** тестовые сценарии с полным стеком вызовов. Каждый тест фиксируется в дизайн-документе — они являются частью результата, а не промежуточным артефактом.
+
+**6 обязательных элементов для каждого теста:**
+
+1. **Имя**: `test_<что>_<сценарий>` — самодокументируемое
+2. **Setup**: точная настройка (фикстуры, моки, содержимое tmp_path) с конкретными значениями
+3. **Input**: точные значения, передаваемые в функцию
+4. **Trace**: пошаговое выполнение кода с этим входом — что получает каждая функция, что возвращает, побочные эффекты на каждом шаге
+5. **Assertions**: конкретные проверки с точными ожидаемыми значениями
+6. **Sufficiency**: зачем нужен этот тест, какую регрессию предотвращает
+
+**Категории:**
+- **Позитивные** — счастливый путь, дефолты, явные значения
+- **Негативные** — некорректный ввод, отсутствующие зависимости
+- **Краевые случаи** — пустые данные, граничные значения, идемпотентность
+
+- **Тесты не выявили проблем контракта** → переходите к Шагу 6
+- **Тест выявил несовместимость типов или логики в контракте** → предложите исправление пользователю через AskUserQuestion.
+  После одобрения — примените правку, валидируйте (`goga-cell`, `goga-cookbook`, линтер), проверьте usages,
+  **вернитесь на Шаг 1** для перетрассировки затронутых точек входа.
+
+#### Шаг 6: Usages and `.usages/` consistency
+
+**Критическое различие — директива `Usages` vs каталог `.usages/`**: это **независимые** концепции:
+- **Директива `Usages`** (в заголовке CODEMANIFEST) — внутренние практики, которые используют сущности ячейки (библиотеки, паттерны, конвенции)
+- **Каталог `<current_cell_path>/.usages/`** (в папке ячейки) — внешняя документация для потребителей, импортирующих эту ячейку. Описывает, как работать с API ячейки
+
+Для каждой затронутой ячейки:
+
+1. Если `.usages/` не существует — пропустите
+2. Если существует — прочитайте и проверьте:
+   - Описанные API соответствуют текущему CODEMANIFEST?
+   - Какие сущности не покрыты?
+   - Какие описания устарели?
+
+Используйте `goga-cookbook` для принятия решений: правила обновления `.usages/` файлов, принципы написания usage файлов,
+критерии выбора между дополнением существующего файла и созданием нового.
+
+**Функциональные категории**: ячейка реализует логику, которую можно разделить по семантическим доменам. Если существующие файлы `.usages/` уже организованы по категориям — используйте эту структуру, не пересоздавайте.
+
+**Правила принятия решений:**
+- Изменения в существующем домене → **дополнить** существующий файл
+- Новый функциональный домен → **создать** новый файл
+- Устаревшие описания → **обновить**
+- **НЕ добавляйте ссылки CODEMANIFEST `Usages` на собственные файлы `.usages/`** — `.usages/` это документация для потребителей, а не источник контрактных требований
+
+Предложите изменения и получите подтверждение пользователя.
+
+Фаза завершена → переходите к Фазе 5.
 
 ---
 
-## Final Self-Check
+### Фаза 5: Сохранение дизайн-документа
 
-Before completing the response, verify:
+#### Шаг 1: Записать по шаблону
 
-0. Was `dsl.md` read before analyzing or editing contracts?
-1. Was a git diff of CODEMANIFEST performed between the current branch and the base branch?
-2. Was a gap analysis performed (contract vs current implementation)?
-2a. Was a contract consistency audit performed (interface ↔ type, type ↔ mutation, interface ↔ interface, annotations ↔ entity)?
-3. Was the linter run: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`?
-3a. Were all CODEMANIFEST issues (insufficient/inconsistent requirements) proposed to the user and resolved?
-3b. Were approved CODEMANIFEST changes applied and re-verified with the linter?
-4. Was a brainstorm performed analyzing implementation details not specified by the DSL?
-4a. Was a code stack trace performed for each contract entry point with checkpoints?
-4a-ct. Were contract interaction checkpoints verified (type flow, mutation compatibility, interface alignment)?
-4a-res. Were issues found during tracing resolved before proceeding?
-4b. Was a full analysis performed (Step 4b)?
-    - Is entity interaction and data flow described?
-    - For each entity: are pattern, state management, error handling, and edge cases described?
-    - Are cross-cutting concerns described (error handling, logging, validation)?
-    - For each Usages entry: is it described what it provides, where it is used, why it was chosen, how it is used?
-    - For each imported usage from `Imports` → `Usages`: was the source file read and analyzed?
-4c. Were test scenarios generated using the 6-element format (name, setup, input, trace, assertions, sufficiency)?
-4d. Was usages categorization performed — functional categories proposed, existing files checked, new vs extend decisions made? Is the planned local usages structure documented?
-5. Were questions asked to the user about unclear aspects and implementation details?
-5a. Were approved CODEMANIFEST changes applied and re-verified with the linter?
-6. Are facts, assumptions, and open questions separated?
-7. Is the design document saved using the template from `design-doc-template.md`?
-8. Are all CODEMANIFEST changes documented in the design document (what changed, why)?
+Запишите результаты в файл, используя шаблон из `design-doc-template.md`.
 
-If any answer is "no" — revise the design document before returning it.
+#### Шаг 2: Сохранить
+
+Путь: `docs/design/<feature-name>.md`.
+
+- Спросите имя функциональности, если неочевидно
+- Создайте каталог `docs/design/`, если не существует
+- Если файл существует — перезапишите
 
 ---

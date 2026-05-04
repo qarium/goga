@@ -1,15 +1,15 @@
-# DSL Specification
+# Спецификация DSL
 
-A DSL document (manifest) must be located in the folder whose interface it describes.
-The folder is referred to as a cell. The manifest file name is strictly fixed — `CODEMANIFEST`.
+Документ DSL (манифест) должен располагаться в папке, интерфейс которой он описывает.
+Папка называется ячейкой (cell). Имя файла манифеста строго фиксировано — `CODEMANIFEST`.
 
-Key case sensitivity in the `yaml` document is **IMPORTANT**: if the specification provides examples with a key in uppercase
-or lowercase, the key must be named exactly as shown; any other spelling should result in a document structure error.
+Чувствительность к регистру ключей в `yaml` документе **ВАЖНА**: если спецификация приводит примеры с ключом в верхнем
+или нижнем регистре, ключ должен называться именно так, как показано; любое другое написание должно приводить к ошибке структуры документа.
 
-Within a folder (hereafter referred to as a cell), usages may be stored that describe practices for working with the cell and using its API.
-Usages are stored inside the cell in the `.usages` folder but are not required.
+Внутри папки (далее — ячейка) могут храниться практики (usages), описывающие подходы к работе с ячейкой
+и использованию её API. Практики хранятся внутри ячейки в папке `.usages`, но не являются обязательными.
 
-## Cell Structure
+## Структура ячейки
 
 ```
 cell/
@@ -17,14 +17,14 @@ cell/
 └── .usages/*.md
 ```
 
-* cell — folder named after the cell
-* CODEMANIFEST — yaml DSL describing the API contract
-* .usages — folder with practices that describe how to work with the cell
+* cell — папка с именем ячейки
+* CODEMANIFEST — yaml DSL, описывающий контракт API
+* .usages — папка с практиками, описывающими работу с ячейкой
 
-**IMPORTANT**: each cell stores descriptions of its practices in `.usages` that explain how to use the cell, but
-they do not store and are not a source of requirements for the cell and its contract.
+**ВАЖНО**: каждая ячейка хранит описания своих практик в `.usages`, которые объясняют, как использовать ячейку,
+но они не хранят и не являются источником требований к ячейке и её контракту.
 
-## Example CODEMANIFEST File
+## Пример файла CODEMANIFEST
 
 ```yaml
 Imports:
@@ -35,7 +35,7 @@ Imports:
     From: path/to/another_cell
 
 Usages:
-  conventions: .usages/conventions.md
+  conventions: .specs/conventions.md
   pattern: |
     Some pattern here
   testing: |
@@ -84,47 +84,47 @@ Description: |
   Description of CODEMANIFEST file
 ```
 
-## CODEMANIFEST Document Structure
+## Структура документа CODEMANIFEST
 
-The DSL describes a **cell contract** — a set of types and their expected API, independent of any specific
-programming language or implementation method, based on `yaml`.
+DSL описывает **контракт ячейки** — набор типов и их ожидаемый API, независимый от конкретного
+языка программирования или способа реализации, на основе `yaml`.
 
-The document is divided into three logical parts:
+Документ делится на три логические части:
 
-1. **Header (meta-level)** — defines the context:
-   - type sources (`Imports`)
-   - used practices (`Usages`)
-   - global directives (`Annotations`)
+1. **Заголовок (метауровень)** — задаёт контекст:
+   - источники типов (`Imports`)
+   - используемые практики (`Usages`)
+   - глобальные директивы (`Annotations`)
 
-2. **Body (contract description)** — type declarations and their expected behavior
+2. **Тело (описание контракта)** — объявления типов и их ожидаемого поведения
 
-3. **Footer (meta-level)** — defines additional meta information that does not affect the contract architecture:
-   - author name (`Author`)
-   - document creation date (`CreatedAt`)
-   - manifest description (`Description`)
+3. **Подвал (метауровень)** — определяет дополнительную метаинформацию, не влияющую на архитектуру контракта:
+   - имя автора (`Author`)
+   - дата создания документа (`CreatedAt`)
+   - описание манифеста (`Description`)
 
-Separation is done according to the `yaml` standard using:
+Разделение осуществляется согласно стандарту `yaml` с помощью:
 
 ```yaml
 ---
 ```
 
-The order of parts is **IMPORTANT**:
-1. Header
-2. Body
-3. Footer
+Порядок частей **ВАЖЕН**:
+1. Заголовок
+2. Тело
+3. Подвал
 
-**IMPORTANT**: the document does not describe *how exactly to implement the code*, but fixes the **expectations for the API and behavior** that need to be implemented.
+**ВАЖНО**: документ описывает не *как именно реализовать код*, а фиксирует **ожидания от API и поведения**, которые нужно реализовать.
 
 ---
 
-### Header
+### Заголовок
 
-The header sets the context in which the entire file should be interpreted.
+Заголовок задаёт контекст, в котором должен интерпретироваться весь файл.
 
-#### Importing Types and Practices
+#### Импорт типов и практик
 
-Types from other files are connected via `Imports` and then used in the body.
+Типы из других файлов подключаются через `Imports` и затем используются в теле документа.
 
 ```yaml
 Imports:
@@ -137,46 +137,46 @@ Imports:
     From: path/to/cell
 ```
 
-Connects available types and practices within the project.
+Подключает доступные типы и практики в рамках проекта.
 
-- `Types` — list of names of imported types
-- `Usages` — list of names of imported practices
-- `From` — source (folder relative to the working directory where the `CODEMANIFEST` file is located)
-- The syntax `ObjectTwo AS Object` means that `ObjectTwo` is imported with the alias name `Object`
+- `Types` — список имён импортируемых типов
+- `Usages` — список имён импортируемых практик
+- `From` — источник (папка относительно рабочего каталога, где находится файл `CODEMANIFEST`)
+- Синтаксис `ObjectTwo AS Object` означает, что `ObjectTwo` импортируется с псевдонимом `Object`
 
-**Case is important**.
+**Регистр важен**.
 
-Imported types can:
-- be used in declared interfaces
-- be mutated and extended
-- be embedded into the current contract
+Импортированные типы могут:
+- использоваться в объявленных интерфейсах
+- мутировать и расширяться
+- встраиваться в текущий контракт
 
-Imported practices:
-- are located in the source cell's folder at `{From}/.usages/`
-- are imported by filename without the `.md` extension; the full file path is `{From}/.usages/{name}.md`
-- create a **trackable dependency** — when a practice changes, consumers are found via the import graph
-- do **not** create contractual obligations — they remain at the documentation level for the consumer
-- must not have names conflicting with the current `Usages` in the document header (conflicts are resolved by creating an alias in `Imports`)
+Импортированные практики:
+- располагаются в папке исходной ячейки по пути `{From}/.usages/`
+- импортируются по имени файла без расширения `.md`; полный путь к файлу — `{From}/.usages/{name}.md`
+- создают **отслеживаемую зависимость** — при изменении практики потребители находятся через граф импортов
+- **не** создают контрактных обязательств — остаются на уровне документации для потребителя
+- не должны иметь имён, конфликтующих с текущими `Usages` в заголовке документа (конфликты разрешаются созданием псевдонима в `Imports`)
 
-Restrictions:
-- Imports cannot be cross-referential between cells, meaning cell `A` cannot import a type/practice from cell `B` if cell `B` imports a type from cell `A`
-- Only cells at the same hierarchy level or below can be imported
+Ограничения:
+- Импорты не могут быть перекрёстными между ячейками, то есть ячейка `A` не может импортировать тип/практику из ячейки `B`, если ячейка `B` импортирует тип из ячейки `A`
+- Импортировать можно только ячейки на том же уровне иерархии или ниже
 
-#### Usages
+#### Практики (Usages)
 
-`Usages` — a directive in the CODEMANIFEST header that defines a named set of practices for use
-in the annotations of the current document.
+`Usages` — директива в заголовке CODEMANIFEST, определяющая именованный набор практик для использования
+в аннотациях текущего документа.
 
-A practice is documentation that can be about:
-- a library
-- a pattern
-- a convention
-- or any specification
+Практика — это документация, которая может быть о:
+- библиотеке
+- паттерне
+- соглашении
+- или любой спецификации
 
-Value formats in the `Usages` section:
-- path to an md file (relative to the project's working directory)
+Форматы значений в секции `Usages`:
+- путь к md-файлу (относительно рабочего каталога проекта)
 - URL
-- inline description
+- встроенное описание
 
 ```yaml
 Usages:
@@ -186,27 +186,27 @@ Usages:
     Usage description here...
 ```
 
-**Key** — the practice name for references in annotations using backticks, e.g. `pattern`.
+**Ключ** — имя практики для ссылок в аннотациях с помощью обратных кавычек, например `pattern`.
 
-Practices are connected in two ways:
+Практики подключаются двумя способами:
 
-1. **Declaration** in the `Usages` section — the practice is described by a value
-2. **Import** via the `Imports` section — the practice is imported from the `.usages/` directory of another cell
-   by filename without the `.md` extension. Import creates a trackable dependency but not a contractual obligation.
+1. **Объявление** в секции `Usages` — практика описывается значением
+2. **Импорт** через секцию `Imports` — практика импортируется из каталога `.usages/` другой ячейки
+   по имени файла без расширения `.md`. Импорт создаёт отслеживаемую зависимость, но не контрактное обязательство.
 
-**IMPORTANT**: practices cannot be directly linked to contract interfaces, but they describe how the consumer should work with the cell's API.
+**ВАЖНО**: практики не могут напрямую связываться с интерфейсами контракта. Они предоставляют только контекст — информируя агента-исполнителя о внешних ресурсах и о том, как с ними работать.
 
-#### Annotations
+#### Аннотации (Annotations)
 
-Global directives for the agent.
+Глобальные директивы для агента.
 
-These are:
-- implementation requirements
-- constraints
-- architectural expectations
-- hints on using practices
+Это:
+- требования к реализации
+- ограничения
+- архитектурные ожидания
+- подсказки по использованию практик
 
-They apply to the entire document.
+Они применяются ко всему документу.
 
 ```yaml
 Annotations: |
@@ -215,33 +215,33 @@ Annotations: |
 
 ---
 
-### Body
+### Тело
 
-The body describes the **types of the contract** — what API elements should exist and how they should behave.
+Тело описывает **типы контракта** — какие элементы API должны существовать и как они должны себя вести.
 
-Three main constructs are used:
+Используются три основные конструкции:
 
-1. Type declaration
-2. Type embedding
-3. Type mutation
+1. Объявление типа
+2. Встраивание типа
+3. Мутация типа
 
-#### Types
+#### Типы
 
-A type in the DSL is an abstract unit of API.
+Тип в DSL — это абстрактная единица API.
 
-It can be:
-- a class
-- a struct
-- an object
-- a function
-- a service
-- any other entity
+Это может быть:
+- класс
+- структура
+- объект
+- функция
+- сервис
+- любая другая сущность
 
-The DSL does not fix the implementation form — only the expected contract.
+DSL не фиксирует форму реализации — только ожидаемый контракт.
 
-#### Type Declaration
+#### Объявление типа
 
-A type is defined by its signature:
+Тип определяется своей сигнатурой:
 
 ```yaml
 "<Name><Signature>":
@@ -254,7 +254,7 @@ A type is defined by its signature:
     ...
 ```
 
-##### Signature
+##### Сигнатура
 
 ```yaml
 "TypeName<Signature>":
@@ -266,17 +266,17 @@ A type is defined by its signature:
        ...
 ```
 
-The signature is written in free form, close to programming languages, that an LLM can easily associate with.
+Сигнатура записывается в свободной форме, близкой к языкам программирования, которую LLM может легко ассоциировать с кодом.
 
-It:
-- describes the API shape
-- helps the agent understand the expected model
-- does not require strict formal grammar
+Она:
+- описывает форму API
+- помогает агенту понять ожидаемую модель
+- не требует строгой формальной грамматики
 
-Basic requirements:
-* The signature describes the input and output of the contract
-* Input and output must have a data type specified
-* The output type is associated with a variable/label to convey the semantic meaning of what is returned with the specified data type
+Базовые требования:
+* Сигнатура описывает вход и выход контракта
+* Вход и выход должны иметь указанный тип данных
+* Тип выхода связан с переменной/меткой для передачи семантического смысла того, что возвращается с указанным типом данных
 
 ##### location
 
@@ -285,18 +285,18 @@ Type():
   location: file.ext
 ```
 
-Specifies the logical placement of the type relative to the root of the current directory in filename format.
+Указывает логическое размещение типа относительно корня текущего каталога в формате имени файла.
 
-Restrictions:
-* The file must be at the same level as `CODEMANIFEST`
-* The file must include an extension
-* The path cannot go up a level or descend into subdirectories
+Ограничения:
+* Файл должен находиться на том же уровне, что и `CODEMANIFEST`
+* Файл должен включать расширение
+* Путь не может подниматься на уровень выше или спускаться в подкаталоги
 
-It defines the **expected filesystem structure**, not the implementation method.
+Это определяет **ожидаемую структуру файловой системы**, а не способ реализации.
 
-#### Entity Type
+#### Тип «Сущность» (Entity)
 
-Must have `methods` and/or `properties`.
+Должен иметь `methods` и/или `properties`.
 
 ```yaml
 SomeEntity():
@@ -311,9 +311,9 @@ SomeEntity():
       ...
 ```
 
-##### Methods
+##### Методы (Methods)
 
-Defines available operations.
+Определяют доступные операции.
 
 ```yaml
 SomeEntity():
@@ -324,14 +324,14 @@ SomeEntity():
       `param`: param of method
 ```
 
-Each method:
-- has a unique name within the entity
-- is defined by a signature
-- is accompanied by an annotation
+Каждый метод:
+- имеет уникальное имя в пределах сущности
+- определяется сигнатурой
+- сопровождается аннотацией
 
-##### Properties
+##### Свойства (Properties)
 
-Defines type properties.
+Определяют свойства типа.
 
 ```yaml
 SomeEntity():
@@ -340,14 +340,14 @@ SomeEntity():
         What is it?
 ```
 
-Each property:
-- has a unique name within the entity
-- specifies the data type of the returned value
-- is accompanied by an annotation
+Каждое свойство:
+- имеет уникальное имя в пределах сущности
+- указывает тип данных возвращаемого значения
+- сопровождается аннотацией
 
-#### Routine Type
+#### Тип «Процедура» (Routine)
 
-A Routine does NOT have `methods` and `properties`; it has a contract of the form input -> output (optional if nothing is returned).
+Процедура (Routine) НЕ имеет `methods` и `properties`; она имеет контракт вида вход -> выход (необязательный, если ничего не возвращается).
 
 ```yaml
 "some_routine(param: int) -> number:int": |
@@ -356,14 +356,14 @@ A Routine does NOT have `methods` and `properties`; it has a contract of the for
   `param`: param of method
 ```
 
-In this example, **number** is simply a semantic association of the `int` type for better understanding of the returned type's meaning.
-**param** is an input parameter of type `int` for a class constructor, struct, or function call.
+В этом примере **number** — это просто семантическая ассоциация типа `int` для лучшего понимания смысла возвращаемого типа.
+**param** — входной параметр типа `int` для конструктора класса, структуры или вызова функции.
 
-#### Minimal Declaration
+#### Минимальное объявление
 
-If `methods` and `properties` are not specified, the type is treated as a callable unit — a routine (function, functor — depending on the programming language's features).
+Если `methods` и `properties` не указаны, тип рассматривается как вызываемая единица — процедура (функция, функтор — в зависимости от возможностей языка программирования).
 
-Example:
+Пример:
 
 ```yaml
 "function(n: int) -> number:int":
@@ -372,55 +372,55 @@ Example:
     ...
 ```
 
-The DSL does not fix the implementation form — only the expected contract.
+DSL не фиксирует форму реализации — только ожидаемый контракт.
 
-#### Type Mutation
+#### Мутация типа
 
-For type mutation, the following form is used:
+Для мутации типа используется следующая форма:
 
 ```yaml
 "Object::SomeClass()":
   ...
 ```
 
-This means:
+Это означает:
 
-- source type `Object`
-- target form `SomeClass`
+- исходный тип `Object`
+- целевая форма `SomeClass`
 
-Important:
-- the DSL does not define the mutation mechanism
-- it can be:
-  - inheritance
-  - composition
-  - adapter
-  - interface implementation
-  - decoration
-  - or any other strategy
+Важно:
+- DSL не определяет механизм мутации
+- это может быть:
+  - наследование
+  - композиция
+  - адаптер
+  - реализация интерфейса
+  - декорирование
+  - или любая другая стратегия
 
-Only the fact is fixed:
-**there exists a type that represents a concretization of the base type and its extension**
+Фиксируется только факт:
+**существует тип, представляющий конкретизацию базового типа и его расширение**
 
-For routines, mutation can mean that the user wants to achieve the same result
-but with a different signature and modified logic; this notation may require:
-- extension via decoration
-- complete replacement of the original logic
-- or any other strategy
+Для процедур мутация может означать, что пользователь хочет достичь того же результата,
+но с другой сигнатурой и изменённой логикой; эта запись может требовать:
+- расширения через декорирование
+- полной замены оригинальной логики
+- или любой другой стратегии
 
-The number of types to mutate is not limited.
+Количество типов для мутации не ограничено.
 
 ```yaml
 "ObjectOne::ObjectTwo::SomeClass()":
   ...
 ```
 
-Semantically, this means that `SomeClass` must mutate from both `ObjectOne` and `ObjectTwo`.
+Семантически это означает, что `SomeClass` должен быть мутацией как из `ObjectOne`, так и из `ObjectTwo`.
 
 ---
 
-### Footer
+### Подвал
 
-The footer is optional and describes the manifest's metadata.
+Подвал необязателен и описывает метаданные манифеста.
 
 ```yaml
 Author: FirstName SecondName
@@ -430,30 +430,30 @@ Description: |
   Manifest description
 ```
 
-Fields:
-- `Author`: first and last name of the manifest author
-- `CreatedAt`: date the manifest was created
-- `Description`: description of the manifest
+Поля:
+- `Author`: имя и фамилия автора манифеста
+- `CreatedAt`: дата создания манифеста
+- `Description`: описание манифеста
 
 ---
 
-## The .usages/ Directory
+## Каталог .usages/
 
-The `.usages/` directory is an optional folder inside a cell containing practice files (`*.md`)
-for consumers of the cell's API.
+Каталог `.usages/` — это необязательная папка внутри ячейки, содержащая файлы практик (`*.md`)
+для потребителей API ячейки.
 
-`.usages/` files are documentation for the consumer: how to work with the cell's facade,
-what practices to apply, what patterns to use (a cross-cell mechanism).
+Файлы `.usages/` — это документация для потребителя: как работать с фасадом ячейки,
+какие практики применять, какие паттерны использовать (механизм межклеточного взаимодействия).
 
 ---
 
-## Type Embedding
+## Встраивание типа
 
-Embedding means including a type into the current contract.
+Встраивание означает включение типа в текущий контракт.
 
-Restrictions:
-- the type must be available via `Imports`
-- embedding from `Usages` is not recommended
+Ограничения:
+- тип должен быть доступен через `Imports`
+- встраивание из `Usages` не рекомендуется
 
 ```yaml
 Imports:
@@ -466,22 +466,22 @@ Imports:
 ->Entity: {}
 ```
 
-Semantically, this means including the imported type (`Entity`) into the current contract.
+Семантически это означает включение импортированного типа (`Entity`) в текущий контракт.
 
 ---
 
-## Annotations
+## Аннотации
 
-Annotations are the key mechanism for controlling generation.
+Аннотации — ключевой механизм управления генерацией.
 
-They are not a description of "what this is", but directives on:
+Это не описание «что это такое», а директивы о:
 
-- what is expected as output
-- how the API should behave
-- what practices to apply
-- what constraints to follow
+- что ожидается на выходе
+- как API должен себя вести
+- какие практики применять
+- какие ограничения соблюдать
 
-Annotations can reference practices from `Usages` in the header and from `Imports`.
+Аннотации могут ссылаться на практики из `Usages` в заголовке и из `Imports`.
 
 ```yaml
 Imports:
@@ -514,16 +514,20 @@ Annotations: |
       Use `pattern` from Usages
 ```
 
-### Using References
+### Использование ссылок
 
-References can be to:
-- variables in the signature
-- any types that are in the context of the current `CODEMANIFEST` file, including those in `Imports`
-- practices in `Usages` and `Imports`
+Ссылка — это идентификатор в обратных кавычках внутри аннотации (например `param`), который указывает на
+именованный элемент документа: переменную из сигнатуры, тип или практику. Ссылка связывает текст аннотации
+с конкретной сущностью из контекста текущего `CODEMANIFEST`.
 
-Restrictions:
-- references must be enclosed in backticks, e.g. — \`link_name\`
-- annotations must not reference things that do not exist in the context of the current `CODEMANIFEST` file
+Ссылки могут быть на:
+- переменные в сигнатуре
+- любые типы, находящиеся в контексте текущего файла `CODEMANIFEST`, включая те, что в `Imports`
+- практики в `Usages` и `Imports`
+
+Ограничения:
+- ссылки должны быть заключены в обратные кавычки, например — \`link_name\`
+- аннотации не должны ссылаться на то, чего нет в контексте текущего файла `CODEMANIFEST`
 
 ```yaml
 Imports:
@@ -577,23 +581,23 @@ Object():
       Use `ObjectTwo` link from imports
 ```
 
-### Global Annotations
+### Глобальные аннотации
 
 ```yaml
 Annotations: |
   Global annotations in document header
 ```
 
-Define the overall context:
+Определяют общий контекст:
 
-- used libraries
-- implementation principles
-- runtime specifics
-- etc.
+- используемые библиотеки
+- принципы реализации
+- особенности выполнения
+- и т.д.
 
-Applied to the entire document.
+Применяются ко всему документу.
 
-### Practice Annotations
+### Аннотации практик
 
 ```yaml
 Usages:
@@ -603,22 +607,22 @@ Usages:
     Inline text of usage in document header
 ```
 
-Practices can be described as:
+Практики могут быть описаны как:
 
-- path to an md file
+- путь к md-файлу
 - URL
-- inline
+- встроенный текст
 
-They define:
-- how to implement
-- how to use
-- what approaches to use
-- what constraints to consider
-- etc.
+Они определяют:
+- как реализовывать
+- как использовать
+- какие подходы применять
+- какие ограничения учитывать
+- и т.д.
 
 ---
 
-### Type Annotations
+### Аннотации типа
 
 ```yaml
 ExampleType():
@@ -626,21 +630,21 @@ ExampleType():
     Type annotations here
 ```
 
-Define expectations for the type entity:
+Определяют ожидания от сущности типа:
 
-- behavior
-- purpose
-- rules of operation
-- interaction with other entities
+- поведение
+- назначение
+- правила работы
+- взаимодействие с другими сущностями
 
-They can:
-- clarify the signature
-- introduce requirements
-- reference practices
+Они могут:
+- уточнять сигнатуру
+- вводить требования
+- ссылаться на практики
 
 ---
 
-### Property and Method Annotations
+### Аннотации свойств и методов
 
 ```yaml
 ExampleType():
@@ -652,26 +656,26 @@ ExampleType():
       Method annotations here
 ```
 
-Used to clarify:
+Используются для уточнения:
 
-- operational logic
-- data structure
-- result format
-- processing rules
+- логики работы
+- структуры данных
+- формата результата
+- правил обработки
 
-This is not a description, but a **behavior contract** that must be implemented.
-
----
-
-## Practices
-
-Practices are a layer of documentation for consumers of the cell's API.
-
-They do not create entities, but describe how to work with the cell's facade.
+Это не описание, а **контракт поведения**, который должен быть реализован.
 
 ---
 
-### Connecting and Using a Practice
+## Практики
+
+Практики — это слой документации для потребителей API ячейки.
+
+Они не создают сущностей, а описывают, как работать с фасадом ячейки.
+
+---
+
+### Подключение и использование практики
 
 ```yaml
 Imports:
@@ -689,19 +693,19 @@ Annotations: |
   Use `usage_from_url` for implementation
 ```
 
-**IMPORTANT**: a practice receives a local reference name in the document that can be used in annotations, such as \`pattern\`.
+**ВАЖНО**: практика получает локальное имя ссылки в документе, которое можно использовать в аннотациях, например \`pattern\`.
 
-Practices are used inside annotations.
+Практики используются внутри аннотаций.
 
-For example:
+Например:
 
-- an instruction to use a specific library
-- a reference to a pattern
-- a requirement to follow a specific structure
-- etc.
+- инструкция использовать определённую библиотеку
+- ссылка на паттерн
+- требование следовать определённой структуре
+- и т.д.
 
-Thus:
+Таким образом:
 
-- the DSL describes **what should exist**
-- practices define **how to use the cell's API**
-- annotations link these two levels
+- DSL описывает **что должно существовать**
+- практики определяют **как использовать API ячейки**
+- аннотации связывают эти два уровня

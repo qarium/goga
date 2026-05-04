@@ -53,9 +53,10 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "design-by-changes" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "plan-by-design" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "verify-plan" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "design-by-brainstorm" / "SKILL.md").is_file()
-        assert "Installed 5 commands" in result.output
-        assert "Installed 7 skills" in result.output
+        assert (claude_dir / "skills" / "arch-by-brainstorm" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "cells-by-brainstorm" / "SKILL.md").is_file()
+        assert "Installed 6 commands" in result.output
+        assert "Installed 11 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
@@ -190,14 +191,12 @@ class TestIntegration:
         claude_dir.mkdir()
         (claude_dir / "CLAUDE.md").write_text("keep this content")
         (claude_dir / "settings.json").write_text('{"key": "value"}')
-        (claude_dir / "README.md").write_text("readme content")
 
         result = self._invoke_install(tmp_path)
         assert result.exit_code == 0
 
         assert (claude_dir / "CLAUDE.md").read_text() == "keep this content"
         assert (claude_dir / "settings.json").read_text() == '{"key": "value"}'
-        assert (claude_dir / "README.md").read_text() == "readme content"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
 
     def test_install_preserves_other_skills(self, tmp_path: Path) -> None:
@@ -226,7 +225,7 @@ class TestIntegration:
         assert (goga_cmds / "review.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
-        assert installed_files == ["cell.md", "design.md", "plan.md", "review.md", "verify.md"]
+        assert installed_files == ["brainstorm.md", "cell.md", "design.md", "plan.md", "review.md", "verify.md"]
 
     def test_install_preserves_other_commands(self, tmp_path: Path) -> None:
         other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"
@@ -257,7 +256,7 @@ class TestIntegration:
         assert (dbc / "dsl.md").is_file()
 
         pbd = skills_dir / "plan-by-design"
-        expected = {"SKILL.md", "README.md", "conventions.md", "example.md", "output-template.md", "dsl.md"}
+        expected = {"SKILL.md", "conventions.md", "output-template.md", "dsl.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
 
