@@ -1,263 +1,269 @@
-# Verify Plan
+# Верификация плана
 
-## Purpose
+## Цель
 
-Verifies the execution plan (`docs/plans/<feature-name>.md`) for **completeness and correctness** against the design document and `CODEMANIFEST` contracts before it is handed off to ralphex.
+Проверяет план выполнения (`docs/plans/<feature-name>.md`) на **полноту и корректность** относительно документа дизайна и контрактов `CODEMANIFEST` перед передачей ralphex.
 
-You **verify** the plan, **report** findings, and **fix** the plan when issues are found (with user approval).
-
----
-
-## Key Principle
-
-**Every affected contract obligation and design decision must be traceable into the plan.** The plan covers only the entities affected by the current feature (as defined in the design document). For everything the plan claims to cover — it must be correct against the contract and complete against the design. If the plan contains tasks that don't trace back to any contract or design — this is also a finding.
-
-### User Interaction Rule
-
-**Always propose answer options.** When asking the user for a decision or confirmation — always present 2-4 concrete answer options. Never ask open-ended questions without proposing selectable variants.
+Вы **верифицируете** план, **сообщаете** о замечаниях и **исправляете** план при обнаружении проблем (с одобрения пользователя).
 
 ---
 
-## Sources of Truth
+## Ключевой принцип
 
-1. `CODEMANIFEST` files — the contract surface (read **all** hierarchical CODEMANIFEST files)
-2. Usages spec files — read by reference: always read root Usages (referenced by global `Annotations`), always read Usages of entities covered by the plan (referenced by entity annotations via backtick syntax), skip Usages not referenced by any covered entity. When a Usages entry value is a file path (relative to the `CODEMANIFEST` file location), read that file to verify the plan correctly reflects the specification content
-3. Design document at `docs/design/<feature-name>.md` — architectural solution
-3. `dsl.md` — DSL reference
-4. `output-template.md` from the `plan-by-design` skill bundle — plan format reference
+**Каждое затронутое контрактное обязательство и проектное решение должно быть отслеживаемо в плане.** План охватывает только сущности, затронутые текущей фичей (как определено в документе дизайна). Для всего, что план заявляет к покрытию — он должен быть корректен относительно контракта и полон относительно дизайна. Если план содержит задачи, не прослеживаемые ни к одному контракту или дизайну — это тоже замечание.
 
-## Artifact Under Verification
+### Правило взаимодействия с пользователем
 
-- Plan file at `docs/plans/<feature-name>.md` — the execution plan being checked against the sources of truth
+**Всегда предлагайте варианты ответа.** При обращении к пользователю за решением или подтверждением — всегда предоставляйте 2-4 конкретных варианта ответа. Никогда не задавайте открытые вопросы без предлагаемых для выбора вариантов.
 
 ---
 
-## Steps
+## Источники истины
 
-### Step 1: Load context
+1. Файлы `CODEMANIFEST` — поверхность контракта (прочитать **все** иерархические файлы CODEMANIFEST)
+2. Файлы спецификаций Usages — чтение по ссылкам: всегда читать корневые Usages (упоминаемые глобальными `Annotations`), всегда читать Usages сущностей, охваченных планом (упоминаемые аннотациями сущностей через синтаксис обратных кавычек), пропускать Usages, не упомянутые ни одной охваченной сущностью. Если значение записи Usages является путём к файлу (относительно расположения файла `CODEMANIFEST`), прочитайте этот файл, чтобы проверить, что план корректно отражает содержимое спецификации
+3. Документ дизайна по адресу `docs/design/<feature-name>.md` — архитектурное решение
+4. DSL спецификация и принципы применения DSL — загружаются через скиллы `goga-cell` и `goga-cookbook` (см. Шаг 1)
+5. `output-template.md` из набора скилла `plan-by-design` — справочник формата плана
 
-1. Read the plan from `docs/plans/<feature-name>.md`
-2. Read the design document from `docs/design/<feature-name>.md`
-3. Read all relevant `CODEMANIFEST` files referenced in the design document
-4. Read `dsl.md` for DSL reference, `output-template.md` and `conventions.md` from the `plan-by-design` skill bundle (same parent directory as this skill)
+## Верифицируемый артефакт
+
+- Файл плана по адресу `docs/plans/<feature-name>.md` — план выполнения, проверяемый относительно источников истины
 
 ---
 
-### Step 2: Run linter
+## Шаги
 
-Run:
+### Шаг 1: Загрузка контекста
+
+1. Используйте **Skill tool** для вызова `goga-lang-helper` — получите языковые правила реализации (фасад, реэкспорты, команды валидации)
+2. Прочитайте план из `docs/plans/<feature-name>.md`
+3. Прочитайте документ дизайна из `docs/design/<feature-name>.md`
+4. Прочитайте все релевантные файлы `CODEMANIFEST`, на которые ссылается документ дизайна
+5. Загрузите DSL спецификацию и принципы применения DSL:
+   - Используйте **Skill tool** для вызова `goga-cell` — для получения справочника DSL
+     (синтаксис сигнатур, правила Imports, Usages, Annotations, типы, мутации, встраивания, ограничения)
+   - Используйте **Skill tool** для вызова `goga-cookbook` — для понимания принципов проектирования cell и CODEMANIFEST
+     (когда использовать Entity vs Routine, когда применять мутации и встраивания, принципы написания usage файлов, гранулярность cell)
+6. Прочитайте `output-template.md` и `conventions.md` из набора скилла `plan-by-design` (в той же родительской директории, что и этот скилл)
+
+---
+
+### Шаг 2: Запуск линтера
+
+Выполните:
 ```
 docker run --rm -v .:/project -w /project qarium/goga:latest linter
 ```
 
-If the linter reports errors — record each error as a **Critical** finding. The CODEMANIFEST syntax must be valid before the plan can be considered correct.
+Если линтер сообщает об ошибках — зафиксируйте каждую ошибку как **Критическое** замечание. Синтаксис CODEMANIFEST должен быть корректен, прежде чем план может считаться правильным.
 
 ---
 
-### Step 3: Consistency — plan vs CODEMANIFEST
+### Шаг 3: Согласованность — план vs CODEMANIFEST
 
-The plan covers only the entities affected by the current feature (as defined in the design document), not the entire CODEMANIFEST. Use CODEMANIFEST as a reference for correctness, not as a completeness checklist.
+План охватывает только сущности, затронутые текущей фичей (как определено в документе дизайна), а не весь CODEMANIFEST. Используйте CODEMANIFEST как справочник для корректности, а не как чеклист полноты.
 
-For each entity/obligation that the plan **does** cover:
+Для каждой сущности/обязательства, которые план **действительно** охватывает:
 
-#### 3a. Entity details
+#### 3a. Детали сущностей
 
-For each contract entity that appears in the plan:
-- Verify the entity name and facade obligation match the CODEMANIFEST — record as **Critical** if mismatch
-- Verify the plan specifies implementation in the correct `location` file per CODEMANIFEST — record as **Critical** if wrong
-- Verify that method/property **descriptions** from the contract are reflected in task instructions — record as **High** if missing
+Для каждой сущности контракта, фигурирующей в плане:
+- Проверьте, что имя сущности и фасадное обязательство соответствуют CODEMANIFEST — зафиксируйте как **Критическое** при несовпадении
+- Проверьте, что план указывает реализацию в корректном файле `location` согласно CODEMANIFEST — зафиксируйте как **Критическое** при ошибке
+- Проверьте, что **описания** методов/свойств из контракта отражены в инструкциях задач — зафиксируйте как **Высокое** при отсутствии
 
-#### 3b. Annotations drill-down
+#### 3b. Детализация аннотаций
 
-For each `annotations` declaration relevant to the plan's scope (file-level, entity-level, method/property-level):
-- Verify the plan embeds annotation content in the relevant task descriptions
-- Verify the cascade: file-level annotations appear in every task of the package, entity-level in the entity's tasks, method-level in the method's task
-- If annotations are missing from tasks — record as **High**
+Для каждого объявления `annotations`, релевантного области действия плана (на уровне файла, сущности, метода/свойства):
+- Проверьте, что план встраивает содержимое аннотаций в соответствующие описания задач
+- Проверьте каскадирование: аннотации на уровне файла присутствуют в каждой задаче пакета, на уровне сущности — в задачах сущности, на уровне метода — в задаче метода
+- Если аннотации отсутствуют в задачах — зафиксируйте как **Высокое**
 
-#### 3c. Import context
+#### 3c. Контекст импортов
 
-For each `Imports` entry relevant to the plan's scope:
-- Verify the plan tasks reference the imported types with correct names (including `AS` aliases)
-- For imported usages from `Imports` → `Usages`: verify plan tasks reference the imported usage content correctly, including the source path `{from_path}/.usages/{usage_name}.md`
-- If import context is missing from tasks that use the imported types — record as **High**
-- If imported usage context is missing from tasks that depend on the imported practice — record as **High**
+Для каждой записи `Imports`, релевантной области действия плана:
+- Проверьте, что задачи плана ссылаются на импортированные типы с корректными именами (включая алиасы `AS`)
+- Для импортированных usages из `Imports` → `Usages`: проверьте, что задачи плана корректно ссылаются на содержимое импортированного usage, включая исходный путь `{from_path}/.usages/{usage_name}.md`
+- Если контекст импортов отсутствует в задачах, использующих импортированные типы — зафиксируйте как **Высокое**
+- Если контекст импортированного usage отсутствует в задачах, зависящих от импортированной практики — зафиксируйте как **Высокое**
 
-#### 3d. Re-export coverage
+#### 3d. Покрытие реэкспортов
 
-For each re-export block that the plan claims to handle:
-- Find the task that ensures this name is importable from the facade
-- If a re-export mentioned in the plan is not covered — record as **Critical**
+Для каждого блока реэкспортов, который план заявляет к обработке:
+- Найдите задачу, обеспечивающую импортируемость этого имени из фасада
+- Если упомянутый в плане реэкспорт не покрыт — зафиксируйте как **Критическое**
 
-#### 3e. Mutation coverage
+#### 3e. Покрытие мутаций
 
-For each `Type::` mutation that the plan claims to handle:
-- Find the task that implements the mutation
-- If a mutation mentioned in the plan is not covered — record as **High**
-
----
-
-### Step 4: Consistency — plan vs design document
-
-#### 4a. Design entity traceability
-
-For each entity and design decision described in the design document:
-- Find where it is reflected in the plan's tasks
-- If a design decision is missing from all tasks — record as **High**
-
-#### 4b. Test scenario traceability
-
-For each test scenario in the design document:
-- Find the corresponding test instruction in the plan tasks
-- If a test scenario is missing — record as **Medium**
-
-#### 4c. No orphan tasks
-
-For each task in the plan:
-- Verify it traces back to a contract entity, design decision, or valid infrastructure need
-- If a task has no traceable origin — record as **Medium**
+Для каждой мутации `Type::`, которую план заявляет к обработке:
+- Найдите задачу, реализующую мутацию
+- Если упомянутая в плане мутация не покрыта — зафиксируйте как **Высокое**
 
 ---
 
-### Step 5: TDD completeness
+### Шаг 4: Согласованность — план vs документ дизайна
 
-For each **coding task** in the plan (entity skeleton, property, method, mutation implementation):
+#### 4a. Трассируемость сущностей дизайна
 
-Verify the task contains all TDD steps as checkboxes:
-1. **Contract tests** — written first, expected to fail
-2. **Code** — implementation steps
-3. **Verify interfaces** — run contract tests
-4. **Logic tests** — behavioral tests
-5. **Debug** — run tests, fix implementation (NOT tests)
-6. **Re-check contracts** — verify contract obligations
-7. **Lint** — formatting check
+Для каждой сущности и проектного решения, описанных в документе дизайна:
+- Найдите, где они отражены в задачах плана
+- Если проектное решение отсутствует во всех задачах — зафиксируйте как **Высокое**
 
-If any TDD step is missing — record as **High**.
+#### 4b. Трассируемость тестовых сценариев
 
-Infrastructure tasks (package structure, `__init__.py`, re-exports) are exempt — they follow a simplified workflow.
+Для каждого тестового сценария в документе дизайна:
+- Найдите соответствующую тестовую инструкцию в задачах плана
+- Если тестовый сценарий отсутствует — зафиксируйте как **Среднее**
 
----
+#### 4c. Отсутствие задач-сирот
 
-### Step 6: Self-contained tasks
-
-For each task in the plan, check all of the following. If any check fails — record as **High**:
-
-1. Does the task include its own context paragraph explaining what it does and which contract entities it covers? If missing — record as **High**.
-2. Does the task include relevant imports, Usages, and annotations? If missing — record as **High**.
-3. Does the task specify target files? If missing — record as **High**.
-4. Does the task depend on another task for implementation context (e.g., "see Task 3 for the API") instead of restating it inline? If yes — record as **High**.
+Для каждой задачи в плане:
+- Проверьте, что она прослеживается до сущности контракта, проектного решения или обоснованной инфраструктурной потребности
+- Если задача не имеет прослеживаемого происхождения — зафиксируйте как **Среднее**
 
 ---
 
-### Step 7: Task ordering
+### Шаг 5: Полнота TDD
 
-Verify the overall task order follows the convention:
+Для каждой **задачи кодирования** в плане (скелет сущности, свойство, метод, реализация мутации):
 
-1. **Infrastructure tasks** (package structure, `__init__.py`, re-exports)
-2. **Entity skeleton tasks**
-3. **Property implementation tasks**
-4. **Method implementation tasks**
-5. **Interface mutation tasks**
-6. **Integration test tasks**
+Проверьте, что задача содержит все шаги TDD в виде чекбоксов:
+1. **Контрактные тесты** — написаны первыми, ожидается провал
+2. **Код** — шаги реализации
+3. **Верификация интерфейсов** — запуск контрактных тестов
+4. **Логические тесты** — поведенческие тесты
+5. **Отладка** — запуск тестов, исправление реализации (НЕ тестов)
+6. **Перепроверка контрактов** — верификация контрактных обязательств
+7. **Линт** — проверка форматирования
 
-Within a multi-package plan:
-- Leaf packages are processed before parent packages
-- Each package's coding tasks are completed before starting the next
+Если любой шаг TDD отсутствует — зафиксируйте как **Высокое**.
 
-If ordering is violated — record as **Medium**.
-
----
-
-### Step 8: Usages coverage
-
-For each `Usages` entry relevant to the plan's scope (from the design document's affected entities):
-- Find at least one task in the plan that references this Usages entry
-- Verify the task contains specific information (what to use, how to call), not just a name mention
-- If the Usages entry value is a file path — verify the plan reflects the actual content from that file, not just the file path or usage name
-
-For each imported usage from `Imports` → `Usages` relevant to the plan's scope:
-- Find at least one task referencing this imported usage
-- Verify the task references the correct source path `{from_path}/.usages/{usage_name}.md`
-- Verify the task contains specific information from the imported usage, not just a name mention
-
-For each planned local `.usages/` file specified in the design document:
-- Find a task or step that creates or extends the `.usages/<category-name>.md` file
-- Verify the task specifies the expected content of the file
-- If the file extends an existing category — verify the plan specifies appending, not replacing
-- Verify the file creation is planned together with code, not as a separate phase
-
-If a Usages entry is not present in any task — record as **Medium**.
-If a Usages mention is too vague — record as **Low**.
-If a Usages file path is mentioned but its content is not reflected — record as **Medium**.
-If an imported usage is not present in any task — record as **Medium**.
-If a planned local `.usages/` file has no creation task — record as **Medium**.
+Инфраструктурные задачи (структура Cell, фасад (согласно `goga-lang-helper`), реэкспорты) освобождены — они следуют упрощённому рабочему процессу.
 
 ---
 
-### Step 9: CODEMANIFEST read-only check
+### Шаг 6: Самодостаточные задачи
 
-For each task in the plan:
-- Verify no task instructs the implementation agent to modify `CODEMANIFEST` files
-- Verify the plan instructs the implementation agent not to modify CODEMANIFEST files (look for the read-only warning in task context)
+Для каждой задачи в плане проверьте всё перечисленное. Если любая проверка не проходит — зафиксируйте как **Высокое**:
 
-If a task suggests modifying CODEMANIFEST — record as **Critical**.
-If the read-only warning is missing — record as **Medium**.
-
----
-
-### Step 10: Report findings
-
-Present all findings to the user, organized by severity:
-
-#### Critical (blocks ralphex execution)
-- <finding with exact reference to plan section and what is wrong>
-
-#### High (will cause implementation bugs)
-- <finding>
-
-#### Medium (may cause issues)
-- <finding>
-
-#### Low (improvements)
-- <finding>
-
-For each finding, propose a **concrete fix** — the exact change needed in the plan.
+1. Содержит ли задача собственный контекстный абзац, объясняющий, что она делает и какие сущности контракта охватывает? Если отсутствует — зафиксируйте как **Высокое**.
+2. Содержит ли задача релевантные импорты, Usages и аннотации? Если отсутствует — зафиксируйте как **Высокое**.
+3. Указывает ли задача целевые файлы? Если отсутствует — зафиксируйте как **Высокое**.
+4. Зависит ли задача от другой задачи для контекста реализации (например, «см. Задачу 3 для API») вместо того, чтобы изложить его внутри? Если да — зафиксируйте как **Высокое**.
 
 ---
 
-### Step 11: Fix (with user approval)
+### Шаг 7: Порядок задач
 
-For each finding the user wants to fix:
+Проверьте, что общий порядок задач следует соглашению:
 
-- Update the plan file at `docs/plans/<feature-name>.md`
-- Re-verify that the fix doesn't introduce new issues (re-run relevant checks)
+1. **Инфраструктурные задачи** (структура Cell, фасад (согласно `goga-lang-helper`), реэкспорты)
+2. **Задачи скелетов сущностей**
+3. **Задачи реализации свойств**
+4. **Задачи реализации методов**
+5. **Задачи мутаций интерфейсов**
+6. **Задачи интеграционных тестов**
+
+В много-пакетном плане:
+- Листовые пакеты обрабатываются перед родительскими пакетами
+- Задачи кодирования каждого пакета завершаются перед началом следующего
+
+Если порядок нарушен — зафиксируйте как **Среднее**.
 
 ---
 
-## Output
+### Шаг 8: Покрытие Usages
 
-- List of findings with severity, location, and proposed fix
-- Updated plan file (if fixes were applied)
-- Verification pass/fail verdict
+Для каждой записи `Usages`, релевантной области действия плана (из затронутых сущностей документа дизайна):
+- Найдите хотя бы одну задачу в плане, ссылающуюся на эту запись Usages
+- Проверьте, что задача содержит конкретную информацию (что использовать, как вызывать), а не просто упоминание имени
+- Если значение записи Usages является путём к файлу — проверьте, что план отражает фактическое содержимое файла, а не просто путь или имя usage
+
+Для каждого импортированного usage из `Imports` → `Usages`, релевантного области действия плана:
+- Найдите хотя бы одну задачу, ссылающуюся на этот импортированный usage
+- Проверьте, что задача ссылается на корректный исходный путь `{from_path}/.usages/{usage_name}.md`
+- Проверьте, что задача содержит конкретную информацию из импортированного usage, а не просто упоминание имени
+
+Для каждого запланированного локального файла `.usages/`, указанного в документе дизайна:
+- Найдите задачу или шаг, создающий или расширяющий файл `.usages/<category-name>.md`
+- Проверьте, что задача указывает ожидаемое содержимое файла
+- Если файл расширяет существующую категорию — проверьте, что план указывает дополнение, а не замену
+- Проверьте, что создание файла запланировано вместе с кодом, а не как отдельный этап
+
+Если запись Usages не присутствует ни в одной задаче — зафиксируйте как **Среднее**.
+Если упоминание Usages слишком расплывчатое — зафиксируйте как **Низкое**.
+Если путь к файлу Usages упомянут, но его содержимое не отражено — зафиксируйте как **Среднее**.
+Если импортированный usage не присутствует ни в одной задаче — зафиксируйте как **Среднее**.
+Если запланированный локальный файл `.usages/` не имеет задачи создания — зафиксируйте как **Среднее**.
 
 ---
 
-## Final Self-Check
+### Шаг 9: Проверка «только чтение» CODEMANIFEST
 
-Before completing, verify:
+Для каждой задачи в плане:
+- Проверьте, что ни одна задача не инструктирует агента реализации модифицировать файлы `CODEMANIFEST`
+- Проверьте, что план инструктирует агента реализации не модифицировать файлы CODEMANIFEST (ищите предупреждение «только чтение» в контексте задачи)
 
-1. Were all relevant CODEMANIFEST files read and every plan entity checked for correctness against the contract (names, locations, descriptions, annotations, imports)?
-2. Was the design document read and every entity/design decision/test scenario traced into the plan? Were orphan tasks identified?
-3. Was `docker run --rm -v .:/project -w /project qarium/goga:latest linter` run and results analyzed?
-4. Was every coding task checked for TDD completeness (all 7 steps)?
-5. Was every task checked for self-contained context?
-6. Was task ordering verified against the convention?
-7. Was every Usages entry checked for coverage in the plan?
-8. Was every imported usage from `Imports` → `Usages` checked for coverage and correct source path reference?
-9. Was every planned local `.usages/` file checked for a creation task with expected content?
-10. Was every task checked for CODEMANIFEST read-only compliance?
-11. Are findings organized by severity with concrete fixes proposed?
-12. Were approved fixes applied and re-verified?
+Если задача предлагает модификацию CODEMANIFEST — зафиксируйте как **Критическое**.
+Если предупреждение «только чтение» отсутствует — зафиксируйте как **Среднее**.
 
-If any answer is "no" — complete the missing verification before returning.
+---
+
+### Шаг 10: Отчёт о замечаниях
+
+Представьте все замечания пользователю, организованные по критичности:
+
+#### Критические (блокируют выполнение ralphex)
+- <замечание с точной ссылкой на раздел плана и описанием проблемы>
+
+#### Высокие (вызовут баги реализации)
+- <замечание>
+
+#### Средние (могут вызвать проблемы)
+- <замечание>
+
+#### Низкие (улучшения)
+- <замечание>
+
+Для каждого замечания предложите **конкретное исправление** — точное изменение, необходимое в плане.
+
+---
+
+### Шаг 11: Исправление (с одобрения пользователя)
+
+Для каждого замечания, которое пользователь хочет исправить:
+
+- Обновите файл плана по адресу `docs/plans/<feature-name>.md`
+- Перепроверьте, что исправление не вносит новых проблем (повторно выполните релевантные проверки)
+
+---
+
+## Результат
+
+- Список замечаний с критичностью, местоположением и предлагаемым исправлением
+- Обновлённый файл плана (если были применены исправления)
+- Вердикт верификации: пройдена / не пройдена
+
+---
+
+## Финальная самопроверка
+
+Перед завершением проверьте:
+
+1. Были ли прочитаны все релевантные файлы CODEMANIFEST и проверена каждая сущность плана на корректность относительно контракта (имена, расположения, описания, аннотации, импорты)?
+2. Был ли прочитан документ дизайна и отслежена каждая сущность/проектное решение/тестовый сценарий в плане? Были ли выявлены задачи-сироты?
+3. Был ли запущен `docker run --rm -v .:/project -w /project qarium/goga:latest linter` и проанализированы результаты?
+4. Была ли каждая задача кодирования проверена на полноту TDD (все 7 шагов)?
+5. Была ли каждая задача проверена на самодостаточный контекст?
+6. Был ли порядок задач проверен относительно соглашения?
+7. Была ли каждая запись Usages проверена на покрытие в плане?
+8. Был ли каждый импортированный usage из `Imports` → `Usages` проверен на покрытие и корректную ссылку на исходный путь?
+9. Был ли каждый запланированный локальный файл `.usages/` проверен на наличие задачи создания с ожидаемым содержимым?
+10. Была ли каждая задача проверена на соблюдение режима «только чтение» CODEMANIFEST?
+11. Замечания организованы по критичности с предложенными конкретными исправлениями?
+12. Были ли одобренные исправления применены и перепроверены?
+
+Если хотя бы один ответ «нет» — завершите недостающую верификацию перед возвратом.
 
 ---
