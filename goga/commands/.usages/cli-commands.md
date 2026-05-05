@@ -235,3 +235,64 @@ goga schema
 goga schema goga/config goga/ast --max-depth 2
 goga schema --depends-on goga/ast
 ```
+
+### config
+
+Вывод значения опции из конфигурации проекта .goga.yml.
+
+Синтаксис:
+
+```
+goga config <option>
+```
+
+Аргументы:
+
+| Аргумент | Тип | Описание |
+|----------|-----|----------|
+| `option` | str | Путь к опции в точечной нотации (например build.task_executor.agent) |
+
+Поведение:
+- Загружает конфигурацию через `load_config()`
+- Разрешает путь по атрибутам объекта Config
+- Для примитивов (str, int, bool) — выводит сырое значение
+- Для None — выводит "null"
+- Для сложных (dict, dataclass) — выводит YAML
+
+Поддерживаемые пути:
+- `language` — язык проекта
+- `build` — вся секция build (YAML)
+- `build.task_executor` — конфигурация AI-агента (YAML)
+- `build.task_executor.agent` — имя AI-executor
+- `build.task_executor.env` — переменные окружения (YAML)
+- `build.worktree` — флаг worktree
+- `build.session_timeout` — таймаут сессии
+- `build.idle_timeout` — таймаут простоя
+- `build.wait` — время ожидания
+- `build.max_iterations` — максимум итераций
+- `build.review_patience` — порог ревью
+- `build.prompts_dir` — путь к промптам
+- `build.agents_dir` — путь к агентам
+- `build.codex_review` — флаг codex ревью
+- `commands` — кастомные команды (YAML)
+
+Код возврата:
+- 0 — успех
+- 1 — ошибка (опция не найдена, ошибка конфигурации)
+
+Примеры:
+
+```bash
+goga config language
+# python
+
+goga config build.task_executor.agent
+# claude
+
+goga config build.task_executor.env
+# ANTHROPIC_API_KEY: sk-xxx
+# MODEL: claude-sonnet-4-6
+
+goga config build.worktree
+# True
+```
