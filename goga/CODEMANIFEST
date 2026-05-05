@@ -5,6 +5,7 @@ Imports:
       - install
       - schema
       - contract
+      - config
     From: goga/commands
   - Types:
       - AST
@@ -33,6 +34,7 @@ app():
     - `install`
     - `schema`
     - `contract`
+    - `config`
 
 ---
 
