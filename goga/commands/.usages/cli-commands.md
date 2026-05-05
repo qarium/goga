@@ -239,23 +239,25 @@ goga schema --depends-on goga/ast
 
 ### config
 
-Вывод значения опции из конфигурации проекта .goga.yml.
+Вывод значений опций из конфигурации проекта .goga.yml.
+Каждая опция выводится отдельно с заголовком-путём.
 
 Синтаксис:
 
 ```
-goga config <option>
+goga config <option>...
 ```
 
 Аргументы:
 
 | Аргумент | Тип | Описание |
 |----------|-----|----------|
-| `option` | str | Путь к опции в точечной нотации (например build.task_executor.agent) |
+| `options` | list[str] | Один или несколько путей к опциям в точечной нотации (например build.task_executor.agent build.worktree) |
 
 Поведение:
 - Загружает конфигурацию через `load_config()`
-- Разрешает путь по атрибутам объекта Config
+- Для каждого пути: разрешает по атрибутам объекта Config
+- Выводит заголовок `# <path>` перед значением каждой опции
 - Для примитивов (str, int, bool) — выводит сырое значение
 - Для None — выводит "null"
 - Для сложных (dict, dataclass) — выводит YAML
@@ -267,6 +269,7 @@ goga config <option>
 - `build.task_executor.agent` — имя AI-executor
 - `build.task_executor.env` — переменные окружения (YAML)
 - `build.worktree` — флаг worktree
+- `build.skip_finalize` — флаг пропуска финализации
 - `build.session_timeout` — таймаут сессии
 - `build.idle_timeout` — таймаут простоя
 - `build.wait` — время ожидания
@@ -285,15 +288,21 @@ goga config <option>
 
 ```bash
 goga config language
-# python
+# language
+python
 
-goga config build.task_executor.agent
-# claude
+goga config language build.task_executor.agent build.worktree
+# language
+python
+
+# build.task_executor.agent
+claude
+
+# build.worktree
+true
 
 goga config build.task_executor.env
-# ANTHROPIC_API_KEY: sk-xxx
-# MODEL: claude-sonnet-4-6
-
-goga config build.worktree
-# True
+# build.task_executor.env
+ANTHROPIC_API_KEY: sk-xxx
+MODEL: claude-sonnet-4-6
 ```
