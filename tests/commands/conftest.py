@@ -1,0 +1,38 @@
+from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture
+def minimal_config(tmp_path: Path) -> Path:
+    """Minimal .goga.yml in tmp_path."""
+    config_file = tmp_path / ".goga.yml"
+    config_file.write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n")
+    return tmp_path
+
+
+@pytest.fixture
+def full_config(tmp_path: Path) -> Path:
+    """Full .goga.yml with all options."""
+    config_file = tmp_path / ".goga.yml"
+    config_file.write_text(
+        "language: python\n"
+        "commands:\n  test: pytest\n"
+        "build:\n"
+        "  task_executor:\n"
+        "    agent: claude\n"
+        "    env:\n"
+        "      API_KEY: sk-xxx\n"
+        "      MODEL: claude-sonnet-4-6\n"
+        "  worktree: true\n"
+        "  skip_finalize: false\n"
+        "  session_timeout: '30m'\n"
+        "  idle_timeout: '1h'\n"
+        "  wait: '5m'\n"
+        "  max_iterations: 10\n"
+        "  review_patience: 3\n"
+        "  prompts_dir: /custom/prompts\n"
+        "  agents_dir: /custom/agents\n"
+        "  codex_review: true\n"
+    )
+    return tmp_path

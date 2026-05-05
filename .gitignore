@@ -52,6 +52,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py.cover
+*,cover
 .hypothesis/
 .pytest_cache/
 cover/
@@ -219,4 +220,5 @@ __marimo__/
 .ralphex/
 docs/plans/
 docs/design/
+docs/arch/
 docs/superpowers/
