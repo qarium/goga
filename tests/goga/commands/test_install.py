@@ -49,12 +49,12 @@ class TestLogicPositive:
         assert (claude_dir / "commands" / "goga" / "design.md").is_file()
         assert (claude_dir / "commands" / "goga" / "plan.md").is_file()
         assert (claude_dir / "commands" / "goga" / "verify.md").is_file()
-        assert (claude_dir / "skills" / "review-design" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "design-by-changes" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "plan-by-design" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "verify-plan" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "arch-by-brainstorm" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "cells-by-brainstorm" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-design-by-changes" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-plan-by-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-verify-plan" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert "Installed 6 commands" in result.output
         assert "Installed 11 skills" in result.output
 
@@ -64,7 +64,7 @@ class TestLogicPositive:
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
-        assert (claude_dir / "skills" / "review-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
 
 
 class TestLogicConfig:
@@ -80,7 +80,7 @@ class TestLogicConfig:
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
-        assert (claude_dir / "skills" / "review-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
 
     def test_install_agent_cli_overrides_config(self, tmp_path: Path, monkeypatch) -> None:
         (tmp_path / ".goga.yml").write_text(
@@ -208,7 +208,7 @@ class TestIntegration:
         assert result.exit_code == 0
 
         assert (custom / "SKILL.md").read_text() == "my custom skill content"
-        assert (tmp_path / ".claude" / "skills" / "review-design" / "SKILL.md").is_file()
+        assert (tmp_path / ".claude" / "skills" / "goga-review-design" / "SKILL.md").is_file()
 
     def test_install_replaces_old_commands(self, tmp_path: Path) -> None:
         goga_cmds = tmp_path / ".claude" / "commands" / "goga"
@@ -244,23 +244,23 @@ class TestIntegration:
 
         skills_dir = tmp_path / ".claude" / "skills"
 
-        clarify_design = skills_dir / "review-design"
+        clarify_design = skills_dir / "goga-review-design"
         assert len(list(clarify_design.iterdir())) == 2
         assert (clarify_design / "SKILL.md").is_file()
         assert (clarify_design / "dsl.md").is_file()
 
-        dbc = skills_dir / "design-by-changes"
+        dbc = skills_dir / "goga-design-by-changes"
         assert len(list(dbc.iterdir())) == 3
         assert (dbc / "SKILL.md").is_file()
         assert (dbc / "design-doc-template.md").is_file()
         assert (dbc / "dsl.md").is_file()
 
-        pbd = skills_dir / "plan-by-design"
+        pbd = skills_dir / "goga-plan-by-design"
         expected = {"SKILL.md", "conventions.md", "output-template.md", "dsl.md"}
         actual = {p.name for p in pbd.iterdir()}
         assert actual == expected
 
-        vp = skills_dir / "verify-plan"
+        vp = skills_dir / "goga-verify-plan"
         assert len(list(vp.iterdir())) == 2
         assert (vp / "SKILL.md").is_file()
         assert (vp / "dsl.md").is_file()

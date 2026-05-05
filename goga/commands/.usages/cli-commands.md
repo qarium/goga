@@ -7,7 +7,7 @@
 Все команды импортируются из фасада:
 
 ```python
-from goga.commands import install, contract, build, linter, schema
+from goga.commands import install, contract, build, linter, schema, config
 ```
 
 Или через корневой CLI:

@@ -52,6 +52,7 @@ nosetests.xml
 coverage.xml
 *.cover
 *.py.cover
+*,cover
 .hypothesis/
 .pytest_cache/
 cover/
