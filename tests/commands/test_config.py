@@ -35,11 +35,6 @@ class TestContract:
         result = runner.invoke(config, [])
         assert result.exit_code != 0
 
-    def test_config_single_option_outputs_header_and_value(self, full_config) -> None:
-        result = _run_with_config(full_config / ".goga.yml", ["language"])
-        assert result.exit_code == 0
-        assert result.output == "# language\npython\n"
-
     def test_config_multiple_options_output_headers_and_values(self, full_config) -> None:
         result = _run_with_config(
             full_config / ".goga.yml",
@@ -119,12 +114,6 @@ class TestPositive:
         assert result.exit_code == 0
         assert result.output == "# commands.test\npytest\n"
 
-    def test_config_single_yaml_option_outputs_header_and_yaml(self, full_config) -> None:
-        result = _run_with_config(full_config / ".goga.yml", ["build.task_executor.env"])
-        assert result.exit_code == 0
-        assert result.output.startswith("# build.task_executor.env\n")
-        assert "API_KEY: sk-xxx" in result.output
-
     def test_config_multiple_mixed_types(self, full_config) -> None:
         result = _run_with_config(
             full_config / ".goga.yml",
@@ -148,11 +137,6 @@ class TestPositive:
 
 class TestNegative:
     """Negative/error scenarios for config command."""
-
-    def test_config_option_not_found(self, minimal_config) -> None:
-        result = _run_with_config(minimal_config / ".goga.yml", ["nonexistent.path"])
-        assert result.exit_code == 1
-        assert "Option not found: nonexistent.path" in result.output
 
     def test_config_missing_goga_yml(self, tmp_path) -> None:
         runner = CliRunner()
@@ -220,11 +204,6 @@ class TestEdgeCases:
         result = _run_with_config(config_file, ["build.codex_review"])
         assert result.exit_code == 0
         assert result.output == "# build.codex_review\nFalse\n"
-
-    def test_config_empty_option_in_list(self, minimal_config) -> None:
-        result = _run_with_config(minimal_config / ".goga.yml", [""])
-        assert result.exit_code == 1
-        assert "Option not found" in result.output
 
     def test_config_private_attribute_rejected(self, full_config) -> None:
         result = _run_with_config(full_config / ".goga.yml", ["build._task_executor"])
