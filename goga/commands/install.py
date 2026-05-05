@@ -52,6 +52,19 @@ def _install_skills(source: Path, target: Path, dsl_source: Path) -> list[str]:
     return sorted(installed)
 
 
+def _cleanup_goga_skills(target: Path) -> int:
+    """Remove all goga-* skill directories from target/skills/. Returns count removed."""
+    target_skills = target / "skills"
+    if not target_skills.is_dir():
+        return 0
+    removed = 0
+    for entry in target_skills.iterdir():
+        if entry.is_dir() and entry.name.startswith("goga-"):
+            shutil.rmtree(entry)
+            removed += 1
+    return removed
+
+
 def _print_summary(commands: list[str], skills: list[str], target: Path) -> None:
     """Print installation summary to stdout."""
     click.echo(f"Installed goga commands to {target}/commands/goga/")
@@ -86,6 +99,7 @@ def install(ctx: click.Context, agent: str | None) -> None:
     target.mkdir(parents=True, exist_ok=True)
 
     try:
+        _cleanup_goga_skills(target)
         commands = _install_commands(source, target)
         skills = _install_skills(source, target, _get_dsl_source())
         _print_summary(commands, skills, target)
