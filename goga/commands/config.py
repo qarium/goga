@@ -61,18 +61,21 @@ def _output_value(value: object) -> None:
 
 
 @click.command()
-@click.argument("option")
+@click.argument("options", nargs=-1, required=True)
 @click.pass_context
-def config(ctx: click.Context, option: str) -> None:
-    """Read and output a configuration option from .goga.yml."""
+def config(ctx: click.Context, options: tuple[str, ...]) -> None:
+    """Read and output configuration options from .goga.yml."""
     try:
         cfg = load_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    value = _resolve_option(cfg, option)
-    if value is _NOT_FOUND:
-        click.echo(f"Option not found: {option}", err=True)
-        ctx.exit(1)
-
-    _output_value(value)
+    for i, option in enumerate(options):
+        if i > 0:
+            click.echo()
+        value = _resolve_option(cfg, option)
+        if value is _NOT_FOUND:
+            click.echo(f"Option not found: {option}", err=True)
+            ctx.exit(1)
+        click.echo(f"# {option}")
+        _output_value(value)
