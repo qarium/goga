@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import sys
 from pathlib import Path
 from unittest import mock
@@ -8,9 +9,15 @@ import click
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import install
-from goga.commands.install import load_config
+from goga.commands.install import _cleanup_goga_skills, load_config
 
 _install_module = sys.modules["goga.commands.install"]
+_AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
+
+
+def _invoke_install(tmp_path: Path) -> click.testing.Result:
+    with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        return CliRunner().invoke(app, ["install"])
 
 
 class TestFacadeAvailability:
@@ -37,6 +44,24 @@ class TestFacadeAvailability:
         assert load_config is not None
 
 
+class TestCleanupGogaSkillsContract:
+    """Contract tests for _cleanup_goga_skills function."""
+
+    def test_cleanup_goga_skills_exists(self) -> None:
+        assert hasattr(_install_module, "_cleanup_goga_skills")
+
+    def test_cleanup_goga_skills_is_callable(self) -> None:
+        assert callable(_cleanup_goga_skills)
+
+    def test_cleanup_goga_skills_signature(self) -> None:
+        sig = inspect.signature(_cleanup_goga_skills)
+        params = list(sig.parameters.keys())
+        assert len(params) == 1
+        # annotations may be stringified due to __future__ annotations
+        ret = sig.return_annotation
+        assert ret is int or ret == "int"
+
+
 class TestLogicPositive:
     """Positive scenario tests for the install command."""
 
@@ -56,7 +81,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert "Installed 6 commands" in result.output
-        assert "Installed 11 skills" in result.output
+        assert "Installed 16 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
@@ -169,20 +194,14 @@ class TestLogicEdgeCases:
 class TestIntegration:
     """Integration tests for cross-cutting install command behaviors."""
 
-    SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
-
-    def _invoke_install(self, tmp_path: Path) -> click.testing.Result:
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            return CliRunner().invoke(app, ["install"])
-
     def test_install_idempotent(self, tmp_path: Path) -> None:
-        first = self._invoke_install(tmp_path)
+        first = _invoke_install(tmp_path)
         assert first.exit_code == 0
 
-        second = self._invoke_install(tmp_path)
+        second = _invoke_install(tmp_path)
         assert second.exit_code == 0
 
-        source_clarify = self.SOURCE_DIR / "commands" / "review.md"
+        source_clarify = _AGENT_SOURCE_DIR / "commands" / "review.md"
         target_clarify = tmp_path / ".claude" / "commands" / "goga" / "review.md"
         assert target_clarify.read_text() == source_clarify.read_text()
 
@@ -192,7 +211,7 @@ class TestIntegration:
         (claude_dir / "CLAUDE.md").write_text("keep this content")
         (claude_dir / "settings.json").write_text('{"key": "value"}')
 
-        result = self._invoke_install(tmp_path)
+        result = _invoke_install(tmp_path)
         assert result.exit_code == 0
 
         assert (claude_dir / "CLAUDE.md").read_text() == "keep this content"
@@ -204,7 +223,7 @@ class TestIntegration:
         custom.mkdir(parents=True)
         (custom / "SKILL.md").write_text("my custom skill content")
 
-        result = self._invoke_install(tmp_path)
+        result = _invoke_install(tmp_path)
         assert result.exit_code == 0
 
         assert (custom / "SKILL.md").read_text() == "my custom skill content"
@@ -216,12 +235,12 @@ class TestIntegration:
         (goga_cmds / "old-deleted-command.md").write_text("should be removed")
         (goga_cmds / "review.md").write_text("old version")
 
-        result = self._invoke_install(tmp_path)
+        result = _invoke_install(tmp_path)
         assert result.exit_code == 0
 
         assert not (goga_cmds / "old-deleted-command.md").exists()
 
-        source_clarify = self.SOURCE_DIR / "commands" / "review.md"
+        source_clarify = _AGENT_SOURCE_DIR / "commands" / "review.md"
         assert (goga_cmds / "review.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
@@ -232,14 +251,14 @@ class TestIntegration:
         other_cmd.mkdir(parents=True)
         (other_cmd / "file.md").write_text("my other command content")
 
-        result = self._invoke_install(tmp_path)
+        result = _invoke_install(tmp_path)
         assert result.exit_code == 0
 
         assert (other_cmd / "file.md").read_text() == "my other command content"
         assert (tmp_path / ".claude" / "commands" / "goga" / "review.md").is_file()
 
     def test_install_skill_files_recursive(self, tmp_path: Path) -> None:
-        result = self._invoke_install(tmp_path)
+        result = _invoke_install(tmp_path)
         assert result.exit_code == 0
 
         skills_dir = tmp_path / ".claude" / "skills"
@@ -264,3 +283,123 @@ class TestIntegration:
         assert len(list(vp.iterdir())) == 2
         assert (vp / "SKILL.md").is_file()
         assert (vp / "dsl.md").is_file()
+
+
+class TestCleanupGogaSkillsLogic:
+    """Logical tests for _cleanup_goga_skills behavior during install."""
+
+    def _setup_config(self, tmp_path: Path, monkeypatch) -> None:
+        (tmp_path / ".goga.yml").write_text(
+            "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
+        )
+        monkeypatch.chdir(tmp_path)
+
+    def test_install_cleanup_removes_old_goga_skills(self, tmp_path: Path, monkeypatch) -> None:
+        """Stale goga-* skills are removed before fresh install."""
+        self._setup_config(tmp_path, monkeypatch)
+        claude_dir = tmp_path / ".claude"
+        skills_dir = claude_dir / "skills"
+
+        # Create stale goga skills
+        (skills_dir / "goga-old-skill").mkdir(parents=True)
+        (skills_dir / "goga-old-skill" / "skill.md").write_text("old")
+        (skills_dir / "goga-another-old").mkdir(parents=True)
+        (skills_dir / "goga-another-old" / "data.md").write_text("old data")
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        assert not (skills_dir / "goga-old-skill").exists()
+        assert not (skills_dir / "goga-another-old").exists()
+        # New goga skills are installed
+        assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
+
+    def test_install_cleanup_keeps_non_goga_skills(self, tmp_path: Path, monkeypatch) -> None:
+        """Non-goga skills are preserved during cleanup."""
+        self._setup_config(tmp_path, monkeypatch)
+        skills_dir = tmp_path / ".claude" / "skills"
+
+        (skills_dir / "other-skill").mkdir(parents=True)
+        (skills_dir / "other-skill" / "data.md").write_text("custom content")
+        (skills_dir / "my-custom-plugin").mkdir(parents=True)
+        (skills_dir / "my-custom-plugin" / "plugin.py").write_text("plugin")
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        assert (skills_dir / "other-skill" / "data.md").read_text() == "custom content"
+        assert (skills_dir / "my-custom-plugin" / "plugin.py").read_text() == "plugin"
+
+    def test_install_fresh_no_existing_skills(self, tmp_path: Path, monkeypatch) -> None:
+        """First install with no skills/ dir works correctly."""
+        self._setup_config(tmp_path, monkeypatch)
+        # Only .claude exists, no skills subdir
+        (tmp_path / ".claude").mkdir()
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        skills_dir = tmp_path / ".claude" / "skills"
+        assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
+
+    def test_install_cleanup_permission_error(self, tmp_path: Path, monkeypatch) -> None:
+        """OSError during cleanup is handled gracefully."""
+        self._setup_config(tmp_path, monkeypatch)
+        skills_dir = tmp_path / ".claude" / "skills"
+        (skills_dir / "goga-locked").mkdir(parents=True)
+
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(
+                _install_module, "_cleanup_goga_skills", side_effect=OSError("denied"),
+            ),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+
+    def test_install_cleanup_empty_skills_dir(self, tmp_path: Path, monkeypatch) -> None:
+        """Empty skills/ dir doesn't cause errors."""
+        self._setup_config(tmp_path, monkeypatch)
+        skills_dir = tmp_path / ".claude" / "skills"
+        skills_dir.mkdir(parents=True)
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
+
+    def test_install_cleanup_mixed_content_in_skills(self, tmp_path: Path, monkeypatch) -> None:
+        """Mixed content: goga dirs removed, non-goga dirs/files preserved."""
+        self._setup_config(tmp_path, monkeypatch)
+        skills_dir = tmp_path / ".claude" / "skills"
+
+        (skills_dir / "goga-old").mkdir(parents=True)
+        (skills_dir / "goga-old" / "old.md").write_text("old")
+        (skills_dir / "goga-another").mkdir(parents=True)
+        (skills_dir / "goga-another" / "data.md").write_text("data")
+        (skills_dir / "my-skill").mkdir(parents=True)
+        (skills_dir / "my-skill" / "custom.md").write_text("custom")
+        (skills_dir / "some-file.txt").write_text("just a file")
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        assert not (skills_dir / "goga-old").exists()
+        assert not (skills_dir / "goga-another").exists()
+        assert (skills_dir / "my-skill" / "custom.md").read_text() == "custom"
+        assert (skills_dir / "some-file.txt").read_text() == "just a file"
+
+    def test_install_cleanup_preserves_goga_without_hyphen(self, tmp_path: Path, monkeypatch) -> None:
+        """Directory named 'goga' (no hyphen) is not removed by cleanup."""
+        self._setup_config(tmp_path, monkeypatch)
+        skills_dir = tmp_path / ".claude" / "skills"
+
+        (skills_dir / "goga").mkdir(parents=True)
+        (skills_dir / "goga" / "custom.md").write_text("must keep")
+
+        result = _invoke_install(tmp_path)
+        assert result.exit_code == 0
+
+        assert (skills_dir / "goga" / "custom.md").read_text() == "must keep"
