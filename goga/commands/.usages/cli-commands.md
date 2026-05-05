@@ -299,7 +299,7 @@ python
 claude
 
 # build.worktree
-true
+True
 
 goga config build.task_executor.env
 # build.task_executor.env

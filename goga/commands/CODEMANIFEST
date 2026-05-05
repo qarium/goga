@@ -348,7 +348,7 @@ Annotations: |
     - код возврата: 0 при успехе, 1 при ошибке
     - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
 
-"config(options: list[str])":
+"config(options: tuple[str, ...])":
   location: config.py
   annotations: |
     Команда выводит значения опций из конфигурации проекта .goga.yml.
@@ -381,7 +381,7 @@ Annotations: |
     claude
 
     # build.worktree
-    true
+    True
     ```
 
     Формат вывода при одной опции — то же самое: заголовок и значение.

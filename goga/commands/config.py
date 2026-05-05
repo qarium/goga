@@ -23,7 +23,7 @@ def _resolve_option(config: object, option: str) -> object:
     current = config
     for part in parts:
         if isinstance(current, dict):
-            if part not in current:
+            if part.startswith('_') or part not in current:
                 return _NOT_FOUND
             current = current[part]
         elif hasattr(current, '__dict__') or is_dataclass(current):

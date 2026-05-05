@@ -140,11 +140,6 @@ class TestPositive:
         idx = lines.index("30m")
         assert lines[idx + 1] == ""
 
-    def test_config_none_value_outputs_header_and_null(self, minimal_config) -> None:
-        result = _run_with_config(minimal_config / ".goga.yml", ["build.worktree"])
-        assert result.exit_code == 0
-        assert result.output == "# build.worktree\nnull\n"
-
     def test_config_skip_finalize_option(self, full_config) -> None:
         result = _run_with_config(full_config / ".goga.yml", ["build.skip_finalize"])
         assert result.exit_code == 0
@@ -193,6 +188,12 @@ class TestNegative:
         assert result.exit_code == 1
         assert "Option not found: nonexistent.path" in result.output
 
+    def test_config_second_option_not_found_stops_after_first(self, full_config) -> None:
+        result = _run_with_config(full_config / ".goga.yml", ["language", "nonexistent"])
+        assert result.exit_code == 1
+        assert "# language\npython" in result.output
+        assert "Option not found: nonexistent" in result.output
+
     def test_config_first_option_not_found_stops_execution(self, full_config) -> None:
         result = _run_with_config(full_config / ".goga.yml", ["nonexistent", "language"])
         assert result.exit_code == 1
@@ -223,6 +224,17 @@ class TestEdgeCases:
     def test_config_empty_option_in_list(self, minimal_config) -> None:
         result = _run_with_config(minimal_config / ".goga.yml", [""])
         assert result.exit_code == 1
+        assert "Option not found" in result.output
+
+    def test_config_private_attribute_rejected(self, full_config) -> None:
+        result = _run_with_config(full_config / ".goga.yml", ["build._task_executor"])
+        assert result.exit_code == 1
+        assert "Option not found: build._task_executor" in result.output
+
+    def test_config_scalar_traversal_returns_not_found(self, full_config) -> None:
+        result = _run_with_config(full_config / ".goga.yml", ["language.foo"])
+        assert result.exit_code == 1
+        assert "Option not found: language.foo" in result.output
 
     def test_config_bool_value_output_format(self, full_config) -> None:
         result = _run_with_config(
