@@ -1,10 +1,11 @@
 # tests/goga/config/test_config.py — contract and logic tests for dataclasses
 
 import dataclasses
+import types
 
 import goga.config as goga_config_mod
 import pytest
-from goga.config import BuildConfig, Config, TaskExecutor
+from goga.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor
 
 # --- Contract tests ---
 
@@ -15,6 +16,11 @@ class TestFacadeAvailability:
         assert hasattr(goga_config_mod, "Config")
         assert hasattr(goga_config_mod, "BuildConfig")
         assert hasattr(goga_config_mod, "TaskExecutor")
+
+    def test_codemanifest_config_importable(self):
+        """CodemanifestConfig is importable from goga.config and in __all__."""
+        assert hasattr(goga_config_mod, "CodemanifestConfig")
+        assert "CodemanifestConfig" in goga_config_mod.__all__
 
     def test_load_config_importable(self):
         """load_config is importable from goga.config."""
@@ -73,6 +79,26 @@ class TestBuildConfigAPIShape:
         assert "codex_review" in BuildConfig.__dataclass_fields__
 
 
+class TestCodemanifestConfigAPIShape:
+    def test_has_usages_field(self):
+        assert "usages" in CodemanifestConfig.__dataclass_fields__
+
+    def test_has_annotations_field(self):
+        assert "annotations" in CodemanifestConfig.__dataclass_fields__
+
+    def test_usages_type_is_dict(self):
+        assert CodemanifestConfig.__dataclass_fields__["usages"].type is dict
+
+    def test_annotations_type_is_optional_str(self):
+        ann_type = CodemanifestConfig.__dataclass_fields__["annotations"].type
+        # str | None creates a UnionType in Python 3.10+; each evaluation creates a new object
+        # so use == instead of `is`, or check get_args
+        assert ann_type == str | None or types.UnionType in type(ann_type).__mro__
+
+    def test_usages_has_default_factory(self):
+        assert CodemanifestConfig.__dataclass_fields__["usages"].default_factory is not dataclasses.MISSING
+
+
 class TestConfigAPIShape:
     def test_has_lang_field(self):
         assert "lang" in Config.__dataclass_fields__
@@ -82,6 +108,9 @@ class TestConfigAPIShape:
 
     def test_has_commands_field(self):
         assert "commands" in Config.__dataclass_fields__
+
+    def test_has_codemanifest_field(self):
+        assert "codemanifest" in Config.__dataclass_fields__
 
     def test_lang_is_required(self):
         """Config without lang raises TypeError (missing required argument)."""
@@ -100,6 +129,13 @@ class TestKwOnlyEnforced:
 
     def test_config_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(Config))
+
+    def test_codemanifest_config_kw_only(self):
+        assert all(f.kw_only for f in dataclasses.fields(CodemanifestConfig))
+
+    def test_codemanifest_config_positional_args_rejected(self):
+        with pytest.raises(TypeError):
+            CodemanifestConfig({"lib": ".specs/lib.md"}, "annotations")
 
     def test_task_executor_positional_args_rejected(self):
         with pytest.raises(TypeError):
@@ -213,3 +249,37 @@ class TestConfigRequiredLang:
         bc = BuildConfig(task_executor=te)
         with pytest.raises(TypeError):
             Config(build=bc)
+
+
+class TestCodemanifestConfigCreation:
+    def test_creation_with_defaults(self):
+        cc = CodemanifestConfig()
+        assert cc.usages == {}
+        assert cc.annotations is None
+
+    def test_full_creation(self):
+        cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
+        assert cc.usages == {"lib": ".specs/lib.md"}
+        assert cc.annotations == "Use lib"
+
+
+class TestCodemanifestConfigFrozen:
+    def test_frozen(self):
+        cc = CodemanifestConfig()
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            cc.usages = {"x": "y"}
+
+
+class TestConfigCodemenifestField:
+    def test_codemanifest_field_defaults_none(self):
+        te = TaskExecutor(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        cfg = Config(lang="python", build=bc)
+        assert cfg.codemanifest is None
+
+    def test_config_with_codemanifest(self):
+        te = TaskExecutor(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
+        cfg = Config(lang="python", build=bc, codemanifest=cc)
+        assert cfg.codemanifest is cc

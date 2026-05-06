@@ -10,6 +10,12 @@ class TaskExecutor:
 
 
 @dataclass(kw_only=True, frozen=True)
+class CodemanifestConfig:
+    usages: dict = field(default_factory=dict)
+    annotations: str | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
 class BuildConfig:
     task_executor: TaskExecutor
     worktree: bool | None = None
@@ -29,3 +35,4 @@ class Config:
     lang: str
     build: BuildConfig
     commands: dict = field(default_factory=dict)
+    codemanifest: CodemanifestConfig | None = None

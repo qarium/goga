@@ -4,24 +4,20 @@ from pathlib import Path
 
 import yaml
 
-from goga.config.config import BuildConfig, Config, TaskExecutor
+from goga.config.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor
 
 
 def _parse_task_executor(task_executor_data: dict) -> TaskExecutor:
     """Parse and validate task_executor section into a TaskExecutor instance."""
     agent = task_executor_data.get("agent")
     if not isinstance(agent, str) or not agent.strip():
-        raise ValueError(
-            "build.task_executor.agent is required in .goga.yml"
-        )
+        raise ValueError("build.task_executor.agent is required in .goga.yml")
 
     env = task_executor_data.get("env", {})
     if not isinstance(env, dict):
         raise ValueError("build.task_executor.env must be a mapping in .goga.yml")
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
-        raise ValueError(
-            "build.task_executor.env must have string keys and values"
-        )
+        raise ValueError("build.task_executor.env must have string keys and values")
 
     return TaskExecutor(agent=agent.strip(), env=dict(env))
 
@@ -37,6 +33,27 @@ def _parse_language(data: dict) -> str:
         raise ValueError("language must be a non-empty string in .goga.yml")
 
     return lang.strip()
+
+
+def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
+    """Parse optional codemanifest section from YAML data."""
+    codemanifest_data = data.get("codemanifest")
+    if codemanifest_data is None:
+        return None
+    if not isinstance(codemanifest_data, dict):
+        raise ValueError("'codemanifest' must be a mapping in .goga.yml")
+
+    usages = codemanifest_data.get("usages", {})
+    if not isinstance(usages, dict):
+        raise ValueError("codemanifest.usages must be a mapping")
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in usages.items()):
+        raise ValueError("codemanifest.usages must have string keys and values")
+
+    annotations = codemanifest_data.get("annotations")
+    if annotations is not None and not isinstance(annotations, str):
+        raise ValueError("codemanifest.annotations must be a string")
+
+    return CodemanifestConfig(usages=dict(usages), annotations=annotations)
 
 
 def load_config() -> Config:
@@ -104,4 +121,4 @@ def load_config() -> Config:
         codex_review=build_data.get("codex_review"),
     )
 
-    return Config(lang=lang, build=build, commands=commands)
+    return Config(lang=lang, build=build, commands=commands, codemanifest=_parse_codemanifest(data))
