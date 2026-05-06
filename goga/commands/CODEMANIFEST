@@ -352,6 +352,8 @@ Annotations: |
   location: config.py
   annotations: |
     Команда выводит значения опций из конфигурации проекта .goga.yml.
+    Структура конфигурации описана в практике `configuration`, конфигурация загружается через `load_config`.
+    Команда поддерживает навигацию по всем полям объекта `Config` через точечную нотацию.
     Каждая опция выводится отдельно с заголовком, идентифицирующим путь.
 
     `options`: пути к опциям в точечной нотации, один или несколько.
@@ -383,26 +385,7 @@ Annotations: |
     # build.worktree
     True
     ```
-
     Формат вывода при одной опции — то же самое: заголовок и значение.
-
-    Поддерживаемые корневые пути:
-    - language → Config.lang
-    - build → Config.build (вывод YAML)
-    - build.task_executor → Config.build.task_executor (вывод YAML)
-    - build.task_executor.agent → Config.build.task_executor.agent
-    - build.task_executor.env → Config.build.task_executor.env (вывод YAML)
-    - build.worktree → Config.build.worktree
-    - build.session_timeout → Config.build.session_timeout
-    - build.idle_timeout → Config.build.idle_timeout
-    - build.wait → Config.build.wait
-    - build.max_iterations → Config.build.max_iterations
-    - build.review_patience → Config.build.review_patience
-    - build.prompts_dir → Config.build.prompts_dir
-    - build.agents_dir → Config.build.agents_dir
-    - build.codex_review → Config.build.codex_review
-    - build.skip_finalize → Config.build.skip_finalize
-    - commands → Config.commands (вывод YAML)
 
     Требования:
     - Ошибки конфигурации (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
