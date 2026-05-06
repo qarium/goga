@@ -306,3 +306,89 @@ goga config build.task_executor.env
 ANTHROPIC_API_KEY: sk-xxx
 MODEL: claude-sonnet-4-6
 ```
+
+### sync
+
+Синхронизация .usages/ из локального пути или git-репозитория в .usages/deps/.
+
+Синтаксис:
+
+```
+goga sync <source> [--token TOKEN] [--branch BRANCH]
+```
+
+Аргументы:
+
+| Аргумент | Тип | Описание |
+|----------|-----|----------|
+| `source` | str | Путь к каталогу (локальный) или URL git-репозитория |
+
+Опции:
+
+| Опция | Тип | Описание |
+|-------|-----|----------|
+| `--token` | str | Токен авторизации для HTTPS git-репозитория |
+| `--branch` | str | Ветка или тег для checkout при клонировании |
+
+Режимы:
+- **Локальный**: если source не распознаётся как git URL —
+  рассматривается как путь к каталогу
+- **Git**: если source начинается с http://, https://, git@ или ssh:// —
+  клонирует репозиторий во временный каталог и синхронизирует
+
+Поведение:
+- Имя зависимости = basename пути или имя репозитория из URL
+- Перед копированием удаляет старую версию зависимости (полная пересинхронизация)
+- Сохраняет структуру подкаталогов источника
+- Временный каталог клонирования удаляется после синхронизации
+
+Структура результата (локальный путь):
+
+```
+Исходный путь: /path/to/external/goga/
+  .usages/dsl.md
+  commands/.usages/cli-commands.md
+  config/.usages/configuration.md
+
+Результат: .usages/deps/goga/
+  .usages/dsl.md
+  commands/.usages/cli-commands.md
+  config/.usages/configuration.md
+```
+
+Структура результата (git-репозиторий):
+
+```
+Репозиторий: https://github.com/owner/goga-lib
+Клонируется во временный каталог → синхронизация → удаление временного каталога
+
+Результат: .usages/deps/goga-lib/
+  .usages/api.md
+  core/.usages/core-contracts.md
+```
+
+Код возврата:
+- 0 — успех
+- 1 — ошибка (путь не существует, нет .usages/, ошибка I/O, ошибка git)
+
+Примеры:
+
+```bash
+# Локальный путь
+goga sync /path/to/external/project/goga
+
+# Относительный путь
+goga sync ../other-project/lib
+
+# GitHub публичный репозиторий
+goga sync https://github.com/owner/repo
+
+# GitHub с персональным токеном
+goga sync --token ghp_xxx https://github.com/owner/private-repo
+
+# GitLab с токеном и указанием ветки
+goga sync --token glpat-xxx --branch v2.0 https://gitlab.com/org/repo
+
+# SSH
+goga sync git@github.com:owner/repo.git
+```

@@ -6,6 +6,7 @@ Imports:
       - schema
       - contract
       - config
+      - sync
     From: goga/commands
   - Types:
       - AST
@@ -35,6 +36,7 @@ app():
     - `schema`
     - `contract`
     - `config`
+    - `sync`
 
 ---
 

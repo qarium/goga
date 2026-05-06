@@ -413,6 +413,102 @@ Annotations: |
     - Между значениями разных опций — пустая строка
     - Для YAML-вывода сложных типов заголовок выводится перед YAML-блоком
 
+"sync(source: str, token: str | None = None, branch: str | None = None)":
+  location: sync.py
+  annotations: |
+    Команда синхронизации .usages/ из локального пути или git-репозитория.
+
+    `source`: путь к каталогу-источнику или URL git-репозитория
+    `token`: опциональный токен авторизации для git-репозитория
+    `branch`: опциональная ветка или тег для checkout при клонировании
+
+    CLI-опции:
+    - --token: токен авторизации. При git-режиме для HTTPS URL
+      токен встраивается в URL как https://<token>@host/path.
+      Для SSH URL (git@...) — игнорируется (используются SSH-ключи).
+      При локальном пути — игнорируется.
+    - --branch: ветка или тег для checkout при клонировании.
+      Передаётся как git clone --branch <branch>.
+      При локальном пути — игнорируется.
+
+    Диспетчеризация:
+    - Если `source` начинается с http://, https://, git@ или ssh:// → git-режим
+    - Иначе → локальный режим
+
+    Алгоритм (локальный режим):
+    1. Разрешить `source` в абсолютный путь через Path.resolve()
+    2. Валидация:
+       - Проверить что путь существует и является каталогом (Path.is_dir())
+       - Если путь указывает на файл или не существует — ошибка в stderr, exit 1
+       - Проверить что путь содержит хотя бы одну .usages/ директорию (рекурсивно)
+       - При отсутствии .usages/ — ошибка в stderr, exit 1
+    3. Имя зависимости: basename переданного пути
+    4. Выполнить синхронизацию (шаг «Синхронизация»)
+
+    Алгоритм (git-режим):
+    1. Извлечь имя зависимости из URL:
+       - Последний сегмент пути без суффикса .git
+       - https://github.com/user/my-lib → my-lib
+       - https://gitlab.com/org/repo.git → repo
+       - git@github.com:user/project.git → project
+    2. Подготовить URL для клонирования:
+       - Если передан --token и URL начинается с https:// →
+         вставить токен: https://<token>@host/path
+       - Для SSH URL (git@..., ssh://) — токен игнорируется
+       - Для http:// без токена — клонирование как есть
+    3. Создать временный каталог через tempfile.mkdtemp()
+    4. Выполнить git clone:
+       - Команда: git clone [--branch <branch>] <prepared_url> <tmp_dir>
+       - Если git не найден в PATH — ошибка в stderr, exit 1
+       - При ошибке clone — вывести stderr git, exit 1
+    5. Валидация: проверить что клонированный каталог содержит
+       хотя бы одну .usages/ директорию (рекурсивно)
+       - При отсутствии .usages/ — ошибка в stderr, exit 1
+    6. Выполнить синхронизацию (шаг «Синхронизация»)
+    7. В блоке finally — удалить временный каталог через shutil.rmtree()
+
+    Синхронизация (общий шаг для обоих режимов):
+    1. Целевой каталог: .usages/deps/<name>/
+    2. Удалить целевой каталог если существует (полная пересинхронизация)
+    3. Найти все .usages/ директории в источнике рекурсивно
+    4. Для каждого найденного .usages/:
+       - Вычислить относительный путь от корня источника до родителя .usages/
+       - Создать структуру в целевом пути: .usages/deps/<name>/<relative>/.usages/
+       - Скопировать содержимое .usages/ (файлы и подкаталоги)
+    5. Вывести результат: имя зависимости, количество синхронизированных .usages/
+
+    Требования:
+    - Использовать shutil.copytree для копирования
+    - Использовать shutil.rmtree для удаления старой зависимости и временных файлов
+    - git clone через subprocess.run с capture_output=True, check=True
+    - Временные файлы через tempfile.mkdtemp()
+    - Временные файлы удалять в блоке finally
+    - GIT_TERMINAL_PROMPT=0 в env для запрета интерактивных промптов
+    - Ошибки I/O и git выводить в stderr (click.echo с err=True)
+    - Код возврата: 0 при успехе, 1 при ошибке
+    - Минимальный вывод: имя зависимости, источник, количество синхронизированных usages
+
+    Примеры:
+      # Локальный путь
+      goga sync /path/to/external/project/goga
+      # → .usages/deps/goga/
+
+      # GitHub (публичный)
+      goga sync https://github.com/owner/repo
+      # → .usages/deps/repo/
+
+      # GitHub (с токеном)
+      goga sync --token ghp_xxx https://github.com/owner/private-repo
+      # → .usages/deps/private-repo/
+
+      # GitLab (с токеном и веткой)
+      goga sync --token glpat-xxx --branch v2.0 https://gitlab.com/org/repo
+      # → .usages/deps/repo/
+
+      # SSH
+      goga sync git@github.com:owner/repo.git
+      # → .usages/deps/repo/
+
 ---
 
 Author: Mikhail Trifonov
