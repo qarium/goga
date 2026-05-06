@@ -4,5 +4,6 @@ from .contract import contract
 from .install import install
 from .linter import linter
 from .schema import schema
+from .sync import sync
 
-__all__ = ["build", "config", "contract", "install", "linter", "schema"]
+__all__ = ["build", "config", "contract", "install", "linter", "schema", "sync"]
