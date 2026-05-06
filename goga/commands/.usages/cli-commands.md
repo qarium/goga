@@ -262,23 +262,6 @@ goga config <option>...
 - Для None — выводит "null"
 - Для сложных (dict, dataclass) — выводит YAML
 
-Поддерживаемые пути:
-- `language` — язык проекта
-- `build` — вся секция build (YAML)
-- `build.task_executor` — конфигурация AI-агента (YAML)
-- `build.task_executor.agent` — имя AI-executor
-- `build.task_executor.env` — переменные окружения (YAML)
-- `build.worktree` — флаг worktree
-- `build.skip_finalize` — флаг пропуска финализации
-- `build.session_timeout` — таймаут сессии
-- `build.idle_timeout` — таймаут простоя
-- `build.wait` — время ожидания
-- `build.max_iterations` — максимум итераций
-- `build.review_patience` — порог ревью
-- `build.prompts_dir` — путь к промптам
-- `build.agents_dir` — путь к агентам
-- `build.codex_review` — флаг codex ревью
-- `commands` — кастомные команды (YAML)
 
 Код возврата:
 - 0 — успех
