@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -272,7 +273,7 @@ class TestSyncLocal:
 
         monkeypatch.chdir(tmp_path)
 
-        with mock.patch("goga.commands.sync.shutil.copytree", side_effect=OSError("Permission denied")):
+        with mock.patch("shutil.copytree", side_effect=OSError("Permission denied")):
             runner = CliRunner()
             result = runner.invoke(sync, [str(source)])
 
@@ -303,9 +304,9 @@ class TestSyncGit:
             return mock.MagicMock()
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -338,9 +339,9 @@ class TestSyncGit:
             return mock.MagicMock()
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(
@@ -371,9 +372,9 @@ class TestSyncGit:
             return str(d)
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["https://github.com/user/bad-repo.git"])
@@ -393,9 +394,9 @@ class TestSyncGit:
             return str(d)
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(
@@ -414,12 +415,12 @@ class TestSyncGit:
             return str(d)
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
             mock.patch(
-                "goga.commands.sync.subprocess.run",
+                "subprocess.run",
                 side_effect=FileNotFoundError("git not found"),
             ),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -444,9 +445,9 @@ class TestSyncGit:
             return mock.MagicMock()
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -467,9 +468,9 @@ class TestSyncGit:
             return str(d)
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             runner.invoke(sync, ["git@github.com:user/repo.git", "--token", "ghp_xxx"])
@@ -497,9 +498,9 @@ class TestSyncGit:
             return mock.MagicMock()
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree"),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
             runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -525,9 +526,9 @@ class TestSyncGit:
             return mock.MagicMock()
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
-            mock.patch("goga.commands.sync.subprocess.run", side_effect=fake_run),
-            mock.patch("goga.commands.sync.shutil.rmtree") as mock_rmtree,
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("subprocess.run", side_effect=fake_run),
+            mock.patch("shutil.rmtree") as mock_rmtree,
         ):
             runner = CliRunner()
             runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -542,12 +543,12 @@ class TestSyncGit:
             return str(tmp_dir_path)
 
         with (
-            mock.patch("goga.commands.sync.tempfile.mkdtemp", side_effect=fake_mkdtemp),
+            mock.patch("tempfile.mkdtemp", side_effect=fake_mkdtemp),
             mock.patch(
-                "goga.commands.sync.subprocess.run",
+                "subprocess.run",
                 side_effect=subprocess.CalledProcessError(1, ["git"]),
             ),
-            mock.patch("goga.commands.sync.shutil.rmtree") as mock_rmtree,
+            mock.patch("shutil.rmtree") as mock_rmtree,
         ):
             runner = CliRunner()
             runner.invoke(sync, ["https://github.com/user/repo.git"])
@@ -556,7 +557,7 @@ class TestSyncGit:
 
     def test_sync_git_invalid_url_no_dep_name(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.sync.shutil.rmtree") as mock_rmtree,
+            mock.patch("shutil.rmtree") as mock_rmtree,
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["https://github.com/"])
@@ -567,7 +568,7 @@ class TestSyncGit:
 
     def test_sync_git_malformed_git_at_url(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.sync.shutil.rmtree") as mock_rmtree,
+            mock.patch("shutil.rmtree") as mock_rmtree,
         ):
             runner = CliRunner()
             result = runner.invoke(sync, ["git@no-colon-here"])
