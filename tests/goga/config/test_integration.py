@@ -3,7 +3,7 @@
 import dataclasses
 
 import pytest
-from goga.config import BuildConfig, Config, TaskExecutor, load_config
+from goga.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor, load_config
 
 FULL_YAML = """\
 language: rust
@@ -59,6 +59,7 @@ class TestFullConfigLoadingFlow:
         # Top-level
         assert isinstance(config, Config)
         assert config.lang == "rust"
+        assert config.codemanifest is None
         assert config.commands == {
             "build": "cargo build --release",
             "test": "cargo test",
@@ -93,6 +94,7 @@ class TestFullConfigLoadingFlow:
 
         assert config.lang == "python"
         assert config.commands == {}
+        assert config.codemanifest is None
         assert config.build.worktree is None
         assert config.build.skip_finalize is None
         assert config.build.session_timeout is None
@@ -115,6 +117,7 @@ class TestFullConfigLoadingFlow:
         assert config.lang == "python"
         assert config.build.task_executor.agent == "codex"
         assert config.build.task_executor.env == {"PYTHONPATH": "/src"}
+        assert config.codemanifest is None
         assert config.build.worktree is False
         assert config.build.max_iterations == 15
         assert config.build.skip_finalize is None
@@ -141,6 +144,11 @@ class TestConfigImmutability:
         cfg = Config(build=bc, lang="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             cfg.lang = "go"
+
+    def test_codemanifest_config_is_frozen(self):
+        cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"})
+        with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
+            cc.usages = {"x": "y"}
 
     def test_env_dict_mutation_does_not_raise(self):
         """Frozen only prevents attribute reassignment, not inner-mutable dict mutation."""

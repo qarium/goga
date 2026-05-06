@@ -31,7 +31,15 @@ Usages:
     12. Создать `TaskExecutor`(agent=agent, env=env)
     13. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
     14. Создать `BuildConfig`(task_executor=task_executor, worktree=..., ...)
-    15. Вернуть Config(lang=lang, build=build, commands=commands)
+    15. Извлечь codemanifest dict: data.get("codemanifest")
+    16. Если codemanifest_data существует и не None:
+        a. Извлечь usages: codemanifest_data.get("usages", {})
+           Если не dict — выбросить ValueError("codemanifest.usages must be a mapping")
+        b. Извлечь annotations: codemanifest_data.get("annotations")
+           Если не str и не None — выбросить ValueError("codemanifest.annotations must be a string")
+        c. Создать `CodemanifestConfig`(usages=usages, annotations=annotations)
+    17. Иначе codemanifest = None
+    18. Вернуть Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)
 
     Requirements:
     - Файл конфигурации: .goga.yml (скрытый, с точкой) в корне проекта
@@ -42,9 +50,10 @@ Usages:
     - build — обязательная секция, при отсутствии выбрасывается KeyError
     - task_executor — обязательная секция внутри build, при отсутствии выбрасывается KeyError
     - agent — обязательное поле, не может быть None или пустой строкой — ValueError
+    - codemanifest — опциональная секция
     - Raw-данные без мёржа с дефолтами — потребитель сам мержит
 
-"Config(lang: str, build: BuildConfig, commands: dict)":
+"Config(lang: str, build: BuildConfig, commands: dict, codemanifest: CodemanifestConfig | None)":
   location: config.py
   annotations: |
     Объект конфигурации проекта. Создаётся `load_config`.
@@ -52,6 +61,7 @@ Usages:
     `lang`: секция language
     `build`: секция build как `BuildConfig`
     `commands`: секция commands — заготовка на будущее для кастомизации промптов
+    `codemanifest`: секция codemanifest как `CodemanifestConfig`
   properties:
     lang -> str: |
       Язык проекта. Значение из корневой директивы language в .goga.yml.
@@ -61,6 +71,10 @@ Usages:
       Секция commands из .goga.yml.
       Заготовка на будущее для кастомизации промптов, пока не используется.
       Пустой dict если секция отсутствует.
+    codemanifest -> CodemanifestConfig | None: |
+      Секция codemanifest из .goga.yml.
+      Экземпляр `CodemanifestConfig`.
+      None если секция codemanifest отсутствует.
 
 "BuildConfig(task_executor: TaskExecutor, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
   location: config.py
@@ -119,10 +133,31 @@ Usages:
       Передаются AI-executor при запуске для конфигурации моделей и endpoint-ов.
       Опциональное поле — по умолчанию пустой dict.
 
+"CodemanifestConfig(usages: dict, annotations: str | None)":
+  location: config.py
+  annotations: |
+    Конфигурация секции codemanifest из .goga.yml.
+    Создаётся внутри `load_config` из секции codemanifest.
+
+    `usages`: маппинг {usage_name: path/to/file.md}
+    `annotations`: текстовые аннотации для AI-агента
+
+    Requirements:
+    - usages — обязательное поле, пустой dict если отсутствует
+    - annotations — опциональное поле, по умолчанию None
+  properties:
+    usages -> dict: |
+      Маппинг {usage_name: path/to/file.md}.
+      Именованные практики, доступные в CODEMANIFEST файлах проекта.
+      Пустой dict если секция usages отсутствует.
+    annotations -> str | None: |
+      Текстовые аннотации — инструкции для AI-агента.
+      Опциональное поле — по умолчанию None.
+
 ---
 
 Author: Serge Nikitin
-CreatedAt: 28/04/26
+CreatedAt: 06/05/26
 
 Description: |
   Манифест описывает единый доступ к конфигурации проекта через .goga.yml
