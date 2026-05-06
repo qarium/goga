@@ -9,7 +9,7 @@
 Все типы импортируются напрямую из `goga.config`:
 
 ```python
-from goga.config import Config, BuildConfig, TaskExecutor, load_config
+from goga.config import Config, BuildConfig, TaskExecutor, CodemanifestConfig, load_config
 ```
 
 ## Загрузка конфигурации
@@ -84,6 +84,11 @@ build:
   prompts_dir: /custom/prompts
   agents_dir: /custom/agents
   codex_review: true
+codemanifest:
+  usages:
+    usage_name: path/to/file.md
+  annotations: |
+    Используй практику `usage_name`.
 ```
 
 ### Обязательные поля
@@ -110,6 +115,9 @@ build:
 | `build.prompts_dir` | str | None | Путь к кастомным промптам |
 | `build.agents_dir` | str | None | Путь к кастомным агентам |
 | `build.codex_review` | bool | None | Включить codex ревью |
+| `codemanifest` | mapping | None | Конфигурация практик и аннотаций CODEMANIFEST |
+| `codemanifest.usages` | mapping | `{}` | Маппинг {usage_name: path/to/file.md} |
+| `codemanifest.annotations` | str | None | Текстовые аннотации для AI-агента |
 
 ## Доступ к данным
 
@@ -131,6 +139,11 @@ config.build.session_timeout # str | None
 # TaskExecutor
 config.build.task_executor.agent  # str
 config.build.task_executor.env    # dict — {str: str}
+
+# CodemanifestConfig
+config.codemanifest                    # CodemanifestConfig | None
+config.codemanifest.usages             # dict — {str: str}
+config.codemanifest.annotations        # str | None
 ```
 
 ## Immutability
