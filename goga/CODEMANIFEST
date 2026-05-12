@@ -13,7 +13,7 @@ Imports:
     From: goga/ast
 
 Usages:
-  click: .usages/tools/click.md
+  click: .usages/cooks/click.md
   conventions: .usages/development/conventions.md
 
 Annotations: |

@@ -7,3 +7,14 @@ build:
       ANTHROPIC_DEFAULT_SONNET_MODEL: "glm-5-turbo"
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
       ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
+
+codemanifest:
+  usages:
+    convention: .usages/development/conventions.md
+  annotations: |
+    Практика `convention` используется для:
+    - работы с кодовой базой
+    - организации REPL цикла разработки
+    - отладки и тестирования
+    - организации тестовой инфраструктуры
+    - понимания общих принципов/правил разработки и тестирования в проекте

@@ -15,9 +15,9 @@ Imports:
     From: goga/config
 
 Usages:
-  click: .usages/tools/click.md
+  click: .usages/cooks/click.md
   conventions: .usages/development/conventions.md
-  ralphex: .usages/tools/ralphex.md
+  ralphex: .usages/cooks/ralphex.md
   documents: |
     Работать с типом `AST`.
 
