@@ -1,6 +1,8 @@
 """Contract tests for the goga.ast.rules package."""
 
+import urllib.error
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from goga.ast.errors import ASTRuleError, DocumentRuleError
@@ -43,7 +45,9 @@ from goga.ast.rules import (
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
+    UsageFilepathExists,
     UsageLinksHasNotConflicts,
+    UsageUrlIsAccessible,
     signature_contains_type_name,
 )
 
@@ -75,11 +79,13 @@ EXPECTED_RULE_CLASSES = [
     SignatureIsValid,
     ImportIsUsed,
     ImportUsageExists,
+    UsageFilepathExists,
+    UsageUrlIsAccessible,
 ]
 
 
 def test_all_rule_classes_importable():
-    """All 23 rule classes must be importable from the rules facade."""
+    """All 25 rule classes must be importable from the rules facade."""
     for cls in EXPECTED_RULE_CLASSES:
         assert isinstance(cls, type), f"{cls.__name__} is not a class"
 
@@ -1543,7 +1549,6 @@ class TestImportTypeExists:
 class TestImportHasValidFromPathHierarchy:
     def test_positive_same_level(self, tmp_path: Path):
         """from_path at the same level as document — no hierarchy error."""
-        # Create a real sibling directory under the project CWD
         cwd = Path.cwd().resolve()
         sibling = cwd / "_test_sibling_pkg"
         sibling.mkdir(exist_ok=True)
@@ -1566,8 +1571,7 @@ class TestImportHasValidFromPathHierarchy:
                 node = DocumentNode(root=root)
                 rule = ImportHasValidFromPath()
                 errors = rule.check(node)
-                hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
-                assert len(hierarchy_errors) == 0
+                assert errors == []
             finally:
                 doc_dir.rmdir()
         finally:
@@ -1595,14 +1599,13 @@ class TestImportHasValidFromPathHierarchy:
             node = DocumentNode(root=root)
             rule = ImportHasValidFromPath()
             errors = rule.check(node)
-            hierarchy_errors = [e for e in errors if "must be at the same level or inside" in e.message]
-            assert len(hierarchy_errors) == 0
+            assert errors == []
         finally:
             child.rmdir()
             doc_dir.rmdir()
 
-    def test_negative_above_document(self, tmp_path: Path):
-        """from_path above document in hierarchy — hierarchy error."""
+    def test_positive_above_document_no_hierarchy_error(self, tmp_path: Path):
+        """from_path above document — no longer an error after hierarchy check removal."""
         cwd = Path.cwd().resolve()
         parent_pkg = cwd / "_test_parent_pkg"
         parent_pkg.mkdir(exist_ok=True)
@@ -1624,8 +1627,7 @@ class TestImportHasValidFromPathHierarchy:
             node = DocumentNode(root=root)
             rule = ImportHasValidFromPath()
             errors = rule.check(node)
-            assert len(errors) >= 1
-            assert any("must be at the same level or inside" in e.message for e in errors)
+            assert errors == []
         finally:
             (parent_pkg / "CODEMANIFEST").unlink(missing_ok=True)
             doc_dir.rmdir()
@@ -2025,3 +2027,352 @@ class TestImportIsUsed:
         node = DocumentNode(root=root)
         rule = ImportIsUsed()
         assert rule.check(node) == []
+
+
+# ---------------------------------------------------------------------------
+# N+3. UsageFilepathExists
+# ---------------------------------------------------------------------------
+
+
+class TestUsageFilepathExists:
+    def test_usage_filepath_exists_importable(self):
+        """UsageFilepathExists must be importable from the rules facade."""
+        assert isinstance(UsageFilepathExists, type)
+
+    def test_usage_filepath_exists_is_document_rule(self):
+        assert issubclass(UsageFilepathExists, DocumentRule)
+
+    def test_usage_filepath_exists_default_name(self):
+        rule = UsageFilepathExists()
+        assert rule.name == "usage_filepath_exists"
+
+    def test_usage_filepath_exists_file_present(self):
+        test_dir = Path.cwd() / "_test_usage_filepath_exists"
+        test_dir.mkdir(exist_ok=True)
+        try:
+            specs_dir = test_dir / "specs"
+            specs_dir.mkdir(exist_ok=True)
+            pattern_file = specs_dir / "pattern.md"
+            pattern_file.write_text("# test")
+
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="existing",
+                                annotations=AnnotationsNode(filepath=str(pattern_file)),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageFilepathExists()
+            errors = rule.check(node)
+            assert errors == []
+        finally:
+            pattern_file.unlink(missing_ok=True)
+            specs_dir.rmdir()
+            test_dir.rmdir()
+
+    def test_usage_filepath_inline_skipped(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="inline",
+                            annotations=AnnotationsNode(text="Some inline pattern"),
+                        )
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_usage_filepath_not_found(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="missing",
+                            annotations=AnnotationsNode(filepath="nonexistent/file.md"),
+                        )
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "usage_filepath_exists"
+        assert "does not exist" in errors[0].message
+
+    def test_usage_filepath_outside_project(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="outside",
+                            annotations=AnnotationsNode(filepath="/etc/passwd"),
+                        )
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "usage_filepath_exists"
+        assert "not built from the root of the project" in errors[0].message
+
+    def test_usage_filepath_empty_usages(self):
+        root = DocumentRoot(header=HeaderNode(usages=UsagesNode(items=[])))
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_usage_filepath_multiple_missing(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(name="a", annotations=AnnotationsNode(filepath="missing_a.md")),
+                        UsageItemNode(name="b", annotations=AnnotationsNode(filepath="missing_b.md")),
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert len(errors) == 2
+
+
+# ---------------------------------------------------------------------------
+# N+4. UsageUrlIsAccessible
+# ---------------------------------------------------------------------------
+
+
+class TestUsageUrlIsAccessible:
+    def test_usage_url_is_accessible_importable(self):
+        """UsageUrlIsAccessible must be importable from the rules facade."""
+        assert isinstance(UsageUrlIsAccessible, type)
+
+    def test_usage_url_is_accessible_is_document_rule(self):
+        assert issubclass(UsageUrlIsAccessible, DocumentRule)
+
+    def test_usage_url_is_accessible_default_name(self):
+        rule = UsageUrlIsAccessible()
+        assert rule.name == "usage_url_is_accessible"
+
+    def test_usage_url_is_accessible_returns_200(self):
+        mock_response = MagicMock()
+        mock_response.status = 200
+        with patch("urllib.request.urlopen", return_value=mock_response):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert errors == []
+
+    def test_usage_url_filepath_skipped(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="local",
+                            annotations=AnnotationsNode(filepath="specs/pattern.md"),
+                        )
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_usage_url_http_error_non_200(self):
+        http_error = urllib.error.HTTPError(
+            "https://example.com/docs.md", 404, "Not Found", None, None
+        )
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert errors[0].rule == "usage_url_is_accessible"
+            assert "HTTP 404" in errors[0].message
+
+    def test_usage_url_http_error_500(self):
+        http_error = urllib.error.HTTPError(
+            "https://example.com/docs.md", 500, "Internal Server Error", None, None
+        )
+        with patch("urllib.request.urlopen", side_effect=http_error):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert "HTTP 500" in errors[0].message
+
+    def test_usage_url_request_failed_timeout(self):
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.URLError(TimeoutError("timed out")),
+        ):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert errors[0].rule == "usage_url_is_accessible"
+            assert "request failed" in errors[0].message
+
+    def test_usage_url_head_fallback_to_get(self):
+        mock_get_response = MagicMock()
+        mock_get_response.status = 200
+        head_error = urllib.error.HTTPError(
+            "https://example.com/docs.md", 405, "Method Not Allowed", None, None
+        )
+
+        with patch("urllib.request.urlopen", side_effect=[head_error, mock_get_response]):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert errors == []
+
+    def test_usage_url_head_fallback_get_also_fails(self):
+        head_error = urllib.error.HTTPError(
+            "https://example.com/docs.md", 405, "Method Not Allowed", None, None
+        )
+        get_error = urllib.error.URLError("connection refused")
+        with patch("urllib.request.urlopen", side_effect=[head_error, get_error]):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="docs",
+                                annotations=AnnotationsNode(url="https://example.com/docs.md"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert errors[0].rule == "usage_url_is_accessible"
+            assert "request failed" in errors[0].message
+
+    def test_usage_url_empty_url_string(self):
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="empty",
+                            annotations=AnnotationsNode(url=""),
+                        )
+                    ]
+                )
+            )
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors = rule.check(node)
+        assert errors == []
+
+    def test_usage_url_invalid_format(self):
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=ValueError("unknown url type: 'not-a-valid-url'"),
+        ):
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="bad",
+                                annotations=AnnotationsNode(url="not-a-valid-url"),
+                            )
+                        ]
+                    )
+                )
+            )
+            node = DocumentNode(root=root)
+            rule = UsageUrlIsAccessible()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert errors[0].rule == "usage_url_is_accessible"
+            assert "request failed" in errors[0].message

@@ -1,0 +1,9 @@
+Usages:
+  docs: https://raw.githubusercontent.com/python/cpython/main/README.rst
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Use `docs`

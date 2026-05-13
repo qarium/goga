@@ -1,0 +1,9 @@
+Usages:
+  existing: usage_filepath_exists/.usages/existing.md
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Use `existing`

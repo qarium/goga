@@ -1,0 +1,6 @@
+errors:
+- rule: usage_filepath_exists
+  message: "Usage 'missing' filepath 'nonexistent/path.md' does not exist on filesystem"
+  document_path: usage_filepath_exists/usage_filepath_exists_helper
+  node_data:
+    missing: nonexistent/path.md

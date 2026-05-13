@@ -1,0 +1,9 @@
+Usages:
+  missing: nonexistent/path.md
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Use `missing`

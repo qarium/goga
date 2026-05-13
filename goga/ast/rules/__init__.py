@@ -24,7 +24,9 @@ from .document import (
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
+    UsageFilepathExists,
     UsageLinksHasNotConflicts,
+    UsageUrlIsAccessible,
 )
 from .tools import signature_contains_type_name
 
@@ -52,6 +54,8 @@ __all__ = [
     "ReturnTypeHasLink",
     "RoutineHasOnlyValidKeys",
     "SignatureIsValid",
+    "UsageFilepathExists",
     "UsageLinksHasNotConflicts",
+    "UsageUrlIsAccessible",
     "signature_contains_type_name",
 ]
