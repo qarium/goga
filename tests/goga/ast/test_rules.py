@@ -2046,35 +2046,28 @@ class TestUsageFilepathExists:
         rule = UsageFilepathExists()
         assert rule.name == "usage_filepath_exists"
 
-    def test_usage_filepath_exists_file_present(self):
-        test_dir = Path.cwd() / "_test_usage_filepath_exists"
-        test_dir.mkdir(exist_ok=True)
-        try:
-            specs_dir = test_dir / "specs"
-            specs_dir.mkdir(exist_ok=True)
-            pattern_file = specs_dir / "pattern.md"
-            pattern_file.write_text("# test")
+    def test_usage_filepath_exists_file_present(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        usages_dir = tmp_path / ".goga" / "usages"
+        usages_dir.mkdir(parents=True)
+        (usages_dir / "pattern.md").write_text("# test")
 
-            root = DocumentRoot(
-                header=HeaderNode(
-                    usages=UsagesNode(
-                        items=[
-                            UsageItemNode(
-                                name="existing",
-                                annotations=AnnotationsNode(filepath=str(pattern_file)),
-                            )
-                        ]
-                    )
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="existing",
+                            annotations=AnnotationsNode(filepath=".goga/usages/pattern.md"),
+                        )
+                    ]
                 )
             )
-            node = DocumentNode(root=root)
-            rule = UsageFilepathExists()
-            errors = rule.check(node)
-            assert errors == []
-        finally:
-            pattern_file.unlink(missing_ok=True)
-            specs_dir.rmdir()
-            test_dir.rmdir()
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert errors == []
 
     def test_usage_filepath_inline_skipped(self):
         root = DocumentRoot(
@@ -2094,14 +2087,15 @@ class TestUsageFilepathExists:
         errors = rule.check(node)
         assert errors == []
 
-    def test_usage_filepath_not_found(self):
+    def test_usage_filepath_not_found(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
         root = DocumentRoot(
             header=HeaderNode(
                 usages=UsagesNode(
                     items=[
                         UsageItemNode(
                             name="missing",
-                            annotations=AnnotationsNode(filepath="nonexistent/file.md"),
+                            annotations=AnnotationsNode(filepath=".goga/usages/nonexistent/file.md"),
                         )
                     ]
                 )
@@ -2114,25 +2108,34 @@ class TestUsageFilepathExists:
         assert errors[0].rule == "usage_filepath_exists"
         assert "does not exist" in errors[0].message
 
-    def test_usage_filepath_outside_project(self):
-        root = DocumentRoot(
-            header=HeaderNode(
-                usages=UsagesNode(
-                    items=[
-                        UsageItemNode(
-                            name="outside",
-                            annotations=AnnotationsNode(filepath="/etc/passwd"),
-                        )
-                    ]
+    def test_usage_filepath_outside_project(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".goga" / "usages").mkdir(parents=True)
+        sibling = tmp_path.parent / "_outside_test"
+        sibling.mkdir(exist_ok=True)
+        (sibling / "secret.md").write_text("secret")
+        try:
+            root = DocumentRoot(
+                header=HeaderNode(
+                    usages=UsagesNode(
+                        items=[
+                            UsageItemNode(
+                                name="outside",
+                                annotations=AnnotationsNode(filepath=".goga/usages/../../../_outside_test/secret.md"),
+                            )
+                        ]
+                    )
                 )
             )
-        )
-        node = DocumentNode(root=root)
-        rule = UsageFilepathExists()
-        errors = rule.check(node)
-        assert len(errors) == 1
-        assert errors[0].rule == "usage_filepath_exists"
-        assert "not built from the root of the project" in errors[0].message
+            node = DocumentNode(root=root)
+            rule = UsageFilepathExists()
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert errors[0].rule == "usage_filepath_exists"
+            assert "not built from the root of the project" in errors[0].message
+        finally:
+            (sibling / "secret.md").unlink(missing_ok=True)
+            sibling.rmdir()
 
     def test_usage_filepath_empty_usages(self):
         root = DocumentRoot(header=HeaderNode(usages=UsagesNode(items=[])))
@@ -2141,13 +2144,15 @@ class TestUsageFilepathExists:
         errors = rule.check(node)
         assert errors == []
 
-    def test_usage_filepath_multiple_missing(self):
+    def test_usage_filepath_multiple_missing(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".goga" / "usages").mkdir(parents=True)
         root = DocumentRoot(
             header=HeaderNode(
                 usages=UsagesNode(
                     items=[
-                        UsageItemNode(name="a", annotations=AnnotationsNode(filepath="missing_a.md")),
-                        UsageItemNode(name="b", annotations=AnnotationsNode(filepath="missing_b.md")),
+                        UsageItemNode(name="a", annotations=AnnotationsNode(filepath=".goga/usages/missing_a.md")),
+                        UsageItemNode(name="b", annotations=AnnotationsNode(filepath=".goga/usages/missing_b.md")),
                     ]
                 )
             )
@@ -2156,6 +2161,7 @@ class TestUsageFilepathExists:
         rule = UsageFilepathExists()
         errors = rule.check(node)
         assert len(errors) == 2
+        assert all("does not exist" in e.message for e in errors)
 
 
 # ---------------------------------------------------------------------------

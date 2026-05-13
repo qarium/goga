@@ -31,14 +31,15 @@ TEST_ENV_VARS = {
 
 
 def _write_goga_yml(tmp_path: Path, extra: dict | None = None) -> None:
-    """Write a minimal .goga.yml with optional extra build fields."""
+    """Write a minimal .goga/config.yml with optional extra build fields."""
     data: dict = {
         "language": "python",
         "build": {"task_executor": {"agent": "claude"}},
     }
     if extra:
         data["build"].update(extra)
-    (tmp_path / ".goga.yml").write_text(yaml.dump(data))
+    (tmp_path / ".goga").mkdir(exist_ok=True)
+    (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
 
 def _run_build_in_tmp(tmp_path, args=None, *, skip_manifest_check=True):
@@ -198,7 +199,7 @@ class TestBuildUsesLoadConfigFromGogaConfig:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_build_env_vars_in_settings_json(self, mock_which, mock_call, tmp_path) -> None:
-        """.goga.yml env vars are written to .claude/settings.json."""
+        """.goga/config.yml env vars are written to .claude/settings.json."""
         _write_goga_yml(
             tmp_path,
             extra={
@@ -219,7 +220,7 @@ class TestBuildUsesLoadConfigFromGogaConfig:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_build_empty_env_dict_creates_empty_env_section(self, mock_which, mock_call, tmp_path) -> None:
-        """.goga.yml without env section creates empty env dict in settings.json."""
+        """.goga/config.yml without env section creates empty env dict in settings.json."""
         _write_goga_yml(tmp_path)
         _run_build_in_tmp(tmp_path, ["plan.md"])
 
@@ -230,12 +231,13 @@ class TestBuildUsesLoadConfigFromGogaConfig:
 
 class TestBuildUnsupportedAgentRaisesError:
     def test_build_unsupported_agent_raises_error(self, tmp_path) -> None:
-        """Unsupported agent in .goga.yml causes exit code 1 with error message."""
+        """Unsupported agent in .goga/config.yml causes exit code 1 with error message."""
         data = {
             "language": "python",
             "build": {"task_executor": {"agent": "gemini"}},
         }
-        (tmp_path / ".goga.yml").write_text(yaml.dump(data))
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
         result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 1
@@ -243,18 +245,18 @@ class TestBuildUnsupportedAgentRaisesError:
 
 
 class TestBuildMissingGogaYmlRaisesConfigError:
-    def test_build_missing_goga_yml_raises_config_error(self, tmp_path) -> None:
-        """Missing .goga.yml causes exit code 1 with config error message."""
+    def test_build_missing_goga_config_yml_raises_config_error(self, tmp_path) -> None:
+        """Missing .goga/config.yml causes exit code 1 with config error message."""
         result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 1
-        assert ".goga.yml" in result.output
+        assert ".goga/config.yml" in result.output
 
 
 class TestBuildCodexReviewMapsToCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_build_codex_review_true(self, mock_which, mock_call, tmp_path) -> None:
-        """.goga.yml with codex_review: true writes codex_enabled = true."""
+        """.goga/config.yml with codex_review: true writes codex_enabled = true."""
         _write_goga_yml(tmp_path, extra={"codex_review": True})
 
         _run_build_in_tmp(tmp_path, ["plan.md"])
@@ -265,7 +267,7 @@ class TestBuildCodexReviewMapsToCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_build_codex_review_none_writes_false(self, mock_which, mock_call, tmp_path) -> None:
-        """.goga.yml without codex_review writes codex_enabled = false."""
+        """.goga/config.yml without codex_review writes codex_enabled = false."""
         _write_goga_yml(tmp_path)
 
         _run_build_in_tmp(tmp_path, ["plan.md"])
@@ -580,7 +582,7 @@ class TestCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_codex_enabled_default_false_in_config(self, mock_which, mock_call, tmp_path) -> None:
-        """Without codex_review in .goga.yml, codex_enabled defaults to false."""
+        """Without codex_review in .goga/config.yml, codex_enabled defaults to false."""
         _write_goga_yml(tmp_path)
         _run_build_in_tmp(tmp_path, ["plan.md"])
 
@@ -589,8 +591,8 @@ class TestCodexEnabled:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_true_from_goga_yml(self, mock_which, mock_call, tmp_path) -> None:
-        """.goga.yml with codex_review: true writes codex_enabled = true to config."""
+    def test_codex_enabled_true_from_goga_config(self, mock_which, mock_call, tmp_path) -> None:
+        """.goga/config.yml with codex_review: true writes codex_enabled = true to config."""
         _write_goga_yml(tmp_path, extra={"codex_review": True})
         _run_build_in_tmp(tmp_path, ["plan.md"])
 
@@ -600,7 +602,7 @@ class TestCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_codex_enabled_overwritten_on_rerun(self, mock_which, mock_call, tmp_path) -> None:
-        """Existing codex_enabled value is overwritten by new .goga.yml value."""
+        """Existing codex_enabled value is overwritten by new .goga/config.yml value."""
         _write_goga_yml(tmp_path, extra={"codex_review": False})
         ralphex_dir = tmp_path / ".ralphex"
         ralphex_dir.mkdir()
@@ -802,16 +804,17 @@ class TestManifestCheck:
 
 
 class TestBuildNegativeCases:
-    def test_build_invalid_goga_yml_raises_config_error(self, tmp_path) -> None:
-        """Invalid .goga.yml (missing required field) causes exit code 1."""
+    def test_build_invalid_goga_config_raises_config_error(self, tmp_path) -> None:
+        """Invalid .goga/config.yml (missing required field) causes exit code 1."""
         data = {
             "build": {"task_executor": {"agent": "claude"}},
         }
-        (tmp_path / ".goga.yml").write_text(yaml.dump(data))
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
         result = _run_build_in_tmp(tmp_path, ["plan.md"])
         assert result.exit_code == 1
-        assert "is required in .goga.yml" in result.output or "must be" in result.output
+        assert "is required in .goga/config.yml" in result.output or "must be" in result.output
 
     def test_build_invalid_existing_settings_json_raises_error(self, tmp_path) -> None:
         """Invalid JSON in existing .claude/settings.json causes non-zero exit with error."""
@@ -829,7 +832,7 @@ class TestBuildConfigFlags:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
     def test_build_worktree_from_config_when_no_cli_flag(self, mock_which, mock_call, tmp_path) -> None:
-        """worktree: true in .goga.yml adds --worktree to command without CLI flag."""
+        """worktree: true in .goga/config.yml adds --worktree to command without CLI flag."""
         _write_goga_yml(tmp_path, extra={"worktree": True})
         _run_build_in_tmp(tmp_path, ["plan.md"])
 

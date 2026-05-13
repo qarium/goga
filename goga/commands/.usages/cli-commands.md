@@ -18,9 +18,9 @@ from goga.cli import app
 
 ## Конфигурация
 
-Файл `.goga.yml` обязателен для команд `install` и `contract`. Он загружается через `load_config()` из `goga.config`.
+Файл `.goga/config.yml` обязателен для команд `install` и `contract`. Он загружается через `load_config()` из `goga.config`.
 
-Минимальный `.goga.yml`:
+Минимальный `.goga/config.yml`:
 
 ```yaml
 language: python
@@ -29,7 +29,7 @@ build:
     agent: claude
 ```
 
-Приоритет значений: CLI-аргумент > Config. Если CLI-аргумент не указан (None), используется значение из `.goga.yml`.
+Приоритет значений: CLI-аргумент > Config. Если CLI-аргумент не указан (None), используется значение из `.goga/config.yml`.
 
 Ошибки конфигурации (`FileNotFoundError`, `KeyError`, `ValueError`, `yaml.YAMLError`) преобразуются в `click.ClickException`.
 
@@ -239,7 +239,7 @@ goga schema --depends-on goga/ast
 
 ### config
 
-Вывод значений опций из конфигурации проекта .goga.yml.
+Вывод значений опций из конфигурации проекта .goga/config.yml.
 Каждая опция выводится отдельно с заголовком-путём.
 
 Синтаксис:
@@ -292,7 +292,7 @@ MODEL: claude-sonnet-4-6
 
 ### sync
 
-Синхронизация .usages/ из локального пути или git-репозитория в .usages/deps/.
+Синхронизация .usages/ из локального пути или git-репозитория в .goga/usages/deps/.
 
 Синтаксис:
 
@@ -333,7 +333,7 @@ goga sync <source> [--token TOKEN] [--branch BRANCH]
   commands/.usages/cli-commands.md
   config/.usages/configuration.md
 
-Результат: .usages/deps/goga/
+Результат: .goga/usages/deps/goga/
   .usages/dsl.md
   commands/.usages/cli-commands.md
   config/.usages/configuration.md
@@ -345,7 +345,7 @@ goga sync <source> [--token TOKEN] [--branch BRANCH]
 Репозиторий: https://github.com/owner/goga-lib
 Клонируется во временный каталог → синхронизация → удаление временного каталога
 
-Результат: .usages/deps/goga-lib/
+Результат: .goga/usages/deps/goga-lib/
   .usages/api.md
   core/.usages/core-contracts.md
 ```

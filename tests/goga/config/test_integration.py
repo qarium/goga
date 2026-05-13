@@ -52,7 +52,8 @@ class TestFullConfigLoadingFlow:
 
     def test_full_object_graph_from_yaml(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".goga.yml").write_text(FULL_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(FULL_YAML)
 
         config = load_config()
 
@@ -88,7 +89,8 @@ class TestFullConfigLoadingFlow:
 
     def test_minimal_yaml_produces_defaults(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".goga.yml").write_text(MINIMAL_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
 
         config = load_config()
 
@@ -110,7 +112,8 @@ class TestFullConfigLoadingFlow:
 
     def test_partial_build_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        (tmp_path / ".goga.yml").write_text(AGENT_PYTHON_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(AGENT_PYTHON_YAML)
 
         config = load_config()
 
@@ -165,19 +168,21 @@ class TestConfigImmutability:
 
 
 class TestSequentialLoadConfigCalls:
-    """Multiple load_config calls with different .goga.yml contents return independent Configs."""
+    """Multiple load_config calls with different .goga/config.yml contents return independent Configs."""
 
     def test_sequential_calls_produce_independent_configs(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
 
         # First call — minimal config
-        (tmp_path / ".goga.yml").write_text(MINIMAL_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
         config1 = load_config()
         assert config1.lang == "python"
         assert config1.build.task_executor.agent == "claude"
 
         # Second call — different config
-        (tmp_path / ".goga.yml").write_text(AGENT_PYTHON_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(AGENT_PYTHON_YAML)
         config2 = load_config()
         assert config2.lang == "python"
         assert config2.build.task_executor.agent == "codex"
@@ -192,11 +197,12 @@ class TestSequentialLoadConfigCalls:
         monkeypatch.chdir(tmp_path)
 
         # First call — valid file
-        (tmp_path / ".goga.yml").write_text(MINIMAL_YAML)
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
         config1 = load_config()
         assert config1.build.task_executor.agent == "claude"
 
         # Remove file, second call should fail
-        (tmp_path / ".goga.yml").unlink()
+        (tmp_path / ".goga" / "config.yml").unlink()
         with pytest.raises(FileNotFoundError):
             load_config()

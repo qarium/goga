@@ -97,7 +97,11 @@ class ImportItemIsValid(DocumentRule):
 
 
 class ImportUsageExists(DocumentRule):
-    """Rule: every imported usage must exist as a .md file in the .usages/ directory of the referenced cell."""
+    """Rule: every imported usage must exist as a .md file in the .usages/ directory of the referenced cell.
+
+    Note: cell-level usages use ``.usages/`` (not ``.goga/usages/``) — this is the
+    per-cell convention distinct from the project-level ``.goga/usages/`` directory.
+    """
 
     def __init__(self) -> None:
         super().__init__(name="import_usage_exists")
@@ -115,7 +119,7 @@ class ImportUsageExists(DocumentRule):
                 if not usage_path.exists():
                     errors.append(
                         DocumentRuleError(
-                            message=(f"Usage '{name}' does not exists on filesystem by path '{usage_path}'"),
+                            message=(f"Usage '{name}' does not exist on filesystem by path '{usage_path}'"),
                             rule=self.name,
                             document=node.root,
                             node=item,
@@ -957,10 +961,7 @@ class LocationIsRequired(DocumentRule):
                     node=node,
                 )
             )
-        if (
-            "." not in location_value
-            or not location_value.rsplit(".", 1)[-1]
-        ):
+        if "." not in location_value or not location_value.rsplit(".", 1)[-1]:
             errors.append(
                 DocumentRuleError(
                     message=(
@@ -1033,6 +1034,7 @@ class LocationIsRequired(DocumentRule):
 
 class UsageFilepathExists(DocumentRule):
     """Rule: every usage with a filepath must point to an existing file within the project root."""
+
     def __init__(self) -> None:
         super().__init__(name="usage_filepath_exists")
 
@@ -1045,6 +1047,17 @@ class UsageFilepathExists(DocumentRule):
             if not filepath:
                 continue
             if item.annotations.url:
+                continue
+
+            if not filepath.startswith(".goga/usages/"):
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' is not built from '.goga/usages/'",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
                 continue
 
             resolved = Path(filepath).resolve()
@@ -1079,6 +1092,7 @@ _REQUEST_TIMEOUT = 10
 
 class UsageUrlIsAccessible(DocumentRule):
     """Rule: every usage with a URL must be accessible via HTTP (status 200)."""
+
     def __init__(self) -> None:
         super().__init__(name="usage_url_is_accessible")
 

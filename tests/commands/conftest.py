@@ -5,16 +5,20 @@ import pytest
 
 @pytest.fixture
 def minimal_config(tmp_path: Path) -> Path:
-    """Minimal .goga.yml in tmp_path."""
-    config_file = tmp_path / ".goga.yml"
+    """Minimal .goga/config.yml in tmp_path."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    config_file = goga_dir / "config.yml"
     config_file.write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n")
     return tmp_path
 
 
 @pytest.fixture
 def full_config(tmp_path: Path) -> Path:
-    """Full .goga.yml with all options."""
-    config_file = tmp_path / ".goga.yml"
+    """Full .goga/config.yml with all options."""
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    config_file = goga_dir / "config.yml"
     config_file.write_text(
         "language: python\n"
         "commands:\n  test: pytest\n"

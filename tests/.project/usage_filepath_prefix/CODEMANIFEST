@@ -1,0 +1,9 @@
+Usages:
+  bad_path: .usages/old_style.md
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Use `bad_path`
