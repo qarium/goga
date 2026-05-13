@@ -1,0 +1,6 @@
+errors:
+- rule: usage_filepath_exists
+  message: "Usage 'bad_path' filepath '.usages/old_style.md' is not built from '.goga/usages/'"
+  document_path: usage_filepath_prefix
+  node_data:
+    bad_path: .usages/old_style.md

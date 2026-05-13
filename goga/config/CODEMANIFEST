@@ -1,6 +1,6 @@
 Usages:
   yaml: |
-    Использовать yaml.safe_load() для парсинга .goga.yml.
+    Использовать yaml.safe_load() для парсинга .goga/config.yml.
     Библиотека PyYAML.
 
 ---
@@ -8,25 +8,25 @@ Usages:
 "load_config() -> config:Config":
   location: loader.py
   annotations: |
-    Читает и парсит .goga.yml из корня проекта, возвращает объект `Config`.
+    Читает и парсит .goga/config.yml из корня проекта, возвращает объект `Config`.
 
     Algorithm:
-    1. Сформировать путь: ./.goga.yml
+    1. Сформировать путь: ./.goga/config.yml
     2. Прочитать и распарсить YAML с использованием практики `yaml`
     3. Если файл не существует или пустой (yaml.safe_load вернул None) —
-       выбросить FileNotFoundError с сообщением ".goga.yml not found in project root"
+       выбросить FileNotFoundError с сообщением ".goga/config.yml not found in project root"
     4. Если YAML невалиден — выбросить исключение с описанием ошибки парсинга
     5. Если результат yaml.safe_load не dict —
-       выбросить ValueError с сообщением ".goga.yml must be a YAML mapping"
+       выбросить ValueError с сообщением ".goga/config.yml must be a YAML mapping"
     6. Извлечь language: data["language"]
-       Если KeyError — выбросить KeyError("language is required in .goga.yml")
+       Если KeyError — выбросить KeyError("language is required in .goga/config.yml")
     7. Извлечь commands: data.get("commands", {})
     8. Извлечь build dict: data["build"]
-       Если KeyError — выбросить KeyError("build is required in .goga.yml")
+       Если KeyError — выбросить KeyError("build is required in .goga/config.yml")
     9. Извлечь task_executor dict: build_data["task_executor"]
-       Если KeyError — выбросить KeyError("build.task_executor is required in .goga.yml")
+       Если KeyError — выбросить KeyError("build.task_executor is required in .goga/config.yml")
     10. Извлечь agent: task_executor_data.get("agent")
-       Если None или пустая строка — выбросить ValueError("build.task_executor.agent is required in .goga.yml")
+       Если None или пустая строка — выбросить ValueError("build.task_executor.agent is required in .goga/config.yml")
     11. Извлечь env: task_executor_data.get("env", {})
     12. Создать `TaskExecutor`(agent=agent, env=env)
     13. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
@@ -42,7 +42,7 @@ Usages:
     18. Вернуть Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)
 
     Requirements:
-    - Файл конфигурации: .goga.yml (скрытый, с точкой) в корне проекта
+    - Файл конфигурации: .goga/config.yml (папка с точкой) в корне проекта
     - Файл обязателен — при отсутствии или пустом содержимом выбрасывается FileNotFoundError
     - Корневой элемент YAML должен быть mapping (dict) — иначе ValueError
     - Если YAML невалиден — выбрасывает исключение с описанием ошибки парсинга
@@ -64,22 +64,22 @@ Usages:
     `codemanifest`: секция codemanifest как `CodemanifestConfig`
   properties:
     lang -> str: |
-      Язык проекта. Значение из корневой директивы language в .goga.yml.
+      Язык проекта. Значение из корневой директивы language в .goga/config.yml.
     build -> BuildConfig: |
-      Секция build из .goga.yml. Экземпляр `BuildConfig`.
+      Секция build из .goga/config.yml. Экземпляр `BuildConfig`.
     commands -> dict: |
-      Секция commands из .goga.yml.
+      Секция commands из .goga/config.yml.
       Заготовка на будущее для кастомизации промптов, пока не используется.
       Пустой dict если секция отсутствует.
     codemanifest -> CodemanifestConfig | None: |
-      Секция codemanifest из .goga.yml.
+      Секция codemanifest из .goga/config.yml.
       Экземпляр `CodemanifestConfig`.
       None если секция codemanifest отсутствует.
 
 "BuildConfig(task_executor: TaskExecutor, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
   location: config.py
   annotations: |
-    Конфигурация сборки. Создаётся внутри `load_config` из секции build файла .goga.yml.
+    Конфигурация сборки. Создаётся внутри `load_config` из секции build файла .goga/config.yml.
 
     `task_executor`: конфигурация AI-агента. Обязательное поле.
     Остальные параметры — опциональные, по умолчанию None.
@@ -136,7 +136,7 @@ Usages:
 "CodemanifestConfig(usages: dict, annotations: str | None)":
   location: config.py
   annotations: |
-    Конфигурация секции codemanifest из .goga.yml.
+    Конфигурация секции codemanifest из .goga/config.yml.
     Создаётся внутри `load_config` из секции codemanifest.
 
     `usages`: маппинг {usage_name: path/to/file.md}
@@ -160,4 +160,4 @@ Author: Serge Nikitin
 CreatedAt: 06/05/26
 
 Description: |
-  Манифест описывает единый доступ к конфигурации проекта через .goga.yml
+  Манифест описывает единый доступ к конфигурации проекта через .goga/config.yml

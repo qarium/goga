@@ -57,7 +57,7 @@ def _find_usages_dirs(root: Path) -> list[Path]:
 
 
 def _sync_usages(source: Path, dep_name: str, usages_dirs: list[Path]) -> int:
-    target = Path(".usages/deps") / dep_name
+    target = Path(".goga/usages/deps") / dep_name
     shutil.rmtree(target, ignore_errors=True)
     for usages_dir in usages_dirs:
         rel = usages_dir.parent.relative_to(source)
@@ -151,7 +151,7 @@ def sync(
     token: str | None,
     branch: str | None,
 ) -> None:
-    """Synchronize .usages/ from a local path or git repository into .usages/deps/<dep_name>/."""
+    """Synchronize .usages/ from a local path or git repository into .goga/usages/deps/<dep_name>/."""
     if _is_git_url(source):
         _sync_from_git(ctx, source, token, branch)
     else:

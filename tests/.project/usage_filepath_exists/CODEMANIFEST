@@ -1,0 +1,9 @@
+Usages:
+  existing: .goga/usages/existing.md
+
+---
+
+"MyEntity()":
+  location: entity.py
+  annotations: |
+    Use `existing`

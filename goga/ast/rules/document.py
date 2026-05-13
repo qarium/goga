@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import os
 import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -96,7 +97,11 @@ class ImportItemIsValid(DocumentRule):
 
 
 class ImportUsageExists(DocumentRule):
-    """Rule: every imported usage must exist as a .md file in the .usages/ directory of the referenced cell."""
+    """Rule: every imported usage must exist as a .md file in the .usages/ directory of the referenced cell.
+
+    Note: cell-level usages use ``.usages/`` (not ``.goga/usages/``) — this is the
+    per-cell convention distinct from the project-level ``.goga/usages/`` directory.
+    """
 
     def __init__(self) -> None:
         super().__init__(name="import_usage_exists")
@@ -114,7 +119,7 @@ class ImportUsageExists(DocumentRule):
                 if not usage_path.exists():
                     errors.append(
                         DocumentRuleError(
-                            message=(f"Usage '{name}' does not exists on filesystem by path '{usage_path}'"),
+                            message=(f"Usage '{name}' does not exist on filesystem by path '{usage_path}'"),
                             rule=self.name,
                             document=node.root,
                             node=item,
@@ -175,25 +180,6 @@ class ImportHasValidFromPath(DocumentRule):
                     )
                 )
                 continue
-
-            # Hierarchy check: from_path must be at the same level as the document or below
-            doc_parent = Path(node.root.path).resolve().parent
-            from_resolved = Path(item.from_path).resolve()
-            from_parent = from_resolved.parent
-            is_same_level = from_parent == doc_parent
-            is_below = str(from_resolved).startswith(str(doc_parent) + os.sep)
-            if not is_same_level and not is_below:
-                errors.append(
-                    DocumentRuleError(
-                        message=(
-                            f"Source path '{item.from_path}' must be at the same level"
-                            f" or inside the current package directory"
-                        ),
-                        rule=self.name,
-                        document=node.root,
-                        node=item,
-                    )
-                )
 
         return errors
 
@@ -975,10 +961,7 @@ class LocationIsRequired(DocumentRule):
                     node=node,
                 )
             )
-        if (
-            "." not in location_value
-            or not location_value.rsplit(".", 1)[-1]
-        ):
+        if "." not in location_value or not location_value.rsplit(".", 1)[-1]:
             errors.append(
                 DocumentRuleError(
                     message=(
@@ -1047,3 +1030,125 @@ class LocationIsRequired(DocumentRule):
                 )
 
         return errors
+
+
+class UsageFilepathExists(DocumentRule):
+    """Rule: every usage with a filepath must point to an existing file within the project root."""
+
+    def __init__(self) -> None:
+        super().__init__(name="usage_filepath_exists")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+        cwd = Path.cwd().resolve()
+
+        for item in node.root.header.usages.items:
+            filepath = item.annotations.filepath
+            if not filepath:
+                continue
+            if item.annotations.url:
+                continue
+
+            if not filepath.startswith(".goga/usages/"):
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' is not built from '.goga/usages/'",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+                continue
+
+            resolved = Path(filepath).resolve()
+            if not resolved.is_relative_to(cwd):
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' is not built from the root of the project",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+                continue
+
+            if not resolved.exists():
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' does not exist on filesystem",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+
+        return errors
+
+
+_OK_STATUS = 200
+_METHOD_NOT_ALLOWED = 405
+_REQUEST_TIMEOUT = 10
+
+
+class UsageUrlIsAccessible(DocumentRule):
+    """Rule: every usage with a URL must be accessible via HTTP (status 200)."""
+
+    def __init__(self) -> None:
+        super().__init__(name="usage_url_is_accessible")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+
+        for item in node.root.header.usages.items:
+            url = item.annotations.url
+            if not url:
+                continue
+            if item.annotations.filepath:
+                continue
+
+            errors.extend(self._check_url(item, url))
+
+        return errors
+
+    def _check_url(self, item, url: str) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+        try:
+            request = urllib.request.Request(url, method="HEAD")
+            response = urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT)
+            if response.status != _OK_STATUS:
+                errors.append(self._not_accessible(item, url, response.status))
+        except urllib.error.HTTPError as e:
+            if e.code == _METHOD_NOT_ALLOWED:
+                errors.extend(self._fallback_get(item, url))
+            else:
+                errors.append(self._not_accessible(item, url, e.code))
+        except urllib.error.URLError as e:
+            errors.append(self._request_failed(item, url, e.reason))
+        except Exception as e:
+            errors.append(self._request_failed(item, url, e))
+        return errors
+
+    def _fallback_get(self, item, url: str) -> list[DocumentRuleError]:
+        try:
+            response = urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT)
+            if response.status != _OK_STATUS:
+                return [self._not_accessible(item, url, response.status)]
+        except Exception as get_error:
+            return [self._request_failed(item, url, get_error)]
+        return []
+
+    def _not_accessible(self, item, url: str, status_code: int) -> DocumentRuleError:
+        return DocumentRuleError(
+            message=f"Usage '{item.name}' URL '{url}' returned HTTP {status_code} — expected {_OK_STATUS}",
+            rule=self.name,
+            document=item.root,
+            node=item,
+        )
+
+    def _request_failed(self, item, url: str, reason) -> DocumentRuleError:
+        return DocumentRuleError(
+            message=f"Usage '{item.name}' URL '{url}' request failed: {reason!s}",
+            rule=self.name,
+            document=item.root,
+            node=item,
+        )

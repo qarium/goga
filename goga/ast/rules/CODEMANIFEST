@@ -27,7 +27,7 @@ Imports:
 Usages:
   nodes: |
     Использовать манифест goga/ast/nodes и его API для работы с структурой документа
-  conventions: .usages/development/conventions.md
+  conventions: .goga/usages/development/conventions.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.
@@ -144,13 +144,11 @@ Annotations: |
     - импорт содержит путь from откуда подключаются типы или практики
     - путь существует на файловой системе
     - путь не выходит на пределы CWD
-    - путь находится на одном уровне или ниже по иерархии на файловой системе
 
     Шаблоны ошибок:
     - empty: "Import in '{doc_path}' has empty source path (From field)"
     - not_found: "Source path '{from_path}' in import of types {type_names} not found on filesystem"
     - escapes: "Source path '{from_path}' in import points outside the project root"
-    - level: "Source path '{from_path}' must be at the same level or inside the current package directory"
 
 "DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
   location: document.py
@@ -382,6 +380,47 @@ Annotations: |
     - missing: "Type '{type_name}' in '{doc_path}' is missing required 'location' — specify the source file"
     - no_extension: "Type '{type_name}' in '{doc_path}' has location '{location_value}' without file extension — use format 'filename.ext'"
     - contains_path: "Type '{type_name}' in '{doc_path}' has location '{location_value}' containing directory path — use a plain filename without directories"
+
+"DocumentRule::UsageFilepathExists(name: str = 'usage_filepath_exists')":
+  location: document.py
+  annotations: |
+    Проверяет `UsageItemNode`.
+
+    Правила:
+    - filepath строится относительно корня проекта
+    - filepath содержит префикс .goga/usages/
+    - файл по filepath существует на файловой системе
+
+    Требования:
+    - базовый путь для проверки — корень проекта (CWD)
+    - проверяется каждый UsageItemNode у которого annotations.filepath не None и не пустой
+    - Usages с annotations.text (inline) пропускаются
+    - Usages с annotations.url пропускаются
+
+    Шаблоны ошибок:
+    - outside_usages: "Usage '{usage_name}' filepath '{filepath}' is not built from the root of the project"
+    - incorrect_path: "Usage '{usage_name}' filepath '{filepath}' is not built from '.goga/usages/'"
+    - not_found: "Usage '{usage_name}' filepath '{filepath}' does not exist on filesystem"
+
+"DocumentRule::UsageUrlIsAccessible(name: str = 'usage_url_is_accessible')":
+  location: document.py
+  annotations: |
+    Проверяет `UsageItemNode`.
+
+    Правила:
+    - URL отвечает с HTTP статусом 200 (OK)
+
+    Требования:
+    - проверяется каждый UsageItemNode у которого annotations.url не None и не пустой
+    - Usages с annotations.text (inline) пропускаются
+    - Usages с annotations.filepath пропускаются
+    - при сетевой ошибке (timeout, connection error) — ошибка валидации
+    - использовать HEAD-запрос для эффективности (если сервер не поддерживает — fallback на GET)
+    - таймаут запроса — 10 секунд
+
+    Шаблоны ошибок:
+    - not_accessible: "Usage '{usage_name}' URL '{url}' returned HTTP {status_code} — expected 200"
+    - request_failed: "Usage '{usage_name}' URL '{url}' request failed: {error_message}"
 
 # ********************************* #
 # Правила на уровне всех документов #

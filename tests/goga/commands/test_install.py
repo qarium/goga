@@ -95,7 +95,8 @@ class TestLogicConfig:
     """Tests for config-based default resolution in the install command."""
 
     def test_install_agent_from_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga.yml").write_text(
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(
             "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
         )
         monkeypatch.chdir(tmp_path)
@@ -107,9 +108,8 @@ class TestLogicConfig:
         assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
 
     def test_install_agent_cli_overrides_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga.yml").write_text(
-            "language: python\nbuild:\n  task_executor:\n    agent: codex\n"
-        )
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: codex\n")
         monkeypatch.chdir(tmp_path)
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["install", "--agent", "claude"])
@@ -122,12 +122,11 @@ class TestLogicConfig:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code != 0
-        assert ".goga.yml" in result.output or ".goga.yml" in result.stderr
+        assert "config.yml" in result.output or "config.yml" in result.stderr
 
     def test_install_config_invalid_agent(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga.yml").write_text(
-            "language: python\nbuild:\n  task_executor:\n    agent: ''\n"
-        )
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: ''\n")
         monkeypatch.chdir(tmp_path)
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
             result = CliRunner().invoke(app, ["install"])
@@ -139,7 +138,8 @@ class TestLogicNegative:
     """Negative scenario tests for the install command."""
 
     def test_install_unknown_agent(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga.yml").write_text(
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(
             "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
         )
         monkeypatch.chdir(tmp_path)
@@ -263,32 +263,27 @@ class TestIntegration:
         skills_dir = tmp_path / ".claude" / "skills"
 
         clarify_design = skills_dir / "goga-review-design"
-        assert len(list(clarify_design.iterdir())) == 2
         assert (clarify_design / "SKILL.md").is_file()
-        assert (clarify_design / "dsl.md").is_file()
 
         dbc = skills_dir / "goga-design-by-changes"
-        assert len(list(dbc.iterdir())) == 3
         assert (dbc / "SKILL.md").is_file()
         assert (dbc / "design-doc-template.md").is_file()
-        assert (dbc / "dsl.md").is_file()
 
         pbd = skills_dir / "goga-plan-by-design"
-        expected = {"SKILL.md", "conventions.md", "output-template.md", "dsl.md"}
-        actual = {p.name for p in pbd.iterdir()}
-        assert actual == expected
+        assert (pbd / "SKILL.md").is_file()
+        assert (pbd / "conventions.md").is_file()
+        assert (pbd / "output-template.md").is_file()
 
         vp = skills_dir / "goga-review-plan"
-        assert len(list(vp.iterdir())) == 2
         assert (vp / "SKILL.md").is_file()
-        assert (vp / "dsl.md").is_file()
 
 
 class TestCleanupGogaSkillsLogic:
     """Logical tests for _cleanup_goga_skills behavior during install."""
 
     def _setup_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga.yml").write_text(
+        (tmp_path / ".goga").mkdir()
+        (tmp_path / ".goga" / "config.yml").write_text(
             "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
         )
         monkeypatch.chdir(tmp_path)
@@ -350,7 +345,9 @@ class TestCleanupGogaSkillsLogic:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
-                _install_module, "_cleanup_goga_skills", side_effect=OSError("denied"),
+                _install_module,
+                "_cleanup_goga_skills",
+                side_effect=OSError("denied"),
             ),
         ):
             result = CliRunner().invoke(app, ["install"])

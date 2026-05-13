@@ -29,7 +29,9 @@ from .rules import (
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
+    UsageFilepathExists,
     UsageLinksHasNotConflicts,
+    UsageUrlIsAccessible,
 )
 from .visitor import Visitor
 
@@ -135,6 +137,8 @@ class AST:
             ImportIsUsed(),
             SignatureIsValid(),
             LocationIsRequired(),
+            UsageFilepathExists(),
+            UsageUrlIsAccessible(),
         ]
 
         for doc in all_documents:

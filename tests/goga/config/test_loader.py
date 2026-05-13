@@ -19,7 +19,9 @@ def goga_project(tmp_path, monkeypatch):
 
 
 def _write_goga_yml(path, content: str):
-    (path / ".goga.yml").write_text(content)
+    goga_dir = path / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text(content)
 
 
 # --- YAML fixtures ---
@@ -98,7 +100,7 @@ class TestLoadConfigFacade:
 
 class TestLoadConfigPositive:
     def test_load_config_minimal_valid_yaml(self, goga_project):
-        """Minimal .goga.yml with language+build.task_executor.agent."""
+        """Minimal .goga/config.yml with language+build.task_executor.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
         assert config.lang == "python"
@@ -108,7 +110,7 @@ class TestLoadConfigPositive:
         assert config.build.worktree is None
 
     def test_load_config_full_yaml(self, goga_project):
-        """.goga.yml with ALL fields populated."""
+        """.goga/config.yml with ALL fields populated."""
         _write_goga_yml(goga_project, FULL_YAML)
         config = load_config()
         assert config.lang == "go"
@@ -196,14 +198,14 @@ build:
 
 class TestLoadConfigNegative:
     def test_load_config_file_not_found(self, goga_project):
-        """No .goga.yml in directory."""
-        with pytest.raises(FileNotFoundError, match=r"\.goga\.yml"):
+        """No .goga/config.yml in directory."""
+        with pytest.raises(FileNotFoundError, match=r"\.goga/config\.yml"):
             load_config()
 
     def test_load_config_empty_file(self, goga_project):
-        """0-byte .goga.yml."""
+        """0-byte .goga/config.yml."""
         _write_goga_yml(goga_project, "")
-        with pytest.raises(FileNotFoundError, match=r"\.goga\.yml"):
+        with pytest.raises(FileNotFoundError, match=r"\.goga/config\.yml"):
             load_config()
 
     def test_load_config_not_a_mapping(self, goga_project):
@@ -213,7 +215,7 @@ class TestLoadConfigNegative:
             load_config()
 
     def test_load_config_missing_language(self, goga_project):
-        """.goga.yml without language key."""
+        """.goga/config.yml without language key."""
         _write_goga_yml(
             goga_project,
             """\
@@ -298,7 +300,7 @@ build:
             load_config()
 
     def test_load_config_missing_build(self, goga_project):
-        """.goga.yml without build key."""
+        """.goga/config.yml without build key."""
         _write_goga_yml(goga_project, "language: python\n")
         with pytest.raises(KeyError, match="build is required"):
             load_config()
@@ -493,7 +495,7 @@ build:
 
 class TestLoadConfigEdgeCases:
     def test_load_config_commands_optional(self, goga_project):
-        """.goga.yml without commands section."""
+        """.goga/config.yml without commands section."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
         assert config.commands == {}
@@ -673,7 +675,7 @@ class TestParseCodemanifestNegative:
 
 class TestLoadConfigCodemanifest:
     def test_load_config_with_codemanifest_section(self, goga_project):
-        """.goga.yml with full codemanifest section."""
+        """.goga/config.yml with full codemanifest section."""
         _write_goga_yml(
             goga_project,
             """\
@@ -694,7 +696,7 @@ codemanifest:
         assert config.codemanifest.annotations == "Use lib for core logic"
 
     def test_load_config_without_codemanifest_section(self, goga_project):
-        """.goga.yml without codemanifest → codemanifest is None."""
+        """.goga/config.yml without codemanifest → codemanifest is None."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
         assert config.codemanifest is None

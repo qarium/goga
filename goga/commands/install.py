@@ -31,12 +31,7 @@ def _install_commands(source: Path, target: Path) -> list[str]:
     return sorted(p.stem for p in target_commands.glob("*.md"))
 
 
-def _get_dsl_source() -> Path:
-    """Return the path to the DSL spec file."""
-    return Path(__file__).parent.parent / ".usages" / "dsl.md"
-
-
-def _install_skills(source: Path, target: Path, dsl_source: Path) -> list[str]:
+def _install_skills(source: Path, target: Path) -> list[str]:
     """Install skill directories from source to target. Returns list of skill names."""
     target_skills = target / "skills"
     target_skills.mkdir(exist_ok=True)
@@ -46,8 +41,6 @@ def _install_skills(source: Path, target: Path, dsl_source: Path) -> list[str]:
             dest = target_skills / entry.name
             shutil.rmtree(dest, ignore_errors=True)
             shutil.copytree(entry, dest)
-            if dsl_source.is_file():
-                shutil.copy2(dsl_source, dest / "dsl.md")
             installed.append(entry.name)
     return sorted(installed)
 
@@ -101,7 +94,7 @@ def install(ctx: click.Context, agent: str | None) -> None:
     try:
         _cleanup_goga_skills(target)
         commands = _install_commands(source, target)
-        skills = _install_skills(source, target, _get_dsl_source())
+        skills = _install_skills(source, target)
         _print_summary(commands, skills, target)
     except OSError as e:
         click.echo(f"Error: {e}", err=True)

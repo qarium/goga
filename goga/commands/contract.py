@@ -104,7 +104,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
     \b
     Options:
       cells          - one or more cell paths to compare (variadic)
-      --lang         - implementation language (default: from .goga.yml config.lang)
+      --lang         - implementation language (default: from .goga/config.yml config.lang)
 
     Exit codes: 0 on success, 1 on error (cell not found, package not importable, or other failure).
     """

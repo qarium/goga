@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -102,9 +101,7 @@ class TestPrepareCloneUrl:
             ("git@github.com:user/repo.git", "ghp_xxx", "git@github.com"),
         ],
     )
-    def test_sync_prepare_clone_url_variants(
-        self, source: str, token: str | None, expected_in_url: str
-    ) -> None:
+    def test_sync_prepare_clone_url_variants(self, source: str, token: str | None, expected_in_url: str) -> None:
         result = _prepare_clone_url(source, token)
         assert expected_in_url in result
 
@@ -116,17 +113,13 @@ class TestPrepareCloneUrl:
             ("http://github.com/user/repo", "ghp_xxx"),
         ],
     )
-    def test_sync_prepare_clone_url_does_not_inject_token_for_non_https(
-        self, source: str, token: str
-    ) -> None:
+    def test_sync_prepare_clone_url_does_not_inject_token_for_non_https(self, source: str, token: str) -> None:
         result = _prepare_clone_url(source, token)
         assert result == source
         assert token not in result
 
     def test_sync_prepare_clone_url_strips_existing_credentials(self) -> None:
-        result = _prepare_clone_url(
-            "https://old_token@github.com/user/repo.git", "ghp_new"
-        )
+        result = _prepare_clone_url("https://old_token@github.com/user/repo.git", "ghp_new")
         assert "ghp_new@" in result
         assert "old_token" not in result
         assert result == "https://ghp_new@github.com/user/repo.git"
@@ -145,7 +138,7 @@ class TestSyncLocal:
 
         assert result.exit_code == 0
         assert "Synced my-lib" in result.output
-        assert (tmp_path / ".usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(
+        assert (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(
             encoding="utf-8"
         ) == "# API"
 
@@ -165,8 +158,8 @@ class TestSyncLocal:
 
         assert result.exit_code == 0
         assert "2 usages" in result.output
-        assert (tmp_path / ".usages" / "deps" / "project" / ".usages" / "root.md").exists()
-        assert (tmp_path / ".usages" / "deps" / "project" / "sub" / ".usages" / "sub.md").exists()
+        assert (tmp_path / ".goga" / "usages" / "deps" / "project" / ".usages" / "root.md").exists()
+        assert (tmp_path / ".goga" / "usages" / "deps" / "project" / "sub" / ".usages" / "sub.md").exists()
 
     def test_sync_local_path_not_exists(self, tmp_path: Path) -> None:
         runner = CliRunner()
@@ -204,7 +197,7 @@ class TestSyncLocal:
         result = runner.invoke(sync, ["my-lib"])
 
         assert result.exit_code == 0
-        assert (tmp_path / ".usages" / "deps" / "my-lib" / ".usages" / "api.md").exists()
+        assert (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages" / "api.md").exists()
 
     def test_sync_replaces_existing_dep(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         source = tmp_path / "my-lib"
@@ -212,7 +205,7 @@ class TestSyncLocal:
         usages = source / ".usages"
         usages.mkdir()
 
-        deps = tmp_path / ".usages" / "deps" / "my-lib" / ".usages"
+        deps = tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages"
         deps.mkdir(parents=True)
         (deps / "v1.md").write_text("# V1", encoding="utf-8")
 
@@ -240,9 +233,7 @@ class TestSyncLocal:
 
         assert result1.exit_code == 0
         assert result2.exit_code == 0
-        content = (tmp_path / ".usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(
-            encoding="utf-8"
-        )
+        content = (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(encoding="utf-8")
         assert content == "# API"
 
     def test_sync_local_empty_usages_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -256,7 +247,7 @@ class TestSyncLocal:
 
         assert result.exit_code == 0
         assert "1 usages" in result.output
-        assert (tmp_path / ".usages" / "deps" / "my-lib" / ".usages").is_dir()
+        assert (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages").is_dir()
 
     def test_sync_local_root_path_gives_empty_dep_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir("/")
@@ -313,7 +304,7 @@ class TestSyncGit:
 
         assert result.exit_code == 0
         assert "Synced repo" in result.output
-        assert (tmp_path / ".usages" / "deps" / "repo" / ".usages" / "api.md").read_text(
+        assert (tmp_path / ".goga" / "usages" / "deps" / "repo" / ".usages" / "api.md").read_text(
             encoding="utf-8"
         ) == "# API"
 
@@ -344,15 +335,13 @@ class TestSyncGit:
             mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
-            result = runner.invoke(
-                sync, ["https://github.com/user/repo.git", "--token", "ghp_xxx", "--branch", "v2.0"]
-            )
+            result = runner.invoke(sync, ["https://github.com/user/repo.git", "--token", "ghp_xxx", "--branch", "v2.0"])
 
         assert result.exit_code == 0
         assert "--branch" in captured_cmd
         assert "v2.0" in captured_cmd
         clone_idx = captured_cmd.index("clone")
-        for arg in captured_cmd[clone_idx + 1:]:
+        for arg in captured_cmd[clone_idx + 1 :]:
             if arg.startswith("https://"):
                 url = arg
                 break
@@ -399,9 +388,7 @@ class TestSyncGit:
             mock.patch("shutil.rmtree"),
         ):
             runner = CliRunner()
-            result = runner.invoke(
-                sync, ["https://github.com/user/repo.git", "--token", "ghp_secret"]
-            )
+            result = runner.invoke(sync, ["https://github.com/user/repo.git", "--token", "ghp_secret"])
 
         assert result.exit_code == 1
         assert "ghp_secret" not in result.output

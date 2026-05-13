@@ -13,8 +13,8 @@ Imports:
     From: goga/ast
 
 Usages:
-  click: .usages/cooks/click.md
-  conventions: .usages/development/conventions.md
+  click: .goga/usages/cooks/click.md
+  conventions: .goga/usages/development/conventions.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.

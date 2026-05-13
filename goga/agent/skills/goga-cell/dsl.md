@@ -35,7 +35,7 @@ Imports:
     From: path/to/another_cell
 
 Usages:
-  conventions: .specs/conventions.md
+  conventions: .goga/usages/conventions.md
   pattern: |
     Some pattern here
   testing: |
@@ -160,7 +160,6 @@ Imports:
 
 Ограничения:
 - Импорты не могут быть перекрёстными между ячейками, то есть ячейка `A` не может импортировать тип/практику из ячейки `B`, если ячейка `B` импортирует тип из ячейки `A`
-- Импортировать можно только ячейки на том же уровне иерархии или ниже
 
 #### Практики (Usages)
 
@@ -174,13 +173,13 @@ Imports:
 - или любой спецификации
 
 Форматы значений в секции `Usages`:
-- путь к md-файлу (относительно рабочего каталога проекта)
+- путь к md-файлу, относительно корня проекта (файл должен находиться в `.goga/usages/`)
 - URL
 - встроенное описание
 
 ```yaml
 Usages:
-  library: .specs/importlib.md
+  library: .goga/usages/importlib.md
   structures: http://goga.example/structures.md
   pattern: |
     Usage description here...
@@ -437,13 +436,17 @@ Description: |
 
 ---
 
-## Каталог .usages/
+## Каталог usages/
 
-Каталог `.usages/` — это необязательная папка внутри ячейки, содержащая файлы практик (`*.md`)
-для потребителей API ячейки.
+Практики хранятся на двух уровнях:
 
-Файлы `.usages/` — это документация для потребителя: как работать с фасадом ячейки,
-какие практики применять, какие паттерны использовать (механизм межклеточного взаимодействия).
+**Проектный уровень** — каталог `.goga/usages/` в корне проекта. Общие практики, не привязанные к конкретной cell:
+библиотеки, инструменты, конвенции. Подключаются через путь в директиве `Usages` в CODEMANIFEST.
+Проектные практики **могут лежать только** в `.goga/usages/`.
+
+**Cell-уровень** — каталог `.usages/` внутри ячейки. Практики для потребителей API конкретной cell:
+как работать с фасадом cell, какие паттерны применять. Потребитель подключает их через `Imports`,
+ссылаясь на cell-провайдер.
 
 ---
 
@@ -684,7 +687,7 @@ Imports:
     From: path/to/cell
 
 Usages:
-  usage_from_doc: .specs/pattern.md
+  usage_from_doc: .goga/usages/pattern.md
   usage_from_url: http://usage.example/usage.md
 
 Annotations: |

@@ -3,7 +3,7 @@
 # ********************************************************* #
 
 Usages:
-  conventions: .usages/development/conventions.md
+  conventions: .goga/usages/development/conventions.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.

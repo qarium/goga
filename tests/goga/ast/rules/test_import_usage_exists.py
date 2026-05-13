@@ -93,7 +93,7 @@ class TestImportUsageExistsNotFound:
         assert isinstance(errors[0], DocumentRuleError)
         assert errors[0].rule == "import_usage_exists"
         assert "missing_usage" in errors[0].message
-        assert "does not exists on filesystem by path" in errors[0].message
+        assert "does not exist on filesystem by path" in errors[0].message
 
     def test_error_message_template(self, tmp_path):
         """Error message matches the contract template exactly."""
@@ -115,7 +115,7 @@ class TestImportUsageExistsNotFound:
         rule = ImportUsageExists()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert errors[0].message == (f"Usage 'missing' does not exists on filesystem by path '{expected_path}'")
+        assert errors[0].message == (f"Usage 'missing' does not exist on filesystem by path '{expected_path}'")
 
     def test_one_missing_one_found(self, tmp_path):
         """One usage exists, one doesn't -> error only for the missing one."""

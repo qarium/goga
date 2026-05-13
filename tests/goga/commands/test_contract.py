@@ -24,7 +24,8 @@ def _write_codemanifest(directory: Path, content: str) -> None:
 
 
 def _write_goga_yml(directory: Path) -> None:
-    (directory / ".goga.yml").write_text(
+    (directory / ".goga").mkdir(exist_ok=True)
+    (directory / ".goga" / "config.yml").write_text(
         "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
     )
 
@@ -405,7 +406,8 @@ def test_contract_lang_from_config(tmp_path) -> None:
 
 
 def test_contract_lang_cli_overrides_config(tmp_path) -> None:
-    (tmp_path / ".goga.yml").write_text(
+    (tmp_path / ".goga").mkdir(exist_ok=True)
+    (tmp_path / ".goga" / "config.yml").write_text(
         "language: go\nbuild:\n  task_executor:\n    agent: claude\n"
     )
     cell = tmp_path / "cell_one"
@@ -431,11 +433,12 @@ def test_contract_config_missing(tmp_path) -> None:
         result = _run_contract("cell_one")
 
     assert result.exit_code != 0
-    assert ".goga.yml" in result.output.lower() or ".goga.yml" in result.stderr.lower()
+    assert ".goga/config.yml" in result.output.lower() or ".goga/config.yml" in result.stderr.lower()
 
 
 def test_contract_config_invalid_language(tmp_path) -> None:
-    (tmp_path / ".goga.yml").write_text(
+    (tmp_path / ".goga").mkdir(exist_ok=True)
+    (tmp_path / ".goga" / "config.yml").write_text(
         "language: \"\"\nbuild:\n  task_executor:\n    agent: claude\n"
     )
     cell = tmp_path / "cell_one"

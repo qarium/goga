@@ -64,7 +64,7 @@ def _output_value(value: object) -> None:
 @click.argument("options", nargs=-1, required=True)
 @click.pass_context
 def config(ctx: click.Context, options: tuple[str, ...]) -> None:
-    """Read and output configuration options from .goga.yml."""
+    """Read and output configuration options from .goga/config.yml."""
     try:
         cfg = load_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
