@@ -11,7 +11,7 @@
   - **label**: "design", **description**: "Ревью дизайн-документа из docs/design/"
   - **label**: "plan", **description**: "Ревью плана реализации из docs/plans/"
   - **label**: "cell", **description**: "Ревью ячейки (CODEMANIFEST и файловой структуры)"
-  - **label**: "proposal", **description**: "Ревью предложения из docs/proposals/"
+  - **label**: "task", **description**: "Ревью задачи из docs/tasks/"
 
 Аргументы: $ARGUMENTS
 
@@ -35,8 +35,8 @@
 2. **Не существует** — остановитесь и попросите пользователя указать корректный путь к cell.
 3. **Существует** — используйте **Skill tool** для вызова `goga-review-cell` с `skill-arg` в качестве аргумента.
 
-## Proposal
+## Task
 
-1. Проверьте, существует ли `docs/proposals/<skill-arg>.md`.
+1. Проверьте, существует ли `docs/tasks/<skill-arg>.md`.
 2. **Не существует** — остановитесь и попросите пользователя сначала выполнить `/goga:propose`.
 3. **Существует** — используйте **Skill tool** для вызова `goga-review-proposal` с `skill-arg` в качестве аргумента.
