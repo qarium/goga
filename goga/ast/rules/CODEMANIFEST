@@ -27,7 +27,7 @@ Imports:
 Usages:
   nodes: |
     Использовать манифест goga/ast/nodes и его API для работы с структурой документа
-  conventions: .usages/development/conventions.md
+  conventions: .goga/usages/development/conventions.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.
@@ -388,6 +388,7 @@ Annotations: |
 
     Правила:
     - filepath строится относительно корня проекта
+    - filepath содержит префикс .goga/usages/
     - файл по filepath существует на файловой системе
 
     Требования:
@@ -398,6 +399,7 @@ Annotations: |
 
     Шаблоны ошибок:
     - outside_usages: "Usage '{usage_name}' filepath '{filepath}' is not built from the root of the project"
+    - incorrect_path: "Usage '{usage_name}' filepath '{filepath}' is not built from '.goga/usages/'"
     - not_found: "Usage '{usage_name}' filepath '{filepath}' does not exist on filesystem"
 
 "DocumentRule::UsageUrlIsAccessible(name: str = 'usage_url_is_accessible')":

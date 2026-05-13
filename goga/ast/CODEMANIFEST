@@ -44,7 +44,7 @@ Imports:
     From: goga/ast/rules
 
 Usages:
-  conventions: .usages/development/conventions.md
+  conventions: .goga/usages/development/conventions.md
   nodes: |
     Использовать манифест goga/ast/nodes и его API дл работы с структурой документа
   factory: |

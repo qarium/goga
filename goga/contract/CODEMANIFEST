@@ -1,5 +1,5 @@
 Usages:
-  conventions: .usages/development/conventions.md
+  conventions: .goga/usages/development/conventions.md
   contract_format: |
     Реализованный контракт должен соответствовать указанному формату
 

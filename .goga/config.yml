@@ -10,7 +10,7 @@ build:
 
 codemanifest:
   usages:
-    convention: .usages/development/conventions.md
+    convention: .goga/usages/development/conventions.md
   annotations: |
     Практика `convention` используется для:
     - работы с кодовой базой

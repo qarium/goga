@@ -22,7 +22,7 @@ __pycache__
 .ralphex
 
 # Development files
-.usages
+.goga/
 .strictacode.yml
 tests
 docs

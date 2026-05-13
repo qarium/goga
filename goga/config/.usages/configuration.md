@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Пакет `goga.config` предоставляет единый доступ к конфигурации проекта через файл `.goga.yml`.
+Пакет `goga.config` предоставляет единый доступ к конфигурации проекта через файл `.goga/config.yml`.
 
 ## Фасад
 
@@ -16,7 +16,7 @@ from goga.config import Config, BuildConfig, TaskExecutor, CodemanifestConfig, l
 
 ### load_config() -> Config
 
-Читает и парсит `.goga.yml` из текущей рабочей директории (CWD).
+Читает и парсит `.goga/config.yml` из текущей рабочей директории (CWD).
 
 **Вызов**:
 
@@ -27,7 +27,7 @@ config = load_config()
 ```
 
 **Поведение**:
-- Файл `.goga.yml` обязателен — при отсутствии или пустом содержимом выбрасывает `FileNotFoundError`
+- Файл `.goga/config.yml` обязателен — при отсутствии или пустом содержимом выбрасывает `FileNotFoundError`
 - Корневой элемент YAML должен быть mapping — иначе `ValueError`
 - Обязательные секции: `language`, `build`, `build.task_executor`, `build.task_executor.agent`
 - При невалидном YAML выбрасывает `yaml.YAMLError`
@@ -40,7 +40,7 @@ from goga.config import load_config
 try:
     config = load_config()
 except FileNotFoundError:
-    # .goga.yml не найден или пустой
+    # .goga/config.yml не найден или пустой
 except KeyError as e:
     # Нарушение структуры — отсутствует обязательная секция
     print(e)
@@ -51,7 +51,7 @@ except yaml.YAMLError as e:
     # Синтаксическая ошибка YAML
 ```
 
-## Структура .goga.yml
+## Структура .goga/config.yml
 
 Минимальный валидный файл:
 
@@ -93,31 +93,31 @@ codemanifest:
 
 ### Обязательные поля
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `language` | str | Язык проекта |
-| `build.task_executor` | mapping | Конфигурация AI-агента |
-| `build.task_executor.agent` | str | AI-executor: `claude`, `codex`, `copilot`, `gemini`, `custom:/path` |
+| Поле                        | Тип     | Описание                                                            |
+|-----------------------------|---------|---------------------------------------------------------------------|
+| `language`                  | str     | Язык проекта                                                        |
+| `build.task_executor`       | mapping | Конфигурация AI-агента                                              |
+| `build.task_executor.agent` | str     | AI-executor: `claude`, `codex`, `copilot`, `gemini`, `custom:/path` |
 
 ### Опциональные поля
 
-| Поле | Тип | Дефолт | Описание |
-|------|-----|--------|----------|
-| `commands` | mapping | `{}` | Кастомизация промптов (заготовка) |
-| `build.task_executor.env` | mapping | `{}` | Переменные окружения {str: str} |
-| `build.worktree` | bool | None | Изолированный git worktree |
-| `build.skip_finalize` | bool | None | Пропустить финализацию |
-| `build.session_timeout` | str | None | Таймаут сессии (Go duration) |
-| `build.idle_timeout` | str | None | Таймаут простоя (Go duration) |
-| `build.wait` | str | None | Ожидание при rate limit (Go duration) |
-| `build.max_iterations` | int | None | Максимум итераций |
-| `build.review_patience` | int | None | Порог остановки ревью |
-| `build.prompts_dir` | str | None | Путь к кастомным промптам |
-| `build.agents_dir` | str | None | Путь к кастомным агентам |
-| `build.codex_review` | bool | None | Включить codex ревью |
-| `codemanifest` | mapping | None | Конфигурация практик и аннотаций CODEMANIFEST |
-| `codemanifest.usages` | mapping | `{}` | Маппинг {usage_name: path/to/file.md} |
-| `codemanifest.annotations` | str | None | Текстовые аннотации для AI-агента |
+| Поле                       | Тип     | Дефолт | Описание                                      |
+|----------------------------|---------|--------|-----------------------------------------------|
+| `commands`                 | mapping | `{}`   | Кастомизация промптов (заготовка)             |
+| `build.task_executor.env`  | mapping | `{}`   | Переменные окружения {str: str}               |
+| `build.worktree`           | bool    | None   | Изолированный git worktree                    |
+| `build.skip_finalize`      | bool    | None   | Пропустить финализацию                        |
+| `build.session_timeout`    | str     | None   | Таймаут сессии (Go duration)                  |
+| `build.idle_timeout`       | str     | None   | Таймаут простоя (Go duration)                 |
+| `build.wait`               | str     | None   | Ожидание при rate limit (Go duration)         |
+| `build.max_iterations`     | int     | None   | Максимум итераций                             |
+| `build.review_patience`    | int     | None   | Порог остановки ревью                         |
+| `build.prompts_dir`        | str     | None   | Путь к кастомным промптам                     |
+| `build.agents_dir`         | str     | None   | Путь к кастомным агентам                      |
+| `build.codex_review`       | bool    | None   | Включить codex ревью                          |
+| `codemanifest`             | mapping | None   | Конфигурация практик и аннотаций CODEMANIFEST |
+| `codemanifest.usages`      | mapping | `{}`   | Маппинг {usage_name: path/to/file.md}         |
+| `codemanifest.annotations` | str     | None   | Текстовые аннотации для AI-агента             |
 
 ## Доступ к данным
 

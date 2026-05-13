@@ -15,9 +15,9 @@ Imports:
     From: goga/config
 
 Usages:
-  click: .usages/cooks/click.md
-  conventions: .usages/development/conventions.md
-  ralphex: .usages/cooks/ralphex.md
+  click: .goga/usages/cooks/click.md
+  conventions: .goga/usages/development/conventions.md
+  ralphex: .goga/usages/cooks/ralphex.md
   documents: |
     Работать с типом `AST`.
 
@@ -91,7 +91,7 @@ Annotations: |
 
     `plan`: путь к файлу плана (markdown)
 
-    CLI-опции (все опциональные, переопределяют .goga.yml):
+    CLI-опции (все опциональные, переопределяют .goga/config.yml):
     - --dry-run: показать команду без выполнения
     - --worktree: включить режим `ralphex` worktree
     - --skip-finalize: пропустить финализацию
@@ -227,8 +227,7 @@ Annotations: |
     5. Скопировать из исходного каталога в целевой:
        - goga/agent/commands/* → ~/.claude/commands/goga/
        - goga/agent/skills/* → ~/.claude/skills/
-    6. Скопировать goga/.usages/dsl.md в каждый установленный скилл как dsl.md
-    7. Вывести список установленных скиллов и команд
+    6. Вывести список установленных скиллов и команд
 
     Требования:
     - Перед установкой skills удалить все подпапки с префиксом goga- в целевом каталоге skills/
@@ -259,7 +258,7 @@ Annotations: |
       "cell": <document path>,
       "description": <document footer description>,
       "types": [<routines and nodes from cell body>],
-      "usages": [<md files from .usage dir>],
+      "usages": [<md files from .usages dir>],
       "dependencies": {
         "<imported cell path>": {
           "types": [<list of imported types>],
@@ -351,7 +350,7 @@ Annotations: |
 "config(options: tuple[str, ...])":
   location: config.py
   annotations: |
-    Команда выводит значения опций из конфигурации проекта .goga.yml.
+    Команда выводит значения опций из конфигурации проекта .goga/config.yml.
     Структура конфигурации описана в практике `configuration`, конфигурация загружается через `load_config`.
     Команда поддерживает навигацию по всем полям объекта `Config` через точечную нотацию.
     Каждая опция выводится отдельно с заголовком, идентифицирующим путь.
@@ -451,12 +450,12 @@ Annotations: |
     7. В блоке finally — удалить временный каталог через shutil.rmtree()
 
     Синхронизация (общий шаг для обоих режимов):
-    1. Целевой каталог: .usages/deps/<name>/
+    1. Целевой каталог: .goga/usages/deps/<name>/
     2. Удалить целевой каталог если существует (полная пересинхронизация)
     3. Найти все .usages/ директории в источнике рекурсивно
     4. Для каждого найденного .usages/:
        - Вычислить относительный путь от корня источника до родителя .usages/
-       - Создать структуру в целевом пути: .usages/deps/<name>/<relative>/.usages/
+       - Создать структуру в целевом пути: .goga/usages/deps/<name>/<relative>/.usages/
        - Скопировать содержимое .usages/ (файлы и подкаталоги)
     5. Вывести результат: имя зависимости, количество синхронизированных .usages/
 
@@ -474,23 +473,23 @@ Annotations: |
     Примеры:
       # Локальный путь
       goga sync /path/to/external/project/goga
-      # → .usages/deps/goga/
+      # → .goga/usages/deps/goga/
 
       # GitHub (публичный)
       goga sync https://github.com/owner/repo
-      # → .usages/deps/repo/
+      # → .goga/usages/deps/repo/
 
       # GitHub (с токеном)
       goga sync --token ghp_xxx https://github.com/owner/private-repo
-      # → .usages/deps/private-repo/
+      # → .goga/usages/deps/private-repo/
 
       # GitLab (с токеном и веткой)
       goga sync --token glpat-xxx --branch v2.0 https://gitlab.com/org/repo
-      # → .usages/deps/repo/
+      # → .goga/usages/deps/repo/
 
       # SSH
       goga sync git@github.com:owner/repo.git
-      # → .usages/deps/repo/
+      # → .goga/usages/deps/repo/
 
 ---
 
