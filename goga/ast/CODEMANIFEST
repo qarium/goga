@@ -35,6 +35,8 @@ Imports:
       - ImportIsUsed
       - SignatureIsValid
       - LocationIsRequired
+      - UsageFilepathExists
+      - UsageUrlIsAccessible
       # правила проекта
       - ImportTypeExists
       - ImportsHasNotCyclicalDeps
@@ -139,6 +141,8 @@ Annotations: |
       - `ImportIsUsed`
       - `SignatureIsValid`
       - `LocationIsRequired`
+      - `UsageFilepathExists`
+      - `UsageUrlIsAccessible`
 
       Правила для всего дерева:
       - `ImportTypeExists`
