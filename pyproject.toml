@@ -44,7 +44,8 @@ docs = [
 include = ["goga*"]
 
 [tool.setuptools.package-data]
-goga = ["agent/**/*", ".usages/**/*", "config/defaults/**/*"]
+"*" = [".usages/**/*"]
+goga = ["agent/**/*", "config/defaults/**/*"]
 
 [tool.ruff]
 target-version = "py310"
