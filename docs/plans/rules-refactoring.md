@@ -356,21 +356,21 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 5 — 6 правил структуры
-- [ ] **Контрактные тесты**: создать `tests/goga/ast/rules/document/structure/__init__.py` и `tests/goga/ast/rules/document/structure/test_document.py` — проверить доступность 6 классов, наследование, сигнатуру check (ожидаемо падают)
-- [ ] **Код**: создать `goga/ast/rules/document/structure/__init__.py` с реэкспортом
-- [ ] **Код**: создать `goga/ast/rules/document/structure/document.py` — извлечь 6 классов, обновить импорты
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/structure/test_document.py -v`
-- [ ] **Логические тесты**: в `test_document.py` добавить:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 5 — 6 правил структуры
+- [x] **Контрактные тесты**: создать `tests/goga/ast/rules/document/structure/__init__.py` и `tests/goga/ast/rules/document/structure/test_document.py` — проверить доступность 6 классов, наследование, сигнатуру check (ожидаемо падают)
+- [x] **Код**: создать `goga/ast/rules/document/structure/__init__.py` с реэкспортом
+- [x] **Код**: создать `goga/ast/rules/document/structure/document.py` — извлечь 6 классов, обновить импорты
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/structure/test_document.py -v`
+- [x] **Логические тесты**: в `test_document.py` добавить:
   - `EntitiesAndRoutinesHasNotConflicts`: конфликт entity с импортом → "entity_conflict"; конфликт routine → "routine_conflict"; embedded → пропуск; нет конфликтов → []
   - `EntityHasOnlyValidKeys`: неизвестный ключ → "unknown_keys"; только допустимые → []
   - `RoutineHasOnlyValidKeys`: неизвестный ключ → "unknown_keys"; только допустимые → []
   - `SignatureIsValid`: некорректный формат → "format"; пустая сигнатура → "empty"; валидная → []
   - `ReturnTypeHasLink`: тип без метки → "missing_link"; с меткой → []; без return → []
   - `LocationIsRequired`: нет location → "missing"; без расширения → "no_extension"; содержит '/' → "contains_path"; embedded → пропуск; валидный → []
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/structure/ -v` — исправлять код
-- [ ] **Перепроверка контрактов**: проверить доступность 6 классов из `goga.ast.rules.document.structure`
-- [ ] **Линт**: `ruff check goga/ast/rules/document/structure/ && ruff format goga/ast/rules/document/structure/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/structure/ -v` — исправлять код
+- [x] **Перепроверка контрактов**: проверить доступность 6 классов из `goga.ast.rules.document.structure`
+- [x] **Линт**: `ruff check goga/ast/rules/document/structure/ && ruff format goga/ast/rules/document/structure/`
 
 ### Task 6: Ячейка `document/mutation` — 3 правила мутаций (TDD кодирование)
 
