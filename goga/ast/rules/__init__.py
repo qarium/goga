@@ -1,16 +1,7 @@
-from .ast import (
-    ASTRule,
-    EmbeddedTypeHasLowLevel,
-    ImportsHasNotCyclicalDeps,
-    ImportTypeExists,
-)
-from .document import (
-    AllUsagesIsUsed,
-    AnnotationLinksExists,
-    DocumentRule,
-    EmbeddedEntityCanNotHasMutations,
-    EntitiesAndRoutinesHasNotConflicts,
-    EntityHasOnlyValidKeys,
+from .ast import EmbeddedTypeHasLowLevel, ImportsHasNotCyclicalDeps, ImportTypeExists
+from .base import ASTRule, DocumentRule
+from .document.annotations import AnnotationLinksExists
+from .document.imports import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
@@ -18,17 +9,27 @@ from .document import (
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
     ImportUsageExists,
-    LocationIsRequired,
+    signature_contains_type_name,
+)
+from .document.mutation import (
+    EmbeddedEntityCanNotHasMutations,
     MutationExists,
     MutationIsValid,
+)
+from .document.structure import (
+    EntitiesAndRoutinesHasNotConflicts,
+    EntityHasOnlyValidKeys,
+    LocationIsRequired,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
+)
+from .document.usages import (
+    AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,
     UsageUrlIsAccessible,
 )
-from .tools import signature_contains_type_name
 
 __all__ = [
     "ASTRule",

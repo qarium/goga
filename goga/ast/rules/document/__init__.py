@@ -1,10 +1,6 @@
-from ._document import (
-    AllUsagesIsUsed,
-    AnnotationLinksExists,
-    DocumentRule,
-    EmbeddedEntityCanNotHasMutations,
-    EntitiesAndRoutinesHasNotConflicts,
-    EntityHasOnlyValidKeys,
+from ..base.document import DocumentRule
+from .annotations.document import AnnotationLinksExists
+from .imports.document import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
@@ -12,12 +8,22 @@ from ._document import (
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
     ImportUsageExists,
-    LocationIsRequired,
+)
+from .mutation.document import (
+    EmbeddedEntityCanNotHasMutations,
     MutationExists,
     MutationIsValid,
+)
+from .structure.document import (
+    EntitiesAndRoutinesHasNotConflicts,
+    EntityHasOnlyValidKeys,
+    LocationIsRequired,
     ReturnTypeHasLink,
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
+)
+from .usages.document import (
+    AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,
     UsageUrlIsAccessible,
@@ -34,9 +40,9 @@ __all__ = [
     "ImportHasValidFromPath",
     "ImportIsUsed",
     "ImportItemIsValid",
+    "ImportUsageExists",
     "ImportsCanNotBeEmpty",
     "ImportsHasOnlyValidKeys",
-    "ImportUsageExists",
     "LocationIsRequired",
     "MutationExists",
     "MutationIsValid",

@@ -471,14 +471,14 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] Обновить `goga/ast/rules/__init__.py` — заменить импорты из монолитных файлов на импорты из подмодулей. Реэкспортировать все 27 сущностей: `from .base import DocumentRule, ASTRule`, `from .document.imports import ...`, `from .document.usages import ...`, `from .document.structure import ...`, `from .document.mutation import ...`, `from .document.annotations import AnnotationLinksExists`, `from .ast import ImportsHasNotCyclicalDeps, ImportTypeExists, EmbeddedTypeHasLowLevel`
-- [ ] Обновить `goga/ast/rules/document.py` — заменить реализацию на реэкспорт из подмодулей (deprecated): `from .document.imports.document import ...`, `from .document.usages.document import ...`, `from .document.structure.document import ...`, `from .document.mutation.document import ...`, `from .document.annotations.document import ...`
-- [ ] Обновить `goga/ast/rules/ast.py` — заменить реализацию на реэкспорт: `from .ast.ast import ...`
-- [ ] Обновить `goga/ast/rules/tools.py` — заменить реализацию на реэкспорт: `from .document.imports.tools import signature_contains_type_name`
-- [ ] Проверить доступность фасада: `python -c "from goga.ast.rules import DocumentRule, ASTRule, signature_contains_type_name, ImportsCanNotBeEmpty, ImportsHasNotCyclicalDeps; print('OK')"` — все 27 сущностей должны быть доступны
-- [ ] Проверить обратную совместимость: `python -c "from goga.ast.rules.document import ImportsCanNotBeEmpty; from goga.ast.rules.ast import ImportsHasNotCyclicalDeps; from goga.ast.rules.tools import signature_contains_type_name; print('OK')"`
-- [ ] Запустить все существующие тесты: `python -m pytest tests/ -v` — все тесты должны пройти (1032 теста)
-- [ ] Линт: `ruff check goga/ast/rules/ && ruff format goga/ast/rules/`
+- [x] Обновить `goga/ast/rules/__init__.py` — заменить импорты из монолитных файлов на импорты из подмодулей. Реэкспортировать все 27 сущностей: `from .base import DocumentRule, ASTRule`, `from .document.imports import ...`, `from .document.usages import ...`, `from .document.structure import ...`, `from .document.mutation import ...`, `from .document.annotations import AnnotationLinksExists`, `from .ast import ImportsHasNotCyclicalDeps, ImportTypeExists, EmbeddedTypeHasLowLevel`
+- [x] Обновить `goga/ast/rules/document.py` — заменить реализацию на реэкспорт из подмодулей (deprecated): `from .document.imports.document import ...`, `from .document.usages.document import ...`, `from .document.structure.document import ...`, `from .document.mutation.document import ...`, `from .document.annotations.document import ...`
+- [x] Обновить `goga/ast/rules/ast.py` — заменить реализацию на реэкспорт: `from .ast.ast import ...`
+- [x] Обновить `goga/ast/rules/tools.py` — заменить реализацию на реэкспорт: `from .document.imports.tools import signature_contains_type_name`
+- [x] Проверить доступность фасада: `python -c "from goga.ast.rules import DocumentRule, ASTRule, signature_contains_type_name, ImportsCanNotBeEmpty, ImportsHasNotCyclicalDeps; print('OK')"` — все 27 сущностей должны быть доступны
+- [x] Проверить обратную совместимость: `python -c "from goga.ast.rules.document import ImportsCanNotBeEmpty; from goga.ast.rules.ast import ImportsHasNotCyclicalDeps; from goga.ast.rules.tools import signature_contains_type_name; print('OK')"`
+- [x] Запустить все существующие тесты: `python -m pytest tests/ -v` — все тесты должны пройти (1032 теста)
+- [x] Линт: `ruff check goga/ast/rules/ && ruff format goga/ast/rules/`
 
 ### Task 10: Реорганизация тестов (инфраструктура)
 
