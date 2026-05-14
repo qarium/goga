@@ -388,18 +388,18 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 6 — 3 правила мутаций
-- [ ] **Контрактные тесты**: создать `tests/goga/ast/rules/document/mutation/__init__.py` и `tests/goga/ast/rules/document/mutation/test_document.py` — проверить доступность 3 классов, наследование, сигнатуру check (ожидаемо падают)
-- [ ] **Код**: создать `goga/ast/rules/document/mutation/__init__.py` с реэкспортом
-- [ ] **Код**: создать `goga/ast/rules/document/mutation/document.py` — извлечь 3 класса, обновить импорты
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/mutation/test_document.py -v`
-- [ ] **Логические тесты**: в `test_document.py` добавить:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 6 — 3 правила мутаций
+- [x] **Контрактные тесты**: создать `tests/goga/ast/rules/document/mutation/__init__.py` и `tests/goga/ast/rules/document/mutation/test_document.py` — проверить доступность 3 классов, наследование, сигнатуру check (ожидаемо падают)
+- [x] **Код**: создать `goga/ast/rules/document/mutation/__init__.py` с реэкспортом
+- [x] **Код**: создать `goga/ast/rules/document/mutation/document.py` — извлечь 3 класса, обновить импорты
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/mutation/test_document.py -v`
+- [x] **Логические тесты**: в `test_document.py` добавить:
   - `MutationExists`: тип не найден → "not_found"; найден в entities → []; найден в routines → []; найден в imports → []
   - `MutationIsValid`: мутация ссылается на себя → "self_mutation"; ссылается на другой → []
   - `EmbeddedEntityCanNotHasMutations`: embedded с мутациями → "has_mutations"; без мутаций → []
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/mutation/ -v` — исправлять код
-- [ ] **Перепроверка контрактов**: проверить доступность 3 классов из `goga.ast.rules.document.mutation`
-- [ ] **Линт**: `ruff check goga/ast/rules/document/mutation/ && ruff format goga/ast/rules/document/mutation/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/mutation/ -v` — исправлять код
+- [x] **Перепроверка контрактов**: проверить доступность 3 классов из `goga.ast.rules.document.mutation`
+- [x] **Линт**: `ruff check goga/ast/rules/document/mutation/ && ruff format goga/ast/rules/document/mutation/`
 
 ### Task 7: Ячейка `document/annotations` — правило проверки аннотаций (TDD кодирование)
 
