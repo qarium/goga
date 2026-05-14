@@ -52,8 +52,10 @@ def _install_skills(source: Path, target: Path) -> list[str]:
 def _download_dsl_spec(target: Path) -> None:
     dsl_path = target / "skills" / "goga-cell" / "dsl.md"
     try:
-        with urllib.request.urlopen(DSL_SPEC_URL) as response:
+        with urllib.request.urlopen(DSL_SPEC_URL, timeout=30) as response:
             data = response.read()
+    except urllib.error.HTTPError as e:
+        raise OSError(f"Failed to download DSL spec: HTTP {e.code} {e.reason}") from e
     except urllib.error.URLError as e:
         raise OSError(f"Failed to download DSL spec: {e.reason}") from e
     dsl_path.write_bytes(data)

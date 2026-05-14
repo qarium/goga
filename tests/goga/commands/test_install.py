@@ -105,7 +105,7 @@ class TestDownloadDslSpecContract:
         ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
-        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL)
+        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL, timeout=30)
 
 
 class TestLogicPositive:
@@ -480,7 +480,7 @@ class TestDownloadDslSpecLogic:
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
         assert dsl_file.read_bytes() == b"dsl content"
-        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL)
+        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL, timeout=30)
 
     def test_download_dsl_spec_idempotent(self, tmp_path: Path) -> None:
         mock_response_old = _mock_urlopen_response(b"old dsl")
@@ -528,6 +528,8 @@ class TestDownloadDslSpecLogic:
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 1
         assert "Failed to download DSL spec" in result.output
+        assert "HTTP 404" in result.output
+        assert "Not Found" in result.output
 
     def test_download_dsl_spec_timeout(self, tmp_path: Path) -> None:
         with (
@@ -556,10 +558,16 @@ class TestDownloadDslSpecLogic:
 
     def test_download_dsl_spec_file_write_error(self, tmp_path: Path) -> None:
         mock_response = _mock_urlopen_response(b"dsl content")
+
+        def _write_bytes_only_dsl(self, data):
+            if "dsl.md" in str(self):
+                raise OSError("permission denied")
+            return Path.write_bytes(self, data)
+
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response),
-            mock.patch.object(Path, "write_bytes", side_effect=OSError("permission denied")),
+            mock.patch.object(Path, "write_bytes", _write_bytes_only_dsl),
         ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 1
