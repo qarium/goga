@@ -449,18 +449,18 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 8 — 3 AST правила
-- [ ] **Контрактные тесты**: создать `tests/goga/ast/rules/ast/__init__.py` и `tests/goga/ast/rules/ast/test_ast.py` — проверить доступность 3 классов, наследование от ASTRule, сигнатуру check(document) (ожидаемо падают)
-- [ ] **Код**: создать `goga/ast/rules/ast/__init__.py` с реэкспортом
-- [ ] **Код**: создать `goga/ast/rules/ast/ast.py` — извлечь 3 класса, обновить импорты: `from ..base.ast import ASTRule`, `from ...nodes import DocumentRoot`
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/ast/test_ast.py -v`
-- [ ] **Логические тесты**: в `test_ast.py` добавить:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 8 — 3 AST правила
+- [x] **Контрактные тесты**: создать `tests/goga/ast/rules/ast/__init__.py` и `tests/goga/ast/rules/ast/test_ast.py` — проверить доступность 3 классов, наследование от ASTRule, сигнатуру check(document) (ожидаемо падают)
+- [x] **Код**: создать `goga/ast/rules/ast/__init__.py` с реэкспортом
+- [x] **Код**: создать `goga/ast/rules/ast/ast.py` — извлечь 3 класса, обновить импорты: `from ..base.ast import ASTRule`, `from ...nodes import DocumentRoot`
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/ast/test_ast.py -v`
+- [x] **Логические тесты**: в `test_ast.py` добавить:
   - `ImportsHasNotCyclicalDeps`: без цикла → []; с циклом (взаимный импорт) → "cycle"
   - `ImportTypeExists`: тип найден → []; тип не найден → "not_found"; путь не существует → пропуск []
   - `EmbeddedTypeHasLowLevel`: уровень ниже → []; уровень выше → "wrong_level"; `os.path.normpath` нормализация
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/ast/ -v` — исправлять код
-- [ ] **Перепроверка контрактов**: проверить доступность 3 классов из `goga.ast.rules.ast`
-- [ ] **Линт**: `ruff check goga/ast/rules/ast/ && ruff format goga/ast/rules/ast/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/ast/ -v` — исправлять код
+- [x] **Перепроверка контрактов**: проверить доступность 3 классов из `goga.ast.rules.ast`
+- [x] **Линт**: `ruff check goga/ast/rules/ast/ && ruff format goga/ast/rules/ast/`
 
 ### Task 9: Фасад и обратная совместимость (инфраструктура)
 
