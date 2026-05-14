@@ -6,13 +6,13 @@ import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..errors import DocumentRuleError
-from ..nodes.common import AnnotationsNode
-from ..nodes.header import ImportTypeItemNode, ImportUsageItemNode
-from .tools import signature_contains_type_name
+from ...errors import DocumentRuleError
+from ...nodes.common import AnnotationsNode
+from ...nodes.header import ImportTypeItemNode, ImportUsageItemNode
+from ..tools import signature_contains_type_name
 
 if TYPE_CHECKING:
-    from ..nodes import (
+    from ...nodes import (
         DocumentNode,
         EntityTypeNode,
         MethodNode,

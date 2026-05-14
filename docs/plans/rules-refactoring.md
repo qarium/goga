@@ -254,18 +254,18 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 2 — `signature_contains_type_name`
-- [ ] **Контрактные тесты**: создать файл `tests/goga/ast/rules/document/imports/__init__.py` и `tests/goga/ast/rules/document/imports/test_tools.py` — проверить доступность функции из `goga.ast.rules.document.imports.tools`, сигнатуру `(signature: str, type_name: str) -> bool` (ожидаемо падают)
-- [ ] **Код**: создать файл `goga/ast/rules/document/imports/__init__.py` (пустой или с реэкспортом)
-- [ ] **Код**: создать файл `goga/ast/rules/document/imports/tools.py` — извлечь функцию `signature_contains_type_name` из `goga/ast/rules/tools.py`
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/imports/test_tools.py -v` — контрактные тесты должны пройти
-- [ ] **Логические тесты**: в `test_tools.py` добавить тесты:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 2 — `signature_contains_type_name`
+- [x] **Контрактные тесты**: создать файл `tests/goga/ast/rules/document/imports/__init__.py` и `tests/goga/ast/rules/document/imports/test_tools.py` — проверить доступность функции из `goga.ast.rules.document.imports.tools`, сигнатуру `(signature: str, type_name: str) -> bool` (ожидаемо падают)
+- [x] **Код**: создать файл `goga/ast/rules/document/imports/__init__.py` (пустой или с реэкспортом)
+- [x] **Код**: создать файл `goga/ast/rules/document/imports/tools.py` — извлечь функцию `signature_contains_type_name` из `goga/ast/rules/tools.py`
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/imports/test_tools.py -v` — контрактные тесты должны пройти
+- [x] **Логические тесты**: в `test_tools.py` добавить тесты:
   - позитивные: тип как значение параметра `(param: TypeName)`, тип в return `(param: Type) -> rv:TypeName`, тип в середине `(param: TypeName, param_2: Type)`, тип в начале `TypeName(param)`
   - негативные: тип как префикс `(param: TypeNameOne)`, тип как суффикс `(param: TwoTypeName)`, тип в строковом литерале `(param: Type: = "TypeName")`
   - краевые: пустой `type_name` → False, `type_name` в начале сигнатуры → True
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/imports/test_tools.py -v` — исправлять код реализации, пока все тесты не пройдут
-- [ ] **Перепроверка контрактов**: проверить сигнатуру `(signature: str, type_name: str) -> result:bool`, доступность из фасада `goga.ast.rules.document.imports`
-- [ ] **Линт**: `ruff check goga/ast/rules/document/imports/ && ruff format goga/ast/rules/document/imports/` — исправить форматирование
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/imports/test_tools.py -v` — исправлять код реализации, пока все тесты не пройдут
+- [x] **Перепроверка контрактов**: проверить сигнатуру `(signature: str, type_name: str) -> result:bool`, доступность из фасада `goga.ast.rules.document.imports`
+- [x] **Линт**: `ruff check goga/ast/rules/document/imports/ && ruff format goga/ast/rules/document/imports/` — исправить форматирование
 
 ### Task 3: Ячейка `document/imports` — 7 правил проверки импортов (TDD кодирование)
 
