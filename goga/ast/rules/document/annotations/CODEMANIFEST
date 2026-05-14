@@ -1,0 +1,67 @@
+Imports:
+  - Types:
+      - DocumentRule
+    From: goga/ast/rules/base
+  - Types:
+      - signature_contains_type_name
+    From: goga/ast/rules/document/imports
+  - Types:
+      - AnnotationsNode
+      - HeaderNode
+      - UsageItemNode
+      - RoutineTypeNode
+      - EntityTypeNode
+      - MethodNode
+      - PropertyNode
+      - BodyNode
+    From: goga/ast/nodes
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Все типы являются мутациями `DocumentRule`.
+
+---
+
+# ************ #
+# Аннотации     #
+# ************ #
+
+"DocumentRule::AnnotationLinksExists(name: str = 'annotation_links_exists')":
+  location: document.py
+  annotations: |
+    Проверяет ссылки на существование в `AnnotationsNode` для нод:
+    - `HeaderNode`
+    - `UsageItemNode`
+    - `RoutineTypeNode`
+    - `EntityTypeNode`
+    - `MethodNode`
+    - `PropertyNode`
+
+    Одно из правил должно соблюдаться:
+    - Ссылка существует импортах `HeaderNode` в качестве type или alias
+    - Ссылка существует в usages `HeaderNode` в качестве name
+    - Ссылка существует в `BodyNode` в качестве имени entity или routine
+
+    Дополнительные правила:
+    - В `EntityTypeNode`, `RoutineTypeNode`, `MethodNode` ссылка может существовать в сигнатуре
+
+    Требования:
+    - Для поиска ссылок в сигнатурах использовать `signature_contains_type_name`
+    - Поиск ссылки в сигнатуре как поиск целого слова, где разделителями могут быть пробелы
+      или пунктуация (например, :), но не символы _ и -. В терминах регулярных выражений это
+      поиск подстроки, которая не окружена символами [\w-], то есть проверка должна падать
+      на param_ или param-, но проходить на param:
+
+    Шаблоны ошибок:
+    - not_found: "Link `{link}` in {context} annotation does not match any import, usage, entity, routine, or signature parameter"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Правила проверки аннотаций в документе манифеста

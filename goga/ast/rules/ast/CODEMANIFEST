@@ -1,0 +1,69 @@
+Imports:
+  - Types:
+      - ASTRule
+    From: goga/ast/rules/base
+  - Types:
+      - DocumentRoot
+    From: goga/ast/nodes
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Все типы являются мутациями `ASTRule`.
+
+---
+
+# ********************************* #
+# Правила на уровне всех документов #
+# ********************************* #
+
+"ASTRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
+  location: ast.py
+  annotations: |
+    Правило - ни один импорт в документе не является циклическим.
+
+    Если в документе есть импорт из пути и в документе по этому
+    пути тоже есть импорт из текущего документа - это является ошибкой.
+
+    Дополнительные требования:
+    - Алгоритм поиска документа из которого происходит импорт при проверке должен иметь алгоритмическую сложность O(1)
+
+    Шаблоны ошибок:
+    - cycle: "Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"
+
+"ASTRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
+  location: ast.py
+  annotations: |
+    Правило - подключаемый тип через Imports существует в указанном в From документе.
+
+    Требования:
+    - Если путь в From не существует на файловой системе, то проверка игнорируется
+
+    Шаблоны ошибок:
+    - not_found: "Type '{type_name}' imported from '{from_path}' is not defined in that package's CODEMANIFEST"
+
+"ASTRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
+  location: ast.py
+  annotations: |
+    Правило - все embedded типы располагаются ниже в иерархии файловой системы.
+
+    Примеры:
+    - В данном примере level-1 может встраивать level-2, а level-2 не может встраивать level-1
+      root/
+      ├── level-1/
+      │   ├── level-2/
+      │   │   ├── CODEMANIFEST
+      │   └── CODEMANIFEST
+
+    Шаблоны ошибок:
+    - wrong_level: "Embedded {kind} '{name}' comes from '{source_path}', but can only be embedded from packages nested below '{current_path}'"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Правила проверки на уровне всех документов AST
