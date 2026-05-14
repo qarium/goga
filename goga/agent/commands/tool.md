@@ -23,8 +23,8 @@
 
 Для вызова skills используйте **Skill tool**.
 
-Если скилл найден:
-- начни свой ответ с: Активирован скилл goga-tool-{TARGET_TOOL}
+Если skill найден:
+- начни свой ответ с: Активирован skill goga-tool-{TARGET_TOOL}
 - вызовите skill `goga-cell`
 - вызовите skill `goga-cookbook`
 - вызовите skill `goga-tool-{TARGET_TOOL}`
