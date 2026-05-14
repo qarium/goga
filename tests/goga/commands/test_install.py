@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import sys
+import urllib.error
 from pathlib import Path
 from unittest import mock
 
@@ -15,8 +16,18 @@ _install_module = sys.modules["goga.commands.install"]
 _AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
 
 
+def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
+    mock_response = mock.MagicMock()
+    mock_response.read.return_value = content
+    mock_response.__enter__.return_value = mock_response
+    return mock_response
+
+
 def _invoke_install(tmp_path: Path) -> click.testing.Result:
-    with mock.patch("pathlib.Path.home", return_value=tmp_path):
+    with (
+        mock.patch("pathlib.Path.home", return_value=tmp_path),
+        mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+    ):
         return CliRunner().invoke(app, ["install"])
 
 
@@ -62,11 +73,49 @@ class TestCleanupGogaSkillsContract:
         assert ret is int or ret == "int"
 
 
+class TestDownloadDslSpecContract:
+    """Contract tests for _download_dsl_spec function."""
+
+    def test_download_dsl_spec_exists(self) -> None:
+        assert hasattr(_install_module, "_download_dsl_spec")
+
+    def test_download_dsl_spec_is_callable(self) -> None:
+        assert callable(_install_module._download_dsl_spec)
+
+    def test_download_dsl_spec_signature(self) -> None:
+        sig = inspect.signature(_install_module._download_dsl_spec)
+        params = list(sig.parameters.keys())
+        assert len(params) == 1
+        param_annotation = sig.parameters[params[0]].annotation
+        assert param_annotation is Path or param_annotation == "Path"
+        ret = sig.return_annotation
+        assert ret is None or ret == "None"
+
+    def test_dsl_spec_url_constant(self) -> None:
+        assert hasattr(_install_module, "DSL_SPEC_URL")
+        assert _install_module.DSL_SPEC_URL == (
+            "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md"
+        )
+
+    def test_download_dsl_spec_integrated_in_install(self, tmp_path: Path) -> None:
+        mock_response = _mock_urlopen_response(b"dsl content")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL)
+
+
 class TestLogicPositive:
     """Positive scenario tests for the install command."""
 
     def test_install_default_agent(self, tmp_path: Path) -> None:
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
@@ -79,16 +128,21 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-review-plan" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert "Installed 5 commands" in result.output
         assert "Installed 20 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
             result = CliRunner().invoke(app, ["install", "--agent", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
         assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
 
 
 class TestLogicConfig:
@@ -100,22 +154,30 @@ class TestLogicConfig:
             "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
         assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
 
     def test_install_agent_cli_overrides_config(self, tmp_path: Path, monkeypatch) -> None:
         (tmp_path / ".goga").mkdir()
         (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: codex\n")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
             result = CliRunner().invoke(app, ["install", "--agent", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
+        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
 
     def test_install_config_missing(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -154,7 +216,10 @@ class TestLogicEdgeCases:
     """Edge case tests for the install command."""
 
     def test_install_creates_target_dir(self, tmp_path: Path) -> None:
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
@@ -399,3 +464,103 @@ class TestCleanupGogaSkillsLogic:
         assert result.exit_code == 0
 
         assert (skills_dir / "goga" / "custom.md").read_text() == "must keep"
+
+
+class TestDownloadDslSpecLogic:
+    """Logical tests for _download_dsl_spec behavior during install."""
+
+    def test_download_dsl_spec_success(self, tmp_path: Path) -> None:
+        mock_response = _mock_urlopen_response(b"dsl content")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
+        assert dsl_file.is_file()
+        assert dsl_file.read_bytes() == b"dsl content"
+        mock_urlopen.assert_called_once_with(_install_module.DSL_SPEC_URL)
+
+    def test_download_dsl_spec_idempotent(self, tmp_path: Path) -> None:
+        mock_response_old = _mock_urlopen_response(b"old dsl")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response_old),
+        ):
+            first = CliRunner().invoke(app, ["install"])
+        assert first.exit_code == 0
+        dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
+        assert dsl_file.read_bytes() == b"old dsl"
+
+        mock_response_new = _mock_urlopen_response(b"new dsl content")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response_new),
+        ):
+            second = CliRunner().invoke(app, ["install"])
+        assert second.exit_code == 0
+        assert dsl_file.read_bytes() == b"new dsl content"
+
+    def test_download_dsl_spec_network_error(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch(
+                "urllib.request.urlopen",
+                side_effect=urllib.error.URLError("connection refused"),
+            ),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Failed to download DSL spec" in result.output
+        assert "connection refused" in result.output
+
+    def test_download_dsl_spec_http_error(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch(
+                "urllib.request.urlopen",
+                side_effect=urllib.error.HTTPError(
+                    "https://example.com", 404, "Not Found", {}, None
+                ),
+            ),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Failed to download DSL spec" in result.output
+
+    def test_download_dsl_spec_timeout(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch(
+                "urllib.request.urlopen",
+                side_effect=urllib.error.URLError(TimeoutError("timed out")),
+            ),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Failed to download DSL spec" in result.output
+        assert "timed out" in result.output
+
+    def test_download_dsl_spec_empty_response(self, tmp_path: Path) -> None:
+        mock_response = _mock_urlopen_response(b"")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
+        assert dsl_file.is_file()
+        assert dsl_file.read_bytes() == b""
+
+    def test_download_dsl_spec_file_write_error(self, tmp_path: Path) -> None:
+        mock_response = _mock_urlopen_response(b"dsl content")
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=mock_response),
+            mock.patch.object(Path, "write_bytes", side_effect=OSError("permission denied")),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
