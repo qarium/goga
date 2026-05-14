@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import shutil
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import click
@@ -9,6 +11,8 @@ import yaml
 from goga.config import load_config
 
 AGENT_DIRS: dict[str, str] = {"claude": ".claude"}
+
+DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md"
 
 
 def _resolve_target_dir(agent: str) -> Path:
@@ -43,6 +47,18 @@ def _install_skills(source: Path, target: Path) -> list[str]:
             shutil.copytree(entry, dest)
             installed.append(entry.name)
     return sorted(installed)
+
+
+def _download_dsl_spec(target: Path) -> None:
+    dsl_path = target / "skills" / "goga-cell" / "dsl.md"
+    try:
+        with urllib.request.urlopen(DSL_SPEC_URL, timeout=30) as response:
+            data = response.read()
+    except urllib.error.HTTPError as e:
+        raise OSError(f"Failed to download DSL spec: HTTP {e.code} {e.reason}") from e
+    except urllib.error.URLError as e:
+        raise OSError(f"Failed to download DSL spec: {e.reason}") from e
+    dsl_path.write_bytes(data)
 
 
 def _cleanup_goga_skills(target: Path) -> int:
@@ -95,6 +111,7 @@ def install(ctx: click.Context, agent: str | None) -> None:
         _cleanup_goga_skills(target)
         commands = _install_commands(source, target)
         skills = _install_skills(source, target)
+        _download_dsl_spec(target)
         _print_summary(commands, skills, target)
     except OSError as e:
         click.echo(f"Error: {e}", err=True)

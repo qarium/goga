@@ -227,7 +227,13 @@ Annotations: |
     5. Скопировать из исходного каталога в целевой:
        - goga/agent/commands/* → ~/.claude/commands/goga/
        - goga/agent/skills/* → ~/.claude/skills/
-    6. Вывести список установленных скиллов и команд
+    6. Скачать DSL спецификацию для скилла goga-cell:
+       - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
+       - HTTP GET запрос через urllib.request (стандартная библиотека)
+       - Записать ответ в файл: <целевой_каталог>/skills/goga-cell/dsl.md
+       - При ошибке сети (timeout, HTTP error, connection refused) —
+         вывести ошибку в stderr (click.echo с err=True), exit 1
+    7. Вывести список установленных скиллов и команд
 
     Требования:
     - Перед установкой skills удалить все подпапки с префиксом goga- в целевом каталоге skills/
@@ -235,6 +241,10 @@ Annotations: |
     - Существующий контент других расширений в skills/ и commands/ не затрагивать
     - CLAUDE.md, settings.json, README.md целевого каталога не затрагивать
     - При отсутствии целевого каталога — создать
+    - DSL спецификация (dsl.md) скачивается из внешнего репозитория при каждой установке
+    - Файл dsl.md НЕ поставляется вместе с пакетом goga
+    - Использовать urllib.request из стандартной библиотеки (без внешних зависимостей)
+    - При ошибке скачивания — прервать установку с кодом 1
     - Код возврата: 0 при успехе, 1 при ошибке
 
 "schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
