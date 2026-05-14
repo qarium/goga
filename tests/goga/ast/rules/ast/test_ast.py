@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import inspect
+from typing import ClassVar
 
-import pytest
-
-from goga.ast.errors import ASTRuleError
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentRoot
 from goga.ast.nodes.header import (
     HeaderNode,
+    ImportsNode,
     ImportTypeItemNode,
     ImportUsageItemNode,
-    ImportsNode,
 )
 from goga.ast.rules.ast.ast import (
     EmbeddedTypeHasLowLevel,
-    ImportTypeExists,
     ImportsHasNotCyclicalDeps,
+    ImportTypeExists,
 )
 from goga.ast.rules.base.ast import ASTRule
 
@@ -32,7 +30,7 @@ def _make_header(imports=None):
 class TestContract:
     """Contract tests — verify all 3 classes exist, inherit ASTRule, have correct check signature."""
 
-    CLASSES = [
+    CLASSES: ClassVar[list[type]] = [
         ImportsHasNotCyclicalDeps,
         ImportTypeExists,
         EmbeddedTypeHasLowLevel,
@@ -55,9 +53,7 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.ast.ast", (
-                f"{cls.__name__} has wrong module: {cls.__module__}"
-            )
+            assert cls.__module__ == "goga.ast.rules.ast.ast", f"{cls.__name__} has wrong module: {cls.__module__}"
 
 
 class TestImportsHasNotCyclicalDeps:
@@ -139,7 +135,9 @@ class TestImportTypeExists:
         )
         doc_a = DocumentRoot(
             path="a",
-            header=_make_header(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MyRoutine"}, from_path="b")])),
+            header=_make_header(
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MyRoutine"}, from_path="b")])
+            ),
         )
         tree = [doc_a, doc_b]
         rule = ImportTypeExists(tree=tree)
@@ -152,18 +150,25 @@ class TestImportTypeExists:
         doc_b = DocumentRoot(path=from_path, header=_make_header(), body=BodyNode())
         doc_a = DocumentRoot(
             path="a",
-            header=_make_header(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MissingType"}, from_path=from_path)])),
+            header=_make_header(
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"MissingType"}, from_path=from_path)])
+            ),
         )
         tree = [doc_a, doc_b]
         rule = ImportTypeExists(tree=tree)
         errors = rule.check(doc_a)
         assert len(errors) >= 1
-        assert any("not_found" in e.rule or "not found" in e.message.lower() or "not defined" in e.message.lower() for e in errors)
+        assert any(
+            "not_found" in e.rule or "not found" in e.message.lower() or "not defined" in e.message.lower()
+            for e in errors
+        )
 
     def test_path_not_exists_skipped(self):
         doc_a = DocumentRoot(
             path="a",
-            header=_make_header(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"X"}, from_path="/nonexistent/path")])),
+            header=_make_header(
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"X"}, from_path="/nonexistent/path")])
+            ),
         )
         rule = ImportTypeExists(tree=[doc_a])
         errors = rule.check(doc_a)
@@ -177,7 +182,9 @@ class TestImportTypeExists:
         doc_b.header.types = ["HeaderType"]
         doc_a = DocumentRoot(
             path="a",
-            header=_make_header(imports=ImportsNode(types=[ImportTypeItemNode(type_name={"HeaderType"}, from_path="b")])),
+            header=_make_header(
+                imports=ImportsNode(types=[ImportTypeItemNode(type_name={"HeaderType"}, from_path="b")])
+            ),
         )
         tree = [doc_a, doc_b]
         rule = ImportTypeExists(tree=tree)

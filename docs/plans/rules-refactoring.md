@@ -486,13 +486,13 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] Переместить `tests/goga/ast/rules/test_document.py` → соответствующие файлы в подкаталогах (содержимое уже покрыто задачами 2–8, дублирование недопустимо — убедиться что новые тесты покрывают все кейсы из старого файла)
-- [ ] Переместить `tests/goga/ast/rules/test_import_item_is_valid.py` → `tests/goga/ast/rules/document/imports/test_document.py` (объединить с тестами из Task 3)
-- [ ] Переместить `tests/goga/ast/rules/test_import_usage_exists.py` → `tests/goga/ast/rules/document/imports/test_document.py` (объединить с тестами из Task 3)
-- [ ] Переместить `tests/goga/ast/rules/test_location_is_required.py` → `tests/goga/ast/rules/document/structure/test_document.py` (объединить с тестами из Task 5)
-- [ ] Удалить или обновить старые тестовые файлы, убедившись что покрытие не уменьшилось
-- [ ] Запустить все тесты: `python -m pytest tests/ -v` — все должны пройти
-- [ ] Линт: `ruff check tests/goga/ast/rules/ && ruff format tests/goga/ast/rules/`
+- [x] Переместить `tests/goga/ast/rules/test_document.py` → соответствующие файлы в подкаталогах (содержимое уже покрыто задачами 2–8, дублирование недопустимо — убедиться что новые тесты покрывают все кейсы из старого файла)
+- [x] Переместить `tests/goga/ast/rules/test_import_item_is_valid.py` → `tests/goga/ast/rules/document/imports/test_document.py` (объединить с тестами из Task 3)
+- [x] Переместить `tests/goga/ast/rules/test_import_usage_exists.py` → `tests/goga/ast/rules/document/imports/test_document.py` (объединить с тестами из Task 3)
+- [x] Переместить `tests/goga/ast/rules/test_location_is_required.py` → `tests/goga/ast/rules/document/structure/test_document.py` (объединить с тестами из Task 5)
+- [x] Удалить или обновить старые тестовые файлы, убедившись что покрытие не уменьшилось
+- [x] Запустить все тесты: `python -m pytest tests/ -v` — все должны пройти
+- [x] Линт: `ruff check tests/goga/ast/rules/ && ruff format tests/goga/ast/rules/`
 
 ### Task 11: Интеграционные тесты для `rules` (интеграционные тесты)
 

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import inspect
+from typing import ClassVar
 
-import pytest
-
-from goga.ast.errors import DocumentRuleError
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, RoutineTypeNode
+from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
-from goga.ast.nodes.header import ImportTypeItemNode, ImportsNode
+from goga.ast.nodes.header import HeaderNode, ImportsNode, ImportTypeItemNode
 from goga.ast.rules.base.document import DocumentRule
 from goga.ast.rules.document.mutation.document import (
     EmbeddedEntityCanNotHasMutations,
@@ -19,7 +18,7 @@ from goga.ast.rules.document.mutation.document import (
 class TestContract:
     """Contract tests — verify all 3 classes exist, inherit DocumentRule, have correct check signature."""
 
-    CLASSES = [
+    CLASSES: ClassVar[list[type]] = [
         MutationExists,
         MutationIsValid,
         EmbeddedEntityCanNotHasMutations,
@@ -56,9 +55,6 @@ class TestContract:
 
 
 def _make_header(data=None, imports=None):
-    from goga.ast.nodes.common import AnnotationsNode
-    from goga.ast.nodes.header import HeaderNode
-
     return HeaderNode(
         data=data or {},
         imports=imports or ImportsNode(),
@@ -148,7 +144,11 @@ class TestMutationIsValid:
         rule = MutationIsValid()
         errors = rule.check(node)
         assert len(errors) == 1
-        assert "self_mutation" in errors[0].message.lower() or "itself" in errors[0].message.lower() or "self" in errors[0].message.lower()
+        assert (
+            "self_mutation" in errors[0].message.lower()
+            or "itself" in errors[0].message.lower()
+            or "self" in errors[0].message.lower()
+        )
 
     def test_mutation_references_other(self):
         entity = EntityTypeNode(name="MyEntity", mutations=[("OtherType", "path")])

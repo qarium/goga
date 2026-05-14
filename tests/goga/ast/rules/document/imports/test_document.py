@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import inspect
+import shutil
+from typing import ClassVar
 
-from goga.ast.errors import DocumentRuleError
+from goga.ast.nodes.body import BodyNode, EntityTypeNode, PropertyNode
+from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import (
+    HeaderNode,
+    ImportsNode,
     ImportTypeItemNode,
     ImportUsageItemNode,
-    ImportsNode,
 )
 from goga.ast.rules.base.document import DocumentRule
 from goga.ast.rules.document.imports.document import (
@@ -15,16 +19,16 @@ from goga.ast.rules.document.imports.document import (
     ImportHasValidFromPath,
     ImportIsUsed,
     ImportItemIsValid,
-    ImportUsageExists,
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
+    ImportUsageExists,
 )
 
 
 class TestContract:
     """Contract tests — verify all 7 classes exist, inherit DocumentRule, have correct check signature."""
 
-    CLASSES = [
+    CLASSES: ClassVar[list[type]] = [
         ImportsCanNotBeEmpty,
         ImportsHasOnlyValidKeys,
         ImportItemIsValid,
@@ -294,25 +298,21 @@ class TestImportHasValidFromPath:
         assert len(errors) == 1
         assert "not found" in errors[0].message.lower()
 
-    def test_valid_from_path(self):
-        import os
-
-        cell_dir = os.path.join(os.getcwd(), "test_cell_for_import")
-        os.makedirs(cell_dir, exist_ok=True)
-        try:
-            item = ImportTypeItemNode(type_name={"Foo"}, from_path=cell_dir)
-            root = DocumentRoot(
-                path="test.md",
-                header=_make_header(
-                    data={"Imports": {}},
-                    imports=ImportsNode(types=[item]),
-                ),
-            )
-            node = DocumentNode(root=root)
-            rule = ImportHasValidFromPath()
-            assert rule.check(node) == []
-        finally:
-            os.rmdir(cell_dir)
+    def test_valid_from_path(self, tmp_path, monkeypatch):
+        cell_dir = tmp_path / "test_cell_for_import"
+        cell_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        item = ImportTypeItemNode(type_name={"Foo"}, from_path=str(cell_dir))
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        assert rule.check(node) == []
 
 
 class TestImportHasNotDuplicate:
@@ -368,8 +368,6 @@ class TestImportIsUsed:
         assert "not used" in errors[0].message.lower()
 
     def test_type_used_in_annotation_returns_empty(self):
-        from goga.ast.nodes.common import AnnotationsNode
-
         item = ImportTypeItemNode(type_name={"UsedType"}, from_path="bar")
         root = DocumentRoot(
             path="test.md",
@@ -398,9 +396,6 @@ class TestImportIsUsed:
         assert rule.check(node) == []
 
     def test_usage_not_checked_in_signatures(self):
-        from goga.ast.nodes.body import EntityTypeNode
-        from goga.ast.nodes.common import AnnotationsNode
-
         item = ImportUsageItemNode(usage_name={"SomeUsage"}, from_path="bar")
         entity = EntityTypeNode(
             name="MyEntity",
@@ -423,9 +418,6 @@ class TestImportIsUsed:
         assert "not used" in errors[0].message.lower()
 
     def test_type_used_in_signature(self):
-        from goga.ast.nodes.body import EntityTypeNode
-        from goga.ast.nodes.common import AnnotationsNode
-
         item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
         entity = EntityTypeNode(
             name="Entity",
@@ -445,9 +437,6 @@ class TestImportIsUsed:
         assert rule.check(node) == []
 
     def test_type_used_in_property_type(self):
-        from goga.ast.nodes.body import EntityTypeNode, PropertyNode
-        from goga.ast.nodes.common import AnnotationsNode
-
         item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
         entity = EntityTypeNode(
             name="Entity",
@@ -468,8 +457,6 @@ class TestImportIsUsed:
         assert rule.check(node) == []
 
     def test_type_used_with_alias(self):
-        from goga.ast.nodes.common import AnnotationsNode
-
         item = ImportTypeItemNode(type_name={"OriginalName"}, from_path="bar", alias="Alias")
         root = DocumentRoot(
             path="test.md",
@@ -484,13 +471,226 @@ class TestImportIsUsed:
         assert rule.check(node) == []
 
 
+class TestImportItemIsValidExtra:
+    """Extra cases from old test_import_item_is_valid.py."""
+
+    def test_mixed_items_all_valid(self):
+        item_t = ImportTypeItemNode(type_name={"Foo"}, from_path="bar")
+        item_u = ImportUsageItemNode(usage_name={"my_usage"}, from_path="baz")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item_t], usages=[item_u]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportItemIsValid()
+        assert rule.check(node) == []
+
+    def test_empty_type_error_message_template(self):
+        item = ImportTypeItemNode(type_name=set(), from_path="some/path")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportItemIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (
+            "Import from 'some/path' has no Types listed — specify at least one type to import"
+        )
+
+    def test_empty_usage_error_message_template(self):
+        item = ImportUsageItemNode(usage_name=set(), from_path="some/path")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportItemIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (
+            "Import from 'some/path' has no Usages listed — specify at least one usage to import"
+        )
+
+    def test_both_empty_type_and_empty_usage(self):
+        item_t = ImportTypeItemNode(type_name=set(), from_path="a")
+        item_u = ImportUsageItemNode(usage_name=set(), from_path="b")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item_t], usages=[item_u]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportItemIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 2
+        assert all(e.rule == "import_item_is_valid" for e in errors)
+
+
+class TestImportUsageExistsExtra:
+    """Extra cases from old test_import_usage_exists.py."""
+
+    def test_multiple_usage_files_exist(self, tmp_path):
+        usages_dir = tmp_path / "cell" / ".usages"
+        usages_dir.mkdir(parents=True)
+        (usages_dir / "usage_a.md").write_text("a")
+        (usages_dir / "usage_b.md").write_text("b")
+
+        item = ImportUsageItemNode(
+            usage_name={"usage_a", "usage_b"},
+            from_path=str(tmp_path / "cell"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        assert rule.check(node) == []
+
+    def test_error_message_template(self, tmp_path):
+        cell_dir = tmp_path / "some_cell"
+        cell_dir.mkdir()
+        expected_path = str(cell_dir / ".usages" / "missing.md")
+        item = ImportUsageItemNode(
+            usage_name={"missing"},
+            from_path=str(cell_dir),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].message == (f"Usage 'missing' does not exist on filesystem by path '{expected_path}'")
+
+    def test_one_missing_one_found(self, tmp_path):
+        usages_dir = tmp_path / "cell" / ".usages"
+        usages_dir.mkdir(parents=True)
+        (usages_dir / "found_usage.md").write_text("found")
+
+        item = ImportUsageItemNode(
+            usage_name={"found_usage", "missing_usage"},
+            from_path=str(tmp_path / "cell"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "missing_usage" in errors[0].message
+
+    def test_type_items_skipped(self):
+        item = ImportTypeItemNode(type_name={"SomeType"}, from_path="some/path")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        assert rule.check(node) == []
+
+    def test_mixed_type_skipped_usage_checked(self, tmp_path):
+        nonexistent = tmp_path / "nonexistent"
+        nonexistent.mkdir()
+        item_t = ImportTypeItemNode(type_name={"SomeType"}, from_path=str(tmp_path))
+        item_u = ImportUsageItemNode(
+            usage_name={"some_usage"},
+            from_path=str(nonexistent),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item_t], usages=[item_u]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportUsageExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "import_usage_exists"
+
+
+class TestImportHasValidFromPathExtra:
+    """Extra cases from old test_document.py."""
+
+    def test_from_deep_nested_path(self, tmp_path, monkeypatch):
+        src = tmp_path / "some" / "deep" / "path"
+        src.mkdir(parents=True)
+        (src / "CODEMANIFEST").write_text("Types:\n  Foo:\n")
+
+        item = ImportTypeItemNode(type_name={"Foo"}, from_path=str(src))
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+        )
+        root.path = str(tmp_path)
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        monkeypatch.chdir(tmp_path)
+        assert rule.check(node) == []
+
+    def test_absolute_path_outside_project(self, tmp_path, monkeypatch):
+        real_outside = tmp_path.parent / f"goga_test_outside_{id(tmp_path)}"
+        real_outside.mkdir(parents=True, exist_ok=True)
+        (real_outside / "CODEMANIFEST").write_text("Types:\n  Bar:\n")
+        try:
+            item = ImportTypeItemNode(type_name={"Bar"}, from_path=str(real_outside))
+            root = DocumentRoot(
+                path="test.md",
+                header=_make_header(
+                    data={"Imports": {}},
+                    imports=ImportsNode(types=[item]),
+                ),
+            )
+            root.path = str(tmp_path)
+            node = DocumentNode(root=root)
+            rule = ImportHasValidFromPath()
+            monkeypatch.chdir(tmp_path)
+            errors = rule.check(node)
+            assert len(errors) == 1
+            assert "outside the project root" in errors[0].message
+        finally:
+            shutil.rmtree(real_outside, ignore_errors=True)
+
+
 # --- Helpers ---
 
 
 def _make_header(data=None, imports=None, annotations=None):
-    from goga.ast.nodes.common import AnnotationsNode
-    from goga.ast.nodes.header import HeaderNode, ImportsNode
-
     return HeaderNode(
         data=data or {},
         imports=imports or ImportsNode(),
@@ -499,6 +699,4 @@ def _make_header(data=None, imports=None, annotations=None):
 
 
 def _make_body(entities=None, routines=None):
-    from goga.ast.nodes.body import BodyNode
-
     return BodyNode(entities=entities or [], routines=routines or [])

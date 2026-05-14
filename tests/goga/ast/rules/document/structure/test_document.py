@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import inspect
+from typing import ClassVar
 
-import pytest
-
-from goga.ast.errors import DocumentRuleError
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
-from goga.ast.nodes.header import ImportTypeItemNode, ImportUsageItemNode, ImportsNode
+from goga.ast.nodes.header import HeaderNode, ImportsNode, ImportTypeItemNode
 from goga.ast.rules.base.document import DocumentRule
 from goga.ast.rules.document.structure.document import (
     EntitiesAndRoutinesHasNotConflicts,
@@ -23,7 +21,7 @@ from goga.ast.rules.document.structure.document import (
 class TestContract:
     """Contract tests — verify all 6 classes exist, inherit DocumentRule, have correct check signature."""
 
-    CLASSES = [
+    CLASSES: ClassVar[list[type]] = [
         EntitiesAndRoutinesHasNotConflicts,
         EntityHasOnlyValidKeys,
         RoutineHasOnlyValidKeys,
@@ -529,10 +527,90 @@ class TestLocationIsRequired:
         assert len(errors) == 2
 
 
-def _make_header(data=None, imports=None, annotations=None):
-    from goga.ast.nodes.common import AnnotationsNode
-    from goga.ast.nodes.header import HeaderNode, ImportsNode
+class TestLocationIsRequiredExtra:
+    """Extra cases from old test_location_is_required.py."""
 
+    def test_dotfile_location_valid(self):
+        entity = EntityTypeNode(name="DotEntity", data={"location": ".gitignore"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        assert rule.check(node) == []
+
+    def test_multi_dot_location_valid(self):
+        entity = EntityTypeNode(name="CompEntity", data={"location": "my.component.py"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        assert rule.check(node) == []
+
+    def test_trailing_dot_error(self):
+        entity = EntityTypeNode(name="DotEntity", data={"location": "entity."})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    def test_only_dot_error(self):
+        entity = EntityTypeNode(name="DotOnlyEntity", data={"location": "."})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    def test_parent_directory_path_error(self):
+        entity = EntityTypeNode(name="ParentEntity", data={"location": "../entity.py"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[entity]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "containing directory path" in errors[0].message
+
+    def test_routine_with_path_contains_path_error(self):
+        routine = RoutineTypeNode(name="sub_tools", data={"location": "sub/tools.py"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(routines=[routine]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "containing directory path" in errors[0].message
+
+    def test_routine_without_extension_error(self):
+        routine = RoutineTypeNode(name="routinescript", data={"location": "routinescript"})
+        root = DocumentRoot(path="my_doc", body=BodyNode(routines=[routine]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "without file extension" in errors[0].message
+
+    def test_multiple_entities_some_missing_location(self):
+        good = EntityTypeNode(name="GoodEntity", data={"location": "entity.py"})
+        bad = EntityTypeNode(name="BadEntity")
+        ugly = EntityTypeNode(name="UglyEntity", data={"location": ""})
+        root = DocumentRoot(path="my_doc", body=BodyNode(entities=[good, bad, ugly]))
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        errors = rule.check(node)
+        assert len(errors) == 2
+        assert errors[0].rule == "location_is_required"
+        assert "BadEntity" in errors[0].message
+        assert errors[1].rule == "location_is_required"
+        assert "UglyEntity" in errors[1].message
+
+    def test_empty_document_no_error(self):
+        root = DocumentRoot(path="my_doc")
+        node = DocumentNode(root=root)
+        rule = LocationIsRequired()
+        assert rule.check(node) == []
+
+
+def _make_header(data=None, imports=None, annotations=None):
     return HeaderNode(
         data=data or {},
         imports=imports or ImportsNode(),

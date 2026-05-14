@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import inspect
-from pathlib import Path
+import urllib.error
+from typing import ClassVar
 from unittest.mock import patch
 
-import pytest
-
-from goga.ast.errors import DocumentRuleError
-from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
+from goga.ast.nodes.body import BodyNode, EntityTypeNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import (
-    ImportTypeItemNode,
-    ImportUsageItemNode,
+    HeaderNode,
     ImportsNode,
+    ImportTypeItemNode,
     UsageItemNode,
     UsagesNode,
 )
@@ -29,7 +27,7 @@ from goga.ast.rules.document.usages.document import (
 class TestContract:
     """Contract tests — verify all 4 classes exist, inherit DocumentRule, have correct check signature."""
 
-    CLASSES = [
+    CLASSES: ClassVar[list[type]] = [
         AllUsagesIsUsed,
         UsageFilepathExists,
         UsageUrlIsAccessible,
@@ -253,11 +251,8 @@ class TestUsageUrlIsAccessible:
 
     @patch("urllib.request.urlopen")
     def test_not_accessible_returns_error(self, mock_urlopen):
-        import urllib.error
 
-        mock_urlopen.side_effect = urllib.error.HTTPError(
-            "https://example.com", 404, "Not Found", {}, None
-        )
+        mock_urlopen.side_effect = urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None)
 
         usage_item = UsageItemNode(
             name="remote",
@@ -275,7 +270,6 @@ class TestUsageUrlIsAccessible:
 
     @patch("urllib.request.urlopen")
     def test_request_failed_returns_error(self, mock_urlopen):
-        import urllib.error
 
         mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
 
@@ -321,11 +315,8 @@ class TestUsageUrlIsAccessible:
 
     @patch("urllib.request.urlopen")
     def test_head_405_fallback_get_ok(self, mock_urlopen):
-        import urllib.error
 
-        head_error = urllib.error.HTTPError(
-            "https://example.com", 405, "Method Not Allowed", {}, None
-        )
+        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
         mock_response = type("Response", (), {"status": 200})()
         mock_urlopen.side_effect = [head_error, mock_response]
 
@@ -426,10 +417,53 @@ class TestUsageLinksHasNotConflicts:
         assert rule.check(node) == []
 
 
-def _make_header(data=None, imports=None, annotations=None, usages=None):
-    from goga.ast.nodes.common import AnnotationsNode
-    from goga.ast.nodes.header import HeaderNode, ImportsNode, UsagesNode
+class TestUsageFilepathExistsExtra:
+    """Extra cases from old test_document.py."""
 
+    def test_filepath_and_url_both_set_skipped(self, tmp_path, monkeypatch):
+        usage_item = UsageItemNode(
+            name="both",
+            annotations=AnnotationsNode(root=None, filepath=".usages/old.md", url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        root.path = str(tmp_path)
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        monkeypatch.chdir(tmp_path)
+        assert rule.check(node) == []
+
+    def test_empty_filepath_skipped(self, tmp_path, monkeypatch):
+        usage_item = UsageItemNode(
+            name="empty",
+            annotations=AnnotationsNode(root=None, filepath=""),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        root.path = str(tmp_path)
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        monkeypatch.chdir(tmp_path)
+        assert rule.check(node) == []
+
+    def test_none_filepath_skipped(self, tmp_path, monkeypatch):
+        usage_item = UsageItemNode(name="none", annotations=AnnotationsNode(root=None))
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        root.path = str(tmp_path)
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        monkeypatch.chdir(tmp_path)
+        assert rule.check(node) == []
+
+
+def _make_header(data=None, imports=None, annotations=None, usages=None):
     return HeaderNode(
         data=data or {},
         imports=imports or ImportsNode(),
