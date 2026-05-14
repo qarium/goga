@@ -92,7 +92,8 @@ class UsageFilepathExists(DocumentRule):
                 continue
 
             resolved = Path(filepath).resolve()
-            if not resolved.is_relative_to(cwd):
+            usages_dir = (cwd / ".goga" / "usages").resolve()
+            if not resolved.is_relative_to(usages_dir):
                 errors.append(
                     DocumentRuleError(
                         message=f"Usage '{item.name}' filepath '{filepath}' is not built from the root of the project",

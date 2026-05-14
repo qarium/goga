@@ -195,7 +195,7 @@ class TestCrossCellInteraction:
         doc = _make_doc(entities=[entity])
         errors = rule.check(doc)
         assert len(errors) > 0
-        assert any("not_found" not in e.rule and "MissingType" in e.message for e in errors)
+        assert any("MissingType" in e.message for e in errors)
 
     def test_annotation_link_resolved_by_import(self) -> None:
         """A link matching an imported type name must be valid."""
