@@ -416,12 +416,12 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 7 — правило проверки аннотаций
-- [ ] **Контрактные тесты**: создать `tests/goga/ast/rules/document/annotations/__init__.py` и `tests/goga/ast/rules/document/annotations/test_document.py` — проверить доступность `AnnotationLinksExists`, наследование от DocumentRule, сигнатуру check (ожидаемо падает)
-- [ ] **Код**: создать `goga/ast/rules/document/annotations/__init__.py` с реэкспортом
-- [ ] **Код**: создать `goga/ast/rules/document/annotations/document.py` — извлечь класс, обновить импорты: `from ...base.document import DocumentRule`, `from ..imports.tools import signature_contains_type_name`, `from ....nodes import ...`
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/annotations/test_document.py -v`
-- [ ] **Логические тесты**: в `test_document.py` добавить:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 7 — правило проверки аннотаций
+- [x] **Контрактные тесты**: создать `tests/goga/ast/rules/document/annotations/__init__.py` и `tests/goga/ast/rules/document/annotations/test_document.py` — проверить доступность `AnnotationLinksExists`, наследование от DocumentRule, сигнатуру check (ожидаемо падает)
+- [x] **Код**: создать `goga/ast/rules/document/annotations/__init__.py` с реэкспортом
+- [x] **Код**: создать `goga/ast/rules/document/annotations/document.py` — извлечь класс, обновить импорты: `from ...base.document import DocumentRule`, `from ..imports.tools import signature_contains_type_name`, `from ....nodes import ...`
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/annotations/test_document.py -v`
+- [x] **Логические тесты**: в `test_document.py` добавить:
   - ссылка найдена в imports (type) → []
   - ссылка найдена в imports (alias) → []
   - ссылка найдена в usages → []
@@ -429,9 +429,9 @@
   - ссылка найдена в сигнатуре через `signature_contains_type_name` → []
   - ссылка не найдена → "not_found"
   - проверка разделителей: `param_` и `param-` не являются разделителями (ссылка не найдена); `param:` — разделитель (ссылка найдена)
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/annotations/ -v` — исправлять код
-- [ ] **Перепроверка контрактов**: проверить доступность `AnnotationLinksExists` из `goga.ast.rules.document.annotations`
-- [ ] **Линт**: `ruff check goga/ast/rules/document/annotations/ && ruff format goga/ast/rules/document/annotations/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/annotations/ -v` — исправлять код
+- [x] **Перепроверка контрактов**: проверить доступность `AnnotationLinksExists` из `goga.ast.rules.document.annotations`
+- [x] **Линт**: `ruff check goga/ast/rules/document/annotations/ && ruff format goga/ast/rules/document/annotations/`
 
 ### Task 8: Ячейка `ast` — 3 AST правила (TDD кодирование)
 
