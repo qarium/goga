@@ -8,6 +8,7 @@
 - **header**: "Тип ревью"
 - **multiSelect**: false
 - **options**:
+  - **label**: "architecture", **description**: "Ревью плана архитектуры из docs/arch/"
   - **label**: "design", **description**: "Ревью дизайн-документа из docs/design/"
   - **label**: "plan", **description**: "Ревью плана реализации из docs/plans/"
   - **label**: "cell", **description**: "Ревью ячейки (CODEMANIFEST и файловой структуры)"
@@ -16,6 +17,12 @@
 Аргументы: $ARGUMENTS
 
 Запомните исходные аргументы на протяжении всей сессии.
+
+## Architecture
+
+1. Проверьте, существует ли `docs/arch/<skill-arg>.md`.
+2. **Не существует** — остановитесь и попросите пользователя сначала выполнить `/goga:brainstorm`.
+3. **Существует** — используйте **Skill tool** для вызова `goga-review-arch` с `skill-arg` в качестве аргумента.
 
 ## Design
 
