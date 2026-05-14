@@ -323,19 +323,19 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 4 — 4 правила проверки usages
-- [ ] **Контрактные тесты**: создать `tests/goga/ast/rules/document/usages/__init__.py` и `tests/goga/ast/rules/document/usages/test_document.py` — проверить доступность 4 классов, наследование от DocumentRule, сигнатуру check (ожидаемо падают)
-- [ ] **Код**: создать `goga/ast/rules/document/usages/__init__.py` с реэкспортом
-- [ ] **Код**: создать `goga/ast/rules/document/usages/document.py` — извлечь 4 класса, обновить импорты на относительные
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/usages/test_document.py -v`
-- [ ] **Логические тесты**: в `test_document.py` добавить:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 4 — 4 правила проверки usages
+- [x] **Контрактные тесты**: создать `tests/goga/ast/rules/document/usages/__init__.py` и `tests/goga/ast/rules/document/usages/test_document.py` — проверить доступность 4 классов, наследование от DocumentRule, сигнатуру check (ожидаемо падают)
+- [x] **Код**: создать `goga/ast/rules/document/usages/__init__.py` с реэкспортом
+- [x] **Код**: создать `goga/ast/rules/document/usages/document.py` — извлечь 4 класса, обновить импорты на относительные
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/usages/test_document.py -v`
+- [x] **Логические тесты**: в `test_document.py` добавить:
   - `AllUsagesIsUsed`: неиспользуемая практика → "unused"; используемая в аннотации → []
   - `UsageFilepathExists`: путь без `.goga/usages/` → "incorrect_path"; путь выходит за корень → "outside_usages"; файл не существует → "not_found"; существует → []; inline usage → пропуск; URL usage → пропуск
   - `UsageUrlIsAccessible`: HTTP 200 → []; HTTP 404 → "not_accessible"; network error → "request_failed"; inline/filepath → пропуск; использовать `mock.patch` для HTTP-запросов
   - `UsageLinksHasNotConflicts`: конфликт с импортом → "import_conflict"; конфликт с entity → "entity_conflict"; нет конфликтов → []
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/usages/ -v` — исправлять код
-- [ ] **Перепроверка контрактов**: проверить доступность 4 классов из `goga.ast.rules.document.usages`
-- [ ] **Линт**: `ruff check goga/ast/rules/document/usages/ && ruff format goga/ast/rules/document/usages/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/usages/ -v` — исправлять код
+- [x] **Перепроверка контрактов**: проверить доступность 4 классов из `goga.ast.rules.document.usages`
+- [x] **Линт**: `ruff check goga/ast/rules/document/usages/ && ruff format goga/ast/rules/document/usages/`
 
 ### Task 5: Ячейка `document/structure` — 6 правил структуры entity/routine (TDD кодирование)
 

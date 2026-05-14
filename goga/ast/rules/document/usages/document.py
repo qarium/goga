@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from ....errors import DocumentRuleError
+from ....nodes.header import ImportTypeItemNode, ImportUsageItemNode
+from ...base.document import DocumentRule
+
+if TYPE_CHECKING:
+    from ....nodes import DocumentNode
+
+_OK_STATUS = 200
+_METHOD_NOT_ALLOWED = 405
+_REQUEST_TIMEOUT = 10
+
+
+class AllUsagesIsUsed(DocumentRule):
+    """Rule: every usage declared in the header must appear in links of at least one AnnotationsNode."""
+
+    def __init__(self) -> None:
+        super().__init__(name="all_usages_is_used")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        usage_names = [item.name for item in node.root.header.usages.items]
+        if not usage_names:
+            return []
+
+        all_links: set[str] = set()
+
+        all_links.update(node.root.header.annotations.links)
+
+        for usage_item in node.root.header.usages.items:
+            all_links.update(usage_item.annotations.links)
+
+        for entity in node.root.body.entities:
+            all_links.update(entity.annotations.links)
+            for method in entity.methods:
+                all_links.update(method.annotations.links)
+            for prop in entity.properties:
+                all_links.update(prop.annotations.links)
+
+        for routine in node.root.body.routines:
+            all_links.update(routine.annotations.links)
+
+        errors: list[DocumentRuleError] = []
+        for usage_name in usage_names:
+            if usage_name not in all_links:
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Usage '{usage_name}' is declared but not referenced in any annotation"
+                            f" — either use it or remove the declaration"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=node,
+                    )
+                )
+
+        return errors
+
+
+class UsageFilepathExists(DocumentRule):
+    """Rule: every usage with a filepath must point to an existing file within the project root."""
+
+    def __init__(self) -> None:
+        super().__init__(name="usage_filepath_exists")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+        cwd = Path.cwd().resolve()
+
+        for item in node.root.header.usages.items:
+            filepath = item.annotations.filepath
+            if not filepath:
+                continue
+            if item.annotations.url:
+                continue
+
+            if not filepath.startswith(".goga/usages/"):
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' is not built from '.goga/usages/'",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+                continue
+
+            resolved = Path(filepath).resolve()
+            if not resolved.is_relative_to(cwd):
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' is not built from the root of the project",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+                continue
+
+            if not resolved.exists():
+                errors.append(
+                    DocumentRuleError(
+                        message=f"Usage '{item.name}' filepath '{filepath}' does not exist on filesystem",
+                        rule=self.name,
+                        document=node.root,
+                        node=item,
+                    )
+                )
+
+        return errors
+
+
+class UsageUrlIsAccessible(DocumentRule):
+    """Rule: every usage with a URL must be accessible via HTTP (status 200)."""
+
+    def __init__(self) -> None:
+        super().__init__(name="usage_url_is_accessible")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+
+        for item in node.root.header.usages.items:
+            url = item.annotations.url
+            if not url:
+                continue
+            if item.annotations.filepath:
+                continue
+
+            errors.extend(self._check_url(item, url))
+
+        return errors
+
+    def _check_url(self, item, url: str) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+        try:
+            request = urllib.request.Request(url, method="HEAD")
+            response = urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT)
+            if response.status != _OK_STATUS:
+                errors.append(self._not_accessible(item, url, response.status))
+        except urllib.error.HTTPError as e:
+            if e.code == _METHOD_NOT_ALLOWED:
+                errors.extend(self._fallback_get(item, url))
+            else:
+                errors.append(self._not_accessible(item, url, e.code))
+        except urllib.error.URLError as e:
+            errors.append(self._request_failed(item, url, e.reason))
+        except Exception as e:
+            errors.append(self._request_failed(item, url, e))
+        return errors
+
+    def _fallback_get(self, item, url: str) -> list[DocumentRuleError]:
+        try:
+            response = urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT)
+            if response.status != _OK_STATUS:
+                return [self._not_accessible(item, url, response.status)]
+        except Exception as get_error:
+            return [self._request_failed(item, url, get_error)]
+        return []
+
+    def _not_accessible(self, item, url: str, status_code: int) -> DocumentRuleError:
+        return DocumentRuleError(
+            message=f"Usage '{item.name}' URL '{url}' returned HTTP {status_code} — expected {_OK_STATUS}",
+            rule=self.name,
+            document=item.root,
+            node=item,
+        )
+
+    def _request_failed(self, item, url: str, reason) -> DocumentRuleError:
+        return DocumentRuleError(
+            message=f"Usage '{item.name}' URL '{url}' request failed: {reason!s}",
+            rule=self.name,
+            document=item.root,
+            node=item,
+        )
+
+
+class UsageLinksHasNotConflicts(DocumentRule):
+    """Rule: usage names must not conflict with import type names (without alias) or entity/routine names."""
+
+    def __init__(self) -> None:
+        super().__init__(name="usage_links_has_not_conflicts")
+
+    def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        usage_names = [item.name for item in node.root.header.usages.items]
+        if not usage_names:
+            return []
+
+        type_names_without_alias = self._collect_import_type_names(node)
+        entity_names = self._collect_entity_routine_names(node)
+        return self._check_conflicts(node, usage_names, type_names_without_alias, entity_names)
+
+    def _collect_import_type_names(self, node: DocumentNode) -> set[str]:
+        names: set[str] = set()
+        for import_item in node.root.header.imports.types + node.root.header.imports.usages:
+            if import_item.alias:
+                continue
+            if isinstance(import_item, ImportTypeItemNode):
+                names.update(import_item.type_name)
+            elif isinstance(import_item, ImportUsageItemNode):
+                names.update(import_item.usage_name)
+        return names
+
+    def _collect_entity_routine_names(self, node: DocumentNode) -> dict[str, str]:
+        names: dict[str, str] = {}
+        for entity in node.root.body.entities:
+            if not entity.embedded:
+                names[entity.name] = "entity"
+        for routine in node.root.body.routines:
+            if not routine.embedded:
+                names[routine.name] = "routine"
+        return names
+
+    def _check_conflicts(
+        self,
+        node: DocumentNode,
+        usage_names: list[str],
+        type_names_without_alias: set[str],
+        entity_names: dict[str, str],
+    ) -> list[DocumentRuleError]:
+        errors: list[DocumentRuleError] = []
+        for name in usage_names:
+            if name in type_names_without_alias:
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Usage key '{name}' conflicts with imported name '{name}'"
+                            f" — rename the usage or use an alias in Imports"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=node,
+                    )
+                )
+            if name in entity_names:
+                kind = entity_names[name]
+                errors.append(
+                    DocumentRuleError(
+                        message=(
+                            f"Usage key '{name}' conflicts with {kind} '{name}' — rename the usage to avoid ambiguity"
+                        ),
+                        rule=self.name,
+                        document=node.root,
+                        node=node,
+                    )
+                )
+
+        return errors
