@@ -289,12 +289,12 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 3 — 7 правил проверки импортов
-- [ ] **Контрактные тесты**: создать файл `tests/goga/ast/rules/document/imports/test_document.py` — проверить доступность всех 7 классов из `goga.ast.rules.document.imports.document`, наследование от DocumentRule, сигнатуру `check(node) -> list[DocumentRuleError]` (ожидаемо падают)
-- [ ] **Код**: создать файл `goga/ast/rules/document/imports/document.py` — извлечь 7 классов из `goga/ast/rules/document.py`, обновить импорты на относительные: `from ...base.document import DocumentRule`, `from ....nodes import ImportsNode, ImportTypeItemNode, ImportUsageItemNode`, `from .tools import signature_contains_type_name`
-- [ ] **Код**: обновить `goga/ast/rules/document/imports/__init__.py` — добавить реэкспорт всех 7 классов + `signature_contains_type_name`
-- [ ] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/imports/test_document.py -v` — контрактные тесты должны пройти
-- [ ] **Логические тесты**: в `test_document.py` добавить тесты для каждого правила:
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: Объявить работу над Task 3 — 7 правил проверки импортов
+- [x] **Контрактные тесты**: создать файл `tests/goga/ast/rules/document/imports/test_document.py` — проверить доступность всех 7 классов из `goga.ast.rules.document.imports.document`, наследование от DocumentRule, сигнатуру `check(node) -> list[DocumentRuleError]` (ожидаемо падают)
+- [x] **Код**: создать файл `goga/ast/rules/document/imports/document.py` — извлечь 7 классов из `goga/ast/rules/document.py`, обновить импорты на относительные: `from ...base.document import DocumentRule`, `from ....nodes import ImportsNode, ImportTypeItemNode, ImportUsageItemNode`, `from .tools import signature_contains_type_name`
+- [x] **Код**: обновить `goga/ast/rules/document/imports/__init__.py` — добавить реэкспорт всех 7 классов + `signature_contains_type_name`
+- [x] **Верификация интерфейсов**: `python -m pytest tests/goga/ast/rules/document/imports/test_document.py -v` — контрактные тесты должны пройти
+- [x] **Логические тесты**: в `test_document.py` добавить тесты для каждого правила:
   - `ImportsCanNotBeEmpty`: пустой imports → ошибка "empty"; нет блока Imports → []; непустой imports → []
   - `ImportsHasOnlyValidKeys`: неизвестный ключ → ошибка "unknown_keys"; только допустимые → []
   - `ImportItemIsValid`: пустой Types/Usages → ошибка "no_type"; непустой → []
@@ -302,9 +302,9 @@
   - `ImportHasValidFromPath`: пустой путь → "empty"; путь не существует → "not_found"; путь выходит за CWD → "escapes"; валидный → []
   - `ImportHasNotDuplicate`: дубликат → "duplicate"; уникальные → []
   - `ImportIsUsed`: неиспользуемый тип → "unused"; используемый в аннотации → []; embedded → []; usage не проверяется в сигнатурах
-- [ ] **Отладка**: `python -m pytest tests/goga/ast/rules/document/imports/ -v` — исправлять код, пока все тесты не пройдут
-- [ ] **Перепроверка контрактов**: проверить что все 7 классов доступны из `goga.ast.rules.document.imports`, наследуют DocumentRule, имеют корректные default имена
-- [ ] **Линт**: `ruff check goga/ast/rules/document/imports/ && ruff format goga/ast/rules/document/imports/`
+- [x] **Отладка**: `python -m pytest tests/goga/ast/rules/document/imports/ -v` — исправлять код, пока все тесты не пройдут
+- [x] **Перепроверка контрактов**: проверить что все 7 классов доступны из `goga.ast.rules.document.imports`, наследуют DocumentRule, имеют корректные default имена
+- [x] **Линт**: `ruff check goga/ast/rules/document/imports/ && ruff format goga/ast/rules/document/imports/`
 
 ### Task 4: Ячейка `document/usages` — 4 правила проверки практик (TDD кодирование)
 
