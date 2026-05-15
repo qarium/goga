@@ -30,7 +30,7 @@ Annotations: |
 # ************ #
 
 "DocumentRule::AnnotationLinksExists(name: str = 'annotation_links_exists')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет ссылки на существование в `AnnotationsNode` для нод:
     - `HeaderNode`

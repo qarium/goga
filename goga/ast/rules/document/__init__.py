@@ -14,7 +14,7 @@ from .mutation.document import (
     MutationExists,
     MutationIsValid,
 )
-from .structure.document import (
+from .structures.document import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     LocationIsRequired,

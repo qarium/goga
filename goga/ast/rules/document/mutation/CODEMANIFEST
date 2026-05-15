@@ -21,7 +21,7 @@ Annotations: |
 # ********************* #
 
 "DocumentRule::MutationExists(name: str = 'mutation_exists')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode`.
 
@@ -34,7 +34,7 @@ Annotations: |
     - not_found: "Base type '{mutation_name}' for mutation of '{entity_name}' not found in imports, entities, or routines of this package"
 
 "DocumentRule::MutationIsValid(name: str = 'mutation_is_valid')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode`.
 
@@ -45,7 +45,7 @@ Annotations: |
     - self_mutation: "Mutation '{mutation_name}' on '{entity_name}' references itself — a type cannot mutate from its own signature"
 
 "DocumentRule::EmbeddedEntityCanNotHasMutations(name: str = 'embedded_entity_can_not_has_mutations')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode`.
 

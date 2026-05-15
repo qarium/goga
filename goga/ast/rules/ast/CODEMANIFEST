@@ -20,7 +20,7 @@ Annotations: |
 # ********************************* #
 
 "ASTRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
-  location: ast.py
+  location: rules.py
   annotations: |
     Правило - ни один импорт в документе не является циклическим.
 
@@ -34,7 +34,7 @@ Annotations: |
     - cycle: "Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"
 
 "ASTRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
-  location: ast.py
+  location: rules.py
   annotations: |
     Правило - подключаемый тип через Imports существует в указанном в From документе.
 
@@ -45,7 +45,7 @@ Annotations: |
     - not_found: "Type '{type_name}' imported from '{from_path}' is not defined in that package's CODEMANIFEST"
 
 "ASTRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
-  location: ast.py
+  location: rules.py
   annotations: |
     Правило - все embedded типы располагаются ниже в иерархии файловой системы.
 

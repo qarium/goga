@@ -8,7 +8,7 @@ from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import HeaderNode, ImportsNode, ImportTypeItemNode
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.structure.document import (
+from goga.ast.rules.document.structures.document import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     LocationIsRequired,
@@ -55,7 +55,7 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.structure.document", (
+            assert cls.__module__ == "goga.ast.rules.document.structures.document", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
 

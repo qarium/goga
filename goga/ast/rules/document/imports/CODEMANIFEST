@@ -48,7 +48,7 @@ Annotations: |
 # ******* #
 
 "DocumentRule::ImportsCanNotBeEmpty(name: str = 'imports_can_not_be_empty')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportsNode`.
 
@@ -62,7 +62,7 @@ Annotations: |
     - empty: "Imports block in '{doc_path}' is empty — each import must specify at least Types and From"
 
 "DocumentRule::ImportsHasOnlyValidKeys(name: str = 'imports_has_only_valid_keys')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportsNode`.
 
@@ -76,7 +76,7 @@ Annotations: |
     - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, Usages, From"
 
 "DocumentRule::ImportItemIsValid(name: str = 'import_item_is_valid')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 
@@ -90,7 +90,7 @@ Annotations: |
     - no_type: "Import from '{from_path}' has no {Types | Usages} listed — specify at least one type to import"
 
 "DocumentRule::ImportUsageExists(name: str = 'import_usage_exists')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportUsageItemNode`.
 
@@ -104,7 +104,7 @@ Annotations: |
     - not_found: "Usage '{usage_name}' does not exists on filesystem by path '{usage_md_file_path}'"
 
 "DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 
@@ -119,7 +119,7 @@ Annotations: |
     - escapes: "Source path '{from_path}' in import points outside the project root"
 
 "DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportsNode`.
 
@@ -130,7 +130,7 @@ Annotations: |
     - duplicate: "{Type || Usage} '{type_name || usage_name}' is imported more than once: from '{path_a}' and '{path_b}'"
 
 "DocumentRule::ImportIsUsed(name: str = 'import_is_used')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
 

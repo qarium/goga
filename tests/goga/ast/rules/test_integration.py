@@ -145,7 +145,7 @@ class TestBackwardCompatibility:
         from goga.ast.rules.document.mutation import (  # noqa: PLC0415
             MutationExists,
         )
-        from goga.ast.rules.document.structure import (  # noqa: PLC0415
+        from goga.ast.rules.document.structures import (  # noqa: PLC0415
             LocationIsRequired,
         )
         from goga.ast.rules.document.usages import (  # noqa: PLC0415

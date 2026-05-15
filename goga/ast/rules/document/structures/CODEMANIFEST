@@ -23,7 +23,7 @@ Annotations: |
 # ************************* #
 
 "DocumentRule::EntitiesAndRoutinesHasNotConflicts(name: str = 'entities_and_routines_has_not_conflicts')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode` и `RoutineTypeNode`.
 
@@ -39,7 +39,7 @@ Annotations: |
     - routine_conflict: "Routine '{routine_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
 
 "DocumentRule::EntityHasOnlyValidKeys(name: str = 'entity_has_only_valid_keys')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode`.
 
@@ -54,7 +54,7 @@ Annotations: |
     - unknown_keys: "Entity '{entity_name}' contains unknown keys {unknown_keys} — allowed: location, annotations, methods, properties"
 
 "DocumentRule::RoutineHasOnlyValidKeys(name: str = 'routine_has_only_valid_keys')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `RoutineTypeNode`.
 
@@ -67,7 +67,7 @@ Annotations: |
     - unknown_keys: "Routine '{routine_name}' contains unknown keys {unknown_keys} — allowed: location, annotations"
 
 "DocumentRule::SignatureIsValid(name: str = 'signature_is_valid')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode`, `RoutineTypeNode`, `MethodNode`.
 
@@ -79,7 +79,7 @@ Annotations: |
     - empty: "signature is empty, use '(...) -> ...' or '(...)'"
 
 "DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode` и `RoutineTypeNode`.
 
@@ -93,7 +93,7 @@ Annotations: |
     - missing_link: "Return type '{return_part}' in '{signature}' is missing a semantic label — use format '-> label:Type'"
 
 "DocumentRule::LocationIsRequired(name: str = 'location_is_required')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `EntityTypeNode` и `RoutineTypeNode`.
 

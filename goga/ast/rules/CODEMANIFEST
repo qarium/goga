@@ -26,7 +26,7 @@ Imports:
       - SignatureIsValid
       - ReturnTypeHasLink
       - LocationIsRequired
-    From: goga/ast/rules/document/structure
+    From: goga/ast/rules/document/structures
   - Types:
       - MutationExists
       - MutationIsValid

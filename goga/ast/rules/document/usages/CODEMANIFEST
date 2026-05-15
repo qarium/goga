@@ -27,7 +27,7 @@ Annotations: |
 # ****** #
 
 "DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `UsagesNode`.
 
@@ -47,7 +47,7 @@ Annotations: |
     - unused: "Usage '{usage_name}' is declared but not referenced in any annotation — either use it or remove the declaration"
 
 "DocumentRule::UsageFilepathExists(name: str = 'usage_filepath_exists')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `UsageItemNode`.
 
@@ -68,7 +68,7 @@ Annotations: |
     - not_found: "Usage '{usage_name}' filepath '{filepath}' does not exist on filesystem"
 
 "DocumentRule::UsageUrlIsAccessible(name: str = 'usage_url_is_accessible')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `UsageItemNode`.
 
@@ -88,7 +88,7 @@ Annotations: |
     - request_failed: "Usage '{usage_name}' URL '{url}' request failed: {error_message}"
 
 "DocumentRule::UsageLinksHasNotConflicts(name: str = 'usage_links_has_not_conflicts')":
-  location: document.py
+  location: rules.py
   annotations: |
     Проверяет `UsagesNode`.
 
