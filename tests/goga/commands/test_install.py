@@ -129,7 +129,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-        assert "Installed 5 commands" in result.output
+        assert "Installed 6 commands" in result.output
         assert "Installed 20 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
@@ -308,7 +308,7 @@ class TestIntegration:
         assert (goga_cmds / "review.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
-        assert installed_files == ["brainstorm.md", "design.md", "plan.md", "propose.md", "review.md"]
+        assert installed_files == ["brainstorm.md", "design.md", "plan.md", "propose.md", "review.md", "tool.md"]
 
     def test_install_preserves_other_commands(self, tmp_path: Path) -> None:
         other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"
