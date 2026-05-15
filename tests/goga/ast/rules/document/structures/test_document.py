@@ -3,12 +3,14 @@ from __future__ import annotations
 import inspect
 from typing import ClassVar
 
+import goga.ast.rules as facade
+import goga.ast.rules.document.structures as sub_facade
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import HeaderNode, ImportsNode, ImportTypeItemNode
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.structures.document import (
+from goga.ast.rules.document.structures.rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     LocationIsRequired,
@@ -28,6 +30,15 @@ class TestContract:
         SignatureIsValid,
         ReturnTypeHasLink,
         LocationIsRequired,
+    ]
+
+    RULE_NAMES: ClassVar[list[str]] = [
+        "EntitiesAndRoutinesHasNotConflicts",
+        "EntityHasOnlyValidKeys",
+        "RoutineHasOnlyValidKeys",
+        "SignatureIsValid",
+        "ReturnTypeHasLink",
+        "LocationIsRequired",
     ]
 
     def test_all_classes_importable(self):
@@ -55,9 +66,18 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.structures.document", (
+            assert cls.__module__ == "goga.ast.rules.document.structures.rules", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
+
+    def test_all_rules_accessible_from_facade(self):
+        for name in self.RULE_NAMES:
+            assert hasattr(facade, name), f"{name} missing from goga.ast.rules facade"
+            assert getattr(facade, name) is getattr(sub_facade, name)
+
+    def test_all_rules_accessible_from_sub_facade(self):
+        for name in self.RULE_NAMES:
+            assert hasattr(sub_facade, name), f"{name} missing from goga.ast.rules.document.structures"
 
 
 class TestEntitiesAndRoutinesHasNotConflicts:
@@ -525,6 +545,8 @@ class TestLocationIsRequired:
         rule = LocationIsRequired()
         errors = rule.check(node)
         assert len(errors) == 2
+        assert "directory path" in errors[0].message.lower()
+        assert "without file extension" in errors[1].message.lower()
 
 
 class TestLocationIsRequiredExtra:

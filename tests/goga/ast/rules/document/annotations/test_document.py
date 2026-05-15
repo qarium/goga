@@ -15,7 +15,7 @@ from goga.ast.nodes.header import (
     UsagesNode,
 )
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.annotations.document import AnnotationLinksExists
+from goga.ast.rules.document.annotations.rules import AnnotationLinksExists
 
 
 class TestContract:
@@ -48,7 +48,7 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.annotations.document", (
+            assert cls.__module__ == "goga.ast.rules.document.annotations.rules", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
 

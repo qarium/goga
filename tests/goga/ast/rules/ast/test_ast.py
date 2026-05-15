@@ -12,7 +12,7 @@ from goga.ast.nodes.header import (
     ImportTypeItemNode,
     ImportUsageItemNode,
 )
-from goga.ast.rules.ast.ast import (
+from goga.ast.rules.ast.rules import (
     EmbeddedTypeHasLowLevel,
     ImportsHasNotCyclicalDeps,
     ImportTypeExists,
@@ -25,6 +25,32 @@ def _make_header(imports=None):
         imports=imports or ImportsNode(),
         annotations=AnnotationsNode(root=None),
     )
+
+
+class TestFacadeAccessibility:
+    """All 3 AST rules must be importable from the facade and sub-cell."""
+
+    RULE_NAMES: ClassVar[list[str]] = [
+        "ImportsHasNotCyclicalDeps",
+        "ImportTypeExists",
+        "EmbeddedTypeHasLowLevel",
+    ]
+
+    def test_facade_imports(self):
+        import goga.ast.rules  # noqa: PLC0415
+
+        facade = goga.ast.rules
+        for name in self.RULE_NAMES:
+            assert hasattr(facade, name), f"{name} not in facade"
+            assert callable(getattr(facade, name))
+
+    def test_subcell_imports(self):
+        import goga.ast.rules.ast  # noqa: PLC0415
+
+        subcell = goga.ast.rules.ast
+        for name in self.RULE_NAMES:
+            assert hasattr(subcell, name), f"{name} not in sub-cell"
+            assert callable(getattr(subcell, name))
 
 
 class TestContract:
@@ -53,7 +79,7 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.ast.ast", f"{cls.__name__} has wrong module: {cls.__module__}"
+            assert cls.__module__ == "goga.ast.rules.ast.rules", f"{cls.__name__} has wrong module: {cls.__module__}"
 
 
 class TestImportsHasNotCyclicalDeps:

@@ -9,7 +9,7 @@ def signature_contains_type_name(signature: str, type_name: str) -> bool:
     """
     if not type_name:
         return False
-    allowed = {":", ">", "(", ")", "[", "]", ",", " ", "<"}
+    allowed = {":", ">", "(", ")", "[", "]", ",", " "}
     start = 0
     while True:
         idx = signature.find(type_name, start)

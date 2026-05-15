@@ -20,6 +20,16 @@ class TestContract:
     def test_module_location(self):
         assert signature_contains_type_name.__module__ == ("goga.ast.rules.document.imports.tools")
 
+    def test_accessible_from_submodule(self):
+        from goga.ast.rules.document.imports import signature_contains_type_name as fn  # noqa: PLC0415
+
+        assert fn is signature_contains_type_name
+
+    def test_accessible_from_facade(self):
+        from goga.ast.rules import signature_contains_type_name as fn  # noqa: PLC0415
+
+        assert fn is signature_contains_type_name
+
 
 class TestLogical:
     """Logical tests — verify behaviour per contract specification."""

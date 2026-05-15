@@ -8,7 +8,7 @@ from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import HeaderNode, ImportsNode, ImportTypeItemNode
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.mutation.document import (
+from goga.ast.rules.document.mutation.rules import (
     EmbeddedEntityCanNotHasMutations,
     MutationExists,
     MutationIsValid,
@@ -49,9 +49,23 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.mutation.document", (
+            assert cls.__module__ == "goga.ast.rules.document.mutation.rules", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
+
+    def test_accessible_from_facade(self):
+        import goga.ast.rules as facade  # noqa: PLC0415
+
+        assert facade.MutationExists is MutationExists
+        assert facade.MutationIsValid is MutationIsValid
+        assert facade.EmbeddedEntityCanNotHasMutations is EmbeddedEntityCanNotHasMutations
+
+    def test_accessible_from_submodule(self):
+        import goga.ast.rules.document.mutation as submod  # noqa: PLC0415
+
+        assert submod.MutationExists is MutationExists
+        assert submod.MutationIsValid is MutationIsValid
+        assert submod.EmbeddedEntityCanNotHasMutations is EmbeddedEntityCanNotHasMutations
 
 
 def _make_header(data=None, imports=None):
@@ -129,6 +143,34 @@ class TestMutationExists:
         errors = rule.check(node)
         assert errors == []
 
+    def test_multiple_mutations_some_not_found(self):
+        base = EntityTypeNode(name="BaseEntity")
+        entity = EntityTypeNode(
+            name="MyEntity",
+            mutations=[("BaseEntity", "path"), ("UnknownType", "path")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(),
+            body=BodyNode(entities=[base, entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = MutationExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "UnknownType" in errors[0].message
+
+    def test_empty_document(self):
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(),
+            body=BodyNode(),
+        )
+        node = DocumentNode(root=root)
+        rule = MutationExists()
+        errors = rule.check(node)
+        assert errors == []
+
 
 class TestMutationIsValid:
     """MutationIsValid: mutation must not reference itself."""
@@ -174,6 +216,22 @@ class TestMutationIsValid:
         errors = rule.check(node)
         assert errors == []
 
+    def test_multiple_mutations_one_self(self):
+        entity = EntityTypeNode(
+            name="MyEntity",
+            mutations=[("OtherType", "path"), ("MyEntity", "path")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = MutationIsValid()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "MyEntity" in errors[0].message
+
 
 class TestEmbeddedEntityCanNotHasMutations:
     """EmbeddedEntityCanNotHasMutations: embedded entities must not define mutations."""
@@ -214,3 +272,16 @@ class TestEmbeddedEntityCanNotHasMutations:
         rule = EmbeddedEntityCanNotHasMutations()
         errors = rule.check(node)
         assert errors == []
+
+    def test_multiple_embedded_with_mutations(self):
+        e1 = EntityTypeNode(name="Embed1", embedded=True, mutations=[("Base", "path")])
+        e2 = EntityTypeNode(name="Embed2", embedded=True, mutations=[("Base", "path")])
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(),
+            body=BodyNode(entities=[e1, e2]),
+        )
+        node = DocumentNode(root=root)
+        rule = EmbeddedEntityCanNotHasMutations()
+        errors = rule.check(node)
+        assert len(errors) == 2

@@ -1,3 +1,3 @@
-from .document import AnnotationLinksExists
+from .rules import AnnotationLinksExists
 
 __all__ = ["AnnotationLinksExists"]

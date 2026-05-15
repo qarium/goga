@@ -5,7 +5,7 @@ import urllib.error
 from typing import ClassVar
 from unittest.mock import patch
 
-from goga.ast.nodes.body import BodyNode, EntityTypeNode, RoutineTypeNode
+from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import (
@@ -16,12 +16,24 @@ from goga.ast.nodes.header import (
     UsagesNode,
 )
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.usages.document import (
+from goga.ast.rules.document.usages.rules import (
     AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,
     UsageUrlIsAccessible,
 )
+
+
+def _mock_response(status: int = 200):
+    """Create a mock HTTP response supporting the context manager protocol."""
+    class MockResp:
+        def __init__(self) -> None:
+            self.status = status
+        def __enter__(self):
+            return self
+        def __exit__(self, *args: object) -> None:
+            pass
+    return MockResp()
 
 
 class TestContract:
@@ -59,7 +71,7 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.usages.document", (
+            assert cls.__module__ == "goga.ast.rules.document.usages.rules", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
 
@@ -234,7 +246,7 @@ class TestUsageUrlIsAccessible:
 
     @patch("urllib.request.urlopen")
     def test_accessible_url_returns_empty(self, mock_urlopen):
-        mock_response = type("Response", (), {"status": 200})()
+        mock_response = _mock_response(200)
         mock_urlopen.return_value = mock_response
 
         usage_item = UsageItemNode(
@@ -317,7 +329,7 @@ class TestUsageUrlIsAccessible:
     def test_head_405_fallback_get_ok(self, mock_urlopen):
 
         head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
-        mock_response = type("Response", (), {"status": 200})()
+        mock_response = _mock_response(200)
         mock_urlopen.side_effect = [head_error, mock_response]
 
         usage_item = UsageItemNode(
@@ -411,6 +423,148 @@ class TestUsageLinksHasNotConflicts:
                 usages=UsagesNode(items=[usage_item]),
                 imports=ImportsNode(types=[import_item]),
             ),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageLinksHasNotConflicts()
+        assert rule.check(node) == []
+
+
+class TestAllUsagesIsUsedExtra:
+    """Extra edge cases for AllUsagesIsUsed."""
+
+    def test_used_in_method_annotations_returns_empty(self):
+        usage_item = UsageItemNode(name="conventions", annotations=AnnotationsNode(root=None))
+        method = MethodNode(
+            name="do_stuff",
+            annotations=AnnotationsNode(root=None, links=["conventions"]),
+        )
+        entity = EntityTypeNode(
+            name="Foo",
+            annotations=AnnotationsNode(root=None),
+            methods=[method],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = AllUsagesIsUsed()
+        assert rule.check(node) == []
+
+    def test_used_in_property_annotations_returns_empty(self):
+        usage_item = UsageItemNode(name="conventions", annotations=AnnotationsNode(root=None))
+        prop = PropertyNode(
+            name="value",
+            type="str",
+            annotations=AnnotationsNode(root=None, links=["conventions"]),
+        )
+        entity = EntityTypeNode(
+            name="Foo",
+            annotations=AnnotationsNode(root=None),
+            properties=[prop],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = AllUsagesIsUsed()
+        assert rule.check(node) == []
+
+    def test_used_in_usage_item_annotations_returns_empty(self):
+        usage_item = UsageItemNode(
+            name="conventions",
+            annotations=AnnotationsNode(root=None, links=["conventions"]),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = AllUsagesIsUsed()
+        assert rule.check(node) == []
+
+    def test_multiple_unused_usages_returns_multiple_errors(self):
+        usage_a = UsageItemNode(name="alpha", annotations=AnnotationsNode(root=None))
+        usage_b = UsageItemNode(name="beta", annotations=AnnotationsNode(root=None))
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_a, usage_b])),
+        )
+        node = DocumentNode(root=root)
+        rule = AllUsagesIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 2
+
+
+class TestUsageUrlIsAccessibleExtra:
+    """Extra edge cases for UsageUrlIsAccessible."""
+
+    @patch("urllib.request.urlopen")
+    def test_head_405_fallback_get_fails(self, mock_urlopen):
+        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
+        get_error = urllib.error.URLError("Connection refused")
+        mock_urlopen.side_effect = [head_error, get_error]
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "failed" in errors[0].message.lower()
+
+    @patch("urllib.request.urlopen")
+    def test_head_405_fallback_get_non_200(self, mock_urlopen):
+        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
+        get_response = _mock_response(503)
+        mock_urlopen.side_effect = [head_error, get_response]
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "503" in errors[0].message
+
+
+class TestUsageLinksHasNotConflictsExtra:
+    """Extra edge cases for UsageLinksHasNotConflicts."""
+
+    def test_embedded_entity_no_conflict(self):
+        usage_item = UsageItemNode(name="MyEntity", annotations=AnnotationsNode(root=None))
+        entity = EntityTypeNode(name="MyEntity", embedded=True)
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+            body=BodyNode(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageLinksHasNotConflicts()
+        assert rule.check(node) == []
+
+    def test_embedded_routine_no_conflict(self):
+        usage_item = UsageItemNode(name="MyRoutine", annotations=AnnotationsNode(root=None))
+        routine = RoutineTypeNode(name="MyRoutine", embedded=True)
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+            body=BodyNode(routines=[routine]),
         )
         node = DocumentNode(root=root)
         rule = UsageLinksHasNotConflicts()

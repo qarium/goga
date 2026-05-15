@@ -1,4 +1,4 @@
-from .document import (
+from .rules import (
     AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,

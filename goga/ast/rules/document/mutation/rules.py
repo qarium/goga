@@ -54,6 +54,8 @@ class MutationIsValid(DocumentRule):
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:
+            if entity.embedded:
+                continue
             for mutation_name, _mutation_path in entity.mutations:
                 if mutation_name == entity.name:
                     errors.append(

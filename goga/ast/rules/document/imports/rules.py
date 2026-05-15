@@ -229,21 +229,23 @@ class ImportIsUsed(DocumentRule):
         super().__init__(name="import_is_used")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
-        all_links = self._collect_links(node)
+        all_links = self._collect_links(node, include_embedded=True)
         all_signatures = self._collect_signatures(node)
         property_types = self._collect_property_types(node)
         embedded_names = {name for name, _ in node.root.embeddings}
-        usage_links = self._collect_links(node, include_embedded=True)
         doc_path = node.root.path
+        document = node.root
 
         errors: list[DocumentRuleError] = []
         for item in node.root.header.imports.types + node.root.header.imports.usages:
             if isinstance(item, ImportTypeItemNode):
                 errors.extend(
-                    self._check_type_item(item, doc_path, all_links, embedded_names, all_signatures, property_types),
+                    self._check_type_item(
+                        item, doc_path, document, all_links, embedded_names, all_signatures, property_types,
+                    ),
                 )
             elif isinstance(item, ImportUsageItemNode):
-                errors.extend(self._check_usage_item(item, doc_path, usage_links))
+                errors.extend(self._check_usage_item(item, doc_path, document, all_links))
 
         return errors
 
@@ -251,6 +253,7 @@ class ImportIsUsed(DocumentRule):
         self,
         item: ImportTypeItemNode,
         doc_path: str,
+        document,
         all_links: set[str],
         embedded_names: set[str],
         all_signatures: list[str],
@@ -271,7 +274,7 @@ class ImportIsUsed(DocumentRule):
                 DocumentRuleError(
                     message=f"Type '{name}' was imported, but not used in '{doc_path}'",
                     rule=self.name,
-                    document=item.root,
+                    document=document,
                     node=item,
                 )
             )
@@ -281,6 +284,7 @@ class ImportIsUsed(DocumentRule):
         self,
         item: ImportUsageItemNode,
         doc_path: str,
+        document,
         usage_links: set[str],
     ) -> list[DocumentRuleError]:
         names = [item.alias] if item.alias else list(item.usage_name)
@@ -292,7 +296,7 @@ class ImportIsUsed(DocumentRule):
                 DocumentRuleError(
                     message=f"Usage '{name}' was imported, but not used in '{doc_path}'",
                     rule=self.name,
-                    document=item.root,
+                    document=document,
                     node=item,
                 )
             )
@@ -326,8 +330,6 @@ class ImportIsUsed(DocumentRule):
     def _collect_property_types(self, node: DocumentNode) -> set[str]:
         types: set[str] = set()
         for entity in node.root.body.entities:
-            if entity.embedded:
-                continue
             for prop in entity.properties:
                 if prop.type:
                     types.add(prop.type)
@@ -336,13 +338,9 @@ class ImportIsUsed(DocumentRule):
     def _collect_signatures(self, node: DocumentNode) -> list[str]:
         signatures: list[str] = []
         for entity in node.root.body.entities:
-            if entity.embedded:
-                continue
             signatures.append(entity.signature)
             for method in entity.methods:
                 signatures.append(method.signature)
         for routine in node.root.body.routines:
-            if routine.embedded:
-                continue
             signatures.append(routine.signature)
         return signatures

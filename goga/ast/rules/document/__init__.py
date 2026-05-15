@@ -1,6 +1,6 @@
 from ..base.document import DocumentRule
-from .annotations.document import AnnotationLinksExists
-from .imports.document import (
+from .annotations.rules import AnnotationLinksExists
+from .imports.rules import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
@@ -9,12 +9,12 @@ from .imports.document import (
     ImportsHasOnlyValidKeys,
     ImportUsageExists,
 )
-from .mutation.document import (
+from .mutation.rules import (
     EmbeddedEntityCanNotHasMutations,
     MutationExists,
     MutationIsValid,
 )
-from .structures.document import (
+from .structures.rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     LocationIsRequired,
@@ -22,7 +22,7 @@ from .structures.document import (
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
 )
-from .usages.document import (
+from .usages.rules import (
     AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,

@@ -215,7 +215,7 @@ class ReturnTypeHasLink(DocumentRule):
         node: DocumentNode,
         errors: list[DocumentRuleError],
     ) -> None:
-        if "->" not in signature:
+        if not signature or "->" not in signature:
             return
 
         return_part = signature.rsplit("->", 1)[1].strip()

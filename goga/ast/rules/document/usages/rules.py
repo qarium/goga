@@ -133,50 +133,50 @@ class UsageUrlIsAccessible(DocumentRule):
             if item.annotations.filepath:
                 continue
 
-            errors.extend(self._check_url(item, url))
+            errors.extend(self._check_url(item, url, node.root))
 
         return errors
 
-    def _check_url(self, item, url: str) -> list[DocumentRuleError]:
+    def _check_url(self, item, url: str, document) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
         try:
             request = urllib.request.Request(url, method="HEAD")
-            response = urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT)
-            if response.status != _OK_STATUS:
-                errors.append(self._not_accessible(item, url, response.status))
+            with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT) as response:
+                if response.status != _OK_STATUS:
+                    errors.append(self._not_accessible(item, url, response.status, document))
         except urllib.error.HTTPError as e:
             if e.code == _METHOD_NOT_ALLOWED:
-                errors.extend(self._fallback_get(item, url))
+                errors.extend(self._fallback_get(item, url, document))
             else:
-                errors.append(self._not_accessible(item, url, e.code))
+                errors.append(self._not_accessible(item, url, e.code, document))
         except urllib.error.URLError as e:
-            errors.append(self._request_failed(item, url, e.reason))
+            errors.append(self._request_failed(item, url, e.reason, document))
         except Exception as e:
-            errors.append(self._request_failed(item, url, e))
+            errors.append(self._request_failed(item, url, e, document))
         return errors
 
-    def _fallback_get(self, item, url: str) -> list[DocumentRuleError]:
+    def _fallback_get(self, item, url: str, document) -> list[DocumentRuleError]:
         try:
-            response = urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT)
-            if response.status != _OK_STATUS:
-                return [self._not_accessible(item, url, response.status)]
+            with urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT) as response:
+                if response.status != _OK_STATUS:
+                    return [self._not_accessible(item, url, response.status, document)]
         except Exception as get_error:
-            return [self._request_failed(item, url, get_error)]
+            return [self._request_failed(item, url, get_error, document)]
         return []
 
-    def _not_accessible(self, item, url: str, status_code: int) -> DocumentRuleError:
+    def _not_accessible(self, item, url: str, status_code: int, document) -> DocumentRuleError:
         return DocumentRuleError(
             message=f"Usage '{item.name}' URL '{url}' returned HTTP {status_code} — expected {_OK_STATUS}",
             rule=self.name,
-            document=item.root,
+            document=document,
             node=item,
         )
 
-    def _request_failed(self, item, url: str, reason) -> DocumentRuleError:
+    def _request_failed(self, item, url: str, reason, document) -> DocumentRuleError:
         return DocumentRuleError(
             message=f"Usage '{item.name}' URL '{url}' request failed: {reason!s}",
             rule=self.name,
-            document=item.root,
+            document=document,
             node=item,
         )
 

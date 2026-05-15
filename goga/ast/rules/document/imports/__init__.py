@@ -1,4 +1,4 @@
-from .document import (
+from .rules import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,

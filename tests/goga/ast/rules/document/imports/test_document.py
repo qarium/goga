@@ -4,7 +4,7 @@ import inspect
 import shutil
 from typing import ClassVar
 
-from goga.ast.nodes.body import BodyNode, EntityTypeNode, PropertyNode
+from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
 from goga.ast.nodes.header import (
@@ -14,7 +14,7 @@ from goga.ast.nodes.header import (
     ImportUsageItemNode,
 )
 from goga.ast.rules.base.document import DocumentRule
-from goga.ast.rules.document.imports.document import (
+from goga.ast.rules.document.imports.rules import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
@@ -36,6 +36,16 @@ class TestContract:
         ImportHasValidFromPath,
         ImportHasNotDuplicate,
         ImportIsUsed,
+    ]
+
+    FACADE_NAMES: ClassVar[list[str]] = [
+        "ImportsCanNotBeEmpty",
+        "ImportsHasOnlyValidKeys",
+        "ImportItemIsValid",
+        "ImportUsageExists",
+        "ImportHasValidFromPath",
+        "ImportHasNotDuplicate",
+        "ImportIsUsed",
     ]
 
     def test_all_classes_importable(self):
@@ -64,9 +74,36 @@ class TestContract:
 
     def test_module_location(self):
         for cls in self.CLASSES:
-            assert cls.__module__ == "goga.ast.rules.document.imports.document", (
+            assert cls.__module__ == "goga.ast.rules.document.imports.rules", (
                 f"{cls.__name__} has wrong module: {cls.__module__}"
             )
+
+    def test_all_accessible_from_facade(self):
+        import goga.ast.rules as facade  # noqa: PLC0415
+
+        for name in self.FACADE_NAMES:
+            assert hasattr(facade, name), f"{name} not found in goga.ast.rules facade"
+            facade_cls = getattr(facade, name)
+            assert issubclass(facade_cls, DocumentRule), f"{name} from facade does not inherit DocumentRule"
+
+    def test_all_accessible_from_submodule(self):
+        from goga.ast.rules.document.imports import (  # noqa: PLC0415
+            ImportHasNotDuplicate,
+            ImportHasValidFromPath,
+            ImportIsUsed,
+            ImportItemIsValid,
+            ImportsCanNotBeEmpty,
+            ImportsHasOnlyValidKeys,
+            ImportUsageExists,
+        )
+
+        submodule_classes = [
+            ImportsCanNotBeEmpty, ImportsHasOnlyValidKeys, ImportItemIsValid,
+            ImportUsageExists, ImportHasValidFromPath, ImportHasNotDuplicate,
+            ImportIsUsed,
+        ]
+        for cls in submodule_classes:
+            assert issubclass(cls, DocumentRule), f"{cls.__name__} from submodule does not inherit DocumentRule"
 
 
 class TestImportsCanNotBeEmpty:
@@ -142,6 +179,25 @@ class TestImportsHasOnlyValidKeys:
         node = DocumentNode(root=root)
         rule = ImportsHasOnlyValidKeys()
         assert rule.check(node) == []
+
+    def test_usage_item_unknown_key_returns_error(self):
+        item = ImportUsageItemNode(
+            usage_name={"Foo"},
+            from_path="bar",
+            data={"Usages": "Foo", "From": "bar", "BadKey": "val"},
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportsHasOnlyValidKeys()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "unknown keys" in errors[0].message.lower()
 
 
 class TestImportItemIsValid:
@@ -348,6 +404,36 @@ class TestImportHasNotDuplicate:
         rule = ImportHasNotDuplicate()
         assert rule.check(node) == []
 
+    def test_duplicate_usage_returns_error(self):
+        item1 = ImportUsageItemNode(usage_name={"MyUsage"}, from_path="bar")
+        item2 = ImportUsageItemNode(usage_name={"MyUsage"}, from_path="baz")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item1, item2]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasNotDuplicate()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "more than once" in errors[0].message.lower()
+
+    def test_unique_usages_returns_empty(self):
+        item1 = ImportUsageItemNode(usage_name={"UsageA"}, from_path="bar")
+        item2 = ImportUsageItemNode(usage_name={"UsageB"}, from_path="baz")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item1, item2]),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasNotDuplicate()
+        assert rule.check(node) == []
+
 
 class TestImportIsUsed:
     """ImportIsUsed: imported types/usages must be used in annotations or signatures."""
@@ -465,6 +551,108 @@ class TestImportIsUsed:
                 annotations=AnnotationsNode(links=["Alias"]),
                 imports=ImportsNode(types=[item]),
             ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_embedded_entity_signature(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="EmbeddedEntity",
+            signature="(param: MyType)",
+            annotations=AnnotationsNode(),
+            embedded=True,
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_embedded_routine_signature(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        routine = RoutineTypeNode(
+            name="EmbeddedRoutine",
+            signature="(param: MyType)",
+            annotations=AnnotationsNode(),
+            embedded=True,
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(routines=[routine]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_embedded_entity_annotation_link(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="EmbeddedEntity",
+            signature="()",
+            annotations=AnnotationsNode(links=["MyType"]),
+            embedded=True,
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_embedded_entity_method_signature(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="EmbeddedEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            embedded=True,
+            methods=[MethodNode(name="doStuff", signature="(x: MyType)", annotations=AnnotationsNode())],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_embedded_entity_property_type(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="EmbeddedEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            embedded=True,
+            properties=[PropertyNode(name="prop", type="MyType")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
         )
         node = DocumentNode(root=root)
         rule = ImportIsUsed()

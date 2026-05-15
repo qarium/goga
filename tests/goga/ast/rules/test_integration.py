@@ -124,7 +124,7 @@ class TestBackwardCompatibility:
         assert ImportsHasNotCyclicalDeps is facade.ImportsHasNotCyclicalDeps
 
     def test_tools_from_old_path(self) -> None:
-        from goga.ast.rules.tools import (  # noqa: PLC0415
+        from goga.ast.rules.document.imports.tools import (  # noqa: PLC0415
             signature_contains_type_name,
         )
 
