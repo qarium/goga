@@ -299,16 +299,16 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 6 — build routine в goga/build
-- [ ] **Контрактные тесты**: написать в `tests/goga/build/test_contract.py` — импортируемость `build` из `goga.build`, сигнатура `(plan, config, cli_options) -> int` (ожидаемо падают)
-- [ ] **Код**: создать `goga/build/build.py` с функцией `build(plan, config, cli_options)`, извлечь бизнес-логику из `goga/commands/build.py`
-- [ ] **Код**: перенести helpers: `_unquote_git_path`, `_parse_porcelain_path`, `_find_uncommitted_manifests`, `_run_precondition`, `_precondition_claude`, `_create_claude_settings`, `_create_claude_wrapper`, `_copy_defaults`, `_assemble_command`, константы `CLAUDE_WRAPPER_SCRIPT`, `DEFAULTS_PACKAGE_DIR`, `RALPHEX_CONFIG_DEFAULTS`
-- [ ] **Код**: заменить click.echo/ClickException/ctx.exit на print(..., file=sys.stderr)/return
-- [ ] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/build/test_contract.py -v` — все должны пройти
-- [ ] **Логические тесты**: написать в `tests/goga/build/test_build.py` — позитивные (dry_run, full execution, env vars, settings merge, claude wrapper, defaults copying, codex_enabled, config flags), негативные (uncommitted manifests, unsupported agent, missing config, invalid settings.json, defaults dir not found, ralphex not found), краевые (overwrite files, repeated build, custom prompts/agents dir)
-- [ ] **Отладка**: запустить `python -m pytest tests/goga/build/ -v` — исправлять код, пока все тесты не пройдут
-- [ ] **Перепроверка контрактов**: проверить `from goga.build import build`, сигнатуру, exit codes, ralphex command assembly
-- [ ] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 6 — build routine в goga/build
+- [x] **Контрактные тесты**: написать в `tests/goga/build/test_contract.py` — импортируемость `build` из `goga.build`, сигнатура `(plan, config, cli_options) -> int` (ожидаемо падают)
+- [x] **Код**: создать `goga/build/build.py` с функцией `build(plan, config, cli_options)`, извлечь бизнес-логику из `goga/commands/build.py`
+- [x] **Код**: перенести helpers: `_unquote_git_path`, `_parse_porcelain_path`, `_find_uncommitted_manifests`, `_run_precondition`, `_precondition_claude`, `_create_claude_settings`, `_create_claude_wrapper`, `_copy_defaults`, `_assemble_command`, константы `CLAUDE_WRAPPER_SCRIPT`, `DEFAULTS_PACKAGE_DIR`, `RALPHEX_CONFIG_DEFAULTS`
+- [x] **Код**: заменить click.echo/ClickException/ctx.exit на print(..., file=sys.stderr)/return
+- [x] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/build/test_contract.py -v` — все должны пройти
+- [x] **Логические тесты**: написать в `tests/goga/build/test_build.py` — позитивные (dry_run, full execution, env vars, settings merge, claude wrapper, defaults copying, codex_enabled, config flags), негативные (uncommitted manifests, unsupported agent, missing config, invalid settings.json, defaults dir not found, ralphex not found), краевые (overwrite files, repeated build, custom prompts/agents dir)
+- [x] **Отладка**: запустить `python -m pytest tests/goga/build/ -v` — исправлять код, пока все тесты не пройдут
+- [x] **Перепроверка контрактов**: проверить `from goga.build import build`, сигнатуру, exit codes, ralphex command assembly
+- [x] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
 
 ### Task 7: Инфраструктура goga/install (инфраструктура)
 
