@@ -178,15 +178,15 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их. Если реализация не соответствует контракту, исправляйте реализацию — никогда не исправляйте контракт.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 2 — sync routine в goga/sync
-- [ ] **Контрактные тесты**: написать в `tests/goga/sync/test_contract.py` — проверить импортируемость `sync` из `goga.sync`, сигнатуру функции `sync(source, token, branch) -> int`, наличие параметров с правильными типами и дефолтами (ожидаемо падают)
-- [ ] **Код**: создать `goga/sync/sync.py` с функцией `sync(source: str, token: str | None = None, branch: str | None = None) -> int`, извлечь бизнес-логику из `goga/commands/sync.py`, заменив click-вызовы на print(..., file=sys.stderr) и return exit_code
-- [ ] **Код**: перенести приватные helpers: `_is_git_url`, `_extract_dep_name`, `_prepare_clone_url`, `_find_usages_dirs`, `_sync_usages`, `_sync_from_git`, `_sync_from_local` — адаптировать для возврата int вместо ctx.exit
-- [ ] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/sync/test_contract.py -v` — все должны пройти
-- [ ] **Логические тесты**: написать в `tests/goga/sync/test_sync.py` — позитивные (local sync, git sync), негативные (path not exists, no usages, git clone fail, token leak), краевые (idempotent, token+branch, relative path, empty usages dir, SSH URL ignores token, GIT_TERMINAL_PROMPT=0, cleanup tmp_dir on success/failure)
-- [ ] **Отладка**: запустить `python -m pytest tests/goga/sync/ -v` — исправлять код, пока все тесты не пройдут (НЕ исправлять тестовый код)
-- [ ] **Перепроверка контрактов**: проверить что `from goga.sync import sync` работает, сигнатура `(source: str, token: str | None = None, branch: str | None = None) -> int`, вывод через sys.stderr, exit codes 0/1
-- [ ] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 2 — sync routine в goga/sync
+- [x] **Контрактные тесты**: написать в `tests/goga/sync/test_contract.py` — проверить импортируемость `sync` из `goga.sync`, сигнатуру функции `sync(source, token, branch) -> int`, наличие параметров с правильными типами и дефолтами (ожидаемо падают)
+- [x] **Код**: создать `goga/sync/sync.py` с функцией `sync(source: str, token: str | None = None, branch: str | None = None) -> int`, извлечь бизнес-логику из `goga/commands/sync.py`, заменив click-вызовы на print(..., file=sys.stderr) и return exit_code
+- [x] **Код**: перенести приватные helpers: `_is_git_url`, `_extract_dep_name`, `_prepare_clone_url`, `_find_usages_dirs`, `_sync_usages`, `_sync_from_git`, `_sync_from_local` — адаптировать для возврата int вместо ctx.exit
+- [x] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/sync/test_contract.py -v` — все должны пройти
+- [x] **Логические тесты**: написать в `tests/goga/sync/test_sync.py` — позитивные (local sync, git sync), негативные (path not exists, no usages, git clone fail, token leak), краевые (idempotent, token+branch, relative path, empty usages dir, SSH URL ignores token, GIT_TERMINAL_PROMPT=0, cleanup tmp_dir on success/failure)
+- [x] **Отладка**: запустить `python -m pytest tests/goga/sync/ -v` — исправлять код, пока все тесты не пройдут (НЕ исправлять тестовый код)
+- [x] **Перепроверка контрактов**: проверить что `from goga.sync import sync` работает, сигнатура `(source: str, token: str | None = None, branch: str | None = None) -> int`, вывод через sys.stderr, exit codes 0/1
+- [x] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
 
 ### Task 3: Инфраструктура goga/schema (инфраструктура)
 
