@@ -362,16 +362,16 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 8 — install routine в goga/install
-- [ ] **Контрактные тесты**: написать в `tests/goga/install/test_contract.py` — импортируемость `install` из `goga.install`, сигнатура `(agent, config) -> int` (ожидаемо падают)
-- [ ] **Код**: создать `goga/install/install.py` с функцией `install(agent, config)`, извлечь бизнес-логику из `goga/commands/install.py`
-- [ ] **Код**: перенести helpers: `_resolve_target_dir`, `_get_source_dir`, `_install_commands`, `_install_skills`, `_download_dsl_spec`, `_cleanup_goga_skills`, `_print_summary`, константы `AGENT_DIRS`, `DSL_SPEC_URL`
-- [ ] **Код**: заменить click.echo/ctx.exit на print/return
-- [ ] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/install/test_contract.py -v` — все должны пройти
-- [ ] **Логические тесты**: написать в `tests/goga/install/test_install.py` — позитивные (default agent, explicit claude agent, config-based agent, full install cycle), негативные (unsupported agent, source missing, download failure HTTP/URL/timeout, permission error), краевые (idempotent, preserves existing files, preserves other skills, replaces old commands, cleanup goga-* skills, empty skills dir)
-- [ ] **Отладка**: запустить `python -m pytest tests/goga/install/ -v` — исправлять код, пока все тесты не пройдут
-- [ ] **Перепроверка контрактов**: проверить `from goga.install import install`, сигнатуру, exit codes, cleanup/install/download flow
-- [ ] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 8 — install routine в goga/install
+- [x] **Контрактные тесты**: написать в `tests/goga/install/test_contract.py` — импортируемость `install` из `goga.install`, сигнатура `(agent, config) -> int` (ожидаемо падают)
+- [x] **Код**: создать `goga/install/install.py` с функцией `install(agent, config)`, извлечь бизнес-логику из `goga/commands/install.py`
+- [x] **Код**: перенести helpers: `_resolve_target_dir`, `_get_source_dir`, `_install_commands`, `_install_skills`, `_download_dsl_spec`, `_cleanup_goga_skills`, `_print_summary`, константы `AGENT_DIRS`, `DSL_SPEC_URL`
+- [x] **Код**: заменить click.echo/ctx.exit на print/return
+- [x] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/install/test_contract.py -v` — все должны пройти
+- [x] **Логические тесты**: написать в `tests/goga/install/test_install.py` — позитивные (default agent, explicit claude agent, config-based agent, full install cycle), негативные (unsupported agent, source missing, download failure HTTP/URL/timeout, permission error), краевые (idempotent, preserves existing files, preserves other skills, replaces old commands, cleanup goga-* skills, empty skills dir)
+- [x] **Отладка**: запустить `python -m pytest tests/goga/install/ -v` — исправлять код, пока все тесты не пройдут
+- [x] **Перепроверка контрактов**: проверить `from goga.install import install`, сигнатуру, exit codes, cleanup/install/download flow
+- [x] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
 
 ### Task 9: Обновление CLI-обёрток goga/commands (TDD кодирование)
 
