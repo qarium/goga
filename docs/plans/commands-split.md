@@ -236,15 +236,15 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 4 — schema routine в goga/schema
-- [ ] **Контрактные тесты**: написать в `tests/goga/schema/test_contract.py` — импортируемость `schema` из `goga.schema`, сигнатура `(cells, max_depth, depends_on) -> str`, типы параметров (ожидаемо падают)
-- [ ] **Код**: создать `goga/schema/schema.py` с функцией `schema(cells, max_depth, depends_on)`, извлечь бизнес-логику из `goga/commands/schema.py`, добавить ValueError при ошибках AST
-- [ ] **Код**: перенести helpers: `_find_usages_files`, `_build_dependencies`, `_build_cell_tree`, `_prune_depth`, `_filter_tree`, `_has_dependency`, `_filter_by_depends_on`, `_cell_in_set`
-- [ ] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/schema/test_contract.py -v` — все должны пройти
-- [ ] **Логические тесты**: написать в `tests/goga/schema/test_schema.py` — позитивные (full tree, cells filter, depends_on filter, max_depth), негативные (AST errors → ValueError), краевые (empty tree → "[]", no usages dir, unicode, deduplicated dependencies, combined filters)
-- [ ] **Отладка**: запустить `python -m pytest tests/goga/schema/ -v` — исправлять код, пока все тесты не пройдут
-- [ ] **Перепроверка контрактов**: проверить `from goga.schema import schema`, сигнатуру, ValueError при ошибках AST, красивый JSON
-- [ ] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 4 — schema routine в goga/schema
+- [x] **Контрактные тесты**: написать в `tests/goga/schema/test_contract.py` — импортируемость `schema` из `goga.schema`, сигнатура `(cells, max_depth, depends_on) -> str`, типы параметров (ожидаемо падают)
+- [x] **Код**: создать `goga/schema/schema.py` с функцией `schema(cells, max_depth, depends_on)`, извлечь бизнес-логику из `goga/commands/schema.py`, добавить ValueError при ошибках AST
+- [x] **Код**: перенести helpers: `_find_usages_files`, `_build_dependencies`, `_build_cell_tree`, `_prune_depth`, `_filter_tree`, `_has_dependency`, `_filter_by_depends_on`, `_cell_in_set`
+- [x] **Верификация интерфейсов**: запустить контрактные тесты `python -m pytest tests/goga/schema/test_contract.py -v` — все должны пройти
+- [x] **Логические тесты**: написать в `tests/goga/schema/test_schema.py` — позитивные (full tree, cells filter, depends_on filter, max_depth), негативные (AST errors → ValueError), краевые (empty tree → "[]", no usages dir, unicode, deduplicated dependencies, combined filters)
+- [x] **Отладка**: запустить `python -m pytest tests/goga/schema/ -v` — исправлять код, пока все тесты не пройдут
+- [x] **Перепроверка контрактов**: проверить `from goga.schema import schema`, сигнатуру, ValueError при ошибках AST, красивый JSON
+- [x] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
 
 ### Task 5: Инфраструктура goga/build (инфраструктура)
 
