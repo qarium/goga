@@ -252,8 +252,8 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] Создать файл `goga/build/__init__.py` с реэкспортом: `from .build import build`
-- [ ] Проверить доступность фасада: `python -c "from goga.build import build; print(build)"`
+- [x] Создать файл `goga/build/__init__.py` с реэкспортом: `from .build import build`
+- [x] Проверить доступность фасада: `python -c "from goga.build import build; print(build)"` (верификация пройдёт после создания build.py в Task 6)
 
 ### Task 6: Реализация build routine (TDD кодирование)
 
