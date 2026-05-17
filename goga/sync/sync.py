@@ -88,7 +88,7 @@ def _sync_from_git(source: str, token: str | None, branch: str | None) -> int:
             print("git is not installed or not in PATH", file=sys.stderr)
             return 1
         except subprocess.CalledProcessError as e:
-            raw = e.stderr.decode() if e.stderr else str(e)
+            raw = e.stderr.decode(errors="replace") if e.stderr else str(e)
             if token is not None:
                 raw = raw.replace(token, "<TOKEN>")
             print(raw, file=sys.stderr)

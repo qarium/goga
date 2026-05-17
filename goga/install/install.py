@@ -52,6 +52,7 @@ def _download_dsl_spec(target: Path) -> None:
         raise OSError(f"Failed to download DSL spec: HTTP {e.code} {e.reason}") from e
     except urllib.error.URLError as e:
         raise OSError(f"Failed to download DSL spec: {e.reason}") from e
+    dsl_path.parent.mkdir(parents=True, exist_ok=True)
     dsl_path.write_bytes(data)
 
 
@@ -74,7 +75,7 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
     print(f"Installed {len(skills)} skills: {', '.join(skills)}", file=sys.stderr)
 
 
-def install(agent: str | None = None, config: Config = None) -> int:
+def install(agent: str | None = None, config: Config | None = None) -> int:
     if config is None:
         print("Error: config is required", file=sys.stderr)
         return 1

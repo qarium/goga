@@ -24,7 +24,7 @@ class TestInstallContract:
         from goga.config import Config
 
         hints = typing.get_type_hints(install)
-        assert hints["config"] is Config
+        assert hints["config"] == Config | None
 
     def test_install_returns_int(self) -> None:
         hints = typing.get_type_hints(install)
