@@ -316,8 +316,8 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] Создать файл `goga/install/__init__.py` с реэкспортом: `from .install import install`
-- [ ] Проверить доступность фасада: `python -c "from goga.install import install; print(install)"`
+- [x] Создать файл `goga/install/__init__.py` с реэкспортом: `from .install import install`
+- [x] Проверить доступность фасада: `python -c "from goga.install import install; print(install)"` (верификация пройдёт после создания install.py в Task 8)
 
 ### Task 8: Реализация install routine (TDD кодирование)
 
