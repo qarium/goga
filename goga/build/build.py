@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import stat
 import subprocess
@@ -227,7 +228,7 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
         return result
 
     cmd = _assemble_command(plan, config, cli_options)
-    cmd_str = " ".join(cmd)
+    cmd_str = shlex.join(cmd)
 
     if cli_options.get("dry_run"):
         print(f"Dry run: {cmd_str}", file=sys.stderr)

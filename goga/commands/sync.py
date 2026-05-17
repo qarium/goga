@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 import click
 
 from goga.sync import sync as sync_logic
@@ -12,7 +10,7 @@ from goga.sync import sync as sync_logic
 @click.option("--token", default=None, help="Token for private repository authentication")
 @click.option("--branch", default=None, help="Branch to clone")
 @click.pass_context
-def sync(_ctx: click.Context, source: str, token: str | None, branch: str | None) -> None:
+def sync(ctx: click.Context, source: str, token: str | None, branch: str | None) -> None:
     """Synchronize .usages/ from a local path or git repository into .goga/usages/deps/<dep_name>/."""
     exit_code = sync_logic(source, token, branch)
-    sys.exit(exit_code)
+    ctx.exit(exit_code)

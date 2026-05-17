@@ -75,6 +75,9 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
 
 
 def install(agent: str | None = None, config: Config = None) -> int:
+    if config is None:
+        print("Error: config is required", file=sys.stderr)
+        return 1
     resolved_agent = agent if agent is not None else config.build.task_executor.agent
 
     try:
