@@ -1,0 +1,63 @@
+Imports:
+  - Types:
+      - AST
+    From: goga/ast
+
+Usages:
+  convention: .goga/usages/development/conventions.md
+  documents: |
+    Работать с типом `AST`.
+    - Загрузить проект с использованием AST.load()
+    - Доступ к документам дерева через свойство AST.tree
+    `AST` необходимо создавать с указанием пути в текущий CWD (".").
+  beautiful_json: |
+    Сделать из python объекта json строку с учетом форматирования.
+    json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
+
+Annotations: |
+  При разработке и тестировании использовать практику `convention`.
+  Использовать практику `documents` для загрузки дерева проекта.
+  Результат форматировать через практику `beautiful_json`.
+
+---
+
+"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = []) -> json:str":
+  location: schema.py
+  annotations: |
+    Формирование JSON-схемы проекта из AST.
+
+    `cells`: пути к клеткам для фильтрации
+    `max_depth`: ограничение вложенности дерева
+    `depends_on`: фильтр клеток по зависимости
+    `json`: JSON-строка со схемой проекта
+
+    Алгоритм:
+    1. Загрузить дерево документов проекта через практику `documents`
+    2. Рекурсивно сформировать дерево json-структуры с вложенностью children
+    3. Применить фильтры: `cells`, `max_depth`, `depends_on`
+    4. Вернуть JSON-строку через практику `beautiful_json`
+
+    Формат каждого узла:
+    {
+      "cell": <path>,
+      "description": <footer description>,
+      "types": [<routine and entity names>],
+      "usages": [<md files from .usages/>],
+      "dependencies": {<path>: {"types": [...], "usages": [...]}},
+      "children": [<children nodes>]
+    }
+
+    Требования:
+    - если `max_depth` не указан — дерево выводится полностью
+    - если `depends_on` не указан — дерево выводится полностью
+    - если дерево пустое → "[]"
+    - если после загрузки `AST` обнаружены ошибки (свойство AST.errors не пустое) —
+      выбросить ValueError с количеством ошибок
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 15/05/26
+
+Description: |
+  Манифест описывает формирование JSON-схемы проекта CODEMANIFEST

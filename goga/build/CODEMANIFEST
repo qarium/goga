@@ -1,0 +1,68 @@
+Imports:
+  - Types:
+      - Config
+      - BuildConfig
+      - TaskExecutor
+    From: goga/config
+
+Usages:
+  convention: .goga/usages/development/conventions.md
+  ralphex: .goga/usages/cooks/ralphex.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `convention`.
+  Для сборки использовать практику `ralphex`.
+  Вывод информации через sys.stderr (click не используется).
+  Использовать subprocess для запуска внешних команд.
+
+---
+
+"build(plan: str, config: Config, cli_options: dict) -> exit_code:int":
+  location: build.py
+  annotations: |
+    Сборка кода через `ralphex`. Подготавливает окружение и запускает.
+
+    `plan`: путь к файлу плана (markdown)
+    `config`: загруженная конфигурация проекта
+    `cli_options`: словарь CLI-опций (dry_run, worktree, skip_finalize,
+                   skip_manifest_check, session_timeout, idle_timeout,
+                   wait, max_iterations, review_patience)
+    `exit_code`: код возврата (0 успех, 1 ошибка)
+
+    Алгоритм:
+    0. (pre-check) Если skip_manifest_check не установлен:
+       - Проверить что все CODEMANIFEST файлы проекта закоммичены в git
+       - При обнаружении незакоммиченных — ошибка, exit 1
+    1. Диспетчеризация прекондишенов по agent из `TaskExecutor`:
+       - Если agent == "claude":
+         a. Создать/обновить .claude/settings.json:
+            - Прочитать существующий если есть, сделать merge
+            - Установить env из `TaskExecutor` в settings["env"]
+            - Установить settings["attribution"] = {"commit": "", "pr": ""}
+         b. Создать .ralphex/claude-wrapper.sh:
+            - Скрипт: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
+            - chmod +x на скрипт
+         c. Обновить .ralphex/config:
+            - Добавить defaults (claude_command, claude_args) если отсутствуют
+            - Перезаписать codex_enabled из `BuildConfig`
+       - Иначе → ошибка "Unsupported agent", exit 1
+    2. Копировать дефолтные prompts и agents из пакета goga в .ralphex/
+       из каталогов, указанных в `BuildConfig`
+    3. Собрать команду ralphex:
+       - Базовая: ["ralphex", plan, "--config-dir", ".ralphex/"]
+       - Добавить флаги с приоритетом: CLI-опции > `Config` > пропуск
+    4. При dry_run: вывести команду и вернуть 0
+    5. Запустить `ralphex` через subprocess.call, вернуть его код возврата
+
+    Требования:
+    - `ralphex` должен быть доступен в PATH, иначе ошибка
+    - Минимальный вывод: что делается на каждом шаге (через sys.stderr)
+    - Код возврата: код `ralphex` при успехе, 1 при ошибке
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 15/05/26
+
+Description: |
+  Манифест описывает логику сборки кода через ralphex
