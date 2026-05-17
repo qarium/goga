@@ -9,11 +9,11 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands import sync as facade_sync
-from goga.commands.sync import (
+from goga.commands.sync import sync
+from goga.sync.sync import (
     _extract_dep_name,
     _is_git_url,
     _prepare_clone_url,
-    sync,
 )
 
 

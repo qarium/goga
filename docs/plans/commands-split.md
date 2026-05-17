@@ -454,17 +454,17 @@ def install(ctx, agent):
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 9 — обновление CLI-обёрток goga/commands
-- [ ] **Контрактные тесты**: проверить что все 7 команд импортируемы из `goga.commands`, что build/install/schema/sync являются click.Command, что параметры (аргументы и опции) совпадают с текущими
-- [ ] **Код**: переписать `goga/commands/sync.py` — тонкая обёртка с делегированием `sync_logic`
-- [ ] **Код**: переписать `goga/commands/schema.py` — тонкая обёртка с делегированием `schema_logic`, обработка ValueError
-- [ ] **Код**: переписать `goga/commands/build.py` — тонкая обёртка с делегированием `build_logic`, load_config + ClickException
-- [ ] **Код**: переписать `goga/commands/install.py` — тонкая обёртка с делегированием `install_logic`, load_config + ClickException
-- [ ] **Верификация интерфейсов**: запустить `python -m pytest tests/goga/commands/ -v` — все существующие тесты должны пройти (с адаптацией mock-путей если нужно)
-- [ ] **Логические тесты**: адаптировать существующие тесты в `tests/goga/commands/` для новой структуры (mock module paths меняются с `goga.commands.build` на `goga.build.build` и т.д.)
-- [ ] **Отладка**: запустить `python -m pytest tests/ -v` — исправлять до полного прохождения
-- [ ] **Перепроверка контрактов**: проверить что все 7 команд доступны из фасада, click-параметры совпадают, делегирование работает
-- [ ] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
+- [x] **ШАГ 0 (ОБЪЯВЛЕНИЕ)**: объявить, что работа ведётся над Task 9 — обновление CLI-обёрток goga/commands
+- [x] **Контрактные тесты**: проверить что все 7 команд импортируемы из `goga.commands`, что build/install/schema/sync являются click.Command, что параметры (аргументы и опции) совпадают с текущими
+- [x] **Код**: переписать `goga/commands/sync.py` — тонкая обёртка с делегированием `sync_logic`
+- [x] **Код**: переписать `goga/commands/schema.py` — тонкая обёртка с делегированием `schema_logic`, обработка ValueError
+- [x] **Код**: переписать `goga/commands/build.py` — тонкая обёртка с делегированием `build_logic`, load_config + ClickException
+- [x] **Код**: переписать `goga/commands/install.py` — тонкая обёртка с делегированием `install_logic`, load_config + ClickException
+- [x] **Верификация интерфейсов**: запустить `python -m pytest tests/goga/commands/ -v` — все существующие тесты должны пройти (с адаптацией mock-путей если нужно)
+- [x] **Логические тесты**: адаптировать существующие тесты в `tests/goga/commands/` для новой структуры (mock module paths меняются с `goga.commands.build` на `goga.build.build` и т.д.)
+- [x] **Отладка**: запустить `python -m pytest tests/ -v` — исправлять до полного прохождения
+- [x] **Перепроверка контрактов**: проверить что все 7 команд доступны из фасада, click-параметры совпадают, делегирование работает
+- [x] **Линт**: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — исправить форматирование
 
 ### Task 10: Интеграционные тесты для commands-split
 

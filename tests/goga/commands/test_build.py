@@ -12,15 +12,10 @@ from unittest import mock
 import click
 import yaml
 from click.testing import CliRunner
+from goga.build.build import CLAUDE_WRAPPER_SCRIPT
 from goga.commands import build as build_cmd
-from goga.commands.build import (
-    CLAUDE_WRAPPER_SCRIPT,
-)
 
-# goga.commands.__init__ re-exports the Click command as "build", shadowing the
-# module.  Retrieve the actual module from sys.modules so that mock.patch can
-# reach module-level attributes like DEFAULTS_PACKAGE_DIR.
-_build_module = sys.modules["goga.commands.build"]
+_build_module = sys.modules["goga.build.build"]
 
 TEST_ENV_VARS = {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",

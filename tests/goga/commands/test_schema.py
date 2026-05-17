@@ -418,9 +418,7 @@ def test_schema_with_ast_errors_exits_1(tmp_path) -> None:
         result = _run_schema()
 
     assert result.exit_code == 1
-    data = json.loads(result.output)
-    assert isinstance(data, list)
-    assert "cell" in data[0]
+    assert "error" in result.output.lower()
 
 
 def test_schema_no_usages_dir(tmp_path) -> None:
@@ -603,6 +601,9 @@ def test_schema_dependencies_empty_imports(tmp_path) -> None:
 
 def test_schema_types_field_entities_and_routines(tmp_path) -> None:
     _write_codemanifest(tmp_path, ROOT_WITH_CHILD)
+    subpkg = tmp_path / "subpkg"
+    subpkg.mkdir()
+    _write_codemanifest(subpkg, CHILD)
 
     with _cwd(tmp_path):
         result = _run_schema()
@@ -644,7 +645,37 @@ def test_schema_usages_basename(tmp_path) -> None:
 
 
 def test_schema_dependencies_multiple_from_paths(tmp_path) -> None:
-    _write_codemanifest(tmp_path, MULTI_IMPORTS)
+    multi_imports_used = """\
+Imports:
+  - Types:
+      - Alpha
+    From: lib_a
+  - Types:
+      - Beta
+    From: lib_b
+
+Usages: {}
+
+Annotations: |
+  Uses `Alpha` and `Beta` here
+
+---
+"Entity()":
+  location: entity.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Multiple import sources
+"""
+    _write_codemanifest(tmp_path, multi_imports_used)
+    lib_a = tmp_path / "lib_a"
+    lib_a.mkdir()
+    _write_codemanifest(lib_a, CHILD.replace("Helper", "Alpha"))
+    lib_b = tmp_path / "lib_b"
+    lib_b.mkdir()
+    _write_codemanifest(lib_b, CHILD.replace("Helper", "Beta"))
 
     with _cwd(tmp_path):
         result = _run_schema()

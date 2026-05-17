@@ -10,9 +10,10 @@ import click
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import install
-from goga.commands.install import _cleanup_goga_skills, load_config
+from goga.config import load_config
+from goga.install.install import _cleanup_goga_skills
 
-_install_module = sys.modules["goga.commands.install"]
+_install_module = sys.modules["goga.install.install"]
 _AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
 
 
