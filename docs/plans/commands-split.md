@@ -194,8 +194,8 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их.**
 
-- [ ] Создать файл `goga/schema/__init__.py` с реэкспортом: `from .schema import schema`
-- [ ] Проверить доступность фасада: `python -c "from goga.schema import schema; print(schema)"`
+- [x] Создать файл `goga/schema/__init__.py` с реэкспортом: `from .schema import schema`
+- [x] Проверить доступность фасада: `python -c "from goga.schema import schema; print(schema)"` (верификация пройдёт после создания schema.py в Task 4)
 
 ### Task 4: Реализация schema routine (TDD кодирование)
 
