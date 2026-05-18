@@ -1,6 +1,7 @@
 """Integration tests for commands-split: CLI wrappers delegate to business logic cells."""
 from __future__ import annotations
 
+import importlib
 import sys
 from pathlib import Path
 from unittest import mock
@@ -12,6 +13,14 @@ from goga.commands.sync import sync as sync_cli
 from goga.commands.schema import schema as schema_cli
 from goga.commands.build import build as build_cli
 from goga.commands.install import install as install_cli
+
+# __init__.py in each package shadows submodule names (from .sync import sync),
+# so `import goga.commands.sync as x` returns the Click Command, not the module.
+# importlib.import_module() always resolves through sys.modules → correct module.
+_sync_mod = importlib.import_module("goga.commands.sync")
+_schema_mod = importlib.import_module("goga.commands.schema")
+_build_mod = importlib.import_module("goga.commands.build")
+_install_mod = importlib.import_module("goga.commands.install")
 
 from tests.conftest import cwd as _cwd
 
@@ -27,7 +36,7 @@ class TestSyncDelegation:
         (source / ".usages" / "api.md").write_text("# API", encoding="utf-8")
 
         with (
-            mock.patch("goga.commands.sync.sync_logic", return_value=0) as mock_logic,
+            mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -37,14 +46,14 @@ class TestSyncDelegation:
         assert result.exit_code == 0
 
     def test_sync_delegates_exit_code_1(self) -> None:
-        with mock.patch("goga.commands.sync.sync_logic", return_value=1):
+        with mock.patch.object(_sync_mod, "sync_logic", return_value=1):
             runner = CliRunner()
             result = runner.invoke(sync_cli, ["/nonexistent"])
 
         assert result.exit_code == 1
 
     def test_sync_delegates_with_none_defaults(self) -> None:
-        with mock.patch("goga.commands.sync.sync_logic", return_value=0) as mock_logic:
+        with mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             runner.invoke(sync_cli, ["https://github.com/user/repo"])
 
@@ -68,8 +77,8 @@ class TestSchemaDelegation:
         )
 
         with (
-            mock.patch(
-                "goga.commands.schema.schema_logic", return_value='[{"cell": "."}]'
+            mock.patch.object(
+                _schema_mod, "schema_logic", return_value='[{"cell": "."}]'
             ) as mock_logic,
             _cwd(tmp_path),
         ):
@@ -82,8 +91,8 @@ class TestSchemaDelegation:
 
     def test_schema_delegates_with_cells_and_options(self, tmp_path: Path) -> None:
         with (
-            mock.patch(
-                "goga.commands.schema.schema_logic", return_value='[{"cell": "pkg_a"}]'
+            mock.patch.object(
+                _schema_mod, "schema_logic", return_value='[{"cell": "pkg_a"}]'
             ) as mock_logic,
             _cwd(tmp_path),
         ):
@@ -95,8 +104,8 @@ class TestSchemaDelegation:
 
     def test_schema_handles_value_error_from_logic(self, tmp_path: Path) -> None:
         with (
-            mock.patch(
-                "goga.commands.schema.schema_logic", side_effect=ValueError("2 error(s) found")
+            mock.patch.object(
+                _schema_mod, "schema_logic", side_effect=ValueError("2 error(s) found")
             ),
             _cwd(tmp_path),
         ):
@@ -128,7 +137,7 @@ class TestBuildDelegation:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch("goga.commands.build.build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -148,7 +157,7 @@ class TestBuildDelegation:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch("goga.commands.build.build_logic", return_value=42),
+            mock.patch.object(_build_mod, "build_logic", return_value=42),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -174,7 +183,7 @@ class TestBuildDelegation:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch("goga.commands.build.build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -217,7 +226,7 @@ def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
 class TestInstallDelegation:
     def test_install_delegates_to_install_logic(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.install.install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
             _cwd(tmp_path),
@@ -232,7 +241,7 @@ class TestInstallDelegation:
 
     def test_install_delegates_with_agent(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.install.install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):
@@ -246,7 +255,7 @@ class TestInstallDelegation:
 
     def test_install_delegates_exit_code_1(self, tmp_path: Path) -> None:
         with (
-            mock.patch("goga.commands.install.install_logic", return_value=1) as mock_logic,
+            mock.patch.object(_install_mod, "install_logic", return_value=1) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):
@@ -279,7 +288,7 @@ class TestInstallDelegation:
 
 class TestAllCommandsDelegationViaApp:
     def test_sync_via_app_delegates(self, tmp_path: Path) -> None:
-        with mock.patch("goga.commands.sync.sync_logic", return_value=0) as mock_logic:
+        with mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(app, ["sync", "/some/path"])
 
@@ -288,8 +297,8 @@ class TestAllCommandsDelegationViaApp:
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
         with (
-            mock.patch(
-                "goga.commands.schema.schema_logic", return_value="[]"
+            mock.patch.object(
+                _schema_mod, "schema_logic", return_value="[]"
             ) as mock_logic,
             _cwd(tmp_path),
         ):
@@ -304,7 +313,7 @@ class TestAllCommandsDelegationViaApp:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch("goga.commands.build.build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -317,7 +326,7 @@ class TestAllCommandsDelegationViaApp:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch("goga.commands.install.install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):

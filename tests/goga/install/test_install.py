@@ -17,6 +17,9 @@ from goga.install.install import (
     install,
 )
 
+import importlib
+_install_mod = importlib.import_module("goga.install.install")
+
 
 def _make_config(agent: str = "claude") -> Config:
     task_executor = TaskExecutor(agent=agent, env={})
@@ -121,7 +124,7 @@ class TestDownloadDslSpec:
         mock_response.__enter__ = mock.MagicMock(return_value=mock_response)
         mock_response.__exit__ = mock.MagicMock(return_value=False)
 
-        with mock.patch("goga.install.install.urllib.request.urlopen", return_value=mock_response):
+        with mock.patch.object(_install_mod.urllib.request, "urlopen", return_value=mock_response):
             _download_dsl_spec(tmp_path)
 
         assert (dsl_dir / "dsl.md").read_bytes() == b"dsl content"
@@ -130,8 +133,9 @@ class TestDownloadDslSpec:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        with mock.patch(
-            "goga.install.install.urllib.request.urlopen",
+        with mock.patch.object(
+            _install_mod.urllib.request,
+            "urlopen",
             side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
         ), pytest.raises(OSError, match="HTTP 404"):
             _download_dsl_spec(tmp_path)
@@ -140,8 +144,9 @@ class TestDownloadDslSpec:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        with mock.patch(
-            "goga.install.install.urllib.request.urlopen",
+        with mock.patch.object(
+            _install_mod.urllib.request,
+            "urlopen",
             side_effect=urllib.error.URLError("connection refused"),
         ), pytest.raises(OSError, match="Failed to download DSL spec"):
             _download_dsl_spec(tmp_path)
@@ -195,9 +200,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent=None, config=config)
 
@@ -215,9 +220,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 
@@ -232,7 +237,7 @@ class TestInstall:
         config = _make_config()
         mock_source = tmp_path / "nonexistent"
 
-        with mock.patch("goga.install.install._get_source_dir", return_value=mock_source):
+        with mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source):
             result = install(agent="claude", config=config)
 
         assert result == 1
@@ -245,9 +250,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec", side_effect=OSError("download failed")),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec", side_effect=OSError("download failed")),
         ):
             result = install(agent="claude", config=config)
 
@@ -261,9 +266,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 
@@ -282,9 +287,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result1 = install(agent="claude", config=config)
             result2 = install(agent="claude", config=config)
@@ -301,9 +306,9 @@ class TestInstall:
         (mock_home / ".claude" / "skills" / "user-skill" / "SKILL.md").write_text("# user")
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 
@@ -319,9 +324,9 @@ class TestInstall:
         (mock_home / ".claude" / "skills" / "goga-obsolete" / "SKILL.md").write_text("# old")
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 
@@ -344,9 +349,9 @@ class TestInstall:
         (mock_home / ".claude" / "commands" / "goga" / "old.md").write_text("# old")
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=mock_source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 
@@ -365,9 +370,9 @@ class TestInstall:
         mock_home.mkdir()
 
         with (
-            mock.patch("goga.install.install._get_source_dir", return_value=source),
-            mock.patch("goga.install.install.Path.home", return_value=mock_home),
-            mock.patch("goga.install.install._download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
             result = install(agent="claude", config=config)
 

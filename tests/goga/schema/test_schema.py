@@ -28,6 +28,9 @@ from goga.schema.schema import (
     schema,
 )
 
+import importlib
+_schema_mod = importlib.import_module("goga.schema.schema")
+
 
 def _make_doc(  # noqa: PLR0913
     path: str,
@@ -240,7 +243,7 @@ class TestFilterByDependsOn:
 class TestSchemaFunction:
     def test_empty_tree_returns_empty_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = []
             mock_ast.errors = []
@@ -250,7 +253,7 @@ class TestSchemaFunction:
 
     def test_ast_errors_raises_value_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.errors = ["some error"]
             mock_ast_cls.return_value = mock_ast
@@ -260,7 +263,7 @@ class TestSchemaFunction:
     def test_full_tree_produces_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         doc = _make_doc("goga/cell", entities=["E1"], description="test cell")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc]
             mock_ast.errors = []
@@ -276,7 +279,7 @@ class TestSchemaFunction:
         doc_a = _make_doc("goga/a")
         doc_b = _make_doc("goga/b")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc_a, doc_b]
             mock_ast.errors = []
@@ -293,7 +296,7 @@ class TestSchemaFunction:
         )
         doc_without_dep = _make_doc("goga/other")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc_with_dep, doc_without_dep]
             mock_ast.errors = []
@@ -307,7 +310,7 @@ class TestSchemaFunction:
         child = _make_doc("goga/cell/child")
         parent = _make_doc("goga/cell", children=[child])
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [parent]
             mock_ast.errors = []
@@ -324,7 +327,7 @@ class TestSchemaFunction:
             children=[child],
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [parent]
             mock_ast.errors = []
@@ -338,7 +341,7 @@ class TestSchemaFunction:
     def test_json_is_pretty_formatted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         doc = _make_doc("goga/cell")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc]
             mock_ast.errors = []
@@ -351,7 +354,7 @@ class TestSchemaFunction:
     def test_unicode_description(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         doc = _make_doc("goga/cell", description="Описание ячейки")
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc]
             mock_ast.errors = []
@@ -361,7 +364,7 @@ class TestSchemaFunction:
 
     def test_multiple_ast_errors(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.errors = ["err1", "err2", "err3"]
             mock_ast_cls.return_value = mock_ast
@@ -380,7 +383,7 @@ class TestSchemaFunction:
             ],
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.schema.schema.AST") as mock_ast_cls:
+        with mock.patch.object(_schema_mod, "AST") as mock_ast_cls:
             mock_ast = mock.MagicMock()
             mock_ast.tree = [doc]
             mock_ast.errors = []
