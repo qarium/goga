@@ -1,0 +1,117 @@
+Imports:
+  - Types:
+      - DocumentRule
+    From: goga/ast/rules/base
+  - Types:
+      - EntityTypeNode
+      - RoutineTypeNode
+      - MethodNode
+      - ImportsNode
+    From: goga/ast/nodes
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Все типы являются мутациями `DocumentRule`.
+
+---
+
+# ************************* #
+# Структура entity / routine #
+# ************************* #
+
+"DocumentRule::EntitiesAndRoutinesHasNotConflicts(name: str = 'entities_and_routines_has_not_conflicts')":
+  location: rules.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - все имена entities и routines не имеют пересечений с именами подключаемых типов в `ImportsNode`
+      (конфликт может быть решен через alias для типа)
+
+    Требования:
+    - Встраиваемые типы с флагом embedded=True являются исключением из общего правила
+
+    Шаблоны ошибок:
+    - entity_conflict: "Entity '{entity_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
+    - routine_conflict: "Routine '{routine_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
+
+"DocumentRule::EntityHasOnlyValidKeys(name: str = 'entity_has_only_valid_keys')":
+  location: rules.py
+  annotations: |
+    Проверяет `EntityTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+      - properties
+      - methods
+
+    Шаблоны ошибок:
+    - unknown_keys: "Entity '{entity_name}' contains unknown keys {unknown_keys} — allowed: location, annotations, methods, properties"
+
+"DocumentRule::RoutineHasOnlyValidKeys(name: str = 'routine_has_only_valid_keys')":
+  location: rules.py
+  annotations: |
+    Проверяет `RoutineTypeNode`.
+
+    Правила:
+    - node.data не содержит ключей отличных от:
+      - location
+      - annotations
+
+    Шаблоны ошибок:
+    - unknown_keys: "Routine '{routine_name}' contains unknown keys {unknown_keys} — allowed: location, annotations"
+
+"DocumentRule::SignatureIsValid(name: str = 'signature_is_valid')":
+  location: rules.py
+  annotations: |
+    Проверяет `EntityTypeNode`, `RoutineTypeNode`, `MethodNode`.
+
+    Правила:
+    - строка сигнатуры соответствует паттерну '(...) -> ...' или '(...)'
+
+    Шаблоны ошибок:
+    - format: "signature '{signature_string}' has invalid format, use '(...) -> ...' or '(...)'"
+    - empty: "signature is empty, use '(...) -> ...' or '(...)'"
+
+"DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
+  location: rules.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - возвращаемый тип в сигнатуре имеет ссылку, правильно -> link:Type, не правильно -> Type
+
+    Требования:
+    - сигнатура может ничего не возвращать на выходе - это валидная ситуация
+
+    Шаблоны ошибок:
+    - missing_link: "Return type '{return_part}' in '{signature}' is missing a semantic label — use format '-> label:Type'"
+
+"DocumentRule::LocationIsRequired(name: str = 'location_is_required')":
+  location: rules.py
+  annotations: |
+    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+
+    Правила:
+    - entity/routine содержит location — имя файла с расширением, без директорий
+    - location содержит расширение: есть '.' и хотя бы один символ после '.'
+    - location не содержит '/'
+    - embedded типы пропускаются
+
+    Шаблоны ошибок:
+    - missing: "Type '{type_name}' in '{doc_path}' is missing required 'location' — specify the source file"
+    - no_extension: "Type '{type_name}' in '{doc_path}' has location '{location_value}' without file extension — use format 'filename.ext'"
+    - contains_path: "Type '{type_name}' in '{doc_path}' has location '{location_value}' containing directory path — use a plain filename without directories"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Правила проверки структуры entity и routine в документе манифеста

@@ -1,0 +1,62 @@
+Imports:
+  - Types:
+      - DocumentNode
+      - DocumentRoot
+    From: goga/ast/nodes
+  - Types:
+      - ASTRuleError
+      - DocumentRuleError
+    From: goga/ast/errors
+
+Usages:
+  nodes: |
+    Использовать манифест goga/ast/nodes и его API для работы с структурой документа
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+"DocumentRule(name: str)":
+  location: document.py
+  annotations: |
+    Описывает одно конкретное правило документа
+
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+  methods:
+    "check(node: DocumentNode) -> errors:list[DocumentRuleError]": |
+      Проверяет ноду на соответствие правилу
+
+      `node`: ноду которую необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+"ASTRule(tree: list[DocumentRoot], name: str)":
+  location: ast.py
+  annotations: |
+    Описывает одно конкретное правило которое применяет глобально ко всем документам
+
+    `tree`: дерево документов к которым необходимо применить правило, дерево можно читать используя практику `nodes`
+    `name`: имя правила
+  properties:
+    name -> str: |
+      Имя с которым было создано правило
+    tree -> list[DocumentRoot]: |
+      Дерево документов с которым было создано правило
+  methods:
+    "check(document: DocumentRoot) -> errors:list[ASTRuleError]": |
+      Проверяет документ на соответствие правилу
+
+      `document`: документ который необходимо проверить
+      `errors`: список ошибок в результате проверки
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Базовые типы правил для проверки манифест документов

@@ -4,29 +4,11 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from ..errors import ASTRuleError
+from ...errors import ASTRuleError
+from ..base.ast import ASTRule
 
 if TYPE_CHECKING:
-    from ..nodes import DocumentRoot
-
-
-class ASTRule:
-    """Base class for AST-level rules."""
-
-    def __init__(self, tree: list[DocumentRoot], name: str) -> None:
-        self._name = name
-        self._tree = tree
-
-    @property
-    def name(self) -> str:
-        return self._name
-
-    @property
-    def tree(self) -> list[DocumentRoot]:
-        return self._tree
-
-    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
-        raise NotImplementedError
+    from ...nodes import DocumentRoot
 
 
 class ImportsHasNotCyclicalDeps(ASTRule):
@@ -36,7 +18,6 @@ class ImportsHasNotCyclicalDeps(ASTRule):
         super().__init__(tree=tree, name="imports_has_not_cyclical_deps")
 
     def check(self, document: DocumentRoot) -> list[ASTRuleError]:
-        # Build a map of resolved path -> set of resolved import paths
         import_map: dict[str, set[str]] = {}
         for doc in self._tree:
             doc_path = doc.path
@@ -50,11 +31,10 @@ class ImportsHasNotCyclicalDeps(ASTRule):
 
         for item in document.header.imports.types + document.header.imports.usages:
             imported_path = item.from_path
-            # Check if the imported document also imports from the current document's path
             if imported_path in import_map and doc_path in import_map[imported_path]:
                 errors.append(
                     ASTRuleError(
-                        message=f"Cyclical import: package '{doc_path}' and '{imported_path}' import from each other",
+                        message=(f"Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"),
                         rule=self.name,
                         document=document,
                         node=item,
@@ -73,13 +53,11 @@ class ImportTypeExists(ASTRule):
     def check(self, document: DocumentRoot) -> list[ASTRuleError]:
         errors: list[ASTRuleError] = []
 
-        # Build O(1) lookup: doc path -> DocumentRoot
         path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
 
         for item in document.header.imports.types:
             from_path = item.from_path
 
-            # Skip if from_path does not exist on filesystem
             if not Path(from_path).exists():
                 continue
 
@@ -87,7 +65,6 @@ class ImportTypeExists(ASTRule):
             if target_doc is None:
                 continue
 
-            # Collect all available type names in the target document
             entity_names = {entity.name for entity in target_doc.body.entities}
             routine_names = {routine.name for routine in target_doc.body.routines}
             header_type_names = set(target_doc.header.types)
@@ -120,11 +97,9 @@ class EmbeddedTypeHasLowLevel(ASTRule):
         errors: list[ASTRuleError] = []
         current_path = os.path.normpath(document.path)
 
-        # Collect all embedded entities and routines from the document body
         embedded_entities = [e for e in document.body.entities if e.embedded]
         embedded_routines = [r for r in document.body.routines if r.embedded]
 
-        # Build a lookup: type name -> document that defines it
         type_source: dict[str, DocumentRoot] = {}
         for doc in self._tree:
             for entity in doc.body.entities:
@@ -142,8 +117,9 @@ class EmbeddedTypeHasLowLevel(ASTRule):
                     errors.append(
                         ASTRuleError(
                             message=(
-                                f"Embedded entity '{entity.name}' comes from '{source_path}',"
-                                f" but can only be embedded from packages nested below '{current_path}'"
+                                f"Embedded entity '{entity.name}' comes from"
+                                f" '{source_path}', but can only be embedded from"
+                                f" packages nested below '{current_path}'"
                             ),
                             rule=self.name,
                             document=document,
@@ -159,8 +135,9 @@ class EmbeddedTypeHasLowLevel(ASTRule):
                     errors.append(
                         ASTRuleError(
                             message=(
-                                f"Embedded routine '{routine.name}' comes from '{source_path}',"
-                                f" but can only be embedded from packages nested below '{current_path}'"
+                                f"Embedded routine '{routine.name}' comes from"
+                                f" '{source_path}', but can only be embedded from"
+                                f" packages nested below '{current_path}'"
                             ),
                             rule=self.name,
                             document=document,

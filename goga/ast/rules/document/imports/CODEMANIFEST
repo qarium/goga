@@ -1,0 +1,175 @@
+Imports:
+  - Types:
+      - DocumentRule
+    From: goga/ast/rules/base
+  - Types:
+      - ImportsNode
+      - ImportTypeItemNode
+      - ImportUsageItemNode
+    From: goga/ast/nodes
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Все типы являются мутациями `DocumentRule`.
+
+---
+
+"signature_contains_type_name(signature: str, type_name: str) -> result:bool":
+  location: tools.py
+  annotations: |
+    Проверяет, что строка с сигнатурой содержит указанное имя типа
+
+    `signature`: строка с сигнатурой вида "(...) -> return"
+    `type_name`: имя типа который проверяем на вхождение
+
+    `result`: результат проверки
+
+    Алгоритм поиска:
+    - находим все вхождения по `type_name`
+    - проверяем каждое вхождение на точное совпадение: слева и справа от `type_name` допускаются
+      только символы :, >, (, ), [, ], запятая, пробел или край строки. Любой другой символ по краю
+      делает совпадение невалидным
+
+    Требования:
+    - кейсы должны покрываться как положительные:
+      - `type_name` = "TypeName" -> (param: TypeName)
+      - `type_name` = "TypeName" -> (param: TypeName, param_2: Type)
+      - `type_name` = "TypeName" -> (param: Type) -> rv:TypeName
+    - кейсы которые должны быть с отрицательным результатом
+      - `type_name` = "TypeName" -> (param: TypeNameOne)
+      - `type_name` = "TypeName" -> (param: TwoTypeName)
+      - `type_name` = "TypeName" -> (param: Type: = "TypeName")
+
+# ******* #
+# Imports #
+# ******* #
+
+"DocumentRule::ImportsCanNotBeEmpty(name: str = 'imports_can_not_be_empty')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - список импортов не может быть пустым
+
+    Требования:
+    - Правило применяется только в том случаи если импорт декларирован в документе
+
+    Шаблоны ошибок:
+    - empty: "Imports block in '{doc_path}' is empty — each import must specify at least Types and From"
+
+"DocumentRule::ImportsHasOnlyValidKeys(name: str = 'imports_has_only_valid_keys')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - каждый item в node.data не содержит ключей отличных от:
+      - Types
+      - Usages
+      - From
+
+    Шаблоны ошибок:
+    - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, Usages, From"
+
+"DocumentRule::ImportItemIsValid(name: str = 'import_item_is_valid')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+
+    Правила:
+    - импорт содержит подключаемый тип или практику
+
+    Требования:
+    - проверяется конкретный Item и ловит случаи когда оставили пустую строку или null в списке
+
+    Шаблоны ошибок:
+    - no_type: "Import from '{from_path}' has no {Types | Usages} listed — specify at least one type to import"
+
+"DocumentRule::ImportUsageExists(name: str = 'import_usage_exists')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportUsageItemNode`.
+
+    Правила:
+    - подключаемая практика существует по пути "{item.from_path}/.usages/{item.usage_name}.md"
+
+    Требования:
+    - проверяется каждый Item отдельно
+
+    Шаблоны ошибок:
+    - not_found: "Usage '{usage_name}' does not exists on filesystem by path '{usage_md_file_path}'"
+
+"DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+
+    Правила:
+    - импорт содержит путь from откуда подключаются типы или практики
+    - путь существует на файловой системе
+    - путь не выходит на пределы CWD
+
+    Шаблоны ошибок:
+    - empty: "Import in '{doc_path}' has empty source path (From field)"
+    - not_found: "Source path '{from_path}' in import of types {type_names} not found on filesystem"
+    - escapes: "Source path '{from_path}' in import points outside the project root"
+
+"DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportsNode`.
+
+    Правила:
+    - все имена типов и практик должны быть уникальны в рамках всех подключаемых документов
+
+    Шаблоны ошибок:
+    - duplicate: "{Type || Usage} '{type_name || usage_name}' is imported more than once: from '{path_a}' and '{path_b}'"
+
+"DocumentRule::ImportIsUsed(name: str = 'import_is_used')":
+  location: rules.py
+  annotations: |
+    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+
+    Правила для типа:
+    - type или alias (если указан) используется в документе хотя бы в одном из мест:
+      - аннотации:
+        - в заголовке документа (header.annotations)
+        - в практиках (header.usages.item[<name>])
+        - сущности (body[*].annotations), включая встраиваемые (embedded=True)
+        - рутины (body[*].annotations), включая встраиваемые (embedded=True)
+        - методы (entity.methods[*].annotations)
+        - свойства (entity.properties[*].annotations)
+      - сигнатуры:
+        - сущности, включая встраиваемые (embedded=True)
+        - рутины, включая встраиваемые (embedded=True)
+        - методы
+
+    Правила для практики:
+    - usage или alias (если указан) используется в документе хотя бы в одном из мест:
+      - аннотации:
+        - в заголовке документа (header.annotations)
+        - в практиках (header.usages.item[<name>])
+        - сущности (body[*].annotations), включая встраиваемые (embedded=True)
+        - рутины (body[*].annotations), включая встраиваемые (embedded=True)
+        - методы (entity.methods[*].annotations)
+        - свойства (entity.properties[*].annotations)
+
+    Требования:
+    - проверяем типы на вхождение в сигнатуру с использованием `signature_contains_type_name`
+    - встраивание (embedded) должно учитываться как использование и не вызывать ошибки
+    - usage (практика) не проверяется в сигнатурах
+
+    Шаблоны ошибок:
+    - unused: "{Type || Usage} '{type_name || usage_name}' was imported, but not used in '{doc_path}'"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Правила проверки импортов документа манифеста

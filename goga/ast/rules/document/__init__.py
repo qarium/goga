@@ -1,7 +1,6 @@
-from .ast import EmbeddedTypeHasLowLevel, ImportsHasNotCyclicalDeps, ImportTypeExists
-from .base import ASTRule, DocumentRule
-from .document.annotations import AnnotationLinksExists
-from .document.imports import (
+from ..base.document import DocumentRule
+from .annotations.rules import AnnotationLinksExists
+from .imports.rules import (
     ImportHasNotDuplicate,
     ImportHasValidFromPath,
     ImportIsUsed,
@@ -9,14 +8,13 @@ from .document.imports import (
     ImportsCanNotBeEmpty,
     ImportsHasOnlyValidKeys,
     ImportUsageExists,
-    signature_contains_type_name,
 )
-from .document.mutation import (
+from .mutation.rules import (
     EmbeddedEntityCanNotHasMutations,
     MutationExists,
     MutationIsValid,
 )
-from .document.structures import (
+from .structures.rules import (
     EntitiesAndRoutinesHasNotConflicts,
     EntityHasOnlyValidKeys,
     LocationIsRequired,
@@ -24,7 +22,7 @@ from .document.structures import (
     RoutineHasOnlyValidKeys,
     SignatureIsValid,
 )
-from .document.usages import (
+from .usages.rules import (
     AllUsagesIsUsed,
     UsageFilepathExists,
     UsageLinksHasNotConflicts,
@@ -32,22 +30,18 @@ from .document.usages import (
 )
 
 __all__ = [
-    "ASTRule",
     "AllUsagesIsUsed",
     "AnnotationLinksExists",
     "DocumentRule",
     "EmbeddedEntityCanNotHasMutations",
-    "EmbeddedTypeHasLowLevel",
     "EntitiesAndRoutinesHasNotConflicts",
     "EntityHasOnlyValidKeys",
     "ImportHasNotDuplicate",
     "ImportHasValidFromPath",
     "ImportIsUsed",
     "ImportItemIsValid",
-    "ImportTypeExists",
     "ImportUsageExists",
     "ImportsCanNotBeEmpty",
-    "ImportsHasNotCyclicalDeps",
     "ImportsHasOnlyValidKeys",
     "LocationIsRequired",
     "MutationExists",
@@ -58,5 +52,4 @@ __all__ = [
     "UsageFilepathExists",
     "UsageLinksHasNotConflicts",
     "UsageUrlIsAccessible",
-    "signature_contains_type_name",
 ]

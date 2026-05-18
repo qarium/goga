@@ -1,0 +1,110 @@
+Imports:
+  - Types:
+      - DocumentRule
+    From: goga/ast/rules/base
+  - Types:
+      - UsagesNode
+      - UsageItemNode
+      - AnnotationsNode
+      - HeaderNode
+      - RoutineTypeNode
+      - EntityTypeNode
+      - MethodNode
+      - PropertyNode
+    From: goga/ast/nodes
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Все типы являются мутациями `DocumentRule`.
+
+---
+
+# ****** #
+# Usages #
+# ****** #
+
+"DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
+  location: rules.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все декларированные usages используются в `AnnotationsNode` документа в нодах:
+      - `HeaderNode`
+      - `UsageItemNode`
+      - `RoutineTypeNode`
+      - `EntityTypeNode`
+      - `MethodNode`
+      - `PropertyNode`
+
+    Требования:
+      - ссылка на имя практики должна использоваться хотя бы в одной `AnnotationsNode`
+
+    Шаблоны ошибок:
+    - unused: "Usage '{usage_name}' is declared but not referenced in any annotation — either use it or remove the declaration"
+
+"DocumentRule::UsageFilepathExists(name: str = 'usage_filepath_exists')":
+  location: rules.py
+  annotations: |
+    Проверяет `UsageItemNode`.
+
+    Правила:
+    - filepath строится относительно корня проекта
+    - filepath содержит префикс .goga/usages/
+    - файл по filepath существует на файловой системе
+
+    Требования:
+    - базовый путь для проверки — корень проекта (CWD)
+    - проверяется каждый UsageItemNode у которого annotations.filepath не None и не пустой
+    - Usages с annotations.text (inline) пропускаются
+    - Usages с annotations.url пропускаются
+
+    Шаблоны ошибок:
+    - outside_usages: "Usage '{usage_name}' filepath '{filepath}' is not built from the root of the project"
+    - incorrect_path: "Usage '{usage_name}' filepath '{filepath}' is not built from '.goga/usages/'"
+    - not_found: "Usage '{usage_name}' filepath '{filepath}' does not exist on filesystem"
+
+"DocumentRule::UsageUrlIsAccessible(name: str = 'usage_url_is_accessible')":
+  location: rules.py
+  annotations: |
+    Проверяет `UsageItemNode`.
+
+    Правила:
+    - URL отвечает с HTTP статусом 200 (OK)
+
+    Требования:
+    - проверяется каждый UsageItemNode у которого annotations.url не None и не пустой
+    - Usages с annotations.text (inline) пропускаются
+    - Usages с annotations.filepath пропускаются
+    - при сетевой ошибке (timeout, connection error) — ошибка валидации
+    - использовать HEAD-запрос для эффективности (если сервер не поддерживает — fallback на GET)
+    - таймаут запроса — 10 секунд
+
+    Шаблоны ошибок:
+    - not_accessible: "Usage '{usage_name}' URL '{url}' returned HTTP {status_code} — expected 200"
+    - request_failed: "Usage '{usage_name}' URL '{url}' request failed: {error_message}"
+
+"DocumentRule::UsageLinksHasNotConflicts(name: str = 'usage_links_has_not_conflicts')":
+  location: rules.py
+  annotations: |
+    Проверяет `UsagesNode`.
+
+    Правила:
+    - все имена usage items не имеют пересечений с именами подключаемых типов
+      (конфликт может быть решен через alias для типа)
+    - все имена usage items не имеют пересечений с именами entity и routine
+
+    Шаблоны ошибок:
+    - import_conflict: "Usage key '{name}' conflicts with imported type '{type_name}' — rename the usage or use an alias in Imports"
+    - entity_conflict: "Usage key '{name}' conflicts with {kind} '{entity_name}' — rename the usage to avoid ambiguity"
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 14/05/26
+
+Description: |
+  Правила проверки практик (usages) документа манифеста

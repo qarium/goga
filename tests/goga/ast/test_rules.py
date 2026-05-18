@@ -1942,14 +1942,13 @@ class TestImportIsUsed:
         assert rule.check(node) == []
 
     def test_negative_property_type_on_embedded_entity_without_embedding(self):
-        """Property type on embedded entity without embedding match -> error."""
+        """Property type on embedded entity counts as usage -> no error."""
         prop = PropertyNode(name="items", type="Node")
         embedded_entity = EntityTypeNode(name="OtherEntity", embedded=True, properties=[prop])
         node = _make_import_is_used_doc(entities=[embedded_entity], import_names={"Node"})
         rule = ImportIsUsed()
         errors = rule.check(node)
-        assert len(errors) == 1
-        assert errors[0].rule == "import_is_used"
+        assert errors == []
 
     def test_negative_type_not_embedded_and_not_used(self):
         """Type imported but not embedded and not used anywhere -> error."""
@@ -2184,6 +2183,8 @@ class TestUsageUrlIsAccessible:
     def test_usage_url_is_accessible_returns_200(self):
         mock_response = MagicMock()
         mock_response.status = 200
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
         with patch("urllib.request.urlopen", return_value=mock_response):
             root = DocumentRoot(
                 header=HeaderNode(
@@ -2294,6 +2295,8 @@ class TestUsageUrlIsAccessible:
     def test_usage_url_head_fallback_to_get(self):
         mock_get_response = MagicMock()
         mock_get_response.status = 200
+        mock_get_response.__enter__ = MagicMock(return_value=mock_get_response)
+        mock_get_response.__exit__ = MagicMock(return_value=False)
         head_error = urllib.error.HTTPError(
             "https://example.com/docs.md", 405, "Method Not Allowed", None, None
         )
