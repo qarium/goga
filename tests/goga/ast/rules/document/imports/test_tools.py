@@ -21,12 +21,12 @@ class TestContract:
         assert signature_contains_type_name.__module__ == ("goga.ast.rules.document.imports.tools")
 
     def test_accessible_from_submodule(self):
-        from goga.ast.rules.document.imports import signature_contains_type_name as fn  # noqa: PLC0415
+        from goga.ast.rules.document.imports import signature_contains_type_name as fn
 
         assert fn is signature_contains_type_name
 
     def test_accessible_from_facade(self):
-        from goga.ast.rules import signature_contains_type_name as fn  # noqa: PLC0415
+        from goga.ast.rules import signature_contains_type_name as fn
 
         assert fn is signature_contains_type_name
 

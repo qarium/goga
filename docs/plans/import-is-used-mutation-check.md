@@ -209,10 +209,10 @@
 
 **КРИТИЧЕСКИ: файлы `CODEMANIFEST` — определения контракта только для чтения. НЕ изменяйте их. Если реализация не соответствует контракту, исправляйте реализацию — никогда не исправляйте контракт.**
 
-- [ ] В файле `goga/ast/rules/document/imports/.usages/import_rules.md` обновить секцию `### ImportIsUsed`:
+- [x] В файле `goga/ast/rules/document/imports/.usages/import_rules.md` обновить секцию `### ImportIsUsed`:
   - Добавить пункт "в мутациях сущностей (`body[*].mutations`)" в список мест использования типа
   - Обновить описание: "Каждый импортированный тип или практика используется хотя бы в одном месте документа: в аннотациях (заголовок, практики, типы, методы, свойства), в сигнатурах (entities, routines, methods) — только для типов, в мутациях сущностей (body[*].mutations) — только для типов"
-- [ ] Проверить что файл корректно отображается: `cat goga/ast/rules/document/imports/.usages/import_rules.md`
+- [x] Проверить что файл корректно отображается: `cat goga/ast/rules/document/imports/.usages/import_rules.md`
 
 ---
 
@@ -228,13 +228,13 @@
 
 ## Критерии завершения
 
-- [ ] Метод `_collect_mutation_names` реализован и возвращает `set[str]` имён базовых типов мутаций
-- [ ] Метод `_check_type_item` принимает `mutation_names` и проверяет `name in mutation_names`
-- [ ] Метод `check()` вызывает `_collect_mutation_names` и передаёт `mutation_names` в `_check_type_item`
-- [ ] `_check_usage_item` не изменён — практики не проверяются в мутациях
-- [ ] Embedded сущности включены в обход мутаций
-- [ ] 7 новых тестов (4 позитивных + 3 негативных/краевых) добавлены в `TestImportIsUsed`
-- [ ] `.usages/import_rules.md` обновлён — мутации добавлены в описание `ImportIsUsed`
-- [ ] Все существующие тесты продолжают проходить
-- [ ] Файлы `CODEMANIFEST` не были изменены (контракт только для чтения)
-- [ ] Все команды валидации проходят
+- [x] Метод `_collect_mutation_names` реализован и возвращает `set[str]` имён базовых типов мутаций
+- [x] Метод `_check_type_item` принимает `mutation_names` и проверяет `name in mutation_names`
+- [x] Метод `check()` вызывает `_collect_mutation_names` и передаёт `mutation_names` в `_check_type_item`
+- [x] `_check_usage_item` не изменён — практики не проверяются в мутациях
+- [x] Embedded сущности включены в обход мутаций
+- [x] 7 новых тестов (4 позитивных + 3 негативных/краевых) добавлены в `TestImportIsUsed`
+- [x] `.usages/import_rules.md` обновлён — мутации добавлены в описание `ImportIsUsed`
+- [x] Все существующие тесты продолжают проходить
+- [x] Файлы `CODEMANIFEST` не были изменены (контракт только для чтения)
+- [x] Все команды валидации проходят
