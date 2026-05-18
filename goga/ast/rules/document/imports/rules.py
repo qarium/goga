@@ -223,7 +223,7 @@ class ImportHasNotDuplicate(DocumentRule):
 
 
 class ImportIsUsed(DocumentRule):
-    """Rule: every imported type must be used in at least one annotation link or signature."""
+    """Rule: every imported type must be used in at least one annotation link, signature, or entity mutation."""
 
     def __init__(self) -> None:
         super().__init__(name="import_is_used")

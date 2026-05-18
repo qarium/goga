@@ -781,6 +781,7 @@ class TestImportIsUsed:
         rule = ImportIsUsed()
         errors = rule.check(node)
         assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
 
     def test_no_entities_no_errors_from_mutations(self):
         item = ImportTypeItemNode(type_name={"UnusedType"}, from_path="bar")
@@ -796,6 +797,29 @@ class TestImportIsUsed:
         rule = ImportIsUsed()
         errors = rule.check(node)
         assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
+
+    def test_usage_not_checked_in_mutations(self):
+        item = ImportUsageItemNode(usage_name={"SomeUsage"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("SomeUsage", "bar")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
 
 
 class TestImportItemIsValidExtra:
