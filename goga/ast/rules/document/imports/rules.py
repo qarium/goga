@@ -223,7 +223,7 @@ class ImportHasNotDuplicate(DocumentRule):
 
 
 class ImportIsUsed(DocumentRule):
-    """Rule: every imported type must be used in at least one annotation link or signature."""
+    """Rule: every imported type must be used in at least one annotation link, signature, or entity mutation."""
 
     def __init__(self) -> None:
         super().__init__(name="import_is_used")
@@ -232,6 +232,7 @@ class ImportIsUsed(DocumentRule):
         all_links = self._collect_links(node, include_embedded=True)
         all_signatures = self._collect_signatures(node)
         property_types = self._collect_property_types(node)
+        mutation_names = self._collect_mutation_names(node)
         embedded_names = {name for name, _ in node.root.embeddings}
         doc_path = node.root.path
         document = node.root
@@ -241,7 +242,8 @@ class ImportIsUsed(DocumentRule):
             if isinstance(item, ImportTypeItemNode):
                 errors.extend(
                     self._check_type_item(
-                        item, doc_path, document, all_links, embedded_names, all_signatures, property_types,
+                        item, doc_path, document, all_links, embedded_names,
+                        all_signatures, property_types, mutation_names,
                     ),
                 )
             elif isinstance(item, ImportUsageItemNode):
@@ -258,6 +260,7 @@ class ImportIsUsed(DocumentRule):
         embedded_names: set[str],
         all_signatures: list[str],
         property_types: set[str] | None = None,
+        mutation_names: set[str] | None = None,
     ) -> list[DocumentRuleError]:
         names = [item.alias] if item.alias else list(item.type_name)
         errors: list[DocumentRuleError] = []
@@ -269,6 +272,8 @@ class ImportIsUsed(DocumentRule):
             if any(signature_contains_type_name(sig, name) for sig in all_signatures):
                 continue
             if property_types and any(signature_contains_type_name(pt, name) for pt in property_types):
+                continue
+            if mutation_names and name in mutation_names:
                 continue
             errors.append(
                 DocumentRuleError(
@@ -344,3 +349,10 @@ class ImportIsUsed(DocumentRule):
         for routine in node.root.body.routines:
             signatures.append(routine.signature)
         return signatures
+
+    def _collect_mutation_names(self, node: DocumentNode) -> set[str]:
+        types: set[str] = set()
+        for entity in node.root.body.entities:
+            for mutation_name, _ in entity.mutations:
+                types.add(mutation_name)
+        return types

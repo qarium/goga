@@ -79,7 +79,7 @@ class TestContract:
             )
 
     def test_all_accessible_from_facade(self):
-        import goga.ast.rules as facade  # noqa: PLC0415
+        import goga.ast.rules as facade
 
         for name in self.FACADE_NAMES:
             assert hasattr(facade, name), f"{name} not found in goga.ast.rules facade"
@@ -87,7 +87,7 @@ class TestContract:
             assert issubclass(facade_cls, DocumentRule), f"{name} from facade does not inherit DocumentRule"
 
     def test_all_accessible_from_submodule(self):
-        from goga.ast.rules.document.imports import (  # noqa: PLC0415
+        from goga.ast.rules.document.imports import (
             ImportHasNotDuplicate,
             ImportHasValidFromPath,
             ImportIsUsed,
@@ -657,6 +657,169 @@ class TestImportIsUsed:
         node = DocumentNode(root=root)
         rule = ImportIsUsed()
         assert rule.check(node) == []
+
+    def test_type_used_in_mutation_base(self):
+        item = ImportTypeItemNode(type_name={"MyType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="MutatedEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("MyType", "bar")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_mutation_of_embedded_entity(self):
+        item = ImportTypeItemNode(type_name={"BaseType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="EmbeddedEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            embedded=True,
+            mutations=[("BaseType", "bar")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_in_multi_level_mutation(self):
+        item = ImportTypeItemNode(type_name={"TypeA"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="Cls",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("TypeA", "bar"), ("TypeB", "baz")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_used_with_alias_in_mutation(self):
+        item = ImportTypeItemNode(type_name={"OriginalType"}, from_path="bar", alias="Alias")
+        entity = EntityTypeNode(
+            name="Cls",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("Alias", "bar")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        assert rule.check(node) == []
+
+    def test_type_unused_despite_other_mutations(self):
+        item = ImportTypeItemNode(type_name={"UnusedType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="Cls",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("OtherType", "baz")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
+
+    def test_entity_with_empty_mutations(self):
+        item = ImportTypeItemNode(type_name={"UnusedType"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="Entity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
+
+    def test_no_entities_no_errors_from_mutations(self):
+        item = ImportTypeItemNode(type_name={"UnusedType"}, from_path="bar")
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+            body=BodyNode(entities=[], routines=[]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
+
+    def test_usage_not_checked_in_mutations(self):
+        item = ImportUsageItemNode(usage_name={"SomeUsage"}, from_path="bar")
+        entity = EntityTypeNode(
+            name="MyEntity",
+            signature="()",
+            annotations=AnnotationsNode(),
+            mutations=[("SomeUsage", "bar")],
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(usages=[item]),
+            ),
+            body=_make_body(entities=[entity]),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportIsUsed()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "not used" in errors[0].message.lower()
 
 
 class TestImportItemIsValidExtra:

@@ -64,6 +64,7 @@ rule = ImportHasNotDuplicate()
 Каждый импортированный тип или практика используется хотя бы в одном месте документа:
 - в аннотациях (заголовок, практики, типы, методы, свойства)
 - в сигнатурах (entities, routines, methods) — только для типов
+- в мутациях сущностей (`body[*].mutations`) — только для типов
 
 ```python
 from goga.ast.rules.document.imports import ImportIsUsed
