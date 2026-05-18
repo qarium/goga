@@ -1,0 +1,59 @@
+Imports:
+  - Types:
+      - Config
+    From: goga/config
+
+Usages:
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `convention`.
+  Использовать urllib.request из стандартной библиотеки для HTTP-запросов.
+  Использовать shutil для копирования файлов.
+  Вывод информации через sys.stderr (click не используется).
+
+---
+
+"install(agent: str | None, config: Config) -> exit_code:int":
+  location: install.py
+  annotations: |
+    Установка скиллов и команд goga для выбранного AI-агента.
+
+    `agent`: целевой AI-агент. Если None — берётся из config
+    `config`: загруженная конфигурация проекта
+    `exit_code`: код возврата (0 успех, 1 ошибка)
+
+    Алгоритм:
+    1. Разрешить агента:
+       - Если `agent` передан (не None) — использовать его
+       - Иначе — из config
+    2. Определить целевой каталог по агенту:
+       - claude → ~/.claude/
+    3. Очистить устаревшие goga-системы:
+       - Просканировать целевой_каталог/skills/ на подпапки goga-*
+       - Удалить все найденные
+    4. Скопировать из исходного каталога в целевой:
+       - goga/agent/commands/* → <target>/commands/goga/
+       - goga/agent/skills/* → <target>/skills/
+    5. Скачать DSL спецификацию:
+       - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
+       - HTTP GET через urllib.request
+       - Записать в <target>/skills/goga-cell/dsl.md
+       - При ошибке сети — exit 1
+    6. Вывести список установленных скиллов и команд
+
+    Требования:
+    - Полное пересоздание goga-папок (удаление + копирование)
+    - Существующий контент других расширений не затрагивать
+    - CLAUDE.md, settings.json, README.md целевого каталога не затрагивать
+    - dsl.md скачивается из внешнего репозитория при каждой установке
+    - Использовать urllib.request (без внешних зависимостей)
+    - При ошибке скачивания — прервать с кодом 1
+
+---
+
+Author: Mikhail Trifonov
+CreatedAt: 15/05/26
+
+Description: |
+  Манифест описывает логику установки скиллов и команд goga

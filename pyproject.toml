@@ -88,6 +88,7 @@ max-complexity = 10
     "ARG002",  # unused method arguments allowed in tests
     "PLR2004", # magic value comparisons in assertions are acceptable
     "RUF001",  # Cyrillic strings in test fixtures are intentional
+    "PLC0415", # imports inside test methods for type checking are acceptable
 ]
 
 [tool.ruff.format]
