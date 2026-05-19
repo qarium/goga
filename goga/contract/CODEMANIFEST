@@ -1,91 +1,37 @@
+Imports:
+  - Types:
+      - EntityContract
+      - RoutineContract
+      - PropertyContract
+      - MethodContract
+    From: goga/contract/data
+  - Types:
+      - python_contract
+    From: goga/contract/python
+  - Types:
+      - golang_contract
+    From: goga/contract/golang
+
 Usages:
   conventions: .goga/usages/development/conventions.md
-  contract_format: |
-    Реализованный контракт должен соответствовать указанному формату
-
-    ```
-    [
-      {
-        "name": "<name of type/object/entity>",
-        "signature": "(...) ..."
-      }
-    ]
-    ```
-
-    - каждый элемент списка - это имя и сигнатура на фасаде клетки
-    - понятие фасада клетки определяется индивидуально для каждого языка программирования
-    - сигнатура - это контракт входных и выходных данных создания объекта/вызова функции
-    - словарь может быть представлен в виде объекта
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.
+  Клетка — фасад для всех контрактных операций
 
 ---
 
-BaseContract():
-  location: contract.py
-  annotations: |
-    Использовать формат `contract_format`.
-  properties:
-    name -> str: |
-      Имя объекта/функции и тд
-    signature -> str: |
-      Сигнатура вызова с входными и выходными данными
-    contract -> str: |
-      Имя и сигнатура "{{ name }}{{ signature }}"
-
-BaseContract::EntityContract():
-  location: contract.py
-  annotations: |
-    Описание контракта сущности
-  properties:
-    properties -> list[PropertyContract]: |
-      Контракт свойства сущности
-    methods -> list[MethodContract]: |
-      Контракт метода сущности
-
-BaseContract::RoutineContract():
-  location: contract.py
-  annotations: |
-    Описание контракта рутины
-
-BaseContract::PropertyContract():
-  location: contract.py
-  annotations: |
-    Описание контракта свойства сущности
-
-BaseContract::MethodContract():
-  location: contract.py
-  annotations: |
-    Описание контракта метода сущности
-
-"python_contract(cell_path: str) -> contract:list[EntityContract | RoutineContract]":
-  location: python.py
-  annotations: |
-    Собрать все объекты с фасада пакета по указанному пути.
-
-    `cell_path`: путь до клетки в формате path/to/cell
-
-    Алгоритм:
-    - импортировать пакет (__init__.py) по указанному пути
-    - взять все объекты из секции __all__
-    - определить тип, имя и сигнатуру
-    - для сущности найти все публичные методы и свойства, определить имя и сигнатуру
-
-    Требования:
-    - аннотации типов входят контракт
-    - порядок аргументов в сигнатуре важен
-    - дефолтные значения аргументов важны
-    - тип аргументов (позиционные, именованные) важны
-    - self исключается из сигнатуры
-    - сущностями являются классы остальные объекты - это рутины
-    - для свойств сигнатура - возвращаемый тип данных, если нет - пустая строка
-    - при невозможности разрешить аннотации типов в рантайме (TYPE_CHECKING, from __future__ import annotations) — использовать строковое представление аннотаций вместо пустой сигнатуры
+->EntityContract: {}
+->RoutineContract: {}
+->PropertyContract: {}
+->MethodContract: {}
+->python_contract: {}
+->golang_contract: {}
 
 ---
 
-Author: Mikhail Trifonov
-CreatedAt: 20/04/26
+Author: Goga
+CreatedAt: 19/05/26
 
 Description: |
-  Работа с реализованном контрактом в языке программирования
+  Работа с реализованным контрактом в языке программирования

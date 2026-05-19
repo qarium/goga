@@ -1,5 +1,16 @@
-from .contract import BaseContract, EntityContract, MethodContract, PropertyContract, RoutineContract
-from .python import python_contract
+from goga.contract.data import (
+    BaseContract,
+    EntityContract,
+    MethodContract,
+    PropertyContract,
+    RoutineContract,
+)
+from goga.contract.python import python_contract
+
+try:
+    from goga.contract.golang import golang_contract
+except ImportError:
+    golang_contract = None  # type: ignore[assignment]
 
 __all__ = [
     "BaseContract",
@@ -7,5 +18,6 @@ __all__ = [
     "MethodContract",
     "PropertyContract",
     "RoutineContract",
+    "golang_contract",
     "python_contract",
 ]

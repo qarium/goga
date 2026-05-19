@@ -1,0 +1,50 @@
+Imports:
+  - Types:
+      - EntityContract
+      - RoutineContract
+    Usages:
+      - contract_data
+    From: goga/contract/data
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+  tree-sitter: .goga/usages/cooks/tree-sitter.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Для парсинга Go-файлов использовать практику `tree-sitter`.
+
+---
+
+"golang_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
+  location: golang.py
+  annotations: |
+    Собрать все экспортируемые объекты с фасада Go-пакета по указанному пути.
+    Использовать практику `contract_data` для формирования результатов.
+
+    `cell_path`: путь до Go-пакета (каталог с .go файлами)
+
+    Алгоритм:
+    - найти все .go файлы в каталоге (без _test.go)
+    - для каждого файла — распарсить AST через практику `tree-sitter`
+    - извлечь экспортируемые декларации (capitalized):
+      - function_declaration → RoutineContract
+      - struct_type → EntityContract (fields → properties, methods → methods)
+      - interface_type → EntityContract (method specs → methods)
+    - для EntityContract (struct) — найти method_declaration с соответствующим ресивером
+    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+
+    Требования:
+    - только экспортируемые (capitalized) декларации
+    - аннотации типов из Go-кода входят в контракт
+    - порядок аргументов важен
+    - _test.go файлы пропускаются
+    - нормализовать через сортировку для стабильного порядка
+
+---
+
+Author: Goga
+CreatedAt: 19/05/26
+
+Description: |
+  Извлечение контракта с фасада Go-пакета через tree-sitter
