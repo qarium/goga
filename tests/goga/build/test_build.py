@@ -5,22 +5,16 @@ import os
 import shutil
 import stat
 import subprocess
-import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
-import yaml
-
 from goga.build.build import (
     CLAUDE_WRAPPER_SCRIPT,
-    DEFAULTS_PACKAGE_DIR,
-    RALPHEX_CONFIG_DEFAULTS,
     _assemble_command,
     _copy_defaults,
     _create_claude_settings,
     _create_claude_wrapper,
-    _find_uncommitted_manifests,
     _parse_porcelain_path,
     _run_precondition,
     _unquote_git_path,
@@ -46,7 +40,12 @@ def _make_config(
     return Config(lang="python", build=build)
 
 
-def _run_build_in_tmp(tmp_path: Path, plan: str = "plan.md", cli_options: dict | None = None, config: Config | None = None) -> int:
+def _run_build_in_tmp(
+    tmp_path: Path,
+    plan: str = "plan.md",
+    cli_options: dict | None = None,
+    config: Config | None = None,
+) -> int:
     original_cwd = str(Path.cwd())
     try:
         os.chdir(tmp_path)

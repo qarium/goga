@@ -1,275 +1,51 @@
 Imports:
   - Types:
-      - AST
-    From: goga/ast
+      - linter
+    From: goga/commands/linter
   - Types:
-      - contract AS contract_logic
-    Usages:
-      - contract AS use_contract
-    From: goga/contract
+      - build
+    From: goga/commands/build
   - Types:
-      - Config
-      - load_config
-    Usages:
-      - configuration
-    From: goga/config
+      - install
+    From: goga/commands/install
   - Types:
-      - build AS build_logic
-    From: goga/build
+      - schema
+    From: goga/commands/schema
   - Types:
-      - install AS install_logic
-    From: goga/install
+      - contract
+    From: goga/commands/contract
   - Types:
-      - schema AS schema_logic
-    From: goga/schema
+      - config
+    From: goga/commands/config
   - Types:
-      - sync AS sync_logic
-    From: goga/sync
+      - sync
+    From: goga/commands/sync
 
 Usages:
-  click: .goga/usages/cooks/click.md
-  conventions: .goga/usages/development/conventions.md
-  documents: |
-    Работать с типом `AST`.
-
-    - Загрузить проект с использованием AST.load()
-    - Доступ к документам дерева через свойство AST.tree
-    - Ошибки брать из свойства AST.errors
-
-    `AST` необходимо создавать с указанием пути в текущий CWD (".").
-  beautiful_json: |
-    Сделать из python объекта json строку с учетом форматирования.
-
-    ```python
-    json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
-    ```
-
-    indent: количество отступов
-    sort_keys: упорядочить ключи словаря по алфавиту
-    ensure_ascii: отобразить корректно кириллицу или другие спецсимволы
-  beautiful_yaml: |
-    Сделать из python объекта yaml строку с учетом форматирования.
-
-    ```python
-    yaml.dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True, indent=2)
-    ```
-
-    indent: количество отступов
-    sort_keys: используется только для python 3.7 и выше, сохраняет порядок ключей
-    default_flow_style: заменяет компактный вид [...] на классические списки с дефисом
-    allow_unicode: позволяет выводить Unicode-символы (например, кириллицу) напрямую, а не кодами
+  convention: .goga/usages/development/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для создания команд и групп команд использовать практику `click`.
-  Команды build, install, schema, sync делегируют бизнес-логику через
-  `build_logic`, `install_logic`, `schema_logic`, `sync_logic`.
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
 
 ---
 
-"linter(path: str = '.')":
-  location: linter.py
-  annotations: |
-    Команда валидации CODEMANIFEST файлов в проекте.
-
-    `path`: путь для создания контекста CWD
-
-    Алгоритм:
-    - Сменить CWD на указанный `path`
-    - Создать и загрузить проект с использованием практики `documents`
-    - Вывести все ошибки в указанном формате
-
-    Формат ошибки:
-    ```
-    [rule_name] <message>
-      --> <path>
-          ---
-          <yaml_data>
-    ```
-
-    Требования:
-    - Данный yaml должны выводиться, в yaml формате с использованием практики `beautiful_yaml`
-    - Отступы в формате важны, [rule_name] - с начала строки, --> - на следующей строке через
-      2 пробела от начала строки, далее идет разделитель "---" с отступом 6 пробелов от начала
-      строки, данные yaml через 6 проделов от начала строки при этом каждая новая строка yaml
-      должна так же отступать 6 пробелов
-    - [rule_name] необходимо выводить красным цветом
-    - В случаи наличия ошибок команда выходит с кодом 1 иначе 0
-
-"build(plan: str)":
-  location: build.py
-  annotations: |
-    CLI-обёртка команды сборки. Делегирует бизнес-логику `build_logic`.
-
-    `plan`: путь к файлу плана
-
-    CLI-опции (через click):
-    - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
-    - --session-timeout, --idle-timeout, --wait
-    - --max-iterations, --review-patience
-
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` (практика `configuration`)
-    2. Собрать cli_options из click-параметров
-    3. Вызвать `build_logic`(`plan`, config, cli_options)
-    4. Вернуть exit_code
-
-"install(agent: str | None = None)":
-  location: install.py
-  annotations: |
-    CLI-обёртка команды установки. Делегирует бизнес-логику `install_logic`.
-
-    `agent`: целевой AI-агент
-
-    CLI-опции:
-    - --agent: целевой AI-агент
-
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` (практика `configuration`)
-    2. Вызвать `install_logic`(`agent`, config)
-    3. Вернуть exit_code
-
-"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
-  location: schema.py
-  annotations: |
-    CLI-обёртка команды схемы. Делегирует бизнес-логику `schema_logic`.
-
-    `cells`: пути к клеткам для фильтрации
-    `max_depth`: ограничение вложенности дерева
-    `depends_on`: фильтр клеток по зависимости
-
-    Алгоритм:
-    1. Вызвать `schema_logic`(`cells`, `max_depth`, `depends_on`)
-    2. При ValueError от `schema_logic` (ошибки AST) — вывести ошибку в stderr, exit 1
-    3. Вывести результат через click.echo
-
-"contract(cells: list[str], lang: str | None = None)":
-  location: contract.py
-  annotations: |
-    Команда сравнения контракта CODEMANIFEST с реализацией.
-    Использовать практику `use_contract` для понимания работы диспатчера контрактов.
-
-    `cells`: пути к клеткам для сравнения, один или несколько
-    `lang`: язык реализации. Приоритет: CLI-аргумент > `Config`. Если None — берётся из `Config`.lang
-
-    CLI-опции:
-    - --lang: язык реализации. Если не указан — используется значение из `Config`.lang
-
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` → `Config`
-    2. Разрешить язык:
-       - Если `lang` передан (не None) — использовать CLI значение
-       - Иначе — использовать `Config`.lang
-    3. Создать и загрузить проект с использованием практики `documents`
-    4. Для каждого пути из `cells`:
-      - Найти документ в дереве с использованием практики `documents`
-      - Извлечь типы из body документа: entities и routines
-      - Получить реализованный контракт через `contract_logic`
-      - Для каждого типа из CODEMANIFEST найти соответствие в реализации по имени
-      - Построить структуру сравнения (CODEMANIFEST первичен)
-
-    Ключевой принцип: CODEMANIFEST — источник истины. Обход идёт по типам,
-    методам и свойствам из контракта. Реализация заполняет поле implementation
-    или null если не найдена.
-
-    Для entity:
-    - signature: параметры конструктора из codemanifest и implementation
-    - properties: для каждого свойства из codemanifest найти в реализации
-    - methods: для каждого метода из codemanifest найти в реализации
-
-    Для routine:
-    - signature: полная сигнатура из codemanifest и implementation
-
-    Вывести результат через практику `beautiful_json`.
-
-    Формат вывода:
-    ```
-    {
-      "norm/path/to/cell": {
-        "TypeName": {
-          "signature": { "codemanifest": "...", "implementation": "..." },
-          "properties": { "name": { "codemanifest": "...", "implementation": "..." } },
-          "methods": { "name": { "codemanifest": "...", "implementation": "..." } }
-        },
-        "RoutineName": {
-          "signature": { "codemanifest": "...", "implementation": "..." }
-        }
-      }
-    }
-    ```
-
-    Требования:
-    - вывод не должен содержать ничего кроме json структуры
-    - если путь к клетке не найден → вывести ошибку в stderr и выйти с кодом 1
-    - ошибки выводить в stderr (click.echo с err=True)
-    - код возврата: 0 при успехе, 1 при ошибке
-    - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
-
-"config(options: tuple[str, ...])":
-  location: config.py
-  annotations: |
-    Команда выводит значения опций из конфигурации проекта .goga/config.yml.
-    Структура конфигурации описана в практике `configuration`, конфигурация загружается через `load_config`.
-    Команда поддерживает навигацию по всем полям объекта `Config` через точечную нотацию.
-    Каждая опция выводится отдельно с заголовком, идентифицирующим путь.
-
-    `options`: пути к опциям в точечной нотации, один или несколько.
-    Например: build.task_executor.agent build.worktree
-
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` → `Config`
-    2. Для каждого пути из `options`:
-       a. Разрешить путь: разбить по "." на компоненты
-       b. Обойти структуру `Config` по компонентам:
-          - Начать с корневого объекта Config
-          - Для каждого компонента: получить атрибут объекта
-          - Если атрибут не существует — ошибка
-       c. Вывести заголовок: # <path>
-       d. Вывести значение:
-          - Для примитивов (str, int, bool) — сырое значение через click.echo
-          - Для None — вывести "null"
-          - Для сложных (dict, dataclass) — вывести через практику `beautiful_yaml`
-    3. Если путь не найден — вывести ошибку в stderr, exit 1
-
-    Формат вывода при нескольких опциях:
-    ```
-    # language
-    python
-
-    # build.task_executor.agent
-    claude
-
-    # build.worktree
-    True
-    ```
-    Формат вывода при одной опции — то же самое: заголовок и значение.
-
-    Требования:
-    - Ошибки конфигурации (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
-      преобразуются в click.ClickException
-    - Ошибка "option not found" выводится в stderr (click.echo с err=True)
-    - Код возврата: 0 при успехе, 1 при ошибке
-    - Заголовок каждой опции начинается с "# "
-    - Между значениями разных опций — пустая строка
-    - Для YAML-вывода сложных типов заголовок выводится перед YAML-блоком
-
-"sync(source: str, token: str | None = None, branch: str | None = None)":
-  location: sync.py
-  annotations: |
-    CLI-обёртка команды синхронизации. Делегирует бизнес-логику `sync_logic`.
-
-    `source`: путь к каталогу или URL git-репозитория
-    `token`: токен авторизации для git
-    `branch`: ветка или тег для checkout
-
-    Алгоритм:
-    1. Вызвать `sync_logic`(`source`, `token`, `branch`)
-    2. Вернуть exit_code
+->linter: {}
+->build: {}
+->install: {}
+->schema: {}
+->contract: {}
+->config: {}
+->sync: {}
 
 ---
 
-Author: Mikhail Trifonov
-CreatedAt: 13/04/26
+Author: Goga
+CreatedAt: 20/05/26
 
 Description: |
-  Манифест описывает команды для консольного приложения goga
+  Фасад команд консольного приложения goga. Реэкспортирует все CLI-команды из подклеток.

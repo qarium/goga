@@ -1,5 +1,6 @@
 """Contract and behavioral tests for contract CLI command."""
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -10,7 +11,7 @@ from click.testing import CliRunner
 from goga.commands.contract import contract
 from goga.config.config import BuildConfig, Config, TaskExecutor
 
-_contract_mod = sys.modules["goga.commands.contract"]
+_contract_mod = importlib.import_module("goga.commands.contract.contract")
 
 
 def _make_config(lang: str = "python") -> Config:
@@ -177,3 +178,14 @@ class TestBehavioral:
 
         assert result.exit_code == 1
         assert "document not found" in result.output
+
+    def test_command_contract_config_error(self) -> None:
+        """Config loading failure produces ClickException and non-zero exit."""
+        runner = CliRunner()
+        with mock.patch.object(
+            _contract_mod, "load_config", side_effect=FileNotFoundError(".goga/config.yml")
+        ):
+            result = runner.invoke(contract, ["some_cell"])
+
+        assert result.exit_code != 0
+        assert "config" in result.output.lower()

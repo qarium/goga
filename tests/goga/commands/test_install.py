@@ -309,7 +309,15 @@ class TestIntegration:
         assert (goga_cmds / "review.md").read_text() == source_clarify.read_text()
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
-        assert installed_files == ["apply.md", "brainstorm.md", "design.md", "plan.md", "propose.md", "review.md", "tool.md"]
+        assert installed_files == [
+            "apply.md",
+            "brainstorm.md",
+            "design.md",
+            "plan.md",
+            "propose.md",
+            "review.md",
+            "tool.md",
+        ]
 
     def test_install_preserves_other_commands(self, tmp_path: Path) -> None:
         other_cmd = tmp_path / ".claude" / "commands" / "my-other-command"

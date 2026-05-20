@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import urllib.error
 from pathlib import Path
 from unittest import mock
@@ -17,7 +18,6 @@ from goga.install.install import (
     install,
 )
 
-import importlib
 _install_mod = importlib.import_module("goga.install.install")
 
 

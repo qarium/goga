@@ -37,7 +37,7 @@ class TestFacadeAccessibility:
     ]
 
     def test_facade_imports(self):
-        import goga.ast.rules  # noqa: PLC0415
+        import goga.ast.rules
 
         facade = goga.ast.rules
         for name in self.RULE_NAMES:
@@ -45,7 +45,7 @@ class TestFacadeAccessibility:
             assert callable(getattr(facade, name))
 
     def test_subcell_imports(self):
-        import goga.ast.rules.ast  # noqa: PLC0415
+        import goga.ast.rules.ast
 
         subcell = goga.ast.rules.ast
         for name in self.RULE_NAMES:

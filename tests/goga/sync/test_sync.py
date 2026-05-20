@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import io
 import shutil
 import subprocess
@@ -14,7 +15,6 @@ from goga.sync.sync import (
     sync,
 )
 
-import importlib
 _sync_mod = importlib.import_module("goga.sync.sync")
 
 

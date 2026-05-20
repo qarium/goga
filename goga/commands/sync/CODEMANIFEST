@@ -1,0 +1,41 @@
+Imports:
+  - Types:
+      - sync AS sync_logic
+    From: goga/sync
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Команда делегирует бизнес-логику через `sync_logic`.
+
+---
+
+"sync(source: str, token: str | None = None, branch: str | None = None)":
+  location: sync.py
+  annotations: |
+    CLI-обёртка команды синхронизации. Делегирует бизнес-логику `sync_logic`.
+
+    `source`: путь к каталогу или URL git-репозитория
+    `token`: токен авторизации для git
+    `branch`: ветка или тег для checkout
+
+    Алгоритм:
+    1. Вызвать `sync_logic`(`source`, `token`, `branch`)
+    2. Вернуть exit_code
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  CLI-обёртка команды синхронизации .usages/

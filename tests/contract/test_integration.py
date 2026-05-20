@@ -1,5 +1,6 @@
 """Integration tests for goga.contract package."""
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -11,7 +12,7 @@ from goga.commands.contract import contract
 from goga.config.config import BuildConfig, Config, TaskExecutor
 from goga.contract import EntityContract, RoutineContract, python_contract
 
-_contract_mod = sys.modules["goga.commands.contract"]
+_contract_mod = importlib.import_module("goga.commands.contract.contract")
 
 
 def _make_config(lang: str = "python") -> Config:

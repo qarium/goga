@@ -1,0 +1,42 @@
+Imports:
+  - Types:
+      - schema AS schema_logic
+    From: goga/schema
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Команда делегирует бизнес-логику через `schema_logic`.
+
+---
+
+"schema(cells: list[str], max_depth: int = None, depends_on: list[str] = [])":
+  location: schema.py
+  annotations: |
+    CLI-обёртка команды схемы. Делегирует бизнес-логику `schema_logic`.
+
+    `cells`: пути к клеткам для фильтрации
+    `max_depth`: ограничение вложенности дерева
+    `depends_on`: фильтр клеток по зависимости
+
+    Алгоритм:
+    1. Вызвать `schema_logic`(`cells`, `max_depth`, `depends_on`)
+    2. При ValueError от `schema_logic` (ошибки AST) — вывести ошибку в stderr, exit 1
+    3. Вывести результат через click.echo
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  CLI-обёртка команды формирования JSON-схемы проекта

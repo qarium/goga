@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from goga.config import BuildConfig, Config, TaskExecutor
+from goga.config import Config
 
 CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"\n'
 
@@ -219,13 +219,10 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
                 print(f"  {path}", file=sys.stderr)
             return 1
 
-    result = _run_precondition(config)
-    if result != 0:
-        return result
-
-    result = _copy_defaults(config)
-    if result != 0:
-        return result
+    for step in (_run_precondition, _copy_defaults):
+        result = step(config)
+        if result != 0:
+            return result
 
     cmd = _assemble_command(plan, config, cli_options)
     cmd_str = shlex.join(cmd)

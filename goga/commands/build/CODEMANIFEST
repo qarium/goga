@@ -1,0 +1,52 @@
+Imports:
+  - Types:
+      - build AS build_logic
+    From: goga/build
+  - Types:
+      - Config
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Команда делегирует бизнес-логику через `build_logic`.
+
+---
+
+"build(plan: str)":
+  location: build.py
+  annotations: |
+    CLI-обёртка команды сборки. Делегирует бизнес-логику `build_logic`.
+
+    `plan`: путь к файлу плана
+
+    CLI-опции (через click):
+    - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
+    - --session-timeout, --idle-timeout, --wait
+    - --max-iterations, --review-patience
+
+    Алгоритм:
+    1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
+    2. Собрать cli_options из click-параметров
+    3. Вызвать `build_logic`(`plan`, `Config`, cli_options)
+    4. Вернуть exit_code
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  CLI-обёртка команды сборки goga

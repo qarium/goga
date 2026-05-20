@@ -142,6 +142,7 @@ class TestEdgeNonExistentPath:
         nonexistent = str(tmp_path / "does_not_exist")
         result = _run_linter(nonexistent)
         assert result.exit_code != 0
+        assert isinstance(result.exception, FileNotFoundError)
 
 
 class TestErrorFormat:

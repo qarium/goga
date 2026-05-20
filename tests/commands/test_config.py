@@ -5,7 +5,6 @@ from pathlib import Path
 from click.testing import CliRunner
 from goga.commands.config import config
 
-
 _CONFIG_FILE = Path(".goga") / "config.yml"
 
 
@@ -23,7 +22,7 @@ class TestContract:
     """Contract-level tests for config command."""
 
     def test_config_importable_from_facade(self) -> None:
-        from goga.commands import config as facade_config  # noqa: PLC0415
+        from goga.commands import config as facade_config
 
         assert facade_config is config
 

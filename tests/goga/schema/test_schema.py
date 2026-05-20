@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import json
 import os
 from pathlib import Path
@@ -28,7 +29,6 @@ from goga.schema.schema import (
     schema,
 )
 
-import importlib
 _schema_mod = importlib.import_module("goga.schema.schema")
 
 

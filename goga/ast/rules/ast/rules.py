@@ -93,7 +93,7 @@ class EmbeddedTypeHasLowLevel(ASTRule):
     def __init__(self, tree: list[DocumentRoot]) -> None:
         super().__init__(tree=tree, name="embedded_type_has_low_level")
 
-    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]:  # noqa: C901
         errors: list[ASTRuleError] = []
         current_path = os.path.normpath(document.path)
 
@@ -126,36 +126,34 @@ class EmbeddedTypeHasLowLevel(ASTRule):
 
         for entity in embedded_entities:
             source_path = _resolve_source(entity.name)
-            if source_path is not None:
-                if not source_path.startswith(current_path + os.sep):
-                    errors.append(
-                        ASTRuleError(
-                            message=(
-                                f"Embedded entity '{entity.name}' comes from"
-                                f" '{source_path}', but can only be embedded from"
-                                f" packages nested below '{current_path}'"
-                            ),
-                            rule=self.name,
-                            document=document,
-                            node=entity,
-                        )
+            if source_path is not None and not source_path.startswith(current_path + os.sep):
+                errors.append(
+                    ASTRuleError(
+                        message=(
+                            f"Embedded entity '{entity.name}' comes from"
+                            f" '{source_path}', but can only be embedded from"
+                            f" packages nested below '{current_path}'"
+                        ),
+                        rule=self.name,
+                        document=document,
+                        node=entity,
                     )
+                )
 
         for routine in embedded_routines:
             source_path = _resolve_source(routine.name)
-            if source_path is not None:
-                if not source_path.startswith(current_path + os.sep):
-                    errors.append(
-                        ASTRuleError(
-                            message=(
-                                f"Embedded routine '{routine.name}' comes from"
-                                f" '{source_path}', but can only be embedded from"
-                                f" packages nested below '{current_path}'"
-                            ),
-                            rule=self.name,
-                            document=document,
-                            node=routine,
-                        )
+            if source_path is not None and not source_path.startswith(current_path + os.sep):
+                errors.append(
+                    ASTRuleError(
+                        message=(
+                            f"Embedded routine '{routine.name}' comes from"
+                            f" '{source_path}', but can only be embedded from"
+                            f" packages nested below '{current_path}'"
+                        ),
+                        rule=self.name,
+                        document=document,
+                        node=routine,
                     )
+                )
 
         return errors

@@ -15,7 +15,7 @@ from goga.ast.nodes import DocumentRoot
 
 class TestFacadeAvailability:
     def test_import_ast_from_codemanifest(self):
-        from goga.ast import AST as Reimported  # noqa: N811, PLC0415
+        from goga.ast import AST as Reimported  # noqa: N811
 
         assert Reimported is AST
 
