@@ -22,8 +22,8 @@ classifiers = [
 dependencies = [
     "click",
     "pyyaml",
-    "tree-sitter",
-    "tree-sitter-go",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-go>=0.25.0",
 ]
 
 [project.scripts]

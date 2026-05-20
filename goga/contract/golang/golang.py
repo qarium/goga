@@ -121,7 +121,7 @@ def _process_type_declaration(node, entities: dict[str, EntityContract], struct_
                 fields = _extract_struct_fields(inner)
                 entities[type_name] = EntityContract(
                     name=type_name,
-                    signature="",
+                    signature="()",
                     properties=fields,
                     methods=[],
                 )
@@ -130,7 +130,7 @@ def _process_type_declaration(node, entities: dict[str, EntityContract], struct_
                 iface_methods = _extract_interface_methods(inner)
                 entities[type_name] = EntityContract(
                     name=type_name,
-                    signature="",
+                    signature="()",
                     properties=[],
                     methods=iface_methods,
                 )

@@ -149,7 +149,7 @@ class TestFullCycleGoPackageViaCLI:
         assert "Server" in cell_data
         server = cell_data["Server"]
         assert server["signature"]["codemanifest"] == "()"
-        assert server["signature"]["implementation"] == ""
+        assert server["signature"]["implementation"] == "()"
         assert "Name" in server["properties"]
         assert server["properties"]["Name"]["codemanifest"] == "string"
         assert server["properties"]["Name"]["implementation"] == "string"
@@ -166,7 +166,7 @@ class TestFullCycleGoPackageViaCLI:
         assert "Handler" in cell_data
         handler = cell_data["Handler"]
         assert handler["signature"]["codemanifest"] == "()"
-        assert handler["signature"]["implementation"] == ""
+        assert handler["signature"]["implementation"] == "()"
         assert "Serve" in handler["methods"]
         assert handler["methods"]["Serve"]["codemanifest"] == "(data: string) -> error"
         assert handler["methods"]["Serve"]["implementation"] == "(data: string) -> error"
