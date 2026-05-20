@@ -4,7 +4,7 @@ import inspect
 import types
 from importlib import import_module
 
-from .contract import (
+from ..data import (
     EntityContract,
     MethodContract,
     PropertyContract,

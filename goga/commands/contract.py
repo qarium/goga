@@ -10,8 +10,14 @@ import yaml
 from ..ast import AST
 from ..ast.errors import DocumentNotFoundError
 from ..config import load_config
-from ..contract import EntityContract, MethodContract, PropertyContract, RoutineContract
-from ..contract.python import python_contract
+from ..contract import (
+    EntityContract,
+    MethodContract,
+    PropertyContract,
+    RoutineContract,
+    golang_contract,
+    python_contract,
+)
 
 if TYPE_CHECKING:
     from ..ast.nodes import EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
@@ -114,7 +120,22 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
         raise click.ClickException(str(exc)) from exc
 
     lang = lang if lang is not None else config.lang
-    _ = lang  # reserved for future use
+
+    if lang == "golang" and golang_contract is None:
+        click.echo("Error: golang support not available (tree-sitter not installed)", err=True)
+        ctx.exit(1)
+        return
+
+    dispatch = {
+        "python": python_contract,
+        "golang": golang_contract,
+    }
+    contract_fn = dispatch.get(lang)
+    if contract_fn is None:
+        click.echo(f"Error: unsupported language: {lang}", err=True)
+        ctx.exit(1)
+        return
+
     ast_obj = AST(".")
     ast_obj.load()
 
@@ -127,7 +148,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
             ctx.exit(1)
 
         try:
-            impl_contracts = python_contract(cell_path)
+            impl_contracts = contract_fn(cell_path)
         except ModuleNotFoundError:
             click.echo(f"Error: package not importable: {cell_path}", err=True)
             ctx.exit(1)

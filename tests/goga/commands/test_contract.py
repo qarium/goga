@@ -137,6 +137,24 @@ ROUTINE_IMPL = (
     "__all__ = ['my_func']\n"
 )
 
+GO_ENTITY_CODEMANIFEST = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"Hello(name: string) -> string":
+  location: service.go
+  annotations: ""
+
+---
+
+Author: Test
+CreatedAt: 01/01/01
+Description: Test
+"""
+
 
 def test_contract_single_cell_entity(tmp_path) -> None:
     cell = tmp_path / "cell_one"
@@ -511,3 +529,61 @@ class TestContractIntegration:
         data = json.loads(result.output)
         assert isinstance(data, dict)
         assert "goga/contract" in data
+
+
+def test_contract_unknown_lang(tmp_path) -> None:
+    _write_goga_yml(tmp_path)
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, ENTITY_CODEMANIFEST)
+    (cell / "__init__.py").write_text(ENTITY_IMPL, encoding="utf-8")
+
+    with _cwd(tmp_path), _sys_path(str(tmp_path)):
+        result = _run_contract("cell_one", "--lang", "rust")
+
+    assert result.exit_code == 1
+    assert "unsupported language" in result.stderr.lower()
+
+
+def test_contract_golang_lang_cli(tmp_path) -> None:
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, GO_ENTITY_CODEMANIFEST)
+    (cell / "service.go").write_text(
+        "package cell_one\n\nfunc Hello(name string) string { return \"Hello \" + name }\n",
+        encoding="utf-8",
+    )
+    _write_goga_yml(tmp_path)
+
+    with _cwd(tmp_path):
+        result = _run_contract("cell_one", "--lang", "golang")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "cell_one" in data
+    assert "Hello" in data["cell_one"]
+    assert data["cell_one"]["Hello"]["signature"]["implementation"] == "(name: string) -> string"
+
+
+def test_contract_default_lang_from_config_golang(tmp_path) -> None:
+    (tmp_path / ".goga").mkdir(exist_ok=True)
+    (tmp_path / ".goga" / "config.yml").write_text(
+        "language: golang\nbuild:\n  task_executor:\n    agent: claude\n",
+        encoding="utf-8",
+    )
+    cell = tmp_path / "cell_one"
+    cell.mkdir()
+    _write_codemanifest(cell, GO_ENTITY_CODEMANIFEST)
+    (cell / "service.go").write_text(
+        "package cell_one\n\nfunc Hello(name string) string { return \"Hello \" + name }\n",
+        encoding="utf-8",
+    )
+
+    with _cwd(tmp_path):
+        result = _run_contract("cell_one")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert "cell_one" in data
+    assert "Hello" in data["cell_one"]
+    assert data["cell_one"]["Hello"]["signature"]["implementation"] == "(name: string) -> string"

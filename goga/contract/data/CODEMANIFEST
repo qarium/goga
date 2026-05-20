@@ -1,0 +1,68 @@
+Usages:
+  conventions: .goga/usages/development/conventions.md
+  contract_format: |
+    Реализованный контракт должен соответствовать указанному формату
+
+    ```
+    [
+      {
+        "name": "<name of type/object/entity>",
+        "signature": "(...) ..."
+      }
+    ]
+    ```
+
+    - каждый элемент списка - это имя и сигнатура на фасаде клетки
+    - понятие фасада клетки определяется индивидуально для каждого языка программирования
+    - сигнатура - это контракт входных и выходных данных создания объекта/вызова функции
+    - словарь может быть представлен в виде объекта
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+
+---
+
+BaseContract():
+  location: contract.py
+  annotations: |
+    Использовать формат `contract_format`.
+  properties:
+    name -> str: |
+      Имя объекта/функции и тд
+    signature -> str: |
+      Сигнатура вызова с входными и выходными данными
+    contract -> str: |
+      Имя и сигнатура "{{ name }}{{ signature }}"
+
+BaseContract::EntityContract():
+  location: contract.py
+  annotations: |
+    Описание контракта сущности
+  properties:
+    properties -> list[PropertyContract]: |
+      Контракт свойства сущности
+    methods -> list[MethodContract]: |
+      Контракт метода сущности
+
+BaseContract::RoutineContract():
+  location: contract.py
+  annotations: |
+    Описание контракта рутины
+
+BaseContract::PropertyContract():
+  location: contract.py
+  annotations: |
+    Описание контракта свойства сущности
+
+BaseContract::MethodContract():
+  location: contract.py
+  annotations: |
+    Описание контракта метода сущности
+
+---
+
+Author: Goga
+CreatedAt: 19/05/26
+
+Description: |
+  Data-классы контрактов — языко-независимая модель данных
