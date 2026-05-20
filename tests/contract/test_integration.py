@@ -11,6 +11,8 @@ from goga.commands.contract import contract
 from goga.config.config import BuildConfig, Config, TaskExecutor
 from goga.contract import EntityContract, RoutineContract, python_contract
 
+_contract_mod = sys.modules["goga.commands.contract"]
+
 
 def _make_config(lang: str = "python") -> Config:
     return Config(
@@ -122,8 +124,8 @@ class TestEndToEndPython:
             cfg = _make_config("python")
             runner = CliRunner()
             with (
-                mock.patch("goga.commands.contract.load_config", return_value=cfg),
-                mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+                mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+                mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
             ):
                 mock_ast = mock.MagicMock()
                 mock_ast_cls.return_value = mock_ast
@@ -182,8 +184,8 @@ class TestEndToEndGolang:
         cfg = _make_config("golang")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
@@ -225,8 +227,8 @@ class TestMultipleCells:
             cfg = _make_config("python")
             runner = CliRunner()
             with (
-                mock.patch("goga.commands.contract.load_config", return_value=cfg),
-                mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+                mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+                mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
             ):
                 mock_ast = mock.MagicMock()
                 mock_ast_cls.return_value = mock_ast
@@ -264,8 +266,8 @@ class TestErrorPropagation:
         cfg = _make_config("rust")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
@@ -284,8 +286,8 @@ class TestErrorPropagation:
         cfg = _make_config("python")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast

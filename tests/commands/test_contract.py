@@ -10,6 +10,8 @@ from click.testing import CliRunner
 from goga.commands.contract import contract
 from goga.config.config import BuildConfig, Config, TaskExecutor
 
+_contract_mod = sys.modules["goga.commands.contract"]
+
 
 def _make_config(lang: str = "python") -> Config:
     return Config(
@@ -63,8 +65,8 @@ class TestBehavioral:
             cfg = _make_config("python")
             runner = CliRunner()
             with (
-                mock.patch("goga.commands.contract.load_config", return_value=cfg),
-                mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+                mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+                mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
             ):
                 # Setup AST mock
                 mock_ast = mock.MagicMock()
@@ -98,8 +100,8 @@ class TestBehavioral:
         cfg = _make_config("rust")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
@@ -119,8 +121,8 @@ class TestBehavioral:
         cfg = _make_config("python")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
@@ -136,8 +138,8 @@ class TestBehavioral:
         cfg = _make_config("python")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
@@ -164,8 +166,8 @@ class TestBehavioral:
         cfg = _make_config("python")
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.contract.load_config", return_value=cfg),
-            mock.patch("goga.commands.contract.AST") as mock_ast_cls,
+            mock.patch.object(_contract_mod, "load_config", return_value=cfg),
+            mock.patch.object(_contract_mod, "AST") as mock_ast_cls,
         ):
             mock_ast = mock.MagicMock()
             mock_ast_cls.return_value = mock_ast
