@@ -15,8 +15,9 @@ from ..contract import (
     MethodContract,
     PropertyContract,
     RoutineContract,
-    golang_contract,
-    python_contract,
+)
+from ..contract import (
+    contract as contract_logic,
 )
 
 if TYPE_CHECKING:
@@ -121,21 +122,6 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
 
     lang = lang if lang is not None else config.lang
 
-    if lang == "golang" and golang_contract is None:
-        click.echo("Error: golang support not available (tree-sitter not installed)", err=True)
-        ctx.exit(1)
-        return
-
-    dispatch = {
-        "python": python_contract,
-        "golang": golang_contract,
-    }
-    contract_fn = dispatch.get(lang)
-    if contract_fn is None:
-        click.echo(f"Error: unsupported language: {lang}", err=True)
-        ctx.exit(1)
-        return
-
     ast_obj = AST(".")
     ast_obj.load()
 
@@ -148,7 +134,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
             ctx.exit(1)
 
         try:
-            impl_contracts = contract_fn(cell_path)
+            impl_contracts = contract_logic(lang, cell_path)
         except ModuleNotFoundError:
             click.echo(f"Error: package not importable: {cell_path}", err=True)
             ctx.exit(1)

@@ -3,15 +3,10 @@ Imports:
       - AST
     From: goga/ast
   - Types:
-      - python_contract
-      - golang_contract
+      - contract AS contract_logic
+    Usages:
+      - contract AS use_contract
     From: goga/contract
-  - Usages:
-      - golang_contract AS use_go_contract
-    From: goga/contract/golang
-  - Usages:
-      - python_contract AS use_py_contract
-    From: goga/contract/python
   - Types:
       - Config
       - load_config
@@ -151,8 +146,8 @@ Annotations: |
 "contract(cells: list[str], lang: str | None = None)":
   location: contract.py
   annotations: |
-    При загрузке контрактов используй `use_py_contract` и `use_go_contract` практики
     Команда сравнения контракта CODEMANIFEST с реализацией.
+    Использовать практику `use_contract` для понимания работы диспатчера контрактов.
 
     `cells`: пути к клеткам для сравнения, один или несколько
     `lang`: язык реализации. Приоритет: CLI-аргумент > `Config`. Если None — берётся из `Config`.lang
@@ -165,15 +160,11 @@ Annotations: |
     2. Разрешить язык:
        - Если `lang` передан (не None) — использовать CLI значение
        - Иначе — использовать `Config`.lang
-    3. Диспетчеризация по языку:
-       - "python" → использовать `python_contract`
-       - "golang" → использовать `golang_contract`
-       - неизвестный язык → ошибка
-    4. Создать и загрузить проект с использованием практики `documents`
-    5. Для каждого пути из `cells`:
+    3. Создать и загрузить проект с использованием практики `documents`
+    4. Для каждого пути из `cells`:
       - Найти документ в дереве с использованием практики `documents`
       - Извлечь типы из body документа: entities и routines
-      - Получить реализованный контракт через выбранную языковую практику
+      - Получить реализованный контракт через `contract_logic`
       - Для каждого типа из CODEMANIFEST найти соответствие в реализации по имени
       - Построить структуру сравнения (CODEMANIFEST первичен)
 

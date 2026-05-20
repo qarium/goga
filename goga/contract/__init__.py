@@ -5,6 +5,7 @@ from goga.contract.data import (
     PropertyContract,
     RoutineContract,
 )
+from goga.contract.dispatcher import contract
 from goga.contract.python import python_contract
 
 try:
@@ -18,6 +19,7 @@ __all__ = [
     "MethodContract",
     "PropertyContract",
     "RoutineContract",
+    "contract",
     "golang_contract",
     "python_contract",
 ]
