@@ -7,17 +7,21 @@ Imports:
     From: goga/contract/data
   - Types:
       - python_contract
+    Usages:
+      - python_contract AS use_py_contract
     From: goga/contract/python
   - Types:
       - golang_contract
+    Usages:
+      - golang_contract AS use_go_contract
     From: goga/contract/golang
 
 Usages:
-  conventions: .goga/usages/development/conventions.md
+  convention: .goga/usages/development/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Клетка — фасад для всех контрактных операций
+  При разработке и тестировании использовать практику `convention`.
+  Клетка — фасад для всех контрактных операций.
 
 ---
 
@@ -25,13 +29,24 @@ Annotations: |
 ->RoutineContract: {}
 ->PropertyContract: {}
 ->MethodContract: {}
-->python_contract: {}
-->golang_contract: {}
+
+"contract(lang: str, cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
+  location: dispatcher.py
+  annotations: |
+    Диспетчер контрактных операций по языку реализации.
+
+    `lang`: язык реализации ("python", "golang")
+    `cell_path`: путь до ячейки
+
+    Алгоритм:
+    - "python" → вызвать `python_contract`(`cell_path`), использовать практику `use_py_contract`
+    - "golang" → вызвать `golang_contract`(`cell_path`), использовать практику `use_go_contract`
+    - неизвестный язык → ValueError
 
 ---
 
 Author: Goga
-CreatedAt: 19/05/26
+CreatedAt: 20/05/26
 
 Description: |
   Работа с реализованным контрактом в языке программирования
