@@ -94,7 +94,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
     """Compare CODEMANIFEST contract with implementation.
 
     For each specified cell, loads the CODEMANIFEST definitions and
-    the Python implementation, then outputs a JSON object with
+    Lang implementation, then outputs a JSON object with
     codemanifest/implementation pairs for every signature, property,
     and method.
 
