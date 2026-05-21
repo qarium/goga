@@ -10,11 +10,15 @@ import pytest
 from click.testing import CliRunner
 from goga.commands import sync as facade_sync
 from goga.commands.sync import sync
+import sys
+
 from goga.sync.sync import (
     _extract_dep_name,
     _is_git_url,
     _prepare_clone_url,
 )
+
+_sync_mod = sys.modules["goga.sync.sync"]
 
 
 class TestContract:
@@ -251,8 +255,9 @@ class TestSyncLocal:
 
     def test_sync_local_root_path_gives_empty_dep_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir("/")
-        runner = CliRunner()
-        result = runner.invoke(sync, ["/"])
+        with mock.patch.object(_sync_mod, "_find_usages_dirs", return_value=[Path("/fake/.usages")]):
+            runner = CliRunner()
+            result = runner.invoke(sync, ["/"])
 
         assert result.exit_code == 1
         assert "Cannot extract dependency name" in result.output

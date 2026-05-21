@@ -5,7 +5,7 @@ import os
 import click
 import yaml
 
-from ..ast import AST
+from ...ast import AST
 
 
 @click.command()

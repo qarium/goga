@@ -1,0 +1,49 @@
+Imports:
+  - Types:
+      - install AS install_logic
+    From: goga/install
+  - Types:
+      - Config
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Команда делегирует бизнес-логику через `install_logic`.
+
+---
+
+"install(agent: str | None = None)":
+  location: install.py
+  annotations: |
+    CLI-обёртка команды установки. Делегирует бизнес-логику `install_logic`.
+
+    `agent`: целевой AI-агент
+
+    CLI-опции:
+    - --agent: целевой AI-агент
+
+    Алгоритм:
+    1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
+    2. Вызвать `install_logic`(`agent`, `Config`)
+    3. Вернуть exit_code
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  CLI-обёртка команды установки скиллов goga

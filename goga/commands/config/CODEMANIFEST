@@ -1,0 +1,79 @@
+Imports:
+  - Types:
+      - Config
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+  beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+
+---
+
+"config(options: tuple[str, ...])":
+  location: config.py
+  annotations: |
+    Команда выводит значения опций из конфигурации проекта .goga/config.yml.
+    Структура конфигурации описана в практике `configuration`, конфигурация загружается через `load_config`.
+    Команда поддерживает навигацию по всем полям объекта `Config` через точечную нотацию.
+    Каждая опция выводится отдельно с заголовком, идентифицирующим путь.
+
+    `options`: пути к опциям в точечной нотации, один или несколько.
+    Например: build.task_executor.agent build.worktree
+
+    Алгоритм:
+    1. Загрузить конфигурацию через `load_config` → `Config`
+    2. Для каждого пути из `options`:
+       a. Разрешить путь: разбить по "." на компоненты
+       b. Обойти структуру `Config` по компонентам:
+          - Начать с корневого объекта Config
+          - Для каждого компонента: получить атрибут объекта
+          - Если атрибут не существует — ошибка
+       c. Вывести заголовок: # <path>
+       d. Вывести значение:
+          - Для примитивов (str, int, bool) — сырое значение через click.echo
+          - Для None — вывести "null"
+          - Для сложных (dict, dataclass) — вывести через практику `beautiful_yaml`
+    3. Если путь не найден — вывести ошибку в stderr, exit 1
+
+    Формат вывода при нескольких опциях:
+    ```
+    # language
+    python
+
+    # build.task_executor.agent
+    claude
+
+    # build.worktree
+    True
+    ```
+    Формат вывода при одной опции — то же самое: заголовок и значение.
+
+    Требования:
+    - Ошибки конфигурации (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
+      преобразуются в click.ClickException
+    - Ошибка "option not found" выводится в stderr (click.echo с err=True)
+    - Код возврата: 0 при успехе, 1 при ошибке
+    - Заголовок каждой опции начинается с "# "
+    - Между значениями разных опций — пустая строка
+    - Для YAML-вывода сложных типов заголовок выводится перед YAML-блоком
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  Команда вывода значений опций из конфигурации проекта

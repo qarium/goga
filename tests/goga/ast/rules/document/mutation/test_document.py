@@ -54,14 +54,14 @@ class TestContract:
             )
 
     def test_accessible_from_facade(self):
-        import goga.ast.rules as facade  # noqa: PLC0415
+        import goga.ast.rules as facade
 
         assert facade.MutationExists is MutationExists
         assert facade.MutationIsValid is MutationIsValid
         assert facade.EmbeddedEntityCanNotHasMutations is EmbeddedEntityCanNotHasMutations
 
     def test_accessible_from_submodule(self):
-        import goga.ast.rules.document.mutation as submod  # noqa: PLC0415
+        import goga.ast.rules.document.mutation as submod
 
         assert submod.MutationExists is MutationExists
         assert submod.MutationIsValid is MutationIsValid

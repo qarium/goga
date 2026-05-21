@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import io
 import shutil
 import subprocess
@@ -14,7 +15,6 @@ from goga.sync.sync import (
     sync,
 )
 
-import importlib
 _sync_mod = importlib.import_module("goga.sync.sync")
 
 
@@ -213,7 +213,8 @@ class TestSyncLocal:
 
     def test_local_root_path_gives_empty_dep_name(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.chdir("/")
-        exit_code = sync("/")
+        with mock.patch.object(_sync_mod, "_find_usages_dirs", return_value=[Path("/fake/.usages")]):
+            exit_code = sync("/")
         assert exit_code == 1
 
     def test_local_os_error_during_copy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -100,6 +100,13 @@ class EmbeddedTypeHasLowLevel(ASTRule):
         embedded_entities = [e for e in document.body.entities if e.embedded]
         embedded_routines = [r for r in document.body.routines if r.embedded]
 
+        # Resolve sources through import declarations first
+        import_source: dict[str, str] = {}
+        for item in document.header.imports.types:
+            for type_name in item.type_name:
+                import_source[type_name] = os.path.normpath(item.from_path)
+
+        # Fallback: global name map for types not resolved via imports
         type_source: dict[str, DocumentRoot] = {}
         for doc in self._tree:
             for entity in doc.body.entities:
@@ -109,40 +116,44 @@ class EmbeddedTypeHasLowLevel(ASTRule):
                 if not routine.embedded:
                     type_source[routine.name] = doc
 
-        for entity in embedded_entities:
-            source_doc = type_source.get(entity.name)
+        def _resolve_source(name: str) -> str | None:
+            if name in import_source:
+                return import_source[name]
+            source_doc = type_source.get(name)
             if source_doc is not None:
-                source_path = os.path.normpath(source_doc.path)
-                if not source_path.startswith(current_path + os.sep):
-                    errors.append(
-                        ASTRuleError(
-                            message=(
-                                f"Embedded entity '{entity.name}' comes from"
-                                f" '{source_path}', but can only be embedded from"
-                                f" packages nested below '{current_path}'"
-                            ),
-                            rule=self.name,
-                            document=document,
-                            node=entity,
-                        )
+                return os.path.normpath(source_doc.path)
+            return None
+
+        for entity in embedded_entities:
+            source_path = _resolve_source(entity.name)
+            if source_path is not None and not source_path.startswith(current_path + os.sep):
+                errors.append(
+                    ASTRuleError(
+                        message=(
+                            f"Embedded entity '{entity.name}' comes from"
+                            f" '{source_path}', but can only be embedded from"
+                            f" packages nested below '{current_path}'"
+                        ),
+                        rule=self.name,
+                        document=document,
+                        node=entity,
                     )
+                )
 
         for routine in embedded_routines:
-            source_doc = type_source.get(routine.name)
-            if source_doc is not None:
-                source_path = os.path.normpath(source_doc.path)
-                if not source_path.startswith(current_path + os.sep):
-                    errors.append(
-                        ASTRuleError(
-                            message=(
-                                f"Embedded routine '{routine.name}' comes from"
-                                f" '{source_path}', but can only be embedded from"
-                                f" packages nested below '{current_path}'"
-                            ),
-                            rule=self.name,
-                            document=document,
-                            node=routine,
-                        )
+            source_path = _resolve_source(routine.name)
+            if source_path is not None and not source_path.startswith(current_path + os.sep):
+                errors.append(
+                    ASTRuleError(
+                        message=(
+                            f"Embedded routine '{routine.name}' comes from"
+                            f" '{source_path}', but can only be embedded from"
+                            f" packages nested below '{current_path}'"
+                        ),
+                        rule=self.name,
+                        document=document,
+                        node=routine,
                     )
+                )
 
         return errors

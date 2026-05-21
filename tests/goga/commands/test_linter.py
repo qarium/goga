@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
-
 import click
 from click.testing import CliRunner
 from goga.commands import linter
@@ -88,12 +85,8 @@ def _setup_valid_project(tmp_path) -> str:
 
 
 def _run_linter(path: str) -> click.testing.Result:
-    original_cwd = str(Path.cwd())
-    try:
-        runner = CliRunner()
-        return runner.invoke(linter_cmd, [path])
-    finally:
-        os.chdir(original_cwd)
+    runner = CliRunner()
+    return runner.invoke(linter_cmd, [path])
 
 
 class TestFacadeAvailability:
@@ -142,6 +135,7 @@ class TestEdgeNonExistentPath:
         nonexistent = str(tmp_path / "does_not_exist")
         result = _run_linter(nonexistent)
         assert result.exit_code != 0
+        assert isinstance(result.exception, FileNotFoundError)
 
 
 class TestErrorFormat:

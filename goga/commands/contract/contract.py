@@ -7,21 +7,21 @@ from typing import TYPE_CHECKING
 import click
 import yaml
 
-from ..ast import AST
-from ..ast.errors import DocumentNotFoundError
-from ..config import load_config
-from ..contract import (
+from ...ast import AST
+from ...ast.errors import DocumentNotFoundError
+from ...config import load_config
+from ...contract import (
     EntityContract,
     MethodContract,
     PropertyContract,
     RoutineContract,
 )
-from ..contract import (
+from ...contract import (
     contract as contract_logic,
 )
 
 if TYPE_CHECKING:
-    from ..ast.nodes import EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
+    from ...ast.nodes import EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
 
 
 def _compare_property(

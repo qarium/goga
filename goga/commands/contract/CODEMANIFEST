@@ -1,0 +1,104 @@
+Imports:
+  - Types:
+      - AST
+    Usages:
+      - loading
+    From: goga/ast
+  - Types:
+      - contract AS contract_logic
+    Usages:
+      - contract AS use_contract
+    From: goga/contract
+  - Types:
+      - Config
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+  beautiful_json: .goga/usages/cooks/beautiful_json.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Использовать практику `use_contract` для понимания работы диспатчера контрактов.
+  Конфигурация загружается через `load_config` с использованием практики `configuration`.
+
+---
+
+"contract(cells: list[str], lang: str | None = None)":
+  location: contract.py
+  annotations: |
+    Команда сравнения контракта CODEMANIFEST с реализацией.
+
+    `cells`: пути к клеткам для сравнения, один или несколько
+    `lang`: язык реализации. Приоритет: CLI-аргумент > `Config`. Если None — берётся из `Config`.lang
+
+    CLI-опции:
+    - --lang: язык реализации. Если не указан — используется значение из `Config`.lang
+
+    Алгоритм:
+    1. Загрузить конфигурацию через `load_config` → `Config`
+    2. Разрешить язык:
+       - Если `lang` передан (не None) — использовать CLI значение
+       - Иначе — использовать `Config`.lang
+    3. Создать объект `AST` и загрузить проект с использованием практики `loading`
+    4. Для каждого пути из `cells`:
+      - Найти документ в дереве с использованием практики `loading`
+      - Извлечь типы из body документа: entities и routines
+      - Получить реализованный контракт через `contract_logic`
+      - Для каждого типа из CODEMANIFEST найти соответствие в реализации по имени
+      - Построить структуру сравнения (CODEMANIFEST первичен)
+
+    Ключевой принцип: CODEMANIFEST — источник истины. Обход идёт по типам,
+    методам и свойствам из контракта. Реализация заполняет поле implementation
+    или null если не найдена.
+
+    Для entity:
+    - signature: параметры конструктора из codemanifest и implementation
+    - properties: для каждого свойства из codemanifest найти в реализации
+    - methods: для каждого метода из codemanifest найти в реализации
+
+    Для routine:
+    - signature: полная сигнатура из codemanifest и implementation
+
+    Вывести результат через практику `beautiful_json`.
+
+    Формат вывода:
+    ```
+    {
+      "norm/path/to/cell": {
+        "TypeName": {
+          "signature": { "codemanifest": "...", "implementation": "..." },
+          "properties": { "name": { "codemanifest": "...", "implementation": "..." } },
+          "methods": { "name": { "codemanifest": "...", "implementation": "..." } }
+        },
+        "RoutineName": {
+          "signature": { "codemanifest": "...", "implementation": "..." }
+        }
+      }
+    }
+    ```
+
+    Требования:
+    - вывод не должен содержать ничего кроме json структуры
+    - если путь к клетке не найден → вывести ошибку в stderr и выйти с кодом 1
+    - ошибки выводить в stderr (click.echo с err=True)
+    - код возврата: 0 при успехе, 1 при ошибке
+    - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
+
+---
+
+Author: Goga
+CreatedAt: 20/05/26
+
+Description: |
+  Команда сравнения контракта CODEMANIFEST с реализацией

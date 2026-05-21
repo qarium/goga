@@ -110,45 +110,45 @@ class TestBackwardCompatibility:
     """Old import paths must still work and return identical objects."""
 
     def test_document_rules_from_old_path(self) -> None:
-        from goga.ast.rules.document import (  # noqa: PLC0415
+        from goga.ast.rules.document import (
             ImportsCanNotBeEmpty,
         )
 
         assert ImportsCanNotBeEmpty is facade.ImportsCanNotBeEmpty
 
     def test_ast_rules_from_old_path(self) -> None:
-        from goga.ast.rules.ast import (  # noqa: PLC0415
+        from goga.ast.rules.ast import (
             ImportsHasNotCyclicalDeps,
         )
 
         assert ImportsHasNotCyclicalDeps is facade.ImportsHasNotCyclicalDeps
 
     def test_tools_from_old_path(self) -> None:
-        from goga.ast.rules.document.imports.tools import (  # noqa: PLC0415
+        from goga.ast.rules.document.imports.tools import (
             signature_contains_type_name,
         )
 
         assert signature_contains_type_name is facade.signature_contains_type_name
 
     def test_base_classes_from_old_path(self) -> None:
-        from goga.ast.rules.base import ASTRule, DocumentRule  # noqa: PLC0415
+        from goga.ast.rules.base import ASTRule, DocumentRule
 
         assert DocumentRule is facade.DocumentRule
         assert ASTRule is facade.ASTRule
 
     def test_subcell_direct_imports(self) -> None:
-        from goga.ast.rules.document.imports import (  # noqa: PLC0415
+        from goga.ast.rules.document.imports import (
             ImportHasNotDuplicate,
             ImportsCanNotBeEmpty,
             signature_contains_type_name,
         )
-        from goga.ast.rules.document.mutation import (  # noqa: PLC0415
+        from goga.ast.rules.document.mutation import (
             MutationExists,
         )
-        from goga.ast.rules.document.structures import (  # noqa: PLC0415
+        from goga.ast.rules.document.structures import (
             LocationIsRequired,
         )
-        from goga.ast.rules.document.usages import (  # noqa: PLC0415
+        from goga.ast.rules.document.usages import (
             AllUsagesIsUsed,
         )
 

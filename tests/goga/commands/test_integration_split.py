@@ -2,28 +2,24 @@
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 from unittest import mock
 
-import yaml
 from click.testing import CliRunner
 from goga.cli import app
-from goga.commands.sync import sync as sync_cli
-from goga.commands.schema import schema as schema_cli
 from goga.commands.build import build as build_cli
 from goga.commands.install import install as install_cli
-
-# __init__.py in each package shadows submodule names (from .sync import sync),
-# so `import goga.commands.sync as x` returns the Click Command, not the module.
-# importlib.import_module() always resolves through sys.modules → correct module.
-_sync_mod = importlib.import_module("goga.commands.sync")
-_schema_mod = importlib.import_module("goga.commands.schema")
-_build_mod = importlib.import_module("goga.commands.build")
-_install_mod = importlib.import_module("goga.commands.install")
+from goga.commands.schema import schema as schema_cli
+from goga.commands.sync import sync as sync_cli
 
 from tests.conftest import cwd as _cwd
 
+# Mock-patching targets the implementation sub-modules where *_logic imports live,
+# not the package __init__.py which only re-exports the click command.
+_sync_mod = importlib.import_module("goga.commands.sync.sync")
+_schema_mod = importlib.import_module("goga.commands.schema.schema")
+_build_mod = importlib.import_module("goga.commands.build.build")
+_install_mod = importlib.import_module("goga.commands.install.install")
 
 # --- sync delegation ---
 
@@ -255,7 +251,7 @@ class TestInstallDelegation:
 
     def test_install_delegates_exit_code_1(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_install_mod, "install_logic", return_value=1) as mock_logic,
+            mock.patch.object(_install_mod, "install_logic", return_value=1),
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):

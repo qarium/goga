@@ -15,7 +15,7 @@ from goga.ast.nodes import DocumentRoot
 
 class TestFacadeAvailability:
     def test_import_ast_from_codemanifest(self):
-        from goga.ast import AST as Reimported  # noqa: N811, PLC0415
+        from goga.ast import AST as Reimported  # noqa: N811
 
         assert Reimported is AST
 
@@ -400,43 +400,36 @@ class TestDocumentLookup:
 
     # -- 3. Positive — relative path with dot --
 
-    def test_relative_path_with_dot(self, tmp_path):
+    def test_relative_path_with_dot(self, tmp_path, monkeypatch):
         """document('./relative') resolves and finds the document."""
         root_dir, _level2, level3 = self._make_three_level_tree(tmp_path)
-        ast_obj = AST(str(root_dir))
+
+        monkeypatch.chdir(root_dir)
+        ast_obj = AST(path=".")
         ast_obj.load()
 
-        # Build "./" + relative from root_dir, and resolve from root_dir as cwd
+        # Build "./" + relative from root_dir
         relative = os.path.relpath(str(level3), str(root_dir))
         dotted_path = "./" + relative
 
-        original_cwd = Path.cwd()
-        try:
-            os.chdir(str(root_dir))
-            doc = ast_obj.document(dotted_path)
-        finally:
-            os.chdir(str(original_cwd))
+        doc = ast_obj.document(dotted_path)
 
-        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level3)).resolve())))
+        assert doc.path == os.path.normpath(os.path.relpath(str(level3), str(root_dir)))
 
     # -- 4. Positive — relative path without dot --
 
-    def test_relative_path_without_dot(self, tmp_path):
+    def test_relative_path_without_dot(self, tmp_path, monkeypatch):
         """document('path/path') resolves and finds the document."""
         root_dir, level2, _level3 = self._make_three_level_tree(tmp_path)
-        ast_obj = AST(str(root_dir))
+
+        monkeypatch.chdir(root_dir)
+        ast_obj = AST(path=".")
         ast_obj.load()
 
         relative = os.path.relpath(str(level2), str(root_dir))
+        doc = ast_obj.document(relative)
 
-        original_cwd = Path.cwd()
-        try:
-            os.chdir(str(root_dir))
-            doc = ast_obj.document(relative)
-        finally:
-            os.chdir(str(original_cwd))
-
-        assert doc.path == os.path.normpath(os.path.relpath(str(Path(str(level2)).resolve())))
+        assert doc.path == os.path.normpath(os.path.relpath(str(level2), str(root_dir)))
 
     # -- 5. Positive — absolute path --
 

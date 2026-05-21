@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import stat
 import subprocess
@@ -37,18 +36,14 @@ def _write_goga_yml(tmp_path: Path, extra: dict | None = None) -> None:
     (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
 
-def _run_build_in_tmp(tmp_path, args=None, *, skip_manifest_check=True):
-    """Run the build command in tmp_path directory, restoring CWD afterwards."""
-    original_cwd = str(Path.cwd())
-    try:
-        os.chdir(tmp_path)
-        runner = CliRunner()
-        full_args = list(args or [])
-        if skip_manifest_check:
-            full_args = ["--skip-manifest-check", *full_args]
-        return runner.invoke(build_cmd, full_args)
-    finally:
-        os.chdir(original_cwd)
+def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):
+    """Run the build command in tmp_path directory."""
+    monkeypatch.chdir(tmp_path)
+    runner = CliRunner()
+    full_args = list(args or [])
+    if skip_manifest_check:
+        full_args = ["--skip-manifest-check", *full_args]
+    return runner.invoke(build_cmd, full_args)
 
 
 class TestFacadeAvailability:
@@ -80,10 +75,10 @@ class TestApiShape:
         plan_param = next(p for p in build_cmd.params if p.name == "plan")
         assert plan_param.required is True
 
-    def test_build_plan_is_required(self, tmp_path) -> None:
+    def test_build_plan_is_required(self, tmp_path, monkeypatch) -> None:
         """Calling build without a plan argument fails with exit code 2."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path)
+        result = _run_build_in_tmp(tmp_path, monkeypatch)
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
@@ -166,34 +161,34 @@ class TestHelpOutput:
 
 class TestDryRun:
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_dry_run_exit_code_zero(self, mock_which, tmp_path) -> None:
+    def test_dry_run_exit_code_zero(self, mock_which, tmp_path, monkeypatch) -> None:
         """Dry-run mode exits with code 0."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
         assert result.exit_code == 0
 
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_dry_run_shows_command(self, mock_which, tmp_path) -> None:
+    def test_dry_run_shows_command(self, mock_which, tmp_path, monkeypatch) -> None:
         """Dry-run mode displays the assembled ralphex command."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
         assert "Dry run:" in result.output
         assert "ralphex" in result.output
         assert "plan.md" in result.output
 
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_dry_run_does_not_call_ralphex(self, mock_which, tmp_path) -> None:
+    def test_dry_run_does_not_call_ralphex(self, mock_which, tmp_path, monkeypatch) -> None:
         """Dry-run mode does not invoke subprocess.call."""
         _write_goga_yml(tmp_path)
         with mock.patch.object(subprocess, "call") as mock_call:
-            _run_build_in_tmp(tmp_path, ["--dry-run", "plan.md"])
+            _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
             mock_call.assert_not_called()
 
 
 class TestBuildUsesLoadConfigFromGogaConfig:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_env_vars_in_settings_json(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_env_vars_in_settings_json(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """.goga/config.yml env vars are written to .claude/settings.json."""
         _write_goga_yml(
             tmp_path,
@@ -205,7 +200,7 @@ class TestBuildUsesLoadConfigFromGogaConfig:
             },
         )
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         for key, value in TEST_ENV_VARS.items():
@@ -214,10 +209,10 @@ class TestBuildUsesLoadConfigFromGogaConfig:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_empty_env_dict_creates_empty_env_section(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_empty_env_dict_creates_empty_env_section(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """.goga/config.yml without env section creates empty env dict in settings.json."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert settings["env"] == {}
@@ -225,7 +220,7 @@ class TestBuildUsesLoadConfigFromGogaConfig:
 
 
 class TestBuildUnsupportedAgentRaisesError:
-    def test_build_unsupported_agent_raises_error(self, tmp_path) -> None:
+    def test_build_unsupported_agent_raises_error(self, tmp_path, monkeypatch) -> None:
         """Unsupported agent in .goga/config.yml causes exit code 1 with error message."""
         data = {
             "language": "python",
@@ -234,15 +229,15 @@ class TestBuildUnsupportedAgentRaisesError:
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert "Unsupported agent" in result.output
 
 
 class TestBuildMissingGogaYmlRaisesConfigError:
-    def test_build_missing_goga_config_yml_raises_config_error(self, tmp_path) -> None:
+    def test_build_missing_goga_config_yml_raises_config_error(self, tmp_path, monkeypatch) -> None:
         """Missing .goga/config.yml causes exit code 1 with config error message."""
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert ".goga/config.yml" in result.output
 
@@ -250,22 +245,22 @@ class TestBuildMissingGogaYmlRaisesConfigError:
 class TestBuildCodexReviewMapsToCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_codex_review_true(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_codex_review_true(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """.goga/config.yml with codex_review: true writes codex_enabled = true."""
         _write_goga_yml(tmp_path, extra={"codex_review": True})
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = true" in config_content
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_codex_review_none_writes_false(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_codex_review_none_writes_false(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """.goga/config.yml without codex_review writes codex_enabled = false."""
         _write_goga_yml(tmp_path)
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_content
@@ -274,7 +269,7 @@ class TestBuildCodexReviewMapsToCodexEnabled:
 class TestSettingsMerge:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_existing_fields_preserved(self, mock_which, mock_call, tmp_path) -> None:
+    def test_existing_fields_preserved(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Existing fields in settings.json are preserved during merge."""
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
@@ -294,7 +289,7 @@ class TestSettingsMerge:
                 }
             },
         )
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         settings = json.loads((claude_dir / "settings.json").read_text())
         assert settings["custom_field"] == "preserved_value"
@@ -304,10 +299,10 @@ class TestSettingsMerge:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_attribution_set(self, mock_which, mock_call, tmp_path) -> None:
+    def test_attribution_set(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The attribution section is set in settings.json."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
         assert "attribution" in settings
@@ -317,20 +312,20 @@ class TestSettingsMerge:
 class TestClaudeWrapper:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_wrapper_created(self, mock_which, mock_call, tmp_path) -> None:
+    def test_wrapper_created(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The claude-wrapper.sh file is created in .ralphex/."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         assert wrapper_path.is_file()
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_wrapper_content(self, mock_which, mock_call, tmp_path) -> None:
+    def test_wrapper_content(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The claude-wrapper.sh has the correct shebang and content."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         content = wrapper_path.read_text()
@@ -338,10 +333,10 @@ class TestClaudeWrapper:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_wrapper_is_executable(self, mock_which, mock_call, tmp_path) -> None:
+    def test_wrapper_is_executable(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The claude-wrapper.sh file has execute permission."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         mode = wrapper_path.stat().st_mode
@@ -353,10 +348,10 @@ class TestClaudeWrapper:
 class TestDefaultsCopying:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_prompts_copied(self, mock_which, mock_call, tmp_path) -> None:
+    def test_prompts_copied(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Default prompt files are copied to .ralphex/prompts/."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         prompts_dir = tmp_path / ".ralphex" / "prompts"
         assert prompts_dir.is_dir()
@@ -366,10 +361,10 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_agents_copied(self, mock_which, mock_call, tmp_path) -> None:
+    def test_agents_copied(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Default agent files are copied to .ralphex/agents/."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         agents_dir = tmp_path / ".ralphex" / "agents"
         assert agents_dir.is_dir()
@@ -385,7 +380,7 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_overwrite_existing_files(self, mock_which, mock_call, tmp_path) -> None:
+    def test_overwrite_existing_files(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Existing files in .ralphex/ are overwritten with defaults."""
         _write_goga_yml(tmp_path)
         ralphex_prompts = tmp_path / ".ralphex" / "prompts"
@@ -393,7 +388,7 @@ class TestDefaultsCopying:
         existing_file = ralphex_prompts / "task.txt"
         existing_file.write_text("ORIGINAL CONTENT DO NOT OVERWRITE")
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert existing_file.read_text() != "ORIGINAL CONTENT DO NOT OVERWRITE"
         expected_files = {"task.txt", "codex.txt", "review_first.txt", "review_second.txt"}
@@ -402,7 +397,7 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_defaults_subdir_empty_no_error(self, mock_which, mock_call, tmp_path) -> None:
+    def test_defaults_subdir_empty_no_error(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Empty prompts/ and agents/ subdirectories under defaults_dir cause no error."""
         _write_goga_yml(tmp_path)
         fake_defaults = tmp_path / "fake_defaults"
@@ -410,7 +405,7 @@ class TestDefaultsCopying:
         (fake_defaults / "agents").mkdir(parents=True)
 
         with mock.patch.object(_build_module, "DEFAULTS_PACKAGE_DIR", fake_defaults):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert result.exit_code == 0
         prompts_dir = tmp_path / ".ralphex" / "prompts"
@@ -422,7 +417,7 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_overwrite_agents_existing_files(self, mock_which, mock_call, tmp_path) -> None:
+    def test_overwrite_agents_existing_files(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Existing agent files in .ralphex/agents/ are overwritten with defaults."""
         _write_goga_yml(tmp_path)
         ralphex_agents = tmp_path / ".ralphex" / "agents"
@@ -430,7 +425,7 @@ class TestDefaultsCopying:
         existing_file = ralphex_agents / "quality.txt"
         existing_file.write_text("ORIGINAL AGENT CONTENT")
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert existing_file.read_text() != "ORIGINAL AGENT CONTENT"
         expected_files = {
@@ -445,16 +440,16 @@ class TestDefaultsCopying:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_repeated_build_overwrites_every_time(self, mock_which, mock_call, tmp_path) -> None:
+    def test_repeated_build_overwrites_every_time(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Running build twice restores defaults even if files were modified between runs."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         prompts_dir = tmp_path / ".ralphex" / "prompts"
         modified_file = prompts_dir / "task.txt"
         modified_file.write_text("USER MODIFICATION BETWEEN RUNS")
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert modified_file.read_text() != "USER MODIFICATION BETWEEN RUNS"
 
@@ -462,13 +457,13 @@ class TestDefaultsCopying:
 class TestDefaultsDirNotFound:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_defaults_dir_not_found_exits_with_error(self, mock_which, mock_call, tmp_path) -> None:
+    def test_defaults_dir_not_found_exits_with_error(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """When defaults directory is missing, build exits with code 1 and error."""
         _write_goga_yml(tmp_path)
         with mock.patch.object(
             _build_module, "DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")
         ):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert "Error" in result.stderr
         assert "defaults" in result.stderr
@@ -476,19 +471,19 @@ class TestDefaultsDirNotFound:
 
 
 class TestRalphexNotFound:
-    def test_error_message_in_output(self, tmp_path) -> None:
+    def test_error_message_in_output(self, tmp_path, monkeypatch) -> None:
         """When ralphex is not found, error message appears in output."""
         _write_goga_yml(tmp_path)
         with mock.patch.object(shutil, "which", return_value=None):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert "ralphex not found in PATH" in result.output
 
-    def test_exit_code_one(self, tmp_path) -> None:
+    def test_exit_code_one(self, tmp_path, monkeypatch) -> None:
         """When ralphex is not found, exit code is 1."""
         _write_goga_yml(tmp_path)
         with mock.patch.object(shutil, "which", return_value=None):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"])
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert result.exit_code == 1
 
@@ -496,10 +491,10 @@ class TestRalphexNotFound:
 class TestRalphexExecution:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_subprocess_called(self, mock_which, mock_call, tmp_path) -> None:
+    def test_subprocess_called(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """subprocess.call is invoked with the assembled ralphex command."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         mock_call.assert_called_once()
         cmd = mock_call.call_args[0][0]
@@ -510,48 +505,48 @@ class TestRalphexExecution:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_exit_code_zero_on_success(self, mock_which, mock_call, tmp_path) -> None:
+    def test_exit_code_zero_on_success(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Successful ralphex execution yields exit code 0."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 0
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_custom_plan_passed(self, mock_which, mock_call, tmp_path) -> None:
+    def test_custom_plan_passed(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """A custom plan argument is forwarded to the ralphex command."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["my-plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["my-plan.md"])
 
         cmd = mock_call.call_args[0][0]
         assert "my-plan.md" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_worktree_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
+    def test_worktree_flag_forwarded(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The --worktree CLI flag is forwarded to ralphex."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md", "--worktree"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
 
         cmd = mock_call.call_args[0][0]
         assert "--worktree" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_skip_finalize_flag_forwarded(self, mock_which, mock_call, tmp_path) -> None:
+    def test_skip_finalize_flag_forwarded(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The --skip-finalize CLI flag is forwarded to ralphex."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md", "--skip-finalize"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--skip-finalize"])
 
         cmd = mock_call.call_args[0][0]
         assert "--skip-finalize" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_session_timeout_forwarded(self, mock_which, mock_call, tmp_path) -> None:
+    def test_session_timeout_forwarded(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """The --session-timeout CLI option is forwarded to ralphex."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md", "--session-timeout", "30m"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--session-timeout", "30m"])
 
         cmd = mock_call.call_args[0][0]
         assert "--session-timeout" in cmd
@@ -559,10 +554,10 @@ class TestRalphexExecution:
 
     @mock.patch.object(subprocess, "call", return_value=42)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_nonzero_exit_propagated(self, mock_which, mock_call, tmp_path) -> None:
+    def test_nonzero_exit_propagated(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Non-zero ralphex return code is propagated as exit code."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 42
 
 
@@ -576,34 +571,34 @@ class TestWrapperScriptEnvVariable:
 class TestCodexEnabled:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_default_false_in_config(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_default_false_in_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Without codex_review in .goga/config.yml, codex_enabled defaults to false."""
         _write_goga_yml(tmp_path)
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_content
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_true_from_goga_config(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_true_from_goga_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """.goga/config.yml with codex_review: true writes codex_enabled = true to config."""
         _write_goga_yml(tmp_path, extra={"codex_review": True})
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = true" in config_content
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_overwritten_on_rerun(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_overwritten_on_rerun(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Existing codex_enabled value is overwritten by new .goga/config.yml value."""
         _write_goga_yml(tmp_path, extra={"codex_review": False})
         ralphex_dir = tmp_path / ".ralphex"
         ralphex_dir.mkdir()
         (ralphex_dir / "config").write_text("codex_enabled = true\n")
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (ralphex_dir / "config").read_text()
         assert "codex_enabled = false" in config_content
@@ -612,24 +607,24 @@ class TestCodexEnabled:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_false_explicit(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_false_explicit(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Explicit codex_review: false writes false to config."""
         _write_goga_yml(tmp_path, extra={"codex_review": False})
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_content
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_overwrite_preserves_other_keys(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_overwrite_preserves_other_keys(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Overwriting codex_enabled preserves other custom keys."""
         _write_goga_yml(tmp_path, extra={"codex_review": True})
         ralphex_dir = tmp_path / ".ralphex"
         ralphex_dir.mkdir()
         (ralphex_dir / "config").write_text("custom_key = custom_value\ncodex_enabled = false\n")
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (ralphex_dir / "config").read_text()
         assert "codex_enabled = true" in config_content
@@ -637,7 +632,7 @@ class TestCodexEnabled:
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_enabled_overwrite_preserves_comments(self, mock_which, mock_call, tmp_path) -> None:
+    def test_codex_enabled_overwrite_preserves_comments(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Overwriting codex_enabled preserves comment lines."""
         _write_goga_yml(tmp_path, extra={"codex_review": False})
         ralphex_dir = tmp_path / ".ralphex"
@@ -648,7 +643,7 @@ class TestCodexEnabled:
             "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose\n"
         )
 
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         config_content = (ralphex_dir / "config").read_text()
         lines = config_content.strip().splitlines()
@@ -671,7 +666,7 @@ def _init_git_repo(path: Path) -> None:
 
 
 class TestManifestCheck:
-    def test_manifest_check_all_committed_proceeds(self, tmp_path) -> None:
+    def test_manifest_check_all_committed_proceeds(self, tmp_path, monkeypatch) -> None:
         """When all CODEMANIFEST files are committed, build proceeds normally."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -684,12 +679,12 @@ class TestManifestCheck:
             mock.patch.object(subprocess, "call", return_value=0),
             mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 0
         assert "Error" not in result.output
 
-    def test_manifest_check_skip_flag_skips_check(self, tmp_path) -> None:
+    def test_manifest_check_skip_flag_skips_check(self, tmp_path, monkeypatch) -> None:
         """When --skip-manifest-check is set, uncommitted CODEMANIFEST is ignored."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -701,13 +696,13 @@ class TestManifestCheck:
             mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
             result = _run_build_in_tmp(
-                tmp_path, ["--skip-manifest-check", "plan.md"], skip_manifest_check=False
+                tmp_path, monkeypatch, ["--skip-manifest-check", "plan.md"], skip_manifest_check=False
             )
 
         assert result.exit_code == 0
         assert "Uncommitted" not in result.output
 
-    def test_manifest_check_uncommitted_unstaged_exit_1(self, tmp_path) -> None:
+    def test_manifest_check_uncommitted_unstaged_exit_1(self, tmp_path, monkeypatch) -> None:
         """Uncommitted (unstaged) CODEMANIFEST causes exit 1 with error."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -717,25 +712,25 @@ class TestManifestCheck:
         subprocess.run(["git", "commit", "-m", "init"], cwd=tmp_path, capture_output=True, check=True)
         manifest.write_text("modified")
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
         assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
         assert "CODEMANIFEST" in result.output
 
-    def test_manifest_check_untracked_exit_1(self, tmp_path) -> None:
+    def test_manifest_check_untracked_exit_1(self, tmp_path, monkeypatch) -> None:
         """Untracked CODEMANIFEST causes exit 1 with error."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
         manifest = tmp_path / "CODEMANIFEST"
         manifest.write_text("content")
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
         assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
 
-    def test_manifest_check_staged_not_committed_exit_1(self, tmp_path) -> None:
+    def test_manifest_check_staged_not_committed_exit_1(self, tmp_path, monkeypatch) -> None:
         """Staged but not committed CODEMANIFEST causes exit 1."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -743,20 +738,20 @@ class TestManifestCheck:
         manifest.write_text("content")
         subprocess.run(["git", "add", "CODEMANIFEST"], cwd=tmp_path, capture_output=True, check=True)
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
         assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
 
-    def test_manifest_check_not_git_repo_exit_1(self, tmp_path) -> None:
+    def test_manifest_check_not_git_repo_exit_1(self, tmp_path, monkeypatch) -> None:
         """When not in a git repo, build exits with code 1."""
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
         assert "git status failed" in result.output
 
-    def test_manifest_check_no_codemanifest_files_proceeds(self, tmp_path) -> None:
+    def test_manifest_check_no_codemanifest_files_proceeds(self, tmp_path, monkeypatch) -> None:
         """Empty repo with no CODEMANIFEST files proceeds normally."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -765,12 +760,12 @@ class TestManifestCheck:
             mock.patch.object(subprocess, "call", return_value=0),
             mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
-            result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 0
         assert "Error" not in result.output
 
-    def test_manifest_check_multiple_uncommitted_lists_all(self, tmp_path) -> None:
+    def test_manifest_check_multiple_uncommitted_lists_all(self, tmp_path, monkeypatch) -> None:
         """Multiple uncommitted CODEMANIFEST files are all listed in the error."""
         _write_goga_yml(tmp_path)
         _init_git_repo(tmp_path)
@@ -782,7 +777,7 @@ class TestManifestCheck:
             subdir.mkdir()
             (subdir / "CODEMANIFEST").write_text(f"content {d}")
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"], skip_manifest_check=False)
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"], skip_manifest_check=False)
 
         assert result.exit_code == 1
         assert "Error: Uncommitted CODEMANIFEST files found:" in result.output
@@ -799,7 +794,7 @@ class TestManifestCheck:
 
 
 class TestBuildNegativeCases:
-    def test_build_invalid_goga_config_raises_config_error(self, tmp_path) -> None:
+    def test_build_invalid_goga_config_raises_config_error(self, tmp_path, monkeypatch) -> None:
         """Invalid .goga/config.yml (missing required field) causes exit code 1."""
         data = {
             "build": {"task_executor": {"agent": "claude"}},
@@ -807,18 +802,18 @@ class TestBuildNegativeCases:
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert "is required in .goga/config.yml" in result.output or "must be" in result.output
 
-    def test_build_invalid_existing_settings_json_raises_error(self, tmp_path) -> None:
+    def test_build_invalid_existing_settings_json_raises_error(self, tmp_path, monkeypatch) -> None:
         """Invalid JSON in existing .claude/settings.json causes non-zero exit with error."""
         _write_goga_yml(tmp_path)
         claude_dir = tmp_path / ".claude"
         claude_dir.mkdir()
         (claude_dir / "settings.json").write_text("{broken json")
 
-        result = _run_build_in_tmp(tmp_path, ["plan.md"])
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code != 0
         assert "Invalid JSON" in result.output or "settings.json" in result.output
 
@@ -826,27 +821,27 @@ class TestBuildNegativeCases:
 class TestBuildConfigFlags:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_worktree_from_config_when_no_cli_flag(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_worktree_from_config_when_no_cli_flag(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """worktree: true in .goga/config.yml adds --worktree to command without CLI flag."""
         _write_goga_yml(tmp_path, extra={"worktree": True})
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         cmd = mock_call.call_args[0][0]
         assert "--worktree" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_cli_worktree_overrides_config(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_cli_worktree_overrides_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """--worktree CLI flag overrides worktree: false in config."""
         _write_goga_yml(tmp_path, extra={"worktree": False})
-        _run_build_in_tmp(tmp_path, ["plan.md", "--worktree"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
 
         cmd = mock_call.call_args[0][0]
         assert "--worktree" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_custom_prompts_dir_from_config(self, mock_which, mock_call, tmp_path) -> None:
+    def test_build_custom_prompts_dir_from_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """Custom prompts_dir and agents_dir from config copy files to .ralphex/."""
         custom_prompts = tmp_path / "custom" / "prompts"
         custom_agents = tmp_path / "custom" / "agents"
@@ -859,7 +854,7 @@ class TestBuildConfigFlags:
             tmp_path,
             extra={"prompts_dir": str(custom_prompts), "agents_dir": str(custom_agents)},
         )
-        _run_build_in_tmp(tmp_path, ["plan.md"])
+        _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").is_file()
         assert (tmp_path / ".ralphex" / "agents" / "custom_agent.txt").is_file()
