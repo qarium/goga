@@ -8,7 +8,7 @@ Imports:
 
 Usages:
   conventions: .goga/usages/development/conventions.md
-  tree-sitter: .goga/usages/cooks/tree-sitter.md
+  tree-sitter: .goga/usages/cooks/tree-sitter-go.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.

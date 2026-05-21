@@ -1,0 +1,52 @@
+Imports:
+  - Types:
+      - EntityContract
+      - RoutineContract
+    Usages:
+      - contract_data
+    From: goga/contract/data
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+  tree-sitter-js: .goga/usages/cooks/tree-sitter-js.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Для парсинга JavaScript-файлов использовать практику `tree-sitter-js`.
+
+---
+
+"javascript_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
+  location: javascript.py
+  annotations: |
+    Собрать все экспортируемые объекты с фасада JavaScript-модуля по указанному пути.
+    Использовать практику `contract_data` для формирования результатов.
+
+    `cell_path`: путь до JavaScript-модуля (каталог с index.js)
+
+    Алгоритм:
+    - найти index.js в указанном каталоге
+    - распарсить AST через практику `tree-sitter-js` (JavaScript grammar)
+    - извлечь экспортируемые декларации:
+      - ESM: export function, export class, export { ... }, export default
+      - CommonJS: module.exports = { ... }, module.exports = functionName
+    - для class → EntityContract: fields → properties, methods → methods
+    - для function → RoutineContract
+    - типы извлекаются из JSDoc-комментариев (@param, @returns, @type)
+
+    Требования:
+    - только экспортируемые декларации входят в контракт
+    - типы из JSDoc входят в контракт
+    - порядок аргументов важен
+    - camelCase для имён функций/методов, PascalCase для классов
+    - при отсутствии JSDoc-аннотаций тип сигнатуры — пустая строка
+    - для свойств класса сигнатура — возвращаемый тип из JSDoc @type, или пустая строка
+    - EntityContract для class получает signature="()": создание экземпляра через new
+
+---
+
+Author: Goga
+CreatedAt: 21/05/26
+
+Description: |
+  Извлечение контракта с фасада JavaScript-модуля через tree-sitter-js

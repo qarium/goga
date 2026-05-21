@@ -70,6 +70,28 @@ def test_contract_dispatches_to_golang(tmp_path: Path) -> None:
     assert len(routines) >= 1
 
 
+def test_javascript_contract_importable_from_facade():
+    """javascript_contract is importable from goga.contract facade."""
+    pytest.importorskip("tree_sitter_javascript", reason="tree-sitter-javascript not installed")
+    from goga.contract import javascript_contract as jc
+
+    assert callable(jc)
+
+
+def test_contract_dispatches_to_javascript(tmp_path: Path) -> None:
+    """Dispatching to javascript_contract returns correct RoutineContract."""
+    pytest.importorskip("tree_sitter_javascript", reason="tree-sitter-javascript not installed")
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    (cell_dir / "index.js").write_text(
+        "export function greet(name) { return name; }\n"
+    )
+    result = contract("javascript", str(cell_dir))
+    routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "greet"]
+    assert len(routines) == 1
+    assert "(name)" in routines[0].signature
+
+
 def test_contract_unsupported_language() -> None:
     """Unknown language raises ValueError."""
     with pytest.raises(ValueError, match="unsupported language"):
