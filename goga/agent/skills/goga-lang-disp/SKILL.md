@@ -17,7 +17,7 @@
 | `language`   | `skill`                |
 |--------------|------------------------|
 | `python`     | `goga-cell-python`     |
-| `typescript` | `goga-cell-typescript` |
+| `javascript` | `goga-cell-javascript` |
 | `go`         | `goga-cell-go`         |
 | `kotlin`     | `goga-cell-kotlin`     |
 | `swift`      | `goga-cell-swift`      |

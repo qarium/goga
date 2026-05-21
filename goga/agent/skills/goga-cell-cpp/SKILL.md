@@ -19,6 +19,30 @@ cell/
 ├── cell.hpp
 ```
 
+## Особенности языка
+
+**Facade**: header-файл (`cell.hpp`) определяет публичный API. Всё, что объявлено в header в cell namespace,
+составляет фасад. Реализация — в соответствующих `.cpp` файлах.
+
+**Naming**: PascalCase для пользовательских классов и структур, snake_case для функций и переменных.
+Типы стандартной библиотеки (`std::string`, `std::vector`) используются как есть (snake_case).
+
+**Namespace**: каждая ячейка использует свой namespace для изоляции.
+
+**Constructors**: Entity signature описывает конструктор класса. Параметры конструктора — входные данные.
+
+**Memory**: запрещены указатели, ссылки и smart pointers в контракте. Используйте value semantics.
+
+## Маппинг конструкций
+
+| C++                            | CODEMANIFEST     | Примечание                     |
+|--------------------------------|------------------|--------------------------------|
+| `class` / `struct` в namespace | Entity           | Конструктор → Entity signature |
+| Свободная функция в namespace  | Routine          |                                |
+| Public member variable         | Property         |                                |
+| Public member function         | Method           |                                |
+| Конструктор                    | Entity signature |                                |
+
 ## Implementation
 
 - Public API defined in header

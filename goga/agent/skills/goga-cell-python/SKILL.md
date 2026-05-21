@@ -19,7 +19,26 @@ cell/
 ├── __init__.py
 ```
 
-`__init__.py` must expose the full contract API.
+## Особенности языка
+
+**Facade**: `__init__.py` must expose the full contract API через `__all__`. Только имена из `__all__`
+составляют фасад ячейки.
+
+**Naming**: PascalCase для классов, snake_case для функций, методов и свойств.
+
+**Constructors**: Entity signature описывает `__init__` (параметр `self` исключается из контракта).
+
+**Type hints**: обязательны. Используются для извлечения сигнатур свойств и методов.
+
+## Маппинг конструкций
+
+| Python                             | CODEMANIFEST     | Примечание                             |
+|------------------------------------|------------------|----------------------------------------|
+| `class` в `__all__`                | Entity           | Класс экспортируется через `__all__`   |
+| `def` на уровне модуля в `__all__` | Routine          | Функция экспортируется через `__all__` |
+| `@property` в классе               | Property         | Тип извлекается из return annotation   |
+| `def` метод в классе               | Method           | `self` исключается из сигнатуры        |
+| `__init__` параметры               | Entity signature | `self` исключается                     |
 
 ## Implementation
 
