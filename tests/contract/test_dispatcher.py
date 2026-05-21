@@ -92,6 +92,34 @@ def test_contract_dispatches_to_javascript(tmp_path: Path) -> None:
     assert "(name)" in routines[0].signature
 
 
+def test_contract_dispatches_to_kotlin(tmp_path: Path) -> None:
+    """Dispatching to kotlin_contract returns correct RoutineContract."""
+    pytest.importorskip("tree_sitter_kotlin", reason="tree-sitter-kotlin not installed")
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    (cell_dir / "Service.kt").write_text(
+        "fun hello(name: String): String = name\n"
+    )
+    result = contract("kotlin", str(cell_dir))
+    routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "hello"]
+    assert len(routines) == 1
+    assert "name: String" in routines[0].signature
+
+
+def test_contract_dispatches_to_swift(tmp_path: Path) -> None:
+    """Dispatching to swift_contract returns correct RoutineContract."""
+    pytest.importorskip("tree_sitter_swift", reason="tree-sitter-swift not installed")
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    (cell_dir / "Utils.swift").write_text(
+        "public func greet(name: String) -> String { return name }\n"
+    )
+    result = contract("swift", str(cell_dir))
+    routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "greet"]
+    assert len(routines) == 1
+    assert "name: String" in routines[0].signature
+
+
 def test_contract_unsupported_language() -> None:
     """Unknown language raises ValueError."""
     with pytest.raises(ValueError, match="unsupported language"):
@@ -116,3 +144,72 @@ def test_contract_nonexistent_package_python(tmp_path: Path) -> None:
     finally:
         sys.path.remove(parent)
         sys.modules.pop("empty", None)
+
+
+# ── Integration tests ─────────────────────────────────────────
+
+
+def test_dispatcher_kotlin_mixed_declarations(tmp_path: Path) -> None:
+    """Dispatcher routes kotlin with mixed entities+routines in one file."""
+    pytest.importorskip("tree_sitter_kotlin", reason="tree-sitter-kotlin not installed")
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    (cell_dir / "App.kt").write_text(
+        "class UserService(val name: String) {\n"
+        "    fun greet(): String = \"Hello\"\n"
+        "}\n\n"
+        "fun formatName(first: String, last: String): String = \"$first $last\"\n"
+    )
+    result = contract("kotlin", str(cell_dir))
+    entities = [r for r in result if isinstance(r, EntityContract)]
+    routines = [r for r in result if isinstance(r, RoutineContract)]
+    assert len(entities) >= 1
+    assert len(routines) >= 1
+    entity_names = {e.name for e in entities}
+    assert "UserService" in entity_names
+    routine_names = {r.name for r in routines}
+    assert "formatName" in routine_names
+
+
+def test_dispatcher_swift_mixed_declarations(tmp_path: Path) -> None:
+    """Dispatcher routes swift with mixed entities+routines in one file."""
+    pytest.importorskip("tree_sitter_swift", reason="tree-sitter-swift not installed")
+    cell_dir = tmp_path / "cell"
+    cell_dir.mkdir()
+    (cell_dir / "App.swift").write_text(
+        "public class Server {\n"
+        "    public init(host: String) {}\n"
+        "    public func start() -> Bool { return true }\n"
+        "}\n\n"
+        "public func greet(name: String) -> String { return name }\n"
+    )
+    result = contract("swift", str(cell_dir))
+    entities = [r for r in result if isinstance(r, EntityContract)]
+    routines = [r for r in result if isinstance(r, RoutineContract)]
+    assert len(entities) >= 1
+    assert len(routines) >= 1
+    entity_names = {e.name for e in entities}
+    assert "Server" in entity_names
+    routine_names = {r.name for r in routines}
+    assert "greet" in routine_names
+
+
+def test_facade_imports_all_symbols() -> None:
+    """All key symbols are importable from goga.contract facade."""
+    from goga.contract import (
+        EntityContract,
+        MethodContract,
+        PropertyContract,
+        RoutineContract,
+        contract,
+        kotlin_contract,
+        swift_contract,
+    )
+
+    assert callable(contract)
+    assert callable(kotlin_contract)
+    assert callable(swift_contract)
+    assert EntityContract.__name__ == "EntityContract"
+    assert RoutineContract.__name__ == "RoutineContract"
+    assert MethodContract.__name__ == "MethodContract"
+    assert PropertyContract.__name__ == "PropertyContract"

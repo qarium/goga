@@ -18,6 +18,16 @@ try:
 except ImportError:
     javascript_contract = None  # type: ignore[assignment]
 
+try:
+    from goga.contract.kotlin import kotlin_contract
+except ImportError:
+    kotlin_contract = None  # type: ignore[assignment]
+
+try:
+    from goga.contract.swift import swift_contract
+except ImportError:
+    swift_contract = None  # type: ignore[assignment]
+
 __all__ = [
     "BaseContract",
     "EntityContract",
@@ -27,5 +37,7 @@ __all__ = [
     "contract",
     "golang_contract",
     "javascript_contract",
+    "kotlin_contract",
     "python_contract",
+    "swift_contract",
 ]
