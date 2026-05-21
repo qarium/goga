@@ -224,34 +224,30 @@ class TestImportHasValidFromPath:
         rule = ImportHasValidFromPath()
         assert rule.name == "import_has_valid_from_path"
 
-    def test_positive_valid_existing_path(self, tmp_path: Path):
-        # The rule uses CWD as project root, so create files inside CWD
-        test_dir = Path.cwd() / "_test_rules_valid_path"
-        test_dir.mkdir(exist_ok=True)
-        try:
-            existing_file = test_dir / "manifest.py"
-            existing_file.write_text("# module")
-            doc_path = test_dir / "CODEMANIFEST"
-            root = DocumentRoot(
-                path=str(doc_path),
-                header=HeaderNode(
-                    imports=ImportsNode(
-                        types=[
-                            ImportTypeItemNode(
-                                type_name={"Foo"},
-                                from_path=str(existing_file),
-                            )
-                        ]
-                    )
-                ),
-            )
-            node = DocumentNode(root=root)
-            rule = ImportHasValidFromPath()
-            errors = rule.check(node)
-            assert errors == []
-        finally:
-            existing_file.unlink(missing_ok=True)
-            test_dir.rmdir()
+    def test_positive_valid_existing_path(self, tmp_path: Path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        test_dir = tmp_path / "_test_rules_valid_path"
+        test_dir.mkdir()
+        existing_file = test_dir / "manifest.py"
+        existing_file.write_text("# module")
+        doc_path = test_dir / "CODEMANIFEST"
+        root = DocumentRoot(
+            path=str(doc_path),
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(
+                            type_name={"Foo"},
+                            from_path=str(existing_file),
+                        )
+                    ]
+                )
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        errors = rule.check(node)
+        assert errors == []
 
     def test_negative_empty_path(self):
         root = DocumentRoot(
@@ -1547,91 +1543,75 @@ class TestImportTypeExists:
 
 
 class TestImportHasValidFromPathHierarchy:
-    def test_positive_same_level(self, tmp_path: Path):
+    def test_positive_same_level(self, tmp_path: Path, monkeypatch):
         """from_path at the same level as document — no hierarchy error."""
-        cwd = Path.cwd().resolve()
-        sibling = cwd / "_test_sibling_pkg"
-        sibling.mkdir(exist_ok=True)
-        try:
-            (sibling / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        sibling = tmp_path / "_test_sibling_pkg"
+        sibling.mkdir()
+        (sibling / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
 
-            doc_dir = cwd / "_test_current_pkg"
-            doc_dir.mkdir(exist_ok=True)
-            try:
-                root = DocumentRoot(
-                    path=str(doc_dir),
-                    header=HeaderNode(
-                        imports=ImportsNode(
-                            types=[
-                                ImportTypeItemNode(type_name={"Foo"}, from_path=str(sibling)),
-                            ],
-                        ),
-                    ),
-                )
-                node = DocumentNode(root=root)
-                rule = ImportHasValidFromPath()
-                errors = rule.check(node)
-                assert errors == []
-            finally:
-                doc_dir.rmdir()
-        finally:
-            (sibling / "CODEMANIFEST").unlink(missing_ok=True)
-            sibling.rmdir()
+        doc_dir = tmp_path / "_test_current_pkg"
+        doc_dir.mkdir()
+        root = DocumentRoot(
+            path=str(doc_dir),
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(type_name={"Foo"}, from_path=str(sibling)),
+                    ],
+                ),
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        errors = rule.check(node)
+        assert errors == []
 
-    def test_positive_below_document(self, tmp_path: Path):
+    def test_positive_below_document(self, tmp_path: Path, monkeypatch):
         """from_path below document in hierarchy — no hierarchy error."""
-        cwd = Path.cwd().resolve()
-        doc_dir = cwd / "_test_doc_pkg"
-        doc_dir.mkdir(exist_ok=True)
+        monkeypatch.chdir(tmp_path)
+        doc_dir = tmp_path / "_test_doc_pkg"
+        doc_dir.mkdir()
         child = doc_dir / "child_pkg"
-        child.mkdir(exist_ok=True)
-        try:
-            root = DocumentRoot(
-                path=str(doc_dir),
-                header=HeaderNode(
-                    imports=ImportsNode(
-                        types=[
-                            ImportTypeItemNode(type_name={"Foo"}, from_path=str(child)),
-                        ],
-                    ),
+        child.mkdir()
+        root = DocumentRoot(
+            path=str(doc_dir),
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(type_name={"Foo"}, from_path=str(child)),
+                    ],
                 ),
-            )
-            node = DocumentNode(root=root)
-            rule = ImportHasValidFromPath()
-            errors = rule.check(node)
-            assert errors == []
-        finally:
-            child.rmdir()
-            doc_dir.rmdir()
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        errors = rule.check(node)
+        assert errors == []
 
-    def test_positive_above_document_no_hierarchy_error(self, tmp_path: Path):
+    def test_positive_above_document_no_hierarchy_error(self, tmp_path: Path, monkeypatch):
         """from_path above document — no longer an error after hierarchy check removal."""
-        cwd = Path.cwd().resolve()
-        parent_pkg = cwd / "_test_parent_pkg"
-        parent_pkg.mkdir(exist_ok=True)
+        monkeypatch.chdir(tmp_path)
+        parent_pkg = tmp_path / "_test_parent_pkg"
+        parent_pkg.mkdir()
         doc_dir = parent_pkg / "child_pkg"
-        doc_dir.mkdir(exist_ok=True)
-        try:
-            (parent_pkg / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
+        doc_dir.mkdir()
+        (parent_pkg / "CODEMANIFEST").write_text("---\n---\n---\n", encoding="utf-8")
 
-            root = DocumentRoot(
-                path=str(doc_dir),
-                header=HeaderNode(
-                    imports=ImportsNode(
-                        types=[
-                            ImportTypeItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
-                        ],
-                    ),
+        root = DocumentRoot(
+            path=str(doc_dir),
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(type_name={"Foo"}, from_path=str(parent_pkg)),
+                    ],
                 ),
-            )
-            node = DocumentNode(root=root)
-            rule = ImportHasValidFromPath()
-            errors = rule.check(node)
-            assert errors == []
-        finally:
-            (parent_pkg / "CODEMANIFEST").unlink(missing_ok=True)
-            doc_dir.rmdir()
-            parent_pkg.rmdir()
+            ),
+        )
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        errors = rule.check(node)
+        assert errors == []
 
 
 # ---------------------------------------------------------------------------
@@ -2110,31 +2090,27 @@ class TestUsageFilepathExists:
     def test_usage_filepath_outside_project(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".goga" / "usages").mkdir(parents=True)
-        sibling = tmp_path.parent / "_outside_test"
-        sibling.mkdir(exist_ok=True)
+        sibling = tmp_path / "_outside_test"
+        sibling.mkdir()
         (sibling / "secret.md").write_text("secret")
-        try:
-            root = DocumentRoot(
-                header=HeaderNode(
-                    usages=UsagesNode(
-                        items=[
-                            UsageItemNode(
-                                name="outside",
-                                annotations=AnnotationsNode(filepath=".goga/usages/../../../_outside_test/secret.md"),
-                            )
-                        ]
-                    )
+        root = DocumentRoot(
+            header=HeaderNode(
+                usages=UsagesNode(
+                    items=[
+                        UsageItemNode(
+                            name="outside",
+                            annotations=AnnotationsNode(filepath=".goga/usages/../../_outside_test/secret.md"),
+                        )
+                    ]
                 )
             )
-            node = DocumentNode(root=root)
-            rule = UsageFilepathExists()
-            errors = rule.check(node)
-            assert len(errors) == 1
-            assert errors[0].rule == "usage_filepath_exists"
-            assert "not built from the root of the project" in errors[0].message
-        finally:
-            (sibling / "secret.md").unlink(missing_ok=True)
-            sibling.rmdir()
+        )
+        node = DocumentNode(root=root)
+        rule = UsageFilepathExists()
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert errors[0].rule == "usage_filepath_exists"
+        assert "not built from the root of the project" in errors[0].message
 
     def test_usage_filepath_empty_usages(self):
         root = DocumentRoot(header=HeaderNode(usages=UsagesNode(items=[])))

@@ -26,19 +26,15 @@ def _collect_cases(project_root: Path) -> list[Path]:
     _collect_cases(Path(__file__).parent.parent.parent / ".project"),
     ids=lambda d: str(d.relative_to(Path(__file__).parent.parent.parent / ".project")),
 )
-def test_ast_rules(case_dir: Path, project_root: Path) -> None:
-    origin = Path.cwd()
-    os.chdir(str(project_root))
-    try:
-        ast_obj = AST(path=".")
-        ast_obj.load()
+def test_ast_rules(case_dir: Path, project_root: Path, monkeypatch) -> None:
+    monkeypatch.chdir(project_root)
+    ast_obj = AST(path=".")
+    ast_obj.load()
 
-        expected_errors = _load_expected(case_dir)
+    expected_errors = _load_expected(case_dir)
 
-        case_rel = os.path.normpath(case_dir.relative_to(project_root))
-        case_errors = [e for e in ast_obj.errors if os.path.normpath(e.document.path) == case_rel]
-    finally:
-        os.chdir(origin)
+    case_rel = os.path.normpath(case_dir.relative_to(project_root))
+    case_errors = [e for e in ast_obj.errors if os.path.normpath(e.document.path) == case_rel]
 
     unmatched: list[dict] = []
     remaining = list(case_errors)

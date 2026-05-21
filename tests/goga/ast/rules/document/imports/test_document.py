@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import shutil
 from typing import ClassVar
 
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
@@ -1015,27 +1014,26 @@ class TestImportHasValidFromPathExtra:
         assert rule.check(node) == []
 
     def test_absolute_path_outside_project(self, tmp_path, monkeypatch):
-        real_outside = tmp_path.parent / f"goga_test_outside_{id(tmp_path)}"
-        real_outside.mkdir(parents=True, exist_ok=True)
-        (real_outside / "CODEMANIFEST").write_text("Types:\n  Bar:\n")
-        try:
-            item = ImportTypeItemNode(type_name={"Bar"}, from_path=str(real_outside))
-            root = DocumentRoot(
-                path="test.md",
-                header=_make_header(
-                    data={"Imports": {}},
-                    imports=ImportsNode(types=[item]),
-                ),
-            )
-            root.path = str(tmp_path)
-            node = DocumentNode(root=root)
-            rule = ImportHasValidFromPath()
-            monkeypatch.chdir(tmp_path)
-            errors = rule.check(node)
-            assert len(errors) == 1
-            assert "outside the project root" in errors[0].message
-        finally:
-            shutil.rmtree(real_outside, ignore_errors=True)
+        project_root = tmp_path / "project"
+        project_root.mkdir()
+        outside = tmp_path / "outside_cell"
+        outside.mkdir()
+        (outside / "CODEMANIFEST").write_text("Types:\n  Bar:\n")
+        item = ImportTypeItemNode(type_name={"Bar"}, from_path=str(outside))
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(
+                data={"Imports": {}},
+                imports=ImportsNode(types=[item]),
+            ),
+        )
+        root.path = str(project_root)
+        node = DocumentNode(root=root)
+        rule = ImportHasValidFromPath()
+        monkeypatch.chdir(project_root)
+        errors = rule.check(node)
+        assert len(errors) == 1
+        assert "outside the project root" in errors[0].message
 
 
 # --- Helpers ---
