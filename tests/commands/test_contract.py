@@ -521,7 +521,7 @@ class TestContractIntegration:
         assert "routine" in output.lower()
 
     def test_contract_with_real_project_cwd(self) -> None:
-        project_root = Path(__file__).resolve().parent.parent.parent.parent
+        project_root = Path(__file__).resolve().parent.parent.parent
         with _cwd(project_root):
             result = _run_contract("goga/contract")
 

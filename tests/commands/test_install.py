@@ -14,7 +14,7 @@ from goga.config import load_config
 from goga.install.install import _cleanup_goga_skills
 
 _install_module = sys.modules["goga.install.install"]
-_AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent.parent / "goga" / "agent"
+_AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "agent"
 
 
 def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:

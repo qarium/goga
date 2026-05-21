@@ -23,8 +23,8 @@ def _collect_cases(project_root: Path) -> list[Path]:
 
 @pytest.mark.parametrize(
     "case_dir",
-    _collect_cases(Path(__file__).parent.parent.parent / ".project"),
-    ids=lambda d: str(d.relative_to(Path(__file__).parent.parent.parent / ".project")),
+    _collect_cases(Path(__file__).parent.parent / ".project"),
+    ids=lambda d: str(d.relative_to(Path(__file__).parent.parent / ".project")),
 )
 def test_ast_rules(case_dir: Path, project_root: Path, monkeypatch) -> None:
     monkeypatch.chdir(project_root)
