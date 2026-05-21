@@ -15,6 +15,11 @@ Imports:
     Usages:
       - golang_contract AS use_go_contract
     From: goga/contract/golang
+  - Types:
+      - javascript_contract
+    Usages:
+      - javascript_contract AS use_js_contract
+    From: goga/contract/javascript
 
 Usages:
   convention: .goga/usages/development/conventions.md
@@ -35,12 +40,13 @@ Annotations: |
   annotations: |
     Диспетчер контрактных операций по языку реализации.
 
-    `lang`: язык реализации ("python", "golang")
+    `lang`: язык реализации ("python", "golang", "javascript")
     `cell_path`: путь до ячейки
 
     Алгоритм:
     - "python" → вызвать `python_contract`(`cell_path`), использовать практику `use_py_contract`
     - "golang" → вызвать `golang_contract`(`cell_path`), использовать практику `use_go_contract`
+    - "javascript" → вызвать `javascript_contract`(`cell_path`), использовать практику `use_js_contract`
     - неизвестный язык → ValueError
 
 ---

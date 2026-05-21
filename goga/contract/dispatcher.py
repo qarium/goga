@@ -16,4 +16,8 @@ def contract(lang: str, cell_path: str) -> list[EntityContract | RoutineContract
         from .golang import golang_contract
 
         return golang_contract(cell_path)
+    if lang == "javascript":
+        from .javascript import javascript_contract
+
+        return javascript_contract(cell_path)
     raise ValueError(f"unsupported language: {lang}")
