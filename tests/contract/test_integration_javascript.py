@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
+from goga.cli import app
 from goga.contract import EntityContract, RoutineContract
 from goga.contract.dispatcher import contract
+
+from tests.conftest import cwd as _cwd
 
 HAS_TREE_SITTER = importlib.util.find_spec("tree_sitter_javascript") is not None
 
@@ -300,3 +306,170 @@ class TestExportDefaultAndNamedExports:
         named_one = next(r for r in result if r.name == "namedOne")
         assert isinstance(named_one, RoutineContract)
         assert "a" in named_one.signature
+
+
+# === CLI-based integration tests ===
+
+
+def _run_contract(*args):
+    runner = CliRunner()
+    return runner.invoke(app, ["contract", *args])
+
+
+def _write_codemanifest(directory: Path, content: str) -> None:
+    (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
+
+
+def _write_goga_yml(directory: Path, lang: str = "javascript") -> None:
+    (directory / ".goga").mkdir(exist_ok=True)
+    (directory / ".goga" / "config.yml").write_text(
+        f"language: {lang}\nbuild:\n  task_executor:\n    agent: claude\n"
+    )
+
+
+JS_FULL_CODEMANIFEST = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"Database()":
+  location: index.js
+  annotations: ""
+  properties:
+    "host -> string": ""
+    "port -> number": ""
+  methods:
+    "constructor(host: string, port: number)": ""
+    "query(sql: string) -> Array": ""
+    "close() -> void": ""
+
+"App()":
+  location: index.js
+  annotations: ""
+  methods:
+    "constructor(name)": ""
+    "handle(route: string) -> number": ""
+    "shutdown()": ""
+
+"start(host: string) -> void":
+  location: index.js
+  annotations: ""
+
+---
+
+Author: Test
+CreatedAt: 01/01/01
+Description: Test
+"""
+
+JS_FULL_INDEX_JS = """\
+/**
+ * @param {string} host
+ * @returns {void}
+ */
+export function start(host) {}
+
+export class Database {
+  /** @type {string} */
+  host;
+
+  /** @type {number} */
+  port;
+
+  /**
+   * @param {string} host
+   * @param {number} port
+   */
+  constructor(host, port) {}
+
+  /**
+   * @param {string} sql
+   * @returns {Array} rows
+   */
+  query(sql) {}
+
+  /**
+   * @returns {void}
+   */
+  close() {}
+}
+
+export class App {
+  constructor(name) {}
+
+  /**
+   * @param {string} route
+   * @returns {number}
+   */
+  handle(route) {}
+
+  shutdown() {}
+}
+"""
+
+
+@requires_tree_sitter
+class TestFullCycleJsPackageViaCLI:
+    """End-to-end: JS module with class (properties + methods) + function through CLI."""
+
+    def test_full_cycle_entity_properties_methods_and_routine(self, tmp_path) -> None:
+        cell = tmp_path / "js_cell"
+        cell.mkdir()
+        _write_codemanifest(cell, JS_FULL_CODEMANIFEST)
+        (cell / "index.js").write_text(JS_FULL_INDEX_JS, encoding="utf-8")
+        _write_goga_yml(tmp_path)
+
+        with _cwd(tmp_path):
+            result = _run_contract("js_cell", "--lang", "javascript")
+
+        assert result.exit_code == 0, f"stderr: {result.stderr}"
+        data = json.loads(result.output)
+        assert "js_cell" in data
+
+        cell_data = data["js_cell"]
+
+        # Database — Entity with properties and methods
+        assert "Database" in cell_data
+        db = cell_data["Database"]
+        assert db["signature"]["codemanifest"] == "()"
+        assert db["signature"]["implementation"] == "()"
+
+        assert "host" in db["properties"]
+        assert db["properties"]["host"]["codemanifest"] == "string"
+        assert db["properties"]["host"]["implementation"] == "string"
+        assert "port" in db["properties"]
+        assert db["properties"]["port"]["codemanifest"] == "number"
+        assert db["properties"]["port"]["implementation"] == "number"
+
+        assert "constructor" in db["methods"]
+        assert db["methods"]["constructor"]["codemanifest"] == "(host: string, port: number)"
+        assert db["methods"]["constructor"]["implementation"] == "(host: string, port: number)"
+        assert "query" in db["methods"]
+        assert db["methods"]["query"]["codemanifest"] == "(sql: string) -> Array"
+        assert db["methods"]["query"]["implementation"] == "(sql: string) -> Array"
+        assert "close" in db["methods"]
+        assert db["methods"]["close"]["codemanifest"] == "() -> void"
+        assert db["methods"]["close"]["implementation"] == "() -> void"
+
+        # App — Entity with methods only (no JSDoc on constructor)
+        assert "App" in cell_data
+        app_data = cell_data["App"]
+        assert app_data["signature"]["codemanifest"] == "()"
+        assert app_data["signature"]["implementation"] == "()"
+
+        assert "constructor" in app_data["methods"]
+        assert app_data["methods"]["constructor"]["codemanifest"] == "(name)"
+        assert app_data["methods"]["constructor"]["implementation"] == "(name)"
+        assert "handle" in app_data["methods"]
+        assert app_data["methods"]["handle"]["codemanifest"] == "(route: string) -> number"
+        assert app_data["methods"]["handle"]["implementation"] == "(route: string) -> number"
+        assert "shutdown" in app_data["methods"]
+        assert app_data["methods"]["shutdown"]["codemanifest"] == "()"
+        assert app_data["methods"]["shutdown"]["implementation"] == "()"
+
+        # start — Routine
+        assert "start" in cell_data
+        assert cell_data["start"]["signature"]["codemanifest"] == "(host: string) -> void"
+        assert cell_data["start"]["signature"]["implementation"] == "(host: string) -> void"
