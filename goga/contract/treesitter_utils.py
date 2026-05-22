@@ -20,6 +20,14 @@ def first_child_by_type(node, type_name):
     return None
 
 
+def build_signature(params: str, return_type: str = "") -> str:
+    """Build a signature string from parameters and optional return type."""
+    sig = f"({params})"
+    if return_type:
+        sig += f" -> {return_type}"
+    return sig
+
+
 def sort_contracts(
     entities: dict[str, EntityContract],
     routines: dict[str, RoutineContract],

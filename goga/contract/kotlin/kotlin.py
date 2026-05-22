@@ -8,15 +8,10 @@ import tree_sitter_kotlin as tskotlin
 from tree_sitter import Language, Parser
 
 from ..data import EntityContract, MethodContract, PropertyContract, RoutineContract
-from ..treesitter_utils import (
-    first_child_by_type as _first_child_by_type,
-)
-from ..treesitter_utils import (
-    node_text as _node_text,
-)
-from ..treesitter_utils import (
-    sort_contracts,
-)
+from ..treesitter_utils import build_signature as _build_signature
+from ..treesitter_utils import first_child_by_type as _first_child_by_type
+from ..treesitter_utils import node_text as _node_text
+from ..treesitter_utils import sort_contracts
 
 _KOTLIN_LANG = Language(tskotlin.language())
 _PARSER = Parser(_KOTLIN_LANG)
@@ -63,17 +58,16 @@ def _extract_primary_constructor_signature(node) -> str:
     ctor = _first_child_by_type(node, "primary_constructor")
     if ctor is None:
         return "()"
-    # Newer versions wrap params in class_parameters
     class_params = _first_child_by_type(ctor, "class_parameters")
     params_container = class_params if class_params else ctor
-    params = _extract_class_params(params_container)
+    params = _extract_typed_params(params_container, "class_parameter")
     return f"({params})"
 
 
-def _extract_class_params(container_node) -> str:
+def _extract_typed_params(container_node, child_type: str) -> str:
     parts: list[str] = []
     for child in container_node.children:
-        if child.type != "class_parameter":
+        if child.type != child_type:
             continue
         name = _extract_identifier(child)
         type_node = (
@@ -93,22 +87,7 @@ def _extract_kotlin_params(node) -> str:
     fvp = _first_child_by_type(node, "function_value_parameters")
     if fvp is None:
         return ""
-    parts: list[str] = []
-    for child in fvp.children:
-        if child.type != "parameter":
-            continue
-        name = _extract_identifier(child)
-        type_node = (
-            _first_child_by_type(child, "user_type")
-            or _first_child_by_type(child, "nullable_type")
-            or _first_child_by_type(child, "function_type")
-        )
-        type_str = _node_text(type_node) if type_node else ""
-        if name and type_str:
-            parts.append(f"{name}: {type_str}")
-        elif name:
-            parts.append(name)
-    return ", ".join(parts)
+    return _extract_typed_params(fvp, "parameter")
 
 
 def _extract_return_type(func_node) -> str:
@@ -159,20 +138,18 @@ def _extract_class_methods(body_node) -> list[MethodContract]:
             continue
         params = _extract_kotlin_params(child)
         ret = _extract_return_type(child)
-        sig = f"({params})"
-        if ret:
-            sig += f" -> {ret}"
-        methods.append(MethodContract(name=name, signature=sig))
+        methods.append(MethodContract(name=name, signature=_build_signature(params, ret)))
     return methods
 
 
-def _process_class_declaration(node, entities: dict[str, EntityContract]) -> None:
+def _process_entity_declaration(node, entities: dict[str, EntityContract], *, signature: str | None = None) -> None:
     name = _extract_type_identifier(node)
     if not name:
         return
     if not _is_public(node):
         return
-    signature = _extract_primary_constructor_signature(node)
+    if signature is None:
+        signature = _extract_primary_constructor_signature(node)
     body = _first_child_by_type(node, "class_body")
     if body is None:
         body = _first_child_by_type(node, "enum_class_body")
@@ -182,21 +159,6 @@ def _process_class_declaration(node, entities: dict[str, EntityContract]) -> Non
         methods = _extract_class_methods(body)
         properties = _extract_class_properties(body)
     entities[name] = EntityContract(name=name, signature=signature, properties=properties, methods=methods)
-
-
-def _process_object_declaration(node, entities: dict[str, EntityContract]) -> None:
-    name = _extract_type_identifier(node)
-    if not name:
-        return
-    if not _is_public(node):
-        return
-    body = _first_child_by_type(node, "class_body")
-    methods: list[MethodContract] = []
-    properties: list[PropertyContract] = []
-    if body:
-        methods = _extract_class_methods(body)
-        properties = _extract_class_properties(body)
-    entities[name] = EntityContract(name=name, signature="()", properties=properties, methods=methods)
 
 
 def _is_extension_function(func_node) -> bool:
@@ -234,10 +196,9 @@ def _process_extension_function(node, methods_by_receiver: dict[str, list[Method
         return
     params = _extract_kotlin_params(node)
     ret = _extract_return_type(node)
-    sig = f"({params})"
-    if ret:
-        sig += f" -> {ret}"
-    methods_by_receiver.setdefault(receiver_type_name, []).append(MethodContract(name=name, signature=sig))
+    methods_by_receiver.setdefault(receiver_type_name, []).append(
+        MethodContract(name=name, signature=_build_signature(params, ret))
+    )
 
 
 def _process_top_level_function(node, routines: dict[str, RoutineContract]) -> None:
@@ -248,10 +209,7 @@ def _process_top_level_function(node, routines: dict[str, RoutineContract]) -> N
         return
     params = _extract_kotlin_params(node)
     ret = _extract_return_type(node)
-    sig = f"({params})"
-    if ret:
-        sig += f" -> {ret}"
-    routines[name] = RoutineContract(name=name, signature=sig)
+    routines[name] = RoutineContract(name=name, signature=_build_signature(params, ret))
 
 
 def _collect_contracts(
@@ -272,9 +230,9 @@ def _collect_contracts(
 
         for node in _unwrap_statements(root):
             if node.type == "class_declaration":
-                _process_class_declaration(node, entities)
+                _process_entity_declaration(node, entities)
             elif node.type == "object_declaration":
-                _process_object_declaration(node, entities)
+                _process_entity_declaration(node, entities, signature="()")
             elif node.type == "function_declaration":
                 if _is_extension_function(node):
                     _process_extension_function(node, methods_by_receiver)

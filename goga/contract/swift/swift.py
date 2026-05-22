@@ -8,15 +8,10 @@ import tree_sitter_swift as tsswift
 from tree_sitter import Language, Parser
 
 from ..data import EntityContract, MethodContract, PropertyContract, RoutineContract
-from ..treesitter_utils import (
-    first_child_by_type as _first_child_by_type,
-)
-from ..treesitter_utils import (
-    node_text as _node_text,
-)
-from ..treesitter_utils import (
-    sort_contracts,
-)
+from ..treesitter_utils import build_signature as _build_signature
+from ..treesitter_utils import first_child_by_type as _first_child_by_type
+from ..treesitter_utils import node_text as _node_text
+from ..treesitter_utils import sort_contracts
 
 _SWIFT_LANG = Language(tsswift.language())
 _PARSER = Parser(_SWIFT_LANG)
@@ -69,10 +64,7 @@ def _extract_swift_class_methods(body_node) -> list[MethodContract]:
         params = _extract_swift_func_params(child)
         return_type_node = child.child_by_field_name("return_type")
         ret = _node_text(return_type_node)
-        sig = f"({params})"
-        if ret:
-            sig += f" -> {ret}"
-        methods.append(MethodContract(name=name, signature=sig))
+        methods.append(MethodContract(name=name, signature=_build_signature(params, ret)))
     return methods
 
 
@@ -167,10 +159,7 @@ def _parse_swift_function_as_method(proto_func_node):
     params = _extract_swift_func_params(proto_func_node)
     return_type_node = proto_func_node.child_by_field_name("return_type")
     ret = _node_text(return_type_node)
-    sig = f"({params})"
-    if ret:
-        sig += f" -> {ret}"
-    return MethodContract(name=name, signature=sig)
+    return MethodContract(name=name, signature=_build_signature(params, ret))
 
 
 def _process_swift_function(node, routines: dict[str, RoutineContract]) -> None:
@@ -183,10 +172,7 @@ def _process_swift_function(node, routines: dict[str, RoutineContract]) -> None:
     params = _extract_swift_func_params(node)
     return_type_node = node.child_by_field_name("return_type")
     ret = _node_text(return_type_node)
-    sig = f"({params})"
-    if ret:
-        sig += f" -> {ret}"
-    routines[name] = RoutineContract(name=name, signature=sig)
+    routines[name] = RoutineContract(name=name, signature=_build_signature(params, ret))
 
 
 def _collect_contracts(
