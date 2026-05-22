@@ -9,6 +9,88 @@
 
 ---
 
+## Examples
+
+Полный пример CODEMANIFEST для JavaScript со всеми конструкциями DSL:
+
+```yaml
+Imports:
+  - Types:
+      - EventEmitter
+      - TransportConfig AS Config
+    Usages:
+      - retry_policy
+    From: path/to/events_cell
+
+Usages:
+  conventions: .goga/usages/js_conventions.md
+  pattern: |
+    Use async/await for all asynchronous operations. Avoid callbacks.
+  testing: |
+    Use Jest. Each exported function and class method must have test coverage.
+
+Annotations: |
+  Use `conventions` for code style.
+  Use `testing` for test requirements.
+  Use `retry_policy` from Imports for retry logic on transient failures.
+
+  All async functions must return `Promise<T>`.
+
+---
+
+"parseInput(input: string) -> data: Buffer":
+  location: parser.js
+  annotations: |
+    Parse raw input string into structured data.
+
+    `input`: raw string to parse
+
+    Use `pattern` for implementation.
+
+"ApiClient(baseURL: string)":
+  location: api.js
+  annotations: |
+    HTTP client for external API communication.
+
+    `baseURL`: root URL for all API requests
+
+    Use `retry_policy` from Imports for request retries.
+    Use `conventions` for code style.
+  properties:
+    "baseURL -> string": |
+      Root URL for API requests.
+    "timeout -> number": |
+      Request timeout in milliseconds.
+  methods:
+    "fetchData(endpoint: string) -> response: Promise<Object<string, any>>": |
+      Fetch data from the specified endpoint.
+
+      `endpoint`: API endpoint path
+      `response`: async response data
+
+      Use `pattern` for implementation.
+    "close()": |
+      Close client and release resources.
+
+"EventEmitter::SocketEmitter(url: string)":
+  location: emitter.js
+  annotations: |
+    Socket-based emitter extending EventEmitter with real-time capabilities.
+
+    `url`: WebSocket server URL
+
+    Use `retry_policy` from Imports for reconnection logic.
+
+->EventEmitter: {}
+
+---
+
+Author: Goga
+CreatedAt: 22/05/26
+Description: |
+  Example CODEMANIFEST demonstrating all DSL constructs for JavaScript.
+```
+
 ## Cell
 
 A cell is a module:

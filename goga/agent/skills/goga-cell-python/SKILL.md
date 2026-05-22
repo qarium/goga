@@ -9,6 +9,88 @@
 
 ---
 
+## Examples
+
+Полный пример CODEMANIFEST для Python со всеми конструкциями DSL:
+
+```yaml
+Imports:
+  - Types:
+      - DataModel
+      - BaseConfig AS Config
+    Usages:
+      - serialization
+    From: path/to/data_cell
+
+Usages:
+  conventions: .goga/usages/python_conventions.md
+  pattern: |
+    All public methods must use type hints. Return values are immutable where possible.
+  testing: |
+    Each routine and entity method must have a corresponding test in tests/.
+
+Annotations: |
+  Use `conventions` for code style.
+  Use `testing` for test requirements.
+  Use `serialization` from Imports for data encoding patterns.
+
+  All methods must return concrete types, not `Any`.
+
+---
+
+"parse_input(input: str) -> data: bytes":
+  location: parser.py
+  annotations: |
+    Parse raw input string into structured data.
+
+    `input`: raw string to parse
+
+    Use `pattern` for implementation.
+
+"DataProcessor(config: Config)":
+  location: processor.py
+  annotations: |
+    Process data according to configuration.
+
+    `config`: processor configuration from `Config` type.
+
+    Use `serialization` from Imports for encoding.
+    Use `conventions` for code style.
+  properties:
+    "name -> str": |
+      Processor identifier.
+    "buffer_size -> int": |
+      Maximum buffer size in bytes.
+  methods:
+    "process(data: list[T]) -> result: list[T]": |
+      Process a batch of data items.
+
+      `data`: input items to process
+      `result`: processed items
+
+      Use `pattern` for implementation.
+    "reset()": |
+      Reset internal state.
+
+"BaseHandler::HTTPHandler(host: str)":
+  location: handler.py
+  annotations: |
+    HTTP-specific handler extending BaseHandler.
+
+    `host`: server hostname
+
+    Use `serialization` from Imports for request/response encoding.
+
+->DataModel: {}
+
+---
+
+Author: Goga
+CreatedAt: 22/05/26
+Description: |
+  Example CODEMANIFEST demonstrating all DSL constructs for Python.
+```
+
 ## Cell
 
 A cell is a Python package:
