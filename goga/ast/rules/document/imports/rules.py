@@ -242,8 +242,14 @@ class ImportIsUsed(DocumentRule):
             if isinstance(item, ImportTypeItemNode):
                 errors.extend(
                     self._check_type_item(
-                        item, doc_path, document, all_links, embedded_names,
-                        all_signatures, property_types, mutation_names,
+                        item,
+                        doc_path,
+                        document,
+                        all_links,
+                        embedded_names,
+                        all_signatures,
+                        property_types,
+                        mutation_names,
                     ),
                 )
             elif isinstance(item, ImportUsageItemNode):
@@ -252,15 +258,15 @@ class ImportIsUsed(DocumentRule):
         return errors
 
     def _check_type_item(  # noqa: PLR0913
-        self,
-        item: ImportTypeItemNode,
-        doc_path: str,
-        document,
-        all_links: set[str],
-        embedded_names: set[str],
-        all_signatures: list[str],
-        property_types: set[str] | None = None,
-        mutation_names: set[str] | None = None,
+            self,
+            item: ImportTypeItemNode,
+            doc_path: str,
+            document,
+            all_links: set[str],
+            embedded_names: set[str],
+            all_signatures: list[str],
+            property_types: set[str] | None = None,
+            mutation_names: set[str] | None = None,
     ) -> list[DocumentRuleError]:
         names = [item.alias] if item.alias else list(item.type_name)
         errors: list[DocumentRuleError] = []
@@ -286,11 +292,11 @@ class ImportIsUsed(DocumentRule):
         return errors
 
     def _check_usage_item(
-        self,
-        item: ImportUsageItemNode,
-        doc_path: str,
-        document,
-        usage_links: set[str],
+            self,
+            item: ImportUsageItemNode,
+            doc_path: str,
+            document,
+            usage_links: set[str],
     ) -> list[DocumentRuleError]:
         names = [item.alias] if item.alias else list(item.usage_name)
         errors: list[DocumentRuleError] = []

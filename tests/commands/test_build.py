@@ -146,15 +146,15 @@ class TestHelpOutput:
         result = runner.invoke(build_cmd, ["--help"])
         output = result.output
         for opt in (
-            "--dry-run",
-            "--worktree",
-            "--skip-finalize",
-            "--skip-manifest-check",
-            "--session-timeout",
-            "--idle-timeout",
-            "--wait",
-            "--max-iterations",
-            "--review-patience",
+                "--dry-run",
+                "--worktree",
+                "--skip-finalize",
+                "--skip-manifest-check",
+                "--session-timeout",
+                "--idle-timeout",
+                "--wait",
+                "--max-iterations",
+                "--review-patience",
         ):
             assert opt in output, f"Option {opt} not found in help output"
 
@@ -460,9 +460,7 @@ class TestDefaultsDirNotFound:
     def test_defaults_dir_not_found_exits_with_error(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
         """When defaults directory is missing, build exits with code 1 and error."""
         _write_goga_yml(tmp_path)
-        with mock.patch.object(
-            _build_module, "DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")
-        ):
+        with mock.patch.object(_build_module, "DEFAULTS_PACKAGE_DIR", Path("/nonexistent/defaults")):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert "Error" in result.stderr
@@ -858,7 +856,4 @@ class TestBuildConfigFlags:
 
         assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").is_file()
         assert (tmp_path / ".ralphex" / "agents" / "custom_agent.txt").is_file()
-        assert (
-            (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text()
-            == "custom task content"
-        )
+        assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text() == "custom task content"

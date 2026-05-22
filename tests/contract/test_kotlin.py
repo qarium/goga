@@ -41,9 +41,7 @@ class TestKotlinContractExtractsExportedClass:
         from goga.contract.kotlin import kotlin_contract
 
         (tmp_path / "UserService.kt").write_text(
-            "class UserService(val name: String) {\n"
-            "    fun greet(): String = \"Hello $name\"\n"
-            "}\n"
+            'class UserService(val name: String) {\n    fun greet(): String = "Hello $name"\n}\n'
         )
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -76,8 +74,7 @@ class TestKotlinContractExtractsTopLevelFunction:
         from goga.contract.kotlin import kotlin_contract
 
         (tmp_path / "Utils.kt").write_text(
-            "fun formatName(firstName: String, lastName: String): String "
-            '= "$firstName $lastName"\n'
+            'fun formatName(firstName: String, lastName: String): String = "$firstName $lastName"\n'
         )
         result = kotlin_contract(str(tmp_path))
         assert len(result) == 1
@@ -92,10 +89,7 @@ class TestKotlinContractExtractsObjectDeclaration:
         from goga.contract.kotlin import kotlin_contract
 
         (tmp_path / "Config.kt").write_text(
-            "object Config {\n"
-            "    val host: String = \"localhost\"\n"
-            "    fun load(): Config = this\n"
-            "}\n"
+            'object Config {\n    val host: String = "localhost"\n    fun load(): Config = this\n}\n'
         )
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -110,9 +104,7 @@ class TestKotlinContractAttachesExtensionFunctions:
     def test_kotlin_attaches_extension_functions(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "User.kt").write_text(
-            "class User\n\nfun User.greet(): String = \"Hello\"\n"
-        )
+        (tmp_path / "User.kt").write_text('class User\n\nfun User.greet(): String = "Hello"\n')
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -127,11 +119,7 @@ class TestKotlinContractNullableTypes:
     def test_kotlin_nullable_types_in_signature(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "Repo.kt").write_text(
-            "class Repo {\n"
-            "    fun find(id: String): String? = null\n"
-            "}\n"
-        )
+        (tmp_path / "Repo.kt").write_text("class Repo {\n    fun find(id: String): String? = null\n}\n")
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -158,11 +146,7 @@ class TestKotlinContractIgnoresCompanionObject:
         from goga.contract.kotlin import kotlin_contract
 
         (tmp_path / "Factory.kt").write_text(
-            "class Factory {\n"
-            "    companion object {\n"
-            "        fun create(): Factory = Factory()\n"
-            "    }\n"
-            "}\n"
+            "class Factory {\n    companion object {\n        fun create(): Factory = Factory()\n    }\n}\n"
         )
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -188,7 +172,7 @@ class TestKotlinContractIgnoresPrivateFunction:
     def test_kotlin_ignores_private_function(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "Hidden.kt").write_text("private fun secret(): String = \"shh\"\n")
+        (tmp_path / "Hidden.kt").write_text('private fun secret(): String = "shh"\n')
         result = kotlin_contract(str(tmp_path))
         assert result == []
 
@@ -217,9 +201,7 @@ class TestKotlinContractStableOrder:
     def test_kotlin_stable_order(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "Order.kt").write_text(
-            "fun Zebra() {}\n\nfun Alpha() {}\n\nfun Middle() {}\n"
-        )
+        (tmp_path / "Order.kt").write_text("fun Zebra() {}\n\nfun Alpha() {}\n\nfun Middle() {}\n")
         result1 = kotlin_contract(str(tmp_path))
         result2 = kotlin_contract(str(tmp_path))
         names1 = [r.name for r in result1]
@@ -233,7 +215,7 @@ class TestKotlinContractMultipleFilesMerged:
     def test_kotlin_multiple_files_merged(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "funcs.kt").write_text("fun hello(): String = \"hi\"\n")
+        (tmp_path / "funcs.kt").write_text('fun hello(): String = "hi"\n')
         (tmp_path / "types.kt").write_text("data class Item(val name: String)\n")
         result = kotlin_contract(str(tmp_path))
         names = [r.name for r in result]
@@ -246,9 +228,7 @@ class TestKotlinContractClassWithNullableParams:
     def test_kotlin_class_with_nullable_params(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "Service.kt").write_text(
-            "class Service(val host: String?, val port: Int?)\n"
-        )
+        (tmp_path / "Service.kt").write_text("class Service(val host: String?, val port: Int?)\n")
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -263,9 +243,7 @@ class TestKotlinContractNullableExtensionFunction:
     def test_kotlin_nullable_receiver_extension_attached(self, tmp_path):
         from goga.contract.kotlin import kotlin_contract
 
-        (tmp_path / "Utils.kt").write_text(
-            "class User\n\nfun User?.orDefault(): String = this ?: \"default\"\n"
-        )
+        (tmp_path / "Utils.kt").write_text('class User\n\nfun User?.orDefault(): String = this ?: "default"\n')
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -284,10 +262,7 @@ class TestKotlinContractExtractsInterface:
         from goga.contract.kotlin import kotlin_contract
 
         (tmp_path / "Repo.kt").write_text(
-            "interface Repository {\n"
-            "    fun save(data: String)\n"
-            "    fun load(id: String): String?\n"
-            "}\n"
+            "interface Repository {\n    fun save(data: String)\n    fun load(id: String): String?\n}\n"
         )
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -318,13 +293,13 @@ class TestKotlinContractMixedDeclarationsInOneFile:
 
         (tmp_path / "App.kt").write_text(
             "class UserService(val name: String) {\n"
-            "    fun greet(): String = \"Hello\"\n"
+            '    fun greet(): String = "Hello"\n'
             "}\n\n"
             "object Config {\n"
-            "    val host: String = \"localhost\"\n"
+            '    val host: String = "localhost"\n'
             "    fun load(): Config = this\n"
             "}\n\n"
-            "fun formatName(first: String, last: String): String = \"$first $last\"\n"
+            'fun formatName(first: String, last: String): String = "$first $last"\n'
         )
         result = kotlin_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]

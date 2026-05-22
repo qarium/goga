@@ -41,9 +41,7 @@ class TestExtractsExportedFunction:
     def test_extracts_exported_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function hello(name) {\n  return name;\n}\n"
-        )
+        (tmp_path / "index.js").write_text("export function hello(name) {\n  return name;\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -73,12 +71,7 @@ class TestExtractsExportedClass:
     def test_extracts_exported_class(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export class Server {\n"
-            "  constructor(host) {}\n"
-            "  start() {}\n"
-            "}\n"
-        )
+        (tmp_path / "index.js").write_text("export class Server {\n  constructor(host) {}\n  start() {}\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         entity = result[0]
@@ -122,12 +115,7 @@ class TestCommonjsObjectExports:
     def test_commonjs_object_exports(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = {\n"
-            "  create(name) {},\n"
-            "  destroy() {},\n"
-            "};\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = {\n  create(name) {},\n  destroy() {},\n};\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 2
         names = [r.name for r in result]
@@ -142,10 +130,7 @@ class TestCommonjsIdentifierExport:
     def test_commonjs_identifier_export(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "function helper(x) {}\n"
-            "module.exports = helper;\n"
-        )
+        (tmp_path / "index.js").write_text("function helper(x) {}\nmodule.exports = helper;\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -158,11 +143,7 @@ class TestNamedReexport:
     def test_named_reexport(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "function foo() {}\n"
-            "function bar() {}\n"
-            "export { foo, bar };\n"
-        )
+        (tmp_path / "index.js").write_text("function foo() {}\nfunction bar() {}\nexport { foo, bar };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 2
         names = [r.name for r in result]
@@ -175,10 +156,7 @@ class TestNamedReexportWithAlias:
     def test_named_reexport_with_alias(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "function foo() {}\n"
-            "export { foo as bar };\n"
-        )
+        (tmp_path / "index.js").write_text("function foo() {}\nexport { foo as bar };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -191,9 +169,7 @@ class TestStableOrder:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "export function zebra() {}\n"
-            "export function alpha() {}\n"
-            "export function middle() {}\n"
+            "export function zebra() {}\nexport function alpha() {}\nexport function middle() {}\n"
         )
         result1 = javascript_contract(str(tmp_path))
         result2 = javascript_contract(str(tmp_path))
@@ -208,11 +184,7 @@ class TestExportDefaultClass:
     def test_export_default_class(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default class {\n"
-            "  constructor(x) {}\n"
-            "}\n"
-        )
+        (tmp_path / "index.js").write_text("export default class {\n  constructor(x) {}\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -224,9 +196,7 @@ class TestExportDefaultFunction:
     def test_export_default_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default function() {}\n"
-        )
+        (tmp_path / "index.js").write_text("export default function() {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -257,10 +227,7 @@ class TestNoExports:
     def test_no_exports(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "function internal(x) {}\n"
-            "class Private {}\n"
-        )
+        (tmp_path / "index.js").write_text("function internal(x) {}\nclass Private {}\n")
         result = javascript_contract(str(tmp_path))
         assert result == []
 
@@ -270,12 +237,7 @@ class TestPrivateClassMembersExcluded:
     def test_private_class_members_excluded(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export class MyClass {\n"
-            "  #privateMethod() {}\n"
-            "  publicMethod() {}\n"
-            "}\n"
-        )
+        (tmp_path / "index.js").write_text("export class MyClass {\n  #privateMethod() {}\n  publicMethod() {}\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         entity = result[0]
@@ -289,10 +251,7 @@ class TestExportDefaultIdentifierSkipped:
     def test_export_default_identifier_skipped(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const foo = 42;\n"
-            "export default foo;\n"
-        )
+        (tmp_path / "index.js").write_text("const foo = 42;\nexport default foo;\n")
         result = javascript_contract(str(tmp_path))
         assert result == []
 
@@ -302,9 +261,7 @@ class TestFunctionWithDefaultParams:
     def test_function_with_default_params(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function configure(host, port = 8080) {}\n"
-        )
+        (tmp_path / "index.js").write_text("export function configure(host, port = 8080) {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         routine = result[0]
@@ -317,11 +274,7 @@ class TestClassNoJsdocEmptyTypes:
     def test_class_no_jsdoc_empty_types(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export class Data {\n"
-            "  value;\n"
-            "}\n"
-        )
+        (tmp_path / "index.js").write_text("export class Data {\n  value;\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         entity = result[0]
@@ -335,10 +288,7 @@ class TestMixedEsmAndCommonjs:
     def test_mixed_esm_and_commonjs(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function main() {}\n"
-            "module.exports.fallback = function() {};\n"
-        )
+        (tmp_path / "index.js").write_text("export function main() {}\nmodule.exports.fallback = function() {};\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         names = [r.name for r in result]
@@ -351,10 +301,7 @@ class TestParamWithoutJsdoc:
     def test_param_without_jsdoc(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "/**\n * @param {string} name\n */\n"
-            "export function greet(name, age) {}\n"
-        )
+        (tmp_path / "index.js").write_text("/**\n * @param {string} name\n */\nexport function greet(name, age) {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         routine = result[0]
@@ -367,9 +314,7 @@ class TestExportDefaultArrowFunction:
     def test_export_default_arrow_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default (x) => x;\n"
-        )
+        (tmp_path / "index.js").write_text("export default (x) => x;\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -380,8 +325,7 @@ class TestExportDefaultArrowFunction:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "/**\n * @param {string} x\n * @returns {number}\n */\n"
-            "export default (x) => x;\n"
+            "/**\n * @param {string} x\n * @returns {number}\n */\nexport default (x) => x;\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -396,10 +340,7 @@ class TestVariableDeclaratorReexport:
     def test_const_function_reexport(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const handler = function(x) { return x; };\n"
-            "export { handler };\n"
-        )
+        (tmp_path / "index.js").write_text("const handler = function(x) { return x; };\nexport { handler };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -410,9 +351,7 @@ class TestVariableDeclaratorReexport:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "/**\n * @param {string} x\n * @returns {boolean}\n */\n"
-            "const handler = (x) => x;\n"
-            "export { handler };\n"
+            "/**\n * @param {string} x\n * @returns {boolean}\n */\nconst handler = (x) => x;\nexport { handler };\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -423,10 +362,7 @@ class TestVariableDeclaratorReexport:
     def test_const_class_reexport(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const App = class { run() {} };\n"
-            "export { App };\n"
-        )
+        (tmp_path / "index.js").write_text("const App = class { run() {} };\nexport { App };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -440,11 +376,7 @@ class TestCommonjsPairNodes:
     def test_commonjs_pair_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = {\n"
-            "  handler: function(x) { return x; },\n"
-            "};\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = {\n  handler: function(x) { return x; },\n};\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -457,9 +389,7 @@ class TestGeneratorFunction:
     def test_export_generator_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function* generate(n) {}\n"
-        )
+        (tmp_path / "index.js").write_text("export function* generate(n) {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -472,10 +402,7 @@ class TestClassAliasReexport:
     def test_export_class_with_alias(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "class Foo { run() {} }\n"
-            "export { Foo as Bar };\n"
-        )
+        (tmp_path / "index.js").write_text("class Foo { run() {} }\nexport { Foo as Bar };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -489,10 +416,7 @@ class TestCommonjsClassExport:
     def test_commonjs_class_identifier_export(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "class Database { connect() {} }\n"
-            "module.exports = Database;\n"
-        )
+        (tmp_path / "index.js").write_text("class Database { connect() {} }\nmodule.exports = Database;\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -506,9 +430,7 @@ class TestRestParameters:
     def test_rest_parameter_extracted(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function log(message, ...args) {}\n"
-        )
+        (tmp_path / "index.js").write_text("export function log(message, ...args) {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         routine = result[0]
@@ -521,9 +443,7 @@ class TestDestructuredParameters:
     def test_destructured_parameter_extracted(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export function configure({ host, port }) {}\n"
-        )
+        (tmp_path / "index.js").write_text("export function configure({ host, port }) {}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         routine = result[0]
@@ -544,9 +464,7 @@ class TestArrowWithoutParens:
     def test_arrow_single_param_no_parens_via_reexport(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const double = x => x * 2;\nexport { double };\n"
-        )
+        (tmp_path / "index.js").write_text("const double = x => x * 2;\nexport { double };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "double"
@@ -558,9 +476,7 @@ class TestExportDefaultAnonymousGenerator:
     def test_export_default_generator_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default function*() { yield 1; }\n"
-        )
+        (tmp_path / "index.js").write_text("export default function*() { yield 1; }\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "default"
@@ -568,9 +484,7 @@ class TestExportDefaultAnonymousGenerator:
     def test_export_default_generator_with_params(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default function*(items) { yield items; }\n"
-        )
+        (tmp_path / "index.js").write_text("export default function*(items) { yield items; }\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert "(items)" in result[0].signature
@@ -602,9 +516,7 @@ class TestCommonJSDirectClassExport:
     def test_module_exports_anonymous_class(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = class { connect() {} };\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = class { connect() {} };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -615,9 +527,7 @@ class TestCommonJSDirectClassExport:
     def test_module_exports_named_class_expression(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = class App { run() {} };\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = class App { run() {} };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -629,10 +539,7 @@ class TestShorthandPropertyIdentifier:
     def test_commonjs_shorthand_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "function foo() {}\n"
-            "module.exports = { foo };\n"
-        )
+        (tmp_path / "index.js").write_text("function foo() {}\nmodule.exports = { foo };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -641,10 +548,7 @@ class TestShorthandPropertyIdentifier:
     def test_commonjs_shorthand_variable(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const handler = (x) => x;\n"
-            "module.exports = { handler };\n"
-        )
+        (tmp_path / "index.js").write_text("const handler = (x) => x;\nmodule.exports = { handler };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -657,9 +561,7 @@ class TestNamedDefaultExport:
     def test_export_default_named_function(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default function myFunc(x) { return x; }\n"
-        )
+        (tmp_path / "index.js").write_text("export default function myFunc(x) { return x; }\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "default"
@@ -668,9 +570,7 @@ class TestNamedDefaultExport:
     def test_export_default_named_class(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export default class MyApp { run() {} }\n"
-        )
+        (tmp_path / "index.js").write_text("export default class MyApp { run() {} }\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -704,10 +604,7 @@ class TestNestedJsdocTypes:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "export class Config {\n"
-            "  /** @type {{host: string, port: number}} */\n"
-            "  config;\n"
-            "}\n"
+            "export class Config {\n  /** @type {{host: string, port: number}} */\n  config;\n}\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -719,8 +616,7 @@ class TestNestedJsdocTypes:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "/** @returns {Array<{id: number}>} */\n"
-            "export function list() { return []; }\n"
+            "/** @returns {Array<{id: number}>} */\nexport function list() { return []; }\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -732,13 +628,7 @@ class TestEntityMethodPropertySorting:
     def test_methods_sorted_within_entity(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "export class Svc {\n"
-            "  zeta() {}\n"
-            "  alpha() {}\n"
-            "  beta() {}\n"
-            "}\n"
-        )
+        (tmp_path / "index.js").write_text("export class Svc {\n  zeta() {}\n  alpha() {}\n  beta() {}\n}\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         entity = result[0]
@@ -749,12 +639,7 @@ class TestEntityMethodPropertySorting:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "export class Config {\n"
-            "  /** @type {string} */\n"
-            "  z;\n"
-            "  /** @type {number} */\n"
-            "  a;\n"
-            "}\n"
+            "export class Config {\n  /** @type {string} */\n  z;\n  /** @type {number} */\n  a;\n}\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -768,10 +653,7 @@ class TestCommonJsVariableDeclaratorClass:
     def test_commonjs_identifier_variable_class_expression(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const App = class { run() {} };\n"
-            "module.exports = App;\n"
-        )
+        (tmp_path / "index.js").write_text("const App = class { run() {} };\nmodule.exports = App;\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -782,10 +664,7 @@ class TestCommonJsVariableDeclaratorClass:
     def test_commonjs_shorthand_variable_class_expression(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "const Svc = class { start() {} };\n"
-            "module.exports = { Svc };\n"
-        )
+        (tmp_path / "index.js").write_text("const Svc = class { start() {} };\nmodule.exports = { Svc };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)
@@ -798,8 +677,7 @@ class TestCommonJsShorthandClassDeclaration:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "class MyService { start() {} stop() {} }\n"
-            "module.exports = { MyService };\n"
+            "class MyService { start() {} stop() {} }\nmodule.exports = { MyService };\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -832,8 +710,7 @@ class TestDeeplyNestedJsdocTypes:
         from goga.contract.javascript import javascript_contract
 
         (tmp_path / "index.js").write_text(
-            "/** @param {{config: {host: string, port: number}}} opts */\n"
-            "export function connect(opts) {}\n"
+            "/** @param {{config: {host: string, port: number}}} opts */\nexport function connect(opts) {}\n"
         )
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
@@ -845,9 +722,7 @@ class TestCommonJsQuotedStringKeys:
     def test_commonjs_quoted_key(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = { 'create': function() {} };\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = { 'create': function() {} };\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "create"
@@ -855,9 +730,7 @@ class TestCommonJsQuotedStringKeys:
     def test_commonjs_double_quoted_key(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            'module.exports = { "destroy": function() {} };\n'
-        )
+        (tmp_path / "index.js").write_text('module.exports = { "destroy": function() {} };\n')
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "destroy"
@@ -868,11 +741,7 @@ class TestCommonJsPairClassExpression:
     def test_commonjs_pair_class_expression(self, tmp_path):
         from goga.contract.javascript import javascript_contract
 
-        (tmp_path / "index.js").write_text(
-            "module.exports = {\n"
-            "  Database: class { connect() {} },\n"
-            "};\n"
-        )
+        (tmp_path / "index.js").write_text("module.exports = {\n  Database: class { connect() {} },\n};\n")
         result = javascript_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], EntityContract)

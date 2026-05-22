@@ -31,9 +31,7 @@ def _write_codemanifest(directory: Path, content: str) -> None:
 
 def _write_goga_yml(directory: Path, lang: str = "kotlin") -> None:
     (directory / ".goga").mkdir(exist_ok=True)
-    (directory / ".goga" / "config.yml").write_text(
-        f"language: {lang}\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (directory / ".goga" / "config.yml").write_text(f"language: {lang}\nbuild:\n  task_executor:\n    agent: claude\n")
 
 
 KT_FULL_CODEMANIFEST = """\
@@ -166,5 +164,6 @@ class TestFullCycleKotlinPackageViaCLI:
         # formatName — top-level function (Routine)
         assert "formatName" in cell_data
         assert cell_data["formatName"]["signature"]["codemanifest"] == "(firstName: String, lastName: String) -> String"
-        assert cell_data["formatName"]["signature"][
-                   "implementation"] == "(firstName: String, lastName: String) -> String"
+        assert (
+            cell_data["formatName"]["signature"]["implementation"] == "(firstName: String, lastName: String) -> String"
+        )

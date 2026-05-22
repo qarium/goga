@@ -37,11 +37,7 @@ def test_contract_dispatches_to_python(tmp_path: Path) -> None:
     pkg_dir = tmp_path / "cell"
     pkg_dir.mkdir()
     (pkg_dir / "__init__.py").write_text(
-        "class MyClass:\n"
-        "    def my_method(self) -> str:\n"
-        "        return ''\n"
-        "\n"
-        "__all__ = ['MyClass']\n"
+        "class MyClass:\n    def my_method(self) -> str:\n        return ''\n\n__all__ = ['MyClass']\n"
     )
     parent = str(tmp_path)
     sys.path.insert(0, parent)
@@ -62,9 +58,7 @@ def test_contract_dispatches_to_golang(tmp_path: Path) -> None:
     pytest.importorskip("tree_sitter_go", reason="tree-sitter-go not installed")
     go_dir = tmp_path / "cell"
     go_dir.mkdir()
-    (go_dir / "example.go").write_text(
-        'package cell\n\nfunc Hello(name string) string { return "" }\n'
-    )
+    (go_dir / "example.go").write_text('package cell\n\nfunc Hello(name string) string { return "" }\n')
     result = contract("golang", str(go_dir))
     routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "Hello"]
     assert len(routines) >= 1
@@ -83,9 +77,7 @@ def test_contract_dispatches_to_javascript(tmp_path: Path) -> None:
     pytest.importorskip("tree_sitter_javascript", reason="tree-sitter-javascript not installed")
     cell_dir = tmp_path / "cell"
     cell_dir.mkdir()
-    (cell_dir / "index.js").write_text(
-        "export function greet(name) { return name; }\n"
-    )
+    (cell_dir / "index.js").write_text("export function greet(name) { return name; }\n")
     result = contract("javascript", str(cell_dir))
     routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "greet"]
     assert len(routines) == 1
@@ -97,9 +89,7 @@ def test_contract_dispatches_to_kotlin(tmp_path: Path) -> None:
     pytest.importorskip("tree_sitter_kotlin", reason="tree-sitter-kotlin not installed")
     cell_dir = tmp_path / "cell"
     cell_dir.mkdir()
-    (cell_dir / "Service.kt").write_text(
-        "fun hello(name: String): String = name\n"
-    )
+    (cell_dir / "Service.kt").write_text("fun hello(name: String): String = name\n")
     result = contract("kotlin", str(cell_dir))
     routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "hello"]
     assert len(routines) == 1
@@ -111,9 +101,7 @@ def test_contract_dispatches_to_swift(tmp_path: Path) -> None:
     pytest.importorskip("tree_sitter_swift", reason="tree-sitter-swift not installed")
     cell_dir = tmp_path / "cell"
     cell_dir.mkdir()
-    (cell_dir / "Utils.swift").write_text(
-        "public func greet(name: String) -> String { return name }\n"
-    )
+    (cell_dir / "Utils.swift").write_text("public func greet(name: String) -> String { return name }\n")
     result = contract("swift", str(cell_dir))
     routines = [r for r in result if isinstance(r, RoutineContract) and r.name == "greet"]
     assert len(routines) == 1
@@ -156,9 +144,9 @@ def test_dispatcher_kotlin_mixed_declarations(tmp_path: Path) -> None:
     cell_dir.mkdir()
     (cell_dir / "App.kt").write_text(
         "class UserService(val name: String) {\n"
-        "    fun greet(): String = \"Hello\"\n"
+        '    fun greet(): String = "Hello"\n'
         "}\n\n"
-        "fun formatName(first: String, last: String): String = \"$first $last\"\n"
+        'fun formatName(first: String, last: String): String = "$first $last"\n'
     )
     result = contract("kotlin", str(cell_dir))
     entities = [r for r in result if isinstance(r, EntityContract)]

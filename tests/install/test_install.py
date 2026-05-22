@@ -133,22 +133,28 @@ class TestDownloadDslSpec:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        with mock.patch.object(
-            _install_mod.urllib.request,
-            "urlopen",
-            side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
-        ), pytest.raises(OSError, match="HTTP 404"):
+        with (
+            mock.patch.object(
+                _install_mod.urllib.request,
+                "urlopen",
+                side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
+            ),
+            pytest.raises(OSError, match="HTTP 404"),
+        ):
             _download_dsl_spec(tmp_path)
 
     def test_url_error_raises_os_error(self, tmp_path: Path) -> None:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        with mock.patch.object(
-            _install_mod.urllib.request,
-            "urlopen",
-            side_effect=urllib.error.URLError("connection refused"),
-        ), pytest.raises(OSError, match="Failed to download DSL spec"):
+        with (
+            mock.patch.object(
+                _install_mod.urllib.request,
+                "urlopen",
+                side_effect=urllib.error.URLError("connection refused"),
+            ),
+            pytest.raises(OSError, match="Failed to download DSL spec"),
+        ):
             _download_dsl_spec(tmp_path)
 
 

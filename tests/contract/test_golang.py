@@ -60,12 +60,9 @@ class TestGolangContractExtractsStructWithFieldsAndMethods:
     def test_extracts_struct_with_fields_and_methods(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "model.go").write_text(
-            "package cell\n\ntype Server struct {\n    Name string\n    Port int\n}\n"
-        )
+        (tmp_path / "model.go").write_text("package cell\n\ntype Server struct {\n    Name string\n    Port int\n}\n")
         (tmp_path / "methods.go").write_text(
-            "package cell\n\nfunc (s *Server) Start() error {\n    return nil\n}\n\n"
-            "func (s *Server) Stop() {\n}\n"
+            "package cell\n\nfunc (s *Server) Start() error {\n    return nil\n}\n\nfunc (s *Server) Stop() {\n}\n"
         )
         result = golang_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -125,12 +122,8 @@ class TestGolangContractIgnoresTestFiles:
     def test_ignores_test_files(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "service.go").write_text(
-            'package cell\n\nfunc Hello() string {\n    return "hi"\n}\n'
-        )
-        (tmp_path / "service_test.go").write_text(
-            "package cell\n\nfunc TestHello(t *testing.T) {\n    // test\n}\n"
-        )
+        (tmp_path / "service.go").write_text('package cell\n\nfunc Hello() string {\n    return "hi"\n}\n')
+        (tmp_path / "service_test.go").write_text("package cell\n\nfunc TestHello(t *testing.T) {\n    // test\n}\n")
         result = golang_contract(str(tmp_path))
         assert len(result) == 1
         assert result[0].name == "Hello"
@@ -141,12 +134,8 @@ class TestGolangContractMultipleFilesMerged:
     def test_multiple_files_merged(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "funcs.go").write_text(
-            "package cell\n\nfunc Create(name string) error {\n    return nil\n}\n"
-        )
-        (tmp_path / "types.go").write_text(
-            "package cell\n\ntype Config struct {\n    Name string\n}\n"
-        )
+        (tmp_path / "funcs.go").write_text("package cell\n\nfunc Create(name string) error {\n    return nil\n}\n")
+        (tmp_path / "types.go").write_text("package cell\n\ntype Config struct {\n    Name string\n}\n")
         result = golang_contract(str(tmp_path))
         names = [r.name for r in result]
         assert "Config" in names
@@ -209,9 +198,7 @@ class TestGolangContractStableOrder:
     def test_stable_order(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "order.go").write_text(
-            "package cell\n\nfunc Zebra() {}\n\nfunc Alpha() {}\n\nfunc Middle() {}\n"
-        )
+        (tmp_path / "order.go").write_text("package cell\n\nfunc Zebra() {}\n\nfunc Alpha() {}\n\nfunc Middle() {}\n")
         result1 = golang_contract(str(tmp_path))
         result2 = golang_contract(str(tmp_path))
         names1 = [r.name for r in result1]
@@ -226,10 +213,7 @@ class TestGolangContractMixedExportedFields:
         from goga.contract.golang import golang_contract
 
         (tmp_path / "mixed.go").write_text(
-            "package cell\n\ntype Mixed struct {\n"
-            "    Exported string\n"
-            "    unexported int\n"
-            "}\n"
+            "package cell\n\ntype Mixed struct {\n    Exported string\n    unexported int\n}\n"
         )
         result = golang_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -245,9 +229,7 @@ class TestGolangContractVariadicParams:
     def test_variadic_params_included(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "varargs.go").write_text(
-            "package cell\n\nfunc Sum(nums ...int) int {\n    return 0\n}\n"
-        )
+        (tmp_path / "varargs.go").write_text("package cell\n\nfunc Sum(nums ...int) int {\n    return 0\n}\n")
         result = golang_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -260,9 +242,7 @@ class TestGolangContractGroupedParams:
     def test_grouped_params_all_names_extracted(self, tmp_path):
         from goga.contract.golang import golang_contract
 
-        (tmp_path / "shared.go").write_text(
-            "package cell\n\nfunc Swap(a, b int) (int, int) {\n    return b, a\n}\n"
-        )
+        (tmp_path / "shared.go").write_text("package cell\n\nfunc Swap(a, b int) (int, int) {\n    return b, a\n}\n")
         result = golang_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -277,10 +257,7 @@ class TestGolangContractGroupedTypeDeclarations:
         from goga.contract.golang import golang_contract
 
         (tmp_path / "types.go").write_text(
-            "package cell\n\ntype (\n"
-            "    Server struct { Name string }\n"
-            "    Handler interface { Serve() }\n"
-            ")\n"
+            "package cell\n\ntype (\n    Server struct { Name string }\n    Handler interface { Serve() }\n)\n"
         )
         result = golang_contract(str(tmp_path))
         names = [r.name for r in result]
@@ -295,8 +272,8 @@ class TestGolangContractIgnoresUnexportedMethods:
 
         (tmp_path / "svc.go").write_text(
             "package cell\n\ntype Server struct { Name string }\n\n"
-            "func (s *Server) Hello() string { return \"hi\" }\n\n"
-            "func (s *Server) privateHelper() string { return \"secret\" }\n"
+            'func (s *Server) Hello() string { return "hi" }\n\n'
+            'func (s *Server) privateHelper() string { return "secret" }\n'
         )
         result = golang_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -332,9 +309,7 @@ class TestGolangContractMethodsOnlyAttachToStructs:
         from goga.contract.golang import golang_contract
 
         (tmp_path / "iface.go").write_text(
-            "package cell\n\n"
-            "type Handler interface {\n    Serve()\n}\n\n"
-            "func (h Handler) DoWork() {}\n"
+            "package cell\n\ntype Handler interface {\n    Serve()\n}\n\nfunc (h Handler) DoWork() {}\n"
         )
         result = golang_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]

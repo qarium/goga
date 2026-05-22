@@ -24,17 +24,13 @@ _PARSER = Parser(_KOTLIN_LANG)
 
 def _extract_identifier(node) -> str:
     """Extract identifier text — supports both 'identifier' and 'simple_identifier' node types."""
-    ident = _first_child_by_type(node, "identifier") or _first_child_by_type(
-        node, "simple_identifier"
-    )
+    ident = _first_child_by_type(node, "identifier") or _first_child_by_type(node, "simple_identifier")
     return _node_text(ident) if ident else ""
 
 
 def _extract_type_identifier(node) -> str:
     """Extract type identifier text — supports both 'identifier' and 'type_identifier' node types."""
-    ident = _first_child_by_type(node, "identifier") or _first_child_by_type(
-        node, "type_identifier"
-    )
+    ident = _first_child_by_type(node, "identifier") or _first_child_by_type(node, "type_identifier")
     return _node_text(ident) if ident else ""
 
 
@@ -81,9 +77,9 @@ def _extract_class_params(container_node) -> str:
             continue
         name = _extract_identifier(child)
         type_node = (
-            _first_child_by_type(child, "user_type")
-            or _first_child_by_type(child, "nullable_type")
-            or _first_child_by_type(child, "function_type")
+                _first_child_by_type(child, "user_type")
+                or _first_child_by_type(child, "nullable_type")
+                or _first_child_by_type(child, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         if name and type_str:
@@ -103,9 +99,9 @@ def _extract_kotlin_params(node) -> str:
             continue
         name = _extract_identifier(child)
         type_node = (
-            _first_child_by_type(child, "user_type")
-            or _first_child_by_type(child, "nullable_type")
-            or _first_child_by_type(child, "function_type")
+                _first_child_by_type(child, "user_type")
+                or _first_child_by_type(child, "nullable_type")
+                or _first_child_by_type(child, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         if name and type_str:
@@ -140,9 +136,9 @@ def _extract_class_properties(body_node) -> list[PropertyContract]:
         if not name:
             continue
         type_node = (
-            _first_child_by_type(var_decl, "user_type")
-            or _first_child_by_type(var_decl, "nullable_type")
-            or _first_child_by_type(var_decl, "function_type")
+                _first_child_by_type(var_decl, "user_type")
+                or _first_child_by_type(var_decl, "nullable_type")
+                or _first_child_by_type(var_decl, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         properties.append(PropertyContract(name=name, signature=type_str))
@@ -185,9 +181,7 @@ def _process_class_declaration(node, entities: dict[str, EntityContract]) -> Non
     if body:
         methods = _extract_class_methods(body)
         properties = _extract_class_properties(body)
-    entities[name] = EntityContract(
-        name=name, signature=signature, properties=properties, methods=methods
-    )
+    entities[name] = EntityContract(name=name, signature=signature, properties=properties, methods=methods)
 
 
 def _process_object_declaration(node, entities: dict[str, EntityContract]) -> None:
@@ -202,9 +196,7 @@ def _process_object_declaration(node, entities: dict[str, EntityContract]) -> No
     if body:
         methods = _extract_class_methods(body)
         properties = _extract_class_properties(body)
-    entities[name] = EntityContract(
-        name=name, signature="()", properties=properties, methods=methods
-    )
+    entities[name] = EntityContract(name=name, signature="()", properties=properties, methods=methods)
 
 
 def _is_extension_function(func_node) -> bool:
@@ -221,23 +213,17 @@ def _extract_receiver_type_name(func_node) -> str:
     children = func_node.children
     for i, child in enumerate(children):
         if child.type == "user_type" and i + 1 < len(children) and children[i + 1].type == ".":
-            ident = _first_child_by_type(child, "identifier") or _first_child_by_type(
-                child, "type_identifier"
-            )
+            ident = _first_child_by_type(child, "identifier") or _first_child_by_type(child, "type_identifier")
             return _node_text(ident) if ident else ""
         if child.type == "nullable_type" and i + 1 < len(children) and children[i + 1].type == ".":
             ut = _first_child_by_type(child, "user_type")
             if ut:
-                ident = _first_child_by_type(ut, "identifier") or _first_child_by_type(
-                    ut, "type_identifier"
-                )
+                ident = _first_child_by_type(ut, "identifier") or _first_child_by_type(ut, "type_identifier")
                 return _node_text(ident) if ident else ""
     return ""
 
 
-def _process_extension_function(
-    node, methods_by_receiver: dict[str, list[MethodContract]]
-) -> None:
+def _process_extension_function(node, methods_by_receiver: dict[str, list[MethodContract]]) -> None:
     receiver_type_name = _extract_receiver_type_name(node)
     if not receiver_type_name:
         return
@@ -251,14 +237,10 @@ def _process_extension_function(
     sig = f"({params})"
     if ret:
         sig += f" -> {ret}"
-    methods_by_receiver.setdefault(receiver_type_name, []).append(
-        MethodContract(name=name, signature=sig)
-    )
+    methods_by_receiver.setdefault(receiver_type_name, []).append(MethodContract(name=name, signature=sig))
 
 
-def _process_top_level_function(
-    node, routines: dict[str, RoutineContract]
-) -> None:
+def _process_top_level_function(node, routines: dict[str, RoutineContract]) -> None:
     if not _is_public(node):
         return
     name = _extract_identifier(node)
@@ -273,7 +255,7 @@ def _process_top_level_function(
 
 
 def _collect_contracts(
-    kt_files: list[Path],
+        kt_files: list[Path],
 ) -> tuple[
     dict[str, EntityContract],
     dict[str, RoutineContract],

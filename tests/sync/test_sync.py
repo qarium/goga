@@ -195,9 +195,7 @@ class TestSyncLocal:
 
         assert exit_code1 == 0
         assert exit_code2 == 0
-        content = (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(
-            encoding="utf-8"
-        )
+        content = (tmp_path / ".goga" / "usages" / "deps" / "my-lib" / ".usages" / "api.md").read_text(encoding="utf-8")
         assert content == "# API"
 
     def test_local_empty_usages_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

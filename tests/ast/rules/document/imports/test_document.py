@@ -97,8 +97,12 @@ class TestContract:
         )
 
         submodule_classes = [
-            ImportsCanNotBeEmpty, ImportsHasOnlyValidKeys, ImportItemIsValid,
-            ImportUsageExists, ImportHasValidFromPath, ImportHasNotDuplicate,
+            ImportsCanNotBeEmpty,
+            ImportsHasOnlyValidKeys,
+            ImportItemIsValid,
+            ImportUsageExists,
+            ImportHasValidFromPath,
+            ImportHasNotDuplicate,
             ImportIsUsed,
         ]
         for cls in submodule_classes:

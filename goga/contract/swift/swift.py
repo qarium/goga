@@ -119,9 +119,7 @@ def _process_swift_class(node, entities: dict[str, EntityContract]) -> None:
     if body:
         methods = _extract_swift_class_methods(body)
         properties = _extract_swift_class_properties(body)
-    entities[name] = EntityContract(
-        name=name, signature=signature, properties=properties, methods=methods
-    )
+    entities[name] = EntityContract(name=name, signature=signature, properties=properties, methods=methods)
 
 
 def _process_swift_enum(node, entities: dict[str, EntityContract]) -> None:
@@ -140,9 +138,7 @@ def _process_swift_enum(node, entities: dict[str, EntityContract]) -> None:
                 entry_name = _node_text(entry_name_node) if entry_name_node else ""
                 if entry_name:
                     properties.append(PropertyContract(name=entry_name, signature=""))
-    entities[name] = EntityContract(
-        name=name, signature="()", properties=properties, methods=[]
-    )
+    entities[name] = EntityContract(name=name, signature="()", properties=properties, methods=[])
 
 
 def _process_swift_protocol(node, entities: dict[str, EntityContract]) -> None:
@@ -160,9 +156,7 @@ def _process_swift_protocol(node, entities: dict[str, EntityContract]) -> None:
                 method = _parse_swift_function_as_method(child)
                 if method is not None:
                     methods.append(method)
-    entities[name] = EntityContract(
-        name=name, signature="()", properties=[], methods=methods
-    )
+    entities[name] = EntityContract(name=name, signature="()", properties=[], methods=methods)
 
 
 def _parse_swift_function_as_method(proto_func_node):
@@ -196,7 +190,7 @@ def _process_swift_function(node, routines: dict[str, RoutineContract]) -> None:
 
 
 def _collect_contracts(
-    swift_files: list[Path],
+        swift_files: list[Path],
 ) -> tuple[dict[str, EntityContract], dict[str, RoutineContract]]:
     entities: dict[str, EntityContract] = {}
     routines: dict[str, RoutineContract] = {}

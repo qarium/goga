@@ -44,7 +44,7 @@ class TestSwiftContractExtractsPublicClass:
             "public class Server {\n"
             "    public init(host: String, port: Int) {}\n"
             "    public func start() -> Bool { return true }\n"
-            "    public var name: String = \"\"\n"
+            '    public var name: String = ""\n'
             "}\n"
         )
         result = swift_contract(str(tmp_path))
@@ -65,11 +65,7 @@ class TestSwiftContractExtractsPublicEnum:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "Status.swift").write_text(
-            "public enum Status {\n"
-            "    case active\n"
-            "    case inactive\n"
-            "    case pending\n"
-            "}\n"
+            "public enum Status {\n    case active\n    case inactive\n    case pending\n}\n"
         )
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -109,9 +105,7 @@ class TestSwiftContractExtractsPublicFunction:
     def test_swift_extracts_public_function(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "Utils.swift").write_text(
-            'public func greet(name: String) -> String { return name }\n'
-        )
+        (tmp_path / "Utils.swift").write_text("public func greet(name: String) -> String { return name }\n")
         result = swift_contract(str(tmp_path))
         assert len(result) == 1
         assert isinstance(result[0], RoutineContract)
@@ -125,10 +119,7 @@ class TestSwiftContractExtractsProtocol:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "Handler.swift").write_text(
-            "public protocol Handler {\n"
-            "    func process(data: String) -> Bool\n"
-            "    func cleanup()\n"
-            "}\n"
+            "public protocol Handler {\n    func process(data: String) -> Bool\n    func cleanup()\n}\n"
         )
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -148,9 +139,7 @@ class TestSwiftContractOptionalTypes:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "Repo.swift").write_text(
-            "public class Repo {\n"
-            '    public func find(id: String) -> String? { return nil }\n'
-            "}\n"
+            "public class Repo {\n    public func find(id: String) -> String? { return nil }\n}\n"
         )
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -165,9 +154,7 @@ class TestSwiftContractExternalParamNames:
     def test_swift_function_external_param_names(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "Config.swift").write_text(
-            "public func configure(with host: String, port: Int) {}\n"
-        )
+        (tmp_path / "Config.swift").write_text("public func configure(with host: String, port: Int) {}\n")
         result = swift_contract(str(tmp_path))
         assert len(result) == 1
         func = result[0]
@@ -181,11 +168,7 @@ class TestSwiftContractExtractsPublicActor:
     def test_swift_extracts_public_actor(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "Worker.swift").write_text(
-            "public actor Worker {\n"
-            "    public func process() {}\n"
-            "}\n"
-        )
+        (tmp_path / "Worker.swift").write_text("public actor Worker {\n    public func process() {}\n}\n")
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -200,11 +183,7 @@ class TestSwiftContractFailableInit:
     def test_swift_failable_init(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "Parser.swift").write_text(
-            "public class Parser {\n"
-            "    public init?(path: String) {}\n"
-            "}\n"
-        )
+        (tmp_path / "Parser.swift").write_text("public class Parser {\n    public init?(path: String) {}\n}\n")
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
         assert len(entities) == 1
@@ -219,9 +198,7 @@ class TestSwiftContractComputedProperty:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "User.swift").write_text(
-            "public class User {\n"
-            '    public var displayName: String { return "" }\n'
-            "}\n"
+            'public class User {\n    public var displayName: String { return "" }\n}\n'
         )
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -237,9 +214,7 @@ class TestSwiftContractNonPublicInitSkipped:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "Service.swift").write_text(
-            "public class Service {\n"
-            "    private init(host: String, port: Int) {}\n"
-            "}\n"
+            "public class Service {\n    private init(host: String, port: Int) {}\n}\n"
         )
         result = swift_contract(str(tmp_path))
         entities = [r for r in result if isinstance(r, EntityContract)]
@@ -264,11 +239,7 @@ class TestSwiftContractIgnoresExtension:
     def test_swift_ignores_extension(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "Ext.swift").write_text(
-            "extension String {\n"
-            "    public func greet() {}\n"
-            "}\n"
-        )
+        (tmp_path / "Ext.swift").write_text("extension String {\n    public func greet() {}\n}\n")
         result = swift_contract(str(tmp_path))
         assert result == []
 
@@ -298,9 +269,7 @@ class TestSwiftContractStableOrder:
         from goga.contract.swift import swift_contract
 
         (tmp_path / "Order.swift").write_text(
-            "public func Zebra() {}\n\n"
-            "public func Alpha() {}\n\n"
-            "public func Middle() {}\n"
+            "public func Zebra() {}\n\npublic func Alpha() {}\n\npublic func Middle() {}\n"
         )
         result1 = swift_contract(str(tmp_path))
         result2 = swift_contract(str(tmp_path))
@@ -315,9 +284,7 @@ class TestSwiftContractMultipleFilesMerged:
     def test_swift_multiple_files_merged(self, tmp_path):
         from goga.contract.swift import swift_contract
 
-        (tmp_path / "funcs.swift").write_text(
-            'public func hello() -> String { return "hi" }\n'
-        )
+        (tmp_path / "funcs.swift").write_text('public func hello() -> String { return "hi" }\n')
         (tmp_path / "types.swift").write_text("public struct Item {}\n")
         result = swift_contract(str(tmp_path))
         names = [r.name for r in result]

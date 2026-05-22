@@ -158,16 +158,8 @@ def _copy_defaults(config: Config) -> int:
 
     ralphex_dir = Path(".ralphex")
 
-    prompts_src = (
-        Path(config.build.prompts_dir)
-        if config.build.prompts_dir
-        else defaults_dir / "prompts"
-    )
-    agents_src = (
-        Path(config.build.agents_dir)
-        if config.build.agents_dir
-        else defaults_dir / "agents"
-    )
+    prompts_src = Path(config.build.prompts_dir) if config.build.prompts_dir else defaults_dir / "prompts"
+    agents_src = Path(config.build.agents_dir) if config.build.agents_dir else defaults_dir / "agents"
 
     for src_dir, dest_name in ((prompts_src, "prompts"), (agents_src, "agents")):
         if not src_dir.is_dir():

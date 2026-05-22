@@ -25,24 +25,24 @@ if TYPE_CHECKING:
 
 
 def _compare_property(
-    prop_node: PropertyNode,
-    impl_props: dict[str, PropertyContract],
+        prop_node: PropertyNode,
+        impl_props: dict[str, PropertyContract],
 ) -> dict:
     impl = impl_props[prop_node.name].signature if prop_node.name in impl_props else None
     return {"codemanifest": prop_node.type, "implementation": impl}
 
 
 def _compare_method(
-    method_node: MethodNode,
-    impl_methods: dict[str, MethodContract],
+        method_node: MethodNode,
+        impl_methods: dict[str, MethodContract],
 ) -> dict:
     impl = impl_methods[method_node.name].signature if method_node.name in impl_methods else None
     return {"codemanifest": method_node.signature, "implementation": impl}
 
 
 def _match_entity(
-    entity_node: EntityTypeNode,
-    impl_entity: EntityContract | None,
+        entity_node: EntityTypeNode,
+        impl_entity: EntityContract | None,
 ) -> dict:
     result: dict = {
         "signature": {
@@ -62,9 +62,9 @@ def _match_entity(
 
 
 def _build_cell_compare(
-    entities: list[EntityTypeNode],
-    routines: list[RoutineTypeNode],
-    impl_contracts: list[EntityContract | RoutineContract],
+        entities: list[EntityTypeNode],
+        routines: list[RoutineTypeNode],
+        impl_contracts: list[EntityContract | RoutineContract],
 ) -> dict:
     impl_by_name: dict[str, EntityContract | RoutineContract] = {c.name: c for c in impl_contracts}
     result: dict = {}
@@ -142,9 +142,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
             click.echo(f"Error: {exc}", err=True)
             ctx.exit(1)
 
-        result[os.path.normpath(doc.path)] = _build_cell_compare(
-            doc.body.entities, doc.body.routines, impl_contracts
-        )
+        result[os.path.normpath(doc.path)] = _build_cell_compare(doc.body.entities, doc.body.routines, impl_contracts)
 
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)

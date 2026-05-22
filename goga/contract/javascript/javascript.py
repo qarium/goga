@@ -33,8 +33,9 @@ def _extract_braced_type(text: str, start_pos: int) -> str:
         elif text[i] == "}":
             depth -= 1
             if depth == 0:
-                return text[brace_start + 1 : i]
+                return text[brace_start + 1: i]
     return ""
+
 
 _FUNCTION_TYPES = frozenset(
     {
@@ -172,9 +173,9 @@ def _extract_class_fields(body_node) -> list[PropertyContract]:
 
 
 def _process_class_declaration(
-    decl_node,
-    entities: dict[str, EntityContract],
-    export_name: str | None = None,
+        decl_node,
+        entities: dict[str, EntityContract],
+        export_name: str | None = None,
 ) -> None:
     if export_name is not None:
         name = export_name
@@ -196,9 +197,9 @@ def _process_class_declaration(
 
 
 def _process_function_declaration(
-    decl_node,
-    routines: dict[str, RoutineContract],
-    export_name: str | None = None,
+        decl_node,
+        routines: dict[str, RoutineContract],
+        export_name: str | None = None,
 ) -> None:
     if export_name is not None:
         name = export_name
@@ -261,10 +262,10 @@ def javascript_contract(cell_path: str) -> list[EntityContract | RoutineContract
 
 
 def _process_export_statement(  # noqa: C901, PLR0912
-    node,
-    declarations: dict[str, object],
-    entities: dict[str, EntityContract],
-    routines: dict[str, RoutineContract],
+        node,
+        declarations: dict[str, object],
+        entities: dict[str, EntityContract],
+        routines: dict[str, RoutineContract],
 ) -> None:
     decl = node.child_by_field_name("declaration")
     if decl is not None:
@@ -314,10 +315,10 @@ def _process_export_statement(  # noqa: C901, PLR0912
 
 
 def _process_expression_statement(  # noqa: C901, PLR0912, PLR0915
-    node,
-    declarations: dict[str, object],
-    entities: dict[str, EntityContract],
-    routines: dict[str, RoutineContract],
+        node,
+        declarations: dict[str, object],
+        entities: dict[str, EntityContract],
+        routines: dict[str, RoutineContract],
 ) -> None:
     expr = None
     for child in node.children:
@@ -399,10 +400,10 @@ def _process_expression_statement(  # noqa: C901, PLR0912, PLR0915
 
 
 def _process_arrow_function(
-    arrow_node,
-    routines: dict[str, RoutineContract],
-    export_name: str = "default",
-    jsdoc: dict | None = None,
+        arrow_node,
+        routines: dict[str, RoutineContract],
+        export_name: str = "default",
+        jsdoc: dict | None = None,
 ) -> None:
     params = _extract_params(arrow_node.child_by_field_name("parameters"))
     if not params:
@@ -416,9 +417,9 @@ def _process_arrow_function(
 
 
 def _process_variable_declarator_as_routine(
-    declarator,
-    routines: dict[str, RoutineContract],
-    export_name: str | None = None,
+        declarator,
+        routines: dict[str, RoutineContract],
+        export_name: str | None = None,
 ) -> None:
     name_node = declarator.child_by_field_name("name")
     value = declarator.child_by_field_name("value")

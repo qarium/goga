@@ -91,9 +91,7 @@ class TestMixedEsmAndCommonjs:
 
     def test_esm_exported_commonjs_fallback_skipped(self, tmp_path) -> None:
         (tmp_path / "index.js").write_text(
-            "export function main() {}\n"
-            "export function helper() {}\n"
-            "module.exports.fallback = function() {};\n",
+            "export function main() {}\nexport function helper() {}\nmodule.exports.fallback = function() {};\n",
             encoding="utf-8",
         )
 
@@ -107,11 +105,7 @@ class TestMixedEsmAndCommonjs:
 
     def test_commonjs_object_export_with_esm(self, tmp_path) -> None:
         (tmp_path / "index.js").write_text(
-            "export function namedFn() {}\n"
-            "module.exports = {\n"
-            "  create(name) {},\n"
-            "  destroy() {},\n"
-            "};\n",
+            "export function namedFn() {}\nmodule.exports = {\n  create(name) {},\n  destroy() {},\n};\n",
             encoding="utf-8",
         )
 
@@ -287,9 +281,7 @@ class TestExportDefaultAndNamedExports:
 
     def test_default_function_with_named_exports(self, tmp_path) -> None:
         (tmp_path / "index.js").write_text(
-            "export default function() {}\n"
-            "export function namedOne(a) {}\n"
-            "export function namedTwo(b, c) {}\n",
+            "export default function() {}\nexport function namedOne(a) {}\nexport function namedTwo(b, c) {}\n",
             encoding="utf-8",
         )
 
@@ -322,9 +314,7 @@ def _write_codemanifest(directory: Path, content: str) -> None:
 
 def _write_goga_yml(directory: Path, lang: str = "javascript") -> None:
     (directory / ".goga").mkdir(exist_ok=True)
-    (directory / ".goga" / "config.yml").write_text(
-        f"language: {lang}\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (directory / ".goga" / "config.yml").write_text(f"language: {lang}\nbuild:\n  task_executor:\n    agent: claude\n")
 
 
 JS_FULL_CODEMANIFEST = """\
