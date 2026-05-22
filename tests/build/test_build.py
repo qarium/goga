@@ -30,9 +30,9 @@ TEST_ENV_VARS = {
 
 
 def _make_config(
-        agent: str = "claude",
-        env: dict | None = None,
-        **build_kwargs,
+    agent: str = "claude",
+    env: dict | None = None,
+    **build_kwargs,
 ) -> Config:
     task_executor = TaskExecutor(agent=agent, env=env or {})
     build = BuildConfig(task_executor=task_executor, **build_kwargs)
@@ -40,11 +40,11 @@ def _make_config(
 
 
 def _run_build_in_tmp(
-        tmp_path: Path,
-        monkeypatch,
-        plan: str = "plan.md",
-        cli_options: dict | None = None,
-        config: Config | None = None,
+    tmp_path: Path,
+    monkeypatch,
+    plan: str = "plan.md",
+    cli_options: dict | None = None,
+    config: Config | None = None,
 ) -> int:
     monkeypatch.chdir(tmp_path)
     if config is None:

@@ -77,9 +77,9 @@ def _extract_class_params(container_node) -> str:
             continue
         name = _extract_identifier(child)
         type_node = (
-                _first_child_by_type(child, "user_type")
-                or _first_child_by_type(child, "nullable_type")
-                or _first_child_by_type(child, "function_type")
+            _first_child_by_type(child, "user_type")
+            or _first_child_by_type(child, "nullable_type")
+            or _first_child_by_type(child, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         if name and type_str:
@@ -99,9 +99,9 @@ def _extract_kotlin_params(node) -> str:
             continue
         name = _extract_identifier(child)
         type_node = (
-                _first_child_by_type(child, "user_type")
-                or _first_child_by_type(child, "nullable_type")
-                or _first_child_by_type(child, "function_type")
+            _first_child_by_type(child, "user_type")
+            or _first_child_by_type(child, "nullable_type")
+            or _first_child_by_type(child, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         if name and type_str:
@@ -136,9 +136,9 @@ def _extract_class_properties(body_node) -> list[PropertyContract]:
         if not name:
             continue
         type_node = (
-                _first_child_by_type(var_decl, "user_type")
-                or _first_child_by_type(var_decl, "nullable_type")
-                or _first_child_by_type(var_decl, "function_type")
+            _first_child_by_type(var_decl, "user_type")
+            or _first_child_by_type(var_decl, "nullable_type")
+            or _first_child_by_type(var_decl, "function_type")
         )
         type_str = _node_text(type_node) if type_node else ""
         properties.append(PropertyContract(name=name, signature=type_str))
@@ -255,7 +255,7 @@ def _process_top_level_function(node, routines: dict[str, RoutineContract]) -> N
 
 
 def _collect_contracts(
-        kt_files: list[Path],
+    kt_files: list[Path],
 ) -> tuple[
     dict[str, EntityContract],
     dict[str, RoutineContract],

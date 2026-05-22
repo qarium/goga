@@ -190,7 +190,7 @@ def _process_swift_function(node, routines: dict[str, RoutineContract]) -> None:
 
 
 def _collect_contracts(
-        swift_files: list[Path],
+    swift_files: list[Path],
 ) -> tuple[dict[str, EntityContract], dict[str, RoutineContract]]:
     entities: dict[str, EntityContract] = {}
     routines: dict[str, RoutineContract] = {}

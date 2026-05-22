@@ -146,15 +146,15 @@ class TestHelpOutput:
         result = runner.invoke(build_cmd, ["--help"])
         output = result.output
         for opt in (
-                "--dry-run",
-                "--worktree",
-                "--skip-finalize",
-                "--skip-manifest-check",
-                "--session-timeout",
-                "--idle-timeout",
-                "--wait",
-                "--max-iterations",
-                "--review-patience",
+            "--dry-run",
+            "--worktree",
+            "--skip-finalize",
+            "--skip-manifest-check",
+            "--session-timeout",
+            "--idle-timeout",
+            "--wait",
+            "--max-iterations",
+            "--review-patience",
         ):
             assert opt in output, f"Option {opt} not found in help output"
 

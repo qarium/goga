@@ -154,11 +154,11 @@ def _process_method_declaration(node, methods_by_receiver: dict[str, list[Method
 
 
 def _parse_file(
-        tree,
-        entities: dict[str, EntityContract],
-        routines: dict[str, RoutineContract],
-        methods_by_receiver: dict[str, list[MethodContract]],
-        struct_names: set[str],
+    tree,
+    entities: dict[str, EntityContract],
+    routines: dict[str, RoutineContract],
+    methods_by_receiver: dict[str, list[MethodContract]],
+    struct_names: set[str],
 ) -> None:
     for node in tree.root_node.children:
         if node.type == "function_declaration":
