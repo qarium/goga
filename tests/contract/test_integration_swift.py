@@ -130,7 +130,7 @@ class TestFullCycleSwiftPackageViaCLI:
     - Routine (public func) with signature
     """
 
-    def test_full_cycle_all_swift_structures(self, tmp_path) -> None:
+    def test_full_cycle_all_swift_structures(self, tmp_path) -> None:  # noqa: PLR0915
         cell = tmp_path / "swift_cell"
         cell.mkdir()
         _write_codemanifest(cell, SWIFT_FULL_CODEMANIFEST)
