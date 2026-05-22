@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -10,8 +11,6 @@ import pytest
 from click.testing import CliRunner
 from goga.commands import sync as facade_sync
 from goga.commands.sync import sync
-import sys
-
 from goga.sync.sync import (
     _extract_dep_name,
     _is_git_url,

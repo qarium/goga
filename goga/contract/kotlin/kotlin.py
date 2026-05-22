@@ -8,22 +8,18 @@ import tree_sitter_kotlin as tskotlin
 from tree_sitter import Language, Parser
 
 from ..data import EntityContract, MethodContract, PropertyContract, RoutineContract
+from ..treesitter_utils import (
+    first_child_by_type as _first_child_by_type,
+)
+from ..treesitter_utils import (
+    node_text as _node_text,
+)
+from ..treesitter_utils import (
+    sort_contracts,
+)
 
 _KOTLIN_LANG = Language(tskotlin.language())
 _PARSER = Parser(_KOTLIN_LANG)
-
-
-def _node_text(node) -> str:
-    if node is None:
-        return ""
-    return node.text.decode("utf-8")
-
-
-def _first_child_by_type(node, type_name):
-    for child in node.children:
-        if child.type == type_name:
-            return child
-    return None
 
 
 def _extract_identifier(node) -> str:
@@ -328,12 +324,4 @@ def kotlin_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
         if receiver_type in entities:
             entities[receiver_type].methods.extend(methods)
 
-    # Sort properties and methods within each entity
-    for entity in entities.values():
-        entity.properties.sort(key=lambda p: p.name)
-        entity.methods.sort(key=lambda m: m.name)
-
-    sorted_entities = sorted(entities.values(), key=lambda e: e.name)
-    sorted_routines = sorted(routines.values(), key=lambda r: r.name)
-
-    return sorted_entities + sorted_routines
+    return sort_contracts(entities, routines)

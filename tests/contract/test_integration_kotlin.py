@@ -166,4 +166,5 @@ class TestFullCycleKotlinPackageViaCLI:
         # formatName — top-level function (Routine)
         assert "formatName" in cell_data
         assert cell_data["formatName"]["signature"]["codemanifest"] == "(firstName: String, lastName: String) -> String"
-        assert cell_data["formatName"]["signature"]["implementation"] == "(firstName: String, lastName: String) -> String"
+        assert cell_data["formatName"]["signature"][
+                   "implementation"] == "(firstName: String, lastName: String) -> String"
