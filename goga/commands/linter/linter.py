@@ -6,6 +6,7 @@ import click
 import yaml
 
 from ...ast import AST
+from ...ast.ast import _flatten_tree
 
 
 @click.command()
@@ -38,4 +39,9 @@ def linter(ctx: click.Context, path: str) -> None:
             for line in yaml_str.splitlines():
                 click.echo(f"      {line}")
 
-    ctx.exit(1 if ast_obj.errors else 0)
+    click.echo("")
+    cell_count = len(_flatten_tree(ast_obj.tree))
+    error_count = len(ast_obj.errors)
+    summary = f"goga linter\n-------------------------\ncells: {cell_count} errors: {error_count}"
+    click.echo(summary)
+    ctx.exit(1 if error_count > 0 else 0)

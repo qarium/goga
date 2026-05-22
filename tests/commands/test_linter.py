@@ -206,6 +206,71 @@ class TestErrorFormat:
         assert sep_line.strip() == "---", f"Expected '---' separator, got: {sep_line!r}"
 
 
+class TestSummary:
+    def test_summary_output_valid_project(self, tmp_path) -> None:
+        project_dir = _setup_valid_project(tmp_path)
+
+        result = _run_linter(project_dir)
+
+        assert "cells: 2 errors: 0" in result.output
+        assert "goga linter" in result.output
+        assert "-------------------------" in result.output
+        assert result.exit_code == 0
+
+    def test_summary_after_errors(self, tmp_path) -> None:
+        project_dir = tmp_path / "bad_summary"
+        project_dir.mkdir()
+        _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
+
+        result = _run_linter(str(project_dir))
+
+        assert "cells: 1 errors: 2" in result.output
+        assert "goga linter" in result.output
+        assert result.exit_code == 1
+
+
+class TestSummaryBehavior:
+    def test_summary_format_exact(self, tmp_path) -> None:
+        project_dir = _setup_valid_project(tmp_path)
+
+        result = _run_linter(project_dir)
+
+        lines = result.output.splitlines()
+        summary_lines = [ln for ln in lines if ln == "goga linter"]
+        assert len(summary_lines) == 1
+        idx = lines.index("goga linter")
+        assert lines[idx + 1] == "-------------------------"
+        assert lines[idx + 2] == "cells: 2 errors: 0"
+
+    def test_summary_minimal_project_no_errors(self, tmp_path) -> None:
+        empty_dir = tmp_path / "empty_project"
+        empty_dir.mkdir()
+        (empty_dir / "CODEMANIFEST").write_text(
+            "Usages: {}\nAnnotations: \"\"\n",
+            encoding="utf-8",
+        )
+
+        result = _run_linter(str(empty_dir))
+
+        assert "cells: 1 errors: 0" in result.output
+        assert "goga linter" in result.output
+        assert result.exit_code == 0
+
+    def test_empty_line_before_summary(self, tmp_path) -> None:
+        project_dir = tmp_path / "empty_line_project"
+        project_dir.mkdir()
+        _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
+
+        result = _run_linter(str(project_dir))
+
+        lines = result.output.splitlines()
+        yaml_lines = [i for i, ln in enumerate(lines) if ln.startswith("      ")]
+        assert len(yaml_lines) > 0
+        last_yaml = yaml_lines[-1]
+        assert lines[last_yaml + 1] == ""
+        assert lines[last_yaml + 2] == "goga linter"
+
+
 class TestExitCodes:
     def test_invalid_project_exits_one(self, tmp_path) -> None:
         project_dir = tmp_path / "exit_project"
