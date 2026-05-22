@@ -529,9 +529,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch(
                 "urllib.request.urlopen",
-                side_effect=urllib.error.HTTPError(
-                    "https://example.com", 404, "Not Found", {}, None
-                ),
+                side_effect=urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None),
             ),
         ):
             result = CliRunner().invoke(app, ["install"])

@@ -142,9 +142,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
             click.echo(f"Error: {exc}", err=True)
             ctx.exit(1)
 
-        result[os.path.normpath(doc.path)] = _build_cell_compare(
-            doc.body.entities, doc.body.routines, impl_contracts
-        )
+        result[os.path.normpath(doc.path)] = _build_cell_compare(doc.body.entities, doc.body.routines, impl_contracts)
 
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)

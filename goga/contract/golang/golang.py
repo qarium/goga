@@ -6,6 +6,8 @@ import tree_sitter_go as tsgo
 from tree_sitter import Language, Parser
 
 from ..data import EntityContract, MethodContract, PropertyContract, RoutineContract
+from ..treesitter_utils import node_text as _node_text
+from ..treesitter_utils import sort_contracts
 
 GO_LANG = Language(tsgo.language())
 _PARSER = Parser(GO_LANG)
@@ -13,12 +15,6 @@ _PARSER = Parser(GO_LANG)
 
 def _is_exported(name: str) -> bool:
     return bool(name) and name[0].isupper()
-
-
-def _node_text(node) -> str:
-    if node is None:
-        return ""
-    return node.text.decode("utf-8")
 
 
 def _extract_params(param_list_node) -> str:
@@ -84,9 +80,7 @@ def _extract_struct_fields(struct_node) -> list[PropertyContract]:
                     if name_node is not None and type_node is not None:
                         name = _node_text(name_node)
                         if _is_exported(name):
-                            fields.append(
-                                PropertyContract(name=name, signature=_node_text(type_node))
-                            )
+                            fields.append(PropertyContract(name=name, signature=_node_text(type_node)))
     return fields
 
 
@@ -204,11 +198,4 @@ def golang_contract(cell_path: str) -> list[EntityContract | RoutineContract]:
         if recv_name in struct_names:
             entities[recv_name].methods.extend(methods)
 
-    for entity in entities.values():
-        entity.properties.sort(key=lambda p: p.name)
-        entity.methods.sort(key=lambda m: m.name)
-
-    sorted_entities = sorted(entities.values(), key=lambda e: e.name)
-    sorted_routines = sorted(routines.values(), key=lambda r: r.name)
-
-    return sorted_entities + sorted_routines
+    return sort_contracts(entities, routines)

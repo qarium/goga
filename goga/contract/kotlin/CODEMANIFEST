@@ -1,0 +1,51 @@
+Imports:
+  - Types:
+      - EntityContract
+      - RoutineContract
+    Usages:
+      - contract_data
+    From: goga/contract/data
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+  tree-sitter-kotlin: .goga/usages/cooks/tree-sitter-kotlin.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Для парсинга Kotlin-файлов использовать практику `tree-sitter-kotlin`.
+
+---
+
+"kotlin_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
+  location: kotlin.py
+  annotations: |
+    Собрать все экспортируемые объекты с фасада Kotlin-пакета по указанному пути.
+    Использовать практику `contract_data` для формирования результатов.
+
+    `cell_path`: путь до Kotlin-пакета (каталог с .kt файлами)
+
+    Алгоритм:
+    - найти все .kt файлы в каталоге
+    - для каждого файла — распарсить AST через практику `tree-sitter-kotlin`
+    - извлечь public декларации:
+      - class/data class/sealed class/interface/enum class → EntityContract (constructor params → signature, properties, methods)
+      - fun верхнего уровня → RoutineContract
+      - object declaration → EntityContract
+    - для EntityContract (class) — найти extension/member функции с соответствующим ресивером
+    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+
+    Требования:
+    - только public декларации входят в контракт (internal/private пропускаются)
+    - аннотации типов Kotlin входят в контракт
+    - порядок аргументов важен
+    - nullability (T?) входит в тип
+    - camelCase для имён функций/свойств, PascalCase для классов
+    - EntityContract для class получает signature из primary constructor
+
+---
+
+Author: Goga
+CreatedAt: 21/05/26
+
+Description: |
+  Извлечение контракта с фасада Kotlin-пакета через tree-sitter-kotlin

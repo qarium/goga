@@ -7,4 +7,4 @@ result = contract("python", "path/to/cell")
 # result: list[goga.contract.EntityContract | goga.contract.RoutineContract]
 ```
 
-Язык передаётся строкой: "python", "golang". При неизвестном языке — ValueError.
+Язык передаётся строкой: "python", "golang", "javascript", "kotlin", "swift". При неизвестном языке — ValueError.

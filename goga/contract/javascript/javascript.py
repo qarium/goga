@@ -9,6 +9,8 @@ import tree_sitter_javascript as tsjs
 from tree_sitter import Language, Parser
 
 from ..data import EntityContract, MethodContract, PropertyContract, RoutineContract
+from ..treesitter_utils import node_text as _node_text
+from ..treesitter_utils import sort_contracts
 
 JS_LANG = Language(tsjs.language())
 _PARSER = Parser(JS_LANG)
@@ -34,6 +36,7 @@ def _extract_braced_type(text: str, start_pos: int) -> str:
                 return text[brace_start + 1 : i]
     return ""
 
+
 _FUNCTION_TYPES = frozenset(
     {
         "function_declaration",
@@ -44,12 +47,6 @@ _FUNCTION_TYPES = frozenset(
 )
 _CLASS_TYPES = frozenset({"class_declaration", "class"})
 _FUNC_EXPR_TYPES = frozenset({"arrow_function", "function_expression", "generator_function"})
-
-
-def _node_text(node) -> str:
-    if node is None:
-        return ""
-    return node.text.decode("utf-8")
 
 
 def _extract_params(params_node) -> str:
@@ -261,13 +258,7 @@ def javascript_contract(cell_path: str) -> list[EntityContract | RoutineContract
         elif node.type == "expression_statement":
             _process_expression_statement(node, declarations, entities, routines)
 
-    for entity in entities.values():
-        entity.properties.sort(key=lambda p: p.name)
-        entity.methods.sort(key=lambda m: m.name)
-    sorted_entities = sorted(entities.values(), key=lambda e: e.name)
-    sorted_routines = sorted(routines.values(), key=lambda r: r.name)
-
-    return sorted_entities + sorted_routines
+    return sort_contracts(entities, routines)
 
 
 def _process_export_statement(  # noqa: C901, PLR0912

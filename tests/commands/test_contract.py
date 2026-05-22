@@ -25,9 +25,7 @@ def _write_codemanifest(directory: Path, content: str) -> None:
 
 def _write_goga_yml(directory: Path) -> None:
     (directory / ".goga").mkdir(exist_ok=True)
-    (directory / ".goga" / "config.yml").write_text(
-        "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (directory / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n")
 
 
 @contextmanager
@@ -130,12 +128,7 @@ CreatedAt: 01/01/01
 Description: Test
 """
 
-ROUTINE_IMPL = (
-    "def my_func(x: int) -> int:\n"
-    "    return x\n"
-    "\n"
-    "__all__ = ['my_func']\n"
-)
+ROUTINE_IMPL = "def my_func(x: int) -> int:\n    return x\n\n__all__ = ['my_func']\n"
 
 GO_ENTITY_CODEMANIFEST = """\
 Usages: {}
@@ -249,9 +242,7 @@ def test_contract_entity_missing_in_implementation(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
-    (cell / "__init__.py").write_text(
-        "class OtherClass:\n    pass\n\n__all__ = ['OtherClass']\n", encoding="utf-8"
-    )
+    (cell / "__init__.py").write_text("class OtherClass:\n    pass\n\n__all__ = ['OtherClass']\n", encoding="utf-8")
     _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
@@ -271,9 +262,7 @@ def test_contract_property_method_missing_in_implementation(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
-    (cell / "__init__.py").write_text(
-        "class MyClass:\n    pass\n\n__all__ = ['MyClass']\n", encoding="utf-8"
-    )
+    (cell / "__init__.py").write_text("class MyClass:\n    pass\n\n__all__ = ['MyClass']\n", encoding="utf-8")
     _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path), _sys_path(str(tmp_path)):
@@ -349,9 +338,7 @@ def test_contract_extra_in_implementation_ignored(tmp_path) -> None:
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
     (cell / "__init__.py").write_text(
-        ENTITY_IMPL
-        + "\n"
-        + "class ExtraClass:\n    pass\n\n__all__ = ['MyClass', 'ExtraClass']\n",
+        ENTITY_IMPL + "\n" + "class ExtraClass:\n    pass\n\n__all__ = ['MyClass', 'ExtraClass']\n",
         encoding="utf-8",
     )
     _write_goga_yml(tmp_path)
@@ -425,9 +412,7 @@ def test_contract_lang_from_config(tmp_path) -> None:
 
 def test_contract_lang_cli_overrides_config(tmp_path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(
-        "language: go\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (tmp_path / ".goga" / "config.yml").write_text("language: go\nbuild:\n  task_executor:\n    agent: claude\n")
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
@@ -456,9 +441,7 @@ def test_contract_config_missing(tmp_path) -> None:
 
 def test_contract_config_invalid_language(tmp_path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(
-        "language: \"\"\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (tmp_path / ".goga" / "config.yml").write_text('language: ""\nbuild:\n  task_executor:\n    agent: claude\n')
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
@@ -550,7 +533,7 @@ def test_contract_golang_lang_cli(tmp_path) -> None:
     cell.mkdir()
     _write_codemanifest(cell, GO_ENTITY_CODEMANIFEST)
     (cell / "service.go").write_text(
-        "package cell_one\n\nfunc Hello(name string) string { return \"Hello \" + name }\n",
+        'package cell_one\n\nfunc Hello(name string) string { return "Hello " + name }\n',
         encoding="utf-8",
     )
     _write_goga_yml(tmp_path)
@@ -575,7 +558,7 @@ def test_contract_default_lang_from_config_golang(tmp_path) -> None:
     cell.mkdir()
     _write_codemanifest(cell, GO_ENTITY_CODEMANIFEST)
     (cell / "service.go").write_text(
-        "package cell_one\n\nfunc Hello(name string) string { return \"Hello \" + name }\n",
+        'package cell_one\n\nfunc Hello(name string) string { return "Hello " + name }\n',
         encoding="utf-8",
     )
 

@@ -20,4 +20,12 @@ def contract(lang: str, cell_path: str) -> list[EntityContract | RoutineContract
         from .javascript import javascript_contract
 
         return javascript_contract(cell_path)
+    if lang == "kotlin":
+        from .kotlin import kotlin_contract
+
+        return kotlin_contract(cell_path)
+    if lang == "swift":
+        from .swift import swift_contract
+
+        return swift_contract(cell_path)
     raise ValueError(f"unsupported language: {lang}")

@@ -1,4 +1,5 @@
 """Integration tests for commands-split: CLI wrappers delegate to business logic cells."""
+
 from __future__ import annotations
 
 import importlib
@@ -73,9 +74,7 @@ class TestSchemaDelegation:
         )
 
         with (
-            mock.patch.object(
-                _schema_mod, "schema_logic", return_value='[{"cell": "."}]'
-            ) as mock_logic,
+            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "."}]') as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -87,9 +86,7 @@ class TestSchemaDelegation:
 
     def test_schema_delegates_with_cells_and_options(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(
-                _schema_mod, "schema_logic", return_value='[{"cell": "pkg_a"}]'
-            ) as mock_logic,
+            mock.patch.object(_schema_mod, "schema_logic", return_value='[{"cell": "pkg_a"}]') as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -100,9 +97,7 @@ class TestSchemaDelegation:
 
     def test_schema_handles_value_error_from_logic(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(
-                _schema_mod, "schema_logic", side_effect=ValueError("2 error(s) found")
-            ),
+            mock.patch.object(_schema_mod, "schema_logic", side_effect=ValueError("2 error(s) found")),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -123,9 +118,7 @@ class TestSchemaDelegation:
 
 def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text(
-        "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
-    )
+    (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n")
 
 
 class TestBuildDelegation:
@@ -189,11 +182,16 @@ class TestBuildDelegation:
                     "--skip-manifest-check",
                     "--worktree",
                     "--skip-finalize",
-                    "--session-timeout", "30m",
-                    "--idle-timeout", "5m",
-                    "--wait", "10s",
-                    "--max-iterations", "5",
-                    "--review-patience", "3",
+                    "--session-timeout",
+                    "30m",
+                    "--idle-timeout",
+                    "5m",
+                    "--wait",
+                    "10s",
+                    "--max-iterations",
+                    "5",
+                    "--review-patience",
+                    "3",
                     "my-plan.md",
                 ],
             )
@@ -293,9 +291,7 @@ class TestAllCommandsDelegationViaApp:
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(
-                _schema_mod, "schema_logic", return_value="[]"
-            ) as mock_logic,
+            mock.patch.object(_schema_mod, "schema_logic", return_value="[]") as mock_logic,
             _cwd(tmp_path),
         ):
             runner = CliRunner()

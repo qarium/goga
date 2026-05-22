@@ -2198,9 +2198,7 @@ class TestUsageUrlIsAccessible:
         assert errors == []
 
     def test_usage_url_http_error_non_200(self):
-        http_error = urllib.error.HTTPError(
-            "https://example.com/docs.md", 404, "Not Found", None, None
-        )
+        http_error = urllib.error.HTTPError("https://example.com/docs.md", 404, "Not Found", None, None)
         with patch("urllib.request.urlopen", side_effect=http_error):
             root = DocumentRoot(
                 header=HeaderNode(
@@ -2222,9 +2220,7 @@ class TestUsageUrlIsAccessible:
             assert "HTTP 404" in errors[0].message
 
     def test_usage_url_http_error_500(self):
-        http_error = urllib.error.HTTPError(
-            "https://example.com/docs.md", 500, "Internal Server Error", None, None
-        )
+        http_error = urllib.error.HTTPError("https://example.com/docs.md", 500, "Internal Server Error", None, None)
         with patch("urllib.request.urlopen", side_effect=http_error):
             root = DocumentRoot(
                 header=HeaderNode(
@@ -2273,9 +2269,7 @@ class TestUsageUrlIsAccessible:
         mock_get_response.status = 200
         mock_get_response.__enter__ = MagicMock(return_value=mock_get_response)
         mock_get_response.__exit__ = MagicMock(return_value=False)
-        head_error = urllib.error.HTTPError(
-            "https://example.com/docs.md", 405, "Method Not Allowed", None, None
-        )
+        head_error = urllib.error.HTTPError("https://example.com/docs.md", 405, "Method Not Allowed", None, None)
 
         with patch("urllib.request.urlopen", side_effect=[head_error, mock_get_response]):
             root = DocumentRoot(
@@ -2296,9 +2290,7 @@ class TestUsageUrlIsAccessible:
             assert errors == []
 
     def test_usage_url_head_fallback_get_also_fails(self):
-        head_error = urllib.error.HTTPError(
-            "https://example.com/docs.md", 405, "Method Not Allowed", None, None
-        )
+        head_error = urllib.error.HTTPError("https://example.com/docs.md", 405, "Method Not Allowed", None, None)
         get_error = urllib.error.URLError("connection refused")
         with patch("urllib.request.urlopen", side_effect=[head_error, get_error]):
             root = DocumentRoot(

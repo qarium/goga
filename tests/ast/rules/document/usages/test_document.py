@@ -26,13 +26,17 @@ from goga.ast.rules.document.usages.rules import (
 
 def _mock_response(status: int = 200):
     """Create a mock HTTP response supporting the context manager protocol."""
+
     class MockResp:
         def __init__(self) -> None:
             self.status = status
+
         def __enter__(self):
             return self
+
         def __exit__(self, *args: object) -> None:
             pass
+
     return MockResp()
 
 

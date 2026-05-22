@@ -20,6 +20,16 @@ Imports:
     Usages:
       - javascript_contract AS use_js_contract
     From: goga/contract/javascript
+  - Types:
+      - kotlin_contract
+    Usages:
+      - kotlin_contract AS use_kt_contract
+    From: goga/contract/kotlin
+  - Types:
+      - swift_contract
+    Usages:
+      - swift_contract AS use_sw_contract
+    From: goga/contract/swift
 
 Usages:
   convention: .goga/usages/development/conventions.md
@@ -40,13 +50,15 @@ Annotations: |
   annotations: |
     Диспетчер контрактных операций по языку реализации.
 
-    `lang`: язык реализации ("python", "golang", "javascript")
+    `lang`: язык реализации ("python", "golang", "javascript", "kotlin", "swift")
     `cell_path`: путь до ячейки
 
     Алгоритм:
     - "python" → вызвать `python_contract`(`cell_path`), использовать практику `use_py_contract`
     - "golang" → вызвать `golang_contract`(`cell_path`), использовать практику `use_go_contract`
     - "javascript" → вызвать `javascript_contract`(`cell_path`), использовать практику `use_js_contract`
+    - "kotlin" → вызвать `kotlin_contract`(`cell_path`), использовать практику `use_kt_contract`
+    - "swift" → вызвать `swift_contract`(`cell_path`), использовать практику `use_sw_contract`
     - неизвестный язык → ValueError
 
 ---

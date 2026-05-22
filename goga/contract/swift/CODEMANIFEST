@@ -1,0 +1,50 @@
+Imports:
+  - Types:
+      - EntityContract
+      - RoutineContract
+    Usages:
+      - contract_data
+    From: goga/contract/data
+
+Usages:
+  conventions: .goga/usages/development/conventions.md
+  tree-sitter-swift: .goga/usages/cooks/tree-sitter-swift.md
+
+Annotations: |
+  При разработке и тестировании использовать практику `conventions`.
+  Для парсинга Swift-файлов использовать практику `tree-sitter-swift`.
+
+---
+
+"swift_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
+  location: swift.py
+  annotations: |
+    Собрать все экспортируемые объекты с фасада Swift-модуля по указанному пути.
+    Использовать практику `contract_data` для формирования результатов.
+
+    `cell_path`: путь до Swift-модуля (каталог с .swift файлами)
+
+    Алгоритм:
+    - найти все .swift файлы в каталоге
+    - для каждого файла — распарсить AST через практику `tree-sitter-swift`
+    - извлечь public декларации:
+      - public class/struct/actor/enum → EntityContract (init params → signature, properties, methods)
+      - public func верхнего уровня → RoutineContract
+      - public protocol → EntityContract (только methods, без properties)
+    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+
+    Требования:
+    - только public декларации входят в контракт (internal/private пропускаются)
+    - аннотации типов Swift входят в контракт
+    - порядок аргументов важен
+    - optionals (T?) входят в тип
+    - camelCase для имён функций/свойств, PascalCase для типов
+    - EntityContract для class/struct получает signature из init
+
+---
+
+Author: Goga
+CreatedAt: 21/05/26
+
+Description: |
+  Извлечение контракта с фасада Swift-модуля через tree-sitter-swift

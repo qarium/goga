@@ -64,7 +64,7 @@ class TestUnquoteGitPath:
         assert _unquote_git_path('"hello world.txt"') == "hello world.txt"
 
     def test_double_backslash_replacement(self) -> None:
-        assert _unquote_git_path('"hello\\\\world"') == 'hello\\world'
+        assert _unquote_git_path('"hello\\\\world"') == "hello\\world"
 
     def test_unclosed_quote(self) -> None:
         assert _unquote_git_path('"no end') is None
