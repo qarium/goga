@@ -23,7 +23,7 @@ Imports:
 
 Usages:
   dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
-  conventions: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
   yaml: |
     Библиотека pyyaml для парсинга yaml документов
     Библиотека требует указания зависимости в проекте

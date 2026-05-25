@@ -1,8 +1,8 @@
 Usages:
-  convention: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `convention`.
+  При разработке и тестировании использовать практику `conventions`.
   Вывод ошибок через sys.stderr (click не используется).
   Использовать shutil, subprocess, tempfile, pathlib из стандартной библиотеки.
 

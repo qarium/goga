@@ -6,11 +6,11 @@ Imports:
     From: goga/config
 
 Usages:
-  convention: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
   ralphex: .goga/usages/cooks/ralphex.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `convention`.
+  При разработке и тестировании использовать практику `conventions`.
   Для сборки использовать практику `ralphex`.
   Вывод информации через sys.stderr (click не используется).
   Использовать subprocess для запуска внешних команд.

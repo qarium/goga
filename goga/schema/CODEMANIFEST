@@ -4,7 +4,7 @@ Imports:
     From: goga/ast
 
 Usages:
-  convention: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
   documents: |
     Работать с типом `AST`.
     - Загрузить проект с использованием AST.load()
@@ -15,7 +15,7 @@ Usages:
     json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
 
 Annotations: |
-  При разработке и тестировании использовать практику `convention`.
+  При разработке и тестировании использовать практику `conventions`.
   Использовать практику `documents` для загрузки дерева проекта.
   Результат форматировать через практику `beautiful_json`.
 

@@ -42,7 +42,7 @@ Imports:
     From: goga/ast/rules/ast
 
 Usages:
-  conventions: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
 
 Annotations: |
   При разработке и тестировании использовать практику `conventions`.

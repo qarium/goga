@@ -32,10 +32,10 @@ Imports:
     From: goga/contract/swift
 
 Usages:
-  convention: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `convention`.
+  При разработке и тестировании использовать практику `conventions`.
   Клетка — фасад для всех контрактных операций.
 
 ---

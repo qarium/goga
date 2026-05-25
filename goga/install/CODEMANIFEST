@@ -4,10 +4,10 @@ Imports:
     From: goga/config
 
 Usages:
-  convention: .goga/usages/development/conventions.md
+  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `convention`.
+  При разработке и тестировании использовать практику `conventions`.
   Использовать urllib.request из стандартной библиотеки для HTTP-запросов.
   Использовать shutil для копирования файлов.
   Вывод информации через sys.stderr (click не используется).
