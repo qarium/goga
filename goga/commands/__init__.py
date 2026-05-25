@@ -5,5 +5,6 @@ from .install import install
 from .linter import linter
 from .schema import schema
 from .sync import sync
+from .tool import tool
 
-__all__ = ["build", "config", "contract", "install", "linter", "schema", "sync"]
+__all__ = ["build", "config", "contract", "install", "linter", "schema", "sync", "tool"]

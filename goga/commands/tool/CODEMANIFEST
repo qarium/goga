@@ -1,0 +1,49 @@
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/development/conventions.md
+
+Annotations: |
+  Практика `convention` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Динамический импорт через importlib.import_module (stdlib).
+
+---
+
+"tool(name: str, args: list[str])":
+  location: tool.py
+  annotations: |
+    CLI-обёртка команды динамического вызова tool-пакета.
+
+    `name`: имя tool-пакета (без префикса goga_tool_). CLI-позиционный аргумент.
+    `args`: произвольные аргументы, передаваемые в main tool-пакета.
+            Получены через ctx.args (allow_extra_args=True).
+
+    Click-декораторы:
+    - @click.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
+    - @click.argument('name')
+    - @click.pass_context
+
+    Алгоритм:
+    1. Сформировать имя пакета: f"goga_tool_{name}"
+    2. Импортировать пакет через importlib.import_module
+    3. Получить функцию main из импортированного пакета
+    4. Вызвать main(args)
+
+    Обработка ошибок:
+    - Пакет не найден (ModuleNotFoundError) → понятное сообщение через click.secho
+    - Функция main отсутствует (AttributeError) → понятное сообщение через click.secho
+
+    Использовать практику `click` для создания команды.
+
+---
+
+Author: Goga
+CreatedAt: 25/05/26
+
+Description: |
+  CLI-обёртка команды goga tool — динамический вызов внешних tool-пакетов

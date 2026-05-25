@@ -20,6 +20,9 @@ Imports:
   - Types:
       - sync
     From: goga/commands/sync
+  - Types:
+      - tool
+    From: goga/commands/tool
 
 Usages:
   convention: .goga/usages/development/conventions.md
@@ -41,6 +44,7 @@ Annotations: |
 ->contract: {}
 ->config: {}
 ->sync: {}
+->tool: {}
 
 ---
 
