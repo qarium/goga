@@ -19,12 +19,16 @@ exit_code = install(agent=None, config=config)
 
 # Установка с явным agent
 exit_code = install(agent="claude", config=config)
+
+# Установка с перезаписью tool skills
+exit_code = install(agent="claude", config=config, force_overwrite=True)
 ```
 
 ## Параметры
 
 - `agent` — целевой AI-агент ("claude"). Если None — из config
 - `config` — объект Config, загруженный через `load_config`
+- `force_overwrite` — разрешить перезапись существующих скиллов из пакетов инструментов. По умолчанию False
 
 ## Возвращаемое значение
 
@@ -37,6 +41,10 @@ exit_code = install(agent="claude", config=config)
 - Копирует goga/agent/commands/* → <target>/commands/goga/
 - Копирует goga/agent/skills/* → <target>/skills/
 - Скачивает dsl.md из GitHub и записывает в <target>/skills/goga-cell/dsl.md
+- Обнаруживает Python-пакеты с префиксом `goga_tool_*` через importlib.metadata
+- Копирует скиллы из обнаруженных пакетов в <target>/skills/ с префиксом `goga-tool-`
+- При `force_overwrite=False` — пропускает существующие скиллы с предупреждением
+- При `force_overwrite=True` — перезаписывает существующие скиллы
 
 ## Целевые каталоги
 

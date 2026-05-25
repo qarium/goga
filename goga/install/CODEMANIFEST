@@ -14,13 +14,15 @@ Annotations: |
 
 ---
 
-"install(agent: str | None, config: Config) -> exit_code:int":
+"install(agent: str | None, config: Config, force_overwrite: bool = False) -> exit_code:int":
   location: install.py
   annotations: |
-    Установка скиллов и команд goga для выбранного AI-агента.
+    Установка скиллов и команд goga для выбранного AI-агента,
+    включая скиллы из установленных пакетов инструментов.
 
     `agent`: целевой AI-агент. Если None — берётся из config
     `config`: загруженная конфигурация проекта
+    `force_overwrite`: разрешить перезапись существующих скиллов. По умолчанию False
     `exit_code`: код возврата (0 успех, 1 ошибка)
 
     Алгоритм:
@@ -40,15 +42,34 @@ Annotations: |
        - HTTP GET через urllib.request
        - Записать в <target>/skills/goga-cell/dsl.md
        - При ошибке сети — exit 1
-    6. Вывести список установленных скиллов и команд
+    6. Установить скиллы из пакетов инструментов:
+       a. Обнаружить все установленные Python-пакеты с префиксом goga_tool_
+          через importlib.metadata.packages_distributions()
+       b. Для каждого найденного пакета goga_tool_<tool_name>:
+          - Получить путь к пакету: найти файл __init__.py внутри пакета,
+            определить родительский каталог как корень пакета
+          - Валидация: проверить наличие <package>/skills/<tool_name>/SKILL.md
+            - Если не найден — вывести предупреждение в stderr
+              и пропустить весь пакет
+          - Скопировать все скиллы из <package>/skills/* в <target>/skills/
+            с добавлением префикса goga-tool- к имени каждого скилла:
+            - <package>/skills/debug/ → <target>/skills/goga-tool-debug/
+            - <package>/skills/analyze/ → <target>/skills/goga-tool-analyze/
+          - Если целевой скилл уже существует и force_overwrite=False —
+            пропустить с предупреждением в stderr
+          - Если force_overwrite=True — перезаписать (shutil.rmtree + shutil.copytree)
+    7. Вывести список установленных скиллов и команд
 
     Требования:
-    - Полное пересоздание goga-папок (удаление + копирование)
+    - Полное пересоздание goga-папок при шаге 3 (удаление + копирование)
     - Существующий контент других расширений не затрагивать
     - CLAUDE.md, settings.json, README.md целевого каталога не затрагивать
     - dsl.md скачивается из внешнего репозитория при каждой установке
     - Использовать urllib.request (без внешних зависимостей)
-    - При ошибке скачивания — прервать с кодом 1
+    - Использовать importlib.metadata из стандартной библиотеки
+    - При ошибке скачивания dsl.md — прервать с кодом 1
+    - Имя скилла из инструмента формируется как goga-tool-<skill_dir_name>
+    - Пакет инструмента без entry-point скилла пропускается целиком
 
 ---
 
@@ -56,4 +77,5 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает логику установки скиллов и команд goga
+  Манифест описывает логику установки скиллов и команд goga,
+  включая установку скиллов из пакетов инструментов goga_tool_*

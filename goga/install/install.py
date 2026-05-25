@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib.metadata
+import importlib.util
 import shutil
 import sys
 import urllib.error
@@ -75,7 +77,49 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
     print(f"Installed {len(skills)} skills: {', '.join(skills)}", file=sys.stderr)
 
 
-def install(agent: str | None = None, config: Config | None = None) -> int:
+def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:
+    pkg_map = importlib.metadata.packages_distributions()
+    tool_skills: list[str] = []
+    for top_level_name in sorted(pkg_map):
+        if not top_level_name.startswith("goga_tool_"):
+            continue
+        try:
+            spec = importlib.util.find_spec(top_level_name)
+        except (ModuleNotFoundError, ValueError):
+            continue
+        if spec is None or spec.origin is None:
+            continue
+        package_path = Path(spec.origin).parent
+        tool_name = top_level_name.removeprefix("goga_tool_")
+        if not (package_path / "skills" / tool_name / "SKILL.md").is_file():
+            print(
+                f"Warning: package {top_level_name} missing skills/{tool_name}/SKILL.md, skipping",
+                file=sys.stderr,
+            )
+            continue
+        try:
+            skills_dir = package_path / "skills"
+            for skill_entry in skills_dir.iterdir():
+                if not skill_entry.is_dir():
+                    continue
+                dest = target / "skills" / f"goga-tool-{skill_entry.name}"
+                if dest.exists():
+                    if not force_overwrite:
+                        print(
+                            f"Warning: skill {dest.name} already exists, skipping",
+                            file=sys.stderr,
+                        )
+                        continue
+                    shutil.rmtree(dest)
+                shutil.copytree(skill_entry, dest)
+                if dest.name not in tool_skills:
+                    tool_skills.append(dest.name)
+        except (OSError, shutil.Error) as e:
+            print(f"Warning: failed to install skills from {top_level_name}: {e}", file=sys.stderr)
+    return tool_skills
+
+
+def install(agent: str | None = None, config: Config | None = None, force_overwrite: bool = False) -> int:
     if config is None:
         print("Error: config is required", file=sys.stderr)
         return 1
@@ -99,8 +143,10 @@ def install(agent: str | None = None, config: Config | None = None) -> int:
         commands = _install_commands(source, target)
         skills = _install_skills(source, target)
         _download_dsl_spec(target)
+        tool_skills = _install_tool_skills(target, force_overwrite)
+        skills.extend(tool_skills)
         _print_summary(commands, skills, target)
-    except OSError as e:
+    except (OSError, shutil.Error) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
