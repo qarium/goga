@@ -547,6 +547,263 @@ class TestUsageUrlIsAccessibleExtra:
         assert "503" in errors[0].message
 
 
+    @patch("urllib.request.urlopen")
+    def test_cache_hit_returns_cached_result(self, mock_urlopen):
+        mock_response = _mock_response(200)
+        mock_urlopen.return_value = mock_response
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        rule.check(node)
+        mock_urlopen.assert_called_once()
+
+        mock_urlopen.reset_mock()
+        errors = rule.check(node)
+        assert errors == []
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_cache_stores_error_result(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            "https://example.com", 404, "Not Found", {}, None,
+        )
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors1 = rule.check(node)
+        assert len(errors1) == 1
+
+        mock_urlopen.reset_mock()
+        errors2 = rule.check(node)
+        assert len(errors2) == 1
+        assert errors1[0].message == errors2[0].message
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_different_urls_both_checked(self, mock_urlopen):
+        mock_response = _mock_response(200)
+        mock_urlopen.return_value = mock_response
+
+        usage_a = UsageItemNode(
+            name="alpha",
+            annotations=AnnotationsNode(root=None, url="https://alpha.com"),
+        )
+        usage_b = UsageItemNode(
+            name="beta",
+            annotations=AnnotationsNode(root=None, url="https://beta.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_a, usage_b])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        assert rule.check(node) == []
+        assert mock_urlopen.call_count == 2
+
+    @patch("urllib.request.urlopen")
+    def test_cache_persists_across_documents(self, mock_urlopen):
+        mock_response = _mock_response(200)
+        mock_urlopen.return_value = mock_response
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root1 = DocumentRoot(
+            path="doc1.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        root2 = DocumentRoot(
+            path="doc2.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node1 = DocumentNode(root=root1)
+        node2 = DocumentNode(root=root2)
+        rule = UsageUrlIsAccessible()
+
+        rule.check(node1)
+        assert mock_urlopen.call_count == 1
+
+        rule.check(node2)
+        assert mock_urlopen.call_count == 1
+
+    @patch("urllib.request.urlopen")
+    def test_cache_hit_with_network_error_returns_cached_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors1 = rule.check(node)
+        assert len(errors1) == 1
+        assert "failed" in errors1[0].message.lower()
+
+        mock_urlopen.reset_mock()
+        mock_urlopen.return_value = _mock_response(200)
+        errors2 = rule.check(node)
+        assert len(errors2) == 1
+        assert errors1[0].message == errors2[0].message
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_cache_empty_for_new_rule_instance(self, mock_urlopen):
+        mock_response = _mock_response(200)
+        mock_urlopen.return_value = mock_response
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule1 = UsageUrlIsAccessible()
+        rule1.check(node)
+        assert mock_urlopen.call_count == 1
+
+        rule2 = UsageUrlIsAccessible()
+        rule2.check(node)
+        assert mock_urlopen.call_count == 2
+
+    @patch("urllib.request.urlopen")
+    def test_cache_with_head_fallback_get(self, mock_urlopen):
+        head_error = urllib.error.HTTPError(
+            "https://example.com", 405, "Method Not Allowed", {}, None,
+        )
+        mock_response = _mock_response(200)
+        mock_urlopen.side_effect = [head_error, mock_response]
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        assert rule.check(node) == []
+        assert mock_urlopen.call_count == 2
+
+        mock_urlopen.reset_mock()
+        assert rule.check(node) == []
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_cache_with_head_fallback_get_failure(self, mock_urlopen):
+        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
+        get_error = urllib.error.URLError("Connection refused")
+        mock_urlopen.side_effect = [head_error, get_error]
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors1 = rule.check(node)
+        assert len(errors1) == 1
+        assert "failed" in errors1[0].message.lower()
+
+        mock_urlopen.reset_mock()
+        errors2 = rule.check(node)
+        assert len(errors2) == 1
+        assert errors1[0].message == errors2[0].message
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_cache_generic_exception(self, mock_urlopen):
+        mock_urlopen.side_effect = ValueError("unexpected error")
+
+        usage_item = UsageItemNode(
+            name="remote",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root = DocumentRoot(
+            path="test.md",
+            header=_make_header(usages=UsagesNode(items=[usage_item])),
+        )
+        node = DocumentNode(root=root)
+        rule = UsageUrlIsAccessible()
+        errors1 = rule.check(node)
+        assert len(errors1) == 1
+        assert "unexpected error" in errors1[0].message
+
+        mock_urlopen.reset_mock()
+        errors2 = rule.check(node)
+        assert len(errors2) == 1
+        assert errors1[0].message == errors2[0].message
+        mock_urlopen.assert_not_called()
+
+    @patch("urllib.request.urlopen")
+    def test_cache_rebuilds_errors_with_current_context(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            "https://example.com", 404, "Not Found", {}, None,
+        )
+
+        usage_a = UsageItemNode(
+            name="alpha",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        usage_b = UsageItemNode(
+            name="beta",
+            annotations=AnnotationsNode(root=None, url="https://example.com"),
+        )
+        root1 = DocumentRoot(
+            path="doc_a.md",
+            header=_make_header(usages=UsagesNode(items=[usage_a])),
+        )
+        root2 = DocumentRoot(
+            path="doc_b.md",
+            header=_make_header(usages=UsagesNode(items=[usage_b])),
+        )
+        node1 = DocumentNode(root=root1)
+        node2 = DocumentNode(root=root2)
+        rule = UsageUrlIsAccessible()
+
+        errors1 = rule.check(node1)
+        assert len(errors1) == 1
+        assert "alpha" in errors1[0].message
+        assert errors1[0].document.path == "doc_a.md"
+
+        errors2 = rule.check(node2)
+        assert len(errors2) == 1
+        assert "beta" in errors2[0].message
+        assert errors2[0].document.path == "doc_b.md"
+        mock_urlopen.assert_called_once()
+
+
 class TestUsageLinksHasNotConflictsExtra:
     """Extra edge cases for UsageLinksHasNotConflicts."""
 

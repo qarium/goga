@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 _OK_STATUS = 200
 _METHOD_NOT_ALLOWED = 405
-_REQUEST_TIMEOUT = 10
+_REQUEST_TIMEOUT = 5
 
 
 class AllUsagesIsUsed(DocumentRule):
@@ -122,6 +122,7 @@ class UsageUrlIsAccessible(DocumentRule):
 
     def __init__(self) -> None:
         super().__init__(name="usage_url_is_accessible")
+        self._url_cache: dict[str, None | tuple[str, int | object]] = {}
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         errors: list[DocumentRuleError] = []
@@ -138,31 +139,45 @@ class UsageUrlIsAccessible(DocumentRule):
         return errors
 
     def _check_url(self, item, url: str, document) -> list[DocumentRuleError]:
-        errors: list[DocumentRuleError] = []
+        if url in self._url_cache:
+            return self._outcome_to_errors(self._url_cache[url], item, url, document)
+
+        outcome = self._http_check(url)
+        self._url_cache[url] = outcome
+        return self._outcome_to_errors(outcome, item, url, document)
+
+    def _http_check(self, url: str) -> None | tuple[str, int | object]:
         try:
             request = urllib.request.Request(url, method="HEAD")
             with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT) as response:
                 if response.status != _OK_STATUS:
-                    errors.append(self._not_accessible(item, url, response.status, document))
+                    return ("http", response.status)
+                return None
         except urllib.error.HTTPError as e:
             if e.code == _METHOD_NOT_ALLOWED:
-                errors.extend(self._fallback_get(item, url, document))
-            else:
-                errors.append(self._not_accessible(item, url, e.code, document))
+                return self._check_via_get(url)
+            return ("http", e.code)
         except urllib.error.URLError as e:
-            errors.append(self._request_failed(item, url, e.reason, document))
+            return ("error", e.reason)
         except Exception as e:
-            errors.append(self._request_failed(item, url, e, document))
-        return errors
+            return ("error", e)
 
-    def _fallback_get(self, item, url: str, document) -> list[DocumentRuleError]:
+    def _check_via_get(self, url: str) -> None | tuple[str, int | object]:
         try:
             with urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT) as response:
                 if response.status != _OK_STATUS:
-                    return [self._not_accessible(item, url, response.status, document)]
-        except Exception as get_error:
-            return [self._request_failed(item, url, get_error, document)]
-        return []
+                    return ("http", response.status)
+        except Exception as e:
+            return ("error", e)
+        return None
+
+    def _outcome_to_errors(self, outcome, item, url: str, document) -> list[DocumentRuleError]:
+        if outcome is None:
+            return []
+        kind, detail = outcome
+        if kind == "http":
+            return [self._not_accessible(item, url, detail, document)]
+        return [self._request_failed(item, url, detail, document)]
 
     def _not_accessible(self, item, url: str, status_code: int, document) -> DocumentRuleError:
         return DocumentRuleError(
