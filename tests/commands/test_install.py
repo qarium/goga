@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import inspect
 import sys
 import urllib.error
@@ -14,6 +15,7 @@ from goga.config import load_config
 from goga.install.install import _cleanup_goga_skills
 
 _install_module = sys.modules["goga.install.install"]
+_cmd_install_module = importlib.import_module("goga.commands.install.install")
 _AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "agent"
 
 
@@ -613,7 +615,7 @@ class TestForceOverwriteLogic:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-            mock.patch("goga.commands.install.install.install_logic") as mock_logic,
+            mock.patch.object(_cmd_install_module, "install_logic") as mock_logic,
         ):
             mock_logic.return_value = 0
             CliRunner().invoke(app, ["install"])
@@ -624,7 +626,7 @@ class TestForceOverwriteLogic:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-            mock.patch("goga.commands.install.install.install_logic") as mock_logic,
+            mock.patch.object(_cmd_install_module, "install_logic") as mock_logic,
         ):
             mock_logic.return_value = 0
             CliRunner().invoke(app, ["install", "--force-overwrite"])
