@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import inspect
 import sys
 import urllib.error
@@ -14,6 +15,7 @@ from goga.config import load_config
 from goga.install.install import _cleanup_goga_skills
 
 _install_module = sys.modules["goga.install.install"]
+_cmd_install_module = importlib.import_module("goga.commands.install.install")
 _AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "agent"
 
 
@@ -54,6 +56,23 @@ class TestFacadeAvailability:
 
     def test_install_load_config_imported(self) -> None:
         assert load_config is not None
+
+
+class TestForceOverwriteContract:
+    """Contract tests -- verify --force-overwrite option on CLI install."""
+
+    def test_force_overwrite_param_exists(self) -> None:
+        params = {p.name for p in install.params}
+        assert "force_overwrite" in params
+
+    def test_force_overwrite_is_flag(self) -> None:
+        param = next(p for p in install.params if p.name == "force_overwrite")
+        assert isinstance(param, click.Option)
+        assert param.is_flag
+
+    def test_force_overwrite_default_is_false(self) -> None:
+        param = next(p for p in install.params if p.name == "force_overwrite")
+        assert param.default is False
 
 
 class TestCleanupGogaSkillsContract:
@@ -579,3 +598,37 @@ class TestDownloadDslSpecLogic:
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 1
         assert "Error:" in result.output
+
+
+class TestForceOverwriteLogic:
+    """Logical tests -- verify --force-overwrite CLI behavior."""
+
+    def test_install_cli_force_overwrite_flag(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
+            result = CliRunner().invoke(app, ["install", "--force-overwrite"])
+        assert result.exit_code == 0
+
+    def test_install_cli_default_no_force(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch.object(_cmd_install_module, "install_logic") as mock_logic,
+        ):
+            mock_logic.return_value = 0
+            CliRunner().invoke(app, ["install"])
+        mock_logic.assert_called_once()
+        assert mock_logic.call_args.kwargs.get("force_overwrite") is False
+
+    def test_install_cli_passes_force_overwrite_true(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch.object(_cmd_install_module, "install_logic") as mock_logic,
+        ):
+            mock_logic.return_value = 0
+            CliRunner().invoke(app, ["install", "--force-overwrite"])
+        mock_logic.assert_called_once()
+        assert mock_logic.call_args.kwargs.get("force_overwrite") is True

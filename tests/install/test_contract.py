@@ -13,7 +13,7 @@ class TestInstallContract:
     def test_install_has_correct_signature(self) -> None:
         sig = inspect.signature(install)
         params = list(sig.parameters.keys())
-        assert params == ["agent", "config"]
+        assert params == ["agent", "config", "force_overwrite"]
 
     def test_install_agent_param_is_optional_str(self) -> None:
         hints = typing.get_type_hints(install)

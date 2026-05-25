@@ -25,19 +25,21 @@ Annotations: |
 
 ---
 
-"install(agent: str | None = None)":
+"install(agent: str | None = None, force_overwrite: bool = False)":
   location: install.py
   annotations: |
     CLI-обёртка команды установки. Делегирует бизнес-логику `install_logic`.
 
     `agent`: целевой AI-агент
+    `force_overwrite`: разрешить перезапись существующих скиллов
 
     CLI-опции:
     - --agent: целевой AI-агент
+    - --force-overwrite: перезаписывать существующие скиллы при установке из инструментов
 
     Алгоритм:
     1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
-    2. Вызвать `install_logic`(`agent`, `Config`)
+    2. Вызвать `install_logic`(`agent`, `Config`, `force_overwrite`)
     3. Вернуть exit_code
 
 ---

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import inspect
 import urllib.error
 from pathlib import Path
 from unittest import mock
@@ -13,6 +14,7 @@ from goga.install.install import (
     _get_source_dir,
     _install_commands,
     _install_skills,
+    _install_tool_skills,
     _print_summary,
     _resolve_target_dir,
     install,
@@ -383,3 +385,455 @@ class TestInstall:
             result = install(agent="claude", config=config)
 
         assert result == 0
+
+
+# --- Contract tests for force_overwrite parameter ---
+
+
+class TestInstallSignatureContract:
+    def test_install_has_three_parameters(self) -> None:
+        sig = inspect.signature(install)
+        params = list(sig.parameters.keys())
+        assert params == ["agent", "config", "force_overwrite"]
+
+    def test_force_overwrite_default_is_false(self) -> None:
+        sig = inspect.signature(install)
+        param = sig.parameters["force_overwrite"]
+        assert param.default is False
+
+    def test_force_overwrite_is_bool_type(self) -> None:
+        hints = inspect.get_annotations(install, eval_str=True)
+        assert hints["force_overwrite"] is bool
+
+    def test_install_accepts_force_overwrite_false(self, tmp_path: Path) -> None:
+        config = _make_config()
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = install(agent="claude", config=config, force_overwrite=False)
+
+        assert result == 0
+
+    def test_install_accepts_force_overwrite_true(self, tmp_path: Path) -> None:
+        config = _make_config()
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = install(agent="claude", config=config, force_overwrite=True)
+
+        assert result == 0
+
+
+# --- Contract tests for _install_tool_skills ---
+
+
+class TestInstallToolSkillsContract:
+    def test_install_tool_skills_exists(self) -> None:
+        assert hasattr(_install_mod, "_install_tool_skills")
+
+    def test_install_tool_skills_is_callable(self) -> None:
+        assert callable(_install_mod._install_tool_skills)
+
+    def test_install_tool_skills_has_two_params(self) -> None:
+        sig = inspect.signature(_install_tool_skills)
+        params = list(sig.parameters.keys())
+        assert params == ["target", "force_overwrite"]
+
+    def test_install_tool_skills_param_types(self) -> None:
+        hints = inspect.get_annotations(_install_tool_skills, eval_str=True)
+        assert hints["target"] is Path
+        assert hints["force_overwrite"] is bool
+
+    def test_install_tool_skills_return_type(self) -> None:
+        hints = inspect.get_annotations(_install_tool_skills, eval_str=True)
+        assert hints["return"] == list[str]
+
+
+# --- Helpers for _install_tool_skills tests ---
+
+
+def _create_tool_package(
+    parent: Path,
+    pkg_name: str,
+    extra_skills: list[str] | None = None,
+    has_entry_point: bool = True,
+) -> Path:
+    pkg_dir = parent / pkg_name
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+
+    tool_name = pkg_name.removeprefix("goga_tool_")
+    skills_dir = pkg_dir / "skills"
+    skills_dir.mkdir()
+
+    if has_entry_point:
+        entry = skills_dir / tool_name
+        entry.mkdir()
+        (entry / "SKILL.md").write_text(f"# {tool_name}")
+
+    for name in extra_skills or []:
+        sdir = skills_dir / name
+        sdir.mkdir()
+        (sdir / "SKILL.md").write_text(f"# {name}")
+
+    return pkg_dir
+
+
+def _make_find_spec_side_effect(spec_map: dict[str, Path]):
+    def find_spec(name: str):
+        if name in spec_map:
+            spec = mock.MagicMock()
+            spec.origin = str(spec_map[name] / "__init__.py")
+            return spec
+        return None
+
+    return find_spec
+
+
+# --- Logical tests for _install_tool_skills ---
+
+
+class TestInstallToolSkills:
+    def test_discovers_and_installs_tool_skill(self, tmp_path: Path) -> None:
+        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert "goga-tool-debug" in result
+        assert (target / "skills" / "goga-tool-debug" / "SKILL.md").exists()
+
+    def test_installs_multiple_tool_packages(self, tmp_path: Path) -> None:
+        pkg1 = _create_tool_package(tmp_path, "goga_tool_debug")
+        pkg2 = _create_tool_package(tmp_path, "goga_tool_analyze")
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={
+                    "goga_tool_debug": ["goga-tool-debug"],
+                    "goga_tool_analyze": ["goga-tool-analyze"],
+                },
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect(
+                    {"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}
+                ),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert "goga-tool-debug" in result
+        assert "goga-tool-analyze" in result
+
+    def test_force_overwrite_replaces_existing(self, tmp_path: Path) -> None:
+        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
+        target = tmp_path / "target"
+        existing = target / "skills" / "goga-tool-debug"
+        existing.mkdir(parents=True)
+        (existing / "old.txt").write_text("old")
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, True)
+
+        assert "goga-tool-debug" in result
+        assert not (existing / "old.txt").exists()
+        assert (existing / "SKILL.md").exists()
+
+    def test_multiple_skills_in_one_package(self, tmp_path: Path) -> None:
+        pkg_dir = tmp_path / "goga_tool_debug"
+        pkg_dir.mkdir(parents=True)
+        (pkg_dir / "__init__.py").write_text("")
+        skills_dir = pkg_dir / "skills"
+        skills_dir.mkdir()
+
+        (skills_dir / "debug").mkdir()
+        (skills_dir / "debug" / "SKILL.md").write_text("# debug")
+        (skills_dir / "analyze").mkdir()
+        (skills_dir / "analyze" / "SKILL.md").write_text("# analyze")
+        (skills_dir / "helpers.md").write_text("helpers")
+
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert sorted(result) == ["goga-tool-analyze", "goga-tool-debug"]
+        assert (target / "skills" / "goga-tool-debug" / "SKILL.md").exists()
+        assert (target / "skills" / "goga-tool-analyze" / "SKILL.md").exists()
+        assert not (target / "skills" / "helpers.md").exists()
+
+    def test_package_no_entry_point(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pkg_dir = _create_tool_package(
+            tmp_path, "goga_tool_debug", has_entry_point=False
+        )
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []
+        captured = capsys.readouterr()
+        assert "missing skills/debug/SKILL.md" in captured.err
+
+    def test_skill_exists_no_overwrite(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
+        target = tmp_path / "target"
+        existing = target / "skills" / "goga-tool-debug"
+        existing.mkdir(parents=True)
+        (existing / "old.txt").write_text("old")
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []
+        assert (existing / "old.txt").exists()
+        captured = capsys.readouterr()
+        assert "already exists" in captured.err
+
+    def test_no_tool_packages(self, tmp_path: Path) -> None:
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with mock.patch.object(
+            _install_mod.importlib.metadata,
+            "packages_distributions",
+            return_value={"requests": ["requests"]},
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []
+
+    def test_find_spec_returns_none(self, tmp_path: Path) -> None:
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util, "find_spec", return_value=None
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []
+
+    def test_preserves_core_skills(self, tmp_path: Path) -> None:
+        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
+        target = tmp_path / "target"
+        (target / "skills" / "goga-cell").mkdir(parents=True)
+        (target / "skills" / "goga-cell" / "SKILL.md").write_text("# cell")
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert "goga-tool-debug" in result
+        assert (target / "skills" / "goga-cell" / "SKILL.md").exists()
+
+    def test_cleanup_removes_old_tool_skills(self, tmp_path: Path) -> None:
+        config = _make_config()
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        (mock_home / ".claude" / "skills" / "goga-tool-obsolete").mkdir(parents=True)
+        (mock_home / ".claude" / "skills" / "goga-tool-obsolete" / "SKILL.md").write_text("# old")
+
+        pkg_dir = _create_tool_package(tmp_path / "pkgs", "goga_tool_debug")
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
+            ),
+        ):
+            result = install(agent="claude", config=config)
+
+        assert result == 0
+        assert not (mock_home / ".claude" / "skills" / "goga-tool-obsolete").exists()
+        assert (mock_home / ".claude" / "skills" / "goga-tool-debug").is_dir()
+
+    def test_two_packages_same_skill_name(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        pkg1 = tmp_path / "goga_tool_debug"
+        pkg1.mkdir(parents=True)
+        (pkg1 / "__init__.py").write_text("")
+        (pkg1 / "skills" / "debug").mkdir(parents=True)
+        (pkg1 / "skills" / "debug" / "SKILL.md").write_text("# debug v1")
+
+        pkg2 = tmp_path / "goga_tool_analyze"
+        pkg2.mkdir(parents=True)
+        (pkg2 / "__init__.py").write_text("")
+        (pkg2 / "skills" / "analyze").mkdir(parents=True)
+        (pkg2 / "skills" / "analyze" / "SKILL.md").write_text("# analyze v1")
+        (pkg2 / "skills" / "debug").mkdir(parents=True)
+        (pkg2 / "skills" / "debug" / "SKILL.md").write_text("# debug v2")
+
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={
+                    "goga_tool_debug": ["goga-tool-debug"],
+                    "goga_tool_analyze": ["goga-tool-analyze"],
+                },
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util,
+                "find_spec",
+                side_effect=_make_find_spec_side_effect(
+                    {"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}
+                ),
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert "goga-tool-debug" in result
+        assert "goga-tool-analyze" in result
+        content = (target / "skills" / "goga-tool-debug" / "SKILL.md").read_text()
+        assert "v2" in content
+        captured = capsys.readouterr()
+        assert "already exists" in captured.err
+
+    def test_empty_packages_distributions(self, tmp_path: Path) -> None:
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        with mock.patch.object(
+            _install_mod.importlib.metadata,
+            "packages_distributions",
+            return_value={},
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []
+
+    def test_find_spec_origin_is_none(self, tmp_path: Path) -> None:
+        target = tmp_path / "target"
+        (target / "skills").mkdir(parents=True)
+
+        spec = mock.MagicMock()
+        spec.origin = None
+
+        with (
+            mock.patch.object(
+                _install_mod.importlib.metadata,
+                "packages_distributions",
+                return_value={"goga_tool_debug": ["goga-tool-debug"]},
+            ),
+            mock.patch.object(
+                _install_mod.importlib.util, "find_spec", return_value=spec
+            ),
+        ):
+            result = _install_tool_skills(target, False)
+
+        assert result == []

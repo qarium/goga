@@ -15,6 +15,7 @@ goga install [--agent <name>]
 | Опция | Тип | Дефолт | Описание |
 |-------|-----|--------|----------|
 | `--agent` | str | из конфига | Целевой AI-агент |
+| `--force-overwrite` | flag | False | Перезаписывать существующие скиллы при установке из пакетов инструментов |
 
 ## Код возврата
 
@@ -26,4 +27,6 @@ goga install [--agent <name>]
 ```bash
 goga install
 goga install --agent claude
+goga install --force-overwrite
+goga install --agent claude --force-overwrite
 ```
