@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from goga.config import Config
+from ..config import Config
 
 CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"\n'
 

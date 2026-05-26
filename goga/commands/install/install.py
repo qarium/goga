@@ -3,8 +3,8 @@ from __future__ import annotations
 import click
 import yaml
 
-from goga.config import load_config
-from goga.install import install as install_logic
+from ...config import load_config
+from ...install import install as install_logic
 
 
 @click.command()

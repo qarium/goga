@@ -17,6 +17,7 @@ class Analyzer:
 
     @property
     def tree(self) -> list[DocumentRoot]:
+        """Document tree being analyzed."""
         return self._tree
 
     def analyze(self, rules: list[ASTRule]) -> list[ASTRuleError]:

@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from goga.config import Config
+from ..config import Config
 
 AGENT_DIRS: dict[str, str] = {"claude": ".claude"}
 
@@ -77,7 +77,7 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
     print(f"Installed {len(skills)} skills: {', '.join(skills)}", file=sys.stderr)
 
 
-def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:
+def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # noqa: C901
     pkg_map = importlib.metadata.packages_distributions()
     tool_skills: list[str] = []
     for top_level_name in sorted(pkg_map):

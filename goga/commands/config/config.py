@@ -5,7 +5,7 @@ from dataclasses import asdict, is_dataclass
 import click
 import yaml
 
-from goga.config import load_config
+from ...config import load_config
 
 _ALIAS_MAP: dict[str, str] = {"language": "lang"}
 _NOT_FOUND = object()

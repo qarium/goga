@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from goga.sync import sync as sync_logic
+from ...sync import sync as sync_logic
 
 
 @click.command()

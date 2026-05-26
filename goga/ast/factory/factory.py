@@ -36,6 +36,7 @@ class Factory:
 
     @property
     def path(self) -> str:
+        """Directory path of the CODEMANIFEST being parsed."""
         return self._path
 
     def create(self, parent: Optional[DocumentRoot] = None) -> DocumentRoot:

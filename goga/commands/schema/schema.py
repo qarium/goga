@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from goga.schema import schema as schema_logic
+from ...schema import schema as schema_logic
 
 
 @click.command()

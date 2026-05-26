@@ -56,14 +56,17 @@ class AST:
 
     @property
     def path(self) -> str:
+        """Root filesystem path of the project being analyzed."""
         return self._path
 
     @property
     def tree(self) -> list[DocumentRoot]:
+        """Parsed document tree root nodes."""
         return self._tree
 
     @property
     def errors(self) -> list[ASTRuleError | DocumentRuleError]:
+        """Validation errors collected during load."""
         return self._errors
 
     def load(self) -> None:

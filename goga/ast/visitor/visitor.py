@@ -18,9 +18,11 @@ class Visitor:
 
     @property
     def document(self) -> DocumentRoot:
+        """Document root being visited."""
         return self._document
 
     def analyze(self, rules: list[DocumentRule]) -> list[DocumentRuleError]:
+        """Run document-level rules against the wrapped document and collect errors."""
         wrapper = DocumentNode(root=self._document)
         errors: list[DocumentRuleError] = []
         for rule in rules:
