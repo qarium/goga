@@ -1,5 +1,5 @@
 Usages:
-  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
+  conventions: .goga/usages/conventions.md
   contract_format: |
     Реализованный контракт должен соответствовать указанному формату
 

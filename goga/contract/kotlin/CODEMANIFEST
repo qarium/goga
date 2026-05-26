@@ -7,7 +7,7 @@ Imports:
     From: goga/contract/data
 
 Usages:
-  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
+  conventions: .goga/usages/conventions.md
   tree-sitter-kotlin: .goga/usages/cooks/tree-sitter-kotlin.md
 
 Annotations: |

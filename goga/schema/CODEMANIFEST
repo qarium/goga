@@ -4,7 +4,7 @@ Imports:
     From: goga/ast
 
 Usages:
-  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
+  conventions: .goga/usages/conventions.md
   documents: |
     Работать с типом `AST`.
     - Загрузить проект с использованием AST.load()

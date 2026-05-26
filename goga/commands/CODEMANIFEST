@@ -25,7 +25,7 @@ Imports:
     From: goga/commands/tool
 
 Usages:
-  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
+  conventions: .goga/usages/conventions.md
 
 Annotations: |
   Практика `conventions` используется для:

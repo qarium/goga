@@ -8,7 +8,7 @@ Imports:
 
 Usages:
   click: .goga/usages/cooks/click.md
-  conventions: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/python/project.md
+  conventions: .goga/usages/conventions.md
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
 
 Annotations: |
