@@ -149,8 +149,8 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-        assert "Installed 7 commands" in result.output
-        assert "Installed 20 skills" in result.output
+        assert "Installed 8 commands" in result.output
+        assert "Installed 40 skills" in result.output
 
     def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
         with (
@@ -331,6 +331,7 @@ class TestIntegration:
         assert installed_files == [
             "apply.md",
             "brainstorm.md",
+            "change.md",
             "design.md",
             "plan.md",
             "propose.md",
