@@ -120,6 +120,16 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:
 
 
 def install(agent: str | None = None, config: Config | None = None, force_overwrite: bool = False) -> int:
+    """Install goga agent commands, skills, and DSL spec to the target directory.
+
+    Args:
+        agent: Target agent name (e.g. 'claude'). If None, uses config.build.task_executor.agent.
+        config: Project configuration. Required for resolving agent and settings.
+        force_overwrite: Overwrite existing tool skills without prompting.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     if config is None:
         print("Error: config is required", file=sys.stderr)
         return 1

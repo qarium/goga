@@ -200,6 +200,19 @@ def _assemble_command(plan: str, config: Config, cli_options: dict) -> list[str]
 
 
 def build(plan: str, config: Config, cli_options: dict) -> int:
+    """Execute the build pipeline for a given plan.
+
+    Validates uncommitted CODEMANIFEST files, runs agent-specific preconditions,
+    copies default prompts and agents, and launches the ralphex build command.
+
+    Args:
+        plan: Path to the build plan file.
+        config: Project configuration with build settings and task executor.
+        cli_options: CLI flags such as dry_run, skip_manifest_check, worktree, etc.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     if not cli_options.get("skip_manifest_check"):
         try:
             uncommitted = _find_uncommitted_manifests()

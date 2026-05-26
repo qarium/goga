@@ -135,6 +135,16 @@ def _sync_from_local(source: str) -> int:
 
 
 def sync(source: str, token: str | None = None, branch: str | None = None) -> int:
+    """Synchronize .usages/ directories from a dependency into the local project.
+
+    Args:
+        source: Git URL or local path of the dependency to sync from.
+        token: Optional authentication token for HTTPS git URLs.
+        branch: Optional branch name to clone when syncing from git.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     if _is_git_url(source):
         return _sync_from_git(source, token, branch)
     else:

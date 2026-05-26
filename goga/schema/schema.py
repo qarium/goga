@@ -105,6 +105,19 @@ def _filter_by_depends_on(result: list[dict], depends_on: list[str]) -> list[dic
 
 
 def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:
+    """Build a JSON schema tree of cells from the project AST.
+
+    Args:
+        cells: List of cell paths to include. Empty list includes all cells.
+        max_depth: Maximum nesting depth for the cell tree. None means unlimited.
+        depends_on: Filter cells to those depending on the specified paths.
+
+    Returns:
+        JSON string representing the filtered cell tree.
+
+    Raises:
+        ValueError: If the AST has parsing errors.
+    """
     ast_obj = AST(".")
     ast_obj.load()
 

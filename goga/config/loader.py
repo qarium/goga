@@ -4,7 +4,7 @@ from pathlib import Path
 
 import yaml
 
-from goga.config.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor
+from .config import BuildConfig, CodemanifestConfig, Config, TaskExecutor
 
 
 def _parse_task_executor(task_executor_data: dict) -> TaskExecutor:

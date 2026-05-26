@@ -8,6 +8,18 @@ if TYPE_CHECKING:
 
 
 def contract(lang: str, cell_path: str) -> list[EntityContract | RoutineContract]:
+    """Extract contracts from a cell source file for the given language.
+
+    Args:
+        lang: Programming language identifier (python, golang, javascript, kotlin, swift).
+        cell_path: Path to the cell source file.
+
+    Returns:
+        List of extracted entity and routine contracts.
+
+    Raises:
+        ValueError: If the language is not supported.
+    """
     if lang == "python":
         from .python import python_contract
 
