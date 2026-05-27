@@ -13,15 +13,18 @@ Execute only after: implementation stabilized, tests passing, reconciliation com
 3. Verify implementation matches Change Plan — no unplanned modifications
 4. Run full test suite
 5. Run project validators and linters
-6. Verify scope integrity — all changes within scope from scope-resolver
-7. Verify backward compatibility — compatibility-guard verdict was respected
-8. Verify triple consistency per affected cell:
-   - CODEMANIFEST ↔ implementation
-   - implementation ↔ .usages
-   - CODEMANIFEST ↔ .usages
-9. Verify template completeness — all previous skills produced complete outputs
-10. Check for unresolved drift from drift-analyzer
-11. Produce Validation Report
+6. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — final CODEMANIFEST validation
+7. Verify scope integrity — all changes within scope from scope-resolver
+8. Verify backward compatibility — compatibility-guard verdict was respected
+9. Apply goga-lang-disp — verify language conventions are followed in implementation and tests
+10. Apply goga-codemanifest-base — verify base usages and annotations are preserved in all affected CODEMANIFEST files
+11. Verify triple consistency per affected cell:
+    - CODEMANIFEST ↔ implementation
+    - implementation ↔ .usages
+    - CODEMANIFEST ↔ .usages
+12. Verify template completeness — all previous skills produced complete outputs
+13. Check for unresolved drift from drift-analyzer
+14. Produce Validation Report
 
 STOP if:
 - any test fails

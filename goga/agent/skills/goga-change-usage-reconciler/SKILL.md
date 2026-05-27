@@ -8,19 +8,21 @@ You are responsible for usage consistency and recipe reconciliation.
 
 1. Read modified code from implementer
 2. Read reconciled manifests from manifest-reconciler
-3. For each modified cell, load its .usages/ files
-4. Classify each usage:
+3. Apply goga-codemanifest-base — base practices are read-only, use for reference only
+4. For each modified cell, load its .usages/ files
+5. Classify each usage:
    - DIRECTLY AFFECTED: usage references changed behavior → MUST update
    - INDIRECTLY AFFECTED: usage references changed cell → MUST verify
    - UNAFFECTED: ignore
-5. For DIRECTLY AFFECTED usages:
+6. For DIRECTLY AFFECTED usages:
    a. Update examples to reflect new behavior
    b. Update parameter descriptions if changed
    c. Verify examples are still valid
-6. For INDIRECTLY AFFECTED usages:
+7. For INDIRECTLY AFFECTED usages:
    a. Verify examples still work
    b. Verify references are still accurate
-7. Verify canonical usage patterns are preserved
+8. Verify canonical usage patterns are preserved
+9. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — validate CODEMANIFEST files reference valid usages after updates
 
 Rules:
 - never rewrite unrelated usages

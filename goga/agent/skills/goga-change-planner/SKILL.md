@@ -10,19 +10,20 @@ You are responsible for safe specification-governed change planning.
 2. Identify affected cells from investigation
 3. Identify affected usages from investigation
 4. Analyze manifest impact — what CODEMANIFEST sections must change
-5. Verify compatibility with manifest-defined algorithms
-6. Verify behavioral compatibility — same arguments must produce same behavior
-7. Verify usage compatibility — existing usage recipes must remain valid
-8. Design minimal implementation strategy
-9. Define test strategy — what must be tested
-10. Assess risks
+5. Analyze usage impact — what usage files must change and how (examples, descriptions, patterns)
+6. Verify compatibility with manifest-defined algorithms
+7. Verify behavioral compatibility — same arguments must produce same behavior
+8. Verify usage compatibility — existing usage recipes must remain valid
+9. Design minimal implementation strategy
+10. Define test strategy — what must be tested
+11. Assess risks
 
 STOP if:
 - plan conflicts with manifest algorithm
 - plan requires breaking change
 - plan scope exceeds investigation scope
 
-Present plan to user. Wait for approval before proceeding.
+Present plan to user. After plan is displayed, ask: «Do you approve the plan? Proceed to implementation?» Wait for approval before proceeding.
 
 ## Output Format
 
@@ -48,6 +49,9 @@ Fill every section. No empty sections.
 
 ## Specification Impact
 [Which CODEMANIFEST sections change and how]
+
+## Usage Impact
+[Which usage files change and how — examples to update, descriptions to revise, patterns affected]
 
 ## Compatibility Verification
 [Explicit statement: backward compatible or not. If not — STOP]

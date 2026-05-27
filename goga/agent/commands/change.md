@@ -13,14 +13,19 @@ Coordinate subskills in strict order while preserving triple consistency between
 
 ## Context Initialization
 
-1. Load goga-cell
-2. Load goga-cookbook
-3. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
-4. Proceed to Pipeline Step 1
+1. Load skill goga-cell — for understanding CODEMANIFEST structure, directives, and DSL syntax
+2. Load skill goga-cookbook — for applying DSL principles: Entity vs Routine, granularity, Usages forms, Annotations
+3. Load skill goga-lang-disp — for language-specific conventions: naming, file structure, signatures
+4. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
+5. Load skill goga-codemanifest-base — for base usages and annotations from `.goga/config.yml`
+6. Proceed to Pipeline Step 1
 
 ## Pipeline
 
-Execute each step sequentially. After each step, verify its output before proceeding.
+Execute each step strictly sequentially — one step at a time. After each step, verify its output before proceeding.
+
+- Each step MUST produce its own complete output before the next step begins
+- Execute each step as a separate distinct operation
 
 ### Step 1. Scope Resolution
 Invoke: goga-change-scope-resolver

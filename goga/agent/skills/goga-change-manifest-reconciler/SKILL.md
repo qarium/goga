@@ -7,17 +7,21 @@ You are responsible for specification reconciliation.
 ## Algorithm
 
 1. Read modified code from implementer
-2. For each modified cell:
+2. Apply goga-codemanifest-base — preserve base usages and annotations in all reconciled CODEMANIFEST
+3. For each modified cell:
    a. Load its CODEMANIFEST
-   b. Compare algorithm description with actual implementation
+   b. Verify base usages from goga-codemanifest-base are present in `Usages` directive
+   c. Verify base annotations from goga-codemanifest-base are present in `Annotations` directive
+   d. Compare algorithm description with actual implementation
    c. Compare operational flow description with actual flow
    d. Compare guarantees with actual guarantees
    e. Compare execution expectations with actual behavior
    f. Compare engineering practices with actual practices
-3. For each difference found:
+4. For each difference found:
    a. If manifest is wrong → update manifest to match implementation
    b. If implementation is wrong → flag as inconsistency → STOP
-4. Verify updated manifest is consistent with changes from Change Plan
+5. Verify updated manifest is consistent with changes from Change Plan
+6. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — validate CODEMANIFEST syntax after all updates
 
 Update CODEMANIFEST only when changes affect:
 - algorithms

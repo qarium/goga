@@ -8,18 +8,20 @@ You are responsible for minimal semantic scope resolution.
 
 1. Read task description
 2. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
-3. Load goga-cell, goga-cookbook
-4. Identify candidate cells from schema matching task intent
-5. For each candidate cell, resolve direct dependencies
-6. For each candidate cell, resolve usage relationships
-7. Trace semantic participation — only include cells with behavioral relevance
-8. Exclude cells where:
-   - dependency is infrastructural-only
-   - no behavioral participation detected
-   - no manifest semantic involvement
-   - no data flow participation
-   - dependency relevance is speculative
-9. Prioritize cells by: runtime participation > manifest relevance > usage participation > direct dependency > behavioral proximity
+3. Apply goga-cell — for understanding CODEMANIFEST structure and directives
+4. Apply goga-cookbook — for determining cell granularity and usage relationships
+5. Apply goga-codemanifest-base — use base usages and annotations when resolving scope
+6. Identify candidate cells from schema matching task intent
+7. For each candidate cell, resolve direct dependencies
+8. For each candidate cell, resolve usage relationships
+9. Trace semantic participation — only include cells with behavioral relevance
+10. Exclude cells where:
+    - dependency is infrastructural-only
+    - no behavioral participation detected
+    - no manifest semantic involvement
+    - no data flow participation
+    - dependency relevance is speculative
+11. Prioritize cells by: runtime participation > manifest relevance > usage participation > direct dependency > behavioral proximity
 
 STOP if:
 - no candidate cells found

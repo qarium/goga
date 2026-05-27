@@ -9,15 +9,16 @@ You are responsible for semantic drift detection.
 Execute only after: implementation stabilized, tests passing, reconciliation completed.
 
 1. Load final state of all modified cells
-2. For each modified cell, compare:
+2. Apply goga-codemanifest-base — verify base practices are not drifting from reconciled CODEMANIFEST files
+3. For each modified cell, compare:
    a. CODEMANIFEST vs implementation → manifest drift
    b. .usages vs implementation → usage drift
    c. behavioral specification vs actual behavior → behavioral drift
    d. algorithm specification vs actual algorithm → algorithmic drift
-3. For each drift found, classify:
+4. For each drift found, classify:
    - resolved: drift was expected and reconciled
    - unresolved: drift remains — problem
-4. If any unresolved drift → STOP
+5. If any unresolved drift → STOP
 
 STOP if:
 - unresolved manifest drift

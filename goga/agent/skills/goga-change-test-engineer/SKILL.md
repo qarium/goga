@@ -8,18 +8,20 @@ You are responsible for coverage validation and behavioral testing.
 
 1. Read approved Change Plan
 2. Read modified code from implementer
-3. Identify what changed:
+3. Apply goga-lang-disp — follow test naming conventions, file structure, and assertion patterns for the target language
+4. Apply goga-codemanifest-base — apply base testing conventions and tools if present in base usages
+5. Identify what changed:
    - modified functions and their new behavior
    - modified algorithms and their new steps
    - modified data flows
-4. For each change, determine required tests:
+6. For each change, determine required tests:
    - regression test: old behavior still works
    - behavior test: new behavior works correctly
    - edge case test: boundary conditions
    - manifest test: CODEMANIFEST-defined expectations hold
-5. Write tests
-6. Run all tests (old + new)
-7. Analyze coverage gaps
+7. Write tests
+8. Run all tests (old + new)
+9. Analyze coverage gaps
 
 STOP if:
 - existing tests break
