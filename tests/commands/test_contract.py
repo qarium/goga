@@ -228,14 +228,16 @@ def test_contract_package_not_importable(tmp_path) -> None:
     cell = tmp_path / "cell_one"
     cell.mkdir()
     _write_codemanifest(cell, ENTITY_CODEMANIFEST)
-    # No __init__.py — package not importable
+    # No __init__.py — tree-sitter returns empty contracts, implementations are null
     _write_goga_yml(tmp_path)
 
     with _cwd(tmp_path):
         result = _run_contract("cell_one")
 
-    assert result.exit_code == 1
-    assert "not importable" in result.stderr.lower()
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    cell_data = data.get("cell_one", {})
+    assert cell_data["MyClass"]["signature"]["implementation"] is None
 
 
 def test_contract_entity_missing_in_implementation(tmp_path) -> None:
