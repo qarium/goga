@@ -1,522 +1,536 @@
-"""Integration tests for python_contract — verifies signature extraction behaviour."""
+"""Tests for python_contract — tree-sitter based public definition extraction."""
 
 import json
-import sys
+from dataclasses import asdict
 from pathlib import Path
+from textwrap import dedent
 
-import pytest
-from goga.contract import EntityContract, RoutineContract, python_contract
-
-
-def _write_and_import(tmp_path: Path, source: str) -> list:
-    """Write source to tmp_path/__init__.py, register on sys.path, and extract contract."""
-    (tmp_path / "__init__.py").write_text(source)
-    parent = str(tmp_path.parent)
-    module_name = tmp_path.name
-    sys.path.insert(0, parent)
-    try:
-        return python_contract(module_name)
-    finally:
-        sys.path.remove(parent)
-        sys.modules.pop(module_name, None)
+from goga.contract import EntityContract, RoutineContract
+from goga.contract.python import python_contract
 
 
-class TestClassmethodExcludesCls:
-    """inspect.signature on a bound classmethod automatically excludes cls."""
+class TestContractFacade:
+    """Contract tests: facade import and API signature."""
 
-    def test_classmethod_excludes_cls_from_signature(self, tmp_path) -> None:
-        source = "\n".join(
-            [
-                "class MyClass:",
-                "    @classmethod",
-                "    def create(cls, x: int) -> int:",
-                "        return x",
-                "",
-                "__all__ = ['MyClass']",
-            ]
-        )
-        result = _write_and_import(tmp_path, source)
-        assert len(result) == 1
-        entity = result[0]
-        methods = [m for m in entity.methods if m.name == "create"]
-        assert len(methods) == 1
-        method = methods[0]
-        assert method.signature == "(x: int) -> int"
+    def test_facade_importable(self):
+        from goga.contract.python import python_contract as fn
+        assert callable(fn)
+
+    def test_signature_accepts_str_returns_list(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        result = python_contract(str(pkg))
+        assert isinstance(result, list)
 
 
-class TestRegularMethodExcludesSelf:
-    """self is removed from regular instance method signatures."""
-
-    def test_regular_method_excludes_self(self, tmp_path) -> None:
-        source = "\n".join(
-            [
-                "class Service:",
-                "    def process(self, data: str) -> bool:",
-                "        return True",
-                "",
-                "__all__ = ['Service']",
-            ]
-        )
-        result = _write_and_import(tmp_path, source)
-        assert len(result) == 1
-        entity = result[0]
-        methods = [m for m in entity.methods if m.name == "process"]
-        assert len(methods) == 1
-        method = methods[0]
-        assert method.signature == "(data: str) -> bool"
-
-
-class TestStaticmethodKeepsAllParams:
-    """staticmethod preserves all parameters in the signature."""
-
-    def test_staticmethod_keeps_all_params(self, tmp_path) -> None:
-        source = "\n".join(
-            [
-                "class Calculator:",
-                "    @staticmethod",
-                "    def add(x: int, y: int) -> int:",
-                "        return x + y",
-                "",
-                "__all__ = ['Calculator']",
-            ]
-        )
-        result = _write_and_import(tmp_path, source)
-        assert len(result) == 1
-        entity = result[0]
-        methods = [m for m in entity.methods if m.name == "add"]
-        assert len(methods) == 1
-        method = methods[0]
-        assert method.signature == "(x: int, y: int) -> int"
-
-
-class TestClassmethodWithSelfNamedParam:
-    """Edge case: self as a regular parameter name in a classmethod."""
-
-    def test_classmethod_with_self_named_param(self, tmp_path) -> None:
-        source = "\n".join(
-            [
-                "class Handler:",
-                "    @classmethod",
-                "    def method(cls, self: int) -> None:",
-                "        pass",
-                "",
-                "__all__ = ['Handler']",
-            ]
-        )
-        result = _write_and_import(tmp_path, source)
-        assert len(result) == 1
-        entity = result[0]
-        methods = [m for m in entity.methods if m.name == "method"]
-        assert len(methods) == 1
-        method = methods[0]
-        assert method.signature == "(self: int) -> None"
-
-
-class TestPropertyContractFormatThroughPythonContract:
-    """PropertyContract extracted via python_contract uses arrow format."""
-
-    def test_property_contract_format_through_python_contract(self, tmp_path) -> None:
-        source = "\n".join(
-            [
-                "class Container:",
-                "    @property",
-                "    def items(self) -> list[str]:",
-                "        return []",
-                "",
-                "__all__ = ['Container']",
-            ]
-        )
-        result = _write_and_import(tmp_path, source)
-        assert len(result) == 1
-        entity = result[0]
-        props = [p for p in entity.properties if p.name == "items"]
-        assert len(props) == 1
-        prop = props[0]
-        assert prop.contract == "items -> list[str]"
-
-
-class TestPythonContractPositive:
+class TestPositiveBehavioral:
     """Positive behavioral tests for python_contract."""
 
-    def test_python_contract_extracts_functions_and_classes(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_extract"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "def foo(x: int) -> str:\n    return str(x)\n"
-            "\n"
-            "class Bar:\n    def __init__(self, name: str = 'default'): ...\n"
-            "\n"
-            "__all__ = ['foo', 'Bar']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_extract")
-
-        assert len(result) == 2
-        assert result[0].name == "foo"
-        assert "x: int" in result[0].signature
-        assert result[1].name == "Bar"
-        assert "name: str" in result[1].signature
-
-    def test_python_contract_empty_all(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_empty"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("__all__ = []\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_empty")
-
-        assert result == []
-
-    def test_python_contract_no_all(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_noall"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("x = 42\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_noall")
-
-        assert result == []
-
-
-class TestPythonContractNegative:
-    """Negative behavioral tests for python_contract."""
-
-    def test_python_contract_module_not_found(self):
-        with pytest.raises(ModuleNotFoundError):
-            python_contract("nonexistent/module/path")
-
-    def test_python_contract_skips_non_callable_objects(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_skip"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "CONSTANT = 42\nan_alias = str\ndef foo(): ...\n__all__ = ['CONSTANT', 'an_alias', 'foo']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_skip")
-
-        names = [item.name for item in result]
-        assert "CONSTANT" not in names
-        assert "an_alias" in names
-        assert "foo" in names
-        assert len(result) == 2
-
-
-class TestPythonContractEdgeCases:
-    """Edge case tests for python_contract."""
-
-    def test_python_contract_module_in_all_not_included(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_mod"
+    def test_extracts_entity_and_routine(self, tmp_path):
+        pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text("import os\ndef foo() -> None: ...\n__all__ = ['os', 'foo']\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_mod")
+        (pkg / "__init__.py").write_text(dedent("""\
+            class MyClass:
+                def __init__(self, name: str):
+                    self.name = name
 
-        names = [item.name for item in result]
-        assert "os" not in names
-        assert "foo" in names
-        assert len(result) == 1
+            def my_func(x: int) -> str:
+                return str(x)
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 2
+        entity = next(r for r in result if r.name == "MyClass")
+        assert isinstance(entity, EntityContract)
+        assert entity.signature == "(name: str)"
+        routine = next(r for r in result if r.name == "my_func")
+        assert isinstance(routine, RoutineContract)
+        assert routine.signature == "(x: int) -> str"
 
-    def test_python_contract_nested_path(self, tmp_path, monkeypatch):
-        nested = tmp_path / "nested_a" / "b" / "c"
-        nested.mkdir(parents=True)
-        (nested / "__init__.py").write_text("def deep_func() -> int:\n    return 0\n__all__ = ['deep_func']\n")
-        (tmp_path / "nested_a" / "__init__.py").write_text("")
-        (tmp_path / "nested_a" / "b" / "__init__.py").write_text("")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("nested_a/b/c")
-
-        assert len(result) == 1
-        assert result[0].name == "deep_func"
-
-    def test_python_contract_class_with_args_kwargs(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_args"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "class Flexible:\n    def __init__(self, *args: int, **kwargs: str): ...\n__all__ = ['Flexible']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_args")
-
-        assert len(result) == 1
-        assert "*args" in result[0].signature
-        assert "**kwargs" in result[0].signature
-
-    def test_python_contract_preserves_default_values(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_defaults"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text(
-            "def func(a: int, b: str = 'hello', c: float = 3.14): ...\n__all__ = ['func']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_defaults")
-
-        sig = result[0].signature
-        assert "a: int" in sig
-        assert "'hello'" in sig
-        assert "3.14" in sig
-
-    def test_python_contract_preserves_argument_order(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_order"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("def func(z: int, a: str, m: float): ...\n__all__ = ['func']\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_order")
-
-        sig = result[0].signature
-        assert sig.index("z") < sig.index("a") < sig.index("m")
-
-    def test_python_contract_path_with_trailing_slashes(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_slash"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("def func(): ...\n__all__ = ['func']\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("/testpkg_slash/")
-
-        assert len(result) == 1
-        assert result[0].name == "func"
-
-    def test_python_contract_class_without_explicit_init(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_plain"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("class Plain:\n    pass\n__all__ = ['Plain']\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_plain")
-
-        assert len(result) == 1
-        assert result[0].name == "Plain"
-        assert "*args" in result[0].signature or result[0].signature == "()"
-
-    def test_python_contract_empty_cell_path_raises(self):
-        with pytest.raises(ValueError, match="Empty module name"):
-            python_contract("")
-
-    def test_python_contract_all_contains_nonexistent_name_raises(self, tmp_path, monkeypatch):
-        pkg_init = tmp_path / "testpkg_stale"
-        pkg_init.mkdir()
-        (pkg_init / "__init__.py").write_text("__all__ = ['missing_name']\n")
-        monkeypatch.syspath_prepend(str(tmp_path))
-        with pytest.raises(AttributeError):
-            python_contract("testpkg_stale")
-
-
-class TestEntityContractExtraction:
-    """Tests for EntityContract property and method extraction."""
-
-    def test_entity_contract_has_properties_and_methods(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_entity"
+    def test_extracts_properties(self, tmp_path):
+        pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "class Service:\n"
-            "    def __init__(self) -> None: ...\n"
-            "    @property\n"
-            "    def name(self) -> str:\n"
-            "        return ''\n"
-            "    @property\n"
-            "    def _hidden(self) -> str:\n"
-            "        return ''\n"
-            "    def run(self) -> None: ...\n"
-            "    @staticmethod\n"
-            "    def helper() -> int:\n"
-            "        return 0\n"
-            "__all__ = ['Service']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_entity")
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Config:
+                def __init__(self):
+                    self._host = ""
+                    self._port = 0
 
+                @property
+                def host(self) -> str:
+                    return self._host
+
+                @property
+                def port(self) -> int:
+                    return self._port
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        entity = result[0]
+        assert len(entity.properties) == 2
+        prop_names = {p.name for p in entity.properties}
+        assert prop_names == {"host", "port"}
+        host_prop = next(p for p in entity.properties if p.name == "host")
+        assert host_prop.signature == "str"
+        port_prop = next(p for p in entity.properties if p.name == "port")
+        assert port_prop.signature == "int"
+
+    def test_handles_default_params(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            def connect(host: str = "localhost", port: int = 8080) -> None:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        assert result[0].name == "connect"
+        assert 'host: str = "localhost"' in result[0].signature
+        assert "port: int = 8080" in result[0].signature
+
+    def test_handles_args_kwargs(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            def func(x: int, *args, **kwargs) -> None:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        sig = result[0].signature
+        assert "x: int" in sig
+        assert "*args" in sig
+        assert "**kwargs" in sig
+
+    def test_extracts_mixed_entity(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Service:
+                def __init__(self, name: str) -> None:
+                    self.name = name
+
+                @property
+                def info(self) -> str:
+                    return self.name
+
+                def run(self, task: str) -> bool:
+                    return True
+
+                def _internal(self) -> None:
+                    pass
+        """))
+        result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
         assert isinstance(entity, EntityContract)
+        assert entity.signature == "(name: str)"
         assert len(entity.properties) == 1
-        assert entity.properties[0].name == "name"
+        assert entity.properties[0].name == "info"
         assert entity.properties[0].signature == "str"
-        assert len(entity.methods) == 2
-        method_names = [m.name for m in entity.methods]
-        assert "run" in method_names
-        assert "helper" in method_names
-        assert "_hidden" not in [p.name for p in entity.properties]
+        assert len(entity.methods) == 1
+        assert entity.methods[0].name == "run"
+        assert entity.methods[0].signature == "(task: str) -> bool"
 
-    def test_entity_without_public_members(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_private"
+    def test_extracts_public_methods(self, tmp_path):
+        pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "class Secret:\n"
-            "    def __init__(self) -> None: ...\n"
-            "    def _internal(self) -> None: ...\n"
-            "    @property\n"
-            "    def _val(self) -> int:\n"
-            "        return 0\n"
-            "__all__ = ['Secret']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_private")
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Worker:
+                def __init__(self) -> None:
+                    pass
 
+                def process(self, data: str) -> bool:
+                    return True
+
+                def execute(self, cmd: str) -> str:
+                    return cmd
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
         entity = result[0]
-        assert len(entity.properties) == 0
-        assert len(entity.methods) == 0
+        method_names = [m.name for m in entity.methods]
+        assert method_names == ["execute", "process"]
+        for method in entity.methods:
+            assert "self" not in method.signature
 
-    def test_property_without_return_annotation(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_propannot"
+    def test_extracts_decorated_methods(self, tmp_path):
+        pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "class Lazy:\n"
-            "    def __init__(self) -> None: ...\n"
-            "    @property\n"
-            "    def data(self):\n"
-            "        return None\n"
-            "__all__ = ['Lazy']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_propannot")
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Calc:
+                def __init__(self) -> None:
+                    pass
 
+                @staticmethod
+                def add(x: int, y: int) -> int:
+                    return x + y
+
+                @classmethod
+                def create(cls, value: int):
+                    return Calc()
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        entity = result[0]
+        assert len(entity.methods) == 2
+        method_names = {m.name for m in entity.methods}
+        assert method_names == {"add", "create"}
+        add_method = next(m for m in entity.methods if m.name == "add")
+        assert add_method.signature == "(x: int, y: int) -> int"
+        create_method = next(m for m in entity.methods if m.name == "create")
+        assert "cls" in create_method.signature
+
+    def test_returns_sorted(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Zebra:
+                def __init__(self) -> None:
+                    pass
+
+            class Apple:
+                def __init__(self) -> None:
+                    pass
+
+            def beta_func() -> None:
+                pass
+
+            def alpha_func() -> None:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 4
+        assert result[0].name == "Apple"
+        assert result[1].name == "Zebra"
+        assert result[2].name == "alpha_func"
+        assert result[3].name == "beta_func"
+
+    def test_extracts_from_multiple_files(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        (pkg / "models.py").write_text(dedent("""\
+            class User:
+                def __init__(self, name: str) -> None:
+                    pass
+        """))
+        (pkg / "utils.py").write_text(dedent("""\
+            def helper(x: int) -> str:
+                return str(x)
+        """))
+        result = python_contract(str(pkg))
+        names = {r.name for r in result}
+        assert "User" in names
+        assert "helper" in names
+
+    def test_main_py_scanned_like_any_file(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        (pkg / "__main__.py").write_text(dedent("""\
+            def main() -> None:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        names = [r.name for r in result]
+        assert "main" in names
+        main_routine = next(r for r in result if r.name == "main")
+        assert isinstance(main_routine, RoutineContract)
+        assert main_routine.signature == "() -> None"
+
+    def test_extracts_type_annotated_fields_as_properties(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class CellData:
+                name: str
+                description: str
+                children: list[str]
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        entity = result[0]
+        assert isinstance(entity, EntityContract)
+        prop_names = {p.name for p in entity.properties}
+        assert prop_names == {"name", "description", "children"}
+        name_prop = next(p for p in entity.properties if p.name == "name")
+        assert name_prop.signature == "str"
+        children_prop = next(p for p in entity.properties if p.name == "children")
+        assert children_prop.signature == "list[str]"
+
+    def test_type_annotated_field_with_default(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Config:
+                host: str = "localhost"
+                port: int = 8080
+        """))
+        result = python_contract(str(pkg))
+        entity = result[0]
+        prop_names = {p.name for p in entity.properties}
+        assert prop_names == {"host", "port"}
+        host_prop = next(p for p in entity.properties if p.name == "host")
+        assert host_prop.signature == "str"
+
+    def test_mixed_property_and_annotated_field(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Service:
+                name: str
+                timeout: int = 30
+
+                @property
+                def url(self) -> str:
+                    return ""
+
+                def run(self) -> bool:
+                    return True
+        """))
+        result = python_contract(str(pkg))
+        entity = result[0]
+        prop_names = {p.name for p in entity.properties}
+        assert prop_names == {"name", "timeout", "url"}
+        method_names = {m.name for m in entity.methods}
+        assert method_names == {"run"}
+
+    def test_plain_assignment_not_extracted_as_property(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Foo:
+                name: str
+                counter = 0
+        """))
+        result = python_contract(str(pkg))
+        entity = result[0]
+        prop_names = {p.name for p in entity.properties}
+        assert "name" in prop_names
+        assert "counter" not in prop_names
+
+
+class TestNegativeBehavioral:
+    """Negative behavioral tests for python_contract."""
+
+    def test_returns_empty_when_no_py_files(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        result = python_contract(str(pkg))
+        assert result == []
+
+    def test_raises_for_nonexistent_directory(self, tmp_path):
+        import pytest
+
+        with pytest.raises(FileNotFoundError):
+            python_contract(str(tmp_path / "no_such_dir"))
+
+
+class TestEdgeCases:
+    """Edge case tests for python_contract."""
+
+    def test_no_type_annotations(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            def func(x, y):
+                pass
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        assert result[0].signature == "(x, y)"
+
+    def test_class_without_init(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Plain:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        assert result[0].name == "Plain"
+        assert result[0].signature == "()"
+
+    def test_property_without_return_type(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            class Container:
+                def __init__(self) -> None:
+                    pass
+
+                @property
+                def data(self):
+                    return None
+        """))
+        result = python_contract(str(pkg))
         entity = result[0]
         assert len(entity.properties) == 1
         assert entity.properties[0].name == "data"
         assert entity.properties[0].signature == ""
 
-    def test_dataclass_fields_not_treated_as_properties(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_dcfields"
+    def test_private_members_excluded(self, tmp_path):
+        pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "from dataclasses import dataclass\n"
-            "\n"
-            "@dataclass\n"
-            "class Record:\n"
-            "    x: int\n"
-            "    y: str = ''\n"
-            "__all__ = ['Record']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_dcfields")
+        (pkg / "__init__.py").write_text(dedent("""\
+            class MyClass:
+                def __init__(self) -> None:
+                    pass
 
-        entity = result[0]
-        assert isinstance(entity, EntityContract)
-        assert len(entity.properties) == 0
-        assert "x" in entity.signature
+                def _private(self) -> None:
+                    pass
 
-    def test_dataclass_with_property_over_field(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_dcprop"
-        pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "from dataclasses import dataclass\n"
-            "\n"
-            "@dataclass\n"
-            "class Config:\n"
-            "    name: str = ''\n"
-            "    @property\n"
-            "    def display_name(self) -> str:\n"
-            "        return self.name.upper()\n"
-            "__all__ = ['Config']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_dcprop")
+                def __repr__(self) -> str:
+                    return ""
 
-        entity = result[0]
-        assert len(entity.properties) == 1
-        assert entity.properties[0].name == "display_name"
-        assert entity.properties[0].signature == "str"
+                @property
+                def _hidden(self) -> int:
+                    return 0
 
-    def test_entity_contract_inherited_methods_and_properties(self, tmp_path, monkeypatch):
-        pkg = tmp_path / "testpkg_inherit"
-        pkg.mkdir()
-        (pkg / "__init__.py").write_text(
-            "class Base:\n"
-            "    def __init__(self) -> None: ...\n"
-            "    def base_method(self) -> None: ...\n"
-            "    @property\n"
-            "    def base_prop(self) -> int:\n"
-            "        return 0\n"
-            "\n"
-            "class Child(Base):\n"
-            "    def child_method(self) -> str:\n"
-            "        return ''\n"
-            "__all__ = ['Child']\n"
-        )
-        monkeypatch.syspath_prepend(str(tmp_path))
-        result = python_contract("testpkg_inherit")
-
+                def public(self) -> None:
+                    pass
+        """))
+        result = python_contract(str(pkg))
         entity = result[0]
         method_names = [m.name for m in entity.methods]
-        assert "base_method" in method_names
-        assert "child_method" in method_names
+        assert "_private" not in method_names
+        assert "__repr__" not in method_names
+        assert "public" in method_names
         prop_names = [p.name for p in entity.properties]
-        assert "base_prop" in prop_names
+        assert "_hidden" not in prop_names
+
+    def test_private_module_level_excluded(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            def public_func() -> None:
+                pass
+
+            def _private_func() -> None:
+                pass
+
+            class PublicClass:
+                pass
+
+            class _PrivateClass:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        names = [r.name for r in result]
+        assert "public_func" in names
+        assert "PublicClass" in names
+        assert "_private_func" not in names
+        assert "_PrivateClass" not in names
+
+    def test_last_definition_wins(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            def func(x: int) -> str:
+                return str(x)
+        """))
+        (pkg / "b.py").write_text(dedent("""\
+            def func(y: float) -> int:
+                return int(y)
+        """))
+        result = python_contract(str(pkg))
+        assert len(result) == 1
+        assert "y: float" in result[0].signature
+
+    def test_non_callable_in_definitions(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text(dedent("""\
+            VALUE = 42
+
+            def foo() -> None:
+                pass
+        """))
+        result = python_contract(str(pkg))
+        names = [item.name for item in result]
+        assert "VALUE" not in names
+        assert "foo" in names
+        assert len(result) == 1
+
+    def test_empty_init_returns_empty(self, tmp_path):
+        pkg = tmp_path / "testpkg"
+        pkg.mkdir()
+        (pkg / "__init__.py").write_text("")
+        result = python_contract(str(pkg))
+        assert result == []
 
 
-class TestSelfReference:
-    """python_contract extracts the facade of its own package."""
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+class TestIntegration:
+    """Integration tests: real project packages and serialization."""
 
     def test_self_contract_contains_base_contract(self):
-        result = python_contract("goga/contract")
-        names = [item.name for item in result]
+        result = python_contract(str(_PROJECT_ROOT / "goga/contract/data"))
+        names = [r.name for r in result]
         assert "BaseContract" in names
 
     def test_self_contract_contains_python_contract(self):
-        result = python_contract("goga/contract")
-        names = [item.name for item in result]
+        result = python_contract(str(_PROJECT_ROOT / "goga/contract/python"))
+        names = [r.name for r in result]
         assert "python_contract" in names
 
     def test_self_contract_base_contract_is_entity(self):
-        result = python_contract("goga/contract")
-        base = next(item for item in result if item.name == "BaseContract")
+        result = python_contract(str(_PROJECT_ROOT / "goga/contract/data"))
+        base = next(r for r in result if r.name == "BaseContract")
         assert isinstance(base, EntityContract)
 
     def test_self_contract_python_contract_is_routine(self):
-        result = python_contract("goga/contract")
-        fn = next(item for item in result if item.name == "python_contract")
-        assert isinstance(fn, RoutineContract)
-
-
-class TestRealPackageExtraction:
-    """python_contract extracts facade from a real project submodule."""
+        result = python_contract(str(_PROJECT_ROOT / "goga/contract/python"))
+        func = next(r for r in result if r.name == "python_contract")
+        assert isinstance(func, RoutineContract)
 
     def test_ast_factory_has_factory(self):
-        result = python_contract("goga/ast/factory")
-        assert len(result) > 0
-        names = [item.name for item in result]
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
+        names = [r.name for r in result]
         assert "Factory" in names
 
     def test_ast_factory_all_items_have_name_and_signature(self):
-        result = python_contract("goga/ast/factory")
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
         for item in result:
-            assert item.name != ""
+            assert item.name
             assert item.signature != ""
 
     def test_ast_factory_is_entity_with_members(self):
-        result = python_contract("goga/ast/factory")
-        factory = next(item for item in result if item.name == "Factory")
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
+        factory = next(r for r in result if r.name == "Factory")
         assert isinstance(factory, EntityContract)
         assert len(factory.methods) > 0 or len(factory.properties) > 0
 
-
-class TestSignatureFormatMatchesContractFormat:
-    """Result is serializable to contract_format: [{"name": "...", "signature": "..."}]."""
-
     def test_result_serializable_to_json(self):
-        result = python_contract("goga/contract")
-        data = [{"name": item.name, "signature": item.signature} for item in result]
-        serialized = json.dumps(data)
-        parsed = json.loads(serialized)
-        assert parsed == data
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
+        data = [asdict(r) for r in result]
+        json_str = json.dumps(data)
+        parsed = json.loads(json_str)
+        assert len(parsed) == len(result)
+        for item in parsed:
+            assert "name" in item
+            assert "signature" in item
 
     def test_entity_with_properties_and_methods_serializable(self):
-        result = python_contract("goga/ast/factory")
-        factory = next(item for item in result if item.name == "Factory")
-        for prop in factory.properties:
-            assert prop.name != ""
-            assert isinstance(prop.signature, str)
-            assert json.dumps({"name": prop.name, "signature": prop.signature})
-        for method in factory.methods:
-            assert method.name != ""
-            assert isinstance(method.signature, str)
-            assert json.dumps({"name": method.name, "signature": method.signature})
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
+        factory = next(r for r in result if r.name == "Factory")
+        data = asdict(factory)
+        assert "properties" in data
+        assert "methods" in data
+        parsed = json.loads(json.dumps(data))
+        assert isinstance(parsed["properties"], list)
+        assert isinstance(parsed["methods"], list)
 
     def test_full_entity_serializable_with_members(self):
-        result = python_contract("goga/ast/factory")
-        factory = next(item for item in result if item.name == "Factory")
-        data = {
-            "name": factory.name,
-            "signature": factory.signature,
-            "properties": [{"name": p.name, "signature": p.signature} for p in factory.properties],
-            "methods": [{"name": m.name, "signature": m.signature} for m in factory.methods],
-        }
-        serialized = json.dumps(data)
-        parsed = json.loads(serialized)
-        assert parsed == data
+        result = python_contract(str(_PROJECT_ROOT / "goga/ast/factory"))
+        data = [asdict(r) for r in result]
+        json_str = json.dumps(data)
+        parsed = json.loads(json_str)
+        assert len(parsed) > 0
+        factory_data = next(d for d in parsed if d["name"] == "Factory")
+        assert "properties" in factory_data
+        assert "methods" in factory_data

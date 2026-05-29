@@ -1,7 +1,6 @@
 """Contract and behavioral tests for contract() dispatcher."""
 
 import inspect
-import sys
 from pathlib import Path
 
 import pytest
@@ -39,18 +38,12 @@ def test_contract_dispatches_to_python(tmp_path: Path) -> None:
     (pkg_dir / "__init__.py").write_text(
         "class MyClass:\n    def my_method(self) -> str:\n        return ''\n\n__all__ = ['MyClass']\n"
     )
-    parent = str(tmp_path)
-    sys.path.insert(0, parent)
-    try:
-        result = contract("python", "cell")
-        assert len(result) >= 1
-        entities = [r for r in result if isinstance(r, EntityContract) and r.name == "MyClass"]
-        assert len(entities) == 1
-        methods = [m for m in entities[0].methods if m.name == "my_method"]
-        assert len(methods) == 1
-    finally:
-        sys.path.remove(parent)
-        sys.modules.pop("cell", None)
+    result = contract("python", str(pkg_dir))
+    assert len(result) >= 1
+    entities = [r for r in result if isinstance(r, EntityContract) and r.name == "MyClass"]
+    assert len(entities) == 1
+    methods = [m for m in entities[0].methods if m.name == "my_method"]
+    assert len(methods) == 1
 
 
 def test_contract_dispatches_to_golang(tmp_path: Path) -> None:
@@ -124,14 +117,8 @@ def test_contract_nonexistent_package_python(tmp_path: Path) -> None:
     """Dispatching python with a directory that has no __init__.py returns empty list."""
     empty_dir = tmp_path / "empty"
     empty_dir.mkdir()
-    parent = str(tmp_path)
-    sys.path.insert(0, parent)
-    try:
-        result = contract("python", "empty")
-        assert result == []
-    finally:
-        sys.path.remove(parent)
-        sys.modules.pop("empty", None)
+    result = contract("python", str(empty_dir))
+    assert result == []
 
 
 # ── Integration tests ─────────────────────────────────────────
