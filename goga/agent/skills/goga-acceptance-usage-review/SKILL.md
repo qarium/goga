@@ -54,7 +54,7 @@ Cell-level usages (`.usages/*.md`) — документация для потр�
 
 ### Step 4. Валидация обновлений
 
-1. Выполните: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+1. Выполните: `goga linter`
 2. Исправьте ошибки, если есть
 
 STOP если:

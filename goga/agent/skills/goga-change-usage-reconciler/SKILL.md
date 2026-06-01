@@ -22,7 +22,7 @@ You are responsible for usage consistency and recipe reconciliation.
    a. Verify examples still work
    b. Verify references are still accurate
 8. Verify canonical usage patterns are preserved
-9. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest linter` — validate CODEMANIFEST files reference valid usages after updates
+9. Execute: `goga linter` — validate CODEMANIFEST files reference valid usages after updates
 
 Rules:
 - never rewrite unrelated usages

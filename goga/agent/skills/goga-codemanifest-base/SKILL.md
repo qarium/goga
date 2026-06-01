@@ -17,12 +17,12 @@
 
 ### Шаг 1: Получите базовые usages проекта
 
-Выполните команду `docker run --rm -v .:/project -w /project qarium/goga:latest config codemanifest.usages` чтобы получить базовые usages проекта из секции `codemanifest.usages` в `.goga/config.yml`.
+Выполните команду `goga config codemanifest.usages` чтобы получить базовые usages проекта из секции `codemanifest.usages` в `.goga/config.yml`.
 Это проектные практики, доступные всем CODEMANIFEST файлам.
 
 ### Шаг 2: Получите базовые annotations проекта
 
-Выполните команду `docker run --rm -v .:/project -w /project qarium/goga:latest config codemanifest.annotations` чтобы получить базовые annotations проекта — текстовые инструкции
+Выполните команду `goga config codemanifest.annotations` чтобы получить базовые annotations проекта — текстовые инструкции
 для AI-агента из секции `codemanifest.annotations` в `.goga/config.yml`.
 
 ### Шаг 3: Обработка результата

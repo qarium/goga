@@ -162,7 +162,7 @@ mkdir -p <cell_path>/.usages
 #### Step 1. Run linter
 
 ```bash
-docker run --rm -v .:/project -w /project qarium/goga:latest linter
+goga linter
 ```
 
 Если linter сообщает об ошибках — исправьте их и повторите. Используйте DSL спецификацию скилл `goga-cell` и `goga-cookbook`
@@ -171,7 +171,7 @@ docker run --rm -v .:/project -w /project qarium/goga:latest linter
 #### Step 2. Run schema
 
 ```bash
-docker run --rm -v .:/project -w /project qarium/goga:latest schema
+goga schema
 ```
 
 Проверьте что все новые cells видны в иерархии и их связи соответствуют карте зависимостей.

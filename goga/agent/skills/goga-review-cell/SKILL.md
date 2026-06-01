@@ -47,7 +47,7 @@
 #### 2a. Запуск линтера
 
 ```
-docker run --rm -v .:/project -w /project qarium/goga:latest linter
+goga linter
 ```
 
 Если линтер сообщает об ошибках — зафиксируйте каждую как проблему синтаксиса DSL. Исправьте ошибки синтаксиса DSL перед продолжением анализа.
@@ -55,7 +55,7 @@ docker run --rm -v .:/project -w /project qarium/goga:latest linter
 #### 2b. Запуск схемы
 
 ```
-docker run --rm -v .:/project -w /project qarium/goga:latest schema
+goga schema
 ```
 
 Извлеките позицию ячейки в иерархии проекта для контекста.
@@ -187,7 +187,7 @@ docker run --rm -v .:/project -w /project qarium/goga:latest schema
 #### 6b. Требования vs Код/Usages (Шаг 4)
 
 1. Примените правки CODEMANIFEST напрямую
-2. Запустите линтер для валидации: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+2. Запустите линтер для валидации: `goga linter`
 3. Исправьте все ошибки синтаксиса DSL после правок
 4. Вызовите `/goga:design` и выберите режим **changes**
 5. Команда дизайна обнаружит изменения через git diff и обновит документ соответственно
@@ -201,7 +201,7 @@ docker run --rm -v .:/project -w /project qarium/goga:latest schema
 
 После выполнения **всех** одобренных действий (6a, 6b, 6c):
 
-1. Запустите линтер для финальной валидации: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+1. Запустите линтер для финальной валидации: `goga linter`
 2. Если линтер сообщает об ошибках — исправьте их
 3. Повторяйте шаги 1-2 пока линтер не пройдёт без ошибок
 

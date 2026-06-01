@@ -16,7 +16,7 @@ Coordinate subskills in strict order while preserving triple consistency between
 1. Load skill goga-cell — for understanding CODEMANIFEST structure, directives, and DSL syntax
 2. Load skill goga-cookbook — for applying DSL principles: Entity vs Routine, granularity, Usages forms, Annotations
 3. Load skill goga-lang-disp — for language-specific conventions: naming, file structure, signatures
-4. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
+4. Execute: `goga schema`
 5. Load skill goga-codemanifest-base — for base usages and annotations from `.goga/config.yml`
 6. Proceed to Pipeline Step 1
 

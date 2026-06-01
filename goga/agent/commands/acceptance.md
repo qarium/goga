@@ -13,7 +13,7 @@
 1. Загрузите скилл goga-cell — для понимания структуры CODEMANIFEST, директив и синтаксиса DSL
 2. Загрузите скилл goga-cookbook — для применения принципов DSL: Entity vs Routine, гранулярность, формы Usages, Annotations
 3. Загрузите скилл goga-lang-disp — для языковых конвенций: именование, структура файлов, сигнатуры
-4. Выполните: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
+4. Выполните: `goga schema`
 5. Загрузите скилл goga-codemanifest-base — для получения базовых usages и annotations из `.goga/config.yml`
 6. Переходите к Pipeline, Step 1
 

@@ -7,7 +7,7 @@ You are responsible for minimal semantic scope resolution.
 ## Algorithm
 
 1. Read task description
-2. Execute: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
+2. Execute: `goga schema`
 3. Apply goga-cell — for understanding CODEMANIFEST structure and directives
 4. Apply goga-cookbook — for determining cell granularity and usage relationships
 5. Apply goga-codemanifest-base — use base usages and annotations when resolving scope

@@ -25,7 +25,7 @@
 
 ### Сопоставление с ячейками
 
-1. Загрузите schema проекта: `docker run --rm -v .:/project -w /project qarium/goga:latest schema`
+1. Загрузите schema проекта: `goga schema`
 2. По описанию функциональности или результатам git diff определите затронутые ячейки из schema
 3. Для каждой обнаруженной ячейки:
    a. Проверьте наличие файла CODEMANIFEST

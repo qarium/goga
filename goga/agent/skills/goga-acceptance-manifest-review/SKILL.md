@@ -27,7 +27,7 @@
 
 ### Step 2. Предварительная проверка
 
-1. Запустите линтер: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+1. Запустите линтер: `goga linter`
 2. Зафиксируйте ошибки как CRITICAL. Исправьте перед продолжением.
 
 ### Step 3. Ревью каждой ячейки
@@ -46,7 +46,7 @@
 
 **Вопрос: Соответствует ли код требованиям CODEMANIFEST, базовым практикам и языковым конвенциям?**
 
-1. Запустите сравнение контрактов: `docker run --rm -v .:/project -w /project qarium/goga:latest contract <cell-path>`
+1. Запустите сравнение контрактов: `goga contract <cell-path>`
 
 2. Для каждой entity сравните:
    - **Сигнатура конструктора**: codemanifest vs implementation
@@ -140,7 +140,7 @@
 
 ### Step 7. Валидация обновлений
 
-1. Выполните: `docker run --rm -v .:/project -w /project qarium/goga:latest linter`
+1. Выполните: `goga linter`
 2. Исправьте ошибки синтаксиса, если есть
 3. Повторяйте, пока линтер не пройдёт без ошибок
 
