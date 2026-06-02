@@ -78,6 +78,9 @@ class TestBuildConfigAPIShape:
     def test_has_codex_review_field(self):
         assert "codex_review" in BuildConfig.__dataclass_fields__
 
+    def test_has_image_field(self):
+        assert "image" in BuildConfig.__dataclass_fields__
+
 
 class TestCodemanifestConfigAPIShape:
     def test_has_usages_field(self):
@@ -115,7 +118,7 @@ class TestConfigAPIShape:
     def test_lang_is_required(self):
         """Config without lang raises TypeError (missing required argument)."""
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         with pytest.raises(TypeError, match="lang"):
             Config(build=bc)
 
@@ -148,7 +151,7 @@ class TestKwOnlyEnforced:
 
     def test_config_positional_args_rejected(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         with pytest.raises(TypeError):
             Config(bc)
 
@@ -174,8 +177,9 @@ class TestTaskExecutorCreation:
 class TestBuildConfigCreation:
     def test_all_none_optional_fields(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         assert bc.task_executor is te
+        assert bc.image == "goga:latest"
         assert bc.worktree is None
         assert bc.skip_finalize is None
         assert bc.session_timeout is None
@@ -191,6 +195,7 @@ class TestBuildConfigCreation:
         te = TaskExecutor(agent="gemini", env={"X": "1"})
         bc = BuildConfig(
             task_executor=te,
+            image="custom:tag",
             worktree=True,
             skip_finalize=False,
             session_timeout="30m",
@@ -204,6 +209,7 @@ class TestBuildConfigCreation:
         )
         assert bc.task_executor.agent == "gemini"
         assert bc.task_executor.env == {"X": "1"}
+        assert bc.image == "custom:tag"
         assert bc.worktree is True
         assert bc.skip_finalize is False
         assert bc.session_timeout == "30m"
@@ -219,14 +225,14 @@ class TestBuildConfigCreation:
 class TestConfigCreation:
     def test_default_commands_dict(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cfg = Config(lang="python", build=bc)
         assert cfg.lang == "python"
         assert cfg.commands == {}
 
     def test_full_config(self):
         te = TaskExecutor(agent="claude", env={"K": "v"})
-        bc = BuildConfig(task_executor=te, worktree=True)
+        bc = BuildConfig(task_executor=te, image="goga:latest", worktree=True)
         cfg = Config(lang="python", build=bc, commands={"foo": "bar"})
         assert cfg.lang == "python"
         assert cfg.build is bc
@@ -235,7 +241,7 @@ class TestConfigCreation:
 
     def test_nested_task_executor_access(self):
         te = TaskExecutor(agent="copilot", env={"A": "1", "B": "2"})
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cfg = Config(lang="python", build=bc)
         assert isinstance(cfg.build.task_executor, TaskExecutor)
         assert cfg.build.task_executor.agent == "copilot"
@@ -246,7 +252,7 @@ class TestConfigRequiredLang:
     def test_config_without_lang_raises_type_error(self):
         """Config(build=bc) without lang raises TypeError."""
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         with pytest.raises(TypeError):
             Config(build=bc)
 
@@ -273,13 +279,13 @@ class TestCodemanifestConfigFrozen:
 class TestConfigCodemenifestField:
     def test_codemanifest_field_defaults_none(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cfg = Config(lang="python", build=bc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
         cfg = Config(lang="python", build=bc, codemanifest=cc)
         assert cfg.codemanifest is cc

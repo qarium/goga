@@ -74,6 +74,7 @@ build:
     env:
       ANTHROPIC_API_KEY: sk-xxx
       MODEL: claude-sonnet-4-6
+  image: qarium/goga:latest
   worktree: true
   skip_finalize: false
   session_timeout: "30m"
@@ -101,23 +102,24 @@ codemanifest:
 
 ### Опциональные поля
 
-| Поле                       | Тип     | Дефолт | Описание                                      |
-|----------------------------|---------|--------|-----------------------------------------------|
-| `commands`                 | mapping | `{}`   | Кастомизация промптов (заготовка)             |
-| `build.task_executor.env`  | mapping | `{}`   | Переменные окружения {str: str}               |
-| `build.worktree`           | bool    | None   | Изолированный git worktree                    |
-| `build.skip_finalize`      | bool    | None   | Пропустить финализацию                        |
-| `build.session_timeout`    | str     | None   | Таймаут сессии (Go duration)                  |
-| `build.idle_timeout`       | str     | None   | Таймаут простоя (Go duration)                 |
-| `build.wait`               | str     | None   | Ожидание при rate limit (Go duration)         |
-| `build.max_iterations`     | int     | None   | Максимум итераций                             |
-| `build.review_patience`    | int     | None   | Порог остановки ревью                         |
-| `build.prompts_dir`        | str     | None   | Путь к кастомным промптам                     |
-| `build.agents_dir`         | str     | None   | Путь к кастомным агентам                      |
-| `build.codex_review`       | bool    | None   | Включить codex ревью                          |
-| `codemanifest`             | mapping | None   | Конфигурация практик и аннотаций CODEMANIFEST |
-| `codemanifest.usages`      | mapping | `{}`   | Маппинг {usage_name: path/to/file.md}         |
-| `codemanifest.annotations` | str     | None   | Текстовые аннотации для AI-агента             |
+| Поле                       | Тип     | Дефолт                 | Описание                                      |
+|----------------------------|---------|------------------------|-----------------------------------------------|
+| `commands`                 | mapping | `{}`                   | Кастомизация промптов (заготовка)             |
+| `build.task_executor.env`  | mapping | `{}`                   | Переменные окружения {str: str}               |
+| `build.image`              | str     | `"qarium/goga:latest"` | Docker-образ для сборки                       |
+| `build.worktree`           | bool    | None                   | Изолированный git worktree                    |
+| `build.skip_finalize`      | bool    | None                   | Пропустить финализацию                        |
+| `build.session_timeout`    | str     | None                   | Таймаут сессии (Go duration)                  |
+| `build.idle_timeout`       | str     | None                   | Таймаут простоя (Go duration)                 |
+| `build.wait`               | str     | None                   | Ожидание при rate limit (Go duration)         |
+| `build.max_iterations`     | int     | None                   | Максимум итераций                             |
+| `build.review_patience`    | int     | None                   | Порог остановки ревью                         |
+| `build.prompts_dir`        | str     | None                   | Путь к кастомным промптам                     |
+| `build.agents_dir`         | str     | None                   | Путь к кастомным агентам                      |
+| `build.codex_review`       | bool    | None                   | Включить codex ревью                          |
+| `codemanifest`             | mapping | None                   | Конфигурация практик и аннотаций CODEMANIFEST |
+| `codemanifest.usages`      | mapping | `{}`                   | Маппинг {usage_name: path/to/file.md}         |
+| `codemanifest.annotations` | str     | None                   | Текстовые аннотации для AI-агента             |
 
 ## Доступ к данным
 
@@ -133,6 +135,7 @@ config.commands       # dict — кастомные команды
 
 # BuildConfig
 config.build.task_executor   # TaskExecutor
+config.build.image           # str — Docker-образ для сборки
 config.build.worktree        # bool | None
 config.build.session_timeout # str | None
 

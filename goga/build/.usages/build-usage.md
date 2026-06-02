@@ -50,3 +50,12 @@ exit_code = build(
 - Создаёт `.ralphex/claude-wrapper.sh` и `.ralphex/config`
 - Копирует prompts и agents в `.ralphex/`
 - Запускает subprocess (`ralphex`)
+
+## Docker entry point
+
+Модуль поддерживает запуск через `python -m goga.build` — используется внутри Docker-контейнера
+при вызове CLI-команды `goga build`. В этом режиме argparse парсит CLI-опции и вызывает `build()` напрямую.
+
+```bash
+python -m goga.build plan.md --worktree --skip-manifest-check
+```

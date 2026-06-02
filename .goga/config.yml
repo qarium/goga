@@ -1,5 +1,6 @@
 language: python
 build:
+  image: qarium/goga:latest
   task_executor:
     agent: claude
     env:

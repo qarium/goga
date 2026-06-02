@@ -119,6 +119,7 @@ def load_config() -> Config:
         prompts_dir=build_data.get("prompts_dir"),
         agents_dir=build_data.get("agents_dir"),
         codex_review=build_data.get("codex_review"),
+        image=build_data.get("image", "qarium/goga:latest"),
     )
 
     return Config(lang=lang, build=build, commands=commands, codemanifest=_parse_codemanifest(data))

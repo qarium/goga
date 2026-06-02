@@ -2,7 +2,7 @@
 
 ## Назначение
 
-CLI-обёртка команды сборки. Парсит click-опции, загружает конфигурацию и делегирует бизнес-логику в `goga/build`.
+CLI-обёртка команды сборки. Парсит click-опции, загружает конфигурацию и запускает goga.build внутри Docker-контейнера.
 
 ## Синтаксис
 
@@ -10,6 +10,7 @@ CLI-обёртка команды сборки. Парсит click-опции, �
 goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N]
+                 [-e KEY=VALUE ...]
 ```
 
 ## Аргументы
@@ -31,6 +32,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `--wait` | str | из конфига | Ожидание при rate limit |
 | `--max-iterations` | int | из конфига | Максимум итераций |
 | `--review-patience` | int | из конфига | Порог остановки ревью |
+| `-e` / `--env` | str (multiple) | — | Передать переменные окружения в контейнер (KEY=VALUE) |
 
 ## Код возврата
 
@@ -42,4 +44,9 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 ```bash
 goga build docs/plans/my-plan.md
 goga build docs/plans/my-plan.md --dry-run --worktree
+goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
 ```
+
+## Требования
+
+- Docker должен быть установлен и доступен в PATH
