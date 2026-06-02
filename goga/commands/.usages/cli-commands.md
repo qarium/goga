@@ -7,7 +7,7 @@
 Все команды доступны из фасада одной строкой:
 
 ```python
-from goga.commands import linter, build, install, schema, contract, config, sync
+from goga.commands import linter, build, connect, schema, contract, config, sync
 ```
 
 Каждая команда доступна из своей подклетки (через `__init__.py` реэкспорт):
@@ -15,7 +15,7 @@ from goga.commands import linter, build, install, schema, contract, config, sync
 ```python
 from goga.commands.linter import linter
 from goga.commands.build import build
-from goga.commands.install import install
+from goga.commands.connect import connect
 from goga.commands.schema import schema
 from goga.commands.contract import contract
 from goga.commands.config import config
@@ -27,7 +27,7 @@ from goga.commands.sync import sync
 ```python
 from goga.commands.linter.linter import linter
 from goga.commands.build.build import build
-from goga.commands.install.install import install
+from goga.commands.connect.connect import connect
 from goga.commands.schema.schema import schema
 from goga.commands.contract.contract import contract
 from goga.commands.config.config import config
@@ -39,7 +39,7 @@ from goga.commands.sync.sync import sync
 ```python
 import click
 
-from goga.commands import linter, build, install, schema, contract, config, sync
+from goga.commands import linter, build, connect, schema, contract, config, sync
 
 
 @click.group()
@@ -49,7 +49,7 @@ def app() -> None:
 
 app.add_command(linter)
 app.add_command(build)
-app.add_command(install)
+app.add_command(connect)
 app.add_command(schema)
 app.add_command(contract)
 app.add_command(config)
@@ -71,12 +71,12 @@ def test_example():
 
 ## Список команд
 
-| Команда | Подклетка | Назначение |
-|---------|-----------|-----------|
-| `linter` | `goga/commands/linter/` | Валидация CODEMANIFEST файлов |
-| `build` | `goga/commands/build/` | Сборка через ralphex |
-| `install` | `goga/commands/install/` | Установка скиллов goga |
-| `schema` | `goga/commands/schema/` | JSON-схема проекта |
+| Команда    | Подклетка                 | Назначение                        |
+|------------|---------------------------|-----------------------------------|
+| `linter`   | `goga/commands/linter/`   | Валидация CODEMANIFEST файлов     |
+| `build`    | `goga/commands/build/`    | Сборка через ralphex              |
+| `connect`  | `goga/commands/connect/`  | Подключение скиллов goga          |
+| `schema`   | `goga/commands/schema/`   | JSON-схема проекта                |
 | `contract` | `goga/commands/contract/` | Сравнение контракта с реализацией |
-| `config` | `goga/commands/config/` | Вывод значений конфигурации |
-| `sync` | `goga/commands/sync/` | Синхронизация .usages/ |
+| `config`   | `goga/commands/config/`   | Вывод значений конфигурации       |
+| `sync`     | `goga/commands/sync/`     | Синхронизация .usages/            |

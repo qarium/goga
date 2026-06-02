@@ -1,13 +1,13 @@
-# CLI Command: install
+# CLI Command: connect
 
 ## Назначение
 
-CLI-обёртка команды установки. Парсит click-опции, загружает конфигурацию и делегирует бизнес-логику в `goga/install`.
+CLI-обёртка команды подключения. Парсит click-опции, загружает конфигурацию и делегирует бизнес-логику в `goga/connect`.
 
 ## Синтаксис
 
 ```
-goga install [--agent <name>]
+goga connect [--agent <name>]
 ```
 
 ## Опции
@@ -25,8 +25,8 @@ goga install [--agent <name>]
 ## Примеры
 
 ```bash
-goga install
-goga install --agent claude
-goga install --force-overwrite
-goga install --agent claude --force-overwrite
+goga connect
+goga connect --agent claude
+goga connect --force-overwrite
+goga connect --agent claude --force-overwrite
 ```

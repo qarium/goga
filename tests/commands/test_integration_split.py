@@ -9,7 +9,7 @@ from unittest import mock
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands.build import build as build_cli
-from goga.commands.install import install as install_cli
+from goga.commands.connect import connect as connect_cli
 from goga.commands.schema import schema as schema_cli
 from goga.commands.sync import sync as sync_cli
 
@@ -20,7 +20,7 @@ from tests.conftest import cwd as _cwd
 _sync_mod = importlib.import_module("goga.commands.sync.sync")
 _schema_mod = importlib.import_module("goga.commands.schema.schema")
 _build_mod = importlib.import_module("goga.commands.build.build")
-_install_mod = importlib.import_module("goga.commands.install.install")
+_connect_mod = importlib.import_module("goga.commands.connect.connect")
 
 # --- sync delegation ---
 
@@ -222,16 +222,16 @@ def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
 
 
 class TestInstallDelegation:
-    def test_install_delegates_to_install_logic(self, tmp_path: Path) -> None:
+    def test_install_delegates_to_connect_logic(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
             _cwd(tmp_path),
         ):
             _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(install_cli, [])
+            result = runner.invoke(connect_cli, [])
 
         assert result.exit_code == 0
         call_args = mock_logic.call_args
@@ -239,13 +239,13 @@ class TestInstallDelegation:
 
     def test_install_delegates_with_agent(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):
             _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(install_cli, ["--agent", "claude"])
+            result = runner.invoke(connect_cli, ["--agent", "claude"])
 
         assert result.exit_code == 0
         call_args = mock_logic.call_args
@@ -253,13 +253,13 @@ class TestInstallDelegation:
 
     def test_install_delegates_exit_code_1(self, tmp_path: Path) -> None:
         with (
-            mock.patch.object(_install_mod, "install_logic", return_value=1),
+            mock.patch.object(_connect_mod, "connect_logic", return_value=1),
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):
             _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(install_cli, ["--agent", "unknown"])
+            result = runner.invoke(connect_cli, ["--agent", "unknown"])
 
         assert result.exit_code == 1
 
@@ -269,14 +269,14 @@ class TestInstallDelegation:
             _cwd(tmp_path),
         ):
             runner = CliRunner()
-            result = runner.invoke(install_cli, [])
+            result = runner.invoke(connect_cli, [])
 
         assert result.exit_code != 0
         assert "config" in result.output.lower()
 
-    def test_install_cli_registered_in_app(self) -> None:
+    def test_connect_cli_registered_in_app(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["install", "--help"])
+        result = runner.invoke(app, ["connect", "--help"])
         assert result.exit_code == 0
         assert "agent" in result.output.lower()
 
@@ -324,12 +324,12 @@ class TestAllCommandsDelegationViaApp:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch.object(_install_mod, "install_logic", return_value=0) as mock_logic,
+            mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
-            result = runner.invoke(app, ["install"])
+            result = runner.invoke(app, ["connect"])
 
         assert result.exit_code == 0
         assert mock_logic.call_args[0][0] is None

@@ -2,7 +2,7 @@ Imports:
   - Types:
       - linter
       - build
-      - install
+      - connect
       - schema
       - contract
       - config
@@ -33,7 +33,7 @@ app():
     Команды:
     - `linter`
     - `build`
-    - `install`
+    - `connect`
     - `schema`
     - `contract`
     - `config`

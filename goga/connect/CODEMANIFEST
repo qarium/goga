@@ -14,8 +14,8 @@ Annotations: |
 
 ---
 
-"install(agent: str | None, config: Config, force_overwrite: bool = False) -> exit_code:int":
-  location: install.py
+"connect(agent: str | None, config: Config, force_overwrite: bool = False) -> exit_code:int":
+  location: connect.py
   annotations: |
     Установка скиллов и команд goga для выбранного AI-агента,
     включая скиллы из установленных пакетов инструментов.
@@ -77,5 +77,5 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает логику установки скиллов и команд goga,
+  Манифест описывает логику подключения скиллов и команд goga,
   включая установку скиллов из пакетов инструментов goga_tool_*

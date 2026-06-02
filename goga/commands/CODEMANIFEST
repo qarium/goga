@@ -6,8 +6,8 @@ Imports:
       - build
     From: goga/commands/build
   - Types:
-      - install
-    From: goga/commands/install
+      - connect
+    From: goga/commands/connect
   - Types:
       - schema
     From: goga/commands/schema
@@ -39,7 +39,7 @@ Annotations: |
 
 ->linter: {}
 ->build: {}
-->install: {}
+->connect: {}
 ->schema: {}
 ->contract: {}
 ->config: {}

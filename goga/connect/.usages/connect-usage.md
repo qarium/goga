@@ -1,27 +1,27 @@
-# Install API — goga/install
+# Connect API — goga/connect
 
 ## Обзор
 
-Модуль `goga.install` реализует логику установки скиллов и команд goga
+Модуль `goga.connect` реализует логику подключения скиллов и команд goga
 в конфигурацию целевого AI-агента.
 
 ## Использование
 
 ```python
 from goga.config import load_config
-from goga.install import install
+from goga.connect import connect
 
 # Загрузить конфигурацию
 config = load_config()
 
-# Установка с agent из конфига
-exit_code = install(agent=None, config=config)
+# Подключение с agent из конфига
+exit_code = connect(agent=None, config=config)
 
-# Установка с явным agent
-exit_code = install(agent="claude", config=config)
+# Подключение с явным agent
+exit_code = connect(agent="claude", config=config)
 
-# Установка с перезаписью tool skills
-exit_code = install(agent="claude", config=config, force_overwrite=True)
+# Подключение с перезаписью tool skills
+exit_code = connect(agent="claude", config=config, force_overwrite=True)
 ```
 
 ## Параметры

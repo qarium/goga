@@ -119,8 +119,8 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
     return tool_skills
 
 
-def install(agent: str | None = None, config: Config | None = None, force_overwrite: bool = False) -> int:
-    """Install goga agent commands, skills, and DSL spec to the target directory.
+def connect(agent: str | None = None, config: Config | None = None, force_overwrite: bool = False) -> int:
+    """Connect goga agent commands, skills, and DSL spec to the target directory.
 
     Args:
         agent: Target agent name (e.g. 'claude'). If None, uses config.build.task_executor.agent.
