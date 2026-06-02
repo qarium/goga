@@ -3,6 +3,7 @@ Imports:
       - Config
       - BuildConfig
       - TaskExecutor
+      - load_config
     From: goga/config
 
 Usages:
@@ -58,6 +59,20 @@ Annotations: |
     - `ralphex` должен быть доступен в PATH, иначе ошибка
     - Минимальный вывод: что делается на каждом шаге (через sys.stderr)
     - Код возврата: код `ralphex` при успехе, 1 при ошибке
+
+"main() -> exit_code:int":
+  location: __main__.py
+  annotations: |
+    Entry point для запуска через python -m goga.build внутри Docker-контейнера.
+
+    `exit_code`: код возврата (0 успех, 1 ошибка)
+
+    Алгоритм:
+    1. Распарсить CLI-аргументы через argparse (plan + опции)
+    2. Загрузить конфигурацию через `load_config`
+    3. Собрать cli_options из argparse-результатов
+    4. Вызвать `build`(plan, `Config`, cli_options)
+    5. Вернуть `exit_code`
 
 ---
 

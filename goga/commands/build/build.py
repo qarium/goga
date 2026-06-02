@@ -1,10 +1,76 @@
 from __future__ import annotations
 
+import os
+import stat
+import subprocess
+import tempfile
+from pathlib import Path
+
 import click
 import yaml
 
-from ...build import build as build_logic
 from ...config import load_config
+
+
+def _check_docker() -> bool:
+    try:
+        result = subprocess.run(
+            ["docker", "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return result.returncode == 0
+    except (FileNotFoundError, PermissionError, OSError):
+        return False
+
+
+def _write_env_file(
+    env: dict[str, str],
+    extra_env: tuple[str, ...],
+) -> Path:
+    fd, path = tempfile.mkstemp(prefix="goga-env-")
+    with os.fdopen(fd, "w") as f:
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        for k, v in env.items():
+            f.write(f"{k}={v}\n")
+        for pair in extra_env:
+            f.write(f"{pair}\n")
+    return Path(path)
+
+
+def _build_docker_cmd(
+    plan: str,
+    image: str,
+    env_file: Path,
+    cli_flags: dict[str, bool | str | int | None],
+) -> list[str]:
+    project_dir = Path.cwd().resolve()
+
+    cmd: list[str] = ["docker", "run", "--rm", "--entrypoint",
+                      "python3", "-v", f"{project_dir}:/workspace", "-w",
+                      "/workspace", "--env-file", str(env_file), image]
+
+    cmd.extend(["-m", "goga.build", plan])
+
+    if cli_flags.get("dry_run"):
+        cmd.append("--dry-run")
+    if cli_flags.get("worktree"):
+        cmd.append("--worktree")
+    if cli_flags.get("skip_finalize"):
+        cmd.append("--skip-finalize")
+    if cli_flags.get("skip_manifest_check"):
+        cmd.append("--skip-manifest-check")
+    for flag in ("session_timeout", "idle_timeout", "wait"):
+        val = cli_flags.get(flag)
+        if val is not None:
+            cmd.extend([f"--{flag.replace('_', '-')}", str(val)])
+    for flag in ("max_iterations", "review_patience"):
+        val = cli_flags.get(flag)
+        if val is not None:
+            cmd.extend([f"--{flag.replace('_', '-')}", str(val)])
+
+    return cmd
 
 
 @click.command()
@@ -18,6 +84,7 @@ from ...config import load_config
 @click.option("--wait", type=str, default=None, help="Wait time")
 @click.option("--max-iterations", type=int, default=None, help="Max iterations")
 @click.option("--review-patience", type=int, default=None, help="Review patience")
+@click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
 @click.pass_context
 def build(  # noqa: PLR0913
     ctx: click.Context,
@@ -31,14 +98,18 @@ def build(  # noqa: PLR0913
     wait: str | None,
     max_iterations: int | None,
     review_patience: int | None,
+    extra_env: tuple[str, ...],
 ) -> None:
-    """Build code via ralphex. Prepares environment and launches ralphex."""
+    """Build code via ralphex. Launches goga.build inside a Docker container."""
+    if not _check_docker():
+        raise click.ClickException("docker not found in PATH")
+
     try:
         config = load_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    cli_options = {
+    cli_flags = {
         "worktree": worktree,
         "skip_finalize": skip_finalize,
         "skip_manifest_check": skip_manifest_check,
@@ -50,5 +121,20 @@ def build(  # noqa: PLR0913
         "dry_run": dry_run,
     }
 
-    exit_code = build_logic(plan, config, cli_options)
-    ctx.exit(exit_code)
+    env_file = _write_env_file(config.build.task_executor.env, extra_env)
+
+    try:
+        docker_cmd = _build_docker_cmd(
+            plan=plan,
+            image=config.build.image,
+            env_file=env_file,
+            cli_flags=cli_flags,
+        )
+
+        if dry_run:
+            ctx.exit(0)
+
+        ctx.exit(subprocess.call(docker_cmd))
+    finally:
+        env_file.unlink(missing_ok=True)
+

@@ -25,7 +25,7 @@ _install_mod = importlib.import_module("goga.install.install")
 
 def _make_config(agent: str = "claude") -> Config:
     task_executor = TaskExecutor(agent=agent, env={})
-    build = BuildConfig(task_executor=task_executor)
+    build = BuildConfig(task_executor=task_executor, image="goga:latest")
     return Config(lang="python", build=build)
 
 

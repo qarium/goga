@@ -1,7 +1,16 @@
 Usages:
+  conventions: .goga/usages/conventions.md
   yaml: |
     Использовать yaml.safe_load() для парсинга .goga/config.yml.
     Библиотека PyYAML.
+
+Annotations: |
+  Практика `conventions` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
 
 ---
 
@@ -29,17 +38,18 @@ Usages:
        Если None или пустая строка — выбросить ValueError("build.task_executor.agent is required in .goga/config.yml")
     11. Извлечь env: task_executor_data.get("env", {})
     12. Создать `TaskExecutor`(agent=agent, env=env)
-    13. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
-    14. Создать `BuildConfig`(task_executor=task_executor, worktree=..., ...)
-    15. Извлечь codemanifest dict: data.get("codemanifest")
-    16. Если codemanifest_data существует и не None:
+    13. Извлечь image: build_data.get("image", "qarium/goga:latest")
+    14. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
+    15. Создать `BuildConfig`(task_executor=task_executor, image=image, worktree=..., ...)
+    16. Извлечь codemanifest dict: data.get("codemanifest")
+    17. Если codemanifest_data существует и не None:
         a. Извлечь usages: codemanifest_data.get("usages", {})
            Если не dict — выбросить ValueError("codemanifest.usages must be a mapping")
         b. Извлечь annotations: codemanifest_data.get("annotations")
            Если не str и не None — выбросить ValueError("codemanifest.annotations must be a string")
         c. Создать `CodemanifestConfig`(usages=usages, annotations=annotations)
-    17. Иначе codemanifest = None
-    18. Вернуть Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)
+    18. Иначе codemanifest = None
+    19. Вернуть Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)
 
     Requirements:
     - Файл конфигурации: .goga/config.yml (папка с точкой) в корне проекта
@@ -76,21 +86,25 @@ Usages:
       Экземпляр `CodemanifestConfig`.
       None если секция codemanifest отсутствует.
 
-"BuildConfig(task_executor: TaskExecutor, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
+"BuildConfig(task_executor: TaskExecutor, image: str, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
   location: config.py
   annotations: |
     Конфигурация сборки. Создаётся внутри `load_config` из секции build файла .goga/config.yml.
 
     `task_executor`: конфигурация AI-агента. Обязательное поле.
+    `image`: Docker-образ для запуска сборки. Обязательное поле.
     Остальные параметры — опциональные, по умолчанию None.
 
     Requirements:
     - task_executor — обязательное поле
+    - image — обязательное поле
     - остальные поля могут быть None
   properties:
     task_executor -> TaskExecutor: |
       Конфигурация AI-агента. Экземпляр `TaskExecutor`.
       Обязательное поле.
+    image -> str: |
+      Docker-образ для запуска сборки.
     worktree -> bool | None: |
       Использовать изолированный git worktree.
     skip_finalize -> bool | None: |

@@ -122,11 +122,14 @@ def _write_goga_yml(tmp_path: Path) -> None:
 
 
 class TestBuildDelegation:
-    def test_build_delegates_to_build_logic(self, tmp_path: Path) -> None:
+    def test_build_launches_docker(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
+            mock.patch("subprocess.call", return_value=0),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -136,17 +139,15 @@ class TestBuildDelegation:
             )
 
         assert result.exit_code == 0
-        call_args = mock_logic.call_args
-        assert call_args[0][0] == "plan.md"
-        cli_options = call_args[0][2]
-        assert cli_options["dry_run"] is True
-        assert cli_options["skip_manifest_check"] is True
 
-    def test_build_delegates_exit_code(self, tmp_path: Path) -> None:
+    def test_build_docker_exit_code(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch.object(_build_mod, "build_logic", return_value=42),
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
+            mock.patch("subprocess.call", return_value=42),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -172,7 +173,10 @@ class TestBuildDelegation:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]) as mock_cmd,
+            mock.patch("subprocess.call", return_value=0),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
@@ -197,14 +201,14 @@ class TestBuildDelegation:
             )
 
         assert result.exit_code == 0
-        cli_options = mock_logic.call_args[0][2]
-        assert cli_options["worktree"] is True
-        assert cli_options["skip_finalize"] is True
-        assert cli_options["session_timeout"] == "30m"
-        assert cli_options["idle_timeout"] == "5m"
-        assert cli_options["wait"] == "10s"
-        assert cli_options["max_iterations"] == 5
-        assert cli_options["review_patience"] == 3
+        cli_flags = mock_cmd.call_args[1]["cli_flags"]
+        assert cli_flags["worktree"] is True
+        assert cli_flags["skip_finalize"] is True
+        assert cli_flags["session_timeout"] == "30m"
+        assert cli_flags["idle_timeout"] == "5m"
+        assert cli_flags["wait"] == "10s"
+        assert cli_flags["max_iterations"] == 5
+        assert cli_flags["review_patience"] == 3
 
 
 # --- install delegation ---
@@ -305,14 +309,16 @@ class TestAllCommandsDelegationViaApp:
         _write_goga_yml(tmp_path)
 
         with (
-            mock.patch.object(_build_mod, "build_logic", return_value=0) as mock_logic,
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
+            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
+            mock.patch("subprocess.call", return_value=0),
             _cwd(tmp_path),
         ):
             runner = CliRunner()
             result = runner.invoke(app, ["build", "--skip-manifest-check", "plan.md"])
 
         assert result.exit_code == 0
-        assert mock_logic.call_args[0][0] == "plan.md"
 
     def test_install_via_app_delegates(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)

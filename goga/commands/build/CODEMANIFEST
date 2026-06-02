@@ -1,8 +1,5 @@
 Imports:
   - Types:
-      - build AS build_logic
-    From: goga/build
-  - Types:
       - Config
       - load_config
     Usages:
@@ -21,14 +18,14 @@ Annotations: |
   - организации тестовой инфраструктуры
   - понимания общих принципов/правил разработки и тестирования в проекте
   Для создания команды использовать практику `click`.
-  Команда делегирует бизнес-логику через `build_logic`.
+  Команда запускает goga.build внутри Docker-контейнера.
 
 ---
 
 "build(plan: str)":
   location: build.py
   annotations: |
-    CLI-обёртка команды сборки. Делегирует бизнес-логику `build_logic`.
+    CLI-обёртка команды сборки. Запускает python -m goga.build внутри Docker-контейнера.
 
     `plan`: путь к файлу плана
 
@@ -36,12 +33,25 @@ Annotations: |
     - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
     - --session-timeout, --idle-timeout, --wait
     - --max-iterations, --review-patience
+    - -e / --env KEY=VALUE (множественная) — передать переменные окружения в контейнер
 
     Алгоритм:
+    0. (pre-check) Проверить доступность docker через _check_docker()
+       Если docker не найден — ошибка ClickException
     1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
-    2. Собрать cli_options из click-параметров
-    3. Вызвать `build_logic`(`plan`, `Config`, cli_options)
-    4. Вернуть exit_code
+    2. Собрать cli_flags из click-параметров
+    3. Записать env-file через _write_env_file:
+       - env из task_executor + extra_env из CLI
+       - Файл с правами 0600 во временной директории
+    4. Собрать Docker-команду через _build_docker_cmd:
+       - docker run --rm --entrypoint python3
+       - Монтирование CWD как /workspace
+       - --env-file для передачи переменных
+       - Образ из `Config`.build.image
+       - Аргументы: -m goga.build <plan> + CLI-флаги
+    5. При dry_run: exit 0 (без запуска контейнера)
+    6. Запустить Docker через subprocess.call, вернуть его exit code
+    7. В finally: удалить env-file
 
 ---
 

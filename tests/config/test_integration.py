@@ -13,6 +13,7 @@ build:
     env:
       RUST_BACKTRACE: "1"
       CARGO_HOME: /opt/cargo
+  image: rust-builder:1.0
   worktree: true
   skip_finalize: false
   session_timeout: "45m"
@@ -68,6 +69,7 @@ class TestFullConfigLoadingFlow:
 
         # BuildConfig level
         assert isinstance(config.build, BuildConfig)
+        assert config.build.image == "rust-builder:1.0"
         assert config.build.worktree is True
         assert config.build.skip_finalize is False
         assert config.build.session_timeout == "45m"
@@ -98,6 +100,7 @@ class TestFullConfigLoadingFlow:
         assert config.commands == {}
         assert config.codemanifest is None
         assert config.build.worktree is None
+        assert config.build.image == "qarium/goga:latest"
         assert config.build.skip_finalize is None
         assert config.build.session_timeout is None
         assert config.build.idle_timeout is None
@@ -137,13 +140,13 @@ class TestConfigImmutability:
 
     def test_build_config_is_frozen(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             bc.worktree = True
 
     def test_config_is_frozen(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cfg = Config(build=bc, lang="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             cfg.lang = "go"
@@ -161,7 +164,7 @@ class TestConfigImmutability:
 
     def test_commands_dict_mutation_does_not_raise(self):
         te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
+        bc = BuildConfig(task_executor=te, image="goga:latest")
         cfg = Config(build=bc, commands={"a": "1"}, lang="python")
         cfg.commands["b"] = "2"  # dict content is mutable
         assert cfg.commands == {"a": "1", "b": "2"}

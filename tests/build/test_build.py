@@ -35,7 +35,7 @@ def _make_config(
     **build_kwargs,
 ) -> Config:
     task_executor = TaskExecutor(agent=agent, env=env or {})
-    build = BuildConfig(task_executor=task_executor, **build_kwargs)
+    build = BuildConfig(task_executor=task_executor, image="goga:latest", **build_kwargs)
     return Config(lang="python", build=build)
 
 
@@ -334,6 +334,7 @@ class TestBuildDryRun:
     def test_dry_run_returns_0(self, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(
             tmp_path,
+            monkeypatch,
             cli_options={"dry_run": True, "skip_manifest_check": True},
         )
         assert result == 0
@@ -342,6 +343,7 @@ class TestBuildDryRun:
         with mock.patch.object(subprocess, "call") as mock_call:
             _run_build_in_tmp(
                 tmp_path,
+                monkeypatch,
                 cli_options={"dry_run": True, "skip_manifest_check": True},
             )
             mock_call.assert_not_called()
@@ -368,6 +370,7 @@ class TestBuildEnvVarsInSettings:
         config = _make_config(env=TEST_ENV_VARS)
         result = _run_build_in_tmp(
             tmp_path,
+            monkeypatch,
             config=config,
             cli_options={"skip_manifest_check": True},
         )
@@ -384,6 +387,7 @@ class TestBuildUnsupportedAgent:
         config = _make_config(agent="gemini")
         result = _run_build_in_tmp(
             tmp_path,
+            monkeypatch,
             config=config,
             cli_options={"skip_manifest_check": True},
         )
@@ -395,6 +399,7 @@ class TestBuildMissingRalphex:
         with mock.patch.object(shutil, "which", return_value=None):
             result = _run_build_in_tmp(
                 tmp_path,
+                monkeypatch,
                 cli_options={"skip_manifest_check": True},
             )
             assert result == 1
@@ -407,6 +412,7 @@ class TestBuildDefaultsDirNotFound:
         with mock.patch("goga.build.build.DEFAULTS_PACKAGE_DIR", Path("/nonexistent")):
             result = _run_build_in_tmp(
                 tmp_path,
+                monkeypatch,
                 cli_options={"skip_manifest_check": True},
             )
             assert result == 1
@@ -501,6 +507,7 @@ class TestBuildNegativeCases:
 
         result = _run_build_in_tmp(
             tmp_path,
+            monkeypatch,
             cli_options={"skip_manifest_check": True},
         )
         assert result != 0
@@ -522,6 +529,7 @@ class TestBuildConfigFlags:
         config = _make_config(worktree=False)
         _run_build_in_tmp(
             tmp_path,
+            monkeypatch,
             config=config,
             cli_options={"worktree": True, "skip_manifest_check": True},
         )
