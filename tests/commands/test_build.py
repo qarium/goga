@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -8,6 +9,8 @@ import click
 import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
+
+_build_mod = sys.modules["goga.commands.build.build"]
 
 
 def _write_goga_yml(tmp_path: Path, extra: dict | None = None) -> None:
@@ -138,7 +141,7 @@ class TestHelpOutput:
 
 
 class TestDockerCheck:
-    @mock.patch("goga.commands.build.build.subprocess.run")
+    @mock.patch.object(_build_mod.subprocess, "run")
     def test_docker_available(self, mock_run, tmp_path, monkeypatch) -> None:
         mock_run.return_value = mock.Mock(returncode=0)
         _write_goga_yml(tmp_path)
@@ -150,7 +153,7 @@ class TestDockerCheck:
 
     def test_docker_not_available(self, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path)
-        with mock.patch("goga.commands.build.build._check_docker", return_value=False):
+        with mock.patch.object(_build_mod, "_check_docker", return_value=False):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert result.exit_code == 1
@@ -161,15 +164,15 @@ class TestDockerCheck:
 
 
 class TestDryRun:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     def test_dry_run_exit_code_zero(self, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path)
         result = _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
         assert result.exit_code == 0
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
     def test_dry_run_does_not_call_docker(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -291,9 +294,9 @@ class TestWriteEnvFile:
 
 
 class TestExtraEnvOption:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
     def test_extra_env_passed_to_write_env_file(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -312,9 +315,9 @@ class TestExtraEnvOption:
         assert "KEY=VALUE" in extra_env
         assert "OTHER=VAL2" in extra_env
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
     def test_no_extra_env_empty_tuple(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -333,9 +336,9 @@ class TestExtraEnvOption:
 
 
 class TestDockerExecution:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_subprocess_called_with_docker_cmd(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -349,9 +352,9 @@ class TestDockerExecution:
                 ["docker", "run", "goga:latest", "-m", "goga.build", "plan.md"]
             )
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_exit_code_propagated(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -368,8 +371,8 @@ class TestDockerExecution:
 
 
 class TestEnvFileCleanup:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
     def test_env_file_cleaned_after_execution(self, mock_cmd, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path)
         real_env_files: list[Path] = []
@@ -382,7 +385,7 @@ class TestEnvFileCleanup:
             return p
 
         with (
-            mock.patch("goga.commands.build.build._write_env_file", side_effect=capture_env_file),
+            mock.patch.object(_build_mod, "_write_env_file", side_effect=capture_env_file),
             mock.patch.object(subprocess, "call", return_value=0),
         ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
@@ -395,9 +398,9 @@ class TestEnvFileCleanup:
 
 
 class TestBuildUsesLoadConfigFromGogaConfig:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_image_from_config(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -411,9 +414,9 @@ class TestBuildUsesLoadConfigFromGogaConfig:
         call_kwargs = mock_cmd.call_args[1]
         assert call_kwargs["image"] == "custom-image:v2"
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_default_image(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -455,9 +458,9 @@ class TestBuildNegativeCases:
 
 
 class TestCLIFlagForwarding:
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_worktree_forwarded(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -471,9 +474,9 @@ class TestCLIFlagForwarding:
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
         assert cli_flags["worktree"] is True
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_session_timeout_forwarded(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
@@ -487,9 +490,9 @@ class TestCLIFlagForwarding:
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
         assert cli_flags["session_timeout"] == "30m"
 
-    @mock.patch("goga.commands.build.build._check_docker", return_value=True)
-    @mock.patch("goga.commands.build.build._write_env_file")
-    @mock.patch("goga.commands.build.build._build_docker_cmd")
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd")
     def test_skip_finalize_forwarded(
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
