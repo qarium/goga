@@ -8,16 +8,19 @@ COPY goga/ /tmp/goga/goga/
 RUN pip install --no-cache-dir /tmp/goga && \
     rm -rf /tmp/goga
 
-FROM ghcr.io/umputun/ralphex:latest AS ralphex-source
+FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-source
 
 FROM python:3.12-slim-bookworm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     git jq ripgrep fzf openssh-client bash make gcc g++ curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
+RUN npm install -g @anthropic-ai/claude-code@2.1.160 @openai/codex@0.136.0
 RUN chmod +x /srv/ralphex
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
