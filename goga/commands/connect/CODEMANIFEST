@@ -1,7 +1,7 @@
 Imports:
   - Types:
-      - install AS install_logic
-    From: goga/install
+      - connect AS connect_logic
+    From: goga/connect
   - Types:
       - Config
       - load_config
@@ -21,14 +21,14 @@ Annotations: |
   - организации тестовой инфраструктуры
   - понимания общих принципов/правил разработки и тестирования в проекте
   Для создания команды использовать практику `click`.
-  Команда делегирует бизнес-логику через `install_logic`.
+  Команда делегирует бизнес-логику через `connect_logic`.
 
 ---
 
-"install(agent: str | None = None, force_overwrite: bool = False)":
-  location: install.py
+"connect(agent: str | None = None, force_overwrite: bool = False)":
+  location: connect.py
   annotations: |
-    CLI-обёртка команды установки. Делегирует бизнес-логику `install_logic`.
+    CLI-обёртка команды подключения. Делегирует бизнес-логику `connect_logic`.
 
     `agent`: целевой AI-агент
     `force_overwrite`: разрешить перезапись существующих скиллов
@@ -39,7 +39,7 @@ Annotations: |
 
     Алгоритм:
     1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
-    2. Вызвать `install_logic`(`agent`, `Config`, `force_overwrite`)
+    2. Вызвать `connect_logic`(`agent`, `Config`, `force_overwrite`)
     3. Вернуть exit_code
 
 ---

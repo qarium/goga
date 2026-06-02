@@ -8,7 +8,7 @@ from unittest import mock
 
 import pytest
 from goga.config import BuildConfig, Config, TaskExecutor
-from goga.install.install import (
+from goga.connect.connect import (
     _cleanup_goga_skills,
     _download_dsl_spec,
     _get_source_dir,
@@ -17,10 +17,10 @@ from goga.install.install import (
     _install_tool_skills,
     _print_summary,
     _resolve_target_dir,
-    install,
+    connect,
 )
 
-_install_mod = importlib.import_module("goga.install.install")
+_install_mod = importlib.import_module("goga.connect.connect")
 
 
 def _make_config(agent: str = "claude") -> Config:
@@ -212,7 +212,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent=None, config=config)
+            result = connect(agent=None, config=config)
 
         assert result == 0
         target = mock_home / ".claude"
@@ -232,13 +232,13 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
 
     def test_unsupported_agent_returns_1(self) -> None:
         config = _make_config(agent="unknown")
-        result = install(agent="unknown", config=config)
+        result = connect(agent="unknown", config=config)
         assert result == 1
 
     def test_source_missing_returns_1(self, tmp_path: Path) -> None:
@@ -246,7 +246,7 @@ class TestInstall:
         mock_source = tmp_path / "nonexistent"
 
         with mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 1
 
@@ -262,7 +262,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec", side_effect=OSError("download failed")),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 1
 
@@ -278,7 +278,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
         target = mock_home / ".claude"
@@ -299,8 +299,8 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result1 = install(agent="claude", config=config)
-            result2 = install(agent="claude", config=config)
+            result1 = connect(agent="claude", config=config)
+            result2 = connect(agent="claude", config=config)
 
         assert result1 == 0
         assert result2 == 0
@@ -318,7 +318,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
         assert (mock_home / ".claude" / "skills" / "user-skill" / "SKILL.md").exists()
@@ -336,14 +336,14 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
         assert not (mock_home / ".claude" / "skills" / "goga-obsolete").exists()
 
     def test_error_output_to_stderr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         config = _make_config()
-        result = install(agent="unknown", config=config)
+        result = connect(agent="unknown", config=config)
         assert result == 1
         captured = capsys.readouterr()
         assert "unsupported agent" in captured.err
@@ -361,7 +361,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
         assert not (mock_home / ".claude" / "commands" / "goga" / "old.md").exists()
@@ -382,7 +382,7 @@ class TestInstall:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
 
@@ -392,17 +392,17 @@ class TestInstall:
 
 class TestInstallSignatureContract:
     def test_install_has_three_parameters(self) -> None:
-        sig = inspect.signature(install)
+        sig = inspect.signature(connect)
         params = list(sig.parameters.keys())
         assert params == ["agent", "config", "force_overwrite"]
 
     def test_force_overwrite_default_is_false(self) -> None:
-        sig = inspect.signature(install)
+        sig = inspect.signature(connect)
         param = sig.parameters["force_overwrite"]
         assert param.default is False
 
     def test_force_overwrite_is_bool_type(self) -> None:
-        hints = inspect.get_annotations(install, eval_str=True)
+        hints = inspect.get_annotations(connect, eval_str=True)
         assert hints["force_overwrite"] is bool
 
     def test_install_accepts_force_overwrite_false(self, tmp_path: Path) -> None:
@@ -417,7 +417,7 @@ class TestInstallSignatureContract:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config, force_overwrite=False)
+            result = connect(agent="claude", config=config, force_overwrite=False)
 
         assert result == 0
 
@@ -433,7 +433,7 @@ class TestInstallSignatureContract:
             mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
             mock.patch.object(_install_mod, "_download_dsl_spec"),
         ):
-            result = install(agent="claude", config=config, force_overwrite=True)
+            result = connect(agent="claude", config=config, force_overwrite=True)
 
         assert result == 0
 
@@ -752,7 +752,7 @@ class TestInstallToolSkills:
                 side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
             ),
         ):
-            result = install(agent="claude", config=config)
+            result = connect(agent="claude", config=config)
 
         assert result == 0
         assert not (mock_home / ".claude" / "skills" / "goga-tool-obsolete").exists()
