@@ -40,18 +40,23 @@ Annotations: |
        Если docker не найден — ошибка ClickException
     1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
     2. Собрать cli_flags из click-параметров
-    3. Записать env-file через _write_env_file:
-       - env из task_executor + extra_env из CLI
+    3. Считать git config (user.name, user.email):
+       - Выполнить git config user.name и git config user.email
+       - При успехе — вернуть dict с GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL
+       - При ошибке или отсутствии git — вернуть пустой dict (не блокировать сборку)
+    4. Записать env-file:
+       - env = task_executor.env + git_env (git_env не перезаписывает task_executor.env)
+       - + extra_env из CLI
        - Файл с правами 0600 во временной директории
-    4. Собрать Docker-команду через _build_docker_cmd:
+    5. Собрать Docker-команду:
        - docker run --rm --entrypoint python3
        - Монтирование CWD как /workspace
        - --env-file для передачи переменных
        - Образ из `Config`.build.image
        - Аргументы: -m goga.build <plan> + CLI-флаги
-    5. При dry_run: exit 0 (без запуска контейнера)
-    6. Запустить Docker через subprocess.call, вернуть его exit code
-    7. В finally: удалить env-file
+    6. При dry_run: exit 0 (без запуска контейнера)
+    7. Запустить Docker через subprocess.call, вернуть его exit code
+    8. В finally: удалить env-file
 
 ---
 

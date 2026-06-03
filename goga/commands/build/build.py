@@ -25,6 +25,32 @@ def _check_docker() -> bool:
         return False
 
 
+def _read_git_config() -> dict[str, str]:
+    try:
+        name_result = subprocess.run(
+            ["git", "config", "user.name"],
+            capture_output=True, text=True, check=False,
+        )
+        email_result = subprocess.run(
+            ["git", "config", "user.email"],
+            capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, PermissionError, OSError):
+        return {}
+
+    name = name_result.stdout.strip()
+    email = email_result.stdout.strip()
+    if not name or not email:
+        return {}
+
+    return {
+        "GIT_AUTHOR_NAME": name,
+        "GIT_AUTHOR_EMAIL": email,
+        "GIT_COMMITTER_NAME": name,
+        "GIT_COMMITTER_EMAIL": email,
+    }
+
+
 def _write_env_file(
     env: dict[str, str],
     extra_env: tuple[str, ...],
@@ -121,7 +147,9 @@ def build(  # noqa: PLR0913
         "dry_run": dry_run,
     }
 
-    env_file = _write_env_file(config.build.task_executor.env, extra_env)
+    git_env = _read_git_config()
+    env = {**git_env, **config.build.task_executor.env}
+    env_file = _write_env_file(env, extra_env)
 
     try:
         docker_cmd = _build_docker_cmd(
