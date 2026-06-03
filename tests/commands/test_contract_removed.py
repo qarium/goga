@@ -9,11 +9,8 @@ from click.testing import CliRunner
 from goga.cli import app
 
 
-def test_no_init_command_registered() -> None:
-    runner = CliRunner()
-    result = runner.invoke(app, ["init"])
-    assert result.exit_code != 0
-    assert "No such command" in result.output
+def test_init_command_registered() -> None:
+    assert "init" in app.commands
 
 
 def test_no_compare_command_registered() -> None:
@@ -28,7 +25,7 @@ def test_no_init_command_in_help() -> None:
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     command_lines = re.findall(r"^\s{2,}(\S+)", result.output, re.MULTILINE)
-    assert "init" not in command_lines
+    assert "init" in command_lines
     assert "compare" not in command_lines
 
 

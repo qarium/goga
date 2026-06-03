@@ -1,0 +1,139 @@
+Usages:
+  conventions: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+  yaml: |
+    Использовать yaml.dump() для генерации .goga/config.yml.
+    Библиотека PyYAML. Параметр default_flow_style=False для читаемого формата.
+  lang_conventions: |
+    Базовые конвенции по языку скачиваются из репозитория qarium/goga-lang-conventions (ветка 0.0.x).
+    URL-шаблон: https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/{language}/project.md
+    Идентификатор языка используется напрямую как URL-сегмент (без маппинга).
+    Скачанный файл сохраняется в .goga/usages/conventions.md.
+  image_defaults: |
+    Дефолтный Docker-образ зависит от выбранного языка.
+    Для языков с предопределёнными образами показывается список подсказок, дефолт — последний из списка.
+    Пользователь может ввести произвольный образ.
+    Маппинг language → доступные образы:
+    - python: qarium/goga-python-{3.10-3.14}:1.0
+    - golang: qarium/goga-golang-{1.23-1.26}:1.0
+
+Annotations: |
+  Практика `conventions` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Использовать `click` для интерактивного ввода (Questionnaire).
+  Использовать `yaml` для генерации YAML-файла (FileGenerator).
+  Использовать `lang_conventions` для скачивания базовой конвенции по языку (Questionnaire, FileGenerator).
+  Использовать `image_defaults` для списка доступных Docker-образов в зависимости от языка (Questionnaire).
+  Все типы — immutable dataclasses (frozen=True, kw_only=True).
+
+---
+
+"InitAnswers(goga_config: GogaConfigAnswers)":
+  location: answers.py
+  annotations: |
+    Контейнер ответов пользователя. В будущем расширяется новыми свойствами
+    для других файлов.
+
+    `goga_config`: ответы для создания .goga/config.yml
+  properties:
+    "goga_config -> GogaConfigAnswers": |
+      Ответы для создания .goga/config.yml.
+
+"GogaConfigAnswers(language: str, agent: str, image: str, env: dict, codemanifest_usages: dict | None, codemanifest_annotations: str | None)":
+  location: answers.py
+  annotations: |
+    Данные для формирования .goga/config.yml.
+
+    `language`: выбранный язык проекта
+    `agent`: выбранный AI-executor
+    `image`: Docker-образ для сборки
+    `env`: переменные окружения для task_executor
+    `codemanifest_usages`: маппинг практик codemanifest
+    `codemanifest_annotations`: аннотации codemanifest
+  properties:
+    "language -> str": |
+      Выбранный язык проекта.
+    "agent -> str": |
+      Выбранный AI-executor.
+    "image -> str": |
+      Docker-образ для сборки.
+    "env -> dict": |
+      Переменные окружения для task_executor.
+    "codemanifest_usages -> dict | None": |
+      Маппинг практик codemanifest.
+    "codemanifest_annotations -> str | None": |
+      Аннотации codemanifest.
+
+"Questionnaire()":
+  location: questionnaire.py
+  annotations: |
+    Интерактивный опрос пользователя. Использует `click` для ввода.
+
+    Использовать `image_defaults` для списка доступных Docker-образов по языку.
+    Использовать `lang_conventions` для предложения скачивания базовой конвенции после выбора языка.
+  methods:
+    "ask() -> answers:InitAnswers": |
+      Выводит заголовок "=== Goga Project Initialization ===" и описание wizard.
+      Вызывает ask_goga_config(), собирает результат в InitAnswers.
+    "ask_goga_config() -> config:GogaConfigAnswers": |
+      Опрос для .goga/config.yml.
+      Выводит "Collecting .goga/config.yml settings...".
+      Каждый шаг сопровождается заголовком секции (---) и поясняющим текстом.
+      Спрашивает language, agent как выбор из дефолтного списка.
+      После выбора language предлагает скачать базовую конвенцию через `lang_conventions`.
+      Если пользователь соглашается:
+      - добавляет {"conventions": ".goga/usages/conventions.md"} в codemanifest_usages
+      - устанавливает codemanifest_annotations в "Use `conventions` for code writing rules and testing."
+      image — показ подсказок из `image_defaults`, дефолт на последний, ввод свободный.
+      env — опционально, пары ключ-значение.
+      codemanifest_usages и codemanifest_annotations — опционально (добавляются к предзаполненным конвенциям).
+
+"FileGenerator()":
+  location: generator.py
+  annotations: |
+    Генерация файлов проекта. Использует `yaml` для формирования YAML.
+    Использует `lang_conventions` для скачивания файла конвенции при его наличии в codemanifest_usages.
+  methods:
+    "generate(answers: InitAnswers) -> _:None": |
+      Создаёт все файлы на основе ответов.
+      Вызывает generate_goga_config() с answers.goga_config.
+    "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
+      Если codemanifest_usages содержит ключ "conventions" — скачивает файл конвенции
+      по URL из `lang_conventions` (на основе language) и сохраняет в .goga/usages/conventions.md,
+      при ошибке скачивания выбрасывает RuntimeError с URL и причиной ошибки, выполнение останавливается.
+      Создаёт .goga/config.yml из GogaConfigAnswers.
+      Создаёт директорию .goga/ если не существует.
+      Формирует YAML через yaml.dump() с default_flow_style=False, sort_keys=False для сохранения порядка полей.
+      codemanifest_annotations сериализуется как literal block scalar (|) через `yaml` практику.
+
+      Маппинг GogaConfigAnswers → YAML:
+      - language → language
+      - image → build.image
+      - agent → build.task_executor.agent
+      - env → build.task_executor.env
+      - codemanifest_usages → codemanifest.usages (если не None/пустой)
+      - codemanifest_annotations → codemanifest.annotations (если не None)
+
+"InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":
+  location: logic.py
+  annotations: |
+    Оркестратор бизнес-логики команды init.
+
+    `questionnaire`: провайдер опроса пользователя
+    `generator`: провайдер генерации файлов
+  methods:
+    "run() -> exit_code:int": |
+      Проводит опрос через questionnaire.ask().
+      Создаёт файлы через generator.generate().
+      Возвращает 0 при успехе, 1 при ошибке.
+
+---
+
+Author: Goga
+CreatedAt: 03/06/26
+Description: |
+  Интерактивная инициализация проекта goga — опрос пользователя и создание файлов конфигурации

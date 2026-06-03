@@ -23,6 +23,9 @@ Imports:
   - Types:
       - tool
     From: goga/commands/tool
+  - Types:
+      - init
+    From: goga/commands/init
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -45,6 +48,7 @@ Annotations: |
 ->config: {}
 ->sync: {}
 ->tool: {}
+->init: {}
 
 ---
 
