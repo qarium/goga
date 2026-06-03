@@ -191,6 +191,11 @@ class TestBuildConfigCreation:
         assert bc.agents_dir is None
         assert bc.codex_review is None
 
+    def test_image_defaults_to_none(self):
+        te = TaskExecutor(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        assert bc.image is None
+
     def test_all_fields_populated(self):
         te = TaskExecutor(agent="gemini", env={"X": "1"})
         bc = BuildConfig(

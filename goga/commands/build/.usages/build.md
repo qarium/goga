@@ -50,4 +50,5 @@ goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-s
 ## Требования
 
 - Docker должен быть установлен и доступен в PATH
+- В `.goga/config.yml` должно быть задано поле `build.image` — иначе команда завершается с ошибкой `image in .goga/config.yml is not set`
 - Git config (user.name, user.email) автоматически пробрасывается в контейнер как GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. При отсутствии git config сборка продолжается без ошибки

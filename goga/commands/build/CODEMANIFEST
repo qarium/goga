@@ -48,15 +48,17 @@ Annotations: |
        - env = task_executor.env + git_env (git_env не перезаписывает task_executor.env)
        - + extra_env из CLI
        - Файл с правами 0600 во временной директории
-    5. Собрать Docker-команду:
+    5. Проверить config.build.image:
+       Если None — ошибка ClickException("image in .goga/config.yml is not set")
+    6. Собрать Docker-команду:
        - docker run --rm --entrypoint python3
        - Монтирование CWD как /workspace
        - --env-file для передачи переменных
        - Образ из `Config`.build.image
        - Аргументы: -m goga.build <plan> + CLI-флаги
-    6. При dry_run: exit 0 (без запуска контейнера)
-    7. Запустить Docker через subprocess.call, вернуть его exit code
-    8. В finally: удалить env-file
+    7. При dry_run: exit 0 (без запуска контейнера)
+    8. Запустить Docker через subprocess.call, вернуть его exit code
+    9. В finally: удалить env-file
 
 ---
 

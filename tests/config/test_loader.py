@@ -108,13 +108,13 @@ class TestLoadConfigPositive:
         assert config.build.task_executor.env == {}
         assert config.commands == {}
         assert config.build.worktree is None
-        assert config.build.image == "qarium/goga:latest"
+        assert config.build.image is None
 
     def test_load_config_image_default(self, goga_project):
-        """image defaults to qarium/goga:latest when not specified."""
+        """image defaults to None when not specified."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
-        assert config.build.image == "qarium/goga:latest"
+        assert config.build.image is None
 
     def test_load_config_image_explicit(self, goga_project):
         """Explicit image value from config."""

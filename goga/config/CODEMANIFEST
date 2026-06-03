@@ -38,7 +38,7 @@ Annotations: |
        Если None или пустая строка — выбросить ValueError("build.task_executor.agent is required in .goga/config.yml")
     11. Извлечь env: task_executor_data.get("env", {})
     12. Создать `TaskExecutor`(agent=agent, env=env)
-    13. Извлечь image: build_data.get("image", "qarium/goga:latest")
+    13. Извлечь image: build_data.get("image")
     14. Извлечь остальные поля `BuildConfig` из build_data через .get(field_name)
     15. Создать `BuildConfig`(task_executor=task_executor, image=image, worktree=..., ...)
     16. Извлечь codemanifest dict: data.get("codemanifest")
@@ -86,24 +86,24 @@ Annotations: |
       Экземпляр `CodemanifestConfig`.
       None если секция codemanifest отсутствует.
 
-"BuildConfig(task_executor: TaskExecutor, image: str, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
+"BuildConfig(task_executor: TaskExecutor, image: str | None = None, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
   location: config.py
   annotations: |
     Конфигурация сборки. Создаётся внутри `load_config` из секции build файла .goga/config.yml.
 
     `task_executor`: конфигурация AI-агента. Обязательное поле.
-    `image`: Docker-образ для запуска сборки. Обязательное поле.
+    `image`: Docker-образ для запуска сборки. Опциональное поле, по умолчанию None.
     Остальные параметры — опциональные, по умолчанию None.
 
     Requirements:
     - task_executor — обязательное поле
-    - image — обязательное поле
+    - image — опциональное поле, может быть None. Потребитель должен обработать None.
     - остальные поля могут быть None
   properties:
     task_executor -> TaskExecutor: |
       Конфигурация AI-агента. Экземпляр `TaskExecutor`.
       Обязательное поле.
-    image -> str: |
+    image -> str | None: |
       Docker-образ для запуска сборки.
     worktree -> bool | None: |
       Использовать изолированный git worktree.

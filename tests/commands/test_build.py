@@ -13,12 +13,14 @@ from goga.commands import build as build_cmd
 _build_mod = sys.modules["goga.commands.build.build"]
 
 
-def _write_goga_yml(tmp_path: Path, extra: dict | None = None) -> None:
+def _write_goga_yml(tmp_path: Path, extra: dict | None = None, *, no_image: bool = False) -> None:
     """Write a minimal .goga/config.yml with optional extra build fields."""
     data: dict = {
         "language": "python",
-        "build": {"task_executor": {"agent": "claude"}},
+        "build": {"task_executor": {"agent": "claude"}, "image": "qarium/goga:latest"},
     }
+    if no_image:
+        del data["build"]["image"]
     if extra:
         data["build"].update(extra)
     (tmp_path / ".goga").mkdir(exist_ok=True)
@@ -429,6 +431,15 @@ class TestBuildUsesLoadConfigFromGogaConfig:
 
         call_kwargs = mock_cmd.call_args[1]
         assert call_kwargs["image"] == "qarium/goga:latest"
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_raises_when_image_is_none(self, mock_docker, tmp_path, monkeypatch) -> None:
+        _write_goga_yml(tmp_path, no_image=True)
+
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "image in .goga/config.yml is not set" in result.output
 
 
 class TestBuildMissingGogaYmlRaisesConfigError:

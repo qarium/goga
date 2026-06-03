@@ -106,7 +106,7 @@ codemanifest:
 |----------------------------|---------|------------------------|-----------------------------------------------|
 | `commands`                 | mapping | `{}`                   | Кастомизация промптов (заготовка)             |
 | `build.task_executor.env`  | mapping | `{}`                   | Переменные окружения {str: str}               |
-| `build.image`              | str     | `"qarium/goga:latest"` | Docker-образ для сборки                       |
+| `build.image`              | str     | None                   | Docker-образ для сборки                       |
 | `build.worktree`           | bool    | None                   | Изолированный git worktree                    |
 | `build.skip_finalize`      | bool    | None                   | Пропустить финализацию                        |
 | `build.session_timeout`    | str     | None                   | Таймаут сессии (Go duration)                  |
@@ -135,7 +135,7 @@ config.commands       # dict — кастомные команды
 
 # BuildConfig
 config.build.task_executor   # TaskExecutor
-config.build.image           # str — Docker-образ для сборки
+config.build.image           # str | None — Docker-образ для сборки
 config.build.worktree        # bool | None
 config.build.session_timeout # str | None
 

@@ -100,7 +100,7 @@ class TestFullConfigLoadingFlow:
         assert config.commands == {}
         assert config.codemanifest is None
         assert config.build.worktree is None
-        assert config.build.image == "qarium/goga:latest"
+        assert config.build.image is None
         assert config.build.skip_finalize is None
         assert config.build.session_timeout is None
         assert config.build.idle_timeout is None

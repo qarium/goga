@@ -151,6 +151,9 @@ def build(  # noqa: PLR0913
     env = {**git_env, **config.build.task_executor.env}
     env_file = _write_env_file(env, extra_env)
 
+    if config.build.image is None:
+        raise click.ClickException("image in .goga/config.yml is not set")
+
     try:
         docker_cmd = _build_docker_cmd(
             plan=plan,

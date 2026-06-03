@@ -34,7 +34,7 @@ class BuildConfig:
     prompts_dir: str | None = None
     agents_dir: str | None = None
     codex_review: bool | None = None
-    image: str
+    image: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True)
