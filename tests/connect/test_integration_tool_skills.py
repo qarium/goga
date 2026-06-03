@@ -10,16 +10,13 @@ from unittest import mock
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, Config, TaskExecutor
 from goga.connect.connect import _install_tool_skills, connect
 
 _install_mod = importlib.import_module("goga.connect.connect")
 
 
-def _make_config(agent: str = "claude") -> Config:
-    task_executor = TaskExecutor(agent=agent, env={})
-    build = BuildConfig(task_executor=task_executor, image="goga:latest")
-    return Config(lang="python", build=build)
+def _make_agents(agent: str = "claude") -> list[str]:
+    return [agent]
 
 
 def _create_agent_resources(target: Path) -> Path:
@@ -81,7 +78,6 @@ class TestFullInstallCycleWithToolPackages:
     _print_summary outputs total count."""
 
     def test_core_and_tool_skills_both_installed(self, tmp_path: Path) -> None:
-        config = _make_config()
         _create_agent_resources(tmp_path)
         mock_source = tmp_path / "goga" / "agent"
         mock_home = tmp_path / "home"
@@ -104,7 +100,7 @@ class TestFullInstallCycleWithToolPackages:
                 side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
             ),
         ):
-            result = connect(agent="claude", config=config)
+            result = connect(agents=["claude"])
 
         assert result == 0
         target = mock_home / ".claude"
@@ -117,7 +113,6 @@ class TestFullInstallCycleWithToolPackages:
     def test_print_summary_includes_tool_skills_count(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        config = _make_config()
         _create_agent_resources(tmp_path)
         mock_source = tmp_path / "goga" / "agent"
         mock_home = tmp_path / "home"
@@ -140,7 +135,7 @@ class TestFullInstallCycleWithToolPackages:
                 side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
             ),
         ):
-            result = connect(agent="claude", config=config)
+            result = connect(agents=["claude"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -155,7 +150,6 @@ class TestCleanupObsoleteToolSkills:
     but preserves goga-tool-* from current packages."""
 
     def test_cleanup_removes_obsolete_but_keeps_current(self, tmp_path: Path) -> None:
-        config = _make_config()
         _create_agent_resources(tmp_path)
         mock_source = tmp_path / "goga" / "agent"
         mock_home = tmp_path / "home"
@@ -183,7 +177,7 @@ class TestCleanupObsoleteToolSkills:
                 side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
             ),
         ):
-            result = connect(agent="claude", config=config)
+            result = connect(agents=["claude"])
 
         assert result == 0
         skills_dir = mock_home / ".claude" / "skills"
@@ -295,7 +289,7 @@ class TestCLIForceOverwriteEndToEnd:
                 ),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect", "--force-overwrite"])
+            result = CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
 
         assert result.exit_code == 0
         # With force_overwrite: alphabetically first (goga_tool_analyze/pkg2) installs
@@ -350,7 +344,7 @@ class TestCLIWithoutForceOverwrite:
                 ),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
 
         assert result.exit_code == 0
         # Alphabetically first (goga_tool_analyze/pkg2) installs goga-tool-debug first,

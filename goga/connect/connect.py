@@ -8,8 +8,6 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from ..config import Config
-
 AGENT_DIRS: dict[str, str] = {"claude": ".claude"}
 
 DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md"
@@ -119,45 +117,44 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
     return tool_skills
 
 
-def connect(agent: str | None = None, config: Config | None = None, force_overwrite: bool = False) -> int:
+def connect(agents: list[str], force_overwrite: bool = False) -> int:
     """Connect goga agent commands, skills, and DSL spec to the target directory.
 
     Args:
-        agent: Target agent name (e.g. 'claude'). If None, uses config.build.task_executor.agent.
-        config: Project configuration. Required for resolving agent and settings.
+        agents: List of target agent names (e.g. ['claude']). Must not be empty.
         force_overwrite: Overwrite existing tool skills without prompting.
 
     Returns:
         0 on success, 1 on failure.
     """
-    if config is None:
-        print("Error: config is required", file=sys.stderr)
-        return 1
-    resolved_agent = agent if agent is not None else config.build.task_executor.agent
-
-    try:
-        target = _resolve_target_dir(resolved_agent)
-    except ValueError:
-        print(f"Error: unsupported agent '{resolved_agent}'", file=sys.stderr)
+    if not agents:
+        print("Error: at least one agent is required", file=sys.stderr)
         return 1
 
-    source = _get_source_dir()
-    if not source.is_dir():
-        print(f"Error: agent resources not found at {source}", file=sys.stderr)
-        return 1
+    for agent in agents:
+        try:
+            target = _resolve_target_dir(agent)
+        except ValueError:
+            print(f"Error: unsupported agent '{agent}'", file=sys.stderr)
+            return 1
 
-    target.mkdir(parents=True, exist_ok=True)
+        source = _get_source_dir()
+        if not source.is_dir():
+            print(f"Error: agent resources not found at {source}", file=sys.stderr)
+            return 1
 
-    try:
-        _cleanup_goga_skills(target)
-        commands = _install_commands(source, target)
-        skills = _install_skills(source, target)
-        _download_dsl_spec(target)
-        tool_skills = _install_tool_skills(target, force_overwrite)
-        skills.extend(tool_skills)
-        _print_summary(commands, skills, target)
-    except (OSError, shutil.Error) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        target.mkdir(parents=True, exist_ok=True)
+
+        try:
+            _cleanup_goga_skills(target)
+            commands = _install_commands(source, target)
+            skills = _install_skills(source, target)
+            _download_dsl_spec(target)
+            tool_skills = _install_tool_skills(target, force_overwrite)
+            skills.extend(tool_skills)
+            _print_summary(commands, skills, target)
+        except (OSError, shutil.Error) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
     return 0

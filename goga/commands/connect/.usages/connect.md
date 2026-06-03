@@ -2,19 +2,24 @@
 
 ## Назначение
 
-CLI-обёртка команды подключения. Парсит click-опции, загружает конфигурацию и делегирует бизнес-логику в `goga/connect`.
+CLI-обёртка команды подключения. Парсит click-аргументы и делегирует бизнес-логику в `goga/connect`.
 
 ## Синтаксис
 
 ```
-goga connect [--agent <name>]
+goga connect <agent> [<agent> ...] [--force-overwrite]
 ```
+
+## Аргументы
+
+| Аргумент | Тип | Обязательный | Описание |
+|----------|-----|-------------|----------|
+| `agents` | tuple[str, ...] | Да | Один или несколько целевых AI-агентов |
 
 ## Опции
 
 | Опция | Тип | Дефолт | Описание |
 |-------|-----|--------|----------|
-| `--agent` | str | из конфига | Целевой AI-агент |
 | `--force-overwrite` | flag | False | Перезаписывать существующие скиллы при установке из пакетов инструментов |
 
 ## Код возврата
@@ -25,8 +30,7 @@ goga connect [--agent <name>]
 ## Примеры
 
 ```bash
-goga connect
-goga connect --agent claude
-goga connect --force-overwrite
-goga connect --agent claude --force-overwrite
+goga connect claude
+goga connect claude codex
+goga connect claude --force-overwrite
 ```

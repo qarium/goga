@@ -11,7 +11,6 @@ import click
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import connect
-from goga.config import load_config
 from goga.connect.connect import _cleanup_goga_skills
 
 _connect_module = sys.modules["goga.connect.connect"]
@@ -26,12 +25,12 @@ def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
     return mock_response
 
 
-def _invoke_install(tmp_path: Path) -> click.testing.Result:
+def _invoke_install(tmp_path: Path, agents: tuple[str, ...] = ("claude",)) -> click.testing.Result:
     with (
         mock.patch("pathlib.Path.home", return_value=tmp_path),
         mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
     ):
-        return CliRunner().invoke(app, ["connect"])
+        return CliRunner().invoke(app, ["connect", *agents])
 
 
 class TestFacadeAvailability:
@@ -46,16 +45,17 @@ class TestFacadeAvailability:
     def test_connect_command_name_is_connect(self) -> None:
         assert connect.name == "connect"
 
-    def test_connect_has_agent_option(self) -> None:
+    def test_connect_has_agents_argument(self) -> None:
         params = {p.name for p in connect.params}
-        assert "agent" in params
+        assert "agents" in params
 
-    def test_connect_agent_default_is_none(self) -> None:
-        agent_param = next(p for p in connect.params if p.name == "agent")
-        assert agent_param.default is None
+    def test_connect_agents_is_argument(self) -> None:
+        agents_param = next(p for p in connect.params if p.name == "agents")
+        assert isinstance(agents_param, click.Argument)
 
-    def test_connect_load_config_imported(self) -> None:
-        assert load_config is not None
+    def test_connect_agents_is_required(self) -> None:
+        agents_param = next(p for p in connect.params if p.name == "agents")
+        assert agents_param.required
 
 
 class TestForceOverwriteContract:
@@ -123,20 +123,20 @@ class TestDownloadDslSpecContract:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         mock_urlopen.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
 
 
 class TestLogicPositive:
-    """Positive scenario tests for the install command."""
+    """Positive scenario tests for the connect command."""
 
-    def test_install_default_agent(self, tmp_path: Path) -> None:
+    def test_install_single_agent(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert (claude_dir / "commands" / "goga" / "review.md").is_file()
@@ -152,95 +152,32 @@ class TestLogicPositive:
         assert "Installed 9 commands" in result.output
         assert "Installed 37 skills" in result.output
 
-    def test_install_claude_agent_explicit(self, tmp_path: Path) -> None:
-        with (
-            mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-        ):
-            result = CliRunner().invoke(app, ["connect", "--agent", "claude"])
-        assert result.exit_code == 0
-        claude_dir = tmp_path / ".claude"
-        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
-        assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-
-
-class TestLogicConfig:
-    """Tests for config-based default resolution in the install command."""
-
-    def test_install_agent_from_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga").mkdir()
-        (tmp_path / ".goga" / "config.yml").write_text(
-            "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
-        )
-        monkeypatch.chdir(tmp_path)
-        with (
-            mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-        ):
-            result = CliRunner().invoke(app, ["connect"])
-        assert result.exit_code == 0
-        claude_dir = tmp_path / ".claude"
-        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
-        assert (claude_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-
-    def test_install_agent_cli_overrides_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga").mkdir()
-        (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: codex\n")
-        monkeypatch.chdir(tmp_path)
-        with (
-            mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-        ):
-            result = CliRunner().invoke(app, ["connect", "--agent", "claude"])
-        assert result.exit_code == 0
-        claude_dir = tmp_path / ".claude"
-        assert (claude_dir / "commands" / "goga" / "review.md").is_file()
-        assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-
-    def test_install_config_missing(self, tmp_path: Path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            result = CliRunner().invoke(app, ["connect"])
-        assert result.exit_code != 0
-        assert "config.yml" in result.output or "config.yml" in result.stderr
-
-    def test_install_config_invalid_agent(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga").mkdir()
-        (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: ''\n")
-        monkeypatch.chdir(tmp_path)
-        with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            result = CliRunner().invoke(app, ["connect"])
-        assert result.exit_code != 0
-        assert "agent" in result.output
-
 
 class TestLogicNegative:
-    """Negative scenario tests for the install command."""
+    """Negative scenario tests for the connect command."""
 
-    def test_install_unknown_agent(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga").mkdir()
-        (tmp_path / ".goga" / "config.yml").write_text(
-            "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
-        )
-        monkeypatch.chdir(tmp_path)
+    def test_install_unknown_agent(self, tmp_path: Path) -> None:
         with mock.patch("pathlib.Path.home", return_value=tmp_path):
-            result = CliRunner().invoke(app, ["connect", "--agent", "unknown"])
+            result = CliRunner().invoke(app, ["connect", "unknown"])
         assert result.exit_code == 1
         assert "unsupported agent" in result.output
         assert not (tmp_path / ".claude").exists()
 
+    def test_install_no_agents(self, tmp_path: Path) -> None:
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
+            result = CliRunner().invoke(app, ["connect"])
+        assert result.exit_code != 0
+
 
 class TestLogicEdgeCases:
-    """Edge case tests for the install command."""
+    """Edge case tests for the connect command."""
 
     def test_install_creates_target_dir(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         claude_dir = tmp_path / ".claude"
         assert claude_dir.is_dir()
@@ -256,7 +193,7 @@ class TestLogicEdgeCases:
                 return_value=tmp_path / "nonexistent",
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "agent resources not found" in result.output
         assert not (tmp_path / ".claude").exists()
@@ -270,13 +207,13 @@ class TestLogicEdgeCases:
                 side_effect=OSError("permission denied"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "Error:" in result.output
 
 
 class TestIntegration:
-    """Integration tests for cross-cutting install command behaviors."""
+    """Integration tests for cross-cutting connect command behaviors."""
 
     def test_install_idempotent(self, tmp_path: Path) -> None:
         first = _invoke_install(tmp_path)
@@ -376,16 +313,8 @@ class TestIntegration:
 class TestCleanupGogaSkillsLogic:
     """Logical tests for _cleanup_goga_skills behavior during install."""
 
-    def _setup_config(self, tmp_path: Path, monkeypatch) -> None:
-        (tmp_path / ".goga").mkdir()
-        (tmp_path / ".goga" / "config.yml").write_text(
-            "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
-        )
-        monkeypatch.chdir(tmp_path)
-
-    def test_install_cleanup_removes_old_goga_skills(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_removes_old_goga_skills(self, tmp_path: Path) -> None:
         """Stale goga-* skills are removed before fresh install."""
-        self._setup_config(tmp_path, monkeypatch)
         claude_dir = tmp_path / ".claude"
         skills_dir = claude_dir / "skills"
 
@@ -403,9 +332,8 @@ class TestCleanupGogaSkillsLogic:
         # New goga skills are installed
         assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
 
-    def test_install_cleanup_keeps_non_goga_skills(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_keeps_non_goga_skills(self, tmp_path: Path) -> None:
         """Non-goga skills are preserved during cleanup."""
-        self._setup_config(tmp_path, monkeypatch)
         skills_dir = tmp_path / ".claude" / "skills"
 
         (skills_dir / "other-skill").mkdir(parents=True)
@@ -419,9 +347,8 @@ class TestCleanupGogaSkillsLogic:
         assert (skills_dir / "other-skill" / "data.md").read_text() == "custom content"
         assert (skills_dir / "my-custom-plugin" / "plugin.py").read_text() == "plugin"
 
-    def test_install_fresh_no_existing_skills(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_fresh_no_existing_skills(self, tmp_path: Path) -> None:
         """First install with no skills/ dir works correctly."""
-        self._setup_config(tmp_path, monkeypatch)
         # Only .claude exists, no skills subdir
         (tmp_path / ".claude").mkdir()
 
@@ -431,9 +358,8 @@ class TestCleanupGogaSkillsLogic:
         skills_dir = tmp_path / ".claude" / "skills"
         assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
 
-    def test_install_cleanup_permission_error(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_permission_error(self, tmp_path: Path) -> None:
         """OSError during cleanup is handled gracefully."""
-        self._setup_config(tmp_path, monkeypatch)
         skills_dir = tmp_path / ".claude" / "skills"
         (skills_dir / "goga-locked").mkdir(parents=True)
 
@@ -445,14 +371,13 @@ class TestCleanupGogaSkillsLogic:
                 side_effect=OSError("denied"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
 
         assert result.exit_code == 1
         assert "Error:" in result.output
 
-    def test_install_cleanup_empty_skills_dir(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_empty_skills_dir(self, tmp_path: Path) -> None:
         """Empty skills/ dir doesn't cause errors."""
-        self._setup_config(tmp_path, monkeypatch)
         skills_dir = tmp_path / ".claude" / "skills"
         skills_dir.mkdir(parents=True)
 
@@ -461,9 +386,8 @@ class TestCleanupGogaSkillsLogic:
 
         assert (skills_dir / "goga-review-design" / "SKILL.md").is_file()
 
-    def test_install_cleanup_mixed_content_in_skills(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_mixed_content_in_skills(self, tmp_path: Path) -> None:
         """Mixed content: goga dirs removed, non-goga dirs/files preserved."""
-        self._setup_config(tmp_path, monkeypatch)
         skills_dir = tmp_path / ".claude" / "skills"
 
         (skills_dir / "goga-old").mkdir(parents=True)
@@ -482,9 +406,8 @@ class TestCleanupGogaSkillsLogic:
         assert (skills_dir / "my-skill" / "custom.md").read_text() == "custom"
         assert (skills_dir / "some-file.txt").read_text() == "just a file"
 
-    def test_install_cleanup_preserves_goga_without_hyphen(self, tmp_path: Path, monkeypatch) -> None:
+    def test_install_cleanup_preserves_goga_without_hyphen(self, tmp_path: Path) -> None:
         """Directory named 'goga' (no hyphen) is not removed by cleanup."""
-        self._setup_config(tmp_path, monkeypatch)
         skills_dir = tmp_path / ".claude" / "skills"
 
         (skills_dir / "goga").mkdir(parents=True)
@@ -505,7 +428,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
@@ -518,7 +441,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response_old),
         ):
-            first = CliRunner().invoke(app, ["connect"])
+            first = CliRunner().invoke(app, ["connect", "claude"])
         assert first.exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.read_bytes() == b"old dsl"
@@ -528,7 +451,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response_new),
         ):
-            second = CliRunner().invoke(app, ["connect"])
+            second = CliRunner().invoke(app, ["connect", "claude"])
         assert second.exit_code == 0
         assert dsl_file.read_bytes() == b"new dsl content"
 
@@ -540,7 +463,7 @@ class TestDownloadDslSpecLogic:
                 side_effect=urllib.error.URLError("connection refused"),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "Failed to download DSL spec" in result.output
         assert "connection refused" in result.output
@@ -553,7 +476,7 @@ class TestDownloadDslSpecLogic:
                 side_effect=urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "Failed to download DSL spec" in result.output
         assert "HTTP 404" in result.output
@@ -567,7 +490,7 @@ class TestDownloadDslSpecLogic:
                 side_effect=urllib.error.URLError(TimeoutError("timed out")),
             ),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "Failed to download DSL spec" in result.output
         assert "timed out" in result.output
@@ -578,7 +501,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=mock_response),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
@@ -597,7 +520,7 @@ class TestDownloadDslSpecLogic:
             mock.patch("urllib.request.urlopen", return_value=mock_response),
             mock.patch.object(Path, "write_bytes", _write_bytes_only_dsl),
         ):
-            result = CliRunner().invoke(app, ["connect"])
+            result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 1
         assert "Error:" in result.output
 
@@ -610,7 +533,7 @@ class TestForceOverwriteLogic:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
         ):
-            result = CliRunner().invoke(app, ["connect", "--force-overwrite"])
+            result = CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
         assert result.exit_code == 0
 
     def test_install_cli_default_no_force(self, tmp_path: Path) -> None:
@@ -620,7 +543,7 @@ class TestForceOverwriteLogic:
             mock.patch.object(_cmd_connect_module, "connect_logic") as mock_logic,
         ):
             mock_logic.return_value = 0
-            CliRunner().invoke(app, ["connect"])
+            CliRunner().invoke(app, ["connect", "claude"])
         mock_logic.assert_called_once()
         assert mock_logic.call_args.kwargs.get("force_overwrite") is False
 
@@ -631,6 +554,6 @@ class TestForceOverwriteLogic:
             mock.patch.object(_cmd_connect_module, "connect_logic") as mock_logic,
         ):
             mock_logic.return_value = 0
-            CliRunner().invoke(app, ["connect", "--force-overwrite"])
+            CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
         mock_logic.assert_called_once()
         assert mock_logic.call_args.kwargs.get("force_overwrite") is True

@@ -2,12 +2,6 @@ Imports:
   - Types:
       - connect AS connect_logic
     From: goga/connect
-  - Types:
-      - Config
-      - load_config
-    Usages:
-      - configuration
-    From: goga/config
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -25,22 +19,21 @@ Annotations: |
 
 ---
 
-"connect(agent: str | None = None, force_overwrite: bool = False)":
+"connect(agents: tuple[str, ...], force_overwrite: bool = False)":
   location: connect.py
   annotations: |
     CLI-обёртка команды подключения. Делегирует бизнес-логику `connect_logic`.
 
-    `agent`: целевой AI-агент
+    `agents`: целевые AI-агенты (один или несколько, обязательный позиционный аргумент)
     `force_overwrite`: разрешить перезапись существующих скиллов
 
-    CLI-опции:
-    - --agent: целевой AI-агент
+    CLI-аргументы:
+    - agents: один или несколько AI-агентов (позиционный, обязательный)
     - --force-overwrite: перезаписывать существующие скиллы при установке из инструментов
 
     Алгоритм:
-    1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
-    2. Вызвать `connect_logic`(`agent`, `Config`, `force_overwrite`)
-    3. Вернуть exit_code
+    1. Вызвать `connect_logic`(`agents`, `force_overwrite`)
+    2. Вернуть exit_code
 
 ---
 

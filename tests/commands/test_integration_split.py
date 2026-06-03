@@ -227,52 +227,42 @@ class TestInstallDelegation:
             mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
-            _cwd(tmp_path),
         ):
-            _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(connect_cli, [])
+            result = runner.invoke(connect_cli, ["claude"])
 
         assert result.exit_code == 0
         call_args = mock_logic.call_args
-        assert call_args[0][0] is None  # agent=None
+        assert call_args[0][0] == ["claude"]
 
-    def test_install_delegates_with_agent(self, tmp_path: Path) -> None:
+    def test_install_delegates_with_multiple_agents(self, tmp_path: Path) -> None:
         with (
             mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            _cwd(tmp_path),
         ):
-            _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(connect_cli, ["--agent", "claude"])
+            result = runner.invoke(connect_cli, ["claude", "codex"])
 
         assert result.exit_code == 0
         call_args = mock_logic.call_args
-        assert call_args[0][0] == "claude"
+        assert call_args[0][0] == ["claude", "codex"]
 
     def test_install_delegates_exit_code_1(self, tmp_path: Path) -> None:
         with (
             mock.patch.object(_connect_mod, "connect_logic", return_value=1),
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            _cwd(tmp_path),
         ):
-            _write_goga_yml(tmp_path)
             runner = CliRunner()
-            result = runner.invoke(connect_cli, ["--agent", "unknown"])
+            result = runner.invoke(connect_cli, ["unknown"])
 
         assert result.exit_code == 1
 
-    def test_install_config_error_raises_click_exception(self, tmp_path: Path) -> None:
-        with (
-            mock.patch("pathlib.Path.home", return_value=tmp_path),
-            _cwd(tmp_path),
-        ):
+    def test_install_no_agents_fails(self, tmp_path: Path) -> None:
+        with mock.patch("pathlib.Path.home", return_value=tmp_path):
             runner = CliRunner()
             result = runner.invoke(connect_cli, [])
 
         assert result.exit_code != 0
-        assert "config" in result.output.lower()
 
     def test_connect_cli_registered_in_app(self) -> None:
         runner = CliRunner()
@@ -321,15 +311,12 @@ class TestAllCommandsDelegationViaApp:
         assert result.exit_code == 0
 
     def test_install_via_app_delegates(self, tmp_path: Path) -> None:
-        _write_goga_yml(tmp_path)
-
         with (
             mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            _cwd(tmp_path),
         ):
             runner = CliRunner()
-            result = runner.invoke(app, ["connect"])
+            result = runner.invoke(app, ["connect", "claude"])
 
         assert result.exit_code == 0
-        assert mock_logic.call_args[0][0] is None
+        assert mock_logic.call_args[0][0] == ["claude"]
