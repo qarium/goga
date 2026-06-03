@@ -505,3 +505,105 @@ class TestCLIFlagForwarding:
 
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
         assert cli_flags["skip_finalize"] is True
+
+
+# --- Git config tests ---
+
+
+class TestReadGitConfig:
+    @mock.patch.object(_build_mod.subprocess, "run")
+    def test_returns_git_env_vars(self, mock_run) -> None:
+        from goga.commands.build.build import _read_git_config
+
+        mock_run.side_effect = [
+            mock.Mock(returncode=0, stdout="John Doe\n"),
+            mock.Mock(returncode=0, stdout="john@example.com\n"),
+        ]
+        result = _read_git_config()
+
+        assert result == {
+            "GIT_AUTHOR_NAME": "John Doe",
+            "GIT_AUTHOR_EMAIL": "john@example.com",
+            "GIT_COMMITTER_NAME": "John Doe",
+            "GIT_COMMITTER_EMAIL": "john@example.com",
+        }
+
+    @mock.patch.object(_build_mod.subprocess, "run")
+    def test_returns_empty_when_name_missing(self, mock_run) -> None:
+        from goga.commands.build.build import _read_git_config
+
+        mock_run.side_effect = [
+            mock.Mock(returncode=1, stdout=""),
+            mock.Mock(returncode=0, stdout="john@example.com\n"),
+        ]
+        result = _read_git_config()
+        assert result == {}
+
+    @mock.patch.object(_build_mod.subprocess, "run")
+    def test_returns_empty_when_email_missing(self, mock_run) -> None:
+        from goga.commands.build.build import _read_git_config
+
+        mock_run.side_effect = [
+            mock.Mock(returncode=0, stdout="John Doe\n"),
+            mock.Mock(returncode=1, stdout=""),
+        ]
+        result = _read_git_config()
+        assert result == {}
+
+    @mock.patch.object(_build_mod.subprocess, "run", side_effect=FileNotFoundError)
+    def test_returns_empty_when_git_not_found(self, mock_run) -> None:
+        from goga.commands.build.build import _read_git_config
+
+        result = _read_git_config()
+        assert result == {}
+
+    @mock.patch.object(_build_mod.subprocess, "run", side_effect=PermissionError)
+    def test_returns_empty_on_permission_error(self, mock_run) -> None:
+        from goga.commands.build.build import _read_git_config
+
+        result = _read_git_config()
+        assert result == {}
+
+
+class TestGitConfigMergedInBuild:
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_read_git_config")
+    def test_git_env_merged_into_env_file(  # noqa: PLR0913
+        self, mock_git, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        _write_goga_yml(tmp_path, extra={"task_executor": {"agent": "claude", "env": {"API_KEY": "secret"}}})
+        mock_git.return_value = {
+            "GIT_AUTHOR_NAME": "User",
+            "GIT_AUTHOR_EMAIL": "u@e.com",
+            "GIT_COMMITTER_NAME": "User",
+            "GIT_COMMITTER_EMAIL": "u@e.com",
+        }
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(subprocess, "call", return_value=0):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        call_args = mock_env.call_args
+        env_dict = call_args[0][0]
+        assert env_dict["API_KEY"] == "secret"
+        assert env_dict["GIT_AUTHOR_NAME"] == "User"
+        assert env_dict["GIT_COMMITTER_EMAIL"] == "u@e.com"
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    @mock.patch.object(_build_mod, "_read_git_config")
+    def test_task_executor_env_has_priority(  # noqa: PLR0913
+        self, mock_git, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        _write_goga_yml(tmp_path, extra={"task_executor": {"agent": "claude", "env": {"GIT_AUTHOR_NAME": "override"}}})
+        mock_git.return_value = {"GIT_AUTHOR_NAME": "GitUser"}
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(subprocess, "call", return_value=0):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        env_dict = mock_env.call_args[0][0]
+        assert env_dict["GIT_AUTHOR_NAME"] == "override"

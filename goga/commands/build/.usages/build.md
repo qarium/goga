@@ -50,3 +50,4 @@ goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-s
 ## Требования
 
 - Docker должен быть установлен и доступен в PATH
+- Git config (user.name, user.email) автоматически пробрасывается в контейнер как GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. При отсутствии git config сборка продолжается без ошибки
