@@ -1,0 +1,43 @@
+Imports:
+  - Types:
+      - InitLogic
+      - Questionnaire
+      - FileGenerator
+    Usages:
+      - init-usage
+    From: goga/init
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  conventions: .goga/usages/conventions.md
+
+Annotations: |
+  Практика `conventions` используется для:
+  - работы с кодовой базой
+  - организации REPL цикла разработки
+  - отладки и тестирования
+  - организации тестовой инфраструктуры
+  - понимания общих принципов/правил разработки и тестирования в проекте
+  Для создания команды использовать практику `click`.
+  Команда делегирует бизнес-логику через `InitLogic`.
+  Использовать `init-usage` из Imports для понимания API InitLogic.
+
+---
+
+"init()":
+  location: init.py
+  annotations: |
+    CLI-обёртка команды инициализации. Делегирует бизнес-логику `InitLogic`.
+
+    Алгоритм:
+    1. Создать `Questionnaire` и `FileGenerator`
+    2. Создать `InitLogic`(questionnaire, generator)
+    3. Вызвать `InitLogic`.run()
+    4. Вернуть exit_code
+
+---
+
+Author: Goga
+CreatedAt: 03/06/26
+Description: |
+  CLI-обёртка команды интерактивной инициализации проекта goga

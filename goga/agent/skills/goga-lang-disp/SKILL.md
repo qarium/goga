@@ -18,7 +18,7 @@
 |--------------|------------------------|
 | `python`     | `goga-cell-python`     |
 | `javascript` | `goga-cell-javascript` |
-| `go`         | `goga-cell-go`         |
+| `golang`     | `goga-cell-go`         |
 | `kotlin`     | `goga-cell-kotlin`     |
 | `swift`      | `goga-cell-swift`      |
 | `cpp`        | `goga-cell-cpp`        |

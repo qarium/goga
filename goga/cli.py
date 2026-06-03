@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from .commands import build, config, connect, contract, linter, schema, sync, tool
+from .commands import build, config, connect, contract, init, linter, schema, sync, tool
 
 
 @click.group()
@@ -13,6 +13,7 @@ def app() -> None:
 app.add_command(build)
 app.add_command(config)
 app.add_command(connect)
+app.add_command(init)
 app.add_command(linter)
 app.add_command(schema)
 app.add_command(contract)
