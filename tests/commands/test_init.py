@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+import importlib
+from unittest import mock
 
 import click
 from click.testing import CliRunner
@@ -8,6 +9,8 @@ from goga.init.answers import GogaConfigAnswers, InitAnswers
 from goga.init.generator import FileGenerator
 from goga.init.logic import InitLogic
 from goga.init.questionnaire import Questionnaire
+
+_cmd_init_module = importlib.import_module("goga.commands.init.init")
 
 
 class TestContract:
@@ -44,15 +47,15 @@ class TestLogic:
         )
         answers = InitAnswers(goga_config=config)
 
-        mock_q = MagicMock(spec=Questionnaire)
+        mock_q = mock.MagicMock(spec=Questionnaire)
         mock_q.ask.return_value = answers
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
 
         with (
-            patch("goga.commands.init.init.Questionnaire", return_value=mock_q),
-            patch("goga.commands.init.init.FileGenerator", return_value=gen),
+            mock.patch.object(_cmd_init_module, "Questionnaire", return_value=mock_q),
+            mock.patch.object(_cmd_init_module, "FileGenerator", return_value=gen),
         ):
             runner = CliRunner()
             result = runner.invoke(init)
@@ -63,13 +66,13 @@ class TestLogic:
         """InitLogic.run() returns 1 → non-zero exit."""
         from goga.commands.init import init
 
-        mock_logic = MagicMock(spec=InitLogic)
+        mock_logic = mock.MagicMock(spec=InitLogic)
         mock_logic.run.return_value = 1
 
         with (
-            patch("goga.commands.init.init.Questionnaire"),
-            patch("goga.commands.init.init.FileGenerator"),
-            patch("goga.commands.init.init.InitLogic", return_value=mock_logic),
+            mock.patch.object(_cmd_init_module, "Questionnaire"),
+            mock.patch.object(_cmd_init_module, "FileGenerator"),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
         ):
             runner = CliRunner()
             result = runner.invoke(init)
