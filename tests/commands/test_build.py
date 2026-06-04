@@ -148,7 +148,9 @@ class TestDockerCheck:
         mock_run.return_value = mock.Mock(returncode=0)
         _write_goga_yml(tmp_path)
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with mock.patch.object(subprocess, "Popen", return_value=mock_proc):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert "docker not found" not in result.output
@@ -179,9 +181,12 @@ class TestDryRun:
         self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
     ) -> None:
         _write_goga_yml(tmp_path)
-        with mock.patch.object(subprocess, "call") as mock_call:
+        with (
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
-            mock_call.assert_not_called()
+            mock_popen.assert_not_called()
 
 
 # --- Docker command assembly tests ---
@@ -191,9 +196,11 @@ class TestBuildDockerCmd:
     def test_basic_command(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {}, "test-build")
         assert cmd[0] == "docker"
         assert "run" in cmd
+        assert "--name" in cmd
+        assert "test-build" in cmd
         assert "--env-file" in cmd
         assert "/tmp/env" in cmd
         assert "goga:latest" in cmd
@@ -204,46 +211,46 @@ class TestBuildDockerCmd:
     def test_dry_run_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"dry_run": True})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"dry_run": True}, "test-build")
         assert "--dry-run" in cmd
 
     def test_worktree_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"worktree": True})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"worktree": True}, "test-build")
         assert "--worktree" in cmd
 
     def test_skip_finalize_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"skip_finalize": True})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"skip_finalize": True}, "test-build")
         assert "--skip-finalize" in cmd
 
     def test_session_timeout_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"session_timeout": "30m"})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"session_timeout": "30m"}, "test-build")
         assert "--session-timeout" in cmd
         assert "30m" in cmd
 
     def test_max_iterations_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"max_iterations": 10})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"max_iterations": 10}, "test-build")
         assert "--max-iterations" in cmd
         assert "10" in cmd
 
     def test_review_patience_flag(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"review_patience": 3})
+        cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {"review_patience": 3}, "test-build")
         assert "--review-patience" in cmd
         assert "3" in cmd
 
     def test_custom_image(self) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
-        cmd = _build_docker_cmd("plan.md", "custom:tag", Path("/tmp/env"), {})
+        cmd = _build_docker_cmd("plan.md", "custom:tag", Path("/tmp/env"), {}, "test-build")
         assert "custom:tag" in cmd
 
 
@@ -305,7 +312,12 @@ class TestExtraEnvOption:
         _write_goga_yml(tmp_path)
         mock_env.return_value = Path("/tmp/env")
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -326,7 +338,12 @@ class TestExtraEnvOption:
         _write_goga_yml(tmp_path)
         mock_env.return_value = Path("/tmp/env")
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         call_args = mock_env.call_args
@@ -348,9 +365,14 @@ class TestDockerExecution:
         mock_cmd.return_value = ["docker", "run", "goga:latest", "-m", "goga.build", "plan.md"]
         _write_goga_yml(tmp_path)
 
-        with mock.patch.object(subprocess, "call", return_value=0) as mock_call:
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
-            mock_call.assert_called_once_with(
+            mock_popen.assert_called_once_with(
                 ["docker", "run", "goga:latest", "-m", "goga.build", "plan.md"]
             )
 
@@ -364,7 +386,12 @@ class TestDockerExecution:
         mock_cmd.return_value = ["docker", "run"]
         _write_goga_yml(tmp_path)
 
-        with mock.patch.object(subprocess, "call", return_value=42):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 42
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
             assert result.exit_code == 42
 
@@ -386,9 +413,12 @@ class TestEnvFileCleanup:
             real_env_files.append(p)
             return p
 
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
         with (
             mock.patch.object(_build_mod, "_write_env_file", side_effect=capture_env_file),
-            mock.patch.object(subprocess, "call", return_value=0),
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
         ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
@@ -410,7 +440,12 @@ class TestBuildUsesLoadConfigFromGogaConfig:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         call_kwargs = mock_cmd.call_args[1]
@@ -426,7 +461,12 @@ class TestBuildUsesLoadConfigFromGogaConfig:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         call_kwargs = mock_cmd.call_args[1]
@@ -479,7 +519,12 @@ class TestCLIFlagForwarding:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
 
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
@@ -495,7 +540,12 @@ class TestCLIFlagForwarding:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--session-timeout", "30m"])
 
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
@@ -511,7 +561,12 @@ class TestCLIFlagForwarding:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--skip-finalize"])
 
         cli_flags = mock_cmd.call_args[1]["cli_flags"]
@@ -593,7 +648,12 @@ class TestGitConfigMergedInBuild:
         }
         mock_env.return_value = Path("/tmp/env")
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         call_args = mock_env.call_args
@@ -613,7 +673,12 @@ class TestGitConfigMergedInBuild:
         mock_git.return_value = {"GIT_AUTHOR_NAME": "GitUser"}
         mock_env.return_value = Path("/tmp/env")
 
-        with mock.patch.object(subprocess, "call", return_value=0):
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         env_dict = mock_env.call_args[0][0]

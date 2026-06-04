@@ -50,15 +50,20 @@ Annotations: |
        - Файл с правами 0600 во временной директории
     5. Проверить config.build.image:
        Если None — ошибка ClickException("image in .goga/config.yml is not set")
-    6. Собрать Docker-команду:
-       - docker run --rm --entrypoint python3
+    6. Сгенерировать container_name: "goga-build-{pid}"
+    7. Установить SIGTERM handler: при получении сигнала — SystemExit(128 + signum)
+    8. Собрать Docker-команду:
+       - docker run --rm --name container_name --entrypoint python3
        - Монтирование CWD как /workspace
        - --env-file для передачи переменных
        - Образ из `Config`.build.image
        - Аргументы: -m goga.build <plan> + CLI-флаги
-    7. При dry_run: exit 0 (без запуска контейнера)
-    8. Запустить Docker через subprocess.call, вернуть его exit code
-    9. В finally: удалить env-file
+    9. При dry_run: exit 0 (без запуска контейнера)
+    10. Запустить Docker через subprocess.Popen, дождаться exit code через .wait()
+    11. В finally:
+        a. Удалить env-file
+        b. Выполнить docker kill container_name (suppress errors)
+        c. Восстановить предыдущий SIGTERM handler
 
 ---
 
