@@ -56,6 +56,12 @@ class FileGenerator:
             usages_dir.mkdir(parents=True, exist_ok=True)
             (usages_dir / "conventions.md").write_text(content, encoding="utf-8")
 
+        if config.dockerfile_path is not None:
+            dockerfile_content = f"FROM {config.image}\n"
+            dockerfile = self._base_dir / config.dockerfile_path
+            dockerfile.parent.mkdir(parents=True, exist_ok=True)
+            dockerfile.write_text(dockerfile_content, encoding="utf-8")
+
         self.generate_goga_config(config)
 
     def generate_goga_config(self, config: GogaConfigAnswers) -> None:

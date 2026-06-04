@@ -44,6 +44,7 @@ class TestLogic:
         env: dict | None = None,
         codemanifest_usages: dict | None = None,
         codemanifest_annotations: str | None = None,
+        dockerfile_path: str | None = None,
     ) -> GogaConfigAnswers:
         return GogaConfigAnswers(
             language=language,
@@ -52,6 +53,7 @@ class TestLogic:
             env=env if env is not None else {},
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
+            dockerfile_path=dockerfile_path,
         )
 
     def _make_gen(self, tmp_path: Path) -> FileGenerator:
@@ -207,3 +209,57 @@ class TestLogic:
 
         data = self._load_yaml(goga_dir / "config.yml")
         assert data["language"] == "golang"
+
+    # --- New tests for Dockerfile generation ---
+
+    def test_generator_creates_dockerfile(self, tmp_path: Path) -> None:
+        """When dockerfile_path is set, Dockerfile is created with FROM image."""
+        config = self._make_config(
+            image="qarium/goga-python-3.14:1.0",
+            dockerfile_path="Dockerfile",
+        )
+        answers = InitAnswers(goga_config=config)
+
+        gen = self._make_gen(tmp_path)
+        gen.generate(answers)
+
+        dockerfile = tmp_path / "Dockerfile"
+        assert dockerfile.exists()
+        content = dockerfile.read_text(encoding="utf-8")
+        assert content == "FROM qarium/goga-python-3.14:1.0\n"
+
+    def test_generator_no_dockerfile_when_none(self, tmp_path: Path) -> None:
+        """When dockerfile_path is None, no Dockerfile is created."""
+        config = self._make_config(dockerfile_path=None)
+        answers = InitAnswers(goga_config=config)
+
+        gen = self._make_gen(tmp_path)
+        with patch("goga.init.generator.urllib.request.urlopen"):
+            gen.generate(answers)
+
+        assert not (tmp_path / "Dockerfile").exists()
+
+    def test_generator_config_yml_no_dockerfile_field(self, tmp_path: Path) -> None:
+        """Dockerfile path is not written to config.yml."""
+        config = self._make_config(dockerfile_path="Dockerfile")
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "dockerfile" not in data["build"]
+
+    def test_generator_dockerfile_custom_path(self, tmp_path: Path) -> None:
+        """Dockerfile can be created at a custom path."""
+        config = self._make_config(
+            image="qarium/goga-golang-1.26:1.0",
+            dockerfile_path="docker/Dockerfile",
+        )
+        answers = InitAnswers(goga_config=config)
+
+        gen = self._make_gen(tmp_path)
+        gen.generate(answers)
+
+        dockerfile = tmp_path / "docker" / "Dockerfile"
+        assert dockerfile.exists()
+        content = dockerfile.read_text(encoding="utf-8")
+        assert content == "FROM qarium/goga-golang-1.26:1.0\n"

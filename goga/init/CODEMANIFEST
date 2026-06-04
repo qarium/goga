@@ -16,6 +16,11 @@ Usages:
     Маппинг language → доступные образы:
     - python: qarium/goga-python-{3.10-3.14}:1.0
     - golang: qarium/goga-golang-{1.23-1.26}:1.0
+  agent_env_defaults: |
+    Маппинг agent → список env-ключей для подсказки пользователю.
+    Пользователю показываются ключи, он вводит значения.
+    Маппинг agent → env-ключи:
+    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
 
 Annotations: |
   Практика `conventions` используется для:
@@ -28,6 +33,7 @@ Annotations: |
   Использовать `yaml` для генерации YAML-файла (FileGenerator).
   Использовать `lang_conventions` для скачивания базовой конвенции по языку (Questionnaire, FileGenerator).
   Использовать `image_defaults` для списка доступных Docker-образов в зависимости от языка (Questionnaire).
+  Использовать `agent_env_defaults` для подсказки env-ключей в зависимости от выбранного агента (Questionnaire).
   Все типы — immutable dataclasses (frozen=True, kw_only=True).
 
 ---
@@ -43,10 +49,10 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Ответы для создания .goga/config.yml.
 
-"GogaConfigAnswers(language: str, agent: str, image: str, env: dict, codemanifest_usages: dict | None, codemanifest_annotations: str | None)":
+"GogaConfigAnswers(language: str, agent: str, image: str, env: dict, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
   location: answers.py
   annotations: |
-    Данные для формирования .goga/config.yml.
+    Данные для формирования .goga/config.yml и Dockerfile.
 
     `language`: выбранный язык проекта
     `agent`: выбранный AI-executor
@@ -54,6 +60,7 @@ Annotations: |
     `env`: переменные окружения для task_executor
     `codemanifest_usages`: маппинг практик codemanifest
     `codemanifest_annotations`: аннотации codemanifest
+    `dockerfile_path`: путь к кастомному Dockerfile (None если не нужен)
   properties:
     "language -> str": |
       Выбранный язык проекта.
@@ -67,6 +74,8 @@ Annotations: |
       Маппинг практик codemanifest.
     "codemanifest_annotations -> str | None": |
       Аннотации codemanifest.
+    "dockerfile_path -> str | None": |
+      Путь к кастомному Dockerfile. None — Dockerfile не создаётся.
 
 "Questionnaire()":
   location: questionnaire.py
@@ -75,6 +84,7 @@ Annotations: |
 
     Использовать `image_defaults` для списка доступных Docker-образов по языку.
     Использовать `lang_conventions` для предложения скачивания базовой конвенции после выбора языка.
+    Использовать `agent_env_defaults` для подсказки env-ключей после выбора агента.
   methods:
     "ask() -> answers:InitAnswers": |
       Выводит заголовок "=== Goga Project Initialization ===" и описание wizard.
@@ -83,14 +93,20 @@ Annotations: |
       Опрос для .goga/config.yml.
       Выводит "Collecting .goga/config.yml settings...".
       Каждый шаг сопровождается заголовком секции (---) и поясняющим текстом.
-      Спрашивает language, agent как выбор из дефолтного списка.
-      После выбора language предлагает скачать базовую конвенцию через `lang_conventions`.
-      Если пользователь соглашается:
-      - добавляет {"conventions": ".goga/usages/conventions.md"} в codemanifest_usages
-      - устанавливает codemanifest_annotations в "Use `conventions` for code writing rules and testing."
-      image — показ подсказок из `image_defaults`, дефолт на последний, ввод свободный.
-      env — опционально, пары ключ-значение.
-      codemanifest_usages и codemanifest_annotations — опционально (добавляются к предзаполненным конвенциям).
+      Шаги опроса:
+      1. language — выбор из списка (python, golang, kotlin, swift, javascript).
+      2. convention — предложение скачать базовую конвенцию через `lang_conventions`.
+         Если соглашается: добавляет {"conventions": ".goga/usages/conventions.md"} в codemanifest_usages,
+         устанавливает codemanifest_annotations.
+      3. codemanifest_usages — опционально, добавляются к предзаполненным конвенциям.
+      4. codemanifest_annotations — опционально, добавляются к предзаполненным.
+      5. agent — выбор из списка (пока только claude).
+      6. image — показ подсказок из `image_defaults`, дефолт на последний, ввод свободный.
+      7. dockerfile — опционально, подтверждение создания кастомного Dockerfile.
+         Если соглашается: запрашивает путь (дефолт "Dockerfile").
+      8. env — сначала предлагает env-ключи из `agent_env_defaults` по выбранному агенту.
+         Пользователь вводит значения для предложенных ключей.
+         Затем опционально — произвольные пары ключ-значение.
 
 "FileGenerator()":
   location: generator.py
@@ -100,6 +116,7 @@ Annotations: |
   methods:
     "generate(answers: InitAnswers) -> _:None": |
       Создаёт все файлы на основе ответов.
+      Если dockerfile_path задан — создаёт Dockerfile с FROM {image}.
       Вызывает generate_goga_config() с answers.goga_config.
     "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
       Если codemanifest_usages содержит ключ "conventions" — скачивает файл конвенции
