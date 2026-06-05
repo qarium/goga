@@ -1,0 +1,97 @@
+name: Publish Docker Langs
+
+on:
+  workflow_dispatch:
+#  workflow_run:
+#    workflows: ["Publish Docker Base"]
+#    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - id: set-matrix
+        run: |
+          python3 -c "
+          import json
+          langs = {
+            'python':     ['3.10', '3.11', '3.12', '3.13', '3.14'],
+            'golang':     ['1.23.12', '1.24.13', '1.25.11', '1.26.4'],
+            'node':       ['22', '24'],
+            'kotlin':     ['2.0.21', '2.1.21', '2.2.21', '2.3.21'],
+            'swift':      ['6.0.3', '6.1.3', '6.2.4'],
+          }
+          matrix = {'include': [{'language': l, 'version': v} for l, vs in langs.items() for v in vs]}
+          with open('$GITHUB_OUTPUT', 'a') as f:
+            f.write(f'matrix={json.dumps(matrix)}\n')
+          "
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tags
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+          else
+            BRANCH="${GITHUB_REF_NAME}"
+          fi
+          PREFIX="${BRANCH%.x}"
+          TAG=$(git tag --sort=-v:refname --merged "origin/${BRANCH}" | grep -E "^v${PREFIX}\.[0-9]+$" | head -1)
+          if [ -z "$TAG" ]; then
+            echo "::error::No semver tag found on this branch"
+            exit 1
+          fi
+          TAG="${TAG#v}"
+          IMAGE="qarium/goga-${{ matrix.language }}-${{ matrix.version }}"
+          TAGS="${IMAGE}:${TAG}"
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          LATEST="${LATEST#v}"
+          if [ "$TAG" = "$LATEST" ]; then
+            TAGS="${TAGS},${IMAGE}:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build and push ${{ matrix.language }}-${{ matrix.version }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./docker/${{ matrix.language }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            GOGA_TAG=${{ steps.meta.outputs.version }}
+            LANG_VERSION=${{ matrix.version }}
+          tags: ${{ steps.meta.outputs.tags }}

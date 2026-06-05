@@ -236,11 +236,11 @@ class TestLogic:
         assert result.language == "golang"
         assert result.image == "my-custom/golang:2.0"
 
-    def test_questionnaire_ask_gogo_config_language_without_predefined_images(self) -> None:
+    def test_questionnaire_ask_goga_config_kotlin_with_predefined_images(self) -> None:
         prompts = iter([
             "kotlin",                          # language
             "claude",                          # agent
-            "custom/kotlin:1.0",               # image (free text, no predefined list)
+            "qarium/goga-kotlin-2.3.21:1.0",   # image (default from predefined list)
         ])
         confirms = iter([
             False,  # Download base convention?
@@ -257,7 +257,59 @@ class TestLogic:
             result = q.ask_goga_config()
 
         assert result.language == "kotlin"
-        assert result.image == "custom/kotlin:1.0"
+        assert result.image == "qarium/goga-kotlin-2.3.21:1.0"
+
+    def test_questionnaire_ask_goga_config_swift_with_predefined_images(self) -> None:
+        prompts = iter([
+            "swift",                           # language
+            "claude",                          # agent
+            "qarium/goga-swift-6.2.4:1.0",     # image (default from predefined list)
+        ])
+        confirms = iter([
+            False,  # Download base convention?
+            False,  # Add codemanifest usages?
+            False,  # Add codemanifest annotations?
+            False,  # Create Dockerfile?
+            False,  # Set suggested env variables?
+            False,  # Add custom environment variable?
+        ])
+
+        with patch("click.prompt", side_effect=prompts), \
+             patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.language == "swift"
+        assert result.image == "qarium/goga-swift-6.2.4:1.0"
+
+    def test_questionnaire_ask_goga_config_javascript_with_predefined_images(self) -> None:
+        prompts = iter([
+            "javascript",                      # language
+            "claude",                          # agent
+            "qarium/goga-node-24:1.0",         # image (default from predefined list)
+        ])
+        confirms = iter([
+            False,  # Download base convention?
+            False,  # Add codemanifest usages?
+            False,  # Add codemanifest annotations?
+            False,  # Create Dockerfile?
+            False,  # Set suggested env variables?
+            False,  # Add custom environment variable?
+        ])
+
+        with patch("click.prompt", side_effect=prompts), \
+             patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.language == "javascript"
+        assert result.image == "qarium/goga-node-24:1.0"
+
+    def test_all_languages_have_image_map_entries(self) -> None:
+        from goga.init.questionnaire import _IMAGE_MAP, _LANGUAGES
+
+        for language in _LANGUAGES:
+            assert language in _IMAGE_MAP, f"Language '{language}' missing from _IMAGE_MAP"
 
     def test_questionnaire_ask_goga_config_duplicate_usage_name_skipped(self) -> None:
         prompts = iter([

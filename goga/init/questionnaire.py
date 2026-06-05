@@ -13,10 +13,25 @@ _IMAGE_MAP: dict[str, list[str]] = {
         "qarium/goga-python-3.14:1.0",
     ],
     "golang": [
-        "qarium/goga-golang-1.23:1.0",
-        "qarium/goga-golang-1.24:1.0",
-        "qarium/goga-golang-1.25:1.0",
-        "qarium/goga-golang-1.26:1.0",
+        "qarium/goga-golang-1.23.12:1.0",
+        "qarium/goga-golang-1.24.13:1.0",
+        "qarium/goga-golang-1.25.11:1.0",
+        "qarium/goga-golang-1.26.4:1.0",
+    ],
+    "javascript": [
+        "qarium/goga-node-22:1.0",
+        "qarium/goga-node-24:1.0",
+    ],
+    "kotlin": [
+        "qarium/goga-kotlin-2.0.21:1.0",
+        "qarium/goga-kotlin-2.1.21:1.0",
+        "qarium/goga-kotlin-2.2.21:1.0",
+        "qarium/goga-kotlin-2.3.21:1.0",
+    ],
+    "swift": [
+        "qarium/goga-swift-6.0.3:1.0",
+        "qarium/goga-swift-6.1.3:1.0",
+        "qarium/goga-swift-6.2.4:1.0",
     ],
 }
 

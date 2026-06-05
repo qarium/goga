@@ -1,0 +1,66 @@
+name: Publish Docker Base
+
+on:
+  workflow_dispatch:
+#  workflow_run:
+#    workflows: ["Publish Release"]
+#    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+#    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine tag
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            BRANCH="${{ github.event.workflow_run.head_branch }}"
+          else
+            BRANCH="${GITHUB_REF_NAME}"
+          fi
+          PREFIX="${BRANCH%.x}"
+          TAG=$(git tag --sort=-v:refname --merged "origin/${BRANCH}" | grep -E "^v${PREFIX}\.[0-9]+$" | head -1)
+          if [ -z "$TAG" ]; then
+            echo "::error::No semver tag found on this branch"
+            exit 1
+          fi
+          TAG="${TAG#v}"
+          TAGS="qarium/goga:${TAG}"
+          LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+          LATEST="${LATEST#v}"
+          if [ "$TAG" = "$LATEST" ]; then
+            TAGS="${TAGS},qarium/goga:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: SETUPTOOLS_SCM_PRETEND_VERSION=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
