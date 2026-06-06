@@ -58,7 +58,10 @@ language, agent, image, env, codemanifest_usages, codemanifest_annotations, dock
 5. **agent** — выбор AI-executor (claude)
 6. **image** — Docker-образ: показываются подсказки для языка, дефолт — последний, ввод свободный
    - python: qarium/goga-python-3.10:1.0 .. qarium/goga-python-3.14:1.0
-   - golang: qarium/goga-golang-1.23:1.0 .. qarium/goga-golang-1.26:1.0
+   - golang: qarium/goga-golang-1.23.12:1.0 .. qarium/goga-golang-1.26.4:1.0
+   - javascript: qarium/goga-node-22:1.0 .. qarium/goga-node-24:1.0
+   - kotlin: qarium/goga-kotlin-2.0.21:1.0 .. qarium/goga-kotlin-2.3.21:1.0
+   - swift: qarium/goga-swift-6.0.3:1.0 .. qarium/goga-swift-6.2.4:1.0
 7. **dockerfile** — опционально, создание кастомного Dockerfile
    - При согласии запрашивается путь (дефолт: "Dockerfile")
    - Dockerfile содержит `FROM {image}`
