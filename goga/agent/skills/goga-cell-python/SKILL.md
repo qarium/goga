@@ -1,6 +1,6 @@
 ---
 name: goga-cell-python
-description: Python: правила реализации контрактов CODEMANIFEST
+description: Python правила реализации контрактов CODEMANIFEST
 ---
 # Python: правила реализации контрактов
 

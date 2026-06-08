@@ -1,6 +1,6 @@
 ---
 name: goga-cell-javascript
-description: JavaScript: правила реализации контрактов CODEMANIFEST
+description: JavaScript правила реализации контрактов CODEMANIFEST
 ---
 # JavaScript: правила реализации контрактов
 

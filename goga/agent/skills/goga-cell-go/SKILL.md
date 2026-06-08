@@ -1,6 +1,6 @@
 ---
 name: goga-cell-go
-description: Golang: правила реализации контрактов CODEMANIFEST
+description: Golang правила реализации контрактов CODEMANIFEST
 ---
 # Golang: правила реализации контрактов
 

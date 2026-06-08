@@ -1,6 +1,6 @@
 ---
 name: goga-cell-cpp
-description: C++: правила реализации контрактов CODEMANIFEST
+description: C++ правила реализации контрактов CODEMANIFEST
 ---
 # C++: правила реализации контрактов
 

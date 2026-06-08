@@ -1,6 +1,6 @@
 ---
 name: goga-cell-kotlin
-description: Kotlin: правила реализации контрактов CODEMANIFEST
+description: Kotlin правила реализации контрактов CODEMANIFEST
 ---
 # Kotlin: правила реализации контрактов
 
