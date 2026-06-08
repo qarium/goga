@@ -105,7 +105,7 @@ Description: Hello world cell
 Run the linter to check all CODEMANIFEST files in your project:
 
 ```bash
-goga linter .
+goga lint .
 ```
 
 The linter applies 21 document-level rules and 3 project-level rules to verify structural correctness, import consistency, usage validity, and more.

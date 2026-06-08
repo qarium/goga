@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from goga.init.answers import GogaConfigAnswers, InitAnswers
+from .answers import GogaConfigAnswers, InitAnswers
 
 _IMAGE_MAP: dict[str, list[str]] = {
     "python": [
@@ -44,6 +44,9 @@ _AGENT_ENV_MAP: dict[str, list[str]] = {
         "ANTHROPIC_DEFAULT_OPUS_MODEL",
         "ANTHROPIC_BASE_URL",
     ],
+    "codex": [
+        "CODEX_MODEL",
+    ],
 }
 
 
@@ -60,7 +63,7 @@ class Questionnaire:
         config = self.ask_goga_config()
         return InitAnswers(goga_config=config)
 
-    def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912
+    def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912, PLR0915
         """Run questionnaire for .goga/config.yml creation."""
         click.echo("Collecting .goga/config.yml settings...\n")
 
@@ -114,7 +117,7 @@ class Questionnaire:
         click.echo("Select the AI agent that will build implementation.")
         agent: str = click.prompt(
             "Agent",
-            type=click.Choice(["claude"]),
+            type=click.Choice(["claude", "codex"]),
         )
 
         # 6. Docker image
@@ -139,7 +142,7 @@ class Questionnaire:
         # 8. Environment variables
         click.echo("\n--- Environment Variables ---")
         click.echo("Configure environment variables for the build implementation.")
-        env: dict = {}
+        env: dict | None = None
 
         suggested_keys = _AGENT_ENV_MAP.get(agent, [])
         if suggested_keys:
@@ -147,14 +150,20 @@ class Questionnaire:
             for key in suggested_keys:
                 click.echo(f"  - {key}")
             if click.confirm("Set suggested env variables?", default=False):
+                env = {}
                 for key in suggested_keys:
                     value = click.prompt(f"  {key}")
                     env[key] = value
 
-        while click.confirm("Add custom environment variable?", default=False):
-            key = click.prompt("Env key")
-            value = click.prompt("Env value")
-            env[key] = value
+        if click.confirm("Add custom environment variable?", default=False):
+            if env is None:
+                env = {}
+            while True:
+                key = click.prompt("Env key")
+                value = click.prompt("Env value")
+                env[key] = value
+                if not click.confirm("Add another?", default=False):
+                    break
 
         return GogaConfigAnswers(
             language=language,

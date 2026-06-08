@@ -21,8 +21,8 @@ docs/cli/init.md:
   - goga/commands/init
   - goga/init
 
-docs/cli/linter.md:
-  - goga/commands/linter
+docs/cli/lint.md:
+  - goga/commands/lint
   - goga/ast
 
 docs/cli/build.md:

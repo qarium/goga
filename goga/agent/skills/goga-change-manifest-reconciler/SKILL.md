@@ -21,7 +21,7 @@ You are responsible for specification reconciliation.
    a. If manifest is wrong → update manifest to match implementation
    b. If implementation is wrong → flag as inconsistency → STOP
 5. Verify updated manifest is consistent with changes from Change Plan
-6. Execute: `goga linter` — validate CODEMANIFEST syntax after all updates
+6. Execute: `goga lint` — validate CODEMANIFEST syntax after all updates
 
 Update CODEMANIFEST only when changes affect:
 - algorithms

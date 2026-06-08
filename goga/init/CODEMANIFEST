@@ -24,6 +24,7 @@ Usages:
     Пользователю показываются ключи, он вводит значения.
     Маппинг agent → env-ключи:
     - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
+    - codex: CODEX_MODEL
 
 Annotations: |
   Практика `conventions` используется для:
@@ -52,7 +53,7 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Ответы для создания .goga/config.yml.
 
-"GogaConfigAnswers(language: str, agent: str, image: str, env: dict, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
+"GogaConfigAnswers(language: str, agent: str, image: str, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
   location: answers.py
   annotations: |
     Данные для формирования .goga/config.yml и Dockerfile.
@@ -71,7 +72,7 @@ Annotations: |
       Выбранный AI-executor.
     "image -> str": |
       Docker-образ для сборки.
-    "env -> dict": |
+    "env -> dict | None": |
       Переменные окружения для task_executor.
     "codemanifest_usages -> dict | None": |
       Маппинг практик codemanifest.
@@ -103,7 +104,7 @@ Annotations: |
          устанавливает codemanifest_annotations.
       3. codemanifest_usages — опционально, добавляются к предзаполненным конвенциям.
       4. codemanifest_annotations — опционально, добавляются к предзаполненным.
-      5. agent — выбор из списка (пока только claude).
+      5. agent — выбор из списка (claude, codex).
       6. image — показ подсказок из `image_defaults`, дефолт на последний, ввод свободный.
       7. dockerfile — опционально, подтверждение создания кастомного Dockerfile.
          Если соглашается: запрашивает путь (дефолт "Dockerfile").
@@ -134,7 +135,7 @@ Annotations: |
       - language → language
       - image → build.image
       - agent → build.task_executor.agent
-      - env → build.task_executor.env
+      - env → build.task_executor.env (если не None и не пустой)
       - codemanifest_usages → codemanifest.usages (если не None/пустой)
       - codemanifest_annotations → codemanifest.annotations (если не None)
 

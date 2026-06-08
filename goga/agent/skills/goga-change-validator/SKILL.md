@@ -13,7 +13,7 @@ Execute only after: implementation stabilized, tests passing, reconciliation com
 3. Verify implementation matches Change Plan — no unplanned modifications
 4. Run full test suite
 5. Run project validators and linters
-6. Execute: `goga linter` — final CODEMANIFEST validation
+6. Execute: `goga lint` — final CODEMANIFEST validation
 7. Verify scope integrity — all changes within scope from scope-resolver
 8. Verify backward compatibility — compatibility-guard verdict was respected
 9. Apply goga-lang-disp — verify language conventions are followed in implementation and tests

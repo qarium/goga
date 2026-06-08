@@ -76,7 +76,7 @@ class TestLogic:
         assert result.language == "python"
         assert result.agent == "claude"
         assert result.image == "qarium/goga-python-3.12:1.0"
-        assert result.env == {}
+        assert result.env is None
         assert result.dockerfile_path is None
         assert result.codemanifest_usages == {"conventions": ".goga/usages/conventions.md"}
         assert result.codemanifest_annotations == "Use `conventions` for code writing rules and testing."
@@ -450,6 +450,58 @@ class TestLogic:
             "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1",
             "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
         }
+
+    def test_questionnaire_ask_goga_config_codex_agent(self) -> None:
+        prompts = iter([
+            "python",                          # language
+            "codex",                           # agent
+            "qarium/goga-python-3.12:1.0",     # image
+        ])
+        confirms = iter([
+            False,  # Download base convention?
+            False,  # Add codemanifest usages?
+            False,  # Add codemanifest annotations?
+            False,  # Create Dockerfile?
+            False,  # Set suggested env variables?
+            False,  # Add custom environment variable?
+        ])
+
+        with patch("click.prompt", side_effect=prompts), \
+             patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.agent == "codex"
+        assert result.env is None
+
+    def test_questionnaire_codex_env_suggested_keys(self) -> None:
+        prompts = iter([
+            "python",                          # language
+            "codex",                           # agent
+            "qarium/goga-python-3.12:1.0",     # image
+            "o4-mini",                         # CODEX_MODEL
+        ])
+        confirms = iter([
+            False,  # Download base convention?
+            False,  # Add codemanifest usages?
+            False,  # Add codemanifest annotations?
+            False,  # Create Dockerfile?
+            True,   # Set suggested env variables?
+            False,  # Add custom environment variable?
+        ])
+
+        with patch("click.prompt", side_effect=prompts), \
+             patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.env == {"CODEX_MODEL": "o4-mini"}
+
+    def test_agent_env_map_contains_codex(self) -> None:
+        from goga.init.questionnaire import _AGENT_ENV_MAP
+
+        assert "codex" in _AGENT_ENV_MAP
+        assert _AGENT_ENV_MAP["codex"] == ["CODEX_MODEL"]
 
     def test_questionnaire_env_skip_suggested_custom_only(self) -> None:
         prompts = iter([

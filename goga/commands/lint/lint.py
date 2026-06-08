@@ -12,7 +12,7 @@ from ...ast.ast import _flatten_tree
 @click.command()
 @click.argument("path", default=".")
 @click.pass_context
-def linter(ctx: click.Context, path: str) -> None:
+def lint(ctx: click.Context, path: str) -> None:
     """Validate CODEMANIFEST files in the project."""
     os.chdir(path)
 
@@ -42,6 +42,6 @@ def linter(ctx: click.Context, path: str) -> None:
     click.echo("")
     cell_count = len(_flatten_tree(ast_obj.tree))
     error_count = len(ast_obj.errors)
-    summary = f"goga linter\n-------------------------\ncells: {cell_count} errors: {error_count}"
+    summary = f"goga lint\n-------------------------\ncells: {cell_count} errors: {error_count}"
     click.echo(summary)
     ctx.exit(1 if error_count > 0 else 0)

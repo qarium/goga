@@ -55,7 +55,7 @@ language, agent, image, env, codemanifest_usages, codemanifest_annotations, dock
    - При согласии добавляется `{"conventions": ".goga/usages/conventions.md"}` в codemanifest_usages
 3. **codemanifest_usages** — опционально, дополнительные практики
 4. **codemanifest_annotations** — опционально
-5. **agent** — выбор AI-executor (claude)
+5. **agent** — выбор AI-executor (claude, codex)
 6. **image** — Docker-образ: показываются подсказки для языка, дефолт — последний, ввод свободный
    - python: qarium/goga-python-3.10:1.0 .. qarium/goga-python-3.14:1.0
    - golang: qarium/goga-golang-1.23.12:1.0 .. qarium/goga-golang-1.26.4:1.0
@@ -67,5 +67,6 @@ language, agent, image, env, codemanifest_usages, codemanifest_annotations, dock
    - Dockerfile содержит `FROM {image}`
 8. **env** — сначала предлагаются env-ключи по выбранному агенту (из `agent_env_defaults`):
    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
+   - codex: CODEX_MODEL
    - Пользователь вводит значения для предложенных ключей
    - Затем опционально — произвольные пары ключ-значение

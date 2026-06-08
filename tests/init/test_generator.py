@@ -50,7 +50,7 @@ class TestLogic:
             language=language,
             agent=agent,
             image=image,
-            env=env if env is not None else {},
+            env=env,
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
             dockerfile_path=dockerfile_path,
@@ -263,3 +263,30 @@ class TestLogic:
         assert dockerfile.exists()
         content = dockerfile.read_text(encoding="utf-8")
         assert content == "FROM qarium/goga-golang-1.26:1.0\n"
+
+    def test_generator_no_env_in_yaml_when_none(self, tmp_path: Path) -> None:
+        """When env is None, 'env' key must not appear in config.yml."""
+        config = self._make_config(env=None)
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "env" not in data["build"]["task_executor"]
+
+    def test_generator_no_env_in_yaml_when_empty(self, tmp_path: Path) -> None:
+        """When env is empty dict, 'env' key must not appear in config.yml."""
+        config = self._make_config(env={})
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "env" not in data["build"]["task_executor"]
+
+    def test_generator_env_in_yaml_when_provided(self, tmp_path: Path) -> None:
+        """When env has values, 'env' key must appear in config.yml."""
+        config = self._make_config(env={"API_KEY": "secret"})
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret"}

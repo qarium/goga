@@ -41,14 +41,13 @@ class TestContract:
         assert hints["language"] is str
         assert hints["agent"] is str
         assert hints["image"] is str
-        assert hints["env"] is dict
+        assert hints["env"] == dict | None
 
     def test_constructors_accept_kwargs(self) -> None:
         cfg = GogaConfigAnswers(
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
-            env={},
         )
         answers = InitAnswers(goga_config=cfg)
         assert answers.goga_config is cfg
@@ -62,7 +61,6 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
-            env={},
         )
         with pytest.raises(dataclasses.FrozenInstanceError):
             cfg.language = "go"  # type: ignore[misc]
@@ -72,7 +70,6 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
-            env={},
         )
         answers = InitAnswers(goga_config=cfg)
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -80,14 +77,13 @@ class TestLogic:
 
     def test_goga_config_answers_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            GogaConfigAnswers("python", "claude", "img", {})  # type: ignore[call-arg]
+            GogaConfigAnswers("python", "claude", "img")  # type: ignore[call-arg]
 
     def test_goga_config_answers_defaults_none(self) -> None:
         cfg = GogaConfigAnswers(
             language="go",
             agent="claude",
             image="qarium/goga-golang-1.23:0.1",
-            env={},
         )
         assert cfg.codemanifest_usages is None
         assert cfg.codemanifest_annotations is None
@@ -97,7 +93,6 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
-            env={},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions for code rules.",
         )
@@ -109,7 +104,6 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
-            env={},
         )
         with pytest.raises(TypeError):
             InitAnswers(cfg)  # type: ignore[call-arg]

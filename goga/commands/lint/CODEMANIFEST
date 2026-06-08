@@ -21,8 +21,8 @@ Annotations: |
 
 ---
 
-"linter(path: str = '.')":
-  location: linter.py
+"lint(path: str = '.')":
+  location: lint.py
   annotations: |
     Команда валидации CODEMANIFEST файлов в проекте.
 
@@ -44,7 +44,7 @@ Annotations: |
 
     Формат итоговой сводки:
     ```
-    goga linter
+    goga lint
     -------------------------
     cells: <N> errors: <M>
     ```

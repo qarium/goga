@@ -1,6 +1,6 @@
 Imports:
   - Types:
-      - linter
+      - lint
       - build
       - connect
       - schema
@@ -32,7 +32,7 @@ app():
     Для создания корневой группы команд использовать практику `click`.
 
     Команды:
-    - `linter`
+    - `lint`
     - `build`
     - `connect`
     - `schema`
