@@ -150,7 +150,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert "Installed 9 commands" in result.output
-        assert "Installed 37 skills" in result.output
+        assert "Installed 46 skills" in result.output
 
 
 class TestLogicNegative:
