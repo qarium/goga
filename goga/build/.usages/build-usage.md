@@ -39,6 +39,13 @@ exit_code = build(
   - `session_timeout`, `idle_timeout`, `wait` (str) — таймауты
   - `max_iterations`, `review_patience` (int) — лимиты
 
+## Поддерживаемые агенты
+
+| Агент | Прекондишены | Флаг ralphex |
+|-------|-------------|-------------|
+| `claude` | Создание .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config | — |
+| `codex` | Не требуются | `--codex` |
+
 ## Возвращаемое значение
 
 - `0` — успех

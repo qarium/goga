@@ -96,6 +96,40 @@ class TestRunPrecondition:
         config = _make_config(agent="claude")
         assert _run_precondition(config) == 0
 
+    def test_codex_agent_succeeds(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+
+    def test_codex_agent_no_claude_settings(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        assert not (tmp_path / ".claude").exists()
+
+    def test_cleanup_ralphex_dir_for_claude(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "old_config").write_text("stale")
+        config = _make_config(agent="claude")
+        assert _run_precondition(config) == 0
+        assert not (ralphex_dir / "old_config").exists()
+
+    def test_cleanup_ralphex_dir_for_codex(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "old_config").write_text("stale")
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        assert not ralphex_dir.exists()
+
+    def test_cleanup_ralphex_dir_no_dir(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+
     def test_unsupported_agent_returns_1(self, tmp_path, monkeypatch) -> None:
         config = _make_config(agent="gemini")
         assert _run_precondition(config) == 1
@@ -326,6 +360,16 @@ class TestAssembleCommand:
         cmd = _assemble_command("plan.md", config, {"skip_finalize": True})
         assert "--skip-finalize" in cmd
 
+    def test_codex_flag_when_codex_agent(self) -> None:
+        config = _make_config(agent="codex")
+        cmd = _assemble_command("plan.md", config, {})
+        assert "--codex" in cmd
+
+    def test_no_codex_flag_when_claude_agent(self) -> None:
+        config = _make_config(agent="claude")
+        cmd = _assemble_command("plan.md", config, {})
+        assert "--codex" not in cmd
+
 
 # --- Full build function tests ---
 
@@ -392,6 +436,34 @@ class TestBuildUnsupportedAgent:
             cli_options={"skip_manifest_check": True},
         )
         assert result == 1
+
+
+class TestBuildCodexAgent:
+    def test_codex_dry_run_returns_0(self, tmp_path, monkeypatch) -> None:
+        result = _run_build_in_tmp(
+            tmp_path,
+            monkeypatch,
+            config=_make_config(agent="codex"),
+            cli_options={"dry_run": True, "skip_manifest_check": True},
+        )
+        assert result == 0
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_flag_in_full_build(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        config = _make_config(agent="codex")
+        _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
+
+        cmd = mock_call.call_args[0][0]
+        assert "--codex" in cmd
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_no_claude_settings(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        config = _make_config(agent="codex")
+        _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
+
+        assert not (tmp_path / ".claude").exists()
 
 
 class TestBuildMissingRalphex:

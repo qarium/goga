@@ -35,6 +35,8 @@ Annotations: |
        - Проверить что все CODEMANIFEST файлы проекта закоммичены в git
        - При обнаружении незакоммиченных — ошибка, exit 1
     1. Диспетчеризация прекондишенов по agent из `TaskExecutor`:
+       - Если agent не в ("claude", "codex") → ошибка "Unsupported agent", exit 1
+       - Удалить .ralphex/ если существует (общий шаг для всех агентов)
        - Если agent == "claude":
          a. Создать/обновить .claude/settings.json:
             - Прочитать существующий если есть, сделать merge
@@ -46,12 +48,14 @@ Annotations: |
          c. Обновить .ralphex/config:
             - Добавить defaults (claude_command, claude_args) если отсутствуют
             - Перезаписать codex_enabled из `BuildConfig`
-       - Иначе → ошибка "Unsupported agent", exit 1
+       - Если agent == "codex":
+         - Дополнительные прекондишены не требуются
     2. Копировать дефолтные prompts и agents из пакета goga в .ralphex/
        из каталогов, указанных в `BuildConfig`
     3. Собрать команду ralphex:
        - Базовая: ["ralphex", plan, "--config-dir", ".ralphex/"]
        - Добавить флаги с приоритетом: CLI-опции > `Config` > пропуск
+       - Если agent == "codex": добавить флаг --codex
     4. При dry_run: вывести команду и вернуть 0
     5. Запустить `ralphex` через subprocess.call, вернуть его код возврата
 

@@ -78,7 +78,13 @@ def _build_docker_cmd(
     cmd: list[str] = ["docker", "run", "--rm", "--name", container_name,
                       "--entrypoint", "python3", "-v",
                       f"{project_dir}:/workspace", "-w",
-                      "/workspace", "--env-file", str(env_file), image]
+                      "/workspace", "--env-file", str(env_file)]
+
+    codex_auth = Path.home() / ".codex" / "auth.json"
+    if codex_auth.is_file():
+        cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
+
+    cmd.append(image)
 
     cmd.extend(["-m", "goga.build", plan])
 

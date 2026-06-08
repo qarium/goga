@@ -11,6 +11,7 @@ from pathlib import Path
 from ..config import Config
 
 CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"\n'
+CODEX_WRAPPER_SCRIPT = '#!/bin/bash\nexec codex "$@" -m "$CODEX_MODEL"\n'
 
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
@@ -62,17 +63,27 @@ def _find_uncommitted_manifests() -> list[str]:
     return uncommitted
 
 
+def _cleanup_ralphex_dir() -> None:
+    ralphex_dir = Path(".ralphex")
+    if ralphex_dir.is_dir():
+        shutil.rmtree(ralphex_dir)
+        print("Removed .ralphex/", file=sys.stderr)
+
+
 def _run_precondition(config: Config) -> int:
     agent = config.build.task_executor.agent
+    if agent not in ("claude", "codex"):
+        print(f"Unsupported agent: {agent}", file=sys.stderr)
+        return 1
     if agent == "claude":
         try:
             _precondition_claude(config)
         except RuntimeError as exc:
             print(str(exc), file=sys.stderr)
             return 1
-        return 0
-    print(f"Unsupported agent: {agent}", file=sys.stderr)
-    return 1
+    if agent == "codex":
+        _precondition_codex()
+    return 0
 
 
 def _precondition_claude(config: Config) -> None:
@@ -105,6 +116,28 @@ def _create_claude_settings(config: Config) -> None:
     with settings_path.open("w") as f:
         json.dump(settings, f, indent=2)
         f.write("\n")
+
+
+def _precondition_codex() -> None:
+    _create_codex_wrapper()
+
+
+def _create_codex_wrapper() -> None:
+    print("Creating .ralphex/config for codex...", file=sys.stderr)
+
+    ralphex_dir = Path(".ralphex")
+    ralphex_dir.mkdir(exist_ok=True)
+
+    wrapper_path = ralphex_dir / "codex-wrapper.sh"
+    wrapper_path.write_text(CODEX_WRAPPER_SCRIPT)
+    wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+    (ralphex_dir / "config").write_text(
+        "executor = codex\n"
+        "codex_command = .ralphex/codex-wrapper.sh\n"
+        "codex_sandbox = danger-full-access\n"
+        "codex_reasoning_effort = high\n"
+    )
 
 
 def _create_claude_wrapper(config: Config) -> None:
@@ -223,6 +256,8 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
             for path in uncommitted:
                 print(f"  {path}", file=sys.stderr)
             return 1
+
+    _cleanup_ralphex_dir()
 
     for step in (_run_precondition, _copy_defaults):
         result = step(config)
