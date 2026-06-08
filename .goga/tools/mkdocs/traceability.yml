@@ -1,0 +1,103 @@
+# Traceability: documentation page → cell paths
+# Each entry maps a doc page to the cells whose CODEMANIFEST/.usages it draws from.
+
+docs/index.md:
+  - goga
+
+docs/getting-started.md:
+  - goga/init
+  - goga/config
+
+docs/examples.md:
+  - goga
+
+docs/configuration.md:
+  - goga/config
+
+docs/cli/index.md:
+  - goga/commands
+
+docs/cli/init.md:
+  - goga/commands/init
+  - goga/init
+
+docs/cli/linter.md:
+  - goga/commands/linter
+  - goga/ast
+
+docs/cli/build.md:
+  - goga/commands/build
+  - goga/build
+
+docs/cli/contract.md:
+  - goga/commands/contract
+  - goga/contract
+
+docs/cli/config.md:
+  - goga/commands/config
+  - goga/config
+
+docs/cli/schema.md:
+  - goga/commands/schema
+  - goga/schema
+
+docs/cli/sync.md:
+  - goga/commands/sync
+  - goga/sync
+
+docs/cli/connect.md:
+  - goga/commands/connect
+  - goga/connect
+
+docs/cli/tool.md:
+  - goga/commands/tool
+
+docs/architecture/index.md:
+  - goga/ast
+
+docs/architecture/ast-nodes.md:
+  - goga/ast/nodes
+
+docs/architecture/ast-factory.md:
+  - goga/ast/factory
+
+docs/architecture/ast-visitor.md:
+  - goga/ast/visitor
+
+docs/architecture/ast-analyzer.md:
+  - goga/ast/analyzer
+
+docs/architecture/ast-errors.md:
+  - goga/ast/errors
+
+docs/architecture/validation-rules.md:
+  - goga/ast/rules
+  - goga/ast/rules/base
+  - goga/ast/rules/document/imports
+  - goga/ast/rules/document/usages
+  - goga/ast/rules/document/structures
+  - goga/ast/rules/document/mutation
+  - goga/ast/rules/document/annotations
+  - goga/ast/rules/ast
+
+docs/architecture/contract-extraction.md:
+  - goga/contract
+  - goga/contract/data
+
+docs/languages/index.md:
+  - goga/contract
+
+docs/languages/python.md:
+  - goga/contract/python
+
+docs/languages/golang.md:
+  - goga/contract/golang
+
+docs/languages/kotlin.md:
+  - goga/contract/kotlin
+
+docs/languages/swift.md:
+  - goga/contract/swift
+
+docs/languages/javascript.md:
+  - goga/contract/javascript
