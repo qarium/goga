@@ -31,6 +31,8 @@ goga connect <agent> [<agent> ...] [--force-overwrite]
 
 ```bash
 goga connect claude
-goga connect claude codex
+goga connect codex
+goga connect cursor
+goga connect claude codex cursor
 goga connect claude --force-overwrite
 ```

@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 from goga.connect.connect import (
+    AGENTS_WITH_COMMANDS,
     _cleanup_goga_skills,
     _download_dsl_spec,
     _get_source_dir,
@@ -46,6 +47,14 @@ class TestResolveTargetDir:
     def test_claude_maps_to_home_claude(self) -> None:
         result = _resolve_target_dir("claude")
         assert result == Path.home() / ".claude"
+
+    def test_codex_maps_to_home_codex(self) -> None:
+        result = _resolve_target_dir("codex")
+        assert result == Path.home() / ".codex"
+
+    def test_cursor_maps_to_home_cursor(self) -> None:
+        result = _resolve_target_dir("cursor")
+        assert result == Path.home() / ".cursor"
 
     def test_unsupported_agent_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported agent"):
@@ -187,6 +196,13 @@ class TestPrintSummary:
         captured = capsys.readouterr()
         assert "Installed goga commands" in captured.err
         assert "Installed 2 commands: build, install" in captured.err
+        assert "Installed goga skills" in captured.err
+        assert "Installed 1 skills: goga-cell" in captured.err
+
+    def test_no_commands_output_when_empty(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _print_summary([], ["goga-cell"], tmp_path)
+        captured = capsys.readouterr()
+        assert "Installed goga commands" not in captured.err
         assert "Installed goga skills" in captured.err
         assert "Installed 1 skills: goga-cell" in captured.err
 
@@ -380,6 +396,134 @@ class TestInstall:
             result = connect(agents=agents)
 
         assert result == 0
+
+
+class TestAgentsWithCommands:
+    def test_claude_in_agents_with_commands(self) -> None:
+        assert "claude" in AGENTS_WITH_COMMANDS
+
+    def test_codex_not_in_agents_with_commands(self) -> None:
+        assert "codex" not in AGENTS_WITH_COMMANDS
+
+    def test_cursor_not_in_agents_with_commands(self) -> None:
+        assert "cursor" not in AGENTS_WITH_COMMANDS
+
+
+class TestCodexCursorInstall:
+    def test_codex_installs_skills_without_commands(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["codex"])
+
+        assert result == 0
+        target = mock_home / ".codex"
+        assert (target / "skills" / "goga-cell").is_dir()
+        assert (target / "skills" / "other-skill").is_dir()
+        assert not (target / "commands").exists()
+
+    def test_cursor_installs_skills_without_commands(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["cursor"])
+
+        assert result == 0
+        target = mock_home / ".cursor"
+        assert (target / "skills" / "goga-cell").is_dir()
+        assert (target / "skills" / "other-skill").is_dir()
+        assert not (target / "commands").exists()
+
+    def test_claude_installs_commands_and_skills(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["claude"])
+
+        assert result == 0
+        target = mock_home / ".claude"
+        assert (target / "commands" / "goga").is_dir()
+        assert (target / "skills" / "goga-cell").is_dir()
+
+    def test_multiple_agents_claude_and_codex(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["claude", "codex"])
+
+        assert result == 0
+        # Claude gets commands + skills
+        claude = mock_home / ".claude"
+        assert (claude / "commands" / "goga" / "build.md").exists()
+        assert (claude / "skills" / "goga-cell").is_dir()
+        # Codex gets only skills
+        codex = mock_home / ".codex"
+        assert not (codex / "commands").exists()
+        assert (codex / "skills" / "goga-cell").is_dir()
+
+    def test_codex_cleanup_removes_old_goga_skills(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        (mock_home / ".codex" / "skills" / "goga-obsolete").mkdir(parents=True)
+        (mock_home / ".codex" / "skills" / "goga-obsolete" / "SKILL.md").write_text("# old")
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["codex"])
+
+        assert result == 0
+        assert not (mock_home / ".codex" / "skills" / "goga-obsolete").exists()
+        assert (mock_home / ".codex" / "skills" / "goga-cell").is_dir()
+
+    def test_codex_summary_no_commands(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _create_agent_resources(tmp_path)
+        mock_source = tmp_path / "goga" / "agent"
+        mock_home = tmp_path / "home"
+        mock_home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
+            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
+            mock.patch.object(_install_mod, "_download_dsl_spec"),
+        ):
+            result = connect(agents=["codex"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Installed goga commands" not in captured.err
+        assert "Installed goga skills" in captured.err
 
 
 # --- Contract tests for force_overwrite parameter ---

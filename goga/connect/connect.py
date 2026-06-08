@@ -8,7 +8,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-AGENT_DIRS: dict[str, str] = {"claude": ".claude"}
+AGENT_DIRS: dict[str, str] = {
+    "claude": ".claude",
+    "codex": ".codex",
+    "cursor": ".cursor",
+}
+
+AGENTS_WITH_COMMANDS: frozenset[str] = frozenset({"claude"})
 
 DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md"
 
@@ -69,8 +75,9 @@ def _cleanup_goga_skills(target: Path) -> int:
 
 
 def _print_summary(commands: list[str], skills: list[str], target: Path) -> None:
-    print(f"Installed goga commands to {target}/commands/goga/", file=sys.stderr)
-    print(f"Installed {len(commands)} commands: {', '.join(commands)}", file=sys.stderr)
+    if commands:
+        print(f"Installed goga commands to {target}/commands/goga/", file=sys.stderr)
+        print(f"Installed {len(commands)} commands: {', '.join(commands)}", file=sys.stderr)
     print(f"Installed goga skills to {target}/skills/", file=sys.stderr)
     print(f"Installed {len(skills)} skills: {', '.join(skills)}", file=sys.stderr)
 
@@ -147,7 +154,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
 
         try:
             _cleanup_goga_skills(target)
-            commands = _install_commands(source, target)
+            commands = _install_commands(source, target) if agent in AGENTS_WITH_COMMANDS else []
             skills = _install_skills(source, target)
             _download_dsl_spec(target)
             tool_skills = _install_tool_skills(target, force_overwrite)
