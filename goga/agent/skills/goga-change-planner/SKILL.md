@@ -1,3 +1,7 @@
+---
+name: goga-change-planner
+description: Планирование безопасных изменений на основе спецификаций
+---
 # goga-change-planner
 
 ## Identity

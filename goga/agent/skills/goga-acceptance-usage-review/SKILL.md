@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-usage-review
+description: Проверка usages файлов каждой ячейки относительно реализации
+---
 # goga-acceptance-usage-review
 
 ## Identity

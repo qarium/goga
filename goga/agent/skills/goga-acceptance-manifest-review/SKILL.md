@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-manifest-review
+description: Проверка CODEMANIFEST каждой ячейки относительно реализации
+---
 # goga-acceptance-manifest-review
 
 ## Identity

@@ -1,3 +1,7 @@
+---
+name: goga-change-usage-reconciler
+description: Обеспечение согласованности .usages файлов с изменениями
+---
 # goga-change-usage-reconciler
 
 ## Identity

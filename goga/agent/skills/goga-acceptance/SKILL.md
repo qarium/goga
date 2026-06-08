@@ -1,3 +1,7 @@
+---
+name: goga-acceptance
+description: Оркестратор финальной приёмки контрактно-ориентированных workflows
+---
 # goga-acceptance
 
 ## Identity

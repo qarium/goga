@@ -1,3 +1,7 @@
+---
+name: goga-change-tracer
+description: Реконструкция семантического поведения через трассировку
+---
 # goga-change-tracer
 
 ## Identity

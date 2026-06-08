@@ -1,3 +1,7 @@
+---
+name: goga-cells-by-brainstorm
+description: Создание и модификация cells по плану архитектуры
+---
 # Create Cells
 
 ## Purpose

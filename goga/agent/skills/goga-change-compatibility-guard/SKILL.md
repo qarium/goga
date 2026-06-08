@@ -1,3 +1,7 @@
+---
+name: goga-change-compatibility-guard
+description: Предотвращение небезопасных изменений
+---
 # goga-change-compatibility-guard
 
 ## Identity

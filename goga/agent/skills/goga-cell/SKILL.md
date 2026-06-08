@@ -1,3 +1,7 @@
+---
+name: goga-cell
+description: DSL спецификация структуры cell и CODEMANIFEST файлов
+---
 # Goga Cell DSL
 
 ## Назначение

@@ -1,3 +1,7 @@
+---
+name: goga-change-validator
+description: Финальная сквозная валидация выполненного изменения
+---
 # goga-change-validator
 
 ## Identity

@@ -1,3 +1,7 @@
+---
+name: goga-cell-swift
+description: Swift: правила реализации контрактов CODEMANIFEST
+---
 # Swift: правила реализации контрактов
 
 Языковой скилл для Swift.

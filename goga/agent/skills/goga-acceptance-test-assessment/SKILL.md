@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-test-assessment
+description: Оценка тестового покрытия ячеек в рамках приёмки
+---
 # goga-acceptance-test-assessment
 
 ## Identity

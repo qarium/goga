@@ -1,3 +1,7 @@
+---
+name: goga-change-reporting
+description: Формирование финального отчёта о выполнении изменений
+---
 # goga-change-reporting
 
 ## Identity

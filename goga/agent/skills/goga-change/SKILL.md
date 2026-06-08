@@ -1,3 +1,7 @@
+---
+name: goga-change
+description: Оркестратор спецификационно-управляемых workflows обслуживания
+---
 # goga-change
 
 ## Identity

@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-report
+description: Формирование финального отчёта приёмки с вердиктом
+---
 # goga-acceptance-report
 
 ## Identity
