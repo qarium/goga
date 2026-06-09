@@ -35,6 +35,12 @@ Update CODEMANIFEST only when changes affect:
 - integration semantics
 - engineering practices
 
+When writing annotations, adhere to the following principles:
+
+* Describe requirements and algorithms without exposing implementation details.
+* Explicitly cover edge cases and boundary conditions.
+* Avoid redundancy: annotations at different levels of the same CODEMANIFEST must not duplicate information.
+
 NEVER:
 - mirror source code into manifest
 - describe trivial refactors
