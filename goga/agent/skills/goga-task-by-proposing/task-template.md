@@ -1,52 +1,52 @@
-# <название задачи>
+# <task name>
 
-## Текущее состояние
+## Current State
 
-<как сейчас обстоят дела в области задачи — сформулировано на основе анализа проекта>
+<current state of the task area — derived from project analysis>
 
-## Описание
+## Description
 
-<сформулированная суть задачи>
+<formulated task essence>
 
-## Границы
+## Scope
 
-**Входит:**
-- <что нужно сделать>
+**In scope:**
+- <what needs to be implemented>
 
-**Не входит:**
-- <что не входит в задачу>
+**Out of scope:**
+- <what is excluded from the task>
 
-## Критерии приёмки
+## Acceptance Criteria
 
-- <как мы поймём, что задача выполнена>
-- <конкретные проверяемые условия>
+- <how completion will be verified>
+- <specific verifiable conditions>
 
-## Стек
+## Stack
 
-- **Фреймворки:** <список фреймворков>
-- **Библиотеки:** <список библиотек>
-- **Инфраструктура:** <БД, брокеры сообщений, очереди и прочее>
+- **Frameworks:** <framework list>
+- **Libraries:** <library list>
+- **Infrastructure:** <databases, message brokers, queues, etc.>
 
-## Внешние зависимости
+## External Dependencies
 
-| Компонент | Usage файл                     | Статус                         |
+| Component | Usage file                     | Status                         |
 |-----------|--------------------------------|--------------------------------|
-| <name>    | `.goga/usages/cooks/<name>.md` | создан / обновлён / существует |
+| <name>    | `.goga/usages/cooks/<name>.md` | created / updated / existing |
 
-## Риски и ограничения
+## Risks and Constraints
 
-- <известные ограничения, которые могут повлиять на реализацию>
-- <ограничения по совместимости, производительности и т.д.>
+- <known constraints that may impact implementation>
+- <compatibility, performance, and other constraints>
 
-## Объём
+## Scope Estimate
 
-<оценка масштаба: одна задача / разбивка на подзадачи>
-<если разбивка: список подзадач>
+<scale assessment: single task / subtask breakdown>
+<if breakdown: subtask list>
 
-## Существующая архитектура
+## Existing Architecture
 
-<какие cells затрагиваются, нужна ли интеграция>
+<affected cells, integration requirements>
 
-## Замечания
+## Notes
 
-<дополнительные замечания, ограничения, решения принятые при груминге>
+<additional notes, constraints, decisions made during grooming>

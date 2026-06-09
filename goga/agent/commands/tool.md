@@ -1,7 +1,7 @@
 # goga-tool
 
-Диспетчер команды tool.
+Command dispatcher for tool.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-tool` с аргументами.
+Use the **Skill tool** to invoke the `goga-tool` skill with arguments.
