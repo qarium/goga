@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from goga.init.answers import GogaConfigAnswers, InitAnswers
+from .answers import GogaConfigAnswers, InitAnswers
 
 _IMAGE_MAP: dict[str, list[str]] = {
     "python": [
@@ -13,14 +13,41 @@ _IMAGE_MAP: dict[str, list[str]] = {
         "qarium/goga-python-3.14:1.0",
     ],
     "golang": [
-        "qarium/goga-golang-1.23:1.0",
-        "qarium/goga-golang-1.24:1.0",
-        "qarium/goga-golang-1.25:1.0",
-        "qarium/goga-golang-1.26:1.0",
+        "qarium/goga-golang-1.23.12:1.0",
+        "qarium/goga-golang-1.24.13:1.0",
+        "qarium/goga-golang-1.25.11:1.0",
+        "qarium/goga-golang-1.26.4:1.0",
+    ],
+    "javascript": [
+        "qarium/goga-node-22:1.0",
+        "qarium/goga-node-24:1.0",
+    ],
+    "kotlin": [
+        "qarium/goga-kotlin-2.0.21:1.0",
+        "qarium/goga-kotlin-2.1.21:1.0",
+        "qarium/goga-kotlin-2.2.21:1.0",
+        "qarium/goga-kotlin-2.3.21:1.0",
+    ],
+    "swift": [
+        "qarium/goga-swift-6.0.3:1.0",
+        "qarium/goga-swift-6.1.3:1.0",
+        "qarium/goga-swift-6.2.4:1.0",
     ],
 }
 
-_LANGUAGES = ["python", "golang", "kotlin", "swift", "javascript", "cpp"]
+_LANGUAGES = ["python", "golang", "kotlin", "swift", "javascript"]
+
+_AGENT_ENV_MAP: dict[str, list[str]] = {
+    "claude": [
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_BASE_URL",
+    ],
+    "codex": [
+        "CODEX_MODEL",
+    ],
+}
 
 
 class Questionnaire:
@@ -36,7 +63,7 @@ class Questionnaire:
         config = self.ask_goga_config()
         return InitAnswers(goga_config=config)
 
-    def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912
+    def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912, PLR0915
         """Run questionnaire for .goga/config.yml creation."""
         click.echo("Collecting .goga/config.yml settings...\n")
 
@@ -59,36 +86,7 @@ class Questionnaire:
                 "Use `conventions` for code writing rules and testing."
             )
 
-        # 3. Agent
-        click.echo("\n--- AI Agent ---")
-        click.echo("Select the AI agent that will execute tasks.")
-        agent: str = click.prompt(
-            "Agent",
-            type=click.Choice(["claude"]),
-        )
-
-        # 4. Docker image
-        click.echo("\n--- Docker Image ---")
-        click.echo("Select the Docker image for the build environment.")
-        images = _IMAGE_MAP.get(language)
-        if images is not None:
-            click.echo("Available images:")
-            for img in images:
-                click.echo(f"  - {img}")
-            image: str = click.prompt("Docker image", default=images[-1])
-        else:
-            image = click.prompt("Docker image")
-
-        # 5. Environment variables
-        click.echo("\n--- Environment Variables ---")
-        click.echo("Configure environment variables for the task executor.")
-        env: dict = {}
-        while click.confirm("Add environment variable?", default=False):
-            key = click.prompt("Env key")
-            value = click.prompt("Env value")
-            env[key] = value
-
-        # 6. Additional codemanifest usages
+        # 3. Additional codemanifest usages
         click.echo("\n--- Codemanifest Usages ---")
         click.echo("Add additional codemanifest usages (code practices documentation).")
         if click.confirm("Add codemanifest usages?", default=False):
@@ -104,7 +102,7 @@ class Questionnaire:
                 if not click.confirm("Add another codemanifest usage?", default=False):
                     break
 
-        # 7. Additional codemanifest annotations
+        # 4. Additional codemanifest annotations
         click.echo("\n--- Codemanifest Annotations ---")
         click.echo("Add custom codemanifest annotations (global directives for AI agent).")
         if click.confirm("Add codemanifest annotations?", default=False):
@@ -114,11 +112,65 @@ class Questionnaire:
             else:
                 codemanifest_annotations = custom
 
+        # 5. Agent
+        click.echo("\n--- AI Agent ---")
+        click.echo("Select the AI agent that will build implementation.")
+        agent: str = click.prompt(
+            "Agent",
+            type=click.Choice(["claude", "codex"]),
+        )
+
+        # 6. Docker image
+        click.echo("\n--- Docker Image ---")
+        click.echo("Select the Docker image for the build implementation.")
+        images = _IMAGE_MAP.get(language)
+        if images is not None:
+            click.echo("Available images:")
+            for img in images:
+                click.echo(f"  - {img}")
+            image: str = click.prompt("Docker image", default=images[-1])
+        else:
+            image = click.prompt("Docker image")
+
+        # 7. Custom Dockerfile
+        click.echo("\n--- Custom Dockerfile ---")
+        click.echo("Create a custom Dockerfile for the build implementation?")
+        dockerfile_path: str | None = None
+        if click.confirm("Create Dockerfile?", default=False):
+            dockerfile_path = click.prompt("Dockerfile path", default="Dockerfile")
+
+        # 8. Environment variables
+        click.echo("\n--- Environment Variables ---")
+        click.echo("Configure environment variables for the build implementation.")
+        env: dict | None = None
+
+        suggested_keys = _AGENT_ENV_MAP.get(agent, [])
+        if suggested_keys:
+            click.echo("Suggested env keys for selected agent:")
+            for key in suggested_keys:
+                click.echo(f"  - {key}")
+            if click.confirm("Set suggested env variables?", default=False):
+                env = {}
+                for key in suggested_keys:
+                    value = click.prompt(f"  {key}")
+                    env[key] = value
+
+        if click.confirm("Add custom environment variable?", default=False):
+            if env is None:
+                env = {}
+            while True:
+                key = click.prompt("Env key")
+                value = click.prompt("Env value")
+                env[key] = value
+                if not click.confirm("Add another?", default=False):
+                    break
+
         return GogaConfigAnswers(
             language=language,
             agent=agent,
             image=image,
             env=env,
+            dockerfile_path=dockerfile_path,
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
         )

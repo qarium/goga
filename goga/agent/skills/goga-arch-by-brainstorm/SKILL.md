@@ -1,3 +1,7 @@
+---
+name: goga-arch-by-brainstorm
+description: Проектирование плана архитектуры cells через brainstorm
+---
 # Проектирование плана архитектуры cells
 
 ## Назначение

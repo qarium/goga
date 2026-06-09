@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-usage-review
+description: Проверка usages файлов каждой ячейки относительно реализации
+---
 # goga-acceptance-usage-review
 
 ## Identity
@@ -54,7 +58,7 @@ Cell-level usages (`.usages/*.md`) — документация для потр�
 
 ### Step 4. Валидация обновлений
 
-1. Выполните: `goga linter`
+1. Выполните: `goga lint`
 2. Исправьте ошибки, если есть
 
 STOP если:

@@ -1,3 +1,7 @@
+---
+name: goga-change-implementer
+description: Минимальные безопасные изменения реализации по плану
+---
 # goga-change-implementer
 
 ## Identity

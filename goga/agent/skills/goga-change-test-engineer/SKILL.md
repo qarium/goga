@@ -1,3 +1,7 @@
+---
+name: goga-change-test-engineer
+description: Валидация покрытия тестами и поведенческое тестирование
+---
 # goga-change-test-engineer
 
 ## Identity

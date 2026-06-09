@@ -1,3 +1,7 @@
+---
+name: goga-change-scope-resolver
+description: Определение минимальной семантической области изменений
+---
 # goga-change-scope-resolver
 
 ## Identity

@@ -36,4 +36,31 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Examples: examples.md
-  - CLI Reference: cli-reference.md
+  - Configuration: configuration.md
+  - CLI:
+      - cli/index.md
+      - Init: cli/init.md
+      - Lint: cli/lint.md
+      - Build: cli/build.md
+      - Contract: cli/contract.md
+      - Config: cli/config.md
+      - Schema: cli/schema.md
+      - Sync: cli/sync.md
+      - Connect: cli/connect.md
+      - Tool: cli/tool.md
+  - Architecture:
+      - architecture/index.md
+      - AST Nodes: architecture/ast-nodes.md
+      - AST Factory: architecture/ast-factory.md
+      - AST Visitor: architecture/ast-visitor.md
+      - AST Analyzer: architecture/ast-analyzer.md
+      - AST Errors: architecture/ast-errors.md
+      - Validation Rules: architecture/validation-rules.md
+      - Contract Extraction: architecture/contract-extraction.md
+  - Languages:
+      - languages/index.md
+      - Python: languages/python.md
+      - Go: languages/golang.md
+      - Kotlin: languages/kotlin.md
+      - Swift: languages/swift.md
+      - JavaScript: languages/javascript.md

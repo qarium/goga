@@ -1,3 +1,7 @@
+---
+name: goga-change-investigator
+description: Исследование корневой причины на основе доказательств
+---
 # goga-change-investigator
 
 ## Identity

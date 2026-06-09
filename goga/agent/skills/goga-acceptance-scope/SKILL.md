@@ -1,3 +1,7 @@
+---
+name: goga-acceptance-scope
+description: Определение области приёмки — набора ячеек
+---
 # goga-acceptance-scope
 
 ## Identity

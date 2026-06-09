@@ -17,7 +17,7 @@ def _represent_literal_str(dumper: yaml.Dumper, data: _LiteralStr) -> yaml.Scala
 
 yaml.add_representer(_LiteralStr, _represent_literal_str)
 
-from goga.init.answers import GogaConfigAnswers, InitAnswers
+from .answers import GogaConfigAnswers, InitAnswers
 
 _CONVENTION_URL_TEMPLATE = (
     "https://raw.githubusercontent.com/qarium/goga-lang-conventions/"
@@ -34,11 +34,24 @@ class FileGenerator:
     def generate(self, answers: InitAnswers) -> None:
         """Create all files based on answers.
 
-        Downloads convention if codemanifest_usages contains 'conventions',
-        then generates config.yml. Raises on download failure — config.yml
-        is NOT created.
+        If dockerfile_path is set — creates Dockerfile, then generates config.yml.
         """
         config = answers.goga_config
+
+        if config.dockerfile_path is not None:
+            dockerfile_content = f"FROM {config.image}\n"
+            dockerfile = self._base_dir / config.dockerfile_path
+            dockerfile.parent.mkdir(parents=True, exist_ok=True)
+            dockerfile.write_text(dockerfile_content, encoding="utf-8")
+
+        self.generate_goga_config(config)
+
+    def generate_goga_config(self, config: GogaConfigAnswers) -> None:
+        """Create .goga/config.yml from GogaConfigAnswers.
+
+        Downloads convention if codemanifest_usages contains 'conventions'.
+        Raises on download failure — config.yml is NOT created.
+        """
         usages = config.codemanifest_usages
 
         if usages is not None and "conventions" in usages:
@@ -56,10 +69,6 @@ class FileGenerator:
             usages_dir.mkdir(parents=True, exist_ok=True)
             (usages_dir / "conventions.md").write_text(content, encoding="utf-8")
 
-        self.generate_goga_config(config)
-
-    def generate_goga_config(self, config: GogaConfigAnswers) -> None:
-        """Create .goga/config.yml from GogaConfigAnswers."""
         goga_dir = self._base_dir / ".goga"
         goga_dir.mkdir(parents=True, exist_ok=True)
 
@@ -69,10 +78,12 @@ class FileGenerator:
                 "image": config.image,
                 "task_executor": {
                     "agent": config.agent,
-                    "env": config.env,
                 },
             },
         }
+
+        if config.env:
+            data["build"]["task_executor"]["env"] = config.env
 
         if config.codemanifest_usages is not None or config.codemanifest_annotations is not None:
             codemanifest: dict = {}

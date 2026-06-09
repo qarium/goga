@@ -96,6 +96,43 @@ class TestRunPrecondition:
         config = _make_config(agent="claude")
         assert _run_precondition(config) == 0
 
+    def test_codex_agent_succeeds(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+
+    def test_codex_agent_no_claude_settings(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        assert not (tmp_path / ".claude").exists()
+
+    def test_codex_agent_creates_ralphex_config(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        config_path = tmp_path / ".ralphex" / "config"
+        assert config_path.is_file()
+        assert "executor = codex" in config_path.read_text()
+
+    def test_codex_wrapper_script_content(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
+        assert wrapper.is_file()
+        assert 'exec codex "$@" -m "$CODEX_MODEL"' in wrapper.read_text()
+
+    def test_codex_wrapper_executable_permissions(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
+        mode = wrapper.stat().st_mode
+        assert mode & stat.S_IXUSR
+        assert mode & stat.S_IXGRP
+        assert mode & stat.S_IXOTH
+
     def test_unsupported_agent_returns_1(self, tmp_path, monkeypatch) -> None:
         config = _make_config(agent="gemini")
         assert _run_precondition(config) == 1
@@ -392,6 +429,25 @@ class TestBuildUnsupportedAgent:
             cli_options={"skip_manifest_check": True},
         )
         assert result == 1
+
+
+class TestBuildCodexAgent:
+    def test_codex_dry_run_returns_0(self, tmp_path, monkeypatch) -> None:
+        result = _run_build_in_tmp(
+            tmp_path,
+            monkeypatch,
+            config=_make_config(agent="codex"),
+            cli_options={"dry_run": True, "skip_manifest_check": True},
+        )
+        assert result == 0
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_codex_no_claude_settings(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        config = _make_config(agent="codex")
+        _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
+
+        assert not (tmp_path / ".claude").exists()
 
 
 class TestBuildMissingRalphex:

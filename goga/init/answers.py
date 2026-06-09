@@ -11,9 +11,10 @@ class GogaConfigAnswers:
     language: str
     agent: str
     image: str
-    env: dict
+    env: Optional[dict] = None
     codemanifest_usages: Optional[dict] = None
     codemanifest_annotations: Optional[str] = None
+    dockerfile_path: Optional[str] = None
 
 
 @dataclass(frozen=True, kw_only=True)

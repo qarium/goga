@@ -1,3 +1,7 @@
+---
+name: goga-cells-by-brainstorm
+description: Создание и модификация cells по плану архитектуры
+---
 # Create Cells
 
 ## Purpose
@@ -162,7 +166,7 @@ mkdir -p <cell_path>/.usages
 #### Step 1. Run linter
 
 ```bash
-goga linter
+goga lint
 ```
 
 Если linter сообщает об ошибках — исправьте их и повторите. Используйте DSL спецификацию скилл `goga-cell` и `goga-cookbook`

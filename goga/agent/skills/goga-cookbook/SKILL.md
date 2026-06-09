@@ -1,3 +1,7 @@
+---
+name: goga-cookbook
+description: Принципы применения DSL спецификации при проектировании cell
+---
 # Goga Cookbook
 
 ## Назначение

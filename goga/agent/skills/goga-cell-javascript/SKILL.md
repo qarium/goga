@@ -1,3 +1,7 @@
+---
+name: goga-cell-javascript
+description: JavaScript правила реализации контрактов CODEMANIFEST
+---
 # JavaScript: правила реализации контрактов
 
 Языковой скилл для JavaScript.
@@ -38,7 +42,7 @@ Annotations: |
 
 ---
 
-"parseInput(input: string) -> data: Buffer":
+"parseInput(input: string) -> data: Uint8Array":
   location: parser.js
   annotations: |
     Parse raw input string into structured data.

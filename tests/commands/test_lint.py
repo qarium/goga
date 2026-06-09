@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import click
 from click.testing import CliRunner
-from goga.commands import linter
-from goga.commands.linter import linter as linter_cmd
+from goga.commands import lint
+from goga.commands.lint import lint as lint_cmd
 
 VALID_CODEMANIFEST = """\
 Imports:
@@ -84,29 +84,29 @@ def _setup_valid_project(tmp_path) -> str:
     return str(project_dir)
 
 
-def _run_linter(path: str) -> click.testing.Result:
+def _run_lint(path: str) -> click.testing.Result:
     runner = CliRunner()
-    return runner.invoke(linter_cmd, [path])
+    return runner.invoke(lint_cmd, [path])
 
 
 class TestFacadeAvailability:
-    def test_import_linter_from_commands(self) -> None:
-        assert linter is not None
+    def test_import_lint_from_commands(self) -> None:
+        assert lint is not None
 
-    def test_linter_is_click_command(self) -> None:
-        assert isinstance(linter_cmd, click.Command)
+    def test_lint_is_click_command(self) -> None:
+        assert isinstance(lint_cmd, click.Command)
 
 
 class TestApiShape:
-    def test_linter_has_callback(self) -> None:
-        assert linter_cmd.callback is not None
+    def test_lint_has_callback(self) -> None:
+        assert lint_cmd.callback is not None
 
-    def test_linter_has_path_argument(self) -> None:
-        param_names = [p.name for p in linter_cmd.params]
+    def test_lint_has_path_argument(self) -> None:
+        param_names = [p.name for p in lint_cmd.params]
         assert "path" in param_names
 
-    def test_linter_path_default_is_dot(self) -> None:
-        path_param = next(p for p in linter_cmd.params if p.name == "path")
+    def test_lint_path_default_is_dot(self) -> None:
+        path_param = next(p for p in lint_cmd.params if p.name == "path")
         assert path_param.default == "."
 
 
@@ -116,7 +116,7 @@ class TestNegativeRun:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         assert result.output != ""
 
@@ -125,7 +125,7 @@ class TestNegativeRun:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         assert "[import_has_valid_from_path]" in result.output
 
@@ -133,7 +133,7 @@ class TestNegativeRun:
 class TestEdgeNonExistentPath:
     def test_nonexistent_path_raises_error(self, tmp_path) -> None:
         nonexistent = str(tmp_path / "does_not_exist")
-        result = _run_linter(nonexistent)
+        result = _run_lint(nonexistent)
         assert result.exit_code != 0
         assert isinstance(result.exception, FileNotFoundError)
 
@@ -144,7 +144,7 @@ class TestErrorFormat:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         lines = result.output.strip().splitlines()
         assert lines[0].startswith("[")
@@ -156,7 +156,7 @@ class TestErrorFormat:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         assert "-->" in result.output
 
@@ -165,7 +165,7 @@ class TestErrorFormat:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         lines = result.output.splitlines()
         yaml_lines = [ln for ln in lines if ln.startswith("      ")]
@@ -176,7 +176,7 @@ class TestErrorFormat:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         lines = result.output.strip().splitlines()
         assert lines[0].startswith("[")
@@ -189,7 +189,7 @@ class TestErrorFormat:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         lines = result.output.splitlines()
         # Find the arrow line, next non-empty line with 6-space indent should be ---
@@ -210,10 +210,10 @@ class TestSummary:
     def test_summary_output_valid_project(self, tmp_path) -> None:
         project_dir = _setup_valid_project(tmp_path)
 
-        result = _run_linter(project_dir)
+        result = _run_lint(project_dir)
 
         assert "cells: 2 errors: 0" in result.output
-        assert "goga linter" in result.output
+        assert "goga lint" in result.output
         assert "-------------------------" in result.output
         assert result.exit_code == 0
 
@@ -222,10 +222,10 @@ class TestSummary:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         assert "cells: 1 errors: 2" in result.output
-        assert "goga linter" in result.output
+        assert "goga lint" in result.output
         assert result.exit_code == 1
 
 
@@ -233,12 +233,12 @@ class TestSummaryBehavior:
     def test_summary_format_exact(self, tmp_path) -> None:
         project_dir = _setup_valid_project(tmp_path)
 
-        result = _run_linter(project_dir)
+        result = _run_lint(project_dir)
 
         lines = result.output.splitlines()
-        summary_lines = [ln for ln in lines if ln == "goga linter"]
+        summary_lines = [ln for ln in lines if ln == "goga lint"]
         assert len(summary_lines) == 1
-        idx = lines.index("goga linter")
+        idx = lines.index("goga lint")
         assert lines[idx + 1] == "-------------------------"
         assert lines[idx + 2] == "cells: 2 errors: 0"
 
@@ -250,10 +250,10 @@ class TestSummaryBehavior:
             encoding="utf-8",
         )
 
-        result = _run_linter(str(empty_dir))
+        result = _run_lint(str(empty_dir))
 
         assert "cells: 1 errors: 0" in result.output
-        assert "goga linter" in result.output
+        assert "goga lint" in result.output
         assert result.exit_code == 0
 
     def test_empty_line_before_summary(self, tmp_path) -> None:
@@ -261,14 +261,14 @@ class TestSummaryBehavior:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         lines = result.output.splitlines()
         yaml_lines = [i for i, ln in enumerate(lines) if ln.startswith("      ")]
         assert len(yaml_lines) > 0
         last_yaml = yaml_lines[-1]
         assert lines[last_yaml + 1] == ""
-        assert lines[last_yaml + 2] == "goga linter"
+        assert lines[last_yaml + 2] == "goga lint"
 
 
 class TestExitCodes:
@@ -277,13 +277,13 @@ class TestExitCodes:
         project_dir.mkdir()
         _write_codemanifest(project_dir, INVALID_CODEMANIFEST)
 
-        result = _run_linter(str(project_dir))
+        result = _run_lint(str(project_dir))
 
         assert result.exit_code == 1
 
     def test_valid_project_exits_zero(self, tmp_path) -> None:
         project_dir = _setup_valid_project(tmp_path)
 
-        result = _run_linter(project_dir)
+        result = _run_lint(project_dir)
 
         assert result.exit_code == 0

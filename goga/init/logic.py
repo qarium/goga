@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import click
 
-from goga.init.generator import FileGenerator
-from goga.init.questionnaire import Questionnaire
+from .generator import FileGenerator
+from .questionnaire import Questionnaire
 
 
 class InitLogic:

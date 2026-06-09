@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import stat
 import subprocess
 import tempfile
@@ -70,12 +71,20 @@ def _build_docker_cmd(
     image: str,
     env_file: Path,
     cli_flags: dict[str, bool | str | int | None],
+    container_name: str,
 ) -> list[str]:
     project_dir = Path.cwd().resolve()
 
-    cmd: list[str] = ["docker", "run", "--rm", "--entrypoint",
-                      "python3", "-v", f"{project_dir}:/workspace", "-w",
-                      "/workspace", "--env-file", str(env_file), image]
+    cmd: list[str] = ["docker", "run", "--rm", "--name", container_name,
+                      "--entrypoint", "python3", "-v",
+                      f"{project_dir}:/workspace", "-w",
+                      "/workspace", "--env-file", str(env_file)]
+
+    codex_auth = Path.home() / ".codex" / "auth.json"
+    if codex_auth.is_file():
+        cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
+
+    cmd.append(image)
 
     cmd.extend(["-m", "goga.build", plan])
 
@@ -154,18 +163,32 @@ def build(  # noqa: PLR0913
     if config.build.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
 
+    container_name = f"goga-build-{os.getpid()}"
+
+    def _on_sigterm(signum: int, frame: object) -> None:
+        raise SystemExit(128 + signum)
+
+    _prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
+
     try:
         docker_cmd = _build_docker_cmd(
             plan=plan,
             image=config.build.image,
             env_file=env_file,
             cli_flags=cli_flags,
+            container_name=container_name,
         )
 
         if dry_run:
             ctx.exit(0)
 
-        ctx.exit(subprocess.call(docker_cmd))
+        docker_proc = subprocess.Popen(docker_cmd)
+        ctx.exit(docker_proc.wait())
     finally:
         env_file.unlink(missing_ok=True)
+        subprocess.run(
+            ["docker", "kill", container_name],
+            check=False, capture_output=True,
+        )
+        signal.signal(signal.SIGTERM, _prev_sigterm)
 

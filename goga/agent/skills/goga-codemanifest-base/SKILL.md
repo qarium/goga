@@ -1,3 +1,7 @@
+---
+name: goga-codemanifest-base
+description: Загрузка конфигурации проекта из .goga/config.yml
+---
 # Загрузка конфигурации проекта
 
 ## Назначение

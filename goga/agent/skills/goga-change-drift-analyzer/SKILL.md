@@ -1,3 +1,7 @@
+---
+name: goga-change-drift-analyzer
+description: Детекция семантического дрейфа после реализации
+---
 # goga-change-drift-analyzer
 
 ## Identity

@@ -29,7 +29,8 @@ COPY --from=builder /usr/local/bin/goga /opt/goga/bin/goga
 RUN useradd -m -s /bin/bash goga && \
     python3 -m venv /opt/goga && \
     sed -i "s|/usr/local|/opt/goga|" /opt/goga/bin/goga && \
-    chown -R goga:goga /opt/goga
+    chown -R goga:goga /opt/goga && \
+    mkdir -p /home/goga/.codex && chown goga:goga /home/goga/.codex
 
 ENV PATH="/opt/goga/bin:/srv:${PATH}"
 ENV RALPHEX_DOCKER=1

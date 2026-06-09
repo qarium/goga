@@ -1,4 +1,4 @@
-# CLI Command: linter
+# CLI Command: lint
 
 ## Назначение
 
@@ -7,7 +7,7 @@
 ## Синтаксис
 
 ```
-goga linter [path]
+goga lint [path]
 ```
 
 ## Аргументы
@@ -39,7 +39,7 @@ goga linter [path]
 После всех ошибок выводится пустая строка и итоговая сводка:
 
 ```
-goga linter
+goga lint
 -------------------------
 cells: 20 errors: 0
 ```
@@ -50,6 +50,6 @@ cells: 20 errors: 0
 ## Примеры
 
 ```bash
-goga linter
-goga linter goga/config
+goga lint
+goga lint goga/config
 ```

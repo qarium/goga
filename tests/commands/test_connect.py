@@ -150,10 +150,48 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert "Installed 9 commands" in result.output
-        assert "Installed 37 skills" in result.output
+        assert "Installed 46 skills" in result.output
 
+    def test_install_codex_agent(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
+            result = CliRunner().invoke(app, ["connect", "codex"])
+        assert result.exit_code == 0
+        codex_dir = tmp_path / ".codex"
+        assert (codex_dir / "skills" / "goga-cell" / "dsl.md").is_file()
+        assert (codex_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
+        assert not (codex_dir / "commands").exists()
+        assert "Installed goga commands" not in result.output
+        assert "Installed" in result.output and "skills" in result.output
 
-class TestLogicNegative:
+    def test_install_cursor_agent(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
+            result = CliRunner().invoke(app, ["connect", "cursor"])
+        assert result.exit_code == 0
+        cursor_dir = tmp_path / ".cursor"
+        assert (cursor_dir / "skills" / "goga-cell" / "dsl.md").is_file()
+        assert (cursor_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
+        assert not (cursor_dir / "commands").exists()
+        assert "Installed goga commands" not in result.output
+        assert "Installed" in result.output and "skills" in result.output
+
+    def test_install_multiple_agents(self, tmp_path: Path) -> None:
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        ):
+            result = CliRunner().invoke(app, ["connect", "claude", "codex"])
+        assert result.exit_code == 0
+        assert (tmp_path / ".claude" / "commands" / "goga" / "review.md").is_file()
+        assert (tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md").is_file()
+        assert (tmp_path / ".codex" / "skills" / "goga-cell" / "dsl.md").is_file()
+        assert not (tmp_path / ".codex" / "commands").exists()
+        assert "Installed" in result.output and "skills" in result.output
     """Negative scenario tests for the connect command."""
 
     def test_install_unknown_agent(self, tmp_path: Path) -> None:

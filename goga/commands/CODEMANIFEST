@@ -1,7 +1,7 @@
 Imports:
   - Types:
-      - linter
-    From: goga/commands/linter
+      - lint
+    From: goga/commands/lint
   - Types:
       - build
     From: goga/commands/build
@@ -40,7 +40,7 @@ Annotations: |
 
 ---
 
-->linter: {}
+->lint: {}
 ->build: {}
 ->connect: {}
 ->schema: {}

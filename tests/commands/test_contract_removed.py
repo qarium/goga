@@ -31,7 +31,7 @@ def test_no_init_command_in_help() -> None:
 
 def test_new_commands_work() -> None:
     runner = CliRunner()
-    for command in ["linter", "build", "connect", "schema", "contract"]:
+    for command in ["lint", "build", "connect", "schema", "contract"]:
         result = runner.invoke(app, [command, "--help"])
         assert result.exit_code == 0, f"Command '{command}' failed: {result.output}"
 

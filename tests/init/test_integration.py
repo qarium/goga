@@ -32,7 +32,6 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Использовать `conventions` для правил написания кода и тестов.",
         )
@@ -69,7 +68,6 @@ class TestIntegration:
             language="golang",
             agent="claude",
             image="qarium/goga-golang-1.23:1.0",
-            env={},
         )
         answers = InitAnswers(goga_config=config)
 
@@ -119,7 +117,6 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
             codemanifest_usages={
                 "conventions": ".goga/usages/conventions.md",
                 "custom": ".goga/usages/custom.md",
@@ -154,7 +151,6 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
             codemanifest_usages={"custom": ".goga/usages/custom.md"},
         )
         answers = InitAnswers(goga_config=config)
@@ -176,12 +172,11 @@ class TestIntegration:
         assert not (tmp_path / ".goga" / "usages").exists()
 
     def test_init_empty_env(self, tmp_path: Path) -> None:
-        """Empty env dict is written correctly."""
+        """Empty env is omitted from config.yml."""
         config = GogaConfigAnswers(
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
         )
         answers = InitAnswers(goga_config=config)
 
@@ -195,7 +190,7 @@ class TestIntegration:
         assert result == 0
 
         data = _load_yaml(tmp_path / ".goga" / "config.yml")
-        assert data["build"]["task_executor"]["env"] == {}
+        assert "env" not in data["build"]["task_executor"]
 
     def test_init_reinit_overwrites_existing_config(self, tmp_path: Path) -> None:
         """Pre-existing config.yml is overwritten on re-init."""
@@ -207,7 +202,6 @@ class TestIntegration:
             language="golang",
             agent="claude",
             image="qarium/goga-golang-1.23:1.0",
-            env={},
         )
         answers = InitAnswers(goga_config=config)
 
@@ -229,7 +223,6 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations=(
                 "Использовать `conventions` для правил написания кода и тестов."
@@ -276,7 +269,6 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
-            env={},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions.",
         )

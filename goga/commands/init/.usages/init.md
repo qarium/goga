@@ -14,18 +14,20 @@ goga init
 
 Команда последовательно спрашивает:
 
-1. **Language** — язык проекта (python, go, kotlin, swift, js, cpp)
+1. **Language** — язык проекта (python, golang, kotlin, swift, javascript)
 2. **Base convention** — скачать ли базовую конвенцию для выбранного языка
-3. **Agent** — AI-executor (claude)
-4. **Docker image** — выбор из списка образов для выбранного языка
-5. **Environment variables** — опционально, пары ключ-значение
-6. **Codemanifest usages** — опционально, дополнительные практики
-7. **Codemanifest annotations** — опционально
+3. **Codemanifest usages** — опционально, дополнительные практики
+4. **Codemanifest annotations** — опционально
+5. **Agent** — AI-executor (claude)
+6. **Docker image** — выбор из списка образов для выбранного языка
+7. **Dockerfile** — опционально, создание кастомного Dockerfile с `FROM {image}`
+8. **Environment variables** — предлагаются env-ключи по агенту, затем опционально произвольные
 
 ## Создаваемые файлы
 
 - `.goga/config.yml` — конфигурация проекта
 - `.goga/usages/conventions.md` — базовая конвенция по языку (если пользователь согласился)
+- `Dockerfile` (или по указанному пути) — кастомный Dockerfile (если пользователь запросил)
 
 ## Код возврата
 

@@ -59,9 +59,9 @@ class TestRegisteredCommands:
         assert hasattr(app, "commands")
         assert isinstance(app.commands, dict)
 
-    def test_linter_command_registered(self) -> None:
-        """The 'linter' command is registered on the app group."""
-        assert "linter" in app.commands
+    def test_lint_command_registered(self) -> None:
+        """The 'lint' command is registered on the app group."""
+        assert "lint" in app.commands
 
     def test_build_command_registered(self) -> None:
         """The 'build' command is registered on the app group."""
@@ -72,9 +72,9 @@ class TestRegisteredCommands:
         assert "connect" in app.commands
 
     def test_both_commands_registered(self) -> None:
-        """Both 'linter' and 'build' commands are present in app.commands."""
+        """Both 'lint' and 'build' commands are present in app.commands."""
         command_names = set(app.commands.keys())
-        assert {"linter", "build"}.issubset(command_names)
+        assert {"lint", "build"}.issubset(command_names)
 
 
 class TestHelpOutput:
@@ -84,11 +84,11 @@ class TestHelpOutput:
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
 
-    def test_help_contains_linter(self) -> None:
-        """The --help output lists the 'linter' command."""
+    def test_help_contains_lint(self) -> None:
+        """The --help output lists the 'lint' command."""
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
-        assert "linter" in result.output
+        assert "lint" in result.output
 
     def test_help_contains_build(self) -> None:
         """The --help output lists the 'build' command."""
@@ -103,10 +103,10 @@ class TestHelpOutput:
         assert "connect" in result.output
 
     def test_help_contains_both_commands(self) -> None:
-        """The --help output contains both 'linter' and 'build'."""
+        """The --help output contains both 'lint' and 'build'."""
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
-        assert "linter" in result.output
+        assert "lint" in result.output
         assert "build" in result.output
 
 
@@ -130,8 +130,8 @@ class TestBuildHelpOutput:
         assert "plan" in result.output.lower()
 
 
-class TestSchemaLinterCoexist:
-    def test_cli_schema_linter_coexist(self) -> None:
+class TestSchemaLintCoexist:
+    def test_cli_schema_lint_coexist(self) -> None:
         runner = CliRunner()
 
         with runner.isolated_filesystem() as tmp:
@@ -146,6 +146,6 @@ class TestSchemaLinterCoexist:
             assert isinstance(schema_data, list)
 
             with _cwd(tmp_path):
-                linter_result = runner.invoke(app, ["linter", "."])
+                lint_result = runner.invoke(app, ["lint", "."])
 
-            assert linter_result.exit_code in (0, 1)
+            assert lint_result.exit_code in (0, 1)
