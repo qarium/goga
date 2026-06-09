@@ -56,6 +56,7 @@ Annotations: |
        - docker run --rm --name container_name --entrypoint python3
        - Монтирование CWD как /workspace
        - --env-file для передачи переменных
+       - Если существует ~/.codex/auth.json — монтировать read-only как /home/goga/.codex/auth.json
        - Образ из `Config`.build.image
        - Аргументы: -m goga.build <plan> + CLI-флаги
     9. При dry_run: exit 0 (без запуска контейнера)
