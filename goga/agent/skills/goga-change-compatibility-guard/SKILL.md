@@ -1,6 +1,6 @@
 ---
 name: goga-change-compatibility-guard
-description: Предотвращение небезопасных изменений
+description: Preventing unsafe changes
 ---
 # goga-change-compatibility-guard
 

@@ -1,21 +1,21 @@
 ---
 name: goga-cell-swift
-description: Swift правила реализации контрактов CODEMANIFEST
+description: Swift CODEMANIFEST contract implementation rules
 ---
-# Swift: правила реализации контрактов
+# Swift: Contract Implementation Rules
 
-Языковой скилл для Swift.
+Language skill for Swift.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply the specification within the context of the calling skill. Do not restate the content — use it
+for decision-making.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoked via the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для Swift со всеми конструкциями DSL:
+Complete CODEMANIFEST example for Swift covering all DSL constructs:
 
 ```yaml
 Imports:
@@ -105,29 +105,28 @@ cell/
 ├── *.swift
 ```
 
-## Особенности языка
+## Language Features
 
-**Facade**: только объявления с модификатором `public` составляют фасад. `internal` (по умолчанию) и `private`
-не входят в контракт.
+**Facade**: only declarations with the `public` access modifier constitute the Facade. `internal` (the default access level) and `private` declarations are excluded from the Contract.
 
-**Naming**: camelCase для функций и свойств, PascalCase для типов.
+**Naming**: camelCase for functions and properties, PascalCase for types.
 
-**Value types**: `struct` — value type, `class` — reference type. Выбор определяется семантикой сущности.
+**Value types**: `struct` defines a Value Type, `class` defines a Reference Type. Select based on entity Semantics.
 
-**Optionals**: `T?` — optional. В CODEMANIFEST отражается как `T?`.
+**Optionals**: `T?` denotes an Optional. Represent as `T?` in CODEMANIFEST.
 
-**Protocol**: протоколы описывают интерфейсы — маппятся в Entity без properties, только methods.
+**Protocol**: protocols define interfaces — map to Entity with methods only, excluding properties.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| Swift                            | CODEMANIFEST     | Примечание                        |
+| Swift                            | CODEMANIFEST     | Note                              |
 |----------------------------------|------------------|-----------------------------------|
-| `public class` / `public struct` | Entity           | Init параметры → Entity signature |
-| `public func` верхнего уровня    | Routine          |                                   |
-| `public var` / `public let`      | Property         | Тип из объявления                 |
-| `public func` метод              | Method           |                                   |
-| `public protocol`                | Entity           | Только methods, без properties    |
-| `init` параметры                 | Entity signature |                                   |
+| `public class` / `public struct` | Entity           | Init parameters → Entity Signature |
+| `public func` (top-level)        | Routine          |                                   |
+| `public var` / `public let`      | Property         | Type from declaration             |
+| `public func` (method)           | Method           |                                   |
+| `public protocol`                | Entity           | Methods only, no properties       |
+| `init` parameters                | Entity Signature |                                   |
 
 ## Implementation
 

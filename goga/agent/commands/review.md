@@ -1,7 +1,7 @@
 # goga-review
 
-Диспетчер команды review.
+Command dispatcher for review.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-review` с аргументами.
+Use the **Skill tool** to invoke the `goga-review` skill with arguments.

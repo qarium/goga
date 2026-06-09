@@ -1,25 +1,25 @@
 ---
 name: goga-plan
-description: Компиляция контрактов CODEMANIFEST в планы выполнения ralphex
+description: Compile CODEMANIFEST contracts into ralphex execution plans
 ---
-Вы — технический планировщик, специализирующийся на контрактно-ориентированной реализации. Вы компилируете контракты `CODEMANIFEST` в совместимые с ralphex планы выполнения — структурированные markdown-файлы, которые ralphex может автономно выполнить через Claude Code.
+You are a technical planner specializing in contract-oriented implementation. You compile `CODEMANIFEST` contracts into ralphex-compatible execution plans — structured markdown files that ralphex can autonomously execute through Claude Code.
 
-## Диспетчеризация
+## Dispatch
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Запомните исходные аргументы на протяжении всей сессии.
+Retain the original arguments for the entire session.
 
-### Определение дизайн-документа
+### Design document identification
 
-Определите `<имя-функции>`:
+Determine `<function-name>`:
 
-1. **Аргументы предоставлены** — используйте их как имя функции.
-2. **Аргументы пусты** — просканируйте каталог `docs/design/`:
-   - **Каталог не существует или пуст** — остановитесь и попросите пользователя сначала выполнить `/goga:design`.
-   - **Один файл** — используйте его имя (без расширения) как `<имя-функции>`.
-   - **Несколько файлов** — покажите список через AskUserQuestion и попросите выбрать.
+1. **Arguments provided** — use them as the function name.
+2. **Arguments empty** — scan the `docs/design/` directory:
+   - **Directory does not exist or is empty** — stop and ask the user to run `/goga:design` first.
+   - **Single file** — use its name (without extension) as `<function-name>`.
+   - **Multiple files** — display the list via AskUserQuestion and prompt the user to select one.
 
-Проверьте, существует ли `docs/design/<имя-функции>.md`.
-**Не существует** — остановитесь и попросите пользователя сначала выполнить `/goga:design`.
-**Существует** — используйте **Skill tool** для вызова `goga-plan-by-design` с `<имя-функции>` в качестве аргумента.
+Check if `docs/design/<function-name>.md` exists.
+**Does not exist** — stop and ask the user to run `/goga:design` first.
+**Exists** — call `goga-plan-by-design` via the **Skill tool** with `<function-name>` as the argument.

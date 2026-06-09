@@ -1,6 +1,6 @@
 ---
 name: goga-change
-description: Оркестратор спецификационно-управляемых workflows обслуживания
+description: Specification-governed maintenance workflow orchestrator
 ---
 # goga-change
 

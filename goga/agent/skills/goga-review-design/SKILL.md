@@ -1,262 +1,262 @@
 ---
 name: goga-review-design
-description: Верификация дизайн-документа через трассировку кода
+description: Design document verification via code stack tracing
 ---
-# Ревью дизайна
+# Design Review
 
-## Цель
+## Purpose
 
-Проверяет документ дизайна на **логическую корректность** путём трассировки полного стека кода для каждой точки входа и тестового сценария. Это **проход верификации** — цель найти логические ошибки до создания плана.
+Verifies the design document for **logical correctness** by tracing the full code stack for each entry point and test scenario. This is a **verification pass** — the goal is to find logical errors before plan creation.
 
-Вы **не** пишете код реализации.
-Вы **трассируете** каждую логическую цепочку и **находите**, где ломается логика.
-
----
-
-## Ключевой принцип
-
-**Трассируйте, а не предполагайте.** Для каждой логической цепочки мысленно выполните путь кода шаг за шагом. Читайте реальные исходные файлы и документацию библиотек для проверки корректности. Если шаг невозможно верифицировать из-за отсутствия информации — это само по себе является замечанием.
-
-### Правило взаимодействия с пользователем
-
-**Всегда предлагайте варианты ответа.** При обращении к пользователю за решением или подтверждением — всегда предоставляйте 2-4 конкретных варианта ответа. Никогда не задавайте открытые вопросы без предлагаемых для выбора вариантов.
-
-### Редактирование CODEMANIFEST
-
-При обнаружении ошибок **в самом контракте** (не в интерпретации контракта дизайном) в ходе трассировки вы **обязаны** предложить правки CODEMANIFEST. Это не замечания на уровне дизайна — это ошибки на уровне контракта, блокирующие корректную реализацию независимо от структуры дизайна.
-
-Условия, требующие редактирования CODEMANIFEST:
-- **Недостаточные требования**: отсутствуют объявления типов, неполные сигнатуры, отсутствуют описания методов/свойств
-- **Противоречивые требования**: противоречия между интерфейсами сущностей, несовпадение типов между взаимодействующими сущностями
-- **Ошибки взаимодействия контрактов**: нарушенные цепочки типов между интерфейсами, мутации `Type::`, ссылающиеся на несуществующие или несовместимые типы, интерфейсные контракты, расходящиеся в форматах данных
-
-Все правки CODEMANIFEST должны быть **предложены пользователю** перед применением.
+You do **not** write implementation code.
+You **trace** each logical chain and **find** where the logic breaks.
 
 ---
 
-## Фазы
+## Core Principle
 
-### Фаза 1: Загрузка контекста
+**Trace, do not assume.** For each logical chain, mentally execute the code path step by step. Read actual source files and library documentation to verify correctness. If a step cannot be verified due to missing information — that in itself is a remark.
 
-1. Загрузите DSL спецификацию и принципы применения DSL:
-   - Используйте **Skill tool** для вызова `goga-cell` — для понимания правил DSL CODEMANIFEST перед ревью контрактов
-     (структура документа, синтаксис сигнатур, правила Imports, Usages, Annotations, типы, мутации, встраивания, ограничения)
-   - Используйте **Skill tool** для вызова `goga-cookbook` — для понимания принципов проектирования cell и CODEMANIFEST
-     (когда использовать Entity vs Routine, когда применять мутации и встраивания, принципы написания usage файлов, гранулярность cell)
-2. Прочитайте документ дизайна из `docs/design/<feature-name>.md`
-3. Прочитайте все релевантные файлы CODEMANIFEST, на которые ссылается дизайн
-4. Прочитайте существующие исходные файлы, на которые ссылается дизайн (если есть)
-5. Выполните `goga schema --help`, чтобы понять команду, затем выполните `goga schema`, чтобы получить полный граф зависимостей проекта. Используйте `--depends-on <cell_path>` для поиска ячеек, зависящих от ячеек, изменённых дизайном. Это гарантирует, что ревью охватывает все затронутые ячейки.
-6. **Чтение спецификаций Usages по ссылкам**: определите, какие Usages читать, на основе ссылок:
-   - **Всегда читать корневые Usages** — Usages (файлы из `.goga/usages/`), на которые ссылаются глобальные `Annotations` в заголовке CODEMANIFEST (через синтаксис обратных кавычек), читаются всегда
-   - **Всегда читать Usages изменённых сущностей** — для каждой сущности, охваченной дизайном, просканируйте её аннотации на наличие ссылок (обратные кавычки) на Usages. Все упомянутые Usages читаются
-   - **Пропускать неупомянутые Usages** — записи Usages, на которые не ссылаются глобальные `Annotations` И на которые не ссылаются аннотации ни одной охваченной сущности, не читаются
+### User Interaction Rule
 
----
+**Always offer answer choices.** When requesting a user decision or confirmation — always provide 2–4 concrete options. Never ask open-ended questions without selectable choices.
 
-### Фаза 2: Верификация трассировкой стека кода
+### CODEMANIFEST Editing
 
-Для **каждой точки входа** (метод, функция, конструктор), описанной в дизайне, выполните полную трассировку стека.
+When tracing reveals errors **in the contract itself** (not in the design's interpretation of the contract), you **must** propose CODEMANIFEST edits. These are not design-level remarks — they are contract-level errors that block correct implementation regardless of design structure.
 
-#### Шаг 1. Трассировка цепочки
+Conditions requiring CODEMANIFEST editing:
+- **Insufficient requirements**: missing type declarations, incomplete signatures, absent method/property descriptions
+- **Contradictory requirements**: contradictions between entity interfaces, type mismatches between interacting entities
+- **Contract interaction errors**: broken type chains between interfaces, `Type::` mutations referencing non-existent or incompatible types, interface contracts diverging in data formats
 
-Проследите логическую цепочку от входа до выхода, шаг за шагом:
-
-1. **Вход** — что инициирует этот путь, каков контекст вызова
-2. **Входные данные** — какие данные поступают, в каком виде, откуда
-3. **Валидация входных данных** — проверяются ли входные данные, что происходит при невалидном вводе
-4. **Каждый шаг трансформации** — что изменяется, какие типы проходят через, что возвращается
-5. **Внешние вызовы** — какие библиотеки/импорты вызываются, что они фактически возвращают
-6. **Изменения состояния** — какое состояние модифицируется, какие побочные эффекты происходят
-7. **Выход** — что возвращается, в каком виде, куда направляется
-
-**Правило трассировки**: на каждом шаге явно запишите, какие данные существуют и в какой форме. Не пропускайте шаги — «а потом это работает» не является допустимой трассировкой.
-
-**Трассировка взаимодействия контрактов** — для каждого шага, где сущности взаимодействуют через границы:
-
-1. **Взаимодействие Interface ↔ Type**: когда сущность A получает или возвращает тип из `Imports`/`Usages`, проверьте:
-   - тип объявлен в исходном CODEMANIFEST
-   - форма типа (поля, методы, свойства) соответствует ожиданиям сущности
-   - при несовпадении — зафиксируйте как **проблему CODEMANIFEST** (критичность: Критическая)
-
-2. **Взаимодействие Type ↔ Mutation**: для каждой мутации `Type::` в цепочке:
-   - проверьте, что базовый тип существует с корректным именем (алиас из `Imports` или квалифицированное имя из `Usages`)
-   - проверьте, что объявленные методы/свойства цели мутации совместимы с базовым типом
-   - для многоуровневых мутаций (`A::B::Cls`) проверьте, что каждый сегмент разрешим и совместим
-   - если любой сегмент нарушен — зафиксируйте как **проблему CODEMANIFEST** (критичность: Критическая)
-
-3. **Взаимодействие Interface ↔ Interface**: когда сущность A вызывает сущность B или передаёт ей данные:
-   - проверьте, что выходной тип A соответствует входному типу, ожидаемому B, на **уровне контракта** (а не только реализации)
-   - проверьте совместимость типов ошибок
-   - проверьте, что общие ссылки на типы разрешаются в один и тот же фактический тип
-   - при несовпадении — зафиксируйте как **проблему CODEMANIFEST** (критичность: Высокая или Критическая в зависимости от влияния)
-
-#### Шаг 2. Верификация контрольных точек
-
-На **каждом шаге** в цепочке проверьте:
-
-- **Непрерывность типов**: совпадает ли выходной тип шага N с входным типом шага N+1?
-- **Логическая корректность**: правильно ли трансформация работает? (например, если нужно отфильтровать по статусу «active», действительно ли логика проверяет «active», а не что-то другое?)
-- **Пропущенные шаги**: есть ли разрыв между тем, что требует контракт, и тем, что предоставляет дизайн?
-- **Пути ошибок**: что происходит при ошибке на этом шаге? Обрабатывается ли ошибка? Корректно ли она распространяется?
-- **Граничные случаи на этом шаге**: что происходит при пустом вводе, None/null, неверном типе, граничных значениях, параллельном доступе?
-
-Если контрольная точка не проходит — зафиксируйте замечание: точное место в цепочке, что не так, что должно происходить.
-
-**Контрольные точки согласованности контрактов** — дополнительно проверьте:
-- **Межсущностная непрерывность типов**: если шаг N в сущности A выводит тип T, а шаг M в сущности B ожидает тип T, означает ли T одно и то же в обоих контекстах? (тот же источник `Imports`, тот же алиас, та же форма)
-- **Согласованность контракта мутаций**: если мутация `Type::` создаёт тип, используемый где-либо ещё, удовлетворяет ли мутировавший контракт всем потребителям?
-- **Согласованность Annotation ↔ сущность**: ссылаются ли аннотации на типы/usages/параметры, которые реально существуют в CODEMANIFEST?
-
-Если контрольная точка согласованности контрактов не проходит — классифицируйте как **проблему CODEMANIFEST** (в самом контракте ошибка), а не как проблему дизайна. Предложите исправление CODEMANIFEST.
-
-#### Шаг 3. Верификация внешних зависимостей
-
-Для каждого внешнего вызова в цепочке:
-
-- Прочитайте фактическую документацию библиотеки или спецификацию Usages
-- Проверьте, что вызываемый метод/функция существует и возвращает то, что предполагает дизайн
-- Проверьте корректность соглашения о вызовах (порядок аргументов, именованные параметры и т.д.)
-- Проверьте, что тип возврата соответствует ожиданиям следующего шага
-
-Для каждого импортированного usage из `Imports` → `Usages`:
-
-- Проверьте, что указанный файл существует по пути `{from_path}/.usages/{usage_name}.md`
-- Прочитайте импортированный файл usage и проверьте, что его содержимое соответствует предположениям дизайна
-- Проверьте, что импортированный usage используется корректно (он предоставляет практические рекомендации, а не контрактные обязательства)
-- Убедитесь, что дизайн не рассматривает импортированный usage как типовой контракт
-
-Для категоризации локальных usages в документе дизайна:
-
-- Проверьте, что функциональные категории семантически различны — никакие две категории не должны покрывать одну и ту же предметную область
-- Проверьте, что практики, помещённые в один и тот же файл категории, действительно связаны по функции
-- Проверьте, что существующие файлы `.usages/` в ячейке были проверены и совпадающие категории были расширены, а не дублированы
+All CODEMANIFEST edits must be **proposed to the user** before applying.
 
 ---
 
-### Фаза 3: Верификация логики тестов
+## Phases
 
-Для **каждого тестового сценария**, описанного в дизайне, создайте **подробную трассировку теста** со следующей структурой для каждого тестового случая.
+### Phase 1: Context Loading
 
-#### Обязательный формат для каждого тестового случая
-
-Каждый тестовый случай ДОЛЖЕН быть описан всеми 6 элементами:
-
-1. **Имя**: `<имя теста>` — самодокументируемое, следуя конвенциям целевого языка
-2. **Настройка**: точная настройка фикстур (содержимое tmp_path, моки, патчи) — конкретный код или описание с точными значениями
-3. **Входные данные**: точные значения, передаваемые в функцию/CLI (аргументы, типы, структура)
-4. **Трассировка**: пошаговое выполнение кода с этим точным вводом — что получает каждый помощник, что он возвращает, какие побочные эффекты возникают на каждом шаге
-5. **Утверждения**: конкретные проверки с точными ожидаемыми значениями (пути, содержимое, коды возврата, строки вывода) — записанные как фактические assert-утверждения или эквивалент
-6. **Оценка достаточности**: зачем нужен этот тест и какую регрессию он предотвращает
-
-#### Шаг 1. Трассировки позитивных тестов
-
-Для каждого позитивного теста:
-1. Напишите полную трассировку из 6 элементов
-2. Проверьте, что ожидаемый результат **корректен** на основе логики дизайна, оттрассированной в Фазе 2
-3. Проверьте, что входные данные теста достаточны — не слишком тривиальны, чтобы поймать реальные баги
-
-#### Шаг 2. Трассировка негативных тестов
-
-Для каждого негативного теста:
-1. Напишите полную трассировку из 6 элементов
-2. Проверьте, где именно код падает и что ошибка обрабатывается корректно (правильное сообщение об ошибке, правильный код возврата)
-3. Проверьте, что тест проверяет **корректный** режим отказа
-
-#### Шаг 3. Аудит покрытия граничных случаев
-
-Для каждой сущности:
-1. Перечислите все граничные условия:
-   - пустой ввод, пустая коллекция, пустая строка
-   - значения None/null
-   - максимальный размер / граничные значения
-   - неверные типы
-   - параллельный доступ (если применимо)
-   - отсутствующие зависимости
-2. Для каждого граничного условия: напишите полную трассировку теста из 6 элементов или зафиксируйте пробел, если он относится к разделу пробелов в тестах
-
-#### Шаг 4. Достаточность тестовых данных
-
-Для каждого теста:
-1. Достаточно ли реалистичны тестовые данные, чтобы поймать реальные баги?
-2. Достаточно ли различных тестовых случаев для покрытия описанного поведения?
-3. Включают ли тестовые данные типичные паттерны использования, а не только тривиальные случаи «счастливого пути»?
+1. Load the DSL specification and DSL application principles:
+   - Use the **Skill tool** to invoke `goga-cell` — for understanding CODEMANIFEST DSL rules before reviewing contracts
+     (document structure, signature syntax, Imports rules, Usages rules, Annotations rules, types, mutations, embeddings, constraints)
+   - Use the **Skill tool** to invoke `goga-cookbook` — for understanding cell design principles and CODEMANIFEST
+     (when to use Entity vs Routine, when to apply mutations and embeddings, usage file authoring principles, cell granularity)
+2. Read the design document from `docs/design/<feature-name>.md`
+3. Read all relevant CODEMANIFEST files referenced by the design
+4. Read existing source files referenced by the design (if any)
+5. Execute `goga schema --help` to understand the command, then execute `goga schema` to obtain the full project dependency graph. Use `--depends-on <cell_path>` to discover cells that depend on cells modified by the design. This ensures the review covers all affected cells.
+6. **Reading Usage specifications by reference**: determine which Usages to read based on references:
+   - **Always read root Usages** — Usages (files from `.goga/usages/`) referenced by global `Annotations` in the CODEMANIFEST header (via backtick syntax) are always read
+   - **Always read Usages of modified entities** — for each entity covered by the design, scan its annotations for references (backticks) to Usages. All referenced Usages are read
+   - **Skip unreferenced Usages** — Usage entries not referenced by global `Annotations` AND not referenced by annotations of any covered entity are skipped
 
 ---
 
-### Фаза 4: Отчёт и исправление замечаний (интерактивно)
+### Phase 2: Code Stack Trace Verification
 
-Соберите все замечания из Фаз 2 и 3 перед их представлением. Отсортируйте по критичности: Критические → Высокие → Средние → Низкие → Пробелы в тестах → Проблемы CODEMANIFEST.
+For **each entry point** (method, function, constructor) described in the design, perform a full stack trace.
 
-Разделите замечания на две категории:
-- **Замечания дизайна** — проблемы в документе дизайна (логические ошибки, пропущенные граничные случаи, пробелы в тестах)
-- **Замечания CODEMANIFEST** — проблемы в самом контракте (недостаточные/противоречивые требования, нарушенные цепочки типов, отсутствующие объявления)
+#### Step 1. Chain Tracing
 
-Представляйте замечания **по одному**. Для каждого замечания:
+Trace the logical chain from entry to exit, step by step:
 
-#### Шаг 1. Покажите замечание
+1. **Entry** — what initiates this path, what is the calling context
+2. **Input data** — what data arrives, in what form, from where
+3. **Input validation** — whether input data is validated, what happens on invalid input
+4. **Each transformation step** — what changes, what types pass through, what is returned
+5. **External calls** — what libraries/imports are called, what they actually return
+6. **State changes** — what state is modified, what side effects occur
+7. **Exit** — what is returned, in what form, where it goes
 
-Представьте одно замечание с:
+**Tracing rule**: at each step, explicitly write down what data exists and in what form. Do not skip steps — "and then it works" is not an acceptable trace.
 
-- **Категория** (Дизайн / CODEMANIFEST)
-- **Критичность** (Критическая / Высокая / Средняя / Низкая / Пробел в тестах)
-- **Местоположение** — точная ссылка на раздел дизайна или файл/сущность CODEMANIFEST
-- **Что не так** — ясное описание проблемы
-- **Предлагаемое исправление** — точное необходимое изменение, а не расплывчатый совет. Для проблем CODEMANIFEST: покажите точное изменение DSL. Для пробелов в тестах: напишите полную трассировку из 6 элементов (имя, настройка, вход, трассировка, утверждения, достаточность)
+**Contract interaction tracing** — for each step where entities interact across boundaries:
 
-#### Шаг 2. Запросите решение у пользователя
+1. **Interface ↔ Type interaction**: when entity A receives or returns a type from `Imports`/`Usages`, verify:
+   - the type is declared in the source CODEMANIFEST
+   - the type shape (fields, methods, properties) matches the entity's expectations
+   - on mismatch — record as a **CODEMANIFEST issue** (criticality: Critical)
 
-Используйте AskUserQuestion с вариантами:
+2. **Type ↔ Mutation interaction**: for each `Type::` mutation in the chain:
+   - verify that the base type exists with the correct name (alias from `Imports` or qualified name from `Usages`)
+   - verify that declared methods/properties of the mutation target are compatible with the base type
+   - for multi-level mutations (`A::B::Cls`) verify that each segment is resolvable and compatible
+   - if any segment is broken — record as a **CODEMANIFEST issue** (criticality: Critical)
 
-1. **Применить предложенное исправление** — немедленно применить исправление к документу дизайна или CODEMANIFEST
-2. **Предложить альтернативу** — пользователь описывает другой подход к исправлению
+3. **Interface ↔ Interface interaction**: when entity A calls entity B or passes data to it:
+   - verify that A's output type matches B's expected input type at the **contract level** (not just implementation)
+   - verify error type compatibility
+   - verify that shared type references resolve to the same actual type
+   - on mismatch — record as a **CODEMANIFEST issue** (criticality: High or Critical depending on impact)
 
-#### Шаг 3. Примените решение
+#### Step 2. Checkpoint Verification
 
-- **Применить предложенное исправление (дизайн)**: обновите документ дизайна, затем перепроверьте, что исправление не ломает другие цепочки (протрассируйте затронутые цепочки заново). Кратко сообщите результат перепроверки.
-- **Применить предложенное исправление (CODEMANIFEST)**: отредактируйте файл CODEMANIFEST, повторно запустите линтер: `goga lint`. Если линтер сообщает об ошибках — исправьте синтаксис DSL. Перепроверьте затронутые цепочки дизайна относительно обновлённого контракта.
-- **Пропустить**: зафиксируйте замечание как «пропущенное» и продолжите.
-- **Предложить альтернативу**: обсудите альтернативу с пользователем, согласуйте исправление, примените его, перепроверьте затронутые цепочки.
+At **each step** in the chain, verify:
 
-#### Шаг 4. Переход к следующему замечанию
+- **Type continuity**: does the output type of step N match the input type of step N+1?
+- **Logical correctness**: does the transformation work correctly? (e.g., if filtering by "active" status, does the logic actually check for "active" and not something else?)
+- **Missing steps**: is there a gap between what the contract requires and what the design provides?
+- **Error paths**: what happens on error at this step? Is the error handled? Does it propagate correctly?
+- **Boundary cases at this step**: what happens on empty input, None/null, wrong type, boundary values, concurrent access?
 
-Повторите с Шаг 1 для следующего замечания. Показывайте краткий счётчик: «Замечание 3 из 12».
+If a checkpoint fails — record a remark: exact location in the chain, what is wrong, what should happen.
 
-После обработки всех замечаний покажите итоги:
+**Contract consistency checkpoints** — additionally verify:
+- **Cross-entity type continuity**: if step N in entity A outputs type T, and step M in entity B expects type T, does T mean the same thing in both contexts? (same `Imports` source, same alias, same shape)
+- **Mutation contract consistency**: if a `Type::` mutation creates a type used anywhere else, does the mutated contract satisfy all consumers?
+- **Annotation ↔ entity consistency**: do annotations reference types/usages/parameters that actually exist in the CODEMANIFEST?
 
-- **Исправлено**: N замечаний (список по критичности, с разделением на дизайн/CODEMANIFEST)
-- **Пропущено**: N замечаний (список по критичности, с разделением на дизайн/CODEMANIFEST)
-- **Статус документа дизайна**: обновлён / без изменений
-- **Статус CODEMANIFEST**: обновлён (список файлов) / без изменений
+If a contract consistency checkpoint fails — classify as a **CODEMANIFEST issue** (the error is in the contract itself), not a design issue. Propose a CODEMANIFEST fix.
+
+#### Step 3. External Dependency Verification
+
+For each external call in the chain:
+
+- Read the actual library documentation or Usage specification
+- Verify that the called method/function exists and returns what the design assumes
+- Verify calling convention correctness (argument order, named parameters, etc.)
+- Verify that the return type matches the expectations of the next step
+
+For each imported usage from `Imports` → `Usages`:
+
+- Verify that the specified file exists at path `{from_path}/.usages/{usage_name}.md`
+- Read the imported usage file and verify that its content matches the design's assumptions
+- Verify that the imported usage is used correctly (it provides practical guidelines, not contractual obligations)
+- Ensure the design does not treat the imported usage as a type contract
+
+For categorizing local usages in the design document:
+
+- Verify that functional categories are semantically distinct — no two categories should cover the same domain
+- Verify that practices placed in the same category file are actually related by function
+- Verify that existing `.usages/` files in the cell have been reviewed and matching categories were extended, not duplicated
 
 ---
 
-## Результат
+### Phase 3: Test Logic Verification
 
-- Итоги замечаний: количество исправленных / пропущенных по критичности
-- Обновлённый документ дизайна (если были применены исправления)
+For **each test scenario** described in the design, create a **detailed test trace** with the following structure for each test case.
+
+#### Mandatory Format for Each Test Case
+
+Each test case MUST be described by all 6 elements:
+
+1. **Name**: `<test name>` — self-documenting, following target language conventions
+2. **Setup**: exact fixture configuration (tmp_path contents, mocks, patches) — specific code or description with exact values
+3. **Input**: exact values passed to the function/CLI (arguments, types, structure)
+4. **Trace**: step-by-step code execution with this exact input — what each helper receives, what it returns, what side effects occur at each step
+5. **Assertions**: specific checks with exact expected values (paths, contents, return codes, output strings) — written as actual assert statements or equivalent
+6. **Sufficiency assessment**: why this test is needed and what regression it prevents
+
+#### Step 1. Positive Test Traces
+
+For each positive test:
+1. Write a complete 6-element trace
+2. Verify that the expected result is **correct** based on the design logic traced in Phase 2
+3. Verify that test input is sufficient — not too trivial to catch real bugs
+
+#### Step 2. Negative Test Traces
+
+For each negative test:
+1. Write a complete 6-element trace
+2. Verify exactly where the code fails and that the error is handled correctly (correct error message, correct return code)
+3. Verify that the test checks the **correct** failure mode
+
+#### Step 3. Boundary Case Coverage Audit
+
+For each entity:
+1. Enumerate all boundary conditions:
+   - empty input, empty collection, empty string
+   - None/null values
+   - maximum size / boundary values
+   - wrong types
+   - concurrent access (if applicable)
+   - missing dependencies
+2. For each boundary condition: write a complete 6-element test trace or record a gap if it belongs in the test gaps section
+
+#### Step 4. Test Data Sufficiency
+
+For each test:
+1. Are the test data realistic enough to catch real bugs?
+2. Are there enough different test cases to cover the described behavior?
+3. Do the test data include typical usage patterns, not just trivial "happy path" cases?
 
 ---
 
-## Финальная самопроверка
+### Phase 4: Report and Resolve Remarks (Interactive)
 
-Перед завершением проверьте:
+Collect all remarks from Phases 2 and 3 before presenting them. Sort by criticality: Critical → High → Medium → Low → Test Gaps → CODEMANIFEST Issues.
 
-1. Была ли DSL спецификация загружена через скиллы `goga-cell` и `goga-cookbook` перед ревью контрактов?
-2. Была ли каждая точка входа в дизайне оттрассирована через полный стек кода?
-3. Была ли каждая контрольная точка в каждой цепочке проверена (тип, логика, ошибка, граничный случай)?
-4. Были ли проверены контрольные точки взаимодействия контрактов (interface ↔ type, type ↔ mutation, interface ↔ interface)?
-5. Были ли внешние зависимости проверены по фактической документации?
-6. Были ли импортированные usages из `Imports` → `Usages` проверены (файл существует, содержимое соответствует предположениям дизайна)?
-7. Был ли каждый тестовый сценарий оттрассирован (позитивный, негативный, граничный)?
-8. Была ли проверена достаточность тестовых данных для каждого теста?
-9. Было ли каждое замечание представлено по одному с решением об исправлении?
-10. Были ли одобренные исправления применены к документу дизайна или CODEMANIFEST?
-11. Были ли изменения CODEMANIFEST перепроверены линтером?
-12. Были ли затронутые цепочки оттрассированы заново после каждого исправления?
-13. Были ли предоставлены итоги исправленных/пропущенных замечаний (с разделением на дизайн/CODEMANIFEST)?
-14. Были ли проблемы CODEMANIFEST отделены от проблем дизайна и предложены с конкретными исправлениями DSL?
+Divide remarks into two categories:
+- **Design remarks** — issues in the design document (logical errors, missing boundary cases, test gaps)
+- **CODEMANIFEST remarks** — issues in the contract itself (insufficient/contradictory requirements, broken type chains, missing declarations)
 
-Если хотя бы один ответ «нет» — завершите недостающую верификацию перед возвратом.
+Present remarks **one at a time**. For each remark:
+
+#### Step 1. Show the Remark
+
+Present one remark with:
+
+- **Category** (Design / CODEMANIFEST)
+- **Criticality** (Critical / High / Medium / Low / Test Gap)
+- **Location** — exact reference to the design section or CODEMANIFEST file/entity
+- **What is wrong** — clear description of the problem
+- **Proposed fix** — the exact change needed, not vague advice. For CODEMANIFEST issues: show the exact DSL change. For test gaps: write the complete 6-element trace (name, setup, input, trace, assertions, sufficiency)
+
+#### Step 2. Request User Decision
+
+Use AskUserQuestion with choices:
+
+1. **Apply the proposed fix** — apply the fix to the design document or CODEMANIFEST immediately
+2. **Propose an alternative** — the user describes a different approach to fixing
+
+#### Step 3. Apply the Decision
+
+- **Apply proposed fix (design)**: update the design document, then re-verify that the fix does not break other chains (re-trace affected chains). Briefly report the re-verification result.
+- **Apply proposed fix (CODEMANIFEST)**: edit the CODEMANIFEST file, re-run the linter: `goga lint`. If the linter reports errors — fix the DSL syntax. Re-verify affected design chains against the updated contract.
+- **Skip**: record the remark as "skipped" and continue.
+- **Propose an alternative**: discuss the alternative with the user, agree on a fix, apply it, re-trace affected chains.
+
+#### Step 4. Proceed to Next Remark
+
+Repeat from Step 1 for the next remark. Show a brief counter: "Remark 3 of 12".
+
+After processing all remarks, show the summary:
+
+- **Fixed**: N remarks (breakdown by criticality, split by design/CODEMANIFEST)
+- **Skipped**: N remarks (breakdown by criticality, split by design/CODEMANIFEST)
+- **Design document status**: updated / unchanged
+- **CODEMANIFEST status**: updated (list of files) / unchanged
+
+---
+
+## Output
+
+- Remark summary: count of fixed / skipped by criticality
+- Updated design document (if fixes were applied)
+
+---
+
+## Final Self-Check
+
+Before completion, verify:
+
+1. Was the DSL specification loaded via `goga-cell` and `goga-cookbook` skills before reviewing contracts?
+2. Was each entry point in the design traced through the full code stack?
+3. Was each checkpoint in each chain verified (type, logic, error, boundary case)?
+4. Were contract interaction checkpoints verified (interface ↔ type, type ↔ mutation, interface ↔ interface)?
+5. Were external dependencies verified against actual documentation?
+6. Were imported usages from `Imports` → `Usages` verified (file exists, content matches design assumptions)?
+7. Was each test scenario traced (positive, negative, boundary)?
+8. Was test data sufficiency verified for each test?
+9. Was each remark presented one at a time with a fix decision?
+10. Were approved fixes applied to the design document or CODEMANIFEST?
+11. Were CODEMANIFEST changes re-verified by the linter?
+12. Were affected chains re-traced after each fix?
+13. Were summary totals of fixed/skipped remarks provided (split by design/CODEMANIFEST)?
+14. Were CODEMANIFEST issues separated from design issues and proposed with specific DSL fixes?
+
+If at least one answer is "no" — complete the missing verification before returning.
 
 ---

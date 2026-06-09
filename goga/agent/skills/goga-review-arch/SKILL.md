@@ -1,334 +1,332 @@
 ---
 name: goga-review-arch
-description: Ревью плана архитектуры на семантическую корректность
+description: Review an architecture plan for semantic correctness
 ---
-# Ревью архитектуры
+# Architecture Review
 
-## Цель
+## Objective
 
-Проверяет план архитектуры (`docs/arch/<topic>.md`) на **семантическую корректность** — связанность модели, разумность
-доменных границ и достаточность требований для реализации.
-Вы **анализируете** план архитектуры, **сообщаете** о замечаниях и **исправляете** план при обнаружении проблем (с
-одобрения пользователя).
-
----
-
-## Ключевой принцип
-
-**Архитектура — это не набор отдельных контрактов, а связная система.** Проверяем не каждый CODEMANIFEST по отдельности,
-а взаимодействие всех типов, доменов и требований как единого целого.
+Validate the architecture plan (`docs/arch/<topic>.md`) for **semantic correctness** — assess model cohesion, domain boundary
+soundness, and requirement sufficiency for implementation.
+The agent **analyzes** the architecture plan, **reports** findings, and **applies fixes** when issues are detected
+(subject to user approval).
 
 ---
 
-## Вход
+## Core Principle
 
-- **Обязательный**: план архитектуры `docs/arch/<topic>.md`
-- **Опциональный**: файл задачи `docs/tasks/<topic>.md` — если существует, сверяем покрытие требований
-
----
-
-## Фазы
-
-### Фаза 1: Загрузка контекста
-
-1. Прочитайте план архитектуры из `docs/arch/<topic>.md`
-2. Загрузите DSL спецификацию и принципы применения DSL:
-    - Используйте **Skill tool** для вызова `goga-cell` — для понимания правил DSL
-      (синтаксис сигнатур, правила Imports, Usages, Annotations, типы, мутации, встраивания, ограничения)
-    - Используйте **Skill tool** для вызова `goga-cookbook` — для понимания принципов проектирования cell и CODEMANIFEST
-      (когда использовать Entity vs Routine, когда применять мутации и встраивания, принципы написания usage файлов,
-      гранулярность cell)
-3. Загрузите языковые правила реализации:
-    - Используйте **Skill tool** для вызова `goga-lang-disp` — получите языковой скилл целевого языка.
-      Языковой скилл определяет конвенции реализации: структуру cell, фасад, правила сигнатур, **именование**.
-      Примеры в других скиллах могут использовать именование одного языка (например snake_case), а целевой язык
-      требует другого (например PascalCase) — языковой скилл содержит авторитетные правила для целевого языка.
-4. Используйте **Skill tool** для вызова `goga-codemanifest-base` — получите базовые usages и annotations проекта
-5. Получите текущую схему проекта:
-    - Выполните `goga schema`, чтобы получить иерархию
-      существующих cells
-    - Определите: какие cells из плана создаются заново, а какие модифицируются
-6. Прочитайте существующие CODEMANIFEST тех cells, которые план помечает как модифицируемые
-7. Прочитайте существующие `.usages/` файлы модифицируемых cells
-8. Если существует файл задачи `docs/tasks/<topic>.md` — прочитайте его для последующей сверки покрытия требований
+**Architecture is a cohesive system, not a collection of isolated contracts.** The agent validates the interaction across
+all types, domains, and requirements as a unified whole — not each CODEMANIFEST in isolation.
 
 ---
 
-### Фаза 2: Структура плана
+## Input
 
-Проверьте, что план архитектуры содержит **все обязательные секции**:
-
-1. **Порядок реализации** — cells упорядочены с указанием причины порядка
-2. **Артефакты для каждой cell** — CODEMANIFEST и `.usages/` файлы
-3. **Карта зависимостей** — ASCII-диаграмма или список связей между cells
-4. **Чеклист верификации** — что проверить после реализации
-
-Если любая секция отсутствует — зафиксируйте как **Критическое** замечание.
-Если секция присутствует, но пуста или содержит плейсхолдеры (TBD, TODO) — зафиксируйте как **Высокое**.
-
-#### Отсутствие кода реализации
-
-План архитектуры содержит **только** артефакты CODEMANIFEST и `.usages/` файлов.
-Если в плане обнаружены блоки кода реализации на каком-либо языке программирования — зафиксируйте как **Критическое**.
+- **Required**: architecture plan at `docs/arch/<topic>.md`
+- **Optional**: task file at `docs/tasks/<topic>.md` — when present, used to verify requirements coverage
 
 ---
 
-### Фаза 3: Реконструкция плоской модели
+## Phases
 
-**Цель:** Построить граф всех типов из всех CODEMANIFEST'ов плана без учёта границ cells — увидеть картину целиком.
+### Phase 1: Context Loading
 
-Извлеките из каждого CODEMANIFEST в плане:
-
-- Все объявленные типы (Entity и Routine) с их сигнатурами
-- Все связи между типами: кто кого принимает как параметр, кто кого возвращает, мутации, встраивания
-- Все Imports-связи (какие типы откуда берутся)
-
-Постройте единый граф типов:
-
-- **Вершины** — все типы из всех CODEMANIFEST'ов плана + все импортированные типы из существующих cells
-- **Рёбра** — взаимодействия между типами (параметры, возвраты, мутации, встраивания, вызовы через Imports)
-
-Представьте граф пользователю в виде ASCII-диаграммы.
-
----
-
-### Фаза 4: Связанность плоской модели
-
-Проверьте граф типов (Фаза 3) на целостность.
-
-#### Шаг 1. Полнота графа типов
-
-- Каждый тип, упомянутый в сигнатурах (параметры, возвраты), мутациях (`Object::Target`), встраиваниях (
-  `->Entity: {}`) — существует в модели как объявленный тип
-- Нет неявных типов — используемых, но нигде не объявленных (ни в CODEMANIFEST'ах плана, ни в существующих cells через
-  Imports)
-
-Если тип используется, но не объявлен — зафиксируйте как **Критическое** (разрыв в модели, реализация невозможна).
-
-#### Шаг 2. Связность графа
-
-- Все типы достижимы от точек входа (EntryPoint-типов — тех, которые инициируют потоки данных)
-- Нет «висящих» типов — которые никто не использует и которые ничего не используют (кроме точек входа)
-- Если тип существует, но ни один другой тип его не использует и он не является точкой входа — это подозрительно
-
-Если обнаружены недостижимые типы — зафиксируйте как **Высокое** (возможно, тип лишний или не хватает связи).
-Если обнаружены висящие типы — зафиксируйте как **Среднее** (возможно, тип нужен для будущего расширения, но стоит явно
-это указать).
-
-#### Шаг 3. Непротиворечивость связей
-
-- Если тип A передаёт тип X в тип B — форма типа X одинакова (тот же источник: объявлен в одном и том же месте, та же
-  сигнатура)
-- Типы входов/выходов согласованы вдоль цепочек взаимодействия: выход типа N совпадает с входом типа N+1
-- Нет цепочек, где тип трансформируется «магически» — каждый переход типов объяснён через контракт (сигнатура, мутация,
-  встраивание)
-
-Если обнаружены несогласованности — зафиксируйте как **Критическое**.
+1. Read the architecture plan from `docs/arch/<topic>.md`
+2. Load the DSL specification and DSL application principles:
+    - Invoke `goga-cell` via **Skill tool** — to understand DSL rules
+      (signature syntax, Import/Usage/Annotation rules, types, mutations, embeddings, constraints)
+    - Invoke `goga-cookbook` via **Skill tool** — to understand cell and CODEMANIFEST design principles
+      (Entity vs Routine selection criteria, when to apply mutations and embeddings, usage file authoring guidelines,
+      cell granularity)
+3. Load language-specific implementation rules:
+    - Invoke `goga-lang-disp` via **Skill tool** — to obtain the target language skill.
+      The language skill defines implementation conventions: cell structure, facade pattern, signature rules, **naming**.
+      Examples in other skills may follow naming conventions of one language (e.g., snake_case), whereas the target
+      language requires another (e.g., PascalCase) — the language skill is the authoritative source for the target language.
+4. Invoke `goga-codemanifest-base` via **Skill tool** — to obtain the project's baseline usages and annotations
+5. Retrieve the current project schema:
+    - Run `goga schema` to obtain the existing cell hierarchy
+    - Classify plan cells: newly created vs. modified
+6. Read the existing CODEMANIFESTs of cells the plan marks for modification
+7. Read the existing `.usages/` files of cells marked for modification
+8. If the task file `docs/tasks/<topic>.md` exists — read it for subsequent requirements coverage verification
 
 ---
 
-### Фаза 5: Связанность cells
+### Phase 2: Plan Structure Validation
 
-**Цель:** Проверить, что границы cells разумны — высокая внутренняя связность, минимальные связи между cells.
+Verify the architecture plan contains **all mandatory sections**:
 
-#### Шаг 1. Внутренняя связность cells
+1. **Implementation order** — cells sequenced with rationale for ordering
+2. **Artifacts per cell** — CODEMANIFEST and `.usages/` files
+3. **Dependency map** — ASCII diagram or enumerated cell-to-cell connections
+4. **Verification checklist** — post-implementation validation criteria
 
-Для каждой cell в плане:
+If any section is missing — log as a **Critical** finding.
+If a section is present but empty or contains placeholders (TBD, TODO) — log as **High**.
 
-- Типы внутри одной cell взаимодействуют друг с другом (обмениваются данными через параметры, возвраты, мутации)
-- Если тип в cell не взаимодействует ни с одним другим типом этой cell — это признак возможной ошибки композиции
+#### No Implementation Code
 
-Если тип не имеет связей с другими типами своей cell — зафиксируйте как **Среднее** (возможно, он относится к другой
-cell).
-
-#### Шаг 2. Разумность границ
-
-- Каждая cell имеет одну зону ответственности — назначение можно описать одной фразой без «и» (см. `goga-cookbook`)
-
-Если cell описывается через «и» — зафиксируйте как **Высокое** (стоит разбить).
-Если тесно связанные типы попали в разные cells без обоснования — зафиксируйте как **Среднее**.
-
-#### Шаг 3. Направленность зависимостей
-
-- Зависимости текут от листьев к корню: cell без Imports проектируется первой, зависимые — после
-- Нет циклов между cells: если cell A импортирует из cell B, то cell B не импортирует из cell A
-- Порядок реализации в плане соответствует направлению зависимостей
-
-Если обнаружены циклы — зафиксируйте как **Критическое**.
-Если порядок реализации не соответствует зависимостям — зафиксируйте как **Критическое** (реализация будет
-заблокирована).
-
-#### Шаг 4. Минимальность межъячеечных связей
-
-- Cell не импортирует из другой cell больше типов, чем ей нужно
-- Если cell A импортирует из cell B значительную часть её типов — это признак неправильного разбиения (cell B слишком
-  мелкая, или границы проведены неверно)
-
-Если cell импортирует бо́льшую часть типов другой cell — зафиксируйте как **Высокое** (стоит пересмотреть границы).
-
-#### Шаг 5. Usages-связи между cells
-
-Используйте скилл `goga-cookbook` как источник правил для проверки usages.
-Проверьте, что `.usages/` файлы и их подключения в CODEMANIFEST соответствуют принципам из `goga-cookbook`
-
-Если обнаружены нарушения — зафиксируйте как **Высокое**.
-
-#### Шаг 6. Изоляция usages
-
-**Принцип:** Каждый `.usages/` файл должен быть самодостаточным — потребитель понимает паттерн без чтения других практик.
-Ссылки на другие практики создают неявные зависимости и нарушают изоляцию (см. `goga-cookbook`).
-
-Для каждого `.usages/` файла в плане проверьте:
-
-- Файл не содержит ссылок на другие практики — нет имён других usage-файлов, нет обратных кавычек с именами практик
-  из других `.usages/`
-- Весь необходимый контекст включён в сам файл — потребитель не вынужден искать дополнительные практики
-
-Если usage-файл ссылается на другую практику — зафиксируйте как **Высокое** (нарушение изоляции).
-Если usage-файл не самодостаточен и требует контекста из другой практики — зафиксируйте как **Высокое**.
+The architecture plan must contain **only** CODEMANIFEST and `.usages/` file artifacts.
+If implementation code blocks in any programming language are found — log as **Critical**.
 
 ---
 
-### Фаза 6: Достаточность требований в CODEMANIFEST
+### Phase 3: Flat Model Reconstruction
 
-**Цель:** Проверить, что CODEMANIFEST'ы содержат достаточно информации для реализации.
+**Goal:** Construct a cross-cell type graph from all CODEMANIFESTs in the plan — disregarding cell boundaries to reveal the
+full picture.
 
-#### Шаг 1. Точность контрактов
+From each CODEMANIFEST in the plan, extract:
 
-- Сигнатуры однозначны — по сигнатуре метода/свойства понятно, что он делает, какие типы принимает и возвращает
-- Нет методов/свойств, назначение которых можно трактовать двояко
-- Мутации и встраивания обоснованы (а не просто использованы «потому что можно») — см. критерии в `goga-cookbook`
-- Выбор Entity vs Routine обоснован для каждого типа — см. критерии в `goga-cookbook`
-- Имена типов, методов и свойств соответствуют конвенциям целевого языка (из языкового скилла `goga-lang-disp`)
+- All declared types (Entity and Routine) with their signatures
+- All inter-type connections: parameter acceptance, return types, mutations, embeddings
+- All Import relationships (source of each referenced type)
 
-Если сигнатура неоднозначна — зафиксируйте как **Высокое**.
-Если мутация/встраивание не обосновано — зафиксируйте как **Среднее**.
-Если Entity/Routine классификация некорректна — зафиксируйте как **Высокое**.
-Если именование не соответствует конвенциям языка — зафиксируйте как **Высокое**.
+Construct a unified type graph:
 
-#### Шаг 2. Качество annotations
+- **Vertices** — all types across all plan CODEMANIFESTs + all imported types from existing cells
+- **Edges** — inter-type interactions (parameters, returns, mutations, embeddings, calls via Imports)
 
-Для каждой annotation в каждом CODEMANIFEST плана:
-
-- Annotation не содержат деталей технической реализации
-- Annotation содержит достаточно информации для реализации — исполнитель не должен угадывать поведение
-- Для логики описан алгоритм или поток выполнения (пошагово) если достижимо
-- Ограничения и граничные случаи описаны: пустой ввод, None/null, ошибки, граничные значения
-- Нет плейсхолдеров (TBD, TODO) — annotation должна быть завершённой
-
-Если annotation недостаточна для реализации — зафиксируйте как **Критическое**.
-Если annotation не соответствует лучшим практикам или требуемому формату — зафиксируйте как **Высокое**.
-Если нетривиальная логика не описана пошагово — зафиксируйте как **Высокое**.
-Если пропущены граничные случаи — зафиксируйте как **Среднее**.
-
-#### Шаг 3. Покрытие требований задачи
-
-Если существует файл задачи `docs/tasks/<topic>.md`:
-
-- Для каждого требования из секции «Описание» — есть тип(ы) в плане, которые его обеспечивают
-- Для каждого критерия приёмки — есть contractual basis в плане: план позволяет выполнить критерий
-- Для каждого риска из задачи — план учитывает его (через типы, annotations или архитектурные решения)
-- Для каждой подзадачи из секции «Объём» — план покрывает её (если задача разбита)
-
-Если требование не покрыто — зафиксируйте как **Критическое**.
-Если критерий приёмки не обеспечен — зафиксируйте как **Высокое**.
-Если риск не учтён — зафиксируйте как **Среднее**.
+Render the graph to the user as an ASCII diagram.
 
 ---
 
-### Фаза 7: Влияние на существующую архитектуру
+### Phase 4: Flat Model Cohesion
 
-Для cells, которые план помечает как модифицируемые (уже существуют в схеме проекта):
+Validate the type graph (Phase 3) for integrity.
 
-#### Шаг 1. Корректность модификации
+#### Step 1. Type Graph Completeness
 
-- План явно указывает, какие cells модифицируются, а какие создаются заново
-- Для модифицируемых cells план содержит diff: что добавить, что изменить, что удалить
-- Модификации не ломают существующие контракты, на которые ссылаются другие cells
+- Every type referenced in signatures (parameters, returns), mutations (`Object::Target`), or embeddings (
+  `->Entity: {}`) must exist as a declared type in the model
+- No implicit types — types that are used but nowhere declared (neither in plan CODEMANIFESTs nor in existing cells
+  via Imports)
 
-Если модификация не описана как diff — зафиксируйте как **Высокое**.
-Если модификация ломает существующие контракты — зафиксируйте как **Критическое**.
+If a type is used but undeclared — log as **Critical** (model gap blocks implementation).
 
-#### Шаг 2. Влияние на зависимые cells
+#### Step 2. Graph Connectivity
 
-- Проверьте, не затрагивают ли изменения cells, не упомянутые в плане, но зависящие от модифицируемых cells
-- Используйте `--depends-on <cell_path>` для поиска зависимых ячеек
+- All types must be reachable from entry points (EntryPoint types — those that initiate data flows)
+- No "dangling" types — types that nothing uses and that use nothing (entry points excepted)
+- A type that no other type references and that is not itself an entry point is suspicious
 
-Если есть незатронутые планом, но влияющие cells — зафиксируйте как **Высокое**.
+Unreachable types — log as **High** (possibly extraneous or missing a connection).
+Dangling types — log as **Medium** (may serve future expansion, but should be explicitly documented).
 
----
+#### Step 3. Connection Consistency
 
-### Фаза 8: Отчёт и исправление замечаний (интерактивно)
+- Where type A passes type X to type B — type X must have a consistent form (same source, same signature)
+- Input/output types must align along interaction chains: output of type N must match input of type N+1
+- No "magical" type transformations — every type transition must be explained by a contract (signature, mutation,
+  embedding)
 
-Соберите все замечания из Фаз 2–7 перед их представлением. Отсортируйте по критичности: Критические → Высокие → Средние.
-
-Представляйте замечания **по одному**. Для каждого замечания:
-
-#### Шаг 1. Покажите замечание
-
-Представьте одно замечание с:
-
-- **Критичность** (Критическая / Высокая / Средняя)
-- **Направление** (Плоская модель / Cells / Требования / Существующая архитектура)
-- **Местоположение** — точная ссылка на тип, cell, секцию плана или CODEMANIFEST
-- **Что не так** — ясное описание проблемы
-- **Предлагаемое исправление** — точное необходимое изменение, а не расплывчатый совет
-
-#### Шаг 2. Запросите решение у пользователя
-
-Используйте AskUserQuestion с вариантами:
-
-1. **Применить предложенное исправление** — немедленно применить исправление к плану архитектуры
-2. **Предложить альтернативу** — пользователь описывает другой подход к исправлению
-3. **Пропустить** - пользователь пропускает замечание
-
-#### Шаг 3. Примените решение
-
-- **Применить предложенное исправление**: обновите план архитектуры, затем перепроверьте, что исправление не вносит
-  новых проблем (повторно выполните релевантные проверки). Кратко сообщите результат перепроверки.
-- **Пропустить**: зафиксируйте замечание как «пропущенное» и продолжите.
-- **Предложить альтернативу**: обсудите альтернативу с пользователем, согласуйте исправление, примените его,
-  перепроверьте.
-
-#### Шаг 4. Переход к следующему замечанию
-
-Повторите с Шага 1 для следующего замечания. Показывайте краткий счётчик: «Замечание 3 из 12».
-
-После обработки всех замечаний покажите итоги:
-
-- **Исправлено**: N замечаний (список по критичности и направлению)
-- **Пропущено**: N замечаний (список по критичности и направлению)
-- **Статус плана архитектуры**: обновлён / без изменений
+Inconsistencies — log as **Critical**.
 
 ---
 
-## Результат
+### Phase 5: Cell Cohesion
 
-- Итоги замечаний: количество исправленных / пропущенных по критичности и направлению
-- Обновлённый файл плана архитектуры (если были применены исправления)
-- Вердикт верификации: пройден / не пройден
+**Goal:** Verify that cell boundaries are well-defined — high internal cohesion, minimal cross-cell coupling.
+
+#### Step 1. Internal Cell Cohesion
+
+For each cell in the plan:
+
+- Types within a single cell must interact with each other (exchange data via parameters, returns, mutations)
+- A type in a cell with no interaction with any other type in that cell signals a potential composition error
+
+If a type has no connections to other types in its cell — log as **Medium** (may belong in a different cell).
+
+#### Step 2. Boundary Soundness
+
+- Each cell must have a single area of responsibility — describable in one phrase without "and" (see `goga-cookbook`)
+
+If a cell requires "and" to describe — log as **High** (consider splitting).
+If closely coupled types are placed in separate cells without justification — log as **Medium**.
+
+#### Step 3. Dependency Directionality
+
+- Dependencies must flow from leaves to root: cells without Imports are designed first, dependent cells follow
+- No cycles between cells: if cell A imports from cell B, cell B must not import from cell A
+- Implementation order in the plan must match the dependency direction
+
+Cycles — log as **Critical**.
+Implementation order mismatch — log as **Critical** (implementation will be blocked).
+
+#### Step 4. Minimal Cross-Cell Coupling
+
+- A cell must not import more types from another cell than necessary
+- If cell A imports a significant portion of cell B's types — this indicates incorrect decomposition (cell B is too
+  granular or boundaries are misdrawn)
+
+If a cell imports the majority of another cell's types — log as **High** (re-examine boundaries).
+
+#### Step 5. Usages Connections Between Cells
+
+Use `goga-cookbook` as the authoritative source for usages validation rules.
+Verify that `.usages/` files and their CODEMANIFEST connections conform to `goga-cookbook` principles.
+
+Violations — log as **High**.
+
+#### Step 6. Usages Isolation
+
+**Principle:** Every `.usages/` file must be self-contained — consumers must understand the pattern without consulting
+other practices. Cross-references to other practices create implicit dependencies and violate isolation
+(see `goga-cookbook`).
+
+For each `.usages/` file in the plan, verify:
+
+- The file contains no references to other practices — no names of other usage files, no backticks referencing
+  practices from other `.usages/`
+- All necessary context is self-contained — consumers must not need to locate additional practices
+
+Cross-reference to another practice — log as **High** (isolation violation).
+Non-self-contained usage file — log as **High**.
 
 ---
 
-## Финальная самопроверка
+### Phase 6: CODEMANIFEST Requirements Sufficiency
 
-Перед завершением проверьте:
+**Goal:** Verify that CODEMANIFESTs contain sufficient information to support implementation.
 
-1. Была ли DSL спецификация загружена через скиллы `goga-cell` и `goga-cookbook`?
-2. Была ли загружена текущая схема проекта?
-3. Была ли проверена структура плана (все 4 обязательные секции, отсутствие кода реализации)?
-4. Была ли реконструирована плоская модель (граф всех типов)?
-5. Была ли проверена связность плоской модели (полнота, достижимость, непротиворечивость)?
-6. Была ли проверена связность cells (внутренняя связность, границы, направленность, минимальность, usages-связи)?
-7. Была ли проверена изоляция usages (отсутствие ссылок на другие практики, самодостаточность каждого файла)?
-8. Была ли проверена достаточность требований (точность контрактов, качество annotations)?
-9. Если существует файл задачи — было ли проверено покрытие требований задачи?
-10. Была ли проверена согласованность с существующей архитектурой (модификации, зависимые cells)?
-11. Было ли каждое замечание представлено по одному с решением об исправлении?
-12. Были ли одобренные исправления применены и перепроверены?
-13. Были ли предоставлены итоги исправленных/пропущенных замечаний?
-14. Были ли загружены и применены языковые правила через `goga-lang-disp`?
+#### Step 1. Contract Precision
 
-Если хотя бы один ответ «нет» — завершите недостающую верификацию перед возвратом.
+- Signatures must be unambiguous — a method/property signature must clearly convey its behavior, input types, and return
+  types
+- No methods/properties open to dual interpretation
+- Mutations and embeddings must be justified (not used simply "because available") — see criteria in `goga-cookbook`
+- Entity vs Routine classification must be justified for each type — see criteria in `goga-cookbook`
+- Type, method, and property names must conform to target language conventions (from `goga-lang-disp`)
+
+Ambiguous signature — log as **High**.
+Unjustified mutation/embedding — log as **Medium**.
+Incorrect Entity/Routine classification — log as **High**.
+Non-conformant naming — log as **High**.
+
+#### Step 2. Annotation Quality
+
+For each annotation in every CODEMANIFEST of the plan:
+
+- Annotations must not contain technical implementation details
+- Annotations must contain sufficient information for implementation — implementers must not need to guess behavior
+- For non-trivial logic, describe an algorithm or execution flow (step-by-step) where achievable
+- Document constraints and edge cases: empty input, None/null, errors, boundary values
+- No placeholders (TBD, TODO) — annotations must be complete
+
+Insufficient annotation — log as **Critical**.
+Non-conformant annotation format — log as **High**.
+Missing step-by-step logic description — log as **High**.
+Missing edge cases — log as **Medium**.
+
+#### Step 3. Task Requirements Coverage
+
+If the task file `docs/tasks/<topic>.md` exists:
+
+- Each requirement from the "Description" section must map to type(s) in the plan that fulfill it
+- Each acceptance criterion must have a contractual basis in the plan — the plan must enable fulfilling the criterion
+- Each risk from the task must be accounted for (via types, annotations, or architectural decisions)
+- Each subtask from the "Scope" section must be covered by the plan (if the task is decomposed)
+
+Uncovered requirement — log as **Critical**.
+Unfulfilled acceptance criterion — log as **High**.
+Unaccounted risk — log as **Medium**.
+
+---
+
+### Phase 7: Impact on Existing Architecture
+
+For cells marked as modifiable (already present in the project schema):
+
+#### Step 1. Modification Correctness
+
+- The plan must explicitly distinguish modified cells from newly created ones
+- For modified cells, the plan must provide a diff: additions, changes, and deletions
+- Modifications must not break existing contracts referenced by other cells
+
+Modification not described as a diff — log as **High**.
+Modification breaks existing contracts — log as **Critical**.
+
+#### Step 2. Impact on Dependent Cells
+
+- Determine whether changes affect cells not mentioned in the plan but dependent on modified cells
+- Run `--depends-on <cell_path>` to locate dependent cells
+
+Unacknowledged affected cells — log as **High**.
+
+---
+
+### Phase 8: Report and Finding Resolution (Interactive)
+
+Aggregate all findings from Phases 2–7 before presenting. Sort by severity: Critical → High → Medium.
+
+Present findings **one at a time**. For each finding:
+
+#### Step 1. Present the Finding
+
+Display one finding with:
+
+- **Severity** (Critical / High / Medium)
+- **Direction** (Flat Model / Cells / Requirements / Existing Architecture)
+- **Location** — precise reference to the type, cell, plan section, or CODEMANIFEST
+- **Issue** — clear problem description
+- **Suggested fix** — specific change required, not vague guidance
+
+#### Step 2. Request User Decision
+
+Use AskUserQuestion with these options:
+
+1. **Apply suggested fix** — apply the fix to the architecture plan immediately
+2. **Propose alternative** — user provides a different fix approach
+3. **Skip** — user defers the finding
+
+#### Step 3. Apply Decision
+
+- **Apply suggested fix**: update the architecture plan, then re-verify that the fix introduces no
+  new issues (re-run relevant checks). Report the re-verification result briefly.
+- **Skip**: mark the finding as "skipped" and proceed.
+- **Propose alternative**: discuss the alternative with the user, agree on a fix, apply it,
+  re-verify.
+
+#### Step 4. Proceed to Next Finding
+
+Repeat from Step 1 for the next finding. Display a brief counter: "Finding 3 of 12".
+
+After all findings are processed, present the summary:
+
+- **Fixed**: N findings (grouped by severity and direction)
+- **Skipped**: N findings (grouped by severity and direction)
+- **Architecture plan status**: updated / unchanged
+
+---
+
+## Output
+
+- Finding summary: fixed/skipped counts by severity and direction
+- Updated architecture plan file (if fixes were applied)
+- Verification verdict: passed / failed
+
+---
+
+## Final Self-Check
+
+Before completion, verify:
+
+1. Was the DSL specification loaded via `goga-cell` and `goga-cookbook`?
+2. Was the current project schema loaded?
+3. Was plan structure validated (all 4 mandatory sections, no implementation code)?
+4. Was the flat model reconstructed (unified type graph)?
+5. Was flat model cohesion validated (completeness, reachability, consistency)?
+6. Was cell cohesion validated (internal cohesion, boundaries, directionality, minimal coupling, usages connections)?
+7. Was usages isolation validated (no cross-references to other practices, self-contained files)?
+8. Was requirements sufficiency validated (contract precision, annotation quality)?
+9. If a task file exists — was task requirements coverage verified?
+10. Was consistency with existing architecture validated (modifications, dependent cells)?
+11. Was each finding presented individually with a fix decision?
+12. Were approved fixes applied and re-verified?
+13. Was a fixed/skipped findings summary provided?
+14. Were language rules loaded and applied via `goga-lang-disp`?
+
+If any answer is "no" — complete the missing verification before returning.
 
 ---

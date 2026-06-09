@@ -1,61 +1,61 @@
 ---
 name: goga-review
-description: Диспетчер специализированных review skills
+description: Dispatcher for specialized review skills
 ---
-Вы — dispatcher-команда для запуска специализированных review skills. Вы определяете тип ревью и вызываете соответствующий скилл.
+You are a dispatcher agent responsible for routing to specialized review skills. Determine the review type from the input and invoke the matching skill.
 
-## Диспетчеризация
+## Dispatch
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-### Определение типа ревью
+### Review Type Detection
 
-1. **Аргументы содержат путь** — извлеките тип из пути:
-   - Путь содержит `docs/arch/` → **architecture**
-   - Путь содержит `docs/design/` → **design**
-   - Путь содержит `docs/plans/` → **plan**
-   - Путь содержит `docs/tasks/` → **task**
-   - Путь не содержит `docs/` (или содержит другое расположение) → **cell**
+1. **Arguments contain a path** — derive the review type by matching path segments:
+   - Path contains `docs/arch/` → **architecture**
+   - Path contains `docs/design/` → **design**
+   - Path contains `docs/plans/` → **plan**
+   - Path contains `docs/tasks/` → **task**
+   - Path does not contain `docs/` (or points to another location) → **cell**
 
-   Извлеките `<target>` из пути:
-   - Для `docs/arch/javascript-contract.md` → `<target>` = `javascript-contract`
-   - Для `src/cell/my-cell` → `<target>` = `src/cell/my-cell`
-   - Для `my-cell` → `<target>` = `my-cell`
+   Extract `<target>` from the path:
+   - For `docs/arch/javascript-contract.md` → `<target>` = `javascript-contract`
+   - For `src/cell/my-cell` → `<target>` = `src/cell/my-cell`
+   - For `my-cell` → `<target>` = `my-cell`
 
-2. **Аргументы пусты** — спросите пользователя через AskUserQuestion:
-   - **question**: "Что вы хотите проверить?"
-   - **header**: "Тип ревью"
+2. **Arguments are empty** — prompt the user via AskUserQuestion:
+   - **question**: "What do you want to review?"
+   - **header**: "Review type"
    - **multiSelect**: false
    - **options**:
-     - **label**: "architecture", **description**: "Ревью плана архитектуры из docs/arch/"
-     - **label**: "design", **description**: "Ревью дизайн-документа из docs/design/"
-     - **label**: "plan", **description**: "Ревью плана реализации из docs/plans/"
-     - **label**: "cell", **description**: "Ревью ячейки (CODEMANIFEST и файловой структуры)"
-     - **label**: "task", **description**: "Ревью задачи из docs/tasks/"
+     - **label**: "architecture", **description**: "Review an architecture plan from docs/arch/"
+     - **label**: "design", **description**: "Review a design document from docs/design/"
+     - **label**: "plan", **description**: "Review an implementation plan from docs/plans/"
+     - **label**: "cell", **description**: "Review a cell (CODEMANIFEST and file structure)"
+     - **label**: "task", **description**: "Review a task from docs/tasks/"
 
-### Маршрутизация по типу
+### Type-Based Routing
 
 #### architecture
-Проверьте, существует ли `docs/arch/<target>.md`.
-1. **Не существует** — остановитесь и сообщите об этом пользователю.
-2. **Существует** — используйте **Skill tool** для вызова скилла `goga-review-arch` с `<target>` в качестве аргумента.
+Verify that `docs/arch/<target>.md` exists.
+1. **Not found** — stop execution and report to the user.
+2. **Found** — invoke skill `goga-review-arch` via the **Skill tool**, passing `<target>` as the argument.
 
 #### design
-Проверьте, существует ли `docs/design/<target>.md`.
-1. **Не существует** — остановитесь и сообщите об этом пользователю.
-2. **Существует** — используйте **Skill tool** для вызова скилла `goga-review-design` с `<target>` в качестве аргумента.
+Verify that `docs/design/<target>.md` exists.
+1. **Not found** — stop execution and report to the user.
+2. **Found** — invoke skill `goga-review-design` via the **Skill tool**, passing `<target>` as the argument.
 
 #### plan
-Проверьте, существует ли `docs/plans/<target>.md`.
-1. **Не существует** — остановитесь и сообщите об этом пользователю.
-2. **Существует** — используйте **Skill tool** для вызова скилла `goga-review-plan` с `<target>` в качестве аргумента.
+Verify that `docs/plans/<target>.md` exists.
+1. **Not found** — stop execution and report to the user.
+2. **Found** — invoke skill `goga-review-plan` via the **Skill tool**, passing `<target>` as the argument.
 
 #### cell
-Проверьте, существует ли директория `<target>` и файл `<target>/CODEMANIFEST`.
-1. **Не существует** — остановитесь и сообщите об этом пользователю.
-2. **Существует** — используйте **Skill tool** для вызова скилла `goga-review-cell` с `<target>` в качестве аргумента.
+Verify that directory `<target>` and file `<target>/CODEMANIFEST` both exist.
+1. **Not found** — stop execution and report to the user.
+2. **Found** — invoke skill `goga-review-cell` via the **Skill tool**, passing `<target>` as the argument.
 
 #### task
-Проверьте, существует ли `docs/tasks/<target>.md`.
-1. **Не существует** — остановитесь и сообщите об этом пользователю.
-2. **Существует** — используйте **Skill tool** для вызова скилла `goga-review-task` с `<target>` в качестве аргумента.
+Verify that `docs/tasks/<target>.md` exists.
+1. **Not found** — stop execution and report to the user.
+2. **Found** — invoke skill `goga-review-task` via the **Skill tool**, passing `<target>` as the argument.

@@ -1,23 +1,21 @@
 ---
 name: goga-cell
-description: DSL спецификация структуры cell и CODEMANIFEST файлов
+description: DSL specification for cell structure and CODEMANIFEST files
 ---
 # Goga Cell DSL
 
-## Назначение
+## Purpose
 
-Предоставляет DSL спецификацию — определение структуры cell, синтаксиса и семантики CODEMANIFEST файлов. Отвечает на
-вопрос что должно/может быть в cell и CODEMANIFEST файле.
+This skill provides the DSL specification that defines cell structure, CODEMANIFEST file syntax, and CODEMANIFEST file semantics. It specifies the required and optional elements within a cell and a CODEMANIFEST file.
 
-Этот скилл вызывается из других скиллов для получения контекста по правилам DSL.
+Other skills invoke this skill to obtain context on DSL rules.
 
 ---
 
-## Поведение
+## Behavior
 
-Прочитайте файл `dsl.md` в директории навыка — это единственный источник спецификации DSL.
+1. Read the file `dsl.md` located in the skill directory — it is the single authoritative source of the DSL specification.
 
-После прочтения используйте спецификацию для проверки корректности CODEMANIFEST: синтаксис, структура документа,
-правила Imports, Usages, Annotations, типы, мутации, встраивания.
+2. Apply the specification to validate CODEMANIFEST correctness, covering: syntax, document structure, Imports rules, Usages, Annotations, types, mutations, and embeddings.
 
-Не пересказывайте содержимое — применяйте правила DSL в контексте вызвавшего скилла.
+3. Do not restate the specification content — apply DSL rules within the context of the calling skill.

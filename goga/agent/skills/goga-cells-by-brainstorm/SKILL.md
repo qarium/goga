@@ -1,201 +1,202 @@
 ---
 name: goga-cells-by-brainstorm
-description: Создание и модификация cells по плану архитектуры
+description: Creation and modification of cells by architecture plan
 ---
 # Create Cells
 
 ## Purpose
 
-Создаёт новые и модифицирует существующие cells по плану архитектуры из `docs/arch/<topic>.md`. Материализует план в файловую структуру cells:
+Creates new cells and modifies existing cells based on the architecture plan defined in `docs/arch/<topic>.md`. Materializes the plan into the cell file structure:
 CODEMANIFEST, `.usages/`.
 
 ---
 
 ## Phases
 
-### Phase 1: Загрузка DSL спецификации и принципов применения DSL
+### Phase 1: Load DSL specification and DSL application principles
 
-#### Шаг 1: Загрузите DSL спецификацию
+#### Step 1: Load the DSL specification
 
-Для понимания определения cell и содержимого CODEMANIFEST файлов: используйте **Skill tool** для вызова `goga-cell`
-Используйте скилл `goga-cell` для:
- - Понимания структуры ячейки — из чего состоит cell (CODEMANIFEST, `.usages/`), как организован документ (заголовок, тело, подвал)
- - Понимания назначения директив CODEMANIFEST — за что отвечает `Imports`, `Usages`, `Annotations`, типы, мутации, встраивания
- - Проверки синтаксической корректности — регистр ключей, правила сигнатур, ограничения `location`, структура объявлений
+To understand cell definitions and CODEMANIFEST file contents, invoke the `goga-cell` skill via the **Skill tool**.
+Use the `goga-cell` skill to:
+ - Understand cell structure — cell composition (CODEMANIFEST, `.usages/`), document organization (header, body, footer)
+ - Understand CODEMANIFEST directive purposes — responsibilities of `Imports`, `Usages`, `Annotations`, types, mutations, embeddings
+ - Verify syntactic correctness — key casing, signature rules, `location` constraints, declaration structure
 
-#### Шаг 2: Загрузите Принципы применения DSL
+#### Step 2: Load DSL application principles
 
-Для понимания принципов работы с cell и CODEMANIFEST файлами: используйте **Skill tool** для вызова `goga-cookbook`
-Используйте скилл `goga-cookbook` для:
- - Определения необходимости создания cell — когда выделять отдельную ячейку, а когда расширять существующую
- - Выбора между Entity и Routine — когда тип должен иметь `methods`/`properties`, а когда это единственная операция
- - Определения гранулярности — насколько крупной или мелкой должна быть ячейка, признаки слишком мелкого/крупного деления
- - Выбора формы подключения Usages — файл, inline или URL, в каких случаях какая форма уместна
- - Определения порядка проектирования — проектировать cell от листьев к корню, сначала ячейки без зависимостей
- - Понимания когда использовать мутации (`Object::Target`) и встраивания (`->Entity: {}`), а когда достаточно Imports
- - Принципов написания usage файлов в `<cell_path>/.usages/` — структура, содержание, рекомендации по качеству
+To understand principles for working with cells and CODEMANIFEST files, invoke the `goga-cookbook` skill via the **Skill tool**.
+Use the `goga-cookbook` skill to:
+ - Determine whether to create a cell — when to extract a standalone cell versus extending an existing one
+ - Choose between Entity and Routine — when a type requires `methods`/`properties` versus a single operation
+ - Determine granularity — appropriate cell size, indicators of over- or under-splitting
+ - Select the Usages connection form — file, inline, or URL, and when each applies
+ - Establish the design order — design cells from leaves to root; cells without dependencies first
+ - Decide when to use mutations (`Object::Target`) and embeddings (`->Entity: {}`) versus Imports alone
+ - Write usage files in `<cell_path>/.usages/` — structure, content, and quality guidelines
 
-#### Шаг 3: Загрузите языковые правила реализации
+#### Step 3: Load language implementation rules
 
-Используйте **Skill tool** для вызова `goga-lang-disp` — получите языковой скилл целевого языка.
-Языковой скилл определяет конвенции реализации: структуру cell, фасад, правила сигнатур, **именование**.
-Примеры в других скиллах могут использовать именование одного языка (например snake_case), а целевой язык
-требует другого (например PascalCase) — языковой скилл содержит авторитетные правила для целевого языка.
+Invoke the `goga-lang-disp` skill via the **Skill tool** to obtain the target language skill.
+The language skill defines implementation conventions: cell structure, facade, signature rules, and **naming**.
+Examples in other skills may use naming conventions from one language (e.g., snake_case), while the target language
+requires different conventions (e.g., PascalCase). The language skill provides authoritative rules for the target language.
 
-Активно используйте загруженные DSL спецификации, Принципы применения DSL и языковые правила при создании и модификации cells
+Apply the loaded DSL specifications, DSL application principles, and language rules actively when creating and modifying cells.
 
 ---
 
-### Phase 2: Read and parse plan
+### Phase 2: Read and parse the plan
 
-#### Step 1. Locate plan file
+#### Step 1. Locate the plan file
 
-- Если аргумент содержит путь к файлу — используйте его
-- Если аргумент содержит только `<topic>` — ищите файл `docs/arch/<topic>.md`
-- Если аргумент не указан — найдите все файлы в `docs/arch/` и предложите список через **AskUserQuestion**
-- Если файл не найден — остановитесь и сообщите об этом пользователю
+- If the argument contains a file path — use it directly
+- If the argument contains only `<topic>` — search for the file `docs/arch/<topic>.md`
+- If no argument is provided — discover all files in `docs/arch/` and present the list via **AskUserQuestion**
+- If the file is not found — halt and report the error to the user
 
-#### Step 2. Parse plan structure
+#### Step 2. Parse the plan structure
 
-Прочитайте файл плана и извлеките:
+Read the plan file and extract:
 
-1. **Порядок реализации** — список cells от листьев к корню (с указанием причин порядка)
-2. **Артефакты для каждой cell** — CODEMANIFEST содержимое, `.usages/` файлы, списки `location` файлов
-3. **Карта зависимостей** — связи между cells через Imports
-4. **Чеклист верификации** — что проверить после реализации
+1. **Implementation order** — ordered list of cells from leaves to root, with rationale for the ordering
+2. **Artifacts per cell** — CODEMANIFEST content, `.usages/` files, `location` file lists
+3. **Dependency map** — inter-cell connections expressed through Imports
+4. **Verification checklist** — items to verify after implementation
 
 #### Step 3. Classify cells
 
-Для каждой cell в плане определите режим:
+For each cell in the plan, determine the operation mode:
 
-- **Новый** — cell директория не существует на диске
-- **Модификация** — cell директория существует (прочитайте текущий CODEMANIFEST для последующего diff)
+- **New** — the cell directory does not exist on disk
+- **Modification** — the cell directory exists (read the current CODEMANIFEST to compute the subsequent diff)
 
 ---
 
-### Phase 3: Validate plan
+### Phase 3: Validate the plan
 
-Проверьте план на корректность **до** создания файлов. Если найдены ошибки — остановитесь и сообщите пользователю.
+The agent must validate the plan for correctness **before** creating any files. If errors are detected, the agent must halt and report them to the user.
 
 #### Step 1. CODEMANIFEST DSL validation
 
-Для каждого CODEMANIFEST в плане проверьте соответствие DSL спецификации используйте скилл `goga-cell` и `goga-cookbook`:
+For each CODEMANIFEST in the plan, the agent must verify compliance with the DSL specification using the `goga-cell` and `goga-cookbook` skills:
 
-- **Структура документа** — Header / Body / Footer разделены через `---`
-- **Header** — корректные `Imports` (Types + From), `Usages` (ключ: значение), `Annotations` (блочный текст после `|`)
-- **Body** — корректные сигнатуры Entity и Routine, `location` директива, `methods`, `properties`, `annotations`
-- **Footer** — `Author`, `CreatedAt`, `Description` поля
-- **Синтаксис** — регистр ключей, формат сигнатур, ограничения `location`
+- **Document structure** — Header / Body / Footer delimited by `---`
+- **Header** — valid `Imports` (Types + From), `Usages` (key: value), `Annotations` (block text after `|`)
+- **Body** — valid Entity and Routine signatures, `location` directive, `methods`, `properties`, `annotations`
+- **Footer** — `Author`, `CreatedAt`, `Description` fields
+- **Syntax** — key casing, signature format, `location` constraints
 
 #### Step 2. Cross-cell consistency
 
-- Каждый `Imports` → `From: <path>` ссылается на cell, которая существует или будет создана в рамках плана
-- Типы в `Imports` → `Types` действительно определены в целевой cell
-- Порядок реализации корректен: cell создаётся после всех cells, от которых она зависит через Imports
+- Every `Imports` → `From: <path>` must reference a cell that exists or will be created within the plan
+- Types listed in `Imports` → `Types` must be defined in the target cell
+- The implementation order must be correct: each cell is created after all cells it depends on via Imports
 
 #### Step 3. Location directives
 
-- Каждый `location` указывает на файл **на том же уровне** что и CODEMANIFEST (без подкаталогов)
-- Имя файла имеет расширение, соответствующее языку проекта (определяется из языкового скилла, загруженного на Шаге 3 Фазы 1)
+- Every `location` must point to a file **at the same level** as the CODEMANIFEST (no subdirectories)
+- The file extension must correspond to the project language (as determined by the language skill loaded in Phase 1, Step 3)
 
 #### Step 4. Error handling
 
-Если найдены ошибки:
+If errors are detected:
 
-- Выведите список ошибок с указанием cell и конкретного нарушения
-- Предложите пользователю вернуться к `arch-by-brainstorm` для исправления плана
-- **Не продолжайте** до исправления плана
+- Output an error list specifying the cell and the specific violation
+- Recommend that the user return to `arch-by-brainstorm` to fix the plan
+- **Do not proceed** until the plan is corrected
 
 ---
 
 ### Phase 4: Create cells
 
-Обрабатывайте cells **строго в порядке** от листьев к корню, как указано в плане.
+Process cells **strictly in the order** specified in the plan, from leaves to root.
 
-Для каждой cell:
+For each cell:
 
-#### Step 1. Determine mode
+#### Step 1. Determine the mode
 
-- **Новый cell** — создать директорию и все файлы с нуля
-- **Модификация** — прочитать текущий CODEMANIFEST, применить изменения из плана
+- **New cell** — create the directory and all files from scratch
+- **Modification** — read the current CODEMANIFEST and apply the planned changes
 
-#### Step 2. Create directory structure
+#### Step 2. Create the directory structure
 
 ```
-# Для нового cell:
+# For a new cell:
 mkdir -p <cell_path>
 
-# Если в плане есть .usages/ файлы:
+# If the plan includes .usages/ files:
 mkdir -p <cell_path>/.usages
 ```
 
-Для модификации — убедитесь что директории существуют.
+For modifications, ensure that directories already exist.
 
-#### Step 3. Write CODEMANIFEST
+#### Step 3. Write the CODEMANIFEST
 
-**Новый cell:** запишите содержимое CODEMANIFEST из плана целиком в файл `<cell_path>/CODEMANIFEST`.
+**New cell:** write the full CODEMANIFEST content from the plan to `<cell_path>/CODEMANIFEST`.
 
-**Модификация:** примените diff из плана к текущему CODEMANIFEST. Diff может включать:
-- Добавить/изменить/удалить типы (Entity/Routine)
-- Добавить/изменить/удалить Imports
-- Добавить/изменить/удалить Usages
-- Добавить/изменить/удалить Annotations
-- Добавить/изменить/удалить methods/properties у Entity
-- Изменить Footer
+**Modification:** apply the diff from the plan to the current CODEMANIFEST. The diff may include:
+- Add, change, or remove types (Entity/Routine)
+- Add, change, or remove Imports
+- Add, change, or remove Usages
+- Add, change, or remove Annotations
+- Add, change, or remove methods/properties on an Entity
+- Update Footer fields
 
-Используйте Edit tool для точечных изменений.
+Use the Edit tool for targeted changes.
 
 #### Step 4. Create .usages/ files
 
-Для каждого `.usages/` файла из плана:
+For each `.usages/` file specified in the plan:
 
-- Создайте файл `<cell_path>/.usages/<usage_name>.md` с полным содержимым из плана
-- При модификации — если файл существует, обновите его содержимое
+- Create the file `<cell_path>/.usages/<usage_name>.md` with the full content from the plan
+- For modifications, if the file already exists, update its content
 
 #### Step 5. Cell report
 
-После обработки каждой cell выведите:
+After processing each cell, output:
 
-- Режим (создание / модификация)
-- Список созданных/изменённых файлов
+- Mode (creation or modification)
+- List of created or modified files
 
 ---
 
 ### Phase 5: Validation
 
-#### Step 1. Run linter
+The agent must run tooling and verify results.
+
+#### Step 1. Run the linter
 
 ```bash
 goga lint
 ```
 
-Если linter сообщает об ошибках — исправьте их и повторите. Используйте DSL спецификацию скилл `goga-cell` и `goga-cookbook`
-для понимания причин ошибок.
+If the linter reports errors, the agent must fix them and rerun. Use the `goga-cell` and `goga-cookbook` DSL specification skills to diagnose the error causes.
 
-#### Step 2. Run schema
+#### Step 2. Run the schema check
 
 ```bash
 goga schema
 ```
 
-Проверьте что все новые cells видны в иерархии и их связи соответствуют карте зависимостей.
+The agent must verify that all new cells appear in the hierarchy and that their connections match the dependency map.
 
 #### Step 3. Checklist verification
 
-Проверьте чеклист верификации из плана:
+The agent must verify the checklist items from the plan:
 
-- Все cells из плана созданы/модифицированы
-- Все CODEMANIFEST файлы проходят linter
-- Все `.usages/` файлы созданы
+- All cells from the plan have been created or modified
+- All CODEMANIFEST files pass the linter
+- All `.usages/` files have been created
 
 ---
 
 ### Phase 6: Final report
 
-Выведите итоговый отчёт:
+Output the final report:
 
-1. **Список cells** — для каждой: путь, режим (создание/модификация), созданные файлы
-2. **Карта зависимостей** — подтверждённая диаграмма связей между cells
-3. **Статус валидации** — результаты linter и schema
+1. **Cell list** — for each cell: path, mode (creation/modification), files created
+2. **Dependency map** — confirmed diagram of inter-cell connections
+3. **Validation status** — linter and schema results
 
 ---

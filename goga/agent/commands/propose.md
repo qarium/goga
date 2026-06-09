@@ -1,7 +1,7 @@
 # goga-propose
 
-Диспетчер команды propose.
+Command dispatcher for propose.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-propose` с аргументами.
+Use the **Skill tool** to invoke the `goga-propose` skill with arguments.

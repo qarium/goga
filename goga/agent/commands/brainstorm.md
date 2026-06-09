@@ -1,7 +1,7 @@
 # goga-brainstorm
 
-Диспетчер команды brainstorm.
+Command dispatcher for brainstorm.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-brainstorm` с аргументами.
+Use the **Skill tool** to invoke the `goga-brainstorm` skill with arguments.

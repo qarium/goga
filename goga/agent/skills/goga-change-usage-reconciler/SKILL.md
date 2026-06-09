@@ -1,6 +1,6 @@
 ---
 name: goga-change-usage-reconciler
-description: Обеспечение согласованности .usages файлов с изменениями
+description: Ensures .usages file consistency with code changes
 ---
 # goga-change-usage-reconciler
 

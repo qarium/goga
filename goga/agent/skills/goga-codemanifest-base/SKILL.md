@@ -1,46 +1,46 @@
 ---
 name: goga-codemanifest-base
-description: Загрузка конфигурации проекта из .goga/config.yml
+description: Load project configuration from .goga/config.yml
 ---
-# Загрузка конфигурации проекта
+# Load project configuration
 
-## Назначение
+## Purpose
 
-Загружает базовые usages и annotations проекта из конфигурационного файла `.goga/config.yml` с помощью CLI-команд `goga config`.
-Эти настройки задают проектные практики и инструкции, доступные всем CODEMANIFEST файлам.
-
----
-
-## Поведение
-
-Не пересказывайте содержимое — применяйте загруженные usages и annotations в контексте вызвавшего скилла.
+Loads the project's base usages and annotations from the `.goga/config.yml` configuration file via `goga config` CLI commands.
+These settings define project practices and instructions available to all CODEMANIFEST files.
 
 ---
 
-## Инструкция
+## Behavior
 
-### Шаг 1: Получите базовые usages проекта
+Do not restate the content — apply the loaded usages and annotations in the context of the invoking skill.
 
-Выполните команду `goga config codemanifest.usages` чтобы получить базовые usages проекта из секции `codemanifest.usages` в `.goga/config.yml`.
-Это проектные практики, доступные всем CODEMANIFEST файлам.
+---
 
-### Шаг 2: Получите базовые annotations проекта
+## Instruction
 
-Выполните команду `goga config codemanifest.annotations` чтобы получить базовые annotations проекта — текстовые инструкции
-для AI-агента из секции `codemanifest.annotations` в `.goga/config.yml`.
+### Step 1: Retrieve the project's base usages
 
-### Шаг 3: Обработка результата
+Run `goga config codemanifest.usages` to retrieve the project's base usages from the `codemanifest.usages` section in `.goga/config.yml`.
+These are project practices available to all CODEMANIFEST files.
 
-Если команды вернули ошибку «Option not found» — значит секция `codemanifest` отсутствует в `.goga/config.yml`, базовые
-annotations и usages не заданы, зафиксируйте это как факт.
+### Step 2: Retrieve the project's base annotations
 
-Если секция `codemanifest` существует:
+Run `goga config codemanifest.annotations` to retrieve the project's base annotations — text instructions
+for the AI agent — from the `codemanifest.annotations` section in `.goga/config.yml`.
 
-1. **Прочитайте файлы практик** — для каждого usage из `codemanifest.usages` прочитайте соответствующий md файл
-   из каталога `.goga/usages/`. Эти практики обязательны для учёта при проектировании всех CODEMANIFEST файлов.
+### Step 3: Process the result
 
-2. **Проанализируйте базовые annotations** — если annotations содержат инструкции влияющие на формирование
-   CODEMANIFEST (например требования к структуре, конвенции, ограничения), зафиксируйте их как обязательные
-   условия проектирования.
+If the commands return an "Option not found" error, the `codemanifest` section is absent from `.goga/config.yml`; no base
+annotations or usages are defined — record this as a fact.
+
+If the `codemanifest` section exists:
+
+1. **Read the usage files** — for each usage listed in `codemanifest.usages`, read the corresponding md file
+   from the `.goga/usages/` directory. These practices are mandatory when designing all CODEMANIFEST files.
+
+2. **Analyze the base annotations** — if annotations contain instructions affecting CODEMANIFEST
+   formation (e.g., structure requirements, conventions, constraints), record them as mandatory
+   design constraints.
 
 ---

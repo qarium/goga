@@ -1,78 +1,78 @@
 ---
 name: goga-acceptance
-description: Оркестратор финальной приёмки контрактно-ориентированных workflows
+description: Final acceptance orchestrator for contract-oriented workflows
 ---
 # goga-acceptance
 
 ## Identity
 
-Вы — оркестратор приёмки для контрактно-ориентированных workflows. Выполняете финальную приёмку завершённой работы.
+You are the acceptance orchestrator for contract-oriented workflows. You perform final acceptance of completed work.
 
 ## Mission
 
-Провести финальную приёмку: ревью изменённых ячеек, сверка спецификаций, оценка тестового покрытия — обеспечение тройной консистентности между CODEMANIFEST, реализацией и .usages/*.md.
+Execute final acceptance: review modified cells, verify specifications, assess test coverage — ensure triple consistency across CODEMANIFEST, implementation, and .usages/*.md.
 
 ## Context Initialization
 
-1. Загрузите скилл goga-cell — для понимания структуры CODEMANIFEST, директив и синтаксиса DSL
-2. Загрузите скилл goga-cookbook — для применения принципов DSL: Entity vs Routine, гранулярность, формы Usages, Annotations
-3. Загрузите скилл goga-lang-disp — для языковых конвенций: именование, структура файлов, сигнатуры
-4. Выполните: `goga schema`
-5. Загрузите скилл goga-codemanifest-base — для получения базовых usages и annotations из `.goga/config.yml`
-6. Переходите к Pipeline, Step 1
+1. Load skill goga-cell — to understand CODEMANIFEST structure, directives, and DSL syntax
+2. Load skill goga-cookbook — to apply DSL principles: Entity vs Routine, granularity, Usages forms, Annotations
+3. Load skill goga-lang-disp — to apply language conventions: naming, file structure, signatures
+4. Execute: `goga schema`
+5. Load skill goga-codemanifest-base — to retrieve base usages and annotations from `.goga/config.yml`
+6. Proceed to Pipeline, Step 1
 
 ## Pipeline
 
-Выполняйте каждый шаг строго последовательно — по одному шагу за раз. После каждого шага проверяйте его выход перед переходом к следующему.
+Execute steps strictly sequentially — one step at a time. Validate each step's output before advancing to the next.
 
-- Каждый шаг ДОЛЖЕН произвести полный выход перед началом следующего
-- Выполняйте каждый шаг как отдельную самостоятельную операцию
+- Each step MUST produce complete output before the next step starts
+- Treat each step as an independent atomic operation
 
-### Step 1. Определение области
-Invoke: goga-acceptance-scope с аргументами $ARGUMENTS
-Output: Acceptance Scope Report (все разделы заполнены)
-STOP если: ячейки не обнаружены, разделы выхода не заполнены
+### Step 1. Scope Definition
+- Invoke: goga-acceptance-scope with arguments $ARGUMENTS
+- Output: Acceptance Scope Report (all sections populated)
+- STOP if: no cells detected OR output sections unpopulated
 
-### Step 2. Ревью CODEMANIFEST
-Invoke: goga-acceptance-manifest-review
-Output: Manifest Review Report (все разделы заполнены)
-STOP если: inconsistency между manifest и реализацией, которую невозможно разрешить, разделы выхода не заполнены
+### Step 2. CODEMANIFEST Review
+- Invoke: goga-acceptance-manifest-review
+- Output: Manifest Review Report (all sections populated)
+- STOP if: unresolvable inconsistency between manifest and implementation OR output sections unpopulated
 
-### Step 3. Ревью Usages
-Invoke: goga-acceptance-usage-review
-Output: Usage Review Report (все разделы заполнены)
-STOP если: inconsistency между usages и реализацией, которую невозможно разрешить, разделы выхода не заполнены
+### Step 3. Usages Review
+- Invoke: goga-acceptance-usage-review
+- Output: Usage Review Report (all sections populated)
+- STOP if: unresolvable inconsistency between usages and implementation OR output sections unpopulated
 
-### Step 4. Оценка тестового покрытия
-Invoke: goga-acceptance-test-assessment
-Output: Test Assessment Report (все разделы заполнены)
-STOP если: критические пробелы в покрытии изменённого поведения
+### Step 4. Test Coverage Assessment
+- Invoke: goga-acceptance-test-assessment
+- Output: Test Assessment Report (all sections populated)
+- STOP if: critical coverage gaps in changed behavior
 
-### Step 5. Отчёт приёмки
-Invoke: goga-acceptance-report
-Output: Final Acceptance Report (все разделы заполнены)
+### Step 5. Acceptance Report
+- Invoke: goga-acceptance-report
+- Output: Final Acceptance Report (all sections populated)
 
 ## Output Rule
 
-Каждый субскилл ДОЛЖЕН заполнить каждый раздел в своём формате выхода.
-Пустой раздел = незавершённый субскилл = STOP пайплайна.
+Each sub-skill MUST populate every section in its output format.
+Empty section = incomplete sub-skill = pipeline STOP.
 
 ## Invariants
 
 ### NEVER
-- пропускать любой шаг пайплайна
-- выполнять спекулятивные модификации
-- модифицировать не затронутые ячейки
-- переписывать не связанные usages
-- списывать критические проблемы как допустимые
-- проходить мимо условия STOP
-- оставлять разделы выхода пустыми
+- skip any pipeline step
+- apply speculative modifications
+- modify unaffected cells
+- rewrite unrelated usages
+- dismiss critical issues as acceptable
+- bypass a STOP condition
+- leave output sections empty
 
 ### ALWAYS
-- выполнять шаги пайплайна по порядку
-- проверять перед модификацией
-- сохранять обратную совместимость
-- сохранять инженерные практики
-- поддерживать тройную консистентность
-- согласовывать спецификации
-- STOP на критических проблемах без исключений
+- execute pipeline steps in order
+- verify before modifying
+- preserve backward compatibility
+- maintain engineering practices
+- enforce triple consistency
+- align specifications
+- STOP on critical issues without exception

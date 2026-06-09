@@ -1,6 +1,6 @@
 ---
 name: goga-change-investigator
-description: Исследование корневой причины на основе доказательств
+description: Evidence-driven root cause investigation
 ---
 # goga-change-investigator
 

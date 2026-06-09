@@ -1,251 +1,229 @@
 ---
 name: goga-cookbook
-description: Принципы применения DSL спецификации при проектировании cell
+description: Principles for applying DSL specification in cell and CODEMANIFEST design
 ---
 # Goga Cookbook
 
-## Назначение
+## Purpose
 
-Предоставляет принципы применения DSL спецификации при проектировании cell и CODEMANIFEST файлов. Отвечает на вопрос,
-как и в каких случаях применять конструкции DSL.
+Provides principles for applying DSL specification constructs when designing cells and CODEMANIFEST files. Defines how and when to apply DSL constructs.
 
-Этот скилл вызывается из других скиллов для получения контекста по принципам работы с DSL.
+This skill is called from other skills to obtain DSL design context.
 
-## Поведение
+## Behavior
 
-Применяйте принципы в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений при проектировании CODEMANIFEST и cell.
+Apply principles within the context of the calling skill. Do not reproduce or summarize the content — use it to make design decisions for CODEMANIFEST files and cells.
 
 ---
 
-# Принципы применения DSL спецификации при проектировании cells и CODEMANIFEST файлов
+# Principles for Applying DSL Specification in Cell and CODEMANIFEST Design
 
-DSL спецификация отвечает на вопрос - что должно/может быть в cell и CODEMANIFEST файле, данный документ отвечает на
-вопрос как и в каких случаях это применяется
+The DSL specification defines what may or must appear in a cell and a CODEMANIFEST file. This document defines how and when to apply those constructs.
 
 ## Cell
 
-### Когда создавать cell
+### When to create a cell
 
-Cell создаётся когда выделяется самостоятельная область ответственности с чёткой границей API.
-Важно использовать принцип *одна зона ответственности — одна cell*
-Признаки того что нужен отдельная cell (достаточно одного из):
+Create a cell when you identify a distinct responsibility domain with a well-defined API boundary.
+Enforce the principle: **one responsibility zone — one cell**.
 
-- Логику можно отделить от других частей системы
-- Логика имеет собственную модель данных, отличную от других частей системы
-- Есть потребность переиспользовать функциональность в разных местах проекта
-- Можно сформулировать назначение одной фразой без "и"
+A separate cell is warranted when **at least one** of the following holds:
 
-### Порядок проектирования
+- The logic can be decoupled from other system components
+- The logic owns a data model distinct from other system components
+- The functionality must be reused across multiple areas of the project
+- The purpose can be stated in a single phrase without "and"
 
-Проектируй cell снизу вверх — от листьев к корню. Если cell A зависит от cell B (через Imports), сначала спроектируй
-B. Cell без зависимостей проектируется первым.
+### Design order
 
-Причина: CODEMANIFEST нижестоящего cell определяет типы и практики, которые вышестоящий cell импортирует. Невозможно
-корректно описать Imports не зная что именно предоставляет зависимый cell.
+Design cells bottom-up — from leaves to root. If cell A depends on cell B (via Imports), design B first.
+A cell with no dependencies is designed first.
 
-### Гранулярность
+**Rationale:** The CODEMANIFEST of a dependency cell defines the types and practices that dependent cells import. You cannot correctly describe Imports without knowing exactly what the dependency provides.
 
-Cell должен быть достаточно крупным чтобы иметь смысл как самостоятельная единица, и достаточно мелким чтобы его
-контракт можно было описать без размывания фокуса.
+### Granularity
 
-**Слишком мелко** — один cell на каждую функцию. Если несколько типов всегда используются вместе и не имеют смысла по
-отдельности — они в одном cell.
+A cell must be large enough to function as an independent unit, yet small enough to describe its contract without losing focus.
 
-**Слишком крупно** — cell описывает разнородную функциональность. Если для описания назначения cell требуется "и" —
-стоит разбить на несколько.
+**Too fine** — one cell per function. When multiple types are always used together and have no independent meaning, they belong in the same cell.
 
-### Каталоги usage файлов — два уровня
+**Too coarse** — a cell covers heterogeneous functionality. If describing the cell's purpose requires "and", consider splitting it into multiple cells.
 
-Практики живут на двух уровнях:
+### Usage file directories — two levels
 
-**Проектный `.goga/usages/`** (в корне проекта) — общие практики не привязанные к конкретной cell: библиотеки, инструменты,
-конвенции, стандарты. Доступны любой cell в проекте. Подключаются через путь в директиве `Usages` в CODEMANIFEST.
+Practices reside at two levels:
 
-**Cell-level `<cell_path>/.usages/`** (внутри cell) — практики для потребителей API конкретной cell: как работать с фасадом cell,
-какие паттерны применять. Потребитель подключает их через `Imports` ссылаясь на cell-провайдер.
+**Project-level `.goga/usages/`** (project root) — shared practices not bound to any specific cell: libraries, tools, conventions, standards. Available to every cell in the project. Referenced via path in the `Usages` directive of CODEMANIFEST.
 
-Когда какую практику куда помещать:
-- Если практика описывает библиотеку/инструмент/конвенцию общую для проекта — проектный `.goga/usages/`
-- Если практика описывает как пользоваться API конкретной cell — cell-level `<cell_path>/.usages/`
+**Cell-level `<cell_path>/.usages/`** (inside a cell) — practices for consumers of a specific cell's API: how to use the cell facade, which patterns to apply. Consumers reference them through `Imports` pointing to the provider cell.
 
-### Написание usage файлов внутри <cell_path>/.usages/
+Placement rules:
+- If the practice describes a library, tool, or project-wide convention → project-level `.goga/usages/`
+- If the practice describes how to consume a specific cell's API → cell-level `<cell_path>/.usages/`
 
-usage.md файл внутри `<cell_path>/.usages/` создаётся/обновляется при создании/обновлении CODEMANIFEST файлов либо
-когда внешний потребитель нуждается в инструкции по работе с API cell.
+### Writing usage files inside <cell_path>/.usages/
 
-При написании или обновлении файлов практик в `<cell_path>/.usages/` следуйте этим рекомендациям:
+Create or update a `usage.md` file inside `<cell_path>/.usages/` when creating or updating CODEMANIFEST files, or when an external consumer requires guidance on working with the cell's API.
 
-**Назначение:**
+Follow these guidelines when writing or updating practice files in `<cell_path>/.usages/`:
 
-Файлы в `<cell_path>/.usages/` — это документация **для потребителя** API cell. Они описывают, как работать с фасадом
-cell, а не требования к самой cell.
+**Purpose:**
 
-**Рекомендации по содержанию:**
-- Сначала проектируется CODEMANIFEST файл, затем пишется usage файл в `<cell_path>/.usages/` директории
-- Начинайте каждый файл с чёткого заявления о домене — какую область покрывает usage и для кого она предназначена
-- Описывайте **готовые паттерны использования** — конкретные сценарии вызова API cell с примерами кода
-- Включайте примеры типичного использования — минимальный рабочий пример для каждого ключевого сценария
-- Когда ячейка предоставляет сложный API с несколькими входными точками — сгруппируйте примеры по функциональным доменам
-  в отдельные файлы в `<cell_path>/.usages/`
-- Если практика ссылается на типы из контракта — используйте имена, совпадающие с сигнатурами в `CODEMANIFEST`, чтобы
-  потребитель мог однозначно найти нужную сущность
-- Документируйте побочные эффекты, предусловия и ограничения, которые важны потребителю, но не являются частью
-  самого контракта
+Files in `<cell_path>/.usages/` are documentation **for the consumer** of the cell's API. They describe how to work with the cell facade — not requirements imposed on the cell itself.
 
-**Рекомендации по качеству:**
+**Content guidelines:**
+- Design the CODEMANIFEST file first, then write the usage file in the `<cell_path>/.usages/` directory
+- Open each file with a clear domain statement — which area the usage covers and its target audience
+- Describe **ready-to-use patterns** — concrete API call scenarios with code examples
+- Include typical usage examples — a minimal working example for each key scenario
+- When a cell exposes a complex API with multiple entry points, group examples by functional domain into separate files within `<cell_path>/.usages/`
+- When referencing contract types, use names matching the signatures in `CODEMANIFEST` so the consumer can locate the entity unambiguously
+- Document side effects, preconditions, and constraints relevant to the consumer but not part of the contract itself
 
-- Один файл в `<cell_path>/.usages/` — один функциональный домен. Не смешивайте unrelated сценарии в одном файле
-- Имя файла должно быть кратким и отражать суть описанного внутри
-- При подключении практики через директиву `Usages` в `CODEMANIFEST` ключ должен совпадать с именем файла
-  (без расширения)
-- Практика должна быть самодостаточной — потребитель должен понять паттерн без необходимости читать исходный код ячейки
-- Практика не должна ссылаться на другие практики - весь необходимый контекст включён в саму практику.
-  Ссылки создают неявные зависимости и нарушают изоляцию
-- Практика не должна дублировать аннотации из `CODEMANIFEST` — она описывает **как использовать**, а не **что должно
-  быть реализовано**
-- Практика не создаёт контрактных обязательств для ячейки — она остаётся на уровне документации
+**Quality guidelines:**
 
-## CODEMANIFEST файл
+- One file in `<cell_path>/.usages/` — one functional domain. Do not mix unrelated scenarios in a single file
+- File names must be concise and descriptive of the content
+- When connecting a practice via the `Usages` directive in `CODEMANIFEST`, the key must match the filename (without extension)
+- Practices must be self-contained — consumers must understand the pattern without reading the cell's source code
+- Practices must not reference other practices — all necessary context resides within the practice itself. Cross-references introduce implicit dependencies and break isolation
+- Practices must not duplicate annotations from `CODEMANIFEST` — they describe **how to use**, not **what to implement**
+- Practices do not impose contractual obligations on the cell — they remain documentation-level artifacts
 
-### Порядок проектирования
+## CODEMANIFEST File
 
-1. **Header** — определи Imports, Usages, Annotations. Это задаёт контекст в котором будет существовать контракт
-2. **Body** — описывай Entity, Routine. Контекст уже определён, поэтому типы пишутся с учётом доступных практик и
-   импортов
-3. **Footer** — зафиксируй Author, CreatedAt, Description
+### Design order
+
+1. **Header** — define Imports, Usages, Annotations. This establishes the context in which the contract operates
+2. **Body** — declare Entity, Routine. With context already set, types leverage available practices and imports
+3. **Footer** — record Author, CreatedAt, Description
 
 ### Header
 
-#### Imports — когда импортировать
+#### Imports — when to import
 
-Импортируй **Types** из другого cell когда:
-- Текущему контракту нужен тип определённый в другом cell (в сигнатуре, аргументах, возврате)
-- Нужно мутировать или встроить тип из другого cell
+Import **Types** from another cell when:
+- The current contract requires a type defined in another cell (in a signature, argument, or return value)
+- You need to mutate or embed a type from another cell
 
-Импортируй **Usages** из другого cell когда:
-- Требуется сослаться на практику из другого cell в annotations
+Import **Usages** from another cell when:
+- You need to reference a practice from another cell within annotations
 
-#### Usages директива в заголовке CODEMANIFEST файла — когда объявлять практику
+#### Usages directive in the CODEMANIFEST header — when to declare a practice
 
-Объявляй Usages когда:
-- Есть внешняя библиотека или инструмент которые должен учитывать агент при реализации
-- Существует паттерн или конвенция применимая к типам в контракте
-- Требуется задать структуру или формат данных, повторяющийся в разных местах
+Declare Usages when:
+- An external library or tool exists that the agent must account for during implementation
+- A pattern or convention applies to the contract's types
+- A data structure or format recurs across multiple locations
 
-**Три формы подключения** выбираются по ситуации:
+**Three connection forms** — choose based on the situation:
 
-**Файл** — путь к md-файлу в `.goga/usages/`, относительно корня проекта:
-- Практика объёмная и засорит CODEMANIFEST если написать inline
-- Практика переиспользуется в нескольких cells — файл живёт в проектном `.goga/usages/` и подключается через путь к md файлу
-- Практика развивается независимо от контракта — её можно обновить не трогая CODEMANIFEST
-- Пример: описание паттерна проектирования, конвенции по работе с БД, инструкция по библиотеке
+**File** — path to an md file in `.goga/usages/`, relative to the project root:
+- The practice is extensive and would clutter CODEMANIFEST if written inline
+- The practice is reused across multiple cells — the file lives in project-level `.goga/usages/` and is referenced by path
+- The practice evolves independently from the contract — it can be updated without modifying CODEMANIFEST
+- Examples: design pattern descriptions, database conventions, library instructions
 
-**Inline** — текст прямо в CODEMANIFEST:
-- Практика короткая — пара предложений или один абзац
-- Практика специфична для данного cell и не имеет смысла вне его контекста
-- Создавать под неё отдельный файл — избыточно
-- Пример: "Использовать immutability для всех возвращаемых значений"
+**Inline** — text directly in CODEMANIFEST:
+- The practice is short — a few sentences or a single paragraph
+- The practice is specific to this cell and has no meaning outside its context
+- Creating a separate file would be overkill
+- Example: "Use immutability for all return values"
 
-**URL** — ссылка на внешний ресурс:
-- Практика это внешняя документация которую нет смысла дублировать в проект (документация библиотеки, RFC, стандарт)
-- Практика поддерживается сторонним источником и актуальна там
+**URL** — link to an external resource:
+- The practice is external documentation with no value in duplicating (library docs, RFCs, standards)
+- The practice is maintained by a third-party source and kept current there
 
-**Рекомендации:**
-- Если практика импортируется через `Imports` и может конфликтовать по имени с локальной — используйте алиас в
-  `Imports` (`practice_name AS alias`), а не переименовывайте ключ в `Usages`
-- Каждая подключённая практика должна использоваться хотя бы в одной аннотации — глобальной, типа, метода или свойства
+**Recommendations:**
+- When a practice imported via `Imports` may conflict by name with a local practice, use an alias in `Imports` (`practice_name AS alias`) rather than renaming the key in `Usages`
+- Every connected practice must be referenced in at least one annotation — global, type-level, method-level, or property-level
 
 #### Annotations
 
-**Зачем** писать annotations:
-- Требования к реализации — что должен делать агент при написании кода
-- Алгоритмы — по шагам, как что должен делать код
-- Ограничения — чего агент не должен делать
-- Архитектурные ожидания — какую структуру или подход использовать
-- Подсказки по использованию практик — какую практику применить и как
-- Annotations — единственный механизм связать практику с контрактом. Практика подключена через Usages или Imports, но
-  применяется только когда на неё ссылается annotation. Без annotation практика подключена но не применена.
+**Why** write annotations:
+- Implementation requirements — what the agent must do when writing code
+- Algorithms — step-by-step instructions for code behavior
+- Constraints — what the agent must not do
+- Architectural expectations — which structure or approach to use
+- Practice application hints — which practice to apply and how
+- **Annotations are the sole mechanism for binding a practice to a contract.** A practice connected via Usages or Imports applies only when an annotation references it. Without an annotation, the practice is connected but not applied.
 
-**Когда** писать annotations:
-Глобальные (в заголовке документа):
-- Есть требования применимые ко всем типам в cell (например библиотека, стиль ошибок, логирование)
-- Нужно задать приоритет между конфликтующими практиками из Usages
+**When** to write annotations:
+Global (in the document header):
+- Requirements apply to all types in the cell (e.g., a library, error style, logging)
+- You need to prioritize between conflicting practices from Usages
 
-На уровне типа:
-- Определение ответственности
-- Сигнатура не передаёт ожидаемое поведение
-- Требуется описать взаимодействие типа с другими cell через usages,
-  использование ссылок на другие типы только в крайнем случаи, например при необходимости реализации паттерна или алгоритма
+At the type level:
+- Defining responsibility
+- The signature alone does not convey expected behavior
+- Describing the type's interaction with other cells via usages; reference other types only when necessary — for example, to implement a pattern or algorithm
 
-На уровне метода/свойства:
-- Нужна специфика конкретной операции, формат входных/выходных данных, побочные эффекты, требования, алгоритмы
+At the method/property level:
+- Operation-specific details: input/output format, side effects, requirements, algorithms
 
-Annotations на разных уровнях не должны:
-- дублировать друг друга
-- содержать детали реализации
+Annotations at different levels must not:
+- duplicate each other
+- contain implementation details
 
-### Ссылки в annotations
+### References in annotations
 
-Ссылки через обратные кавычки (`` ` ``) используй для:
-- Переменных из сигнатуры — чтобы агент понимал, о каком параметре речь
-- Практик из Usages/Imports — чтобы агент знал какую практику применить
-- Типов из Imports — чтобы агент понимал типы данных
+Use backtick references (`` ` ``) for:
+- Signature variables — so the agent identifies the parameter under discussion
+- Usages/Imports practices — so the agent knows which practice to apply
+- Import types — so the agent identifies the data types
 
-**Не ссылайся** на то чего нет в контексте документа — каждая ссылка должна быть разрешима внутри CODEMANIFEST.
+**Do not reference** anything outside the document context — every reference must resolve to an entity within the CODEMANIFEST file.
 
 ### Body
 
-#### Entity vs Routine — когда что
+#### Entity vs Routine — when to use which
 
-**Entity** (с methods и/или properties) — когда тип имеет состояние и/или несколько операций:
+**Entity** (with methods and/or properties) — when a type carries state and/or exposes multiple operations:
 
-- Объект с данными и поведением
-- Сервис с набором методов
-- Конфигурация с параметрами
+- An object with data and behavior
+- A service with a set of methods
+- A configuration with parameters
 
-**Entity сигнатура:**
-- Описывает параметры получения экземпляра типа — как потребитель получает объект
-- Назначение — зафиксировать входные данные, необходимые для создания типа
+**Entity signature:**
+- Describes how to obtain an instance of the type — how the consumer acquires the object
+- Purpose: capture the input data required to construct the type
 
-**Routine** (без methods и properties) — когда тип это единственная операция:
+**Routine** (no methods or properties) — when a type represents a single operation:
 
-- Функция-трансформер (вход -> выход)
-- Фабрика/конструктор
-- Валидатор, парсер, конвертер
+- Transformer function (input → output)
+- Factory/constructor
+- Validator, parser, converter
 
-**Routine сигнатура:**
-- Описывает вход и выход единственной операции — что подаётся и что возвращается
-- Возвращаемое значение имеет семантическую метку (например `number:int`), где `number` поясняет смысл
-  возвращаемого типа
-- Если Routine ничего не возвращает — выход можно опустить
+**Routine signature:**
+- Describes the input and output of the sole operation — what goes in and what comes out
+- The return value carries a semantic label (e.g. `number:int`), where `number` clarifies the meaning of the returned type
+- If the Routine returns nothing, omit the output
 
-#### Mutation — когда использовать
+#### Mutation — when to use
 
-Используй мутацию (`Object::Target`) когда:
+Use mutation (`Object::Target`) when:
 
-- Нужно явно показать что целевой тип является конкретизацией или расширением базового
-- Агент должен понимать связь между типами для правильного выбора стратегии реализации
+- You must explicitly indicate that the target type specializes or extends a base type
+- The agent needs to understand the type relationship to select the correct implementation strategy
 
-**Не используй мутацию** если тип просто использует другой тип как аргумент или возврат — это обычная зависимость,
-достаточно Imports в связе с сигнатурой или annotations.
+**Do not use mutation** when a type merely uses another type as an argument or return value — that is a standard dependency; Imports with a signature or annotations suffice.
 
-#### Embedding — когда использовать
+#### Embedding — when to use
 
-Embedding (`->Entity: {}`) используй когда:
+Use embedding (`->Entity: {}`) when:
 
-- Импортированный тип должен стать частью текущего контракта как есть
-- Потребитель cell должен знать что тип доступен через этот cell (re-export)
+- An imported type must become part of the current contract as-is
+- The cell consumer needs to know the type is available through this cell (re-export)
 
-**Не встраивай** если тип нужен только для внутренних ссылок — достаточно импорта.
+**Do not embed** if the type is needed only for internal references — an import suffices.
 
 ### Footer
 
-Footer не влияет на контракт и архитектуру — это атрибутика.
+The footer does not affect the contract or architecture — it serves attribution purposes only.
 
-Заполняй при первичном создании CODEMANIFEST:
-- `Author` — всегда `Goga`. Не придумывай другие имена — все CODEMANIFEST-файлы подписываются как `Author: Goga`
-- `CreatedAt` — дата создания в формате day/month/year
-- `Description` — краткое описание зачем этот манифест существует. Полезен если назначение cell не очевидно из заголовка и аннотаций
+Fill in upon initial CODEMANIFEST creation:
+- `Author` — always `Goga`. Do not invent other names — all CODEMANIFEST files carry `Author: Goga`
+- `CreatedAt` — creation date in day/month/year format
+- `Description` — brief statement of why this manifest exists. Useful when the cell's purpose is not obvious from the header and annotations
 
 ---

@@ -1,7 +1,7 @@
 # goga-acceptance
 
-Диспетчер команды acceptance.
+Command dispatcher for acceptance.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-acceptance` с аргументами.
+Use the **Skill tool** to invoke the `goga-acceptance` skill with arguments.

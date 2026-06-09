@@ -1,21 +1,21 @@
 ---
 name: goga-cell-python
-description: Python правила реализации контрактов CODEMANIFEST
+description: Python rules for implementing CODEMANIFEST contracts
 ---
-# Python: правила реализации контрактов
+# Python: Contract Implementation Rules
 
-Языковой скилл для Python.
+Language skill for Python.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply the specification within the context of the invoking skill. Do not paraphrase the content — use it
+for decision-making.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoke via the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для Python со всеми конструкциями DSL:
+Full CODEMANIFEST example for Python with all DSL constructs:
 
 ```yaml
 Imports:
@@ -105,26 +105,26 @@ cell/
 ├── __init__.py
 ```
 
-## Особенности языка
+## Language Specifics
 
-**Facade**: `__init__.py` must expose the full contract API через `__all__`. Только имена из `__all__`
-составляют фасад ячейки.
+**Facade**: `__init__.py` must expose the full contract API through `__all__`. Only identifiers listed in
+`__all__` constitute the cell facade.
 
-**Naming**: PascalCase для классов, snake_case для функций, методов и свойств.
+**Naming**: PascalCase for classes; snake_case for functions, methods, and properties.
 
-**Constructors**: Entity signature описывает `__init__` (параметр `self` исключается из контракта).
+**Constructors**: The entity signature describes `__init__` (the `self` parameter is excluded from the contract).
 
-**Type hints**: обязательны. Используются для извлечения сигнатур свойств и методов.
+**Type hints**: mandatory. Type annotations drive signature extraction for properties and methods.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| Python                             | CODEMANIFEST     | Примечание                             |
-|------------------------------------|------------------|----------------------------------------|
-| `class` в `__all__`                | Entity           | Класс экспортируется через `__all__`   |
-| `def` на уровне модуля в `__all__` | Routine          | Функция экспортируется через `__all__` |
-| `@property` в классе               | Property         | Тип извлекается из return annotation   |
-| `def` метод в классе               | Method           | `self` исключается из сигнатуры        |
-| `__init__` параметры               | Entity signature | `self` исключается                     |
+| Python                             | CODEMANIFEST     | Note                                       |
+|------------------------------------|------------------|--------------------------------------------|
+| `class` in `__all__`               | Entity           | Class exported through `__all__`           |
+| `def` at module level in `__all__` | Routine          | Function exported through `__all__`        |
+| `@property` in class               | Property         | Type extracted from return annotation      |
+| `def` method in class              | Method           | `self` excluded from signature             |
+| `__init__` parameters              | Entity signature | `self` excluded                            |
 
 ## Implementation
 

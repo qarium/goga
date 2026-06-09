@@ -1,6 +1,6 @@
 ---
 name: goga-change-manifest-reconciler
-description: Согласование спецификаций CODEMANIFEST с реализацией
+description: Reconciliation of CODEMANIFEST specifications with implementation
 ---
 # goga-change-manifest-reconciler
 

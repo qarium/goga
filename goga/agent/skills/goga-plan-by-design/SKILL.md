@@ -1,344 +1,344 @@
 ---
 name: goga-plan-by-design
-description: Компиляция дизайн-документа в план выполнения ralphex
+description: Compile a design document into a ralphex execution plan
 ---
-# Агент планирования дизайн-документ → план ralphex
+# Planning Agent: Design Document → ralphex Plan
 
-## Назначение
+## Purpose
 
-Компилирует готовое **архитектурное решение из дизайн-документа** в **план выполнения, совместимый с ralphex** —
-структурированный markdown-файл, который [ralphex](https://github.com/umputun/ralphex) может автономно выполнять через Claude Code.
-Вы **декомпозируете** готовое архитектурное решение в задачи кодирования.
-
----
-
-### Фаза 1: Загрузка контекста
-
-#### Шаг 1: Загрузите DSL спецификацию
-
-Используйте **Skill tool** для вызова `goga-cell`.
-
-Используйте для:
-- Понимания терминологии DSL при компиляции дизайн-документа в задачи
-
-#### Шаг 2: Загрузите принципы применения DSL
-
-Используйте **Skill tool** для вызова `goga-cookbook`.
-
-Используйте для:
-- Понимания Entity vs Routine при компиляции сущностей в задачи
-- Принципов работы с `.usages/` при планировании задач создания/обновления usage файлов
-
-#### Шаг 3: Загрузите языковые правила реализации
-
-Используйте **Skill tool** для вызова `goga-lang-disp`.
-
-Языковой скилл определяет конвенции реализации: структуру cell, фасад, правила сигнатур, **именование**.
-Примеры в других скиллах (DSL, cookbook, шаблоны) могут использовать именование одного языка
-(например snake_case), а целевой язык требует другого (например PascalCase) — языковой скилл
-содержит авторитетные правила для целевого языка. Применяйте их при компиляции плана.
-
-#### Шаг 4: Загрузить шаблон плана
-
-Прочитать файл `output-template.md` из текущего скилла.
-
-Используйте для:
-- Структуры плана (секции, заголовки, чекбоксы)
-- Шаблонов задач трёх типов (инфраструктурная, кодирование с TDD, интеграционные тесты)
-- Формата секций «Команды валидации» и «Критерии завершения»
-
-#### Шаг 5: Загрузить конвенции проекта
-
-Прочитать файл `conventions.md` из текущего скилла.
-
-Используйте для:
-- Правил реализации (внутренняя структура cell, публичная поверхность, именование)
-- Правил трассируемости и отображения контракта в тесты
-- Классификации тестов (контрактные, логические, интеграционные)
-
-#### Шаг 6: Загрузить дизайн-документ
-
-Прочитать файл из `docs/design/<feature-name>.md`. `<feature-name>` берётся из аргументов скилла.
-Если документ дизайна не существует — остановитесь и попросите пользователя сначала запустить `/goga:design`.
+Compiles a finalized **architectural decision from a design document** into a **ralphex-compatible execution plan** —
+a structured markdown file that [ralphex](https://github.com/umputun/ralphex) can autonomously execute through Claude Code.
+You **decompose** a finalized architectural decision into coding tasks.
 
 ---
 
-### Фаза 2: Компиляция дизайн-документа в план
+### Phase 1: Context Loading
 
-Цель: декомпозировать архитектурное решение из дизайн-документа в задачи ralphex.
+#### Step 1: Load DSL Specification
 
-#### Шаг 1: Извлечь данные из дизайн-документа
+Use the **Skill tool** to invoke `goga-cell`.
 
-Извлечь из дизайн-документа:
+Use for:
+- Understanding DSL terminology when compiling the design document into tasks
 
-- **Изменения контракта** → определить scope задач (какие сущности новые/изменённые/удалённые)
-- **Применённые исправления** → контекст для задач (что было исправлено и почему)
-- **Взаимодействие сущностей** → диаграммы и потоки данных перенести дословно в контекст задач
-- **Code Stack Trace** → проверенные логические цепочки включить в контекст задач
-- **Algorithm Design** → шаги алгоритмов становятся чекбоксами реализации в задачах
-- **Сквозные проблемы** → распределить по релевантным задачам
-- **Usages Analysis** → контекст usages включить в задачи, где они используются
-- **Обновление .usages/** → задачи создания/обновления usage файлов
-- **Test Stack Trace** → тестовые сценарии становятся инструкциями в чекбоксах задач
-- **Дополнительные инструкции** → включить в контекст задач
+#### Step 2: Load DSL Application Principles
 
-**Критично**: трассировки, диаграммы и тестовые сценарии из дизайн-документа содержат проверенные знания.
-Переносите их дословно в релевантный контекст задач, а не резюмируйте.
+Use the **Skill tool** to invoke `goga-cookbook`.
 
-#### Шаг 2: Скомпилировать в задачи ralphex
+Use for:
+- Understanding Entity vs Routine when compiling entities into tasks
+- Principles for working with `.usages/` when planning tasks for creating/updating usage files
 
-Для каждой сущности из дизайн-документа создать задачи, следуя правилам:
-- таблице компиляции DSL → план (см. раздел «Правила компиляции DSL»)
-- границам Cell (см. раздел «Границы»)
-- требованиям формата ralphex (см. раздел «Интеграция с Ralphex»)
-- принципам упорядочивания задач (см. «Принципы упорядочивания задач» в разделе «Правила компиляции DSL»)
-- рабочему процессу TDD (см. раздел «Правила планирования тестов»)
-- правилам формирования задач (см. раздел «Правила планирования выполнения»: структура задач, требования, гранулярность чекбоксов, размещение команд валидации, антипаттерны)
-- шаблонам из `output-template.md` (загружен на Шаге 4)
-- конвенциям проекта из `conventions.md` (загружены на Шаге 5)
+#### Step 3: Load Language Implementation Rules
 
-Используйте скилл `goga-cell` для корректной интерпретации DSL-элементов при компиляции.
+Use the **Skill tool** to invoke `goga-lang-disp`.
 
-#### Шаг 3: Сохранить план
+The language skill defines implementation conventions: cell structure, facade, signature rules, **naming**.
+Examples in other skills (DSL, cookbook, templates) may use naming from one language
+(e.g., snake_case) while the target language requires another (e.g., PascalCase) — the language skill
+contains authoritative rules for the target language. Apply them when compiling the plan.
 
-Записать план в `docs/plans/<feature-name>.md` с использованием шаблона из `output-template.md`.
+#### Step 4: Load Plan Template
 
-`<feature-name>` — краткое описательное имя фичи (например, `http-client`, `auth-module`).
-Имя должно отражать область действия плана, а не имя Cell.
-Создайте директорию `docs/plans/`, если она не существует.
+Read the file `output-template.md` from the current skill.
 
----
+Use for:
+- Plan structure (sections, headings, checkboxes)
+- Templates for three task types (infrastructure, TDD coding, integration tests)
+- Format for "Validation Commands" and "Completion Criteria" sections
 
-### Фаза 3: Проверка плана
+#### Step 5: Load Project Conventions
 
-Перед завершением проверьте:
+Read the file `conventions.md` from the current skill.
 
-1. Каждая сущность контрактного изменения из дизайн-документа покрыта задачей?
-2. Каждый тестовый сценарий из дизайн-документа включён в тестовые инструкции задач?
-3. Каждая запись Usages Analysis из дизайн-документа включена как минимум в одну задачу?
-4. Каждая запланированная задача `.usages/` из дизайн-документа имеет задачу создания или шаг?
-5. Диаграммы взаимодействий и трассировки перенесены дословно, а не резюмированы?
-6. Все задачи кодирования следуют рабочему процессу TDD?
-7. Формат ralphex корректен (заголовки `### Task N:`, чекбоксы `- [ ]`)?
-8. Каждая задача атомарна и самодостаточна?
-9. Команды валидации определены?
-10. Файлы `CODEMANIFEST` отмечены как только для чтения?
+Use for:
+- Implementation rules (internal cell structure, public surface, naming)
+- Traceability rules and contract-to-test mapping
+- Test classification (contract, logic, integration)
 
-Если любой ответ «нет» — переработайте план.
+#### Step 6: Load Design Document
+
+Read the file from `docs/design/<feature-name>.md`. `<feature-name>` is taken from skill arguments.
+If the design document does not exist — stop and ask the user to run `/goga:design` first.
 
 ---
 
-### Фаза 4: Представить сводку
+### Phase 2: Compile Design Document into Plan
 
-После сохранения плана выведите краткую сводку для пользователя:
+Goal: decompose the architectural decision from the design document into ralphex tasks.
 
-- **Таблица задач**: нумерованный список всех задач с типом (инфраструктура / TDD кодирование / интеграционные тесты) и однострочным описанием
-- **Ключевые проектные решения**: максимум 3-5 пунктов
-- **Общее количество тестов**: сколько тестовых сценариев запланировано
+#### Step 1: Extract Data from Design Document
 
-НЕ повторяйте полное содержимое плана. Уложитесь в минимум строк.
+Extract from the design document:
 
----
+- **Contract changes** → determine task scope (which entities are new/modified/deleted)
+- **Applied fixes** → context for tasks (what was fixed and why)
+- **Entity interactions** → transfer diagrams and data flows verbatim into task context
+- **Code Stack Trace** → include verified logical chains into task context
+- **Algorithm Design** → algorithm steps become implementation checkboxes in tasks
+- **Cross-cutting concerns** → distribute across relevant tasks
+- **Usages Analysis** → include usages context in tasks where they are used
+- **.usages/ updates** → tasks for creating/updating usage files
+- **Test Stack Trace** → test scenarios become instructions in task checkboxes
+- **Additional instructions** → include in task context
 
-## Интеграция с Ralphex
+**Critical**: traces, diagrams, and test scenarios from the design document contain verified knowledge.
+Transfer them verbatim into relevant task context, do not summarize.
 
-### Требования к формату плана
-План **должен** следовать этой структуре для совместимости с ralphex:
-- заголовки `### Task N: <title>` определяют отдельные задачи
-- чекбоксы `- [ ]` отмечают невыполненные элементы внутри каждой задачи
-- чекбоксы `- [x]` отмечают выполненные элементы (изначально их нет)
-- раздел `## Validation Commands` содержит команды для проверки корректности
-- Только ОДНА задача выполняется за итерацию ralphex
+#### Step 2: Compile into ralphex Tasks
 
-### Проектирование задач для выполнения ИИ
-Каждая задача должна быть:
-- **Атомарной** — выполнимой ИИ-агентом за одну сессию Claude Code
-- **Самодостаточной** — включает весь контекст, необходимый для реализации без чтения других задач
-- **Упорядоченной** — внутри Cell: инфраструктура перед сущностями; простое перед сложным; каждая задача следует рабочему процессу TDD
-- **Верифицируемой** — имеет чёткие критерии завершения и команды валидации
+For each entity from the design document, create tasks following the rules:
+- DSL → plan compilation table (see "DSL Compilation Rules" section)
+- Cell boundaries (see "Boundaries" section)
+- ralphex format requirements (see "Ralphex Integration" section)
+- task ordering principles (see "Task Ordering Principles" in "DSL Compilation Rules" section)
+- TDD workflow (see "Test Planning Rules" section)
+- task formation rules (see "Execution Planning Rules": task structure, requirements, checkbox granularity, validation command placement, anti-patterns)
+- templates from `output-template.md` (loaded in Step 4)
+- project conventions from `conventions.md` (loaded in Step 5)
 
-### Протокол выполнения ralphex
-Шаги 1–7 должны присутствовать как чекбоксы в каждой задаче кодирования плана — протокол самореализуется через структуру плана.
-Когда ralphex выполняет задачу кодирования, ИИ-агент следует этим чекбоксам:
-1. **ШАГ 0 (ОБЪЯВЛЕНИЕ)** — объявить, над какой задачей ведётся работа
-2. **ШАГ 1 (КОНТРАКТНЫЕ ТЕСТЫ)** — написать контрактные тесты для сущностей/интерфейсов в этой задаче (они будут падать — это ожидаемо)
-3. **ШАГ 2 (РЕАЛИЗАЦИЯ)** — написать код для этой одной задачи
-4. **ШАГ 3 (ВЕРИФИКАЦИЯ ИНТЕРФЕЙСОВ)** — запустить контрактные тесты из шага 1 для проверки соответствия реализованных интерфейсов контракту
-5. **ШАГ 4 (ЛОГИЧЕСКИЕ ТЕСТЫ)** — написать тесты, проверяющие поведенческую логику (позитивные, негативные, граничные случаи)
-6. **ШАГ 5 (ОТЛАДКА)** — запустить все тесты и исправлять код реализации, пока все тесты не пройдут
-7. **ШАГ 6 (ПЕРЕПРОВЕРКА КОНТРАКТА)** — проверить, что все обязательства контракта по-прежнему соблюдены (фасад, форма API, поведение)
-8. **ШАГ 7 (ЛИНТ)** — запустить линтер, исправить форматирование и декомпозировать при необходимости
-9. **ШАГ 8 (ЗАВЕРШЕНИЕ)** — отметить чекбоксы как выполненные
-10. **→ РЕВЬЮ → ОДОБРЕНИЕ → СЛЕДУЮЩАЯ ЗАДАЧА** — после завершения ralphex отправляет задачу на ревью кода; ревью должно быть одобрено перед переходом к следующей задаче
+Use the `goga-cell` skill for correct interpretation of DSL elements during compilation.
 
----
+#### Step 3: Save the Plan
 
-## Границы
+Write the plan to `docs/plans/<feature-name>.md` using the template from `output-template.md`.
 
-### Разрешено внутри текущей Cell
-Вы можете планировать:
-- дополнительные внутренние файлы и модули
-- вспомогательные функции и классы
-- приватные абстракции
-- внутреннюю реструктуризацию
-- декомпозицию реализации на более мелкие внутренние единицы
-
-### Запрещено
-Вы не должны планировать:
-- создание новых Cell
-- определение новых интерфейсов на уровне Cell за пределами текущей
-- расширение системных границ за пределы текущей Cell
-- замену сущностей контракта абстракциями, доступными только внутренне
-- нарушение требований доступности фасада
-- игнорирование `location`
-- изменение файлов `CODEMANIFEST` — они **только для чтения** для агента реализации
+`<feature-name>` — a short descriptive feature name (e.g., `http-client`, `auth-module`).
+The name should reflect the plan's scope, not the Cell name.
+Create the `docs/plans/` directory if it does not exist.
 
 ---
 
-## Правила компиляции DSL
+### Phase 3: Plan Verification
 
-Используйте скилл `goga-cell` для интерпретации DSL-элементов при компиляции.
-Следуйте конвенциям проекта из `conventions.md`.
+Before completion, verify:
 
-### Отображение компиляции
+1. Is every entity from the contract changes in the design document covered by a task?
+2. Is every test scenario from the design document included in task test instructions?
+3. Is every Usages Analysis entry from the design document included in at least one task?
+4. Does every planned `.usages/` entry from the design document have a creation task or step?
+5. Are interaction diagrams and traces transferred verbatim, not summarized?
+6. Do all coding tasks follow the TDD workflow?
+7. Is the ralphex format correct (`### Task N:` headings, `- [ ]` checkboxes)?
+8. Is every task atomic and self-contained?
+9. Are validation commands defined?
+10. Are `CODEMANIFEST` files marked as read-only?
 
-| Элемент DSL              | Результат в плане                                                          |
-|--------------------------|----------------------------------------------------------------------------|
-| `Types Import`           | Раздел контекста — внутренние типы, сгруппированные под одним `From`       |
-| `Usages Import`          | Раздел контекста — импортированная практика из `.usages/` другой ячейки    |
-| `Usages`                 | Раздел контекста с руководством по реализации                              |
-| `Annotations`            | Контекстные подсказки, внедрённые в описания задач                         |
-| `->Re-exports`           | Задача: обеспечить импортируемость из фасада                             |
-| `Entity` с `properties`  | Задача: создать сущность в `location`, реализовать свойства                |
-| `Entity` с `methods`     | Задача: реализовать методы в `location` с поведением из описаний           |
-| `Standalone function`    | Задача: реализовать функцию в `location`                                   |
-| `Type::` мутация         | Задача: реализовать механизм мутации интерфейса                            |
-| Описания методов/свойств | Отражены в инструкциях по реализации задач                                 |
-
-### Принципы упорядочивания задач
-Задачи упорядочиваются **внутри Cell**. Каждая Cell завершается перед переходом к следующей.
-
-Внутри одной Cell:
-1. **Инфраструктурные задачи** — структура Cell, фасад, реэкспорты
-2. **Задачи каркаса сущностей** — создание классов/функций в правильных `location`
-3. **Задачи реализации свойств** — реализация видимых на фасаде свойств
-4. **Задачи реализации методов** — реализация методов с описанным поведением
-5. **Задачи мутации интерфейсов** — реализация мутаций `Type::`
-6. **Задачи интеграционных тестов** — межсущностные, граничные случаи
-
-Когда план охватывает несколько Cell:
-- Листовые Cell первыми, затем родительские
-- Уважайте порядок зависимостей: если A импортирует из B, завершите B первым
-
-Сущности с одним и тем же `location` группируются в одну задачу.
-
-### Описания обязательны
-Описания, прикреплённые к свойствам, методам и функциям, определяют смысл, поведенческие ожидания,
-ограничения и требования к реализации. Они должны появляться в инструкциях задач.
-
-### Imports — внутренние зависимости и отслеживаемые ссылки на практики
-Imports определяют:
-1. **Зависимости контракта** — типы из других `CODEMANIFEST` через `Types:` + `From:`
-2. **Зависимости практик** — usages из `.usages/` других ячеек через `Usages:` + `From:`
-Типы внешних библиотек описываются в `Usages`, а не в `Imports`.
-
-### Usages — документация для потребителей API ячейки
-`Usages` предоставляет контекст: типы внешних библиотек, спецификации, конвенции.
-Включите контекст Usages в план из дизайн-документа (секция Usages Analysis).
-
-**Двухуровневая модель usages**:
-- **Глобальные** — `.goga/usages/` корня проекта
-- **Локальные** — `.usages/` внутри ячейки
-- **Импортированные** — из других ячеек через `Imports` → `Usages`
-
-### Реэкспорты — обязательства фасада
-Блоки реэкспортов (`->Name: {}`) определяют имена, которые должны быть доступны на фасаде.
-Каждое реэкспортируемое имя должно быть импортируемо.
-
-### Аннотации — предписывающие инструкции
-`annotations` на уровне файла, сущности или функции предоставляют инструкции для агента реализации.
-Внедряйте их как требования в описания задач.
+If any answer is "no" — rework the plan.
 
 ---
 
-## Правила планирования выполнения
+### Phase 4: Present Summary
 
-### Структура задач
+After saving the plan, output a brief summary for the user:
 
-Шаблоны задач определены в `output-template.md`. Следуйте им при формировании каждой задачи в плане.
+- **Task table**: numbered list of all tasks with type (infrastructure / TDD coding / integration tests) and one-line description
+- **Key design decisions**: maximum 3-5 points
+- **Total test count**: how many test scenarios are planned
 
-Существует три типа задач:
-- **Инфраструктурная** — структура Cell, фасад, реэкспорты (код → верификация → линт)
-- **Кодирование с TDD** — реализация сущностей с протоколом ralphex (шаги 0–8 из раздела «Протокол выполнения ralphex»)
-- **Интеграционные тесты** — межсущностные сценарии (отдельные задачи)
-
-### Требования к задачам
-Каждая задача должна:
-- иметь ясное, описательное название
-- включать достаточно контекста для реализации без чтения других задач, в том числе:
-  - какие сущности контракта она покрывает
-  - какие файлы `location` задействованы
-  - релевантные импорты и использования
-  - поведенческие требования из описаний
-  - аннотации как предписывающие инструкции для агента реализации
-- перечислять шаги реализации как чекбоксы `- [ ]`
-- явно указывать целевые файлы
-- идентифицировать покрываемые сущности контракта
-- включать как минимум одну контрольную точку валидации
-- быть выполнимой за одну сессию Claude Code
-
-### Гранулярность чекбоксов
-Каждый чекбокс `- [ ]` должен быть:
-- конкретным, проверяемым действием (например, «Создать файл реализации для `location`», «Реализовать метод `load()`, возвращающий коллекцию элементов»)
-- проверяемым запуском команды или проверкой наличия файла
-- не размытой целью (избегайте «Реализовать сервис» без конкретики)
-
-### Размещение команд валидации
-- Каждая задача включает как минимум один встроенный шаг валидации (чекбокс с командой проверки).
-- Раздел `## Команды валидации` на уровне плана перечисляет глобальные команды.
-- Команды на уровне задачи проверяют результат конкретной задачи.
-- Команды на уровне плана проверяют общее соответствие контракту.
-
-### Антипаттерны
-- Размытые задачи вроде «реализовать X» без конкретных шагов
-- Задачи, покрывающие несколько несвязанных сущностей контракта
-- Задачи без команд валидации
-- Задачи, предполагающие контекст из предыдущих задач без его пересказа
-- Задачи, слишком большие для одной ИИ-сессии
-- Задачи, предлагающие изменение файлов `CODEMANIFEST`
-- Задачи кодирования без контрактных тестов (нарушает TDD)
-- Задачи кодирования без шага отладки
+Do NOT repeat the full plan contents. Keep it to a minimum of lines.
 
 ---
 
-## Правила планирования тестов
+## Ralphex Integration
 
-### Тесты внутри задач кодирования
-1. **Контрактные тесты** — пишутся ПЕРВЫМИ; проверяют фасад, форму API, сигнатуры
-2. **Логические тесты** — пишутся ПОСЛЕ реализации; проверяют поведение
+### Plan Format Requirements
+The plan **must** follow this structure for ralphex compatibility:
+- `### Task N: <title>` headings define individual tasks
+- `- [ ]` checkboxes mark incomplete items within each task
+- `- [x]` checkboxes mark completed items (none initially)
+- `## Validation Commands` section contains commands for verifying correctness
+- Only ONE task is executed per ralphex iteration
 
-Оба типа встроены в чекбоксы задачи кодирования.
+### Designing Tasks for AI Execution
+Each task must be:
+- **Atomic** — executable by an AI agent in a single Claude Code session
+- **Self-contained** — includes all context needed for implementation without reading other tasks
+- **Ordered** — within a Cell: infrastructure before entities; simple before complex; each task follows the TDD workflow
+- **Verifiable** — has clear completion criteria and validation commands
 
-### Задачи интеграционных тестов
-Создавайте для межсущностных сценариев, охватывающих несколько сущностей или несколько Cell.
-
-### Категории тестов
-- **Контрактные** — фасад и форма API (обязательны, встроены в задачи кодирования)
-- **Логические** — поведенческие требования (обязательны, встроены в задачи кодирования)
-- **Интеграционные** — межсущностные взаимодействия (отдельные задачи, когда уместно)
+### ralphex Execution Protocol
+Steps 1–7 must be present as checkboxes in each coding task of the plan — the protocol is self-enforcing through the plan structure.
+When ralphex executes a coding task, the AI agent follows these checkboxes:
+1. **STEP 0 (DECLARATION)** — declare which task is being worked on
+2. **STEP 1 (CONTRACT TESTS)** — write contract tests for the entities/interfaces in this task (they will fail — this is expected)
+3. **STEP 2 (IMPLEMENTATION)** — write the code for this one task
+4. **STEP 3 (INTERFACE VERIFICATION)** — run the contract tests from step 1 to verify implemented interfaces match the contract
+5. **STEP 4 (LOGIC TESTS)** — write tests verifying behavioral logic (positive, negative, edge cases)
+6. **STEP 5 (DEBUGGING)** — run all tests and fix implementation code until all tests pass
+7. **STEP 6 (CONTRACT RE-VERIFICATION)** — verify that all contract obligations are still met (facade, API shape, behavior)
+8. **STEP 7 (LINT)** — run linter, fix formatting and decompose if necessary
+9. **STEP 8 (COMPLETION)** — mark checkboxes as completed
+10. **→ REVIEW → APPROVAL → NEXT TASK** — after completion, ralphex submits the task for code review; review must be approved before moving to the next task
 
 ---
 
-## Команды валидации
+## Boundaries
 
-План должен включать раздел `## Команды валидации`.
-Конкретные команды определяются на основании спецификаций и практик проекта.
+### Allowed Within the Current Cell
+You may plan:
+- additional internal files and modules
+- helper functions and classes
+- private abstractions
+- internal restructuring
+- decomposition of implementation into smaller internal units
+
+### Prohibited
+You must not plan:
+- creating new Cells
+- defining new interfaces at the Cell level outside the current one
+- expanding system boundaries beyond the current Cell
+- replacing contract entities with internally-only-accessible abstractions
+- violating facade accessibility requirements
+- ignoring `location`
+- modifying `CODEMANIFEST` files — they are **read-only** for the implementation agent
+
+---
+
+## DSL Compilation Rules
+
+Use the `goga-cell` skill to interpret DSL elements during compilation.
+Follow the project conventions from `conventions.md`.
+
+### Compilation Mapping
+
+| DSL Element                  | Result in Plan                                                          |
+|------------------------------|-------------------------------------------------------------------------|
+| `Types Import`               | Context section — internal types grouped under a single `From`          |
+| `Usages Import`              | Context section — imported practice from another cell's `.usages/`      |
+| `Usages`                     | Context section with implementation guidance                            |
+| `Annotations`                | Contextual hints embedded into task descriptions                        |
+| `->Re-exports`               | Task: ensure importability from the facade                              |
+| `Entity` with `properties`   | Task: create entity in `location`, implement properties                 |
+| `Entity` with `methods`      | Task: implement methods in `location` with behavior from descriptions   |
+| `Standalone function`        | Task: implement function in `location`                                  |
+| `Type::` mutation            | Task: implement interface mutation mechanism                            |
+| Method/property descriptions | Reflected in task implementation instructions                           |
+
+### Task Ordering Principles
+Tasks are ordered **within a Cell**. Each Cell is completed before moving to the next.
+
+Within a single Cell:
+1. **Infrastructure tasks** — Cell structure, facade, re-exports
+2. **Entity skeleton tasks** — creating classes/functions in correct `location`s
+3. **Property implementation tasks** — implementing facade-visible properties
+4. **Method implementation tasks** — implementing methods with described behavior
+5. **Interface mutation tasks** — implementing `Type::` mutations
+6. **Integration test tasks** — cross-entity, edge cases
+
+When the plan spans multiple Cells:
+- Leaf Cells first, then parent Cells
+- Respect dependency order: if A imports from B, complete B first
+
+Entities with the same `location` are grouped into one task.
+
+### Descriptions Are Mandatory
+Descriptions attached to properties, methods, and functions define semantics, behavioral expectations,
+constraints, and implementation requirements. They must appear in task instructions.
+
+### Imports — Internal Dependencies and Tracked Practice References
+Imports define:
+1. **Contract dependencies** — types from other `CODEMANIFEST` via `Types:` + `From:`
+2. **Practice dependencies** — usages from other cells' `.usages/` via `Usages:` + `From:`
+External library types are described in `Usages`, not in `Imports`.
+
+### Usages — Documentation for Cell API Consumers
+`Usages` provides context: external library types, specifications, conventions.
+Include Usages context in the plan from the design document (Usages Analysis section).
+
+**Two-level usages model**:
+- **Global** — project root `.goga/usages/`
+- **Local** — `.usages/` inside the cell
+- **Imported** — from other cells via `Imports` → `Usages`
+
+### Re-exports — Facade Obligations
+Re-export blocks (`->Name: {}`) define names that must be available on the facade.
+Every re-exported name must be importable.
+
+### Annotations — Prescriptive Instructions
+`annotations` at the file, entity, or function level provide instructions for the implementation agent.
+Embed them as requirements in task descriptions.
+
+---
+
+## Execution Planning Rules
+
+### Task Structure
+
+Task templates are defined in `output-template.md`. Follow them when forming each task in the plan.
+
+There are three task types:
+- **Infrastructure** — Cell structure, facade, re-exports (code → verification → lint)
+- **TDD Coding** — entity implementation with the ralphex protocol (steps 0–8 from "ralphex Execution Protocol" section)
+- **Integration Tests** — cross-entity scenarios (separate tasks)
+
+### Task Requirements
+Each task must:
+- have a clear, descriptive title
+- include enough context for implementation without reading other tasks, including:
+  - which contract entities it covers
+  - which `location` files are involved
+  - relevant imports and usages
+  - behavioral requirements from descriptions
+  - annotations as prescriptive instructions for the implementation agent
+- list implementation steps as `- [ ]` checkboxes
+- explicitly specify target files
+- identify covered contract entities
+- include at least one validation checkpoint
+- be executable in a single Claude Code session
+
+### Checkbox Granularity
+Each `- [ ]` checkbox must be:
+- a specific, verifiable action (e.g., "Create implementation file for `location`", "Implement method `load()` returning a collection of items")
+- verifiable by running a command or checking file existence
+- not a vague goal (avoid "Implement service" without specifics)
+
+### Validation Command Placement
+- Each task includes at least one inline validation step (checkbox with a verification command).
+- The `## Validation Commands` section at the plan level lists global commands.
+- Task-level commands verify the outcome of a specific task.
+- Plan-level commands verify overall contract compliance.
+
+### Anti-patterns
+- Vague tasks like "implement X" without specific steps
+- Tasks covering multiple unrelated contract entities
+- Tasks without validation commands
+- Tasks assuming context from previous tasks without restating it
+- Tasks too large for a single AI session
+- Tasks that propose modifying `CODEMANIFEST` files
+- Coding tasks without contract tests (violates TDD)
+- Coding tasks without a debugging step
+
+---
+
+## Test Planning Rules
+
+### Tests Within Coding Tasks
+1. **Contract tests** — written FIRST; verify facade, API shape, signatures
+2. **Logic tests** — written AFTER implementation; verify behavior
+
+Both types are embedded in coding task checkboxes.
+
+### Integration Test Tasks
+Create for cross-entity scenarios spanning multiple entities or multiple Cells.
+
+### Test Categories
+- **Contract** — facade and API shape (mandatory, embedded in coding tasks)
+- **Logic** — behavioral requirements (mandatory, embedded in coding tasks)
+- **Integration** — cross-entity interactions (separate tasks, when appropriate)
+
+---
+
+## Validation Commands
+
+The plan must include a `## Validation Commands` section.
+Specific commands are defined based on project specifications and practices.
 
 ```markdown
-## Команды валидации
-- <команда запуска всех тестов>: Запустить все тесты
-- <команда линта>: Проверка линта
-- <команда проверки фасада>: Доступность фасада
+## Validation Commands
+- <run all tests command>: Run all tests
+- <lint command>: Lint check
+- <facade check command>: Facade accessibility
 ```
 
 ---

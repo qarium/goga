@@ -1,6 +1,6 @@
 ---
 name: goga-change-planner
-description: Планирование безопасных изменений на основе спецификаций
+description: Safe specification-governed change planning
 ---
 # goga-change-planner
 
@@ -27,7 +27,7 @@ STOP if:
 - plan requires breaking change
 - plan scope exceeds investigation scope
 
-Present plan to user. After plan is displayed, ask: «Do you approve the plan? Proceed to implementation?» Wait for approval before proceeding.
+Present plan to user. After plan is displayed, ask: "Do you approve the plan? Proceed to implementation?" Wait for approval before proceeding.
 
 ## Output Format
 

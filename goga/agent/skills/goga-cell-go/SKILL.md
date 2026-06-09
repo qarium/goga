@@ -1,21 +1,21 @@
 ---
 name: goga-cell-go
-description: Golang правила реализации контрактов CODEMANIFEST
+description: Golang rules for implementing CODEMANIFEST contracts
 ---
-# Golang: правила реализации контрактов
+# Golang: Contract Implementation Rules
 
-Языковой скилл для Golang.
+Language skill for Golang.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply this specification within the calling skill's context. Do not paraphrase the contents — use them
+to drive decisions.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoked through the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для Go со всеми конструкциями DSL:
+A complete CODEMANIFEST example for Go with all DSL constructs:
 
 ```yaml
 Imports:
@@ -107,32 +107,32 @@ cell/
 ├── cell.go
 ```
 
-## Особенности языка
+## Language Specifics
 
-**Facade**: пакет Go и есть фасад. Все exported identifiers составляют публичный API ячейки.
-Контракт-экстрактор читает exported имена как есть — имена в CODEMANIFEST должны совпадать точно.
+**Facade**: The Go package itself serves as the facade. All exported identifiers define the cell's public API.
+The contract-extractor reads exported names verbatim — names declared in CODEMANIFEST must match exactly.
 
-**Naming**: camelCase для всех идентификаторов (без подчёркиваний). Экспортируемые начинаются с
-большой буквы: `SomeFunc`, `SomeField`. Неэкспортируемые — с маленькой: `someFunc`, `someField`.
-В CODEMANIFEST используются экспортируемые имена.
+**Naming**: Use camelCase for all identifiers (no underscores). Exported identifiers start with
+an uppercase letter: `SomeFunc`, `SomeField`. Unexported identifiers start with lowercase: `someFunc`, `someField`.
+CODEMANIFEST references exported names only.
 
-**Constructors**: в Go нет конструкторов. Entity signature описывает фабричную функцию (например `NewServer()`).
+**Constructors**: Go does not provide constructors. The Entity signature declares a factory function (e.g. `NewServer()`).
 
-**Methods**: методы определяются через receiver, а не внутри struct. Контракт-экстрактор привязывает методы
-к struct по типу receiver.
+**Methods**: Methods are defined via receivers, not inside struct definitions. The contract-extractor associates methods
+with their struct based on the receiver type.
 
-**Error handling**: идиома `(result, error)`. В CODEMANIFEST возвращаемое значение обязано иметь
-семантическую метку: `() -> err:error` или `() -> result:T, err:error`.
+**Error handling**: Follow the `(result, error)` idiom. CODEMANIFEST return values must carry
+a semantic label: `() -> err:error` or `() -> result:T, err:error`.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| Go                              | CODEMANIFEST     | Примечание                                 |
-|---------------------------------|------------------|--------------------------------------------|
-| `type X struct`                 | Entity           | Поля struct → properties (только exported) |
-| `type X interface`              | Entity           | Методы интерфейса → methods                |
-| `func (r *X) Method()`          | Method           | Привязывается к Entity по типу receiver    |
-| `func Name()` (без receiver)    | Routine          | Функция на уровне пакета                   |
-| Exported поле struct            | Property         | Тип извлекается из объявления поля         |
+| Go                              | CODEMANIFEST     | Note                                      |
+|---------------------------------|------------------|-------------------------------------------|
+| `type X struct`                 | Entity           | Struct fields → properties (exported only)|
+| `type X interface`              | Entity           | Interface methods → methods               |
+| `func (r *X) Method()`          | Method           | Bound to Entity by receiver type          |
+| `func Name()` (no receiver)     | Routine          | Package-level function                    |
+| Exported struct field           | Property         | Type derived from field declaration       |
 
 ## Implementation
 
