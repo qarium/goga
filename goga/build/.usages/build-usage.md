@@ -41,10 +41,10 @@ exit_code = build(
 
 ## Поддерживаемые агенты
 
-| Агент | Прекондишены | Флаг ralphex |
-|-------|-------------|-------------|
-| `claude` | Создание .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config | — |
-| `codex` | Не требуются | `--codex` |
+| Агент | Прекондишены |
+|-------|-------------|
+| `claude` | Создание .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config |
+| `codex` | Создание .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex) |
 
 ## Возвращаемое значение
 
@@ -53,8 +53,10 @@ exit_code = build(
 
 ## Побочные эффекты
 
-- Создаёт/обновляет `.claude/settings.json`
-- Создаёт `.ralphex/claude-wrapper.sh` и `.ralphex/config`
+- Удаляет `.ralphex/` перед каждым запуском (cleanup)
+- Создаёт/обновляет `.claude/settings.json` (для agent=claude)
+- Создаёт `.ralphex/claude-wrapper.sh` и `.ralphex/config` (для agent=claude)
+- Создаёт `.ralphex/codex-wrapper.sh` и `.ralphex/config` (для agent=codex)
 - Копирует prompts и agents в `.ralphex/`
 - Запускает subprocess (`ralphex`)
 

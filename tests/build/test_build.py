@@ -107,28 +107,31 @@ class TestRunPrecondition:
         assert _run_precondition(config) == 0
         assert not (tmp_path / ".claude").exists()
 
-    def test_cleanup_ralphex_dir_for_claude(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        ralphex_dir = tmp_path / ".ralphex"
-        ralphex_dir.mkdir()
-        (ralphex_dir / "old_config").write_text("stale")
-        config = _make_config(agent="claude")
-        assert _run_precondition(config) == 0
-        assert not (ralphex_dir / "old_config").exists()
-
-    def test_cleanup_ralphex_dir_for_codex(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        ralphex_dir = tmp_path / ".ralphex"
-        ralphex_dir.mkdir()
-        (ralphex_dir / "old_config").write_text("stale")
-        config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
-        assert not ralphex_dir.exists()
-
-    def test_cleanup_ralphex_dir_no_dir(self, tmp_path, monkeypatch) -> None:
+    def test_codex_agent_creates_ralphex_config(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = _make_config(agent="codex")
         assert _run_precondition(config) == 0
+        config_path = tmp_path / ".ralphex" / "config"
+        assert config_path.is_file()
+        assert "executor = codex" in config_path.read_text()
+
+    def test_codex_wrapper_script_content(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
+        assert wrapper.is_file()
+        assert 'exec codex "$@" -m "$CODEX_MODEL"' in wrapper.read_text()
+
+    def test_codex_wrapper_executable_permissions(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="codex")
+        assert _run_precondition(config) == 0
+        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
+        mode = wrapper.stat().st_mode
+        assert mode & stat.S_IXUSR
+        assert mode & stat.S_IXGRP
+        assert mode & stat.S_IXOTH
 
     def test_unsupported_agent_returns_1(self, tmp_path, monkeypatch) -> None:
         config = _make_config(agent="gemini")
@@ -360,16 +363,6 @@ class TestAssembleCommand:
         cmd = _assemble_command("plan.md", config, {"skip_finalize": True})
         assert "--skip-finalize" in cmd
 
-    def test_codex_flag_when_codex_agent(self) -> None:
-        config = _make_config(agent="codex")
-        cmd = _assemble_command("plan.md", config, {})
-        assert "--codex" in cmd
-
-    def test_no_codex_flag_when_claude_agent(self) -> None:
-        config = _make_config(agent="claude")
-        cmd = _assemble_command("plan.md", config, {})
-        assert "--codex" not in cmd
-
 
 # --- Full build function tests ---
 
@@ -447,15 +440,6 @@ class TestBuildCodexAgent:
             cli_options={"dry_run": True, "skip_manifest_check": True},
         )
         assert result == 0
-
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_flag_in_full_build(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
-        config = _make_config(agent="codex")
-        _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
-
-        cmd = mock_call.call_args[0][0]
-        assert "--codex" in cmd
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")

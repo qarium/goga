@@ -253,6 +253,26 @@ class TestBuildDockerCmd:
         cmd = _build_docker_cmd("plan.md", "custom:tag", Path("/tmp/env"), {}, "test-build")
         assert "custom:tag" in cmd
 
+    def test_codex_auth_mounted_when_exists(self, tmp_path) -> None:
+        from goga.commands.build.build import _build_docker_cmd
+
+        codex_dir = tmp_path / ".codex"
+        codex_dir.mkdir()
+        (codex_dir / "auth.json").write_text("{}")
+
+        with mock.patch.object(Path, "home", return_value=tmp_path):
+            cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {}, "test-build")
+
+        assert any("/home/goga/.codex/auth.json:ro" in arg for arg in cmd)
+
+    def test_no_codex_auth_when_file_absent(self, tmp_path) -> None:
+        from goga.commands.build.build import _build_docker_cmd
+
+        with mock.patch.object(Path, "home", return_value=tmp_path):
+            cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {}, "test-build")
+
+        assert not any(".codex" in arg for arg in cmd)
+
 
 # --- Env file tests ---
 
