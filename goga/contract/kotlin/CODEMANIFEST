@@ -11,36 +11,36 @@ Usages:
   tree-sitter-kotlin: .goga/usages/cooks/tree-sitter-kotlin.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для парсинга Kotlin-файлов использовать практику `tree-sitter-kotlin`.
+  During development and testing, use practice `conventions`.
+  For parsing Kotlin files, use practice `tree-sitter-kotlin`.
 
 ---
 
 "kotlin_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: kotlin.py
   annotations: |
-    Собрать все экспортируемые объекты с фасада Kotlin-пакета по указанному пути.
-    Использовать практику `contract_data` для формирования результатов.
+    Collect all exported objects from the Kotlin package facade at the specified path.
+    Use practice `contract_data` to form the results.
 
-    `cell_path`: путь до Kotlin-пакета (каталог с .kt файлами)
+    `cell_path`: path to the Kotlin package (directory with .kt files)
 
-    Алгоритм:
-    - найти все .kt файлы в каталоге
-    - для каждого файла — распарсить AST через практику `tree-sitter-kotlin`
-    - извлечь public декларации:
+    Algorithm:
+    - find all .kt files in the directory
+    - for each file — parse the AST via practice `tree-sitter-kotlin`
+    - extract public declarations:
       - class/data class/sealed class/interface/enum class → EntityContract (constructor params → signature, properties, methods)
-      - fun верхнего уровня → RoutineContract
+      - top-level fun → RoutineContract
       - object declaration → EntityContract
-    - для EntityContract (class) — найти extension/member функции с соответствующим ресивером
-    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+    - for EntityContract (class) — find extension/member functions with the corresponding receiver
+    - collect signatures: parameters (name + type), return types
 
-    Требования:
-    - только public декларации входят в контракт (internal/private пропускаются)
-    - аннотации типов Kotlin входят в контракт
-    - порядок аргументов важен
-    - nullability (T?) входит в тип
-    - camelCase для имён функций/свойств, PascalCase для классов
-    - EntityContract для class получает signature из primary constructor
+    Requirements:
+    - only public declarations are included in the contract (internal/private are skipped)
+    - Kotlin type annotations are included in the contract
+    - argument order matters
+    - nullability (T?) is included in the type
+    - camelCase for function/property names, PascalCase for classes
+    - EntityContract for class gets signature from primary constructor
 
 ---
 
@@ -48,4 +48,4 @@ Author: Goga
 CreatedAt: 21/05/26
 
 Description: |
-  Извлечение контракта с фасада Kotlin-пакета через tree-sitter-kotlin
+  Contract extraction from the Kotlin package facade via tree-sitter-kotlin

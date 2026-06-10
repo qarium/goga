@@ -20,19 +20,19 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Все типы являются мутациями `DocumentRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `DocumentRule`.
 
 ---
 
 # ************ #
-# Аннотации     #
+# Annotations  #
 # ************ #
 
 "DocumentRule::AnnotationLinksExists(name: str = 'annotation_links_exists')":
   location: rules.py
   annotations: |
-    Проверяет ссылки на существование в `AnnotationsNode` для нод:
+    Validates link existence in `AnnotationsNode` for the following nodes:
     - `HeaderNode`
     - `UsageItemNode`
     - `RoutineTypeNode`
@@ -40,22 +40,22 @@ Annotations: |
     - `MethodNode`
     - `PropertyNode`
 
-    Одно из правил должно соблюдаться:
-    - Ссылка существует импортах `HeaderNode` в качестве type или alias
-    - Ссылка существует в usages `HeaderNode` в качестве name
-    - Ссылка существует в `BodyNode` в качестве имени entity или routine
+    At least one of the following must hold:
+    - Link exists in `HeaderNode` imports as type or alias
+    - Link exists in `HeaderNode` usages as name
+    - Link exists in `BodyNode` as entity or routine name
 
-    Дополнительные правила:
-    - В `EntityTypeNode`, `RoutineTypeNode`, `MethodNode` ссылка может существовать в сигнатуре
+    Additional rules:
+    - In `EntityTypeNode`, `RoutineTypeNode`, `MethodNode` the link may exist in the signature
 
-    Требования:
-    - Для поиска ссылок в сигнатурах использовать `signature_contains_type_name`
-    - Поиск ссылки в сигнатуре как поиск целого слова, где разделителями могут быть пробелы
-      или пунктуация (например, :), но не символы _ и -. В терминах регулярных выражений это
-      поиск подстроки, которая не окружена символами [\w-], то есть проверка должна падать
-      на param_ или param-, но проходить на param:
+    Requirements:
+    - Use `signature_contains_type_name` to search for links in signatures
+    - Link search in signatures is a whole-word search, where delimiters can be spaces
+      or punctuation (e.g. :), but not _ and - characters. In regex terms, this is
+      a substring search that is not surrounded by [\w-] characters — the check must fail
+      on param_ or param-, but pass on param:
 
-    Шаблоны ошибок:
+    Error templates:
     - not_found: "Link `{link}` in {context} annotation does not match any import, usage, entity, routine, or signature parameter"
 
 ---
@@ -64,4 +64,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки аннотаций в документе манифеста
+  Validation rules for annotations in CODEMANIFEST documents.

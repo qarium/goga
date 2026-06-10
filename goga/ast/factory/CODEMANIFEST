@@ -1,5 +1,5 @@
 # ******************************************************************* #
-# Манифест описывает фабрику по построению дерева документа манифеста #
+# Defines the factory for building a CODEMANIFEST document node tree #
 # ******************************************************************* #
 
 Imports:
@@ -22,80 +22,79 @@ Imports:
     From: goga/ast/errors
 
 Usages:
-  dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
+  dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
   conventions: .goga/usages/conventions.md
   yaml: |
-    Библиотека pyyaml для парсинга yaml документов
-    Библиотека требует указания зависимости в проекте
+    The pyyaml library for parsing YAML documents.
+    The library must be listed as a project dependency.
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
-  Использовать практику `yaml` для загрузки документов.
-  Использовать практику `dsl` для ориентации по YAML.
+  Use the practice `yaml` for loading documents.
+  Use the practice `dsl` for YAML navigation.
 
-  Соглашения сборки:
-    * Каждая созданная нода содержит data — исходные данные, из которых она создана
-    * Каждая созданная нода содержит parent — ссылку на родительскую ноду
-    * Неизвестные ключи в header и footer вызывают `DocumentParseError` с перечислением
-      всех неизвестных ключей
-    * Типы значений проверяются согласно практике `dsl`
+  Build conventions:
+    * Every created node contains data — the raw data from which it was created
+    * Every created node contains parent — a reference to the parent node
+    * Unknown keys in header and footer raise `DocumentParseError` listing
+      all unknown keys
+    * Value types are validated according to practice `dsl`
 
 ---
 
 "Factory(path: str)":
   location: factory.py
   annotations: |
-    Создает дерево документа из YAML файла CODEMANIFEST
+    Creates a document tree from a CODEMANIFEST YAML file.
 
-    `path`: путь до папки с файлом CODEMANIFEST относительно CWD
+    `path`: path to the directory containing the CODEMANIFEST file, relative to CWD
 
-    Дерево состоит из заголовка (`HeaderNode`), тела (`BodyNode`) и
-    нижнего колонтитула (`FooterNode`),
-    объединенных в корневую ноду `DocumentRoot`.
+    The tree consists of a header (`HeaderNode`), body (`BodyNode`), and
+    footer (`FooterNode`), combined into a root `DocumentRoot` node.
 
-    Встраиваемые типы (префикс ->) маршрутизируются в embeddings как (name, path),
-    и одновременно добавляются в entities/routines с флагом embedded=True.
+    Embedded types (prefix ->) are routed into embeddings as (name, path),
+    and simultaneously added to entities/routines with the flag embedded=True.
   methods:
     "create(parent: Node = None) -> document:DocumentRoot": |
-      Создает дерево документа
+      Creates the document tree.
 
-      `parent`: родительская нода
-      `document`: сущность созданного документа
+      `parent`: parent node
+      `document`: the resulting document
 
-      ## Заголовок → `HeaderNode`
+      ## Header → `HeaderNode`
 
-      Импорты → `ImportsNode`:
-      - Каждый type и usage в item проверяется на alias и парсится с учетом AS
-      - Каждый импортированный тип → отдельный `ImportTypeItemNode`
-      - Каждая импортированная практика → отдельный `ImportUsageItemNode`
+      Imports → `ImportsNode`:
+      - Each type and usage in item is checked for alias and parsed with AS handling
+      - Each imported type → a separate `ImportTypeItemNode`
+      - Each imported usage → a separate `ImportUsageItemNode`
 
-      Практики → `UsagesNode`:
-      - Сборка аннотаций в `AnnotationsNode`
-      - Файл: наличие .md в суффиксе → сохранить путь без чтения
-      - URL: префикс http/https → сохранить URL без загрузки
+      Usages → `UsagesNode`:
+      - Annotations are assembled into `AnnotationsNode`
+      - File: .md suffix detected → store path without reading
+      - URL: http/https prefix → store URL without fetching
 
-      Аннотации → `AnnotationsNode`:
-      - Только строковое представление
-      - Извлечение ссылок (backtick) согласно практике `dsl`
+      Annotations → `AnnotationsNode`:
+      - String representation only
+      - Link extraction (backtick) according to practice `dsl`
 
-      Неизвестные ключи → `DocumentParseError`
+      Unknown keys → `DocumentParseError`
 
-      ## Тело → `BodyNode`
+      ## Body → `BodyNode`
 
-      Рутины → `RoutineTypeNode` (только если нет properties, methods и мутаций):
-      - Сигнатура сохраняется без имени: "(param: str) -> void:null"
-      - Префикс -> влияет на embedded флаг, но не является частью имени
+      Routines → `RoutineTypeNode` (only when no properties, methods, or mutations):
+      - Signature is stored without name: "(param: str) -> void:null"
+      - Prefix -> affects the embedded flag but is not part of the name
 
-      Сущности → `EntityTypeNode`:
-      - Сигнатура сохраняется без имени: "(param: str) -> void:null"
-      - Файл преобразуется из имени в относительный путь от CWD
-      - Префикс -> влияет на embedded флаг, но не является частью имени
-      - Если нет свойств и методов, но есть мутация → это сущность
+      Entities → `EntityTypeNode`:
+      - Signature is stored without name: "(param: str) -> void:null"
+      - File is converted from name to relative path from CWD
+      - Prefix -> affects the embedded flag but is not part of the name
+      - If no properties or methods but mutation exists → this is an entity
 
-      ## Нижний колонтитул → `FooterNode`
+      ## Footer → `FooterNode`
 
-      Неизвестные ключи → `DocumentParseError`
+      Unknown keys → `DocumentParseError`
 
 ---
 
@@ -103,4 +102,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает фабрику по построению дерева документа манифеста
+  Defines the factory for building a CODEMANIFEST document node tree.

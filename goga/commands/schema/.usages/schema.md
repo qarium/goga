@@ -1,34 +1,34 @@
 # CLI Command: schema
 
-## Назначение
+## Purpose
 
-CLI-обёртка команды схемы. Делегирует бизнес-логику в `goga/schema`. Выводит JSON-дерево CODEMANIFEST ячеек проекта.
+CLI wrapper for the schema command. Delegates business logic to `goga/schema`. Outputs a JSON tree of project CODEMANIFEST cells.
 
-## Синтаксис
+## Syntax
 
 ```
 goga schema [cells...] [--max-depth N] [--depends-on PATH]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Описание |
-|----------|-----|----------|
-| `cells` | list[str] | Пути к клеткам для фильтрации (необязательно) |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `cells` | list[str] | Paths to cells for filtering (optional) |
 
-## Опции
+## Options
 
-| Опция | Тип | Дефолт | Описание |
-|-------|-----|--------|----------|
-| `--max-depth` | int | None | Ограничение глубины вложенности |
-| `--depends-on` | list[str] | None | Фильтр клеток по зависимости (повторяемый) |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--max-depth` | int | None | Nesting depth limit |
+| `--depends-on` | list[str] | None | Filter cells by dependency (repeatable) |
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — найдены ошибки парсинга AST
+- 0 — success
+- 1 — AST parsing errors found
 
-## Примеры
+## Examples
 
 ```bash
 goga schema

@@ -1,22 +1,22 @@
 # Sync API — goga/sync
 
-## Обзор
+## Overview
 
-Модуль `goga.sync` предоставляет синхронизацию .usages/ файлов из локального пути
-или git-репозитория в `.goga/usages/deps/`.
+The `goga.sync` module synchronizes .usages/ files from a local path
+or git repository into `.goga/usages/deps/`.
 
-## Использование
+## Usage
 
 ```python
 from goga.sync import sync
 
-# Локальный путь
+# Local path
 exit_code = sync(source="/path/to/external/project/goga")
 
-# Git-репозиторий (публичный)
+# Public git repository
 exit_code = sync(source="https://github.com/owner/repo")
 
-# Git-репозиторий (с токеном и веткой)
+# Private git repository (token and branch)
 exit_code = sync(
     source="https://github.com/owner/private-repo",
     token="ghp_xxx",
@@ -27,25 +27,25 @@ exit_code = sync(
 exit_code = sync(source="git@github.com:owner/repo.git")
 ```
 
-## Возвращаемое значение
+## Return Value
 
-- `0` — успех
-- `1` — ошибка (путь не существует, нет .usages/, ошибка I/O, ошибка git)
+- `0` — success
+- `1` — failure (path does not exist, missing .usages/, I/O error, git error)
 
-## Побочные эффекты
+## Side Effects
 
-- Создаёт/перезаписывает каталог `.goga/usages/deps/<name>/`
-- При git-режиме создаёт и удаляет временный каталог
-- Требует `git` в PATH при git-режиме
+- Creates or overwrites the `.goga/usages/deps/<name>/` directory tree
+- In git mode, allocates and removes a temporary directory
+- Requires `git` available in PATH for git-mode operation
 
-## Результат синхронизации
+## Synchronization Result
 
 ```
-Исходный путь: /path/to/external/goga/
+Source path: /path/to/external/goga/
   .usages/dsl.md
   commands/.usages/cli-commands.md
 
-Результат: .goga/usages/deps/goga/
+Result: .goga/usages/deps/goga/
   .usages/dsl.md
   commands/.usages/cli-commands.md
 ```

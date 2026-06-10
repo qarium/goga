@@ -2,68 +2,68 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Использовать urllib.request из стандартной библиотеки для HTTP-запросов.
-  Использовать shutil для копирования файлов.
-  Вывод информации через sys.stderr (click не используется).
+  Apply the `conventions` practice during development and testing.
+  Use urllib.request from the standard library for HTTP requests.
+  Use shutil for file copying.
+  Route all output through sys.stderr (click is not used).
 
 ---
 
 "connect(agents: list[str], force_overwrite: bool = False) -> exit_code:int":
   location: connect.py
   annotations: |
-    Установка скиллов и команд goga для одного или нескольких AI-агентов,
-    включая скиллы из установленных пакетов инструментов.
+    Install goga skills and commands for one or more AI agents,
+    including skills from installed tool packages.
 
-    `agents`: список целевых AI-агентов (обязательный, не пустой). Поддерживаемые: claude, codex, cursor
-    `force_overwrite`: разрешить перезапись существующих скиллов. По умолчанию False
-    `exit_code`: код возврата (0 успех, 1 ошибка)
+    `agents`: list of target AI agents (required, non-empty). Supported: claude, codex, cursor
+    `force_overwrite`: allow overwriting existing skills. Defaults to False
+    `exit_code`: return code (0 success, 1 error)
 
-    Алгоритм:
-    1. Проверить что `agents` не пустой, иначе exit 1
-    2. Для каждого значения из `agents`:
-       a. Определить целевой каталог по агенту:
+    Algorithm:
+    1. Validate that `agents` is non-empty; otherwise exit with code 1
+    2. For each agent in `agents`:
+       a. Resolve the target directory for the agent:
           - claude → ~/.claude/
           - codex → ~/.codex/
           - cursor → ~/.cursor/
-       b. Очистить устаревшие goga-системы:
-          - Просканировать целевой_каталог/skills/ на подпапки goga-*
-          - Удалить все найденные
-       c. Скопировать из исходного каталога в целевой (команды только для AGENTS_WITH_COMMANDS):
-          - Выполняется только если агент в AGENTS_WITH_COMMANDS (claude)
-          - Для codex и cursor — команды пропускаются, commands = []
+       b. Purge stale goga installations:
+          - Scan target_directory/skills/ for goga-* subdirectories
+          - Delete all matches
+       c. Copy assets from source to target directory (commands only for AGENTS_WITH_COMMANDS):
+          - Execute only when the agent is in AGENTS_WITH_COMMANDS (claude)
+          - For codex and cursor, skip commands entirely (commands = [])
           - goga/agent/commands/* → <target>/commands/goga/
           - goga/agent/skills/* → <target>/skills/
-       d. Скачать DSL спецификацию:
-          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
-          - HTTP GET через urllib.request
-          - Записать в <target>/skills/goga-cell/dsl.md
-          - При ошибке сети — exit 1
-       e. Установить скиллы из пакетов инструментов:
-          i. Обнаружить все установленные Python-пакеты с префиксом goga_tool_
-             через importlib.metadata.packages_distributions()
-          ii. Для каждого найденного пакета goga_tool_<tool_name>:
-              - Получить путь к пакету
-              - Валидация: проверить наличие <package>/skills/<tool_name>/SKILL.md
-                - Если не найден — вывести предупреждение в stderr и пропустить
-              - Скопировать все скиллы из <package>/skills/* в <target>/skills/
-                с добавлением префикса goga-tool- к имени каждого скилла
-              - Если целевой скилл уже существует и force_overwrite=False —
-                пропустить с предупреждением в stderr
-              - Если force_overwrite=True — перезаписать
-       f. Вывести список установленных скиллов и команд
-    3. Если все агенты обработаны успешно — вернуть 0, иначе 1
+       d. Fetch the DSL specification:
+          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
+          - Perform HTTP GET via urllib.request
+          - Write response to <target>/skills/goga-cell/dsl.md
+          - On network failure, exit with code 1
+       e. Install skills from tool packages:
+          i. Discover all installed Python packages with the goga_tool_ prefix
+             via importlib.metadata.packages_distributions()
+          ii. For each discovered package goga_tool_<tool_name>:
+              - Resolve the package path
+              - Validate entry point: verify <package>/skills/<tool_name>/SKILL.md exists
+                - If absent, log warning to stderr and skip the package
+              - Copy all skills from <package>/skills/* to <target>/skills/,
+                prepending goga-tool- to each skill directory name
+              - If the target skill already exists and force_overwrite=False,
+                skip with a warning to stderr
+              - If force_overwrite=True, overwrite the target skill
+       f. Print the list of installed skills and commands
+    3. Return 0 if all agents processed successfully, otherwise 1
 
-    Требования:
-    - Полное пересоздание goga-папок при шаге 2b (удаление + копирование)
-    - Существующий контент других расширений не затрагивать
-    - CLAUDE.md, settings.json, README.md целевого каталога не затрагивать
-    - dsl.md скачивается из внешнего репозитория при каждой установке
-    - Использовать urllib.request (без внешних зависимостей)
-    - Использовать importlib.metadata из стандартной библиотеки
-    - При ошибке скачивания dsl.md — прервать с кодом 1
-    - Имя скилла из инструмента формируется как goga-tool-<skill_dir_name>
-    - Пакет инструмента без entry-point скилла пропускается целиком
+    Requirements:
+    - Fully recreate goga directories at step 2b (delete + copy)
+    - Do not modify content belonging to other extensions
+    - Do not touch CLAUDE.md, settings.json, README.md in the target directory
+    - Download dsl.md from the external repository on every installation
+    - Use urllib.request exclusively (no external dependencies)
+    - Use importlib.metadata from the standard library
+    - Abort with code 1 if dsl.md download fails
+    - Derive tool skill names as goga-tool-<skill_dir_name>
+    - Skip any tool package that lacks an entry-point skill entirely
 
 ---
 
@@ -71,5 +71,5 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает логику подключения скиллов и команд goga,
-  включая установку скиллов из пакетов инструментов goga_tool_*
+  Manifest describing the goga skill and command connection logic,
+  including skill installation from goga_tool_* tool packages

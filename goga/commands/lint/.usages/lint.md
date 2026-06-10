@@ -1,27 +1,27 @@
 # CLI Command: lint
 
-## Назначение
+## Purpose
 
-Валидация CODEMANIFEST файлов в проекте. Загружает AST дерево проекта, применяет правила валидации и выводит найденные ошибки.
+Validation of CODEMANIFEST files in the project. Loads the project AST tree, applies validation rules, and outputs found errors.
 
-## Синтаксис
+## Syntax
 
 ```
 goga lint [path]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Дефолт | Описание |
-|----------|-----|--------|----------|
-| `path` | str | `.` | Путь к директории для валидации |
+| Argument | Type | Default | Description |
+|----------|------|---------|-------------|
+| `path` | str | `.` | Path to the directory for validation |
 
-## Код возврата
+## Exit code
 
-- 0 — успех (нет ошибок)
-- 1 — найдены ошибки валидации
+- 0 — success (no errors)
+- 1 — validation errors found
 
-## Формат вывода ошибок
+## Error output format
 
 ```
 [rule_name] <message>
@@ -30,13 +30,13 @@ goga lint [path]
       <yaml_data>
 ```
 
-- `[rule_name]` выводится красным цветом
-- `-->` — путь к файлу с ошибкой
-- yaml-данные ошибки с отступом 6 пробелов
+- `[rule_name]` is output in red
+- `-->` — path to the file with the error
+- yaml error data indented 6 spaces
 
-## Итоговая сводка
+## Summary
 
-После всех ошибок выводится пустая строка и итоговая сводка:
+After all errors, an empty line and the summary are output:
 
 ```
 goga lint
@@ -44,10 +44,10 @@ goga lint
 cells: 20 errors: 0
 ```
 
-- `cells` — количество проверенных клеток
-- `errors` — количество найденных ошибок
+- `cells` — number of checked cells
+- `errors` — number of errors found
 
-## Примеры
+## Examples
 
 ```bash
 goga lint

@@ -35,8 +35,8 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Клетка — фасад для всех контрактных операций.
+  During development and testing, use the practice `conventions`.
+  The cell is the facade for all contract operations.
 
 ---
 
@@ -48,18 +48,18 @@ Annotations: |
 "contract(lang: str, cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: dispatcher.py
   annotations: |
-    Диспетчер контрактных операций по языку реализации.
+    Dispatcher of contract operations by implementation language.
 
-    `lang`: язык реализации ("python", "golang", "javascript", "kotlin", "swift")
-    `cell_path`: путь до ячейки
+    `lang`: implementation language ("python", "golang", "javascript", "kotlin", "swift")
+    `cell_path`: path to the cell
 
-    Алгоритм:
-    - "python" → вызвать `python_contract`(`cell_path`), использовать практику `use_py_contract`
-    - "golang" → вызвать `golang_contract`(`cell_path`), использовать практику `use_go_contract`
-    - "javascript" → вызвать `javascript_contract`(`cell_path`), использовать практику `use_js_contract`
-    - "kotlin" → вызвать `kotlin_contract`(`cell_path`), использовать практику `use_kt_contract`
-    - "swift" → вызвать `swift_contract`(`cell_path`), использовать практику `use_sw_contract`
-    - неизвестный язык → ValueError
+    Algorithm:
+    - "python" → call `python_contract`(`cell_path`), use the practice `use_py_contract`
+    - "golang" → call `golang_contract`(`cell_path`), use the practice `use_go_contract`
+    - "javascript" → call `javascript_contract`(`cell_path`), use the practice `use_js_contract`
+    - "kotlin" → call `kotlin_contract`(`cell_path`), use the practice `use_kt_contract`
+    - "swift" → call `swift_contract`(`cell_path`), use the practice `use_sw_contract`
+    - unknown language → ValueError
 
 ---
 
@@ -67,4 +67,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  Работа с реализованным контрактом в языке программирования
+  Working with an implemented contract in a programming language

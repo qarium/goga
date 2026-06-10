@@ -1,34 +1,34 @@
 # CLI Command: sync
 
-## Назначение
+## Purpose
 
-CLI-обёртка команды синхронизации. Делегирует бизнес-логику в `goga/sync`. Копирует .usages/ из локального пути или git-репозитория.
+CLI wrapper for the synchronization command. Delegates business logic to `goga/sync`. Copies .usages/ from a local path or git repository.
 
-## Синтаксис
+## Syntax
 
 ```
 goga sync <source> [--token TOKEN] [--branch BRANCH]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Описание |
-|----------|-----|----------|
-| `source` | str | Путь к каталогу (локальный) или URL git-репозитория |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `source` | str | Path to directory (local) or git repository URL |
 
-## Опции
+## Options
 
-| Опция | Тип | Описание |
-|-------|-----|----------|
-| `--token` | str | Токен авторизации для HTTPS git-репозитория |
-| `--branch` | str | Ветка или тег для checkout при клонировании |
+| Option | Type | Description |
+|--------|------|-------------|
+| `--token` | str | Authorization token for HTTPS git repository |
+| `--branch` | str | Branch or tag for checkout when cloning |
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка
+- 0 — success
+- 1 — error
 
-## Примеры
+## Examples
 
 ```bash
 goga sync /path/to/external/project/goga

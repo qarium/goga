@@ -1,30 +1,32 @@
-# Анализ дерева документов
+# Analyzing the document tree
 
-Область: глобальный анализ всех документов AST-дерева.
-Аудитория: потребители, которым нужно применить правила уровня проекта к загруженному дереву.
+Scope: Global validation across all documents in the AST tree.
+Audience: Consumers who need to apply project-level validation rules to a loaded document tree.
 
-## Минимальный пример
+## Minimal example
 
 ```python
 from goga.ast.analyzer import Analyzer
 from goga.ast.nodes import DocumentRoot
 
-# tree — список DocumentRoot, полученный из Factory или AST
+# tree: list[DocumentRoot] obtained from Factory or AST
 analyzer = Analyzer(tree)
 errors = analyzer.analyze(ast_rules)
 ```
 
-Analyzer принимает:
-- `tree` — плоский список всех документов дерева (включая вложенные)
-- `rules` — список правил типа `ASTRule`
+Constructor parameters:
+- `tree` — `list[DocumentRoot]`: flat list of all documents (including nested children)
 
-Для каждого правила вызывается `rule.check(document)` по каждому документу.
-Результат — плоский список `ASTRuleError`.
+`analyze()` parameters:
+- `rules` — `list[ASTRule]`: tree-level rules to apply
 
-## Использование вместе с Visitor
+Behavior: For each rule, `Analyzer` calls `rule.check(document)` on each document in the tree.
+Returns a flat list of `ASTRuleError` instances.
 
-Analyzer не заменяет Visitor — они работают на разных уровнях:
-- `Visitor` — правила одного документа (`DocumentRule`)
-- `Analyzer` — правила, требующие доступа ко всему дереву (`ASTRule`)
+## Relationship to Visitor
 
-Типичный порядок: сначала Visitor для каждого документа, затем Analyzer для дерева целиком.
+`Analyzer` and `Visitor` operate at different scopes:
+- `Visitor` applies `DocumentRule` instances to individual documents
+- `Analyzer` applies `ASTRule` instances across the entire tree
+
+Recommended order: run `Visitor` on each document first, then run `Analyzer` on the full tree.

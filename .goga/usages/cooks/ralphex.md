@@ -1,151 +1,151 @@
-# Автономное выполнение планов с ralphex
+# Autonomous execution of plans with ralphex
 
-## Инструмент
+## Tool
 
-**ralphex** — CLI-утилита для автономного выполнения планов через Claude Code. Оркестрирует сессии Claude Code, выполняя задачи одну за другой с автоматическими коммитами и код-ревью.
+**ralphex** is a CLI utility for autonomous execution of plans via Claude Code. It orchestrates Claude Code sessions, executing tasks one by one with automatic commits and code review.
 
-Репозиторий: https://github.com/umputun/ralphex
+Repository: https://github.com/umputun/ralphex
 
-## Формат плана
+## Plan format
 
-Планы — это markdown-файлы с секциями задач. Каждая задача содержит чекбоксы, которые Claude отмечает по мере выполнения.
+Plans are markdown files with task sections. Each task contains checkboxes that Claude marks as they are completed.
 
 ```markdown
-# Plan: Название фичи
+# Plan: Feature name
 
 ## Overview
-Описание того, что нужно реализовать.
+Description of what needs to be implemented.
 
 ## Validation Commands
 - `pytest tests/`
 - `ruff check goga/`
 
-### Task 1: Описание первой задачи
-- [ ] Шаг 1
-- [ ] Шаг 2
-- [ ] Добавить тесты
+### Task 1: Description of the first task
+- [ ] Step 1
+- [ ] Step 2
+- [ ] Add tests
 
-### Task 2: Описание второй задачи
-- [ ] Шаг 1
-- [ ] Шаг 2
+### Task 2: Description of the second task
+- [ ] Step 1
+- [ ] Step 2
 ```
 
-**Правила:**
-- Заголовки задач: `### Task N:` или `### Iteration N:`
-- Чекбоксы: `- [ ]` (не выполнено) / `- [x]` (выполнено)
-- Секция `## Validation Commands` — команды для проверки (тесты, линтеры)
-- Планы размещаются в `docs/plans/`
+**Rules:**
+- Task headers: `### Task N:` or `### Iteration N:`
+- Checkboxes: `- [ ]` (not done) / `- [x]` (done)
+- The `## Validation Commands` section contains verification commands (tests, linters)
+- Plans are placed in `docs/plans/`
 
-## Использование в проекте goga
+## Usage in the goga project
 
-### Запуск выполнения
+### Starting execution
 
 ```bash
-# Полный цикл: задачи + ревью
+# Full cycle: tasks + review
 ralphex docs/plans/my-feature.md
 
-# Только задачи (без ревью)
+# Tasks only (without review)
 ralphex --tasks-only docs/plans/my-feature.md
 
-# Только ревью (без выполнения задач)
+# Review only (without executing tasks)
 ralphex --review docs/plans/my-feature.md
 
 ```
 
-ralphex автоматически:
-1. Создаст ветку из имени файла плана
-2. Выполнит задачи одну за другой
-3. Запустит валидацию после каждой задачи
-4. Сделает коммит после каждой завершенной задачи
-5. Проведет код-ревью (5 агентов → codex → 2 агента)
-6. Переместит план в `completed/` при успехе
+ralphex automatically:
+1. Creates a branch from the plan file name
+2. Executes tasks one by one
+3. Runs validation after each task
+4. Makes a commit after each completed task
+5. Conducts code review (5 agents → codex → 2 agents)
+6. Moves the plan to `completed/` on success
 
-### Мониторинг прогресса
+### Progress monitoring
 
 ```bash
-# Веб-дашборд в браузере
+# Web dashboard in browser
 ralphex --serve docs/plans/my-feature.md
-# откроет http://localhost:8080
+# will open http://localhost:8080
 
-# Лог выполнения в реальном времени
+# Real-time execution log
 tail -f progress-my-feature.txt
 ```
 
-### Возобновление после сбоя
+### Resuming after a failure
 
-Выполненные задачи уже закоммичены. Просто перезапусти:
+Completed tasks are already committed. Just restart:
 
 ```bash
 ralphex docs/plans/my-feature.md
 ```
 
-ralphex найдет первую невыполненную задачу (`- [ ]`) и продолжит с нее.
+ralphex will find the first incomplete task (`- [ ]`) and continue from there.
 
-### Корректировка хода выполнения
+### Adjusting execution progress
 
-- **Изменить поведение** — отредактируй `CLAUDE.md`, изменения применятся на следующей задаче
-- **Изменить структуру** — останови (Ctrl+C), отредактируй план, перезапусти
+- **Change behavior** — edit `CLAUDE.md`, changes will take effect on the next task
+- **Change structure** — stop (Ctrl+C), edit the plan, restart
 
-## CLI-опции
+## CLI options
 
-| Флаг                  | Описание                                    | По умолчанию |
-|-----------------------|---------------------------------------------|--------------|
-| `-m, --max-iterations`| Максимум итераций задач                     | 50           |
-| `-r, --review`        | Только ревью (без выполнения задач)         | false        |
-| `-e, --external-only` | Только внешнее ревью (codex/custom)         | false        |
-| `-t, --tasks-only`    | Только задачи (без ревью)                   | false        |
-| `--plan`              | Интерактивное создание плана                | —            |
-| `-s, --serve`         | Запустить веб-дашборд                       | false        |
-| `-p, --port`          | Порт веб-дашборда (с `--serve`)             | 8080         |
-| `-d, --debug`         | Отладочный вывод                            | false        |
-| `--no-color`          | Отключить цветной вывод                     | false        |
+| Flag                 | Description                                     | Default      |
+|----------------------|-------------------------------------------------|--------------|
+| `-m, --max-iterations`| Maximum task iterations                        | 50           |
+| `-r, --review`       | Review only (without executing tasks)           | false        |
+| `-e, --external-only`| External review only (codex/custom)             | false        |
+| `-t, --tasks-only`   | Tasks only (without review)                     | false        |
+| `--plan`             | Interactive plan creation                       | —            |
+| `-s, --serve`        | Start web dashboard                             | false        |
+| `-p, --port`         | Web dashboard port (with `--serve`)             | 8080         |
+| `-d, --debug`        | Debug output                                    | false        |
+| `--no-color`         | Disable colored output                          | false        |
 
-## Конфигурация
+## Configuration
 
-ralphex использует `~/.config/ralphex/` (глобально) или `.ralphex/` в корне проекта (локально).
+ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (local).
 
-**Приоритет:** CLI-флаги > локальный `.ralphex/` > глобальный `~/.config/ralphex/` > встроенные значения
+**Priority:** CLI flags > local `.ralphex/` > global `~/.config/ralphex/` > built-in values
 
-### Структура конфигурации
+### Configuration structure
 
 ```
 ~/.config/ralphex/
-├── config              # основной конфиг (INI-формат)
-├── prompts/            # кастомные промпты
+├── config              # main config (INI format)
+├── prompts/            # custom prompts
 │   ├── task.txt
 │   ├── review_first.txt
 │   ├── review_second.txt
 │   └── codex.txt
-└── agents/             # кастомные агенты ревью (*.txt)
+└── agents/             # custom review agents (*.txt)
 ```
 
-### Ключевые настройки
+### Key settings
 
-| Опция                | Описание                        | По умолчанию |
-|----------------------|---------------------------------|--------------|
-| `claude_command`     | Команда Claude CLI              | `claude`     |
-| `plans_dir`          | Директория с планами            | `docs/plans` |
-| `codex_enabled`      | Включить фазу codex-ревью       | `true`       |
-| `task_retry_count`   | Количество попыток на задачу    | `1`          |
-| `finalize_enabled`   | Финальный шаг после ревью       | `false`      |
+| Option              | Description                          | Default      |
+|---------------------|--------------------------------------|--------------|
+| `claude_command`    | Claude CLI command                   | `claude`     |
+| `plans_dir`         | Directory with plans                 | `docs/plans` |
+| `codex_enabled`     | Enable codex review phase            | `true`       |
+| `task_retry_count`  | Number of retries per task           | `1`          |
+| `finalize_enabled`  | Final step after review              | `false`      |
 
-## Агенты ревью
+## Review agents
 
-По умолчанию ralphex запускает 5 параллельных агентов:
+By default, ralphex launches 5 parallel agents:
 
-| Агент              | Назначение                         |
-|--------------------|------------------------------------|
-| `quality`          | Баги, безопасность, race conditions|
-| `implementation`   | Соответствие кода целям плана      |
-| `testing`          | Покрытие и качество тестов         |
-| `simplification`   | Обнаружение over-engineering       |
-| `documentation`    | Необходимость обновления доков     |
+| Agent               | Purpose                                  |
+|---------------------|------------------------------------------|
+| `quality`           | Bugs, security, race conditions          |
+| `implementation`    | Code alignment with plan goals           |
+| `testing`           | Test coverage and quality                |
+| `simplification`    | Detecting over-engineering               |
+| `documentation`     | Documentation update needs               |
 
-Агенты настраиваемые — можно добавлять, удалять и модифицировать через `~/.config/ralphex/agents/`.
+Agents are customizable — you can add, remove, and modify them via `~/.config/ralphex/agents/`.
 
-## Антипаттерны
+## Anti-patterns
 
-- Не запускай ralphex не из корня git-репозитория
-- Не запускай на ветке с незакоммиченными изменениями (кроме файла плана) — либо закоммить, либо сделай `git stash`
-- Не запускай полные планы на не-master/main ветке — ralphex сам создаст feature-ветку
-- Не забывай секцию `## Validation Commands` в плане — без неё задачи не проверяются
+- Do not run ralphex outside the root of a git repository
+- Do not run on a branch with uncommitted changes (except the plan file) — either commit them or run `git stash`
+- Do not run full plans on a non-master/main branch — ralphex will create a feature branch itself
+- Do not forget the `## Validation Commands` section in the plan — without it, tasks are not verified

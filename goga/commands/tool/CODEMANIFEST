@@ -3,42 +3,42 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Динамический импорт через importlib.import_module (stdlib).
+  The `conventions` practice provides rules for:
+  - codebase navigation and modification
+  - REPL development loop organization
+  - debugging and testing procedures
+  - test infrastructure setup
+  - project-wide development and testing principles
+  Use the `click` practice to implement CLI commands.
+  Dynamic import via importlib.import_module (stdlib).
 
 ---
 
 "tool(name: str, args: list[str])":
   location: tool.py
   annotations: |
-    CLI-обёртка команды динамического вызова tool-пакета.
+    CLI wrapper command that dynamically dispatches to a tool package.
 
-    `name`: имя tool-пакета (без префикса goga_tool_). CLI-позиционный аргумент.
-    `args`: произвольные аргументы, передаваемые в main tool-пакета.
-            Получены через ctx.args (allow_extra_args=True).
+    `name`: tool package identifier (without the goga_tool_ prefix). CLI positional argument.
+    `args`: variadic arguments forwarded to the tool package's main function.
+            Captured via ctx.args (allow_extra_args=True).
 
-    Click-декораторы:
+    Click decorators:
     - @click.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
     - @click.argument('name')
     - @click.pass_context
 
-    Алгоритм:
-    1. Сформировать имя пакета: f"goga_tool_{name}"
-    2. Импортировать пакет через importlib.import_module
-    3. Получить функцию main из импортированного пакета
-    4. Вызвать main(args)
+    Algorithm:
+    1. Resolve the package name: f"goga_tool_{name}"
+    2. Import the package via importlib.import_module
+    3. Retrieve the main function from the imported module
+    4. Invoke main(args)
 
-    Обработка ошибок:
-    - Пакет не найден (ModuleNotFoundError) → понятное сообщение через click.secho
-    - Функция main отсутствует (AttributeError) → понятное сообщение через click.secho
+    Error handling:
+    - ModuleNotFoundError (package not found) → user-facing message via click.secho
+    - AttributeError (main function missing) → user-facing message via click.secho
 
-    Использовать практику `click` для создания команды.
+    Use the `click` practice for command implementation.
 
 ---
 
@@ -46,4 +46,4 @@ Author: Goga
 CreatedAt: 25/05/26
 
 Description: |
-  CLI-обёртка команды goga tool — динамический вызов внешних tool-пакетов
+  CLI wrapper command `goga tool` — runtime dispatch to external tool packages via dynamic import

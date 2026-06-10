@@ -11,60 +11,60 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Команда запускает goga.build внутри Docker-контейнера.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
+  The command runs goga.build inside a Docker container.
 
 ---
 
 "build(plan: str)":
   location: build.py
   annotations: |
-    CLI-обёртка команды сборки. Запускает python -m goga.build внутри Docker-контейнера.
+    CLI wrapper for the build command. Runs python -m goga.build inside a Docker container.
 
-    `plan`: путь к файлу плана
+    `plan`: path to the plan file
 
-    CLI-опции (через click):
+    CLI options (via click):
     - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
     - --session-timeout, --idle-timeout, --wait
     - --max-iterations, --review-patience
-    - -e / --env KEY=VALUE (множественная) — передать переменные окружения в контейнер
+    - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
 
-    Алгоритм:
-    0. (pre-check) Проверить доступность docker через _check_docker()
-       Если docker не найден — ошибка ClickException
-    1. Загрузить конфигурацию через `load_config` (практика `configuration`) → получить `Config`
-    2. Собрать cli_flags из click-параметров
-    3. Считать git config (user.name, user.email):
-       - Выполнить git config user.name и git config user.email
-       - При успехе — вернуть dict с GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL
-       - При ошибке или отсутствии git — вернуть пустой dict (не блокировать сборку)
-    4. Записать env-file:
-       - env = task_executor.env + git_env (git_env не перезаписывает task_executor.env)
-       - + extra_env из CLI
-       - Файл с правами 0600 во временной директории
-    5. Проверить config.build.image:
-       Если None — ошибка ClickException("image in .goga/config.yml is not set")
-    6. Сгенерировать container_name: "goga-build-{pid}"
-    7. Установить SIGTERM handler: при получении сигнала — SystemExit(128 + signum)
-    8. Собрать Docker-команду:
+    Algorithm:
+    0. (pre-check) Verify docker availability via _check_docker()
+       If docker is not found — ClickException error
+    1. Load configuration via `load_config` (practice `configuration`) → get `Config`
+    2. Collect cli_flags from click parameters
+    3. Read git config (user.name, user.email):
+       - Execute git config user.name and git config user.email
+       - On success — return dict with GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL
+       - On error or absence of git — return empty dict (do not block the build)
+    4. Write env-file:
+       - env = task_executor.env + git_env (git_env does not overwrite task_executor.env)
+       - + extra_env from CLI
+       - File with 0600 permissions in a temporary directory
+    5. Check config.build.image:
+       If None — ClickException error("image in .goga/config.yml is not set")
+    6. Generate container_name: "goga-build-{pid}"
+    7. Set SIGTERM handler: on signal — SystemExit(128 + signum)
+    8. Assemble Docker command:
        - docker run --rm --name container_name --entrypoint python3
-       - Монтирование CWD как /workspace
-       - --env-file для передачи переменных
-       - Если существует ~/.codex/auth.json — монтировать read-only как /home/goga/.codex/auth.json
-       - Образ из `Config`.build.image
-       - Аргументы: -m goga.build <plan> + CLI-флаги
-    9. При dry_run: exit 0 (без запуска контейнера)
-    10. Запустить Docker через subprocess.Popen, дождаться exit code через .wait()
-    11. В finally:
-        a. Удалить env-file
-        b. Выполнить docker kill container_name (suppress errors)
-        c. Восстановить предыдущий SIGTERM handler
+       - Mount CWD as /workspace
+       - --env-file for passing variables
+       - If ~/.codex/auth.json exists — mount read-only as /home/goga/.codex/auth.json
+       - Image from `Config`.build.image
+       - Arguments: -m goga.build <plan> + CLI flags
+    9. On dry_run: exit 0 (without running the container)
+    10. Run Docker via subprocess.Popen, wait for exit code via .wait()
+    11. In finally:
+        a. Delete env-file
+        b. Execute docker kill container_name (suppress errors)
+        c. Restore previous SIGTERM handler
 
 ---
 
@@ -72,4 +72,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  CLI-обёртка команды сборки goga
+  CLI wrapper for the goga build command

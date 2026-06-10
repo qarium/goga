@@ -1,55 +1,55 @@
-# Реестр правил валидации CODEMANIFEST
+# CODEMANIFEST validation rule registry
 
-Область: обзор всех доступных правил и их分类икация.
-Аудитория: потребители, которым нужно подобрать правила для валидации манифеста.
+Scope: Overview of all available validation rules and their classification.
+Audience: Consumers selecting rules for manifest validation.
 
-## Два уровня правил
+## Two rule tiers
 
-Правила разделены на две категории по области применения:
+Rules are organized into two categories by scope:
 
-### DocumentRule — правила одного документа
+### DocumentRule — per-document validation
 
-Применяются через `Visitor` к каждому документу отдельно.
+Applied via `Visitor` to each document independently.
 
-**Импорты:**
-- `ImportsCanNotBeEmpty` — блок импортов не может быть пустым
-- `ImportsHasOnlyValidKeys` — только ключи Types, Usages, From
-- `ImportItemIsValid` — каждый импорт содержит тип или практику
-- `ImportUsageExists` — импортируемая практика существует на файловой системе
-- `ImportHasValidFromPath` — путь From существует и не выходит за CWD
-- `ImportHasNotDuplicate` — нет дубликатов в импортах
-- `ImportIsUsed` — каждый импорт используется в документе
+**Imports:**
+- `ImportsCanNotBeEmpty` — import block must not be empty
+- `ImportsHasOnlyValidKeys` — only Types, Usages, From keys allowed
+- `ImportItemIsValid` — each import must declare a type or usage
+- `ImportUsageExists` — imported usage file must exist on disk
+- `ImportHasValidFromPath` — From path must exist and stay within CWD
+- `ImportHasNotDuplicate` — no duplicate names across imports
+- `ImportIsUsed` — every import must be referenced in the document
 
-**Практики (Usages):**
-- `AllUsagesIsUsed` — каждая практика используется в аннотациях
-- `UsageFilepathExists` — файл практики существует
-- `UsageUrlIsAccessible` — URL практики доступен (HTTP 200)
-- `UsageLinksHasNotConflicts` — имена практик не конфликтуют с типами
+**Usages:**
+- `AllUsagesIsUsed` — every declared usage must appear in annotations
+- `UsageFilepathExists` — usage file must exist on disk
+- `UsageUrlIsAccessible` — usage URL must return HTTP 200
+- `UsageLinksHasNotConflicts` — usage names must not conflict with type names
 
-**Аннотации:**
-- `AnnotationLinksExists` — ссылки в аннотациях указывают на существующие сущности
+**Annotations:**
+- `AnnotationLinksExists` — backtick links in annotations must resolve to existing entities
 
-**Структуры:**
-- `EntitiesAndRoutinesHasNotConflicts` — имена не конфликтуют с импортами
-- `EntityHasOnlyValidKeys` — entity содержит только допустимые ключи
-- `RoutineHasOnlyValidKeys` — routine содержит только допустимые ключи
-- `SignatureIsValid` — формат сигнатуры `(...) -> ...` или `(...)`
-- `ReturnTypeHasLink` — возвращаемый тип имеет семантическую метку
-- `LocationIsRequired` — тип содержит location — имя файла с расширением
+**Structures:**
+- `EntitiesAndRoutinesHasNotConflicts` — entity/routine names must not conflict with imports
+- `EntityHasOnlyValidKeys` — entity must contain only allowed keys
+- `RoutineHasOnlyValidKeys` — routine must contain only allowed keys
+- `SignatureIsValid` — signature must match `(...) -> ...` or `(...)` format
+- `ReturnTypeHasLink` — return type must include a semantic label
+- `LocationIsRequired` — type must specify a filename with extension
 
-**Мутации:**
-- `MutationExists` — базовый тип мутации существует
-- `MutationIsValid` — мутация не ссылается на себя
-- `EmbeddedEntityCanNotHasMutations` — встроенная сущность не имеет мутаций
+**Mutations:**
+- `MutationExists` — mutation base type must exist
+- `MutationIsValid` — mutation must not reference itself
+- `EmbeddedEntityCanNotHasMutations` — embedded entities must not define mutations
 
-### ASTRule — правила всего дерева
+### ASTRule — tree-wide validation
 
-Применяются через `Analyzer` ко всем документам.
+Applied via `Analyzer` across all documents.
 
-- `ImportsHasNotCyclicalDeps` — нет циклических импортов между документами
-- `ImportTypeExists` — импортируемый тип существует в указанном документе
-- `EmbeddedTypeHasLowLevel` — встроенный тип находится ниже в иерархии
+- `ImportsHasNotCyclicalDeps` — no cyclic import dependencies between documents
+- `ImportTypeExists` — imported type must exist in the target document
+- `EmbeddedTypeHasLowLevel` — embedded types must reside deeper in the file hierarchy
 
-## Вспомогательные типы
+## Utility function
 
-- `signature_contains_type_name(signature, type_name) -> bool` — проверяет вхождение имени типа в сигнатуру
+- `signature_contains_type_name(signature, type_name) -> bool` — tests whether a type name appears in a signature

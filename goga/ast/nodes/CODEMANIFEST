@@ -1,12 +1,12 @@
 # ********************************************************* #
-# Файл описывает структуры данных нод в документе манифеста #
+# Defines the data structures of nodes in a CODEMANIFEST document #
 # ********************************************************* #
 
 Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
 ---
 
@@ -14,178 +14,178 @@ Node():
   location: base.py
   properties:
     parent -> DocumentNode | DocumentRoot:
-      Родительская нода или документ
+      Parent node or document
     data -> dict[str, Any]: |
-      Исходные данные из которых была сделана нода
+      Raw data from which the node was created
 
 Node::DocumentRoot():
   location: document.py
   properties:
     path -> str: |
-      Относительный путь расположения документа
+      Relative path to the document's directory
     links -> dict[str, list[Node]]: |
-      Все ссылки в документе с маппингом на ноды аннотаций в которых они встречаются
+      All links in the document mapped to the annotation nodes where they occur
     embeddings -> list[tuple[str, str]]: |
-      Список отношений имени встраиваемого типа к пути из которого он встраивается
+      List of (embedded type name, source path) tuples
     header -> HeaderNode: |
-      Нода с содержимым заголовка, default=HeaderNode()
+      Node containing the header content, default=HeaderNode()
     body -> BodyNode: |
-      Нода с содержимым тела, default=BodyNode()
+      Node containing the body content, default=BodyNode()
     footer -> FooterNode: |
-      Нижний колонтитул документа, default=FooterNode()
+      Footer node of the document, default=FooterNode()
     types -> dict[str, list[Node]]: |
-      Все типы в документе из header и Body с маппингом на ноды типа.
-      Для подключенных типов список нод пустой.
+      All types in the document from header and body mapped to their nodes.
+      For imported types, the node list is empty.
     children -> list[DocumentRoot]:
-      Дочерние, вложенные документы
+      Nested child documents
 
 Node::DocumentNode():
   location: document.py
   properties:
     root -> DocumentRoot:
-      Основной объект документа
+      The underlying document object
 
 DocumentNode::AnnotationsNode():
   location: common.py
   properties:
     url -> str | None: |
-      ULR из которого нужно загрузить практику
+      URL from which to load the usage
     filepath -> str | None: |
-      Путь до файла с аннотацией
+      Path to the annotation file
     links -> list[str]: |
-      Список ссылок в аннотациях
+      List of links in annotations
     text -> str: |
-      Текст аннотации
+      Annotation text
 
 DocumentNode::HeaderNode():
   location: header.py
   properties:
     imports -> ImportsNode: |
-      Список импортов содержащийся в документе, default=ImportsNode()
+      List of imports in the document, default=ImportsNode()
     usages -> UsagesNode: |
-      Список практик содержащийся в документе, default=UsagesNode()
+      List of usages in the document, default=UsagesNode()
     annotations -> AnnotationsNode: |
-      Аннотации содержащийся в документе
+      Annotations in the document
     types -> list[str]: |
-      Список имен типов подключенных через imports
+      List of type names connected via imports
 
 DocumentNode::ImportsNode():
   location: header.py
   properties:
     types -> list[ImportTypeItemNode]: |
-      Список импортов типов
+      List of type imports
     usages -> list[ImportUsageItemNode]: |
-      Список импортов практик
+      List of usage imports
 
 DocumentNode::ImportTypeItemNode():
   location: header.py
   properties:
     type_name -> set[str]: |
-      Имя типа который нужно импортировать
+      Name of the type to import
     from_path -> str: |
-      Путь к клетке из которой импортировать тип
+      Path to the cell to import the type from
     alias -> str: |
-      Альяс на имя типа
+      Alias for the type name
 
 DocumentNode::ImportUsageItemNode():
   location: header.py
   properties:
     usage_name -> set[str]: |
-      Имя практики которую нужно импортировать
+      Name of the usage to import
     from_path -> str: |
-      Путь к клетке из которой импортировать практику
+      Path to the cell to import the usage from
     alias -> str: |
-      Альяс на имя типа
+      Alias for the type name
 
 DocumentNode::UsagesNode():
   location: header.py
   properties:
     items -> list[UsageItemNode]: |
-      Список практик
+      List of usages
 
 DocumentNode::UsageItemNode():
   location: header.py
   properties:
     name -> str: |
-      Имя практики
+      Usage name
     annotations -> AnnotationsNode: |
-      Аннотации практики
+      Usage annotations
 
 DocumentNode::BodyNode():
   location: body.py
   properties:
     types -> dict[str, list[Node]]: |
-      Все типы в документе с маппингом на ноды типа.
+      All types in the document mapped to their nodes.
     entities -> list[EntityTypeNode]: |
-      Список сущностей в теле документа
+      List of entities in the document body
     routines -> list[RoutineTypeNode]: |
-      Список рутин в теле документа
+      List of routines in the document body
 
 DocumentNode::RoutineTypeNode():
   location: body.py
   properties:
     name -> str: |
-      Имя рутины
+      Routine name
     signature -> str: |
-      Строка с сигнатурой рутины
+      Routine signature string
     location -> str: |
-      Файл в котором располагается рутина
+      File where the routine is located
     annotations -> AnnotationsNode: |
-      Аннотации рутины
+      Routine annotations
     embedded -> bool: |
-      Флаг указывает на то является ли рутина встроенной
-      в текущий документ из другого документа
+      Flag indicating whether the routine is embedded
+      into the current document from another document
 
 DocumentNode::EntityTypeNode():
   location: body.py
   properties:
     name -> str: |
-      Имя сущности
+      Entity name
     signature -> str: |
-      Строка с сигнатурой сущности
+      Entity signature string
     location -> str: |
-      Файл в котором располагается сущность
+      File where the entity is located
     annotations -> AnnotationsNode: |
-      Аннотации сущности
+      Entity annotations
     properties -> list[PropertyNode]: |
-      Свойства сущности
+      Entity properties
     methods -> list[MethodNode]: |
-      Список методов сущности
+      List of entity methods
     embedded -> bool: |
-      Флаг указывает на то является ли сущность встроенной
-      в текущий документ из другого документа
+      Flag indicating whether the entity is embedded
+      into the current document from another document
     mutations -> list[tuple[str, str]]: |
-      Список кортежей (имя_базового_типа, путь_документа_где_объявлена_мутация)
+      List of (base_type_name, document_path_where_mutation_is_declared) tuples
 
 DocumentNode::MethodNode():
   location: body.py
   properties:
     name -> str: |
-      Имя метода
+      Method name
     signature -> str: |
-      Строка с сигнатурой метода
+      Method signature string
     annotations -> AnnotationsNode: |
-      Аннотации метода
+      Method annotations
 
 DocumentNode::PropertyNode():
   location: body.py
   properties:
     name -> str: |
-      Имя свойства
+      Property name
     type -> str: |
-      Тип свойства
+      Property type
     annotations -> AnnotationsNode: |
-      Аннотации свойства
+      Property annotations
 
 DocumentNode::FooterNode():
   location: footer.py
   properties:
     author -> str: |
-      Имя автора
+      Author name
     created_at -> str: |
-      Дата создания документа
+      Document creation date
     description -> str: |
-      Описание документа
+      Document description
 
 ---
 
@@ -193,4 +193,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает структуры данных нод документа манифеста
+  Defines the data structures of nodes in a CODEMANIFEST document.

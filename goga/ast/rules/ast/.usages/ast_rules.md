@@ -1,13 +1,13 @@
-# Правила уровня AST-дерева
+# AST tree-level rules
 
-Область: правила, проверяющие связи между документами в рамках всего проекта.
-Аудитория: потребители, применяющие глобальную валидацию манифестов.
+Scope: Rules that validate cross-document relationships across the entire project.
+Audience: Consumers applying global manifest validation.
 
-## Доступные правила
+## Available rules
 
 ### ImportsHasNotCyclicalDeps
 
-Проверяет отсутствие циклических зависимостей между документами.
+Validates that no cyclic import dependencies exist between documents.
 
 ```python
 from goga.ast.rules.ast import ImportsHasNotCyclicalDeps
@@ -16,11 +16,11 @@ rule = ImportsHasNotCyclicalDeps(tree)
 errors = rule.check(document)
 ```
 
-Циклом считается ситуация, когда документ A импортирует из документа B, а документ B импортирует из документа A.
+A cycle occurs when document A imports from document B, and document B also imports from document A.
 
 ### ImportTypeExists
 
-Проверяет, что импортируемый тип существует в целевом документе.
+Validates that each imported type exists in the document specified by the `From` path.
 
 ```python
 from goga.ast.rules.ast import ImportTypeExists
@@ -29,11 +29,11 @@ rule = ImportTypeExists(tree)
 errors = rule.check(document)
 ```
 
-Если путь в `From` не существует на файловой системе, проверка для этого импорта пропускается.
+If the `From` path does not exist on disk, the rule skips validation for that import item.
 
 ### EmbeddedTypeHasLowLevel
 
-Проверяет, что встраиваемые типы находятся ниже в иерархии файловой системы.
+Validates that embedded types reside deeper in the filesystem hierarchy than their parent document.
 
 ```python
 from goga.ast.rules.ast import EmbeddedTypeHasLowLevel
@@ -42,5 +42,5 @@ rule = EmbeddedTypeHasLowLevel(tree)
 errors = rule.check(document)
 ```
 
-Допустимо: `level-1/` встраивает тип из `level-1/level-2/`.
-Недопустимо: `level-1/level-2/` встраивает тип из `level-1/`.
+Valid: document at `level-1/` embeds a type from `level-1/level-2/`.
+Invalid: document at `level-1/level-2/` embeds a type from `level-1/`.

@@ -11,37 +11,37 @@ Usages:
   tree-sitter: .goga/usages/cooks/tree-sitter-go.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для парсинга Go-файлов использовать практику `tree-sitter`.
+  During development and testing, use the practice `conventions`.
+  For parsing Go files, use the practice `tree-sitter`.
 
 ---
 
 "golang_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: golang.py
   annotations: |
-    Собрать все экспортируемые объекты с фасада Go-пакета по указанному пути.
-    Использовать практику `contract_data` для формирования результатов.
+    Collect all exported objects from the facade of the Go package at the specified path.
+    Use the practice `contract_data` to form the results.
 
-    `cell_path`: путь до Go-пакета (каталог с .go файлами)
+    `cell_path`: path to the Go package (directory with .go files)
 
-    Алгоритм:
-    - найти все .go файлы в каталоге (без _test.go)
-    - для каждого файла — распарсить AST через практику `tree-sitter`
-    - извлечь экспортируемые декларации (capitalized):
+    Algorithm:
+    - find all .go files in the directory (excluding _test.go)
+    - for each file — parse AST via the practice `tree-sitter`
+    - extract exported declarations (capitalized):
       - function_declaration → RoutineContract
       - struct_type → EntityContract (fields → properties, methods → methods)
       - interface_type → EntityContract (method specs → methods)
-    - для EntityContract (struct) — найти method_declaration с соответствующим ресивером
-    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+    - for EntityContract (struct) — find method_declaration with the corresponding receiver
+    - collect signatures: parameters (name + type), return types
 
-    Требования:
-    - только экспортируемые (capitalized) декларации
-    - аннотации типов из Go-кода входят в контракт
-    - порядок аргументов важен
-    - _test.go файлы пропускаются
-    - нормализовать через сортировку для стабильного порядка
-    - EntityContract для struct/interface всегда получает signature="()": в Go нет явных конструкторов,
-      создание экземпляра — zero-value или struct literal, что семантически эквивалентно пустому списку параметров
+    Requirements:
+    - only exported (capitalized) declarations
+    - type annotations from Go code are included in the contract
+    - argument order matters
+    - _test.go files are skipped
+    - normalize via sorting for stable order
+    - EntityContract for struct/interface always gets signature="()": Go has no explicit constructors,
+      instance creation is zero-value or struct literal, which is semantically equivalent to an empty parameter list
 
 ---
 
@@ -49,4 +49,4 @@ Author: Goga
 CreatedAt: 19/05/26
 
 Description: |
-  Извлечение контракта с фасада Go-пакета через tree-sitter
+  Extract contract from the facade of a Go package via tree-sitter

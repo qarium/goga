@@ -1,5 +1,5 @@
 # ********************************************************** #
-# Манифест описывает анализатор дерева документов манифестов #
+# Defines the analyzer for the document tree #
 # ********************************************************** #
 
 Imports:
@@ -17,24 +17,24 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
 ---
 
 "Analyzer(tree: list[DocumentRoot])":
   location: analyzer.py
   annotations: |
-    Анализирует все документы на предмет ошибок
+    Analyzes all documents in the tree for validation errors.
 
-    `tree`: дерево документов которые необходимо проанализировать
+    `tree`: the document tree to analyze
   properties:
     tree -> list[DocumentRoot]: |
-      Дерево документов с которым был создан анализатор
+      The document tree passed at construction.
   methods:
     "analyze(rules: list[ASTRule]) -> errors:list[ASTRuleError]": |
-      Анализировать правила применяемые ко всем документам
+      Analyze all documents against the specified tree-level rules.
 
-      `errors`: список ошибок после применения правил
+      `errors`: list of errors after applying rules
 
 ---
 
@@ -42,4 +42,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает анализатор дерева документов
+  Defines the analyzer for the CODEMANIFEST document tree.

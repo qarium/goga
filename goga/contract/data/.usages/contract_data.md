@@ -1,9 +1,9 @@
-Работа с data-классами контрактов
+Working with Contract Data Classes
 
 ```python
 from goga.contract.data import EntityContract, RoutineContract
 
-# EntityContract — контракт сущности (класс, struct, interface)
+# EntityContract — entity contract (class, struct, interface)
 entity = EntityContract(
     name="TypeName",
     signature="(param: str)",
@@ -11,7 +11,7 @@ entity = EntityContract(
     methods=[...]
 )
 
-# RoutineContract — контракт рутины (функция)
+# RoutineContract — routine contract (function)
 routine = RoutineContract(
     name="function_name",
     signature="(param: str) -> str"

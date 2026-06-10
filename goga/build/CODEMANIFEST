@@ -11,78 +11,79 @@ Usages:
   ralphex: .goga/usages/cooks/ralphex.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для сборки использовать практику `ralphex`.
-  Вывод информации через sys.stderr (click не используется).
-  Использовать subprocess для запуска внешних команд.
+  Use the `conventions` practice for development and testing.
+  Use the `ralphex` practice for builds.
+  Write all output to sys.stderr (click is not used).
+  Run external commands via subprocess.
 
 ---
 
 "build(plan: str, config: Config, cli_options: dict) -> exit_code:int":
   location: build.py
   annotations: |
-    Сборка кода через `ralphex`. Подготавливает окружение и запускает.
+    Orchestrates code builds through `ralphex`. The function prepares the
+    execution environment and launches the build runner.
 
-    `plan`: путь к файлу плана (markdown)
-    `config`: загруженная конфигурация проекта
-    `cli_options`: словарь CLI-опций (dry_run, worktree, skip_finalize,
+    `plan`: path to the plan file (markdown)
+    `config`: loaded project configuration object
+    `cli_options`: dictionary of CLI options (dry_run, worktree, skip_finalize,
                    skip_manifest_check, session_timeout, idle_timeout,
                    wait, max_iterations, review_patience)
-    `exit_code`: код возврата (0 успех, 1 ошибка)
+    `exit_code`: process exit code (0 = success, 1 = failure)
 
-    Алгоритм:
-    0. (pre-check) Если skip_manifest_check не установлен:
-       - Проверить что все CODEMANIFEST файлы проекта закоммичены в git
-       - При обнаружении незакоммиченных — ошибка, exit 1
-    1. Удалить .ralphex/ если существует (общий шаг для всех агентов)
-    2. Диспетчеризация прекондишенов по agent из `TaskExecutor`:
-       - Если agent не в ("claude", "codex") → ошибка "Unsupported agent", exit 1
-       - Если agent == "claude":
-         a. Создать/обновить .claude/settings.json:
-            - Прочитать существующий если есть, сделать merge
-            - Установить env из `TaskExecutor` в settings["env"]
-            - Установить settings["attribution"] = {"commit": "", "pr": ""}
-         b. Создать .ralphex/claude-wrapper.sh:
-            - Скрипт: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
-            - chmod +x на скрипт
-         c. Обновить .ralphex/config:
-            - Добавить defaults (claude_command, claude_args) если отсутствуют
-            - Перезаписать codex_enabled из `BuildConfig`
-       - Если agent == "codex":
-         a. Создать .ralphex/codex-wrapper.sh:
-            - Скрипт: exec codex "$@" -m "$CODEX_MODEL"
-            - chmod +x на скрипт
-         b. Создать .ralphex/config:
+    Algorithm:
+    0. (pre-check) When skip_manifest_check is not set:
+       - Verify all project CODEMANIFEST files are committed to git
+       - Reject with exit code 1 if any uncommitted manifests are found
+    1. Remove .ralphex/ directory if present (applies to all agent types)
+    2. Dispatch agent-specific preconditions based on the agent field from `TaskExecutor`:
+       - If agent is not in ("claude", "codex") → fail with "Unsupported agent", exit 1
+       - If agent == "claude":
+         a. Create or update .claude/settings.json:
+            - Merge with the existing file if present
+            - Inject env from `TaskExecutor` into settings["env"]
+            - Set settings["attribution"] = {"commit": "", "pr": ""}
+         b. Create .ralphex/claude-wrapper.sh:
+            - Script body: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
+            - Apply chmod +x
+         c. Update .ralphex/config:
+            - Add defaults (claude_command, claude_args) if missing
+            - Overwrite codex_enabled from `BuildConfig`
+       - If agent == "codex":
+         a. Create .ralphex/codex-wrapper.sh:
+            - Script body: exec codex "$@" -m "$CODEX_MODEL"
+            - Apply chmod +x
+         b. Create .ralphex/config:
             - executor = codex
             - codex_command = .ralphex/codex-wrapper.sh
             - codex_sandbox = danger-full-access
             - codex_reasoning_effort = high
-    3. Копировать дефолтные prompts и agents из пакета goga в .ralphex/
-       из каталогов, указанных в `BuildConfig`
-    4. Собрать команду ralphex:
-       - Базовая: ["ralphex", plan, "--config-dir", ".ralphex/"]
-       - Добавить флаги с приоритетом: CLI-опции > `Config` > пропуск
-    5. При dry_run: вывести команду и вернуть 0
-    6. Запустить `ralphex` через subprocess.call, вернуть его код возврата
+    3. Copy default prompts and agents from the goga package to .ralphex/,
+       using the directory paths specified in `BuildConfig`
+    4. Assemble the ralphex command:
+       - Base command: ["ralphex", plan, "--config-dir", ".ralphex/"]
+       - Apply flags with precedence: CLI options > `Config` > omit
+    5. On dry_run: print the assembled command and return 0
+    6. Execute `ralphex` via subprocess.call and propagate its exit code
 
-    Требования:
-    - `ralphex` должен быть доступен в PATH, иначе ошибка
-    - Минимальный вывод: что делается на каждом шаге (через sys.stderr)
-    - Код возврата: код `ralphex` при успехе, 1 при ошибке
+    Requirements:
+    - `ralphex` must be available on PATH; fail otherwise
+    - Minimal output: log each step to sys.stderr
+    - Return code: `ralphex` exit code on success, 1 on error
 
 "main() -> exit_code:int":
   location: __main__.py
   annotations: |
-    Entry point для запуска через python -m goga.build внутри Docker-контейнера.
+    Entry point for python -m goga.build execution inside a Docker container.
 
-    `exit_code`: код возврата (0 успех, 1 ошибка)
+    `exit_code`: process exit code (0 = success, 1 = failure)
 
-    Алгоритм:
-    1. Распарсить CLI-аргументы через argparse (plan + опции)
-    2. Загрузить конфигурацию через `load_config`
-    3. Собрать cli_options из argparse-результатов
-    4. Вызвать `build`(plan, `Config`, cli_options)
-    5. Вернуть `exit_code`
+    Algorithm:
+    1. Parse CLI arguments via argparse (plan + options)
+    2. Load project configuration via `load_config`
+    3. Build cli_options from the parsed argparse results
+    4. Invoke `build`(plan, `Config`, cli_options)
+    5. Return the resulting `exit_code`
 
 ---
 
@@ -90,4 +91,4 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает логику сборки кода через ralphex
+  Manifest describing the code build orchestration logic through ralphex

@@ -1,24 +1,24 @@
-# Конфигурация проекта — goga/config
+# Project Configuration — goga/config
 
-## Обзор
+## Overview
 
-Пакет `goga.config` предоставляет единый доступ к конфигурации проекта через файл `.goga/config.yml`.
+The `goga.config` package provides unified access to project configuration through the `.goga/config.yml` file.
 
-## Фасад
+## Facade
 
-Все типы импортируются напрямую из `goga.config`:
+Import all types directly from `goga.config`:
 
 ```python
 from goga.config import Config, BuildConfig, TaskExecutor, CodemanifestConfig, load_config
 ```
 
-## Загрузка конфигурации
+## Loading Configuration
 
 ### load_config() -> Config
 
-Читает и парсит `.goga/config.yml` из текущей рабочей директории (CWD).
+Parses `.goga/config.yml` from the current working directory (CWD).
 
-**Вызов**:
+**Usage**:
 
 ```python
 from goga.config import load_config
@@ -26,13 +26,13 @@ from goga.config import load_config
 config = load_config()
 ```
 
-**Поведение**:
-- Файл `.goga/config.yml` обязателен — при отсутствии или пустом содержимом выбрасывает `FileNotFoundError`
-- Корневой элемент YAML должен быть mapping — иначе `ValueError`
-- Обязательные секции: `language`, `build`, `build.task_executor`, `build.task_executor.agent`
-- При невалидном YAML выбрасывает `yaml.YAMLError`
+**Behavior**:
+- `.goga/config.yml` is mandatory — raises `FileNotFoundError` if missing or empty
+- Root YAML element must be a mapping — raises `ValueError` otherwise
+- Required sections: `language`, `build`, `build.task_executor`, `build.task_executor.agent`
+- Raises `yaml.YAMLError` on invalid YAML syntax
 
-**Обработка ошибок**:
+**Error handling**:
 
 ```python
 from goga.config import load_config
@@ -40,20 +40,20 @@ from goga.config import load_config
 try:
     config = load_config()
 except FileNotFoundError:
-    # .goga/config.yml не найден или пустой
+    # .goga/config.yml not found or empty
 except KeyError as e:
-    # Нарушение структуры — отсутствует обязательная секция
+    # Missing required section
     print(e)
 except ValueError as e:
-    # Некорректное значение поля
+    # Invalid field value
     print(e)
 except yaml.YAMLError as e:
-    # Синтаксическая ошибка YAML
+    # YAML syntax error
 ```
 
-## Структура .goga/config.yml
+## .goga/config.yml Schema
 
-Минимальный валидный файл:
+Minimal valid configuration:
 
 ```yaml
 language: python
@@ -62,7 +62,7 @@ build:
     agent: claude
 ```
 
-Полный файл со всеми опциями:
+Full configuration with all options:
 
 ```yaml
 language: python
@@ -89,61 +89,60 @@ codemanifest:
   usages:
     usage_name: path/to/file.md
   annotations: |
-    Используй практику `usage_name`.
+    Use the `usage_name` practice.
 ```
 
-### Обязательные поля
+### Required Fields
 
-| Поле                        | Тип     | Описание                                                            |
+| Field                       | Type    | Description                                                         |
 |-----------------------------|---------|---------------------------------------------------------------------|
-| `language`                  | str     | Язык проекта                                                        |
-| `build.task_executor`       | mapping | Конфигурация AI-агента                                              |
-| `build.task_executor.agent` | str     | AI-executor: `claude`, `codex`, `copilot`, `gemini`, `custom:/path` |
+| `language`                  | str     | Project programming language                                        |
+| `build.task_executor`       | mapping | AI agent configuration block                                        |
+| `build.task_executor.agent` | str     | AI executor identifier: `claude`, `codex`, `copilot`, `gemini`, `custom:/path` |
 
-### Опциональные поля
+### Optional Fields
 
-| Поле                       | Тип     | Дефолт                 | Описание                                      |
-|----------------------------|---------|------------------------|-----------------------------------------------|
-| `commands`                 | mapping | `{}`                   | Кастомизация промптов (заготовка)             |
-| `build.task_executor.env`  | mapping | `{}`                   | Переменные окружения {str: str}               |
-| `build.image`              | str     | None                   | Docker-образ для сборки                       |
-| `build.worktree`           | bool    | None                   | Изолированный git worktree                    |
-| `build.skip_finalize`      | bool    | None                   | Пропустить финализацию                        |
-| `build.session_timeout`    | str     | None                   | Таймаут сессии (Go duration)                  |
-| `build.idle_timeout`       | str     | None                   | Таймаут простоя (Go duration)                 |
-| `build.wait`               | str     | None                   | Ожидание при rate limit (Go duration)         |
-| `build.max_iterations`     | int     | None                   | Максимум итераций                             |
-| `build.review_patience`    | int     | None                   | Порог остановки ревью                         |
-| `build.prompts_dir`        | str     | None                   | Путь к кастомным промптам                     |
-| `build.agents_dir`         | str     | None                   | Путь к кастомным агентам                      |
-| `build.codex_review`       | bool    | None                   | Включить codex ревью                          |
-| `codemanifest`             | mapping | None                   | Конфигурация практик и аннотаций CODEMANIFEST |
-| `codemanifest.usages`      | mapping | `{}`                   | Маппинг {usage_name: path/to/file.md}         |
-| `codemanifest.annotations` | str     | None                   | Текстовые аннотации для AI-агента             |
+| Field                      | Type    | Default                | Description                                  |
+|----------------------------|---------|------------------------|----------------------------------------------|
+| `commands`                 | mapping | `{}`                   | Prompt customization hooks (reserved)        |
+| `build.task_executor.env`  | mapping | `{}`                   | Environment variables (`{str: str}`)         |
+| `build.image`              | str     | None                   | Docker image for build execution             |
+| `build.worktree`           | bool    | None                   | Run in an isolated git worktree              |
+| `build.skip_finalize`      | bool    | None                   | Skip the finalization step                   |
+| `build.session_timeout`    | str     | None                   | Session timeout (Go duration format)         |
+| `build.idle_timeout`       | str     | None                   | Idle timeout (Go duration format)            |
+| `build.wait`               | str     | None                   | Rate-limit retry wait (Go duration format)   |
+| `build.max_iterations`     | int     | None                   | Maximum task iteration count                 |
+| `build.review_patience`    | int     | None                   | Review convergence threshold                 |
+| `build.prompts_dir`        | str     | None                   | Custom prompt directory path                 |
+| `build.agents_dir`         | str     | None                   | Custom agent directory path                  |
+| `build.codex_review`       | bool    | None                   | Enable external codex review                 |
+| `codemanifest`             | mapping | None                   | CODEMANIFEST usage and annotation config     |
+| `codemanifest.usages`      | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)    |
+| `codemanifest.annotations` | str     | None                   | Freeform annotations for the AI agent        |
 
-## Доступ к данным
+## Accessing Configuration Data
 
-Все объекты — immutable dataclasses (frozen=True). Поля доступны только для чтения.
+All objects are immutable frozen dataclasses (`frozen=True`). Fields expose read-only access.
 
 ```python
 config = load_config()
 
-# Корневые поля
-config.lang           # str — язык проекта
+# Top-level accessors
+config.lang           # str — project language
 config.build          # BuildConfig
-config.commands       # dict — кастомные команды
+config.commands       # dict — custom command hooks
 
-# BuildConfig
+# BuildConfig fields
 config.build.task_executor   # TaskExecutor
-config.build.image           # str | None — Docker-образ для сборки
+config.build.image           # str | None — build Docker image
 config.build.worktree        # bool | None
-config.build.session_timeout # str | None
 
-# TaskExecutor
+# TaskExecutor fields
 config.build.task_executor.agent  # str
 config.build.task_executor.env    # dict — {str: str}
 
-# CodemanifestConfig
+# CodemanifestConfig fields
 config.codemanifest                    # CodemanifestConfig | None
 config.codemanifest.usages             # dict — {str: str}
 config.codemanifest.annotations        # str | None
@@ -151,14 +150,14 @@ config.codemanifest.annotations        # str | None
 
 ## Immutability
 
-Объекты frozen — попытка модификации вызывает `FrozenInstanceError`:
+All config objects are frozen — mutation attempts raise `FrozenInstanceError`:
 
 ```python
 config = load_config()
-config.lang = "go"  # dataclasses.FrozenInstanceError
+config.lang = "go"  # raises dataclasses.FrozenInstanceError
 ```
 
-Для изменения конфигурации создайте новый объект:
+To derive a modified copy, use `dataclasses.replace`:
 
 ```python
 from dataclasses import replace

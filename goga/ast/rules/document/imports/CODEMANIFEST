@@ -12,33 +12,33 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Все типы являются мутациями `DocumentRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `DocumentRule`.
 
 ---
 
 "signature_contains_type_name(signature: str, type_name: str) -> result:bool":
   location: tools.py
   annotations: |
-    Проверяет, что строка с сигнатурой содержит указанное имя типа
+    Validates that the signature string contains the specified type name.
 
-    `signature`: строка с сигнатурой вида "(...) -> return"
-    `type_name`: имя типа который проверяем на вхождение
+    `signature`: signature string in the format "(...) -> return"
+    `type_name`: type name to check for inclusion
 
-    `result`: результат проверки
+    `result`: validation result
 
-    Алгоритм поиска:
-    - находим все вхождения по `type_name`
-    - проверяем каждое вхождение на точное совпадение: слева и справа от `type_name` допускаются
-      только символы :, >, (, ), [, ], запятая, пробел или край строки. Любой другой символ по краю
-      делает совпадение невалидным
+    Search algorithm:
+    - Find all occurrences of `type_name`
+    - Check each occurrence for exact match: left and right of `type_name` only
+      the characters :, >, (, ), [, ], comma, space, or string boundary are allowed.
+      Any other character at the boundary invalidates the match.
 
-    Требования:
-    - кейсы должны покрываться как положительные:
+    Requirements:
+    - Cases that must match as positive:
       - `type_name` = "TypeName" -> (param: TypeName)
       - `type_name` = "TypeName" -> (param: TypeName, param_2: Type)
       - `type_name` = "TypeName" -> (param: Type) -> rv:TypeName
-    - кейсы которые должны быть с отрицательным результатом
+    - Cases that must match as negative:
       - `type_name` = "TypeName" -> (param: TypeNameOne)
       - `type_name` = "TypeName" -> (param: TwoTypeName)
       - `type_name` = "TypeName" -> (param: Type: = "TypeName")
@@ -50,70 +50,70 @@ Annotations: |
 "DocumentRule::ImportsCanNotBeEmpty(name: str = 'imports_can_not_be_empty')":
   location: rules.py
   annotations: |
-    Проверяет `ImportsNode`.
+    Validates `ImportsNode`.
 
-    Правила:
-    - список импортов не может быть пустым
+    Rules:
+    - The import list must not be empty
 
-    Требования:
-    - Правило применяется только в том случаи если импорт декларирован в документе
+    Requirements:
+    - The rule applies only when imports are declared in the document
 
-    Шаблоны ошибок:
+    Error templates:
     - empty: "Imports block in '{doc_path}' is empty — each import must specify at least Types and From"
 
 "DocumentRule::ImportsHasOnlyValidKeys(name: str = 'imports_has_only_valid_keys')":
   location: rules.py
   annotations: |
-    Проверяет `ImportsNode`.
+    Validates `ImportsNode`.
 
-    Правила:
-    - каждый item в node.data не содержит ключей отличных от:
+    Rules:
+    - Each item in node.data contains only the following keys:
       - Types
       - Usages
       - From
 
-    Шаблоны ошибок:
+    Error templates:
     - unknown_keys: "Import from '{from_path}' contains unknown keys {unknown_keys} — allowed: Types, Usages, From"
 
 "DocumentRule::ImportItemIsValid(name: str = 'import_item_is_valid')":
   location: rules.py
   annotations: |
-    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+    Validates `ImportTypeItemNode` and `ImportUsageItemNode`.
 
-    Правила:
-    - импорт содержит подключаемый тип или практику
+    Rules:
+    - Import contains a type or usage to connect
 
-    Требования:
-    - проверяется конкретный Item и ловит случаи когда оставили пустую строку или null в списке
+    Requirements:
+    - Each Item is validated individually and catches cases where an empty string or null was left in the list
 
-    Шаблоны ошибок:
+    Error templates:
     - no_type: "Import from '{from_path}' has no {Types | Usages} listed — specify at least one type to import"
 
 "DocumentRule::ImportUsageExists(name: str = 'import_usage_exists')":
   location: rules.py
   annotations: |
-    Проверяет `ImportUsageItemNode`.
+    Validates `ImportUsageItemNode`.
 
-    Правила:
-    - подключаемая практика существует по пути "{item.from_path}/.usages/{item.usage_name}.md"
+    Rules:
+    - Imported usage exists at path "{item.from_path}/.usages/{item.usage_name}.md"
 
-    Требования:
-    - проверяется каждый Item отдельно
+    Requirements:
+    - Each Item is validated individually
 
-    Шаблоны ошибок:
+    Error templates:
     - not_found: "Usage '{usage_name}' does not exists on filesystem by path '{usage_md_file_path}'"
 
 "DocumentRule::ImportHasValidFromPath(name: str = 'import_has_valid_from_path')":
   location: rules.py
   annotations: |
-    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+    Validates `ImportTypeItemNode` and `ImportUsageItemNode`.
 
-    Правила:
-    - импорт содержит путь from откуда подключаются типы или практики
-    - путь существует на файловой системе
-    - путь не выходит на пределы CWD
+    Rules:
+    - Import contains a From path for types or usages
+    - Path exists on the filesystem
+    - Path does not escape CWD
 
-    Шаблоны ошибок:
+    Error templates:
     - empty: "Import in '{doc_path}' has empty source path (From field)"
     - not_found: "Source path '{from_path}' in import of types {type_names} not found on filesystem"
     - escapes: "Source path '{from_path}' in import points outside the project root"
@@ -121,51 +121,51 @@ Annotations: |
 "DocumentRule::ImportHasNotDuplicate(name: str = 'import_has_not_duplicate')":
   location: rules.py
   annotations: |
-    Проверяет `ImportsNode`.
+    Validates `ImportsNode`.
 
-    Правила:
-    - все имена типов и практик должны быть уникальны в рамках всех подключаемых документов
+    Rules:
+    - All type and usage names must be unique across all imported documents
 
-    Шаблоны ошибок:
+    Error templates:
     - duplicate: "{Type || Usage} '{type_name || usage_name}' is imported more than once: from '{path_a}' and '{path_b}'"
 
 "DocumentRule::ImportIsUsed(name: str = 'import_is_used')":
   location: rules.py
   annotations: |
-    Проверяет `ImportTypeItemNode` и `ImportUsageItemNode`.
+    Validates `ImportTypeItemNode` and `ImportUsageItemNode`.
 
-    Правила для типа:
-    - type или alias (если указан) используется в документе хотя бы в одном из мест:
-      - аннотации:
-        - в заголовке документа (header.annotations)
-        - в практиках (header.usages.item[<name>])
-        - сущности (body[*].annotations), включая встраиваемые (embedded=True)
-        - рутины (body[*].annotations), включая встраиваемые (embedded=True)
-        - методы (entity.methods[*].annotations)
-        - свойства (entity.properties[*].annotations)
-      - сигнатуры:
-        - сущности, включая встраиваемые (embedded=True)
-        - рутины, включая встраиваемые (embedded=True)
-        - методы
-      - мутации:
-        - сущности (body[*].mutations), включая встраиваемые (embedded=True)
+    Rules for types:
+    - type or alias (if specified) is used in the document in at least one of:
+      - Annotations:
+        - In document header (header.annotations)
+        - In usages (header.usages.item[<name>])
+        - Entities (body[*].annotations), including embedded (embedded=True)
+        - Routines (body[*].annotations), including embedded (embedded=True)
+        - Methods (entity.methods[*].annotations)
+        - Properties (entity.properties[*].annotations)
+      - Signatures:
+        - Entities, including embedded (embedded=True)
+        - Routines, including embedded (embedded=True)
+        - Methods
+      - Mutations:
+        - Entities (body[*].mutations), including embedded (embedded=True)
 
-    Правила для практики:
-    - usage или alias (если указан) используется в документе хотя бы в одном из мест:
-      - аннотации:
-        - в заголовке документа (header.annotations)
-        - в практиках (header.usages.item[<name>])
-        - сущности (body[*].annotations), включая встраиваемые (embedded=True)
-        - рутины (body[*].annotations), включая встраиваемые (embedded=True)
-        - методы (entity.methods[*].annotations)
-        - свойства (entity.properties[*].annotations)
+    Rules for usages:
+    - usage or alias (if specified) is used in the document in at least one of:
+      - Annotations:
+        - In document header (header.annotations)
+        - In usages (header.usages.item[<name>])
+        - Entities (body[*].annotations), including embedded (embedded=True)
+        - Routines (body[*].annotations), including embedded (embedded=True)
+        - Methods (entity.methods[*].annotations)
+        - Properties (entity.properties[*].annotations)
 
-    Требования:
-    - проверяем типы на вхождение в сигнатуру с использованием `signature_contains_type_name`
-    - встраивание (embedded) должно учитываться как использование и не вызывать ошибки
-    - usage (практика) не проверяется в сигнатурах
+    Requirements:
+    - Check types for inclusion in signatures using `signature_contains_type_name`
+    - Embedding (embedded) must count as usage and must not trigger an error
+    - Usage (practice) is not checked in signatures
 
-    Шаблоны ошибок:
+    Error templates:
     - unused: "{Type || Usage} '{type_name || usage_name}' was imported, but not used in '{doc_path}'"
 
 ---
@@ -174,4 +174,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки импортов документа манифеста
+  Validation rules for imports in CODEMANIFEST documents.

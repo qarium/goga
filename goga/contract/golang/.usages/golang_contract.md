@@ -1,4 +1,4 @@
-Извлечение контракта с фасада Go-пакета
+Extracting the contract from the Go package facade
 
 ```python
 from goga.contract.golang import golang_contract

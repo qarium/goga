@@ -8,32 +8,32 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Команда делегирует бизнес-логику через `connect_logic`.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
+  The command delegates business logic through `connect_logic`.
 
 ---
 
 "connect(agents: tuple[str, ...], force_overwrite: bool = False)":
   location: connect.py
   annotations: |
-    CLI-обёртка команды подключения. Делегирует бизнес-логику `connect_logic`.
+    CLI wrapper for the connect command. Delegates business logic to `connect_logic`.
 
-    `agents`: целевые AI-агенты (один или несколько, обязательный позиционный аргумент). Поддерживаемые: claude, codex, cursor
-    `force_overwrite`: разрешить перезапись существующих скиллов
+    `agents`: target AI agents (one or more, required positional argument). Supported: claude, codex, cursor
+    `force_overwrite`: allow overwriting existing skills
 
-    CLI-аргументы:
-    - agents: один или несколько AI-агентов (позиционный, обязательный)
-    - --force-overwrite: перезаписывать существующие скиллы при установке из инструментов
+    CLI arguments:
+    - agents: one or more AI agents (positional, required)
+    - --force-overwrite: overwrite existing skills when installing from tool packages
 
-    Алгоритм:
-    1. Вызвать `connect_logic`(`agents`, `force_overwrite`)
-    2. Вернуть exit_code
+    Algorithm:
+    1. Call `connect_logic`(`agents`, `force_overwrite`)
+    2. Return exit_code
 
 ---
 
@@ -41,4 +41,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  CLI-обёртка команды установки скиллов goga
+  CLI wrapper for the goga skill installation command

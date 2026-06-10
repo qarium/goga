@@ -6,38 +6,38 @@ Imports:
 Usages:
   conventions: .goga/usages/conventions.md
   documents: |
-    Работать с типом `AST`.
-    - Загрузить проект с использованием AST.load()
-    - Доступ к документам дерева через свойство AST.tree
-    `AST` необходимо создавать с указанием пути в текущий CWD (".").
+    Operate on the `AST` entity.
+    - The caller loads the project via AST.load()
+    - The caller accesses the document tree through the AST.tree property
+    The caller must instantiate `AST` with the current CWD path (".").
   beautiful_json: |
-    Сделать из python объекта json строку с учетом форматирования.
+    Serialize a Python object to a formatted JSON string.
     json.dumps(data, indent=4, sort_keys=True, ensure_ascii=False)
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Использовать практику `documents` для загрузки дерева проекта.
-  Результат форматировать через практику `beautiful_json`.
+  The caller applies the `conventions` practice during development and testing.
+  The caller uses the `documents` practice to load the project tree.
+  The caller formats output through the `beautiful_json` practice.
 
 ---
 
 "schema(cells: list[str], max_depth: int = None, depends_on: list[str] = []) -> json:str":
   location: schema.py
   annotations: |
-    Формирование JSON-схемы проекта из AST.
+    Generate a JSON schema of the project from the AST entity.
 
-    `cells`: пути к клеткам для фильтрации
-    `max_depth`: ограничение вложенности дерева
-    `depends_on`: фильтр клеток по зависимости
-    `json`: JSON-строка со схемой проекта
+    `cells`: cell paths to include in the output
+    `max_depth`: maximum nesting depth of the cell tree
+    `depends_on`: filter cells by their dependencies
+    `json`: JSON string representing the project schema
 
-    Алгоритм:
-    1. Загрузить дерево документов проекта через практику `documents`
-    2. Рекурсивно сформировать дерево json-структуры с вложенностью children
-    3. Применить фильтры: `cells`, `max_depth`, `depends_on`
-    4. Вернуть JSON-строку через практику `beautiful_json`
+    Algorithm:
+    1. Load the project document tree using the `documents` practice
+    2. Recursively build a JSON tree with nested children nodes
+    3. Apply filters: `cells`, `max_depth`, `depends_on`
+    4. Return the JSON string using the `beautiful_json` practice
 
-    Формат каждого узла:
+    Node format:
     {
       "cell": <path>,
       "description": <footer description>,
@@ -47,12 +47,11 @@ Annotations: |
       "children": [<children nodes>]
     }
 
-    Требования:
-    - если `max_depth` не указан — дерево выводится полностью
-    - если `depends_on` не указан — дерево выводится полностью
-    - если дерево пустое → "[]"
-    - если после загрузки `AST` обнаружены ошибки (свойство AST.errors не пустое) —
-      выбросить ValueError с количеством ошибок
+    Requirements:
+    - If `max_depth` is None: return the full tree without depth limits
+    - If `depends_on` is an empty list: return the full tree without dependency filtering
+    - If the tree is empty: return "[]"
+    - If AST.errors is non-empty after loading: raise ValueError with the error count
 
 ---
 
@@ -60,4 +59,4 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает формирование JSON-схемы проекта CODEMANIFEST
+  This manifest defines how the `schema` routine generates the CODEMANIFEST project JSON schema.

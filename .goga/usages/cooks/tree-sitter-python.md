@@ -1,12 +1,12 @@
 # tree-sitter + tree-sitter-python
 
-## Назначение
-Python-биндинги для incremental parsing. tree-sitter-python — грамматика Python.
+## Purpose
+Python bindings for incremental parsing. tree-sitter-python is the Python grammar.
 
-## Установка
+## Installation
 pip install tree-sitter tree-sitter-python
 
-## Базовый паттерн парсинга Python-файла
+## Basic pattern for parsing a Python file
 
 ```python
 import tree_sitter_python as tspython
@@ -20,46 +20,46 @@ tree = parser.parse(source_bytes)
 root = tree.root_node
 ```
 
-## Ключевые типы узлов Python AST
+## Key Python AST node types
 
-### Декларации
-- `function_definition` — функция (fields: name, parameters, return_type)
-- `class_definition` — класс (fields: name, superclasses, body)
-- `decorated_definition` — декорированная декларация (children: decorator + function/class_definition)
+### Declarations
+- `function_definition` — function (fields: name, parameters, return_type)
+- `class_definition` — class (fields: name, superclasses, body)
+- `decorated_definition` — decorated declaration (children: decorator + function/class_definition)
 
-### Параметры
-- `parameters` — список параметров (children: identifier, typed_parameter, default_parameter, typed_default_parameter, list_parameter_pattern, dictionary_parameter_pattern)
-- `typed_parameter` — параметр с аннотацией типа (fields: name, type)
-- `default_parameter` — параметр со значением по умолчанию (fields: name, value)
-- `typed_default_parameter` — параметр с аннотацией и значением по умолчанию (fields: name, type, value)
+### Parameters
+- `parameters` — parameter list (children: identifier, typed_parameter, default_parameter, typed_default_parameter, list_parameter_pattern, dictionary_parameter_pattern)
+- `typed_parameter` — parameter with a type annotation (fields: name, type)
+- `default_parameter` — parameter with a default value (fields: name, value)
+- `typed_default_parameter` — parameter with a type annotation and a default value (fields: name, type, value)
 - `list_parameter_pattern` — *args (fields: name)
 - `dictionary_parameter_pattern` — **kwargs (fields: name)
 
-### Присваивания
-- `assignment` — присваивание (fields: left, right)
-- `expression_statement` — выражение-утверждение (для __all__ = [...])
+### Assignments
+- `assignment` — assignment (fields: left, right)
+- `expression_statement` — expression statement (for __all__ = [...])
 
-### Аннотации типов
-- `type` — аннотация типа (children: various type nodes)
-- `identifier` — идентификатор
-- `string` — строковый литерал (для from __future__ import annotations)
+### Type annotations
+- `type` — type annotation (children: various type nodes)
+- `identifier` — identifier
+- `string` — string literal (for from __future__ import annotations)
 
-### Свойства и методы
-- `decorator` — декоратор (для @property)
-- `function_definition` внутри class body — метод
+### Properties and methods
+- `decorator` — decorator (for @property)
+- `function_definition` inside a class body — method
 
-## Извлечение сигнатур
+## Signature extraction
 
-Обход AST — `node.children` + проверка `node.type`.
-Текст узла — `node.text.decode('utf-8')`.
-Дочерние по имени поля — `node.child_by_field_name(field)`.
+AST traversal — `node.children` + checking `node.type`.
+Node text — `node.text.decode('utf-8')`.
+Children by field name — `node.child_by_field_name(field)`.
 
-### Доступные поля узлов (field names)
-- `name` — имя декларации (функции, класса, параметра)
-- `type` — тип (параметра, return)
-- `parameters` — список параметров функции/метода
-- `return_type` — возвращаемый тип функции/метода
-- `body` — тело функции/класса
-- `superclasses` — базовые классы
-- `left` / `right` — левая/правая часть присваивания
-- `value` — значение (для default_parameter)
+### Available node fields (field names)
+- `name` — declaration name (of a function, class, or parameter)
+- `type` — type (of a parameter or return)
+- `parameters` — parameter list of a function/method
+- `return_type` — return type of a function/method
+- `body` — body of a function/class
+- `superclasses` — base classes
+- `left` / `right` — left/right side of an assignment
+- `value` — value (for default_parameter)

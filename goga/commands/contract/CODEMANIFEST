@@ -22,57 +22,57 @@ Usages:
   beautiful_json: .goga/usages/cooks/beautiful_json.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Использовать практику `use_contract` для понимания работы диспатчера контрактов.
-  Конфигурация загружается через `load_config` с использованием практики `configuration`.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
+  Use the `use_contract` practice to understand the contract dispatcher.
+  Configuration is loaded via `load_config` using the `configuration` practice.
 
 ---
 
 "contract(cells: list[str], lang: str | None = None)":
   location: contract.py
   annotations: |
-    Команда сравнения контракта CODEMANIFEST с реализацией.
+    Command for comparing CODEMANIFEST contract with implementation.
 
-    `cells`: пути к клеткам для сравнения, один или несколько
-    `lang`: язык реализации. Приоритет: CLI-аргумент > `Config`. Если None — берётся из `Config`.lang
+    `cells`: paths to cells for comparison, one or more
+    `lang`: implementation language. Priority: CLI argument > `Config`. If None — taken from `Config`.lang
 
-    CLI-опции:
-    - --lang: язык реализации. Если не указан — используется значение из `Config`.lang
+    CLI options:
+    - --lang: implementation language. If not specified — the value from `Config`.lang is used
 
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` → `Config`
-    2. Разрешить язык:
-       - Если `lang` передан (не None) — использовать CLI значение
-       - Иначе — использовать `Config`.lang
-    3. Создать объект `AST` и загрузить проект с использованием практики `loading`
-    4. Для каждого пути из `cells`:
-      - Найти документ в дереве с использованием практики `loading`
-      - Извлечь типы из body документа: entities и routines
-      - Получить реализованный контракт через `contract_logic`
-      - Для каждого типа из CODEMANIFEST найти соответствие в реализации по имени
-      - Построить структуру сравнения (CODEMANIFEST первичен)
+    Algorithm:
+    1. Load configuration via `load_config` → `Config`
+    2. Resolve language:
+       - If `lang` is provided (not None) — use CLI value
+       - Otherwise — use `Config`.lang
+    3. Create `AST` object and load the project using the `loading` practice
+    4. For each path from `cells`:
+      - Find the document in the tree using the `loading` practice
+      - Extract types from document body: entities and routines
+      - Get the implemented contract via `contract_logic`
+      - For each type from CODEMANIFEST find the match in implementation by name
+      - Build comparison structure (CODEMANIFEST is primary)
 
-    Ключевой принцип: CODEMANIFEST — источник истины. Обход идёт по типам,
-    методам и свойствам из контракта. Реализация заполняет поле implementation
-    или null если не найдена.
+    Key principle: CODEMANIFEST is the source of truth. Traversal goes by types,
+    methods and properties from the contract. Implementation fills the implementation
+    field or null if not found.
 
-    Для entity:
-    - signature: параметры конструктора из codemanifest и implementation
-    - properties: для каждого свойства из codemanifest найти в реализации
-    - methods: для каждого метода из codemanifest найти в реализации
+    For entity:
+    - signature: constructor parameters from codemanifest and implementation
+    - properties: for each property from codemanifest find in implementation
+    - methods: for each method from codemanifest find in implementation
 
-    Для routine:
-    - signature: полная сигнатура из codemanifest и implementation
+    For routine:
+    - signature: full signature from codemanifest and implementation
 
-    Вывести результат через практику `beautiful_json`.
+    Output the result via the `beautiful_json` practice.
 
-    Формат вывода:
+    Output format:
     ```
     {
       "norm/path/to/cell": {
@@ -88,12 +88,12 @@ Annotations: |
     }
     ```
 
-    Требования:
-    - вывод не должен содержать ничего кроме json структуры
-    - если путь к клетке не найден → вывести ошибку в stderr и выйти с кодом 1
-    - ошибки выводить в stderr (click.echo с err=True)
-    - код возврата: 0 при успехе, 1 при ошибке
-    - help команды должен объяснять структуру ответа и опции понятно для ИИ агентов
+    Requirements:
+    - output must contain nothing except the json structure
+    - if cell path not found → output error to stderr and exit with code 1
+    - output errors to stderr (click.echo with err=True)
+    - exit code: 0 on success, 1 on error
+    - command help must explain the response structure and options clearly for AI agents
 
 ---
 
@@ -101,4 +101,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  Команда сравнения контракта CODEMANIFEST с реализацией
+  Command for comparing CODEMANIFEST contract with implementation

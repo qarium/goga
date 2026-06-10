@@ -1,4 +1,4 @@
-Извлечение контракта с фасада Swift-модуля
+Extracting the contract from the Swift module facade
 
 ```python
 from goga.contract.swift import swift_contract

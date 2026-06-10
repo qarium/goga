@@ -1,7 +1,7 @@
 Usages:
   conventions: .goga/usages/conventions.md
   contract_format: |
-    Реализованный контракт должен соответствовать указанному формату
+    The implemented contract must conform to the specified format
 
     ```
     [
@@ -12,52 +12,52 @@ Usages:
     ]
     ```
 
-    - каждый элемент списка - это имя и сигнатура на фасаде клетки
-    - понятие фасада клетки определяется индивидуально для каждого языка программирования
-    - сигнатура - это контракт входных и выходных данных создания объекта/вызова функции
-    - словарь может быть представлен в виде объекта
+    - each list element is a name and signature on the cell facade
+    - the concept of a cell facade is defined individually for each programming language
+    - a signature is the contract of input and output data for object creation/function invocation
+    - a dictionary can be represented as an object
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  During development and testing, use the practice `conventions`.
 
 ---
 
 BaseContract():
   location: contract.py
   annotations: |
-    Использовать формат `contract_format`.
+    Use the format `contract_format`.
   properties:
     name -> str: |
-      Имя объекта/функции и тд
+      Name of the object/function, etc.
     signature -> str: |
-      Сигнатура вызова с входными и выходными данными
+      Invocation signature with input and output data
     contract -> str: |
-      Имя и сигнатура "{{ name }}{{ signature }}"
+      Name and signature "{{ name }}{{ signature }}"
 
 BaseContract::EntityContract():
   location: contract.py
   annotations: |
-    Описание контракта сущности
+    Description of the entity contract
   properties:
     properties -> list[PropertyContract]: |
-      Контракт свойства сущности
+      Contract of the entity property
     methods -> list[MethodContract]: |
-      Контракт метода сущности
+      Contract of the entity method
 
 BaseContract::RoutineContract():
   location: contract.py
   annotations: |
-    Описание контракта рутины
+    Description of the routine contract
 
 BaseContract::PropertyContract():
   location: contract.py
   annotations: |
-    Описание контракта свойства сущности
+    Description of the entity property contract
 
 BaseContract::MethodContract():
   location: contract.py
   annotations: |
-    Описание контракта метода сущности
+    Description of the entity method contract
 
 ---
 
@@ -65,4 +65,4 @@ Author: Goga
 CreatedAt: 19/05/26
 
 Description: |
-  Data-классы контрактов — языко-независимая модель данных
+  Contract data classes — language-independent data model

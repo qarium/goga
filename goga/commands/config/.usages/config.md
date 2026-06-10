@@ -1,22 +1,22 @@
 # CLI Command: config
 
-## Назначение
+## Purpose
 
-Вывод значений опций из конфигурации проекта .goga/config.yml. Поддерживает навигацию по всем полям через точечную нотацию.
+Output option values from the project configuration .goga/config.yml. Supports navigation across all fields via dot notation.
 
-## Синтаксис
+## Syntax
 
 ```
 goga config <option>...
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Описание |
-|----------|-----|----------|
-| `options` | list[str] | Пути к опциям в точечной нотации (например build.task_executor.agent) |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `options` | list[str] | Paths to options in dot notation (e.g. build.task_executor.agent) |
 
-## Формат вывода
+## Output format
 
 ```
 # language
@@ -29,17 +29,17 @@ claude
 True
 ```
 
-- Каждая опция начинается с заголовка `# <path>`
-- Между опциями — пустая строка
-- Примитивы выводятся как есть
-- Сложные типы выводятся в YAML-формате
+- Each option starts with a `# <path>` header
+- Between options — empty line
+- Primitives are output as-is
+- Complex types are output in YAML format
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка (опция не найдена, ошибка конфигурации)
+- 0 — success
+- 1 — error (option not found, configuration error)
 
-## Примеры
+## Examples
 
 ```bash
 goga config language

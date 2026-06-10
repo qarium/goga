@@ -8,29 +8,29 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Команда делегирует бизнес-логику через `sync_logic`.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
+  The command delegates business logic through `sync_logic`.
 
 ---
 
 "sync(source: str, token: str | None = None, branch: str | None = None)":
   location: sync.py
   annotations: |
-    CLI-обёртка команды синхронизации. Делегирует бизнес-логику `sync_logic`.
+    CLI wrapper for the synchronization command. Delegates business logic to `sync_logic`.
 
-    `source`: путь к каталогу или URL git-репозитория
-    `token`: токен авторизации для git
-    `branch`: ветка или тег для checkout
+    `source`: path to directory or git repository URL
+    `token`: authorization token for git
+    `branch`: branch or tag for checkout
 
-    Алгоритм:
-    1. Вызвать `sync_logic`(`source`, `token`, `branch`)
-    2. Вернуть exit_code
+    Algorithm:
+    1. Call `sync_logic`(`source`, `token`, `branch`)
+    2. Return exit_code
 
 ---
 
@@ -38,4 +38,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  CLI-обёртка команды синхронизации .usages/
+  CLI wrapper for the .usages/ synchronization command

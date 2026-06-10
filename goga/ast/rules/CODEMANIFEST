@@ -45,7 +45,7 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
 ---
 
@@ -83,4 +83,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Манифест описывает свод правил применяемых к манифесту
+  Defines the set of validation rules applied to CODEMANIFEST documents.

@@ -31,12 +31,12 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
 
 ---
 
@@ -56,4 +56,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  Фасад команд консольного приложения goga. Реэкспортирует все CLI-команды из подклеток.
+  Facade of the goga console application commands. Re-exports all CLI commands from subcells.

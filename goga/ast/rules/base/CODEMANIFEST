@@ -10,48 +10,48 @@ Imports:
 
 Usages:
   nodes: |
-    Использовать манифест goga/ast/nodes и его API для работы с структурой документа
+    Consumer uses the manifest goga/ast/nodes and its API to work with document structure.
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
 ---
 
 "DocumentRule(name: str)":
   location: document.py
   annotations: |
-    Описывает одно конкретное правило документа
+    Describes a single document-level validation rule.
 
-    `name`: имя правила
+    `name`: rule name
   properties:
     name -> str: |
-      Имя с которым было создано правило
+      The name with which the rule was created.
   methods:
     "check(node: DocumentNode) -> errors:list[DocumentRuleError]": |
-      Проверяет ноду на соответствие правилу
+      Validates the node against the rule.
 
-      `node`: ноду которую необходимо проверить
-      `errors`: список ошибок в результате проверки
+      `node`: the node to validate
+      `errors`: list of errors from the validation
 
 "ASTRule(tree: list[DocumentRoot], name: str)":
   location: ast.py
   annotations: |
-    Описывает одно конкретное правило которое применяет глобально ко всем документам
+    Describes a single rule applied globally across all documents.
 
-    `tree`: дерево документов к которым необходимо применить правило, дерево можно читать используя практику `nodes`
-    `name`: имя правила
+    `tree`: the document tree to apply the rule to. The tree can be read using practice `nodes`.
+    `name`: rule name
   properties:
     name -> str: |
-      Имя с которым было создано правило
+      The name with which the rule was created.
     tree -> list[DocumentRoot]: |
-      Дерево документов с которым было создано правило
+      The document tree passed at construction.
   methods:
     "check(document: DocumentRoot) -> errors:list[ASTRuleError]": |
-      Проверяет документ на соответствие правилу
+      Validates the document against the rule.
 
-      `document`: документ который необходимо проверить
-      `errors`: список ошибок в результате проверки
+      `document`: the document to validate
+      `errors`: list of errors from the validation
 
 ---
 
@@ -59,4 +59,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Базовые типы правил для проверки манифест документов
+  Base rule types for validating CODEMANIFEST documents.

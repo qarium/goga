@@ -1,30 +1,30 @@
 # CLI Command: contract
 
-## Назначение
+## Purpose
 
-Сравнение CODEMANIFEST контракта с реализацией. Для каждого типа в контракте находит соответствие в коде и строит структуру сравнения.
+Compare CODEMANIFEST contract with implementation. For each type in the contract, finds the match in code and builds a comparison structure.
 
-## Синтаксис
+## Syntax
 
 ```
 goga contract <cell_path>... [--lang <language>]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Описание |
-|----------|-----|----------|
-| `cells` | list[str] | Один или несколько путей к клеткам для сравнения |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `cells` | list[str] | One or more paths to cells for comparison |
 
-## Опции
+## Options
 
-| Опция | Тип | Дефолт | Описание |
-|-------|-----|--------|----------|
-| `--lang` | str | из конфига | Язык реализации. Приоритет: CLI > config.lang |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--lang` | str | from config | Implementation language. Priority: CLI > config.lang |
 
-## Формат вывода
+## Output format
 
-JSON-структура, где CODEMANIFEST — источник истины:
+JSON structure, where CODEMANIFEST is the source of truth:
 
 ```json
 {
@@ -41,12 +41,12 @@ JSON-структура, где CODEMANIFEST — источник истины:
 }
 ```
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка (клетка не найдена, ошибка конфигурации)
+- 0 — success
+- 1 — error (cell not found, configuration error)
 
-## Примеры
+## Examples
 
 ```bash
 goga contract goga/config goga/ast

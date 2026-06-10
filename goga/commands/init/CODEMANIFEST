@@ -12,32 +12,32 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
-  Команда делегирует бизнес-логику через `InitLogic`.
-  Использовать `init-usage` из Imports для понимания API InitLogic.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
+  The command delegates business logic through `InitLogic`.
+  Use `init-usage` from Imports to understand the InitLogic API.
 
 ---
 
 "init()":
   location: init.py
   annotations: |
-    CLI-обёртка команды инициализации. Делегирует бизнес-логику `InitLogic`.
+    CLI wrapper for the initialization command. Delegates business logic to `InitLogic`.
 
-    Алгоритм:
-    1. Создать `Questionnaire` и `FileGenerator`
-    2. Создать `InitLogic`(questionnaire, generator)
-    3. Вызвать `InitLogic`.run()
-    4. Вернуть exit_code
+    Algorithm:
+    1. Create `Questionnaire` and `FileGenerator`
+    2. Create `InitLogic`(questionnaire, generator)
+    3. Call `InitLogic`.run()
+    4. Return exit_code
 
 ---
 
 Author: Goga
 CreatedAt: 03/06/26
 Description: |
-  CLI-обёртка команды интерактивной инициализации проекта goga
+  CLI wrapper for the interactive goga project initialization command

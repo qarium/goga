@@ -1,10 +1,10 @@
 # CLI Command: build
 
-## Назначение
+## Purpose
 
-CLI-обёртка команды сборки. Парсит click-опции, загружает конфигурацию и запускает goga.build внутри Docker-контейнера.
+CLI wrapper for the build command. Parses click options, loads configuration, and runs goga.build inside a Docker container.
 
-## Синтаксис
+## Syntax
 
 ```
 goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-check]
@@ -13,33 +13,33 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
                  [-e KEY=VALUE ...]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Описание |
-|----------|-----|----------|
-| `plan` | str | Путь к плану для ralphex |
+| Argument | Type | Description |
+|----------|------|-------------|
+| `plan` | str | Path to the plan for ralphex |
 
-## Опции
+## Options
 
-| Опция | Тип | Дефолт | Описание |
-|-------|-----|--------|----------|
-| `--dry-run` | flag | false | Показать команду без выполнения |
-| `--worktree` | flag | false | Режим изолированного git worktree |
-| `--skip-finalize` | flag | false | Пропустить финализацию |
-| `--skip-manifest-check` | flag | false | Пропустить проверку uncommitted CODEMANIFEST |
-| `--session-timeout` | str | из конфига | Таймаут сессии |
-| `--idle-timeout` | str | из конфига | Таймаут простоя |
-| `--wait` | str | из конфига | Ожидание при rate limit |
-| `--max-iterations` | int | из конфига | Максимум итераций |
-| `--review-patience` | int | из конфига | Порог остановки ревью |
-| `-e` / `--env` | str (multiple) | — | Передать переменные окружения в контейнер (KEY=VALUE) |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--dry-run` | flag | false | Show the command without executing |
+| `--worktree` | flag | false | Isolated git worktree mode |
+| `--skip-finalize` | flag | false | Skip finalization |
+| `--skip-manifest-check` | flag | false | Skip uncommitted CODEMANIFEST check |
+| `--session-timeout` | str | from config | Session timeout |
+| `--idle-timeout` | str | from config | Idle timeout |
+| `--wait` | str | from config | Wait on rate limit |
+| `--max-iterations` | int | from config | Maximum iterations |
+| `--review-patience` | int | from config | Review stop threshold |
+| `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка
+- 0 — success
+- 1 — error
 
-## Примеры
+## Examples
 
 ```bash
 goga build docs/plans/my-plan.md
@@ -47,9 +47,9 @@ goga build docs/plans/my-plan.md --dry-run --worktree
 goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
 ```
 
-## Требования
+## Requirements
 
-- Docker должен быть установлен и доступен в PATH
-- В `.goga/config.yml` должно быть задано поле `build.image` — иначе команда завершается с ошибкой `image in .goga/config.yml is not set`
-- Git config (user.name, user.email) автоматически пробрасывается в контейнер как GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. При отсутствии git config сборка продолжается без ошибки
-- При наличии `~/.codex/auth.json` файл монтируется в контейнер как read-only (`/home/goga/.codex/auth.json`)
+- Docker must be installed and available in PATH
+- `.goga/config.yml` must have the `build.image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
+- Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
+- If `~/.codex/auth.json` exists, the file is mounted into the container as read-only (`/home/goga/.codex/auth.json`)

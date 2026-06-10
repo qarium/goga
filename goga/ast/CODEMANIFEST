@@ -1,5 +1,5 @@
 # *********************************************** #
-# Манифест описывает посетителя каждого манифеста #
+# Manifest defining the visitor for each CODEMANIFEST document #
 # *********************************************** #
 
 Imports:
@@ -15,7 +15,7 @@ Imports:
       - DocumentNotFoundError
     From: goga/ast/errors
   - Types:
-      # правила документа
+      # Document-level rules
       - ImportsCanNotBeEmpty
       - ImportItemIsValid
       - ImportUsageExists
@@ -37,7 +37,7 @@ Imports:
       - LocationIsRequired
       - UsageFilepathExists
       - UsageUrlIsAccessible
-      # правила проекта
+      # Project-level rules
       - ImportTypeExists
       - ImportsHasNotCyclicalDeps
       - EmbeddedTypeHasLowLevel
@@ -46,28 +46,28 @@ Imports:
 Usages:
   conventions: .goga/usages/conventions.md
   nodes: |
-    Использовать манифест goga/ast/nodes и его API дл работы с структурой документа
+    Consumer uses the manifest goga/ast/nodes and its API to work with document structure.
   factory: |
-    Создать объект CODEMANIFEST файла с использованием `Factory`
+    Instantiate a CODEMANIFEST document using `Factory`.
 
     ```python
     factory = Factory("path/to/dir/with/codemanifest")
     document = factory.create()
     ```
 
-    Для ориентации по document использовать api `DocumentRoot`.
+    Navigate the resulting document via the `DocumentRoot` API.
   visitor: |
-    Использовать манифест goga/ast/visitor и его API для анализа одного документа
+    Consumer uses the manifest goga/ast/visitor and its API to analyze a single CODEMANIFEST document.
   analyzer: |
-    Использовать манифест goga/ast/analyzer и его API для анализа всего дерева документов
+    Consumer uses the manifest goga/ast/analyzer and its API to analyze the entire tree of CODEMANIFEST documents.
   testing: |
-    Интеграционные тесты правил `AST`.
+    Integration tests for `AST` rules.
 
-    Структура:
-    - tests/.project/<rule_name>/ — папка кейса для правила с CODEMANIFEST и .expected.yaml
-    - helper-папки создаются рядом если правилу нужны дополнительные файлы с суффиксом "_helper"
+    Directory structure:
+    - tests/.project/<rule_name>/ — test fixture directory containing CODEMANIFEST and .expected.yaml
+    - Helper directories are co-located with the suffix "_helper" when additional files are required.
 
-    Формат .expected.yaml:
+    .expected.yaml format:
     ```
     errors:
       - rule: <rule_name>
@@ -76,52 +76,51 @@ Usages:
         node_data: <dict — exact node.data>
     ```
 
-    Один параметризованный тест в test_project_integration.py:
-    - сканирует tests/.project/, загружает AST(.project/)
-    - сравнивает len(errors) и каждое поле ошибки строго
+    A single parameterized test in test_project_integration.py:
+    - Scans tests/.project/ and loads AST(.project/)
+    - Asserts len(errors) and performs strict field-by-field comparison on each error.
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  При добавлении нового правила создавать интеграционный тест по практике `testing`.
+  When developing and testing: follow the practice `conventions`.
+  When adding a new rule: create an integration test following the practice `testing`.
 
 ---
 
 "AST(path: str)":
   location: ast.py
   annotations: |
-    Рекурсивно загружает дерево манифест документов
+    The `AST` class recursively loads the tree of CODEMANIFEST documents.
 
-    `path`: путь из которого необходимо загрузить дерево
+    `path`: the root path from which the document tree is loaded.
   properties:
     tree -> list[DocumentRoot]: |
-      Дерево документов в проекте.
-      Вершины графа, спускаться по дереву можно от вершин используя практику `nodes`.
+      The document tree of the project.
+      Contains top-level graph vertices. Consumer traverses from these vertices using practice `nodes`.
     errors -> list[ASTRuleError | DocumentRuleError]: |
-      Список ошибок после анализа
+      The list of validation errors produced after analysis.
   methods:
     load(): |
-      Загружает дерево по указанному пути
+      Loads the document tree starting at the specified path.
 
-      Алгоритм:
-      - Рекурсивно обойти каждую директорию
-      - Обнаружить CODEMANIFEST файл в корне директории и если файл существует выполнить:
-        - создание документа с помощью практики `factory`
-        - добавить вершину в tree если это самый верхний уровень иерархии
-        - добавить ребенка к родительскому документу с помощью практики `nodes`
-      - Разрешить встраиваемые типы по оригинальным типам из дерева документов:
-        для каждого embedded типа в entities/routines найти оригинальный не-embedded тип
-        с таким же именем и выполнить:
-        - Обогатить ноду метаданными оригинала: signature, annotations, properties, methods
-        - Обновить location на путь оригинального документа
-        - Сохранить из фабричной ноды: mutations, data
-        - Если оригинал является routine, а embedded в entities —
-          удалить из entities, создать RoutineTypeNode и добавить в routines
-        - Если оригинал является entity, а embedded в routines —
-          удалить из routines, создать EntityTypeNode и добавить в entities
-      - Выполнить анализ каждого документа с помощью практики `visitor`
-      - Применить глобальный анализ документов с помощью практики `analyzer`
+      Algorithm:
+      - Recursively traverse each subdirectory starting from the specified path
+      - When a CODEMANIFEST file is found at the directory root:
+        - Create the document via practice `factory`
+        - Append as a top-level vertex if at the root of the hierarchy
+        - Attach as a child to the parent document via practice `nodes`
+      - Resolve embedded types against original types in the document tree:
+        For each embedded type in entities/routines, locate the matching non-embedded original type by name:
+        - Enrich the node with original metadata: signature, annotations, properties, methods
+        - Update location to the original document's path
+        - Preserve from the factory node: mutations, data
+        - If the original is a routine but embedded under entities —
+          remove from entities, create RoutineTypeNode, and add to routines
+        - If the original is an entity but embedded under routines —
+          remove from routines, create EntityTypeNode, and add to entities
+      - Run per-document analysis via practice `visitor`
+      - Run tree-wide analysis via practice `analyzer`
 
-      Правила для каждого документа:
+      Per-document rules:
       - `ImportsCanNotBeEmpty`
       - `ImportItemIsValid`
       - `ImportUsageExists`
@@ -144,25 +143,25 @@ Annotations: |
       - `UsageFilepathExists`
       - `UsageUrlIsAccessible`
 
-      Правила для всего дерева:
+      Tree-wide rules:
       - `ImportTypeExists`
       - `ImportsHasNotCyclicalDeps`
       - `EmbeddedTypeHasLowLevel`
 
     "document(path: str) -> found_document:DocumentRoot": |
-      На основании пути возвращает документ.
+      Resolves and returns the document at the given path.
 
-      `path`: путь до папки в которой лежит CODEMANIFEST
+      `path`: path to the directory containing the CODEMANIFEST file.
 
-      `found_document`: найденный документ
+      `found_document`: the resolved document.
 
-      Требования:
-      - Должны обрабатываться любые варианты путей
-        - относительный ./path/path
-        - относительный path/path
-        - полный /path/path
-      - Поиск документа должен соответствовать алгоритмической сложности O(1)
-      - Документ не найден → `DocumentNotFoundError`
+      Requirements:
+      - Handle all path formats:
+        - Relative with dot prefix: ./path/path
+        - Relative without prefix: path/path
+        - Absolute: /path/path
+      - Document lookup must run in O(1) time.
+      - Raise `DocumentNotFoundError` when the document is not found.
 
 ---
 
@@ -170,4 +169,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает проект в котором строится дерево манифест документов
+  Defines a project that constructs and validates a tree of CODEMANIFEST documents.

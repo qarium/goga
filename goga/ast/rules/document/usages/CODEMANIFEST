@@ -17,8 +17,8 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Все типы являются мутациями `DocumentRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `DocumentRule`.
 
 ---
 
@@ -29,10 +29,10 @@ Annotations: |
 "DocumentRule::AllUsagesIsUsed(name: str = 'all_usages_is_used')":
   location: rules.py
   annotations: |
-    Проверяет `UsagesNode`.
+    Validates `UsagesNode`.
 
-    Правила:
-    - все декларированные usages используются в `AnnotationsNode` документа в нодах:
+    Rules:
+    - All declared usages are used in `AnnotationsNode` of the document in the following nodes:
       - `HeaderNode`
       - `UsageItemNode`
       - `RoutineTypeNode`
@@ -40,29 +40,29 @@ Annotations: |
       - `MethodNode`
       - `PropertyNode`
 
-    Требования:
-      - ссылка на имя практики должна использоваться хотя бы в одной `AnnotationsNode`
+    Requirements:
+      - The usage name must be referenced in at least one `AnnotationsNode`
 
-    Шаблоны ошибок:
+    Error templates:
     - unused: "Usage '{usage_name}' is declared but not referenced in any annotation — either use it or remove the declaration"
 
 "DocumentRule::UsageFilepathExists(name: str = 'usage_filepath_exists')":
   location: rules.py
   annotations: |
-    Проверяет `UsageItemNode`.
+    Validates `UsageItemNode`.
 
-    Правила:
-    - filepath строится относительно корня проекта
-    - filepath содержит префикс .goga/usages/
-    - файл по filepath существует на файловой системе
+    Rules:
+    - filepath is resolved relative to project root
+    - filepath contains prefix .goga/usages/
+    - File at filepath exists on the filesystem
 
-    Требования:
-    - базовый путь для проверки — корень проекта (CWD)
-    - проверяется каждый UsageItemNode у которого annotations.filepath не None и не пустой
-    - Usages с annotations.text (inline) пропускаются
-    - Usages с annotations.url пропускаются
+    Requirements:
+    - Base path for validation is project root (CWD)
+    - Each UsageItemNode with annotations.filepath not None and not empty is validated
+    - Usages with annotations.text (inline) are skipped
+    - Usages with annotations.url are skipped
 
-    Шаблоны ошибок:
+    Error templates:
     - outside_usages: "Usage '{usage_name}' filepath '{filepath}' is not built from the root of the project"
     - incorrect_path: "Usage '{usage_name}' filepath '{filepath}' is not built from '.goga/usages/'"
     - not_found: "Usage '{usage_name}' filepath '{filepath}' does not exist on filesystem"
@@ -70,38 +70,38 @@ Annotations: |
 "DocumentRule::UsageUrlIsAccessible(name: str = 'usage_url_is_accessible')":
   location: rules.py
   annotations: |
-    Проверяет `UsageItemNode`.
+    Validates `UsageItemNode`.
 
-    Правила:
-    - URL отвечает с HTTP статусом 200 (OK)
+    Rules:
+    - URL responds with HTTP status 200 (OK)
 
-    Требования:
-    - проверяется каждый UsageItemNode у которого annotations.url не None и не пустой
-    - Usages с annotations.text (inline) пропускаются
-    - Usages с annotations.filepath пропускаются
-    - при сетевой ошибке (timeout, connection error) — ошибка валидации
-    - использовать HEAD-запрос для эффективности (если сервер не поддерживает — fallback на GET)
-    - таймаут запроса — 10 секунд
-    - результат проверки URL кэшируется: при повторной проверке того же URL
-      возвращается сохранённый результат без повторного сетевого запроса
-    - кэш хранится в экземпляре правила как dict, ключ — URL
-    - кэш накапливается при обходе всех документов одной сессией линтера
+    Requirements:
+    - Each UsageItemNode with annotations.url not None and not empty is validated
+    - Usages with annotations.text (inline) are skipped
+    - Usages with annotations.filepath are skipped
+    - On network error (timeout, connection error) — validation error
+    - Use HEAD request for efficiency (fallback to GET if server does not support it)
+    - Request timeout — 10 seconds
+    - URL validation result is cached: on repeated check of the same URL
+      the stored result is returned without a new network request
+    - Cache is stored in the rule instance as a dict, key is the URL
+    - Cache accumulates when traversing all documents in a single linter session
 
-    Шаблоны ошибок:
+    Error templates:
     - not_accessible: "Usage '{usage_name}' URL '{url}' returned HTTP {status_code} — expected 200"
     - request_failed: "Usage '{usage_name}' URL '{url}' request failed: {error_message}"
 
 "DocumentRule::UsageLinksHasNotConflicts(name: str = 'usage_links_has_not_conflicts')":
   location: rules.py
   annotations: |
-    Проверяет `UsagesNode`.
+    Validates `UsagesNode`.
 
-    Правила:
-    - все имена usage items не имеют пересечений с именами подключаемых типов
-      (конфликт может быть решен через alias для типа)
-    - все имена usage items не имеют пересечений с именами entity и routine
+    Rules:
+    - All usage item names must not conflict with imported type names
+      (conflicts can be resolved via alias for the type)
+    - All usage item names must not conflict with entity and routine names
 
-    Шаблоны ошибок:
+    Error templates:
     - import_conflict: "Usage key '{name}' conflicts with imported type '{type_name}' — rename the usage or use an alias in Imports"
     - entity_conflict: "Usage key '{name}' conflicts with {kind} '{entity_name}' — rename the usage to avoid ambiguity"
 
@@ -111,4 +111,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки практик (usages) документа манифеста
+  Validation rules for usages in CODEMANIFEST documents.

@@ -13,9 +13,9 @@ codemanifest:
   usages:
     convention: .goga/usages/conventions.md
   annotations: |
-    Практика `convention` используется для:
-    - работы с кодовой базой
-    - организации REPL цикла разработки
-    - отладки и тестирования
-    - организации тестовой инфраструктуры
-    - понимания общих принципов/правил разработки и тестирования в проекте
+    The `convention` practice is used for:
+    - Working with the codebase
+    - Organizing the REPL development cycle
+    - Debugging and testing
+    - Organizing the test infrastructure
+    - Understanding the general principles and rules of development and testing in the project

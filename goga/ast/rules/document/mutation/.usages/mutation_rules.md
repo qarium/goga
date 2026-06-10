@@ -1,16 +1,16 @@
-# Правила валидации мутаций и встраиваний
+# Mutation and embedding validation rules
 
-Область: правила, проверяющие корректность мутаций типов (синтаксис `::`) в CODEMANIFEST.
-Аудитория: потребители системы правил, нуждающиеся в валидации мутаций.
+Scope: Rules validating type mutation declarations (`::` syntax) in CODEMANIFEST.
+Audience: Consumers of the rule system performing mutation validation.
 
-## Доступные правила
+## Available rules
 
 ### MutationExists
 
-Базовый тип мутации должен существовать в одном из источников:
-- имена entities в текущем документе
-- имена routines в текущем документе
-- типы, подключённые через Imports
+The base type of each mutation must exist in one of:
+- Entity names in the current document
+- Routine names in the current document
+- Types imported via `Imports`
 
 ```python
 from goga.ast.rules.document.mutation import MutationExists
@@ -19,7 +19,7 @@ rule = MutationExists()
 
 ### MutationIsValid
 
-Имя мутации не должно совпадать с именем самой сущности — тип не может мутировать из самого себя.
+The mutation name must differ from the entity name — a type cannot mutate from itself.
 
 ```python
 from goga.ast.rules.document.mutation import MutationIsValid
@@ -28,17 +28,17 @@ rule = MutationIsValid()
 
 ### EmbeddedEntityCanNotHasMutations
 
-Встроенная сущность (префикс `->`) не может определять мутации — встроенные типы подключаются как есть.
+Embedded entities (declared with `->` prefix) must not define mutations. Embedded types are imported as-is.
 
 ```python
 from goga.ast.rules.document.mutation import EmbeddedEntityCanNotHasMutations
 rule = EmbeddedEntityCanNotHasMutations()
 ```
 
-## Пример валидного использования мутаций
+## Valid mutation example
 
 ```yaml
-# В документе с Imports:
+# In a document with imports:
 Imports:
   - Types:
       - BaseType
@@ -49,7 +49,7 @@ Imports:
 "BaseType::ConcreteType()":
   location: impl.py
   annotations: |
-    Конкретизация BaseType
+    BaseType specialization
 ```
 
-`BaseType` — существует в импортах, `ConcreteType` — не совпадает с `BaseType`. Правило соблюдено.
+Validation: `BaseType` exists in imports, `ConcreteType` differs from `BaseType`. All rules pass.
