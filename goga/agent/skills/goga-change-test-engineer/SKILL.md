@@ -1,6 +1,6 @@
 ---
 name: goga-change-test-engineer
-description: Валидация покрытия тестами и поведенческое тестирование
+description: Test Coverage Validation and Behavioral Testing
 ---
 # goga-change-test-engineer
 

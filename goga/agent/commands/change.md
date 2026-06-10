@@ -1,7 +1,7 @@
 # goga-change
 
-Диспетчер команды change.
+Command dispatcher for change.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-change` с аргументами.
+Use the **Skill tool** to invoke the `goga-change` skill with arguments.

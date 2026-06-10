@@ -1,6 +1,6 @@
 ---
 name: goga-change-scope-resolver
-description: Определение минимальной семантической области изменений
+description: Resolving the minimal semantic scope of changes
 ---
 # goga-change-scope-resolver
 

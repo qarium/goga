@@ -1,7 +1,7 @@
 # goga-design
 
-Диспетчер команды design.
+Command dispatcher for design.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-design` с аргументами.
+Use the **Skill tool** to invoke the `goga-design` skill with arguments.

@@ -1,201 +1,202 @@
 ---
 name: goga-acceptance-manifest-review
-description: Проверка CODEMANIFEST каждой ячейки относительно реализации
+description: Verify each Cell's CODEMANIFEST against the implementation
 ---
 # goga-acceptance-manifest-review
 
 ## Identity
 
-Вы отвечаете за проверку CODEMANIFEST каждой ячейки относительно реализации в рамках приёмки: код vs требования, требования vs код, точность manifest.
+The Agent verifies each Cell's CODEMANIFEST against its implementation during acceptance: code vs requirements, requirements vs code, manifest accuracy.
 
-## Ключевой принцип
+## Core Principle
 
-Вы **сравниваете** CODEMANIFEST с фактической реализацией, **актуализируете** manifest при необходимости и **фиксируете** несоответствия, которые не можете разрешить.
+The Agent **compares** CODEMANIFEST with the actual implementation, **updates** the manifest as needed, and **records** any unresolvable discrepancies.
 
-### Правило взаимодействия с пользователем
+### User Interaction Rule
 
-**Всегда предлагайте варианты ответа.** При обращении к пользователю — всегда предоставляйте 2-4 конкретных варианта.
-
----
-
-## Алгоритм
-
-### Step 1. Загрузка контекста
-
-1. Загрузите Acceptance Scope Report
-2. Используйте скилл `goga-lang-disp` — для получения языковых конвенций целевого языка
-3. Загрузите DSL спецификацию:
-   - Используйте скилл `goga-cell` — для понимания синтаксиса DSL CODEMANIFEST, структурных правил и семантики
-   - Используйте скилл `goga-cookbook` — для понимания принципов работы с cell и CODEMANIFEST файлами
-4. Используйте скилл `goga-codemanifest-base` — для получения базовых usages и annotations
-
-### Step 2. Предварительная проверка
-
-1. Запустите линтер: `goga lint`
-2. Зафиксируйте ошибки как CRITICAL. Исправьте перед продолжением.
-
-### Step 3. Ревью каждой ячейки
-
-Для каждой ячейки из Acceptance Scope Report:
-
-#### Sub-step 1. Загрузка
-
-1. Прочитайте CODEMANIFEST ячейки
-2. Разберите все сущности, методы, свойства, импорты, usages, аннотации, реэкспорты и расположения с учётом скиллов goga-cell и goga-cookbook
-3. Перечислите все исходные файлы (исключая `.usages/`, артефакты сборки, тесты)
-4. Прочитайте все исходные файлы по объявленным `location`
-5. Проверьте наличие файла фасада
-
-#### Sub-step 2. Анализ: Код
-
-**Вопрос: Соответствует ли код требованиям CODEMANIFEST, базовым практикам и языковым конвенциям?**
-
-1. Запустите сравнение контрактов: `goga contract <cell-path>`
-
-2. Для каждой entity сравните:
-   - **Сигнатура конструктора**: codemanifest vs implementation
-   - **Методы**: для каждого метода — codemanifest vs implementation
-   - **Свойства**: для каждого свойства — codemanifest vs implementation
-3. Для каждой функции (routine):
-   - **Совпадение сигнатур**: из результата contract — codemanifest vs implementation
-   - **Существование**: экспортируется ли через фасад
-4. Проверьте экспозицию фасада — присутствует ли каждая сущность в фасаде
-5. Проверьте соответствие кода базовым usages и annotations из скилла goga-codemanifest-base
-6. Проверьте соответствие кода языковым конвенциям из скилла goga-lang-disp
-
-Дополнительные проверки:
-- **Расположение**: существует ли файл по пути `<cell-path>/<location>`
-
-#### Sub-step 3. Анализ: CODEMANIFEST
-
-**Вопрос: Отражён ли весь значимый код в CODEMANIFEST?**
-
-Для каждого элемента в коде, не отражённом в CODEMANIFEST, определите критичность:
-**HIGH** — обязательно добавьте в CODEMANIFEST:
-- Публичные Entity (классы с состоянием/поведением) не объявлены
-- Публичные Routine (функции-трансформеры, фабрики, валидаторы) не объявлены
-- Реэкспортируемые типы не объявлены через Embedding
-- Мутации (`Object::Target`) не отражены
-
-**MEDIUM** — обязательно добавьте в CODEMANIFEST:
-- Методы/свойства объявленных Entity отсутствуют
-- Неточности в сигнатурах (параметры, возвращаемые значения, семантические метки)
-- Используемые Imports не объявлены
-
-**LOW** — не требует добавления:
-- Приватные члены, внутренние детали реализации
-- Вспомогательные функции, не входящие в фасад
-- Стилистические улучшения аннотаций
-
-Проверки качества написания:
-- Каждая аннотация начинается с ясного заявления о цели
-- Для каждого параметра есть описание с `имя_параметра`: описание
-- Нетривиальная логика включает раздел `Алгоритм:`
-- Ограничения описаны в разделе `Требования:`
-- Нет TBD, TODO или расплывчатых формулировок
-
-#### Sub-step 4. Сравнение алгоритмов
-
-Для каждой сущности и функции сравните аннотации с реализацией по осям:
-- **Поведение**: делает ли код то, что описано в аннотации
-- **Алгоритм**: шаги, порядок, условия, ветвления
-- **Операционный поток**: входы, выходы, побочные эффекты
-- **Гарантии**: пост-условия, инварианты, ограничения
-- **Инженерные практики**: обработка ошибок, логирование, валидация
-
-Для каждого расхождения:
-- **CODEMANIFEST неточен, код корректен** → обновите CODEMANIFEST
-- **Код некорректен, CODEMANIFEST точен** → сформулируйте задачу
-- **Оба частично неточны** → предложите правки для обеих сторон, запросите подтверждение пользователя
-
-### Step 4. Проверка базовых usages и annotations
-
-Для каждой ячейки сверьтесь с goga-codemanifest-base:
-1. Получите базовые usages из `goga-codemanifest-base`
-2. Проверьте, что каждый базовый usage присутствует в директиве `Usages` CODEMANIFEST
-3. Получите базовые annotations из `goga-codemanifest-base`
-4. Проверьте, что каждая базовая annotation присутствует в директиве `Annotations` CODEMANIFEST
-5. Отсутствующие базовые usages/annotations → **добавьте** автоматически
-
-### Step 5. Классификация замечаний
-
-Для каждого обнаруженного замечания:
-
-1. Классифицируйте:
-   - **CRITICAL**: нарушение фасада, отсутствие реализации, синтаксическая ошибка CODEMANIFEST, реализация противоречит manifest и manifest корректен
-   - **WARNING**: неточное описание, пропущенный параметр в аннотации, устаревший алгоритм в manifest
-   - **INFO**: рекомендация по улучшению качества написания
-
-2. Предложите конкретное действие:
-   - Для Анализа 1 (код не соответствует требованиям): сформулируйте задачу с описанием расхождения
-   - Для Анализа 2 (требования не соответствуют коду): отредактировать CODEMANIFEST
-   - Для расхождения алгоритмов: обновить manifest если реализация корректна, или сформулируйте задачу
-
-3. Запросите подтверждение пользователя для CRITICAL и WARNING замечаний
-
-### Step 6. Выполнение одобренных действий
-
-Для каждого одобренного действия:
-
-1. **Код не соответствует требованиям**: сформулируйте задачу с описанием расхождения
-2. **Требования не соответствуют коду**: примените правки CODEMANIFEST
-3. **Manifest устарел**: обновите CODEMANIFEST, запишите причину
-4. **Реализация некорректна**: зафиксируйте CRITICAL, сформулируйте задачу
-
-### Step 7. Валидация обновлений
-
-1. Выполните: `goga lint`
-2. Исправьте ошибки синтаксиса, если есть
-3. Повторяйте, пока линтер не пройдёт без ошибок
-
-STOP если:
-- CRITICAL нарушения в любой ячейке
-- реализация противоречит manifest и manifest корректен
-- ошибки линтера CODEMANIFEST
-- нарушения экспозиции фасада
+**Always provide response options.** When addressing the User, always offer 2–4 concrete choices.
 
 ---
 
-## Формат выхода
+## Algorithm
 
-Заполните каждый раздел. Пустые разделы недопустимы.
+### Step 1. Load Context
+
+1. Load the Acceptance Scope Report.
+2. Invoke skill `goga-lang-disp` to retrieve language conventions for the target language.
+3. Load the DSL specification:
+   - Invoke skill `goga-cell` to understand CODEMANIFEST DSL syntax, structural rules, and semantics.
+   - Invoke skill `goga-cookbook` to understand principles for working with Cell and CODEMANIFEST files.
+4. Invoke skill `goga-codemanifest-base` to retrieve baseline Usages and Annotations.
+
+### Step 2. Pre-flight Check
+
+1. Run the linter: `goga lint`.
+2. Record all errors as CRITICAL. Resolve them before proceeding.
+
+### Step 3. Per-Cell Review
+
+Process each Cell listed in the Acceptance Scope Report:
+
+#### Sub-step 1. Load Data
+
+1. Read the Cell's CODEMANIFEST.
+2. Parse all entities, methods, properties, imports, usages, annotations, re-exports, and locations per the goga-cell and goga-cookbook skill definitions.
+3. Enumerate all source files (exclude `.usages/`, build artifacts, and test files).
+4. Read every source file at its declared `location`.
+5. Verify the Facade file exists.
+
+#### Sub-step 2. Code Analysis
+
+**Question: Does the code satisfy the CODEMANIFEST requirements, baseline practices, and language conventions?**
+
+1. Run the contract comparison: `goga contract <cell-path>`.
+
+2. For each Entity, compare:
+   - **Constructor Signature**: CODEMANIFEST vs implementation.
+   - **Methods**: CODEMANIFEST vs implementation — per method.
+   - **Properties**: CODEMANIFEST vs implementation — per property.
+3. For each Routine:
+   - **Signature match**: contract result — CODEMANIFEST vs implementation.
+   - **Facade export**: is the Routine exported through the Facade.
+4. Check Facade exposure — every Entity must be present in the Facade.
+5. Check code compliance with baseline Usages and Annotations from skill `goga-codemanifest-base`.
+6. Check code compliance with language conventions from skill `goga-lang-disp`.
+
+Additional checks:
+- **Location**: the file at `<cell-path>/<location>` must exist.
+
+#### Sub-step 3. CODEMANIFEST Completeness Analysis
+
+**Question: Is all meaningful code reflected in the CODEMANIFEST?**
+
+For every code element absent from CODEMANIFEST, classify criticality:
+
+**HIGH** — must be added:
+- Undeclared public Entity (class with state or behavior).
+- Undeclared public Routine (transformer function, factory, validator).
+- Re-exported types not declared via Embedding.
+- Unreported Mutations (`Object::Target`).
+
+**MEDIUM** — must be added:
+- Missing methods or properties on a declared Entity.
+- Signature inaccuracies (parameters, return values, semantic labels).
+- Used Imports not declared.
+
+**LOW** — no action required:
+- Private members, internal implementation details.
+- Helper functions not included in the Facade.
+- Stylistic annotation improvements.
+
+Annotation quality checks:
+- Each Annotation starts with a clear purpose statement.
+- Every parameter is documented as `parameter_name`: description.
+- Non-trivial logic includes an `Algorithm:` section.
+- Constraints are described under `Requirements:`.
+- No TBD, TODO, or vague wording.
+
+#### Sub-step 4. Algorithm Comparison
+
+For each Entity and Routine, compare Annotations against the implementation along these axes:
+- **Behavior**: does the code perform what the Annotation describes.
+- **Algorithm**: steps, order, conditions, branching.
+- **Operational Flow**: inputs, outputs, side effects.
+- **Guarantees**: post-conditions, invariants, constraints.
+- **Engineering Practices**: error handling, logging, validation.
+
+For each discrepancy:
+- **CODEMANIFEST inaccurate, code correct** → update CODEMANIFEST.
+- **Code incorrect, CODEMANIFEST accurate** → create a Task.
+- **Both partially inaccurate** → propose edits for both sides, request User confirmation.
+
+### Step 4. Baseline Usages and Annotations Audit
+
+For each Cell, verify against `goga-codemanifest-base`:
+1. Retrieve baseline Usages from `goga-codemanifest-base`.
+2. Verify every baseline Usage appears in the CODEMANIFEST `Usages` directive.
+3. Retrieve baseline Annotations from `goga-codemanifest-base`.
+4. Verify every baseline Annotation appears in the CODEMANIFEST `Annotations` directive.
+5. **Auto-add** any missing baseline Usages or Annotations.
+
+### Step 5. Classify Findings
+
+For each finding:
+
+1. Assign a severity:
+   - **CRITICAL**: Facade violation, missing implementation, CODEMANIFEST syntax error, implementation contradicts a correct manifest.
+   - **WARNING**: inaccurate description, missing parameter in Annotation, stale manifest algorithm.
+   - **INFO**: writing-quality improvement recommendation.
+
+2. Propose a concrete action:
+   - Analysis 1 (code fails requirements) → create a Task describing the discrepancy.
+   - Analysis 2 (requirements diverge from code) → edit CODEMANIFEST.
+   - Algorithm mismatch → update manifest if implementation is correct, or create a Task.
+
+3. Request User confirmation for all CRITICAL and WARNING findings.
+
+### Step 6. Execute Approved Actions
+
+For each approved action:
+
+1. **Code fails requirements** → create a Task with discrepancy details.
+2. **Requirements diverge from code** → apply CODEMANIFEST edits.
+3. **Manifest is stale** → update CODEMANIFEST and record the reason.
+4. **Implementation is incorrect** → record CRITICAL, create a Task.
+
+### Step 7. Validate Updates
+
+1. Run: `goga lint`.
+2. Fix any syntax errors.
+3. Repeat until the linter passes with zero errors.
+
+STOP if:
+- CRITICAL violations exist in any Cell.
+- Implementation contradicts manifest and manifest is correct.
+- CODEMANIFEST linter errors are present.
+- Facade exposure violations are detected.
+
+---
+
+## Output Format
+
+Fill in every section. Empty sections are prohibited.
 
 ```md
 # Manifest Review Report
 
-## Результаты линтера
-[Таблица: Ячейка | Статус линтера | Ошибки (если есть)]
+## Linter Results
+[Table: Cell | Linter Status | Errors (if any)]
 
-## Анализ 1 — Код vs Требования
-[Таблица: Ячейка | Совпадение сигнатур | Покрытие методов | Покрытие свойств | Фасад | Статус]
+## Analysis 1 — Code vs Requirements
+[Table: Cell | Signature Match | Method Coverage | Property Coverage | Facade | Status]
 
-## Анализ 2 — Требования vs Код
-[Таблица: Ячейка | Недокументированные сущности | Точность описаний | Качество аннотаций | Статус]
+## Analysis 2 — Requirements vs Code
+[Table: Cell | Undocumented Entities | Description Accuracy | Annotation Quality | Status]
 
-## Консистентность алгоритмов
-[Для каждой ячейки: алгоритм manifest vs реализация — совпадает/расхождение]
+## Algorithm Consistency
+[Per Cell: manifest algorithm vs implementation — match / discrepancy]
 
-## Консистентность операционного потока
-[Для каждой ячейки: поток manifest vs реализация — совпадает/расхождение]
+## Operational Flow Consistency
+[Per Cell: manifest flow vs implementation — match / discrepancy]
 
-## Проверка гарантий
-[Для каждой ячейки: гарантии manifest vs реализация — сохранены/нарушены]
+## Guarantee Verification
+[Per Cell: manifest guarantees vs implementation — preserved / violated]
 
-## Консистентность практик
-[Для каждой ячейки: практики manifest vs реализация — совпадает/расхождение]
+## Practice Consistency
+[Per Cell: manifest practices vs implementation — match / discrepancy]
 
-## Проверка базовых usages/annotations
-[Таблица: Ячейка | Базовые usages на месте? | Базовые annotations на месте?]
+## Baseline Usages/Annotations Audit
+[Table: Cell | Baseline Usages present? | Baseline Annotations present?]
 
-## Обнаруженные замечания
-[Таблица: Ячейка | Анализ | Замечание | Классификация (CRITICAL/WARNING/INFO) | Предложенное действие]
+## Findings
+[Table: Cell | Analysis | Finding | Severity (CRITICAL/WARNING/INFO) | Proposed Action]
 
-## Внесённые обновления
-[Таблица: Ячейка | Обновлённый раздел | Старое значение | Новое значение | Причина]
+## Applied Updates
+[Table: Cell | Updated Section | Previous Value | New Value | Reason]
 
-## Критические несоответствия
-[Список CRITICAL. Пусто, если нет]
+## Critical Discrepancies
+[List of CRITICAL items. Empty if none.]
 
-## Общий статус
-[CONSISTENT / INCONSISTENT — с обоснованием]
+## Overall Status
+[CONSISTENT / INCONSISTENT — with justification]
 ```

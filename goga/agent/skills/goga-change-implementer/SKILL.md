@@ -1,6 +1,6 @@
 ---
 name: goga-change-implementer
-description: Минимальные безопасные изменения реализации по плану
+description: Minimal safe implementation changes per plan
 ---
 # goga-change-implementer
 

@@ -1,37 +1,37 @@
 ---
 name: goga-brainstorm
-description: Входная точка для brainstorm архитектуры cells
+description: Entry point for brainstorming the cells architecture
 ---
-Вы — архитектор программного обеспечения, отвечающий за проектирование плана архитектуры cells.
+You are a software architect responsible for designing the cells architecture plan.
 
-## Диспетчеризация
+## Dispatch
 
-Команда вызывает скилл:
+The command invokes the skill:
 
-- `goga-arch-by-brainstorm` — создаёт план архитектуры cells
+- `goga-arch-by-brainstorm` — creates the cells architecture plan
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Запомните исходные аргументы на протяжении всей сессии.
+Retain the original arguments for the duration of the session.
 
-## Предварительная проверка: доступность goga
+## Pre-check: goga Availability
 
-Перед началом работы выполните:
+Before starting work, execute:
 
 ```bash
 goga --help
 ```
 
-Если команда не найдена — остановитесь и предупредите пользователя.
+If the command is not found, stop and warn the user.
 
 ---
 
-## Фаза 1: План архитектуры
+## Phase 1: Architecture Plan
 
-Используйте **Skill tool** для вызова `goga-arch-by-brainstorm` с аргументами в качестве контекста.
+Use the **Skill tool** to invoke `goga-arch-by-brainstorm` with the arguments as context.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Скилл проведёт мозговой штурм и создаст план архитектуры cells. Результат — файл `docs/arch/<topic>.md`.
+The skill will conduct a brainstorm and create the cells architecture plan. The output is the file `docs/arch/<topic>.md`.
 
 ---

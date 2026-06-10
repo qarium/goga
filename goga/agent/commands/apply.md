@@ -1,7 +1,7 @@
 # goga-apply
 
-Диспетчер команды apply.
+Command dispatcher for apply.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-apply` с аргументами.
+Use the **Skill tool** to invoke the `goga-apply` skill with arguments.

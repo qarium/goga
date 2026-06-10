@@ -1,248 +1,246 @@
 ---
 name: goga-review-task
-description: Ревью задачи на полноту, корректность и согласованность
+description: Review a task for completeness, correctness, and consistency
 ---
-# Ревью task
+# Task Review
 
-## Цель
+## Objective
 
-Проверяет задачу (`docs/tasks/<topic>.md`) на **полноту, корректность и согласованность** — убедиться, что задача сформулирована достаточно чётко для перехода к архитектуре (`goga-arch-by-brainstorm`).
+Validates a task (`docs/tasks/<topic>.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-arch-by-brainstorm`).
 
-Вы **верифицируете** task, **сообщаете** о замечаниях и **исправляете** task при обнаружении проблем (с одобрения пользователя).
-
----
-
-## Ключевой принцип
-
-**Task должен быть самодостаточным и однозначным.** Любой архитектор, прочитав task, должен понять что нужно сделать, какие есть ограничения и по каким критериям будет оцениваться результат. Если формулировка допускает неоднозначность — это замечание.
-
-### Правило взаимодействия с пользователем
-
-**Всегда предлагайте варианты ответа.** При обращении к пользователю за решением или подтверждением — всегда предоставляйте конкретные варианта ответа. Никогда не задавайте открытые вопросы без предлагаемых для выбора вариантов.
+You **verify** the task, **report** findings, and **fix** the task when issues are discovered (with user approval).
 
 ---
 
-## Верифицируемый артефакт
+## Core Principle
 
-- Файл задачи по адресу `docs/tasks/<topic>.md` — сформулированная задача, проверяемая на полноту и корректность
+**The task must be self-contained and unambiguous.** Any architect reading the task must understand what needs to be done, what constraints exist, and what criteria will be used to evaluate the result. If the wording allows ambiguity — that is a finding.
 
----
+### User Interaction Rule
 
-## Фазы
-
-### Фаза 1: Загрузка контекста
-
-1. Прочитайте задачу из `docs/tasks/<topic>.md`
-2. Загрузите DSL спецификацию и принципы применения DSL:
-   - Используйте **Skill tool** для вызова `goga-cell` — для понимания терминологии cell и CODEMANIFEST при проверке секции «Существующая архитектура»
-   - Используйте **Skill tool** для вызова `goga-cookbook` — для понимания принципов работы с cell при проверке корректности описания затрагиваемых cells
-3. Получите схему проекта:
-   - Выполните `goga schema`, чтобы получить иерархию cells
-   - Используйте результат для верификации секции «Существующая архитектура» task
-4. Прочитайте релевантные CODEMANIFEST тех cells, которые упомянуты в секции «Существующая архитектура» task
-5. Прочитайте релевантные usages (`.goga/usages/cooks/`), упомянутые в секции «Внешние зависимости» task
+**Always offer response options.** When asking the user for a decision or confirmation — always provide specific options to choose from. Never ask open-ended questions without offering selectable options.
 
 ---
 
-### Фаза 2: Полнота структуры
+## Verifiable Artifact
 
-Проверьте, что task содержит **все обязательные секции**:
-
-1. **Текущее состояние** — описано ли, как сейчас обстоят дела
-2. **Описание** — сформулирована ли суть задачи
-3. **Границы** — определено ли, что входит и что НЕ входит
-4. **Критерии приёмки** — есть ли конкретные проверяемые условия
-5. **Стек** — перечислены ли фреймворки, библиотеки, инфраструктура
-6. **Внешние зависимости** — есть ли таблица с компонентами и статусом usage файлов
-7. **Риски и ограничения** — зафиксированы ли известные ограничения
-8. **Объём** — оценён ли масштаб задачи
-9. **Существующая архитектура** — указано ли, какие cells затрагиваются
-
-Если любая секция отсутствует — зафиксируйте как **Критическое** замечание.
-Если любая секция присутствует, но пуста или содержит плейсхолдеры (TBD, TODO) — зафиксируйте как **Высокое**.
+- Task file at `docs/tasks/<topic>.md` — a formulated task being verified for completeness and correctness
 
 ---
 
-### Фаза 3: Корректность текущего состояния
+## Phases
 
-**Цель:** Убедиться, что секция «Текущее состояние» точно отражает реальное положение дел.
+### Phase 1: Load Context
 
-1. **Сравните с фактической архитектурой** — на основе схемы проекта (Фаза 1) проверьте:
-   - Если утверждается, что чего-то «нет» — действительно ли этого нет в проекте?
-   - Если утверждается, что что-то «работает так» — соответствует ли это фактическому CODEMANIFEST или коду?
-   - Если упоминаются конкретные cells — существуют ли они?
-
-2. **Проверьте полноту** — не пропущено ли важное существующее поведение, которое затрагивает задача
-
-Если текущее состояние не соответствует реальности — зафиксируйте как **Критическое** (фактическая ошибка) или **Высокое** (неполное описание).
-
----
-
-### Фаза 4: Согласованность описания и границ
-
-**Цель:** Убедиться, что описание и границы не противоречат друг другу.
-
-1. **Описание vs Границы:**
-   - Всё, что описано как «нужно сделать», попадает ли в секцию «Входит»?
-   - Нет ли в «Входит» того, что не упоминается в описании?
-   - Нет ли в «Не входит» того, что логически необходимо для реализации описанного?
-
-2. **Описание vs Критерии приёмки:**
-   - Покрывают ли критерии приёмки все аспекты описания?
-   - Нет ли критериев, которые не относятся к описанной задаче?
-   - Достаточно ли конкретны критерии для проверки (можно ли однозначно ответить «да/нет»)?
-
-3. **Границы vs Существующая архитектура:**
-   - Если границы исключают какие-то cells — отражено ли это в секции архитектуры?
-   - Если архитектура упоминает затрагиваемые cells — соответствуют ли они описанным границам?
-
-Если обнаружены противоречия — зафиксируйте как **Высокое**.
-Если критерии приёмки неконкретны — зафиксируйте как **Высокое**.
-Если есть логические пробелы между секциями — зафиксируйте как **Среднее**.
+1. Read the task from `docs/tasks/<topic>.md`
+2. Load the DSL specification and DSL application principles:
+   - Use the **Skill tool** to invoke `goga-cell` — for understanding cell terminology and CODEMANIFEST when verifying the "Existing Architecture" section
+   - Use the **Skill tool** to invoke `goga-cookbook` — for understanding cell interaction principles when verifying the correctness of affected cells description
+3. Get the project schema:
+   - Execute `goga schema` to get the cell hierarchy
+   - Use the result to verify the task's "Existing Architecture" section
+4. Read the relevant CODEMANIFESTs of the cells mentioned in the task's "Existing Architecture" section
+5. Read the relevant usages (`.goga/usages/cooks/`) mentioned in the task's "External Dependencies" section
 
 ---
 
-### Фаза 5: Корректность стека и зависимостей
+### Phase 2: Structure Completeness
 
-**Цель:** Убедиться, что стек и зависимости указаны корректно и полностью.
+Verify that the task contains **all required sections**:
 
-1. **Стек:**
-   - Указаны ли конкретные версии или диапазоны версий библиотек/фреймворков?
-   - Соответствует ли стек реальным используемым технологиям проекта?
+1. **Current State** — is the current situation described
+2. **Description** — is the essence of the task formulated
+3. **Boundaries** — is what is included and excluded defined
+4. **Acceptance Criteria** — are there specific verifiable conditions
+5. **Stack** — are frameworks, libraries, and infrastructure listed
+6. **External Dependencies** — is there a table with components and usage file statuses
+7. **Risks and Constraints** — are known constraints documented
+8. **Scope** — is the task scale estimated
+9. **Existing Architecture** — are the affected cells specified
 
-2. **Внешние зависимости:**
-   - Для каждой зависимости в таблице проверьте статус usage файла:
-     - «создан» — существует ли файл `.goga/usages/cooks/<name>.md`?
-     - «обновлён» — соответствует ли содержимое описанным паттернам использования?
-     - «существует» — актуально ли содержание файла для текущей задачи?
-   - Есть ли в стеке компоненты, не отражённые в таблице зависимостей?
-
-3. **Связь с описанием:**
-   - Обосновано ли использование каждого компонента стека задачей?
-   - Нет ли в описании требований, для которых не указан соответствующий инструмент в стеке?
-
-Если usage файл отсутствует, хотя статус «создан» — зафиксируйте как **Критическое**.
-Если стек не покрывает потребности описания — зафиксируйте как **Высокое**.
-Если зависимость без обоснования — зафиксируйте как **Среднее**.
+If any section is missing — record as a **Critical** finding.
+If any section is present but empty or contains placeholders (TBD, TODO) — record as **High**.
 
 ---
 
-### Фаза 6: Корректность существующей архитектуры
+### Phase 3: Current State Correctness
 
-**Цель:** Убедиться, что секция «Существующая архитектура» точно описывает затрагиваемые cells.
+**Objective:** Ensure the "Current State" section accurately reflects the actual situation.
 
-1. **Существование cells** — все упомянутые cells существуют в схеме проекта?
-2. **Корректность описания интеграции** — правильно ли описано, как cells взаимодействуют?
-3. **Полнота** — не пропущены ли cells, которые логически затрагиваются задачей (на основе описания и границ)?
-4. **Направление влияния** — корректно ли указано, какие cells нужно создать, а какие модифицировать?
+1. **Compare with actual architecture** — based on the project schema (Phase 1), verify:
+   - If it claims something "doesn't exist" — does it really not exist in the project?
+   - If it claims something "works this way" — does it match the actual CODEMANIFEST or code?
+   - If specific cells are mentioned — do they actually exist?
 
-Если указанные cells не существуют — зафиксируйте как **Критическое**.
-Если описание интеграции некорректно — зафиксируйте как **Высокое**.
-Если пропущены затрагиваемые cells — зафиксируйте как **Высокое**.
+2. **Check completeness** — is there important existing behavior that affects the task but is omitted?
 
----
-
-### Фаза 7: Риски и ограничения
-
-**Цель:** Убедиться, что риски реалистичны и полны.
-
-1. **Реалистичность** — основан ли каждый риск на реальных ограничениях, а не на общих фразах?
-2. **Полнота** — учитывает ли задача:
-   - Ограничения совместимости (версии, платформы)?
-   - Ограничения производительности?
-   - Ограничения, вытекающие из текущей архитектуры?
-   - Зависимости от внешних компонентов?
-
-Если риски состоят из общих фраз — зафиксируйте как **Среднее**.
-Если пропущены очевидные риски — зафиксируйте как **Среднее**.
+If the current state doesn't match reality — record as **Critical** (factual error) or **High** (incomplete description).
 
 ---
 
-### Фаза 8: Объём
+### Phase 4: Description and Boundaries Consistency
 
-**Цель:** Убедиться, что оценка объёма обоснована.
+**Objective:** Ensure that description and boundaries don't contradict each other.
 
-1. **Обоснованность** — соответствует ли оценка масштабу описания?
-2. **Разбивка** — если указана разбивка на подзадачи:
-   - Имеет ли каждая подзадача самостоятельную ценность?
-   - Покрывают ли подзадачи вместе всю задачу?
-   - Нет ли пересечений между подзадачами?
-3. **Отсутствие разбивки** — если задача помечена как «одна», действительно ли она достаточно мала?
+1. **Description vs Boundaries:**
+   - Does everything described as "needs to be done" fall into the "Included" section?
+   - Is there anything in "Included" that isn't mentioned in the description?
+   - Is there anything in "Excluded" that is logically necessary for implementing what's described?
 
-Если оценка объёма не соответствует масштабу описания — зафиксируйте как **Среднее**.
-Если подзадачи пересекаются или не покрывают задачу — зафиксируйте как **Высокое**.
+2. **Description vs Acceptance Criteria:**
+   - Do the acceptance criteria cover all aspects of the description?
+   - Are there criteria that don't relate to the described task?
+   - Are the criteria specific enough for verification (can you unambiguously answer "yes/no")?
 
----
+3. **Boundaries vs Existing Architecture:**
+   - If boundaries exclude certain cells — is this reflected in the architecture section?
+   - If the architecture mentions affected cells — do they match the described boundaries?
 
-### Фаза 9: Отчёт и исправление замечаний (интерактивно)
-
-Соберите все замечания из Фаз 2–8 перед их представлением. Отсортируйте по критичности: Критические → Высокие → Средние.
-
-Представляйте замечания **по одному**. Для каждого замечания:
-
-#### Шаг 1. Покажите замечание
-
-Представьте одно замечание с:
-
-- **Критичность** (Критическая / Высокая / Средняя)
-- **Направление** (Структура / Текущее состояние / Описание и границы / Стек и зависимости / Архитектура / Риски / Объём)
-- **Местоположение** — точная ссылка на секцию задачи
-- **Что не так** — ясное описание проблемы
-- **Предлагаемое исправление** — точное необходимое изменение, а не расплывчатый совет
-
-#### Шаг 2. Запросите решение у пользователя
-
-Используйте AskUserQuestion с вариантами:
-
-1. **Применить предложенное исправление** — немедленно применить исправление к задаче
-2. **Предложить альтернативу** — пользователь описывает другой подход к исправлению
-3. **Пропустить** — пользователь пропускает замечание
-
-#### Шаг 3. Примените решение
-
-- **Применить предложенное исправление**: обновите файл задачи, затем перепроверьте, что исправление не вносит
-  новых проблем (повторно выполните релевантные проверки). Кратко сообщите результат перепроверки.
-- **Пропустить**: зафиксируйте замечание как «пропущенное» и продолжите.
-- **Предложить альтернативу**: обсудите альтернативу с пользователем, согласуйте исправление, примените его,
-  перепроверьте.
-
-#### Шаг 4. Переход к следующему замечанию
-
-Повторите с Шага 1 для следующего замечания. Показывайте краткий счётчик: «Замечание 3 из 12».
-
-После обработки всех замечаний покажите итоги:
-
-- **Исправлено**: N замечаний (список по критичности и направлению)
-- **Пропущено**: N замечаний (список по критичности и направлению)
-- **Статус задачи**: обновлён / без изменений
+If contradictions are found — record as **High**.
+If acceptance criteria are not specific — record as **High**.
+If there are logical gaps between sections — record as **Medium**.
 
 ---
 
-## Результат
+### Phase 5: Stack and Dependencies Correctness
 
-- Итоги замечаний: количество исправленных / пропущенных по критичности и направлению
-- Обновлённый task файл (если были применены исправления)
-- Вердикт верификации: пройден / не пройден
+**Objective:** Ensure that the stack and dependencies are specified correctly and completely.
+
+1. **Stack:**
+   - Are specific versions or version ranges of libraries/frameworks specified?
+   - Does the stack match the technologies actually used in the project?
+
+2. **External Dependencies:**
+   - For each dependency in the table, check the usage file status:
+     - "created" — does the file `.goga/usages/cooks/<name>.md` exist?
+     - "updated" — does the content match the described usage patterns?
+     - "exists" — is the file content relevant to the current task?
+   - Are there components in the stack not reflected in the dependencies table?
+
+3. **Connection to description:**
+   - Is the use of each stack component justified by the task?
+   - Are there requirements in the description for which no corresponding tool is specified in the stack?
+
+If a usage file is missing despite a "created" status — record as **Critical**.
+If the stack doesn't cover the description's needs — record as **High**.
+If a dependency lacks justification — record as **Medium**.
 
 ---
 
-## Финальная самопроверка
+### Phase 6: Existing Architecture Correctness
 
-Перед завершением проверьте:
+**Objective:** Ensure the "Existing Architecture" section accurately describes the affected cells.
 
-1. Была ли DSL спецификация загружена через скиллы `goga-cell` и `goga-cookbook`?
-2. Была ли загружена текущая схема проекта?
-3. Была ли проверена полнота структуры задачи (все 9 обязательных секций)?
-4. Была ли проверена корректность текущего состояния (соответствие схеме проекта и CODEMANIFEST)?
-5. Была ли проверена согласованность описания, границ и критериев приёмки?
-6. Были ли проверены стек и внешние зависимости (существование usage файлов, обоснованность)?
-7. Была ли проверена корректность существующей архитектуры (существование cells, полнота, направление влияния)?
-8. Были ли проверены риски и ограничения (реалистичность, полнота)?
-9. Была ли проверена оценка объёма (обоснованность, разбивка на подзадачи)?
-10. Было ли каждое замечание представлено по одному с решением об исправлении?
-11. Были ли одобренные исправления применены и перепроверены?
-12. Были ли предоставлены итоги исправленных/пропущенных замечаний?
+1. **Cell existence** — do all mentioned cells exist in the project schema?
+2. **Integration description correctness** — is the description of how cells interact correct?
+3. **Completeness** — are there cells logically affected by the task (based on description and boundaries) that are omitted?
+4. **Direction of impact** — is it correctly specified which cells need to be created and which need to be modified?
 
-Если хотя бы один ответ «нет» — завершите недостающую верификацию перед возвратом.
+If specified cells don't exist — record as **Critical**.
+If the integration description is incorrect — record as **High**.
+If affected cells are omitted — record as **High**.
+
+---
+
+### Phase 7: Risks and Constraints
+
+**Objective:** Ensure risks are realistic and complete.
+
+1. **Realism** — is each risk based on actual constraints rather than generic phrases?
+2. **Completeness** — does the task account for:
+   - Compatibility constraints (versions, platforms)?
+   - Performance constraints?
+   - Constraints arising from the current architecture?
+   - Dependencies on external components?
+
+If risks consist of generic phrases — record as **Medium**.
+If obvious risks are omitted — record as **Medium**.
+
+---
+
+### Phase 8: Scope
+
+**Objective:** Ensure the scope estimate is justified.
+
+1. **Justification** — does the estimate match the scale of the description?
+2. **Breakdown** — if a breakdown into subtasks is provided:
+   - Does each subtask have standalone value?
+   - Do the subtasks together cover the entire task?
+   - Is there overlap between subtasks?
+3. **Absence of breakdown** — if the task is marked as "single", is it truly small enough?
+
+If the scope estimate doesn't match the description's scale — record as **Medium**.
+If subtasks overlap or don't cover the task — record as **High**.
+
+---
+
+### Phase 9: Report and Fix Findings (Interactive)
+
+Collect all findings from Phases 2–8 before presenting them. Sort by severity: Critical → High → Medium.
+
+Present findings **one at a time**. For each finding:
+
+#### Step 1. Show the finding
+
+Present one finding with:
+
+- **Severity** (Critical / High / Medium)
+- **Area** (Structure / Current State / Description and Boundaries / Stack and Dependencies / Architecture / Risks / Scope)
+- **Location** — exact reference to the task section
+- **Issue** — clear description of the problem
+- **Suggested fix** — specific required change, not vague advice
+
+#### Step 2. Request user decision
+
+Use AskUserQuestion with options:
+
+1. **Apply suggested fix** — apply the fix to the task immediately
+2. **Suggest alternative** — user describes a different fix approach
+3. **Skip** — user skips the finding
+
+#### Step 3. Apply the decision
+
+- **Apply suggested fix**: update the task file, then re-verify that the fix doesn't introduce new issues (re-run relevant checks). Briefly report the re-verification result.
+- **Skip**: record the finding as "skipped" and continue.
+- **Suggest alternative**: discuss the alternative with the user, agree on a fix, apply it, re-verify.
+
+#### Step 4. Proceed to next finding
+
+Repeat from Step 1 for the next finding. Show a brief counter: "Finding 3 of 12".
+
+After processing all findings, show the summary:
+
+- **Fixed**: N findings (list by severity and area)
+- **Skipped**: N findings (list by severity and area)
+- **Task status**: updated / unchanged
+
+---
+
+## Output
+
+- Findings summary: count of fixed / skipped by severity and area
+- Updated task file (if fixes were applied)
+- Verification verdict: passed / failed
+
+---
+
+## Final Self-Check
+
+Before completing, verify:
+
+1. Was the DSL specification loaded via `goga-cell` and `goga-cookbook` skills?
+2. Was the current project schema loaded?
+3. Was the task structure completeness checked (all 9 required sections)?
+4. Was the current state correctness checked (consistency with project schema and CODEMANIFEST)?
+5. Was the consistency of description, boundaries, and acceptance criteria checked?
+6. Were the stack and external dependencies checked (usage file existence, justification)?
+7. Was the existing architecture correctness checked (cell existence, completeness, direction of impact)?
+8. Were risks and constraints checked (realism, completeness)?
+9. Was the scope estimate checked (justification, subtask breakdown)?
+10. Was each finding presented one at a time with a fix decision?
+11. Were approved fixes applied and re-verified?
+12. Was a summary of fixed/skipped findings provided?
+
+If any answer is "no" — complete the missing verification before returning.
 
 ---

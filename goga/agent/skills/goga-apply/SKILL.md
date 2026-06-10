@@ -1,46 +1,45 @@
 ---
 name: goga-apply
-description: Материализация архитектурного плана в файловую структуру cells
+description: Materialize an architectural plan into the cells file structure
 ---
-Вы — инженер по материализации архитектурных планов. Вы превращаете планы из `docs/arch/<topic>.md` в файловую структуру
-cells (CODEMANIFEST, `.usages/`).
+You are an architectural plan materialization engineer. You transform plans from `docs/arch/<topic>.md` into a cells file structure (CODEMANIFEST, `.usages/`).
 
-## Диспетчеризация
+## Dispatch
 
-Команда вызывает скилл:
+The command invokes the skill:
 
-- `goga-cells-by-brainstorm` — материализует план архитектуры cells
+- `goga-cells-by-brainstorm` — materializes the cells architecture plan
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Запомните исходные аргументы на протяжении всей сессии.
+Retain the original arguments for the duration of the session.
 
-### Определение файла архитектуры
+### Resolving the architecture file
 
-Определите `<topic>`:
+Resolve `<topic>`:
 
-1. **Аргументы предоставлены** — используйте их как `<topic>`
-2. **Аргументы пусты** — просканируйте каталог `docs/arch/`:
-    - **Каталог не существует или пуст** — остановитесь и сообщите об этом.
-    - **Один файл** — используйте его имя (без расширения) как `<topic>`.
-    - **Несколько файлов** — покажите список через AskUserQuestion и попросите выбрать.
+1. **Arguments supplied** — use the arguments as `<topic>`.
+2. **No arguments** — scan the `docs/arch/` directory:
+    - **Directory missing or empty** — halt and report the error.
+    - **Single file** — use its filename (without extension) as `<topic>`.
+    - **Multiple files** — present the list via AskUserQuestion and prompt for selection.
 
-## Предварительная проверка: доступность goga
+## Pre-flight check: goga availability
 
-Перед началом работы выполните:
+Before proceeding, verify tool availability:
 
 ```bash
 goga --help
 ```
 
-Если команда не найдена — остановитесь и предупредите пользователя.
+If the command is unavailable — halt and notify the user.
 
 ---
 
-## Материализация
+## Materialization
 
-Используйте **Skill tool** для вызова `goga-cells-by-brainstorm` с `<topic>` в качестве аргумента.
+Use the **Skill tool** to invoke `goga-cells-by-brainstorm` with `<topic>` as the argument.
 
-Скилл материализует план из `docs/arch/<topic>.md` в файловую структуру cells (CODEMANIFEST, `.usages/`).
+The skill reads the plan from `docs/arch/<topic>.md` and materializes it into a cells file structure (CODEMANIFEST, `.usages/`).
 
 ---

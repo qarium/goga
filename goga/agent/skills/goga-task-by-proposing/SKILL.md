@@ -1,181 +1,180 @@
 ---
 name: goga-task-by-proposing
-description: Интерактивная формулировка задачи из сырого запроса
+description: Interactive task formulation from a raw request
 ---
-# Формулировка задачи
+# Task Formulation
 
-## Назначение
+## Purpose
 
-Превращает сырой запрос пользователя («добавить авторизацию») в **сформулированную задачу** — документ с описанием,
-стеком, зависимостями и оценкой объёма. Результат сохраняется в `docs/tasks/<topic>.md` и становится входом для `goga-arch-by-brainstorm`.
-
----
-
-## Правила ведения диалога
-
-1. **Работайте через гипотезы.** Вместо открытых вопросов предлагайте конкретные варианты.
-
-2. **Задавайте один вопрос за сообщение.** Один сфокусированный вопрос с 2-4 вариантами ответа.
-
-3. **Структурируйте каждый ответ.** Эта дисциплина предотвращает хаотичное обсуждение.
+Transforms a raw user request (e.g., "add authorization") into a **formulated task** — a structured document containing
+the description, technology stack, dependencies, and scope estimate. The output is persisted to `docs/tasks/<topic>.md`
+and serves as input for the `goga-arch-by-brainstorm` skill.
 
 ---
 
-### Фаза 1: Сбор входных данных
+## Dialogue Rules
 
-Примите описание пользователя о том, что нужно сделать.
+1. **Drive the conversation through hypotheses.** Present concrete options rather than open-ended questions.
 
-Описание может быть:
-- **Кратким** — одно предложение или название функции
-- **Детальным** — полная спецификация с требованиями
+2. **Ask one question per message.** Deliver a single focused question with 2-4 answer options.
 
-Если описание краткое — пока не просите уточнений. Фаза 3 прояснит недостающие детали.
-Запомните исходное описание на протяжении всей сессии.
+3. **Structure every response.** This discipline prevents unstructured discussion.
 
-### Фаза 2: Загрузка контекста
+---
 
-#### Шаг 1: Загрузите DSL спецификацию
+### Phase 1: Input Collection
 
-Используйте **Skill tool** для вызова `goga-cell`.
-Используйте для:
-- Понимания терминологии cell и CODEMANIFEST при анализе существующей архитектуры
+Accept the user's description of the desired outcome.
 
-#### Шаг 2: Загрузите принципы применения DSL
+The description may be:
+- **Brief** — a single sentence or feature name
+- **Detailed** — a complete specification with requirements
 
-Используйте **Skill tool** для вызова `goga-cookbook`.
-Используйте для:
-- Понимания двухуровневой модели usages (проектный `.goga/usages/` и cell-level `<cell_path>/.usages/`)
-- Принципов написания usage файлов при создании `.goga/usages/cooks/`
+If the description is brief, do not request clarifications yet. Phase 3 will resolve missing details.
+Retain the original description throughout the session.
 
-#### Шаг 3: Получите схему проекта
+### Phase 2: Context Loading
 
-Выполните `goga schema`, чтобы получить иерархию cells.
+#### Step 1: Load the DSL specification
 
-Если у проекта нет существующей архитектуры — зафиксируйте это как факт.
+Invoke `goga-cell` via the **Skill tool**.
+Purpose:
+- Understand cell and CODEMANIFEST terminology for analyzing the existing architecture
 
-#### Шаг 4: Получите базовые annotations и usages проекта
+#### Step 2: Load DSL application principles
 
-Используйте **Skill tool** для вызова `goga-codemanifest-base`.
+Invoke `goga-cookbook` via the **Skill tool**.
+Purpose:
+- Understand the two-level usages model (project-level `.goga/usages/` and cell-level `<cell_path>/.usages/`)
+- Learn usage file authoring principles for creating `.goga/usages/cooks/`
 
-#### Шаг 5: Прочитайте релевантные usages
+#### Step 3: Retrieve the project schema
 
-Если задача подразумевает использование внешних библиотек/технологий — прочитайте usages о них (в `.goga/usages/cooks/`).
+Run `goga schema` to obtain the cell hierarchy.
 
-### Фаза 3: Формулировка задачи
+If the project lacks an existing architecture, record this as a known fact.
 
-**Цель:** Уточнить с пользователем что именно нужно сделать и какие границы.
+#### Step 4: Retrieve base annotations and usages
 
-На основе описания пользователя (Фаза 1) и контекста проекта (Фаза 2) итеративно формулируйте задачу:
+Invoke `goga-codemanifest-base` via the **Skill tool**.
 
-1. **Сформулируйте текущее состояние** — на основе контекста из Фазы 2 опишите:
-   - Если это новая функциональность — чего сейчас не хватает в проекте
-   - Если это изменение — как сейчас работает затрагиваемая область и что не устраивает
+#### Step 5: Read relevant usages
 
-2. **Предложите гипотезу** — конкретную формулировку задачи с границами:
-   - Что нужно сделать
-   - Что НЕ входит в задачу
-   - Какие существующие cells затрагиваются
+If the task involves external libraries or technologies, read their corresponding usages from `.goga/usages/cooks/`.
 
-3. **Задайте один вопрос** — верна ли формулировка текущего состояния и гипотезы, нет ли пропущенных аспектов
+### Phase 3: Task Formulation
 
-4. **Дождитесь ответа** — скорректируйте и повторите
+**Objective:** Align with the user on the exact scope and boundaries of the task.
 
-5. **После утверждения формулировки** — предложите пользователю включить в задачу примеры кода:
-   - Если задача описывает библиотеку или API — предложите описать целевой API
-     с примерами использования на языке проекта
-   - Если в ходе обсуждения пользователь заострял внимание на конкретном API или коде —
-     предложите зафиксировать его в задаче
-   - Если пользователь хочет сам написать кусок кода — примите его и включите в задачу
-   - Если примеры не нужны — переходите к Фазе 4
+Using the user's description (Phase 1) and project context (Phase 2), iteratively formulate the task:
 
-**Критерии готовности:**
-- Суть задачи сформулирована однозначно
-- Границы определены (что входит, что нет)
-- Пользователь утвердил формулировку
+1. **Define the current state** — based on Phase 2 context, describe:
+   - For new features — what the project currently lacks
+   - For modifications — how the affected area currently operates and what is unsatisfactory
 
-### Фаза 4: Выбор стека и внешних зависимостей
+2. **Propose a hypothesis** — a concrete task formulation with defined boundaries:
+   - What to implement
+   - What is explicitly out of scope
+   - Which existing cells are impacted
 
-**Цель:** Определить технологии и внешние зависимости.
+3. **Ask a single question** — validate whether the current state description and hypothesis are correct, and whether any aspects are missing
 
-1. **Определите стек реализации** — технологии, которые будут использованы:
-   - Фреймворки, библиотеки, базы данных, брокеры сообщений, инфраструктурные компоненты
-   - Какие существующие usages проекта (в `.goga/usages/`) уже описывают используемые инструменты
+4. **Await the response** — adjust and repeat
 
-2. **Определите внешние зависимости** — нужны ли компоненты, которых ещё нет в проекте:
-   - Если задача требует новый компонент — зафиксируйте его
-   - Для каждой внешней зависимости определите, есть ли уже usage-файл в проекте (`.goga/usages/cooks/`)
-   - Если usage-файла нет — запланируйте создание на Фазе 5
-   - Если существующий usage-файл не покрывает новые паттерны использования — запланируйте обновление на Фазе 5
+5. **After formulation approval** — offer to include code examples in the task:
+   - If the task describes a library or API — suggest defining the target API with usage examples in the project's language
+   - If the user emphasized a specific API or code during discussion — suggest capturing it in the task
+   - If the user wants to write code directly — accept and include it in the task
+   - If examples are unnecessary — proceed to Phase 4
 
-3. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к Фазе 5
-   - **Не утверждено** → предложите скорректированный стек с учётом обратной связи
+**Completion criteria:**
+- The task essence is formulated unambiguously
+- Scope boundaries are defined (included and excluded)
+- The user has approved the formulation
 
-**Критерии готовности:**
-- Стек реализации определён (фреймворки, библиотеки, БД, брокеры, инфраструктура)
-- Внешние зависимости зафиксированы
-- Определено, какие `.goga/usages/cooks` файлы нужно создать или обновить
+### Phase 4: Technology Stack and External Dependencies
 
-### Фаза 5: Работа с .goga/usages/cooks
+**Objective:** Define the technology stack and identify external dependencies.
 
-**Цель:** Обеспечить покрытие usage-файлами всех внешних зависимостей из Фазы 4.
+1. **Define the implementation stack** — technologies to be used:
+   - Frameworks, libraries, databases, message brokers, infrastructure components
+   - Existing project usages (in `.goga/usages/`) that already describe the tools in use
 
-Для принципов написания usage файлов — используйте скилл `goga-cookbook`.
+2. **Identify external dependencies** — components not yet present in the project:
+   - If the task requires a new component, record it
+   - For each external dependency, check whether a usage file exists in `.goga/usages/cooks/`
+   - If no usage file exists, schedule creation in Phase 5
+   - If the existing usage file does not cover new usage patterns, schedule an update in Phase 5
 
-#### Создание новых usage-файлов
+3. **Await feedback** — the user approves or requests changes
+   - **Approved** → proceed to Phase 5
+   - **Rejected** → propose a revised stack incorporating the feedback
 
-Для каждой внешней зависимости без usage-файла:
+**Completion criteria:**
+- Implementation stack is defined (frameworks, libraries, databases, brokers, infrastructure)
+- External dependencies are documented
+- `.goga/usages/cooks` files to create or update are identified
 
-1. **Предложите содержание usage-файла:**
-   - Описание компонента и его назначения
-   - Паттерны использования, релевантные для текущей задачи
-   - Примеры кода
+### Phase 5: Usage File Management (.goga/usages/cooks)
 
-2. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → создайте файл `.goga/usages/cooks/<name>.md`
-   - **Не утверждено** → предложите скорректированное содержание
+**Objective:** Ensure all external dependencies from Phase 4 are covered by usage files.
 
-#### Обновление существующих usage-файлов
+For usage file authoring principles, invoke the `goga-cookbook` skill.
 
-Для каждой зависимости, чей usage-файл не покрывает новые паттерны использования:
+#### Creating new usage files
 
-1. **Предложите дополнения** — какие разделы/примеры нужно добавить в существующий файл
+For each external dependency without a usage file:
 
-2. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → обновите файл `.goga/usages/cooks/<name>.md`
-   - **Не утверждено** → предложите скорректированные дополнения
+1. **Propose usage file content:**
+   - Component description and purpose
+   - Usage patterns relevant to the current task
+   - Code examples
 
-Если все внешние зависимости покрыты актуальными usage-файлами — пропустите эту фазу.
+2. **Await feedback** — the user approves or requests changes
+   - **Approved** → create `.goga/usages/cooks/<name>.md`
+   - **Rejected** → propose revised content
 
-### Фаза 6: Оценка объёма
+#### Updating existing usage files
 
-**Цель:** Оценить масштаб задачи и определить, нужна ли разбивка.
+For each dependency whose usage file does not cover new usage patterns:
 
-1. **Оцените масштаб:**
-   - Сколько сущностей/типов подразумевается
-   - Есть ли несколько независимых подсистем
-   - Насколько сложны взаимодействия
+1. **Propose additions** — sections and examples to add to the existing file
 
-2. **Предложите оценку пользователю:**
-   - Одна задача или несколько
-   - Если несколько — предложите разбиение на подзадачи
-   - Каждая подзадача должна иметь самостоятельную ценность
+2. **Await feedback** — the user approves or requests changes
+   - **Approved** → update `.goga/usages/cooks/<name>.md`
+   - **Rejected** → propose revised additions
 
-3. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
+If all external dependencies are covered by current usage files, skip this phase.
 
-### Фаза 7: Сохранение задачи
+### Phase 6: Scope Estimation
 
-**Цель:** Сохранить сформулированную задачу по шаблону в файл `docs/tasks/<topic>.md`.
+**Objective:** Assess the task scale and determine whether decomposition is necessary.
 
-`<topic>` — короткое имя по теме задачи (из описания пользователя Фазы 1).
+1. **Assess the scale:**
+   - Number of entities/types involved
+   - Presence of multiple independent subsystems
+   - Complexity of interactions
 
-1. Прочитать шаблон `task-template.md` из текущего скилла и использовать его структуру при заполнении.
+2. **Present the estimate to the user:**
+   - Single task or multiple tasks
+   - If multiple, propose a breakdown into subtasks
+   - Each subtask must deliver independent value
 
-2. Сохраните файл и представьте пользователю сводку:
-- Название задачи
-- Стек
-- Количество внешних зависимостей
-- Объём (одна / разбивка)
-- Риски и ограничения
+3. **Await feedback** — the user approves or requests changes
+
+### Phase 7: Task Persistence
+
+**Objective:** Save the formulated task to `docs/tasks/<topic>.md` using the template.
+
+`<topic>` is a short name derived from the task topic (from the user's Phase 1 description).
+
+1. Read the `task-template.md` template from the current skill directory and apply its structure.
+
+2. Save the file and present a summary to the user:
+   - Task name
+   - Technology stack
+   - External dependency count
+   - Scope (single task / breakdown)
+   - Risks and constraints
 
 ---

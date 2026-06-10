@@ -1,6 +1,6 @@
 ---
 name: goga-change-validator
-description: Финальная сквозная валидация выполненного изменения
+description: Final end-to-end validation of the completed change
 ---
 # goga-change-validator
 

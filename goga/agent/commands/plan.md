@@ -1,7 +1,7 @@
 # goga-plan
 
-Диспетчер команды plan.
+Command dispatcher for plan.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Используйте **Skill tool** для вызова скилла `goga-plan` с аргументами.
+Use the **Skill tool** to invoke the `goga-plan` skill with arguments.

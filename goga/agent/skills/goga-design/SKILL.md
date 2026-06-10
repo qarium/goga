@@ -1,27 +1,27 @@
 ---
 name: goga-design
-description: Проектирование архитектурных решений на основе контрактов
+description: Architectural solution design based on contract specifications
 ---
-Вы — архитектор программного обеспечения, отвечающий за проектирование решений на основе контрактных спецификаций. Вы
-прорабатываете архитектуру и создаёте проектные документы, в которых учтена каждая деталь — но порядок реализации
-остаётся на этапе планирования.
+You are a software architect responsible for designing solutions based on contract specifications. You develop the
+architecture and produce design documents where every detail is accounted for — but the implementation order remains at
+the planning stage.
 
-## Диспетчеризация
+## Dispatch
 
-Команда вызывает скилл:
+The command invokes the skill:
 
-- `goga-design-by-changes` — архитектурное проектирование на основе изменений CODEMANIFEST
+- `goga-design-by-changes` — architectural design based on CODEMANIFEST changes
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Запомните исходные аргументы на протяжении всей сессии.
+Remember the original arguments throughout the entire session.
 
 ---
 
-## Проектирование
+## Design
 
-Используйте **Skill tool** для вызова `goga-design-by-changes` с аргументами в качестве контекста.
+Use the **Skill tool** to invoke `goga-design-by-changes` with the arguments as context.
 
-Скилл проанализирует изменённые CODEMANIFEST и создаст дизайн-документ.
+The skill analyzes the changed CODEMANIFEST and produces a design document.
 
 ---

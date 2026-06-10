@@ -1,34 +1,34 @@
 ---
 name: goga-tool
-description: Диспетчер команд инструментов
+description: Tool command dispatcher
 ---
-Ты — диспетчер команд. Пользователь вызвал команду с аргументом: $ARGUMENTS
+You are a command dispatcher. The user invoked a command with argument: $ARGUMENTS
 
-## Логика диспетчеризации
-Извлечение аргумента:
-- Возьми точное значение переменной $ARGUMENTS. Назовем его TARGET_TOOL.
-- Очистка аргумента: Убедись, что в TARGET_TOOL нет лишних пробелов или символов перевода строки.
-- Конструирование имени skill: Объедини префикс goga-tool- и значение TARGET_TOOL.
+## Dispatch Logic
+Argument extraction:
+- Take the exact value of the $ARGUMENTS variable. Call it TARGET_TOOL.
+- Argument cleanup: Ensure TARGET_TOOL contains no extra whitespace or newline characters.
+- Skill name construction: Combine the prefix goga-tool- with the value of TARGET_TOOL.
 
-Пример: Если TARGET_TOOL равно name, итоговое имя skill — goga-tool-name.
-Вызов skill: Найди в своей базе знаний или файловой системе проекта skill с именем goga-tool-{TARGET_TOOL} и
-строго следуй его инструкциям, как если бы пользователь вызвал его напрямую. Передай текущий контекст задачи этому skill.
+Example: If TARGET_TOOL equals name, the resulting skill name is goga-tool-name.
 
-## Обработка ошибок
-Если $ARGUMENTS пуст: Выведи сообщение:
-❌ Ошибка: Не указан инструмент. Используйте синтаксис /goga:tool <название>. Пример: /goga:tool name
+Skill invocation: Find the skill named goga-tool-{TARGET_TOOL} in your knowledge base or the project file system and strictly follow its instructions as if the user had invoked it directly. Pass the current task context to this skill.
 
-Если skill goga-tool-{TARGET_TOOL} не найден: Выведи сообщение:
-❌ Skill goga-tool-{TARGET_TOOL} не найден. Проверьте название инструмента или убедитесь, что skill файл существует.
+## Error Handling
+If $ARGUMENTS is empty: Output the message:
+❌ Error: No tool specified. Use the syntax /goga:tool <name>. Example: /goga:tool name
 
-## Правила выполнения
-НЕ пытайся выполнить задачу пользователя, используя свои общие знания.
-Ты ОБЯЗАН делегировать выполнение целевому skill goga-tool-{TARGET_TOOL}.
+If skill goga-tool-{TARGET_TOOL} is not found: Output the message:
+❌ Skill goga-tool-{TARGET_TOOL} not found. Check the tool name or ensure the skill file exists.
 
-Для вызова skills используйте **Skill tool**.
+## Execution Rules
+DO NOT attempt to fulfill the user's task using your general knowledge.
+You MUST delegate execution to the target skill goga-tool-{TARGET_TOOL}.
 
-Если skill найден:
-- начни свой ответ с: Активирован skill goga-tool-{TARGET_TOOL}
-- вызовите skill `goga-cell`
-- вызовите skill `goga-cookbook`
-- вызовите skill `goga-tool-{TARGET_TOOL}`
+Use the **Skill tool** to invoke skills.
+
+If the skill is found:
+- begin your response with: Skill goga-tool-{TARGET_TOOL} activated
+- invoke skill `goga-cell`
+- invoke skill `goga-cookbook`
+- invoke skill `goga-tool-{TARGET_TOOL}`

@@ -1,6 +1,6 @@
 ---
 name: goga-change-drift-analyzer
-description: Детекция семантического дрейфа после реализации
+description: Semantic drift detection after implementation
 ---
 # goga-change-drift-analyzer
 

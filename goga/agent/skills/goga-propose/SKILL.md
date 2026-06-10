@@ -1,25 +1,25 @@
 ---
 name: goga-propose
-description: Формулировка задачи пользователя
+description: User task formulation specialist
 ---
-Вы — специалист по формулировке задач. Вы помогаете пользователю сформулировать задачу — определить стек, зависимости и объём работ.
+You are a task formulation specialist. You help the user formulate a task — identifying the technology stack, dependencies, and scope of work.
 
-## Диспетчеризация
+## Dispatch
 
-Команда вызывает скилл:
+The command invokes the skill:
 
-- `goga-task-by-proposing` — создаёт задачу на основе запроса пользователя
+- `goga-task-by-proposing` — creates a task based on the user's request
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Запомните исходные аргументы на протяжении всей сессии.
+You must persist the original arguments throughout the session.
 
-## Фаза 1: Формулировка задачи
+## Phase 1: Task Formulation
 
-Используйте **Skill tool** для вызова `goga-task-by-proposing` с аргументами в качестве контекста.
+Use the **Skill tool** to invoke `goga-task-by-proposing` with the arguments as context.
 
-Аргументы: $ARGUMENTS
+Arguments: $ARGUMENTS
 
-Скилл сформулирует задачу и сохранит артефакт в файл `docs/tasks/<topic>.md`.
+The skill formulates the task and saves the artifact to `docs/tasks/<topic>.md`.
 
 ---

@@ -1,21 +1,21 @@
 ---
 name: goga-cell-kotlin
-description: Kotlin правила реализации контрактов CODEMANIFEST
+description: Kotlin rules for implementing CODEMANIFEST contracts
 ---
-# Kotlin: правила реализации контрактов
+# Kotlin: Contract Implementation Rules
 
-Языковой скилл для Kotlin.
+Language skill for Kotlin.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply this specification within the context of the calling skill. Do not restate the content — use it
+for making decisions.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoked via the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для Kotlin со всеми конструкциями DSL:
+Complete CODEMANIFEST example for Kotlin demonstrating all DSL constructs:
 
 ```yaml
 Imports:
@@ -108,26 +108,26 @@ cell/
 ├── *.kt
 ```
 
-## Особенности языка
+## Language Features
 
-**Facade**: все `public` классы и функции верхнего уровня в пакете составляют фасад.
-Приватные и internal объявления не входят в контракт.
+**Facade**: all `public` classes and top-level functions in the package define the facade.
+Private and `internal` declarations are not part of the contract.
 
-**Naming**: camelCase для функций и свойств, PascalCase для классов.
+**Naming**: camelCase for functions and properties, PascalCase for classes.
 
-**Constructors**: Entity signature описывает primary constructor. Параметры constructor'а — это входные данные
-для получения экземпляра.
+**Constructors**: Entity signature describes the primary constructor. Constructor parameters are the input data
+for obtaining an instance.
 
-**Nullability**: `T?` — nullable, `T` — non-null. В CODEMANIFEST отражается через `T?` и `T`.
+**Nullability**: `T?` — nullable, `T` — non-null. CODEMANIFEST represents these directly via `T?` and `T`.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| Kotlin                          | CODEMANIFEST | Примечание                             |
+| Kotlin                          | CODEMANIFEST | Note                                   |
 |---------------------------------|--------------|----------------------------------------|
 | `class` / `data class` (public) | Entity       | Primary constructor → Entity signature |
-| `fun` верхнего уровня           | Routine      | Public функция на уровне файла         |
-| `val` / `var` свойство класса   | Property     | Тип из объявления                      |
-| `fun` метод класса              | Method       |                                        |
+| Top-level `fun`                 | Routine      | Public function at file level          |
+| `val` / `var` class property    | Property     | Type from declaration                  |
+| Class method `fun`              | Method       |                                        |
 
 ## Implementation
 

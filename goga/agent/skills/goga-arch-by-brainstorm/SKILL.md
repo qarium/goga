@@ -1,207 +1,205 @@
 ---
 name: goga-arch-by-brainstorm
-description: Проектирование плана архитектуры cells через brainstorm
+description: Designing a cells architecture plan through brainstorm
 ---
-# Проектирование плана архитектуры cells
+# Designing a Cells Architecture Plan
 
-## Назначение
+## Purpose
 
-Создаёт **план архитектуры** — структурированный документ, описывающий какие cells, CODEMANIFEST файлы и .usages файлы нужно создать и в каком порядке.
-Пользователь предоставляет описание того, что нужно спроектировать — от одного предложения до детальной спецификации — и агент совместно проектирует
-через исследование, обсуждение и уточнение.
-
----
-
-## Правила ведения диалога
-
-1. **Не читайте исходный код реализации.** Проектирование ведётся на уровне CODEMANIFEST, схемы проекта и практик.
-
-2. **Описание пользователя — всегда архитектурная задача.** Любое описание, от одного предложения до детальной спецификации,
-   является входными данными для алгоритма. Не решайте за пользователя, что задача «не архитектурная» — следуйте алгоритму
-   полностью для любого описания.
-
-3. **Работайте через гипотезы.** Вместо открытых вопросов («как это должно работать?») предлагайте конкретные гипотезы
-   («Похоже, вам нужен UserService с CRUD и авторизацией. Это так?»).
-
-4. **Задавайте один вопрос за сообщение.** Один сфокусированный вопрос с 2-4 конкретными вариантами ответа — дождитесь
-   выбора пользователя, затем задавайте следующий. Не группируйте вопросы. Никогда не задавайте открытые вопросы без
-   предлагаемых вариантов ответа.
-
-5. **Структурируйте каждый ответ** Эта дисциплина предотвращает хаотичное или несфокусированное обсуждение.
-
-6. **Разделяйте большие области.** Если описание пользователя охватывает несколько независимых подсистем — укажите на
-   это, предложите разделить на отдельные проходы мозгового штурма, затем проведите первый.
-
-7. **Используйте ASCII-диаграммы для визуализации**:
-    - **Взаимосвязи сущностей** — как сущности взаимодействуют и зависят друг от друга
-    - **Потоки данных** — как данные движутся через систему
-    - **Границы cell** — где контракты разделяются по cell
+Creates an **architecture plan** — a structured document describing which cells, CODEMANIFEST files, and .usages files need to be created and in what order.
+The user provides a description of what needs to be designed — from one sentence to a detailed specification — and the agent collaboratively designs
+through exploration, discussion, and refinement.
 
 ---
 
-### Фаза 1: Сбор входных данных
+## Dialogue Rules
 
-Примите описание пользователя о том, что нужно спроектировать.
+1. **Do not read implementation source code.** Design is conducted at the level of CODEMANIFEST, project schema, and practices.
 
-Описание может быть:
-- **Кратким** — одно предложение или название функции (например, «добавить авторизацию пользователей»)
-- **Детальным** — полная спецификация с требованиями, ограничениями и примерами
-- **Из файла задачи** — путь к файлу `docs/tasks/<topic>.md`, сформированному скиллом `goga-task-by-proposing`
+2. **The user's description is always an architecture task.** Any description, from one sentence to a detailed specification,
+   is input data for the algorithm. Do not decide for the user that a task is "not architectural" — follow the algorithm
+   completely for any description.
 
-Если пользователь указал файл задачи — прочитайте его и используйте секции напрямую:
-- **Текущее состояние** → контекст для первичного анализа (Фаза 4, Шаг 1)
-- **Описание и Границы** → основа для проектирования
-- **Стек и Внешние зависимости** → учтите при выборе технологий
-- **Критерии приёмки** → условие финального утверждения (Фаза 4, Шаг 7)
-- **Риски и ограничения** → учтите при первичном анализе (Фаза 4, Шаг 1)
-- **Объём** → если задача разбита на подзадачи — проводите мозговой штурм для одной подзадачи за раз
+3. **Work through hypotheses.** Instead of open-ended questions ("how should this work?"), offer concrete hypotheses
+   ("It looks like you need a UserService with CRUD and authorization. Is that correct?").
 
-Если описание краткое — пока не просите уточнений. Фаза мозгового штурма (Фаза 4) прояснит недостающие детали.
-Запомните исходное описание на протяжении всей сессии.
+4. **Ask one question per message.** One focused question with 2-4 concrete answer options — wait for
+   the user's selection, then ask the next one. Do not group questions. Never ask open-ended questions without
+   proposed answer options.
 
-### Фаза 2: Загрузка DSL спецификации и принципов применения DSL
+5. **Structure every response.** This discipline prevents chaotic or unfocused discussion.
 
-#### Шаг 1: Загрузите DSL спецификацию
+6. **Split large domains.** If the user's description covers several independent subsystems — point this out,
+   suggest splitting into separate brainstorm passes, then conduct the first one.
 
-Для понимания определения cell и содержимого CODEMANIFEST файлов: используйте **Skill tool** для вызова `goga-cell`
-Используйте скилл `goga-cell` для:
- - Понимания структуры ячейки — из чего состоит cell (CODEMANIFEST, `.usages/`), как организован документ (заголовок, тело, подвал)
- - Понимания назначения директив CODEMANIFEST — за что отвечает `Imports`, `Usages`, `Annotations`, типы, мутации, встраивания
- - Проверки синтаксической корректности — регистр ключей, правила сигнатур, ограничения `location`, структура объявлений
+7. **Use ASCII diagrams for visualization**:
+    - **Entity relationships** — how entities interact and depend on each other
+    - **Data flows** — how data moves through the system
+    - **Cell boundaries** — where contracts are separated by cell
 
-#### Шаг 2: Загрузите Принципы применения DSL
+---
 
-Для понимания принципов работы с cell и CODEMANIFEST файлами: используйте **Skill tool** для вызова `goga-cookbook`
-Используйте скилл `goga-cookbook` для:
- - Определения необходимости создания cell — когда выделять отдельную ячейку, а когда расширять существующую
- - Выбора между Entity и Routine — когда тип должен иметь `methods`/`properties`, а когда это единственная операция
- - Определения гранулярности — насколько крупной или мелкой должна быть ячейка, признаки слишком мелкого/крупного деления
- - Выбора формы подключения Usages — файл, inline или URL, в каких случаях какая форма уместна
- - Определения порядка проектирования — проектировать cell от листьев к корню, сначала ячейки без зависимостей
- - Понимания когда использовать мутации (`Object::Target`) и встраивания (`->Entity: {}`), а когда достаточно Imports
- - Принципов написания usage файлов в `<cell_path>/.usages/` — структура, содержание, рекомендации по качеству
+### Phase 1: Input Collection
 
-#### Шаг 3: Загрузите языковые правила реализации
+Accept the user's description of what needs to be designed.
 
-Используйте **Skill tool** для вызова `goga-lang-disp` — получите языковой скилл целевого языка.
-Языковой скилл определяет конвенции реализации: структуру cell, фасад, правила сигнатур, **именование**.
-Примеры в других скиллах могут использовать именование одного языка (например snake_case), а целевой язык
-требует другого (например PascalCase) — языковой скилл содержит авторитетные правила для целевого языка.
+The description can be:
+- **Brief** — one sentence or a feature name (e.g., "add user authorization")
+- **Detailed** — a complete specification with requirements, constraints, and examples
+- **From a task file** — path to a file `docs/tasks/<topic>.md`, produced by the `goga-task-by-proposing` skill
 
-Активно используйте загруженные DSL спецификацию, Принципы применения DSL и языковые правила при проектировании и анализе
+If the user specified a task file — read it and use the sections directly:
+- **Current state** → context for primary analysis (Phase 4, Step 1)
+- **Description and Boundaries** → basis for design
+- **Stack and External Dependencies** → account for when choosing technologies
+- **Acceptance Criteria** → condition for final approval (Phase 4, Step 7)
+- **Risks and Constraints** → account for during primary analysis (Phase 4, Step 1)
+- **Scope** → if the task is split into subtasks — conduct a brainstorm for one subtask at a time
 
-### Фаза 3: Исследование контекста проекта
+If the description is brief — do not ask for clarifications yet. The brainstorm phase (Phase 4) will clarify missing details.
+Remember the original description throughout the entire session.
 
-Цель — собрать факты о текущем состоянии проекта
+### Phase 2: Loading DSL Specification and DSL Application Principles
 
-#### Шаг 1. Получите схему проекта
+#### Step 1: Load DSL Specification
 
-Выполните `goga schema --help`, чтобы понять возможности
-команды.
+To understand cell definitions and CODEMANIFEST file contents: use **Skill tool** to call `goga-cell`.
+Use the `goga-cell` skill for:
+ - Understanding cell structure — what a cell consists of (CODEMANIFEST, `.usages/`), how the document is organized (header, body, footer)
+ - Understanding CODEMANIFEST directive purposes — what `Imports`, `Usages`, `Annotations`, types, mutations, embeddings are responsible for
+ - Checking syntactic correctness — key casing, signature rules, `location` restrictions, declaration structure
 
-Затем выполните `goga schema`, чтобы получить полную иерархию
-cells проекта. Для понимания что такое cell используйте скилл `goga-cell`.
+#### Step 2: Load DSL Application Principles
 
-Если у проекта нет существующей архитектуры — зафиксируйте это как факт и переходите к Шагу 2.
+To understand the principles of working with cells and CODEMANIFEST files: use **Skill tool** to call `goga-cookbook`.
+Use the `goga-cookbook` skill for:
+ - Determining the need to create a cell — when to extract a separate cell, and when to extend an existing one
+ - Choosing between Entity and Routine — when a type should have `methods`/`properties`, and when it is a single operation
+ - Determining granularity — how large or small a cell should be, signs of too fine or coarse splitting
+ - Choosing the Usages connection form — file, inline, or URL, in which cases each form is appropriate
+ - Determining the design order — design cells from leaves to root, starting with cells without dependencies
+ - Understanding when to use mutations (`Object::Target`) and embeddings (`->Entity: {}`), and when Imports are sufficient
+ - Principles of writing usage files in `<cell_path>/.usages/` — structure, content, quality recommendations
 
-#### Шаг 2. Получите базовые annotations и usages проекта
+#### Step 3: Load Language Implementation Rules
 
-Используйте **Skill tool** для вызова `goga-codemanifest-base`.
-Результат — базовые usages и annotations проекта, которые обязательны для учёта при проектировании всех CODEMANIFEST файлов в плане.
+Use **Skill tool** to call `goga-lang-disp` — get the language skill for the target language.
+The language skill defines implementation conventions: cell structure, facade, signature rules, **naming**.
+Examples in other skills may use naming from one language (e.g., snake_case), while the target language
+requires another (e.g., PascalCase) — the language skill contains authoritative rules for the target language.
 
-#### Шаг 3. Прочитайте релевантные CODEMANIFEST
+Actively use the loaded DSL specification, DSL Application Principles, and language rules during design and analysis.
 
-На основе схемы проекта и описания пользователя из Фазы 1 — прочитайте файлы CODEMANIFEST тех cells, которые могут быть
-связаны с темой пользователя, для понимания, на чем и в какой последовательности фокусировать внимание используйте скилл `goga-cell`.
+### Phase 3: Project Context Exploration
 
-**Сопоставьте описание пользователя со схемой:**
-- Имена, совпадающие с cell-путями или типами в схеме, **могут быть** указателями на существующие артефакты —
-  проверьте это через чтение CODEMANIFEST и представьте как гипотезу пользователю
-- Имена без совпадений в схеме **могут быть** указателями на новые артефакты для создания
-- Если описание не содержит конкретных имён — определите затрагиваемые cells по смыслу описания
-- Если имена неоднозначны (несколько совпадений) — уточните через гипотезу
+The goal is to gather facts about the current state of the project.
 
-Используйте `--depends-on <cell_path>` для поиска зависимых ячеек при необходимости.
+#### Step 1. Get the project schema
 
-#### Шаг 4. Прочитайте релевантные usages
+Run `goga schema --help` to understand the command's capabilities.
 
-Прочитайте usages файлов, связанных с cells из Шага 3, следуя правилам скилла `goga-cookbook`.
+Then run `goga schema` to get the complete cell hierarchy of the project. To understand what a cell is, use the `goga-cell` skill.
 
-Если задача подразумевает использование внешних библиотек/технологий — прочитайте usages о них (в `.goga/usages/cooks/`),
-чтобы понимать доступные практики работы с этими библиотеками/технологиями.
+If the project has no existing architecture — record this as a fact and proceed to Step 2.
 
-Это предоставляет каталог доступных практик, библиотек и инструментов, на которые новая архитектура может ссылаться.
+#### Step 2. Get base annotations and usages of the project
 
-Адаптируйте глубину:
-- **Связано с темой пользователя** — прочитайте файл полностью
-- **Косвенно связано** — прочитайте аннотации и ключевые разделы
-- **Нет существующих CODEMANIFEST** — пропустите этот шаг
+Use **Skill tool** to call `goga-codemanifest-base`.
+The result is base usages and annotations of the project that are mandatory for consideration when designing all CODEMANIFEST files in the plan.
 
-Во время мозгового штурма (Фаза 4) можно вернуться и дочитать конкретную практику, если возникнет вопрос.
+#### Step 3. Read relevant CODEMANIFESTs
 
-### Фаза 4: Цикл мозгового штурма
+Based on the project schema and the user's description from Phase 1 — read the CODEMANIFEST files of those cells that may be
+related to the user's topic. To understand where and in what sequence to focus attention, use the `goga-cell` skill.
 
-Используйте скиллы `goga-cell` и `goga-cookbook` для проверки проектных решений.
+**Match the user's description to the schema:**
+- Names matching cell paths or types in the schema **may be** pointers to existing artifacts —
+  verify this by reading CODEMANIFEST and present it as a hypothesis to the user
+- Names without matches in the schema **may be** pointers to new artifacts to create
+- If the description does not contain specific names — identify affected cells by the meaning of the description
+- If names are ambiguous (multiple matches) — clarify through a hypothesis
 
-**Принцип:** сначала проектируются типы и их взаимодействия без границ cells, затем типы группируются в cells.
-Это позволяет агенту видеть все связи между типами до того, как границы cells их скроют.
+Use `--depends-on <cell_path>` to search for dependent cells when necessary.
 
-#### Шаг 1. Первичный анализ
+#### Step 4. Read relevant usages
 
-На основе описания пользователя (Фаза 1) и собранных фактов (Фаза 3) определите:
+Read the usages of files related to the cells from Step 3, following the rules of the `goga-cookbook` skill.
 
-1. **Ключевые концепции** — какие сущности, интерфейсы, типы подразумеваются описанием
-2. **Тёмные зоны** — аспекты, которые неясны или требуют проектных решений
-3. **Связь с существующей архитектурой** — какие существующие cells затрагиваются, нужна ли интеграция
-4. **Риски и ограничения** — если вход из файла задачи, учтите секцию «Риски и ограничения»:
-   какие ограничения могут повлиять на проектные решения
+If the task implies using external libraries or technologies — read usages about them (in `.goga/usages/cooks/`),
+to understand available practices for working with these libraries or technologies.
 
-**Проверка области:** Если описание охватывает несколько независимых подсистем — предложите разбить на подсистемы.
-Проводите мозговой штурм для одной подсистемы за раз.
+This provides a catalog of available practices, libraries, and tools that the new architecture can reference.
 
-Представьте первичный анализ пользователю.
+Adapt depth:
+- **Related to the user's topic** — read the file completely
+- **Indirectly related** — read annotations and key sections
+- **No existing CODEMANIFESTs** — skip this step
 
-#### Шаг 2. Карта типов
+During the brainstorm (Phase 4), you can return and read a specific practice if a question arises.
 
-**Цель:** Построить «оглавление» всех типов — только имена, характер (Entity/Routine), краткое назначение и связи между ними.
-Без методов, свойств и деталей — только каркас абстрактной объектной модели.
+### Phase 4: Brainstorm Cycle
 
-Для понимания когда тип является Entity (имеет состояние и/или несколько операций), а когда Routine
-(единственная операция) — используйте скилл `goga-cookbook`.
+Use the `goga-cell` and `goga-cookbook` skills to verify design decisions.
 
-На основе первичного анализа (Шаг 1) итеративно стройте карту типов:
+**Principle:** first design types and their interactions without cell boundaries, then group types into cells.
+This allows the agent to see all connections between types before cell boundaries hide them.
 
-1. **Предложите гипотезу карты типов** — список типов с характером, описанием и связями:
+#### Step 1. Primary analysis
+
+Based on the user's description (Phase 1) and gathered facts (Phase 3), determine:
+
+1. **Key concepts** — what entities, interfaces, types are implied by the description
+2. **Dark zones** — aspects that are unclear or require design decisions
+3. **Connection to existing architecture** — which existing cells are affected, whether integration is needed
+4. **Risks and constraints** — if input is from a task file, account for the "Risks and Constraints" section:
+   what constraints may affect design decisions
+
+**Scope check:** If the description covers several independent subsystems — propose splitting into subsystems.
+Conduct a brainstorm for one subsystem at a time.
+
+Present the primary analysis to the user.
+
+#### Step 2. Type map
+
+**Goal:** Build a "table of contents" of all types — only names, character (Entity/Routine), brief purpose, and connections between them.
+No methods, properties, or details — only the skeleton of the abstract object model.
+
+To understand when a type is an Entity (has state and/or multiple operations), and when it is a Routine
+(a single operation) — use the `goga-cookbook` skill.
+
+Based on the primary analysis (Step 1), iteratively build the type map:
+
+1. **Propose a type map hypothesis** — a list of types with character, description, and connections:
    ```
-   DocumentRoot      — [Entity] корень документа. Ссылается на: HeaderNode, BodyNode
-   HeaderNode        — [Entity] заголовок документа. Ссылается на: ImportNode
-   ImportNode        — [Entity] импорт. Ссылается на: DocumentRoot (resolve)
-   ASTRule           — [Entity] правило проверки. Принимает: DocumentRoot. Возвращает: ASTRuleError
-   parse_config      — [Routine] парсер конфигурации. Принимает: str. Возвращает: Config
+   DocumentRoot      — [Entity] document root. References: HeaderNode, BodyNode
+   HeaderNode        — [Entity] document header. References: ImportNode
+   ImportNode        — [Entity] import. References: DocumentRoot (resolve)
+   ASTRule           — [Entity] validation rule. Accepts: DocumentRoot. Returns: ASTRuleError
+   parse_config      — [Routine] config parser. Accepts: str. Returns: Config
    ```
 
-2. **Задайте вопрос** — отсутствуют ли типы, лишние ли, верны ли связи
+2. **Ask a question** — are any types missing, are any extra, are the connections correct
 
-3. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к Шагу 3
-   - **Не утверждено** → запомните замечания, вернитесь к пункту 1 и предложите скорректированную карту с учётом обратной связи.
+3. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to Step 3
+   - **Not approved** → remember the comments, return to point 1 and propose a corrected map accounting for the feedback.
 
-**Критерии готовности:**
-- Все типы из описания пользователя присутствуют
-- Все связи между типами указаны (кто кого принимает, возвращает, содержит)
-- Пользователь утвердил карту
+**Readiness criteria:**
+- All types from the user's description are present
+- All connections between types are specified (who accepts whom, returns, contains)
+- The user has approved the map
 
-#### Шаг 3. Детализация типов
+#### Step 3. Type detailing
 
-**Цель:** Для каждого типа из карты (Шаг 2) определить методы, свойства, сигнатуры и взаимодействия.
+**Goal:** For each type from the map (Step 2), define methods, properties, signatures, and interactions.
 
-Для понимания когда использовать мутации (`Object::Target`) и встраивания (`->Entity: {}`),
-а когда достаточно Imports — используйте скилл `goga-cookbook`.
+To understand when to use mutations (`Object::Target`) and embeddings (`->Entity: {}`),
+and when Imports are sufficient — use the `goga-cookbook` skill.
 
-Проходите типы по одному. Агент видит все связи из карты и корректно проектирует взаимодействия.
-Для каждого типа:
+Process types one at a time. The agent sees all connections from the map and correctly designs interactions.
+For each type:
 
-1. **Предложите детализацию** — методы, свойства, сигнатуры с типами параметров и возвращаемых значений:
+1. **Propose detailing** — methods, properties, signatures with parameter types and return values:
    ```
    DocumentRoot(rule: ASTRule)
      properties:
@@ -218,29 +216,29 @@ cells проекта. Для понимания что такое cell испо�
        fix(doc: DocumentRoot) -> DocumentRoot
    ```
 
-2. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к следующему типу
-   - **Не утверждено** → запомните замечания, вернитесь к пункту 1 и предложите скорректированную детализацию с учётом обратной связи.
+2. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to the next type
+   - **Not approved** → remember the comments, return to point 1 and propose corrected detailing accounting for the feedback.
 
-3. **Проверяйте согласованность** — если детализация типа затрагивает уже утверждённые типы
-   (изменился тип параметра, добавилась новая связь), вернитесь к затронутым типам
-   и предложите необходимые корректировки
+3. **Check consistency** — if the detailing of a type affects already approved types
+   (a parameter type changed, a new connection was added), return to the affected types
+   and propose necessary adjustments.
 
-**Критерии готовности:**
-- Каждый тип имеет полную детализацию (методы, свойства, сигнатуры)
-- Все взаимодействия между типами согласованы (типы параметров и возвращаемых значений совпадают)
-- Пользователь утвердил все типы
+**Readiness criteria:**
+- Each type has complete detailing (methods, properties, signatures)
+- All interactions between types are consistent (parameter types and return values match)
+- The user has approved all types
 
-#### Шаг 4. Распределение типов по cells
+#### Step 4. Distributing types across cells
 
-**Цель:** Распределить утверждённые типы (Шаг 3) по cells и определить границы клеток.
+**Goal:** Distribute the approved types (Step 3) across cells and define cell boundaries.
 
-Для понимания когда создавать отдельную cell, а когда расширять существующую,
-и определения гранулярности — используйте скилл `goga-cookbook`.
+To understand when to create a separate cell and when to extend an existing one,
+and to determine granularity — use the `goga-cookbook` skill.
 
-Предложите распределение типов по cells, основываясь на связности типов и зонах ответственности:
+Propose distribution of types across cells based on type cohesion and responsibility zones:
 
-1. **Предложите гипотезу cell** — какие типы в какую cell попадают:
+1. **Propose a cell hypothesis** — which types go into which cell:
    ```
    cell: goga/ast/nodes
      DocumentRoot, HeaderNode, BodyNode, ImportNode, DocumentNode, Node
@@ -252,186 +250,186 @@ cells проекта. Для понимания что такое cell испо�
      ASTRuleError, DocumentRuleError
    ```
 
-2. **Покажите связи между cells** — какие типы перетекают из cell в cell через Imports:
+2. **Show connections between cells** — which types flow from cell to cell via Imports:
    ```
    goga/ast/nodes ──(DocumentRoot, DocumentNode)──> goga/ast/rules
    goga/ast/errors ──(ASTRuleError)────────────────> goga/ast/rules
    goga/ast/nodes ──(DocumentRoot, DocumentNode)──> goga/ast/errors
    ```
 
-3. **Задайте один вопрос** — согласовано ли распределение? нет ли типов которые лучше перегруппировать?
+3. **Ask one question** — is the distribution agreed upon? Are there types that should be regrouped?
 
-4. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к Шагу 5
-   - **Не утверждено** → запомните замечания, вернитесь к пункту 1 и предложите скорректированное распределение с учётом обратной связи.
+4. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to Step 5
+   - **Not approved** → remember the comments, return to point 1 and propose a corrected distribution accounting for the feedback.
 
-**Критерии готовности:**
-- Все типы распределены по cells
-- Связи между cells определены (какие типы импортируются)
-- Нет циклических зависимостей между cells
-- Пользователь утвердил распределение
+**Readiness criteria:**
+- All types are distributed across cells
+- Connections between cells are defined (which types are imported)
+- No circular dependencies between cells
+- The user has approved the distribution
 
-#### Шаг 5. Проектирование usages и annotations
+#### Step 5. Designing usages and annotations
 
-**Цель:** Для каждой cell из распределения (Шаг 4) определить, какие practices (usages) и инструкции
-(annotations) нужны для корректной реализации контрактов.
+**Goal:** For each cell from the distribution (Step 4), determine which practices (usages) and instructions
+(annotations) are needed for correct implementation of contracts.
 
-Используйте скилл `goga-cookbook` для:
-- выбора формы подключения Usages (файл, inline или URL)
-- принципов написания usage файлов в `<cell_path>/.usages/`
-- принципов написания annotations (для header, entity, routine, method, property)
+Use the `goga-cookbook` skill for:
+- Choosing the Usages connection form (file, inline, or URL)
+- Principles of writing usage files in `<cell_path>/.usages/`
+- Principles of writing annotations (for header, entity, routine, method, property)
 
-Проходите cells в порядке от листьев к корню. Для каждой cell:
+Process cells in order from leaves to root. For each cell:
 
-1. **Определите usages** — какие практики нужны типам в этой cell:
-   - **Базовые usages проекта** (из скилла `goga-codemanifest-base`) — впишите ВСЕ базовые usages в директиву `Usages`
-     заголовка CODEMANIFEST. Базовые практики обязательны для всех cells.
-     Если базовая практика влияет на форму контракта (например, требует определённую обработку ошибок,
-     конвенцию именования, паттерн) — контракт должен ей соответствовать. Ссылайтесь на релевантные
-     базовые usages в annotations через `` `usage_name` ``
-   - **Usages из других cells** — если типы в этой cell используют библиотеку или паттерн,
-     описанный в usages другой cell, импортируйте эту практику через `Imports.Usages`
-   - **Usages внешних библиотек** — если типы в этой cell используют внешнюю библиотеку,
-     для которой есть usage-файл в проекте (`.goga/usages/`, `.goga/usages/cooks/`), подключите его через директиву `Usages`.
-     Если usage-файла для библиотеки нет — зафиксируйте необходимость его создания (создание выполняется в отдельном скилле)
+1. **Determine usages** — what practices the types in this cell need:
+   - **Base usages of the project** (from the `goga-codemanifest-base` skill) — include ALL base usages in the `Usages`
+     directive of the CODEMANIFEST header. Base practices are mandatory for all cells.
+     If a base practice affects the contract form (e.g., requires specific error handling,
+     naming convention, pattern) — the contract must comply with it. Reference relevant
+     base usages in annotations via `` `usage_name` ``
+   - **Usages from other cells** — if types in this cell use a library or pattern
+     described in the usages of another cell, import that practice via `Imports.Usages`
+   - **Usages of external libraries** — if types in this cell use an external library
+     for which there is a usage file in the project (`.goga/usages/`, `.goga/usages/cooks/`), connect it via the `Usages` directive.
+     If there is no usage file for the library — record the need to create one (creation is performed in a separate skill)
 
-2. **Определите annotations** — какие инструкции нужны AI-агенту при реализации:
-   - **Базовые annotations проекта** (из скилла `goga-codemanifest-base`) — впишите базовые annotations в директиву `Annotations`
-     заголовка CODEMANIFEST. Содержимое базовых annotations должно учитываться при проектировании контракта:
-     если базовая annotation задаёт ограничение или требование, контракт должен ему соответствовать
-   - **Глобальные annotations** заголовка — общие инструкции относящиеся ко всей cell
-     (конвенции именования, ограничения, архитектурные решения)
-   - **Аннотации entity** — описание области ответственности и параметров сигнатуры, общие требования к реализации
-   - **Аннотации routine/method/property** — описание параметров и параметров сигнатуры, алгоритма работы (если достижимо)
-     и требований к реализации без технических деталей
-   - Ссылайтесь на usages через обратные кавычки (`` `usage_name` ``), чтобы связать инструкции с практиками
+2. **Determine annotations** — what instructions the AI agent needs during implementation:
+   - **Base annotations of the project** (from the `goga-codemanifest-base` skill) — include base annotations in the `Annotations`
+     directive of the CODEMANIFEST header. The content of base annotations must be considered when designing the contract:
+     if a base annotation sets a constraint or requirement, the contract must comply with it
+   - **Global header annotations** — general instructions relating to the entire cell
+     (naming conventions, constraints, architectural decisions)
+   - **Entity annotations** — description of responsibility scope and signature parameters, general implementation requirements
+   - **Routine/method/property annotations** — description of parameters and signature parameters, operation algorithm (if achievable),
+     and implementation requirements without technical details
+   - Reference usages via backticks (`` `usage_name` ``) to link instructions to practices
 
-3. **Определите cell usages** — какие файлы `<cell_path>/.usages/*.md` будут предоставлены для потребителя:
-   - посмотрите текущие md файлы в `<cell_path>/.usages/`
-   - разделите контракт CODEMANIFEST на функциональные домены на основании действий которые может совершать потребитель при использовании API
-   - для каждого домена определите понятное имя файла `<cell_path>/.usages/<domain_name>.md`
-   - опишите инструкцию по взаимодействию с контрактом для внешнего потребителя с примерами использования
-   - придерживайтесь принципа самодостаточности — каждая инструкция должна быть независима от других cell если достижимо
+3. **Determine cell usages** — which files `<cell_path>/.usages/*.md` will be provided for consumers:
+   - Review current md files in `<cell_path>/.usages/`
+   - Divide the CODEMANIFEST contract into functional domains based on actions the consumer can perform when using the API
+   - For each domain, define a clear file name `<cell_path>/.usages/<domain_name>.md`
+   - Describe instructions for interacting with the contract for an external consumer with usage examples
+   - Adhere to the self-sufficiency principle — each instruction should be independent of other cells if achievable
 
-4. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к следующей cell
-   - **Не утверждено** → запомните замечания, предложите скорректированные usages/annotations
+4. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to the next cell
+   - **Not approved** → remember the comments, propose corrected usages/annotations
 
-Результат этого шага — для каждой cell сформирован CODEMANIFEST с определением набора usages и annotations,
-которые будут использованы при реализации.
+The result of this step — for each cell, a CODEMANIFEST is formed with the definition of the set of usages and annotations
+that will be used during implementation.
 
-#### Шаг 6. Проектирование cell
+#### Step 6. Cell design
 
-**Цель:** На основе утверждённых детализированных типов (Шаг 3), распределения (Шаг 4)
-и usages/annotations (Шаг 5) собрать CODEMANIFEST и .usages/ файлы для каждой cell.
+**Goal:** Based on the approved detailed types (Step 3), distribution (Step 4),
+and usages/annotations (Step 5), assemble CODEMANIFEST and .usages/ files for each cell.
 
-Для проверки синтаксической корректности CODEMANIFEST используйте скилл `goga-cell`.
-Для порядка проектирования CODEMANIFEST (Header → Body → Footer) — используйте скилл `goga-cookbook`.
-Для корректного именования типов, методов и свойств, а также значений `location` — используйте языковой скилл из Шага 3 Фазы 2.
+To check syntactic correctness of CODEMANIFEST, use the `goga-cell` skill.
+For the CODEMANIFEST design order (Header → Body → Footer) — use the `goga-cookbook` skill.
+For correct naming of types, methods, and properties, as well as `location` values — use the language skill from Step 3 of Phase 2.
 
-Проходите cells в порядке от листьев к корню (сначала cells без зависимостей). Для каждой cell:
+Process cells in order from leaves to root (cells without dependencies first). For each cell:
 
-1. **Соберите CODEMANIFEST** — «упакуйте» утверждённые типы в DSL-формат:
-   - **Header** — Imports (из связей Шага 4), Usages (из Шага 5), Annotations (из Шага 5)
-   - **Body** — типы из Шага 3 с их методами, свойствами, мутациями, встраиваниями
+1. **Assemble CODEMANIFEST** — "package" the approved types into DSL format:
+   - **Header** — Imports (from Step 4 connections), Usages (from Step 5), Annotations (from Step 5)
+   - **Body** — types from Step 3 with their methods, properties, mutations, embeddings
    - **Footer** — Author, CreatedAt, Description
 
-2. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к пункту 3
-   - **Не утверждено** → запомните замечания пользователя, вернитесь к пункту 1 и предложите скорректированный CODEMANIFEST
-     с учётом обратной связи
-3. **Предложите .usages/ файлы** для потребителей этой cell — других cells, так как описывает скилл `goga-cookbook`
-4. **Дождитесь обратной связи** — пользователь утверждает или просит изменения
-   - **Утверждено** → перейдите к следующей cell
-   - **Не утверждено** → запомните замечания пользователя, вернитесь к пункту 3 и предложите скорректированные .usages/ файлы
-     с учётом обратной связи
+2. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to point 3
+   - **Not approved** → remember the user's comments, return to point 1 and propose a corrected CODEMANIFEST
+     accounting for the feedback
+3. **Propose .usages/ files** for consumers of this cell — other cells, as described by the `goga-cookbook` skill
+4. **Wait for feedback** — the user approves or requests changes
+   - **Approved** → proceed to the next cell
+   - **Not approved** → remember the user's comments, return to point 3 and propose corrected .usages/ files
+     accounting for the feedback
 
-Если изменения в текущей cell затрагивают уже утверждённые cells — вернитесь к затронутым cells
-и предложите необходимые корректировки.
+If changes in the current cell affect already approved cells — return to the affected cells
+and propose necessary adjustments.
 
-#### Шаг 7. Финальное утверждение
+#### Step 7. Final approval
 
-Когда все cells спроектированы — представьте сводку:
+When all cells are designed — present a summary:
 
-- Диаграмма зависимостей с учётом финальных изменений
-- Список всех артефактов (CODEMANIFEST + .usages/ файлы) с путями
+- Dependency diagram accounting for final changes
+- List of all artifacts (CODEMANIFEST + .usages/ files) with paths
 
-Если вход из файла задачи — сверьте результат с секцией «Критерии приёмки»:
-убедитесь, что спроектированная архитектура позволяет выполнить каждое из условий приёмки.
-Если какое-то условие не покрыто — укажите это и предложите дополнение.
+If input is from a task file — verify the result against the "Acceptance Criteria" section:
+ensure that the designed architecture allows fulfilling each acceptance condition.
+If any condition is not covered — point this out and propose an addition.
 
-- **Пользователь утверждает** → переходите к Фазе 5
-- **Пользователь запрашивает изменения** → вернитесь к Шагу 6 к нужной cell
+- **User approves** → proceed to Phase 5
+- **User requests changes** → return to Step 6 to the relevant cell
 
-### Фаза 5: Сборка плана архитектуры
+### Phase 5: Architecture Plan Assembly
 
-На основе утверждённых артефактов из Фазы 4 соберите **план архитектуры** — структурированный документ,
-описывающий CODEMANIFEST и `.usages/` файлы для каждой cell.
-Сохраните план в файл `docs/arch/<topic>.md`, где `<topic>` — короткое имя по теме из описания
-пользователя (Фаза 1).
+Based on the approved artifacts from Phase 4, assemble an **architecture plan** — a structured document
+describing CODEMANIFEST and `.usages/` files for each cell.
+Save the plan to the file `docs/arch/<topic>.md`, where `<topic>` is a short name based on the topic from the user's
+description (Phase 1).
 
-#### Структура плана
+#### Plan Structure
 
-1. **Порядок реализации** — cells упорядочены от листьев к корню (сначала cells без зависимостей, затем зависимые).
-   Для каждой cell укажите причину порядка (например: «не имеет Imports», «зависит от cell X»).
+1. **Implementation order** — cells are ordered from leaves to root (cells without dependencies first, then dependent ones).
+   For each cell, specify the reason for the order (e.g., "has no Imports", "depends on cell X").
 
-2. **Артефакты для каждой cell** — для каждой cell в порядке реализации:
-   - **CODEMANIFEST** — полное содержимое файла в формате DSL
-   - **.usages/ файлы** — для каждого файла: путь, имя, полное содержимое
+2. **Artifacts for each cell** — for each cell in implementation order:
+   - **CODEMANIFEST** — complete file contents in DSL format
+   - **.usages/ files** — for each file: path, name, complete contents
 
-3. **Карта зависимостей** — ASCII-диаграмма или список связей между cells через Imports
+3. **Dependency map** — ASCII diagram or list of connections between cells via Imports
 
-4. **Чеклист верификации** — что проверить после реализации каждого артефакта
+4. **Verification checklist** — what to check after implementing each artifact
 
-#### Правила генерации плана
+#### Plan Generation Rules
 
-- Каждый CODEMANIFEST в плане должен быть синтаксически корректным согласно DSL спецификации
-- Имена файлов и пути должны соответствовать структуре проекта из `schema`
-- Для модификации существующих CODEMANIFEST — укажите diff: что добавить, что изменить, что удалить
-- Если план затрагивает существующие cells — явно укажите какие cells модифицируются, а какие создаются заново
-- План содержит **только** артефакты CODEMANIFEST и `.usages/` файлов. Не включайте код реализации на каком-либо языке программирования
+- Each CODEMANIFEST in the plan must be syntactically correct according to the DSL specification
+- File names and paths must correspond to the project structure from `schema`
+- For modification of existing CODEMANIFESTs — specify a diff: what to add, what to change, what to delete
+- If the plan affects existing cells — explicitly specify which cells are modified and which are created anew
+- The plan contains **only** CODEMANIFEST and `.usages/` file artifacts. Do not include implementation code in any programming language
 
-Представьте план пользователю для подтверждения.
+Present the plan to the user for confirmation.
 
-### Фаза 6: Проверка плана
+### Phase 6: Plan Verification
 
-### Шаг 1: Проверка
+### Step 1: Verification
 
-Выполните проверку созданного плана, используя скиллы `goga-cell` и `goga-cookbook` для валидации:
+Perform verification of the created plan using the `goga-cell` and `goga-cookbook` skills for validation:
 
-1. **Полнота** — каждый тип, метод, свойство из утверждённого решения присутствует в плане
-2. **Корректность DSL** — все CODEMANIFEST в плане синтаксически корректны (ключи, сигнатуры, структура документа)
-3. **Межъячеечная согласованность** — Imports в плане ссылаются на существующие cells, типы совпадают
-4. **Порядок реализации** — каждая cell создаётся после всех cells, от которых она зависит
-5. **Нет плейсхолдеров** — нет TBD, TODO, незавершённых описаний в CODEMANIFEST файлах плана
-6. **Использование Imports.Types** — каждый импортированный тип (из `Imports.Types`) используется в теле документа:
-   в сигнатурах, мутациях, встраиваниях или аннотациях текущего CODEMANIFEST
-7. **Использование Imports.Usages** — каждая импортированная практика (из `Imports.Usages`) упоминается хотя бы
-   в одной аннотации (глобальной, типа, метода или свойства)
-8. **Использование Usages** — каждая объявленная в заголовке `Usages` практика упоминается хотя бы в одной аннотации
-   (глобальной, типа, метода или свойства)
-9. **Алгоритмы в annotations** — аннотации для routine, method содержат описание алгоритма работы если это достижимо
-10. **Формулировки annotations** — аннотации не содержат деталей технической реализации
-11. **Разрешимость ссылок в аннотациях** — каждая ссылка в обратных кавычках внутри аннотаций разрешима в контексте
-   текущего CODEMANIFEST: переменная из сигнатуры, тип из Imports или объявленный в документе, практика из Usages или Imports
-12. **Ограничения location** — каждое значение `location` содержит только имя файла с расширением, без каталогов
-    и без выхода за пределы текущего уровня
-13. **Отсутствие перекрёстных импортов** — если cell A импортирует из cell B, то cell B не импортирует из cell A
-14. **Embedding из Imports** — каждый встраиваемый тип (через `->`) доступен через `Imports`
-15. **Мутации из доступных типов** — базовые типы в мутациях (`Object::Target`) доступны: импортированы через `Imports`
-    или объявлены в текущем CODEMANIFEST
-16. **Entity / Routine корректность** — каждый тип с `methods` и/или `properties` является Entity; каждый тип без
-    `methods` и `properties` является Routine и не содержит этих секций
-17. **Базовые usages из конфигурации** — если скилл `goga-codemanifest-base` вернул базовые usages, каждая
-    базовая практика включена в директиву `Usages` всех CODEMANIFEST и на неё есть ссылка хотя бы в одной аннотации
-18. **Базовые annotations из конфигурации** — если скилл `goga-codemanifest-base` вернул базовые annotations, базовые
-    annotations включены в директиву `Annotations` всех CODEMANIFEST и учтены при проектировании контрактов
-    (контракты соответствуют требованиям из базовых annotations)
-19. **Языковая корректность** — имена типов, методов и свойств в CODEMANIFEST соответствуют конвенциям целевого языка
-    (из языкового скилла). Значения `location` содержат корректные имена файлов для целевого языка
+1. **Completeness** — every type, method, property from the approved solution is present in the plan
+2. **DSL correctness** — all CODEMANIFESTs in the plan are syntactically correct (keys, signatures, document structure)
+3. **Inter-cell consistency** — Imports in the plan reference existing cells, types match
+4. **Implementation order** — each cell is created after all cells it depends on
+5. **No placeholders** — no TBD, TODO, or incomplete descriptions in the plan's CODEMANIFEST files
+6. **Usage of Imports.Types** — every imported type (from `Imports.Types`) is used in the document body:
+   in signatures, mutations, embeddings, or annotations of the current CODEMANIFEST
+7. **Usage of Imports.Usages** — every imported practice (from `Imports.Usages`) is mentioned in at least
+   one annotation (global, type, method, or property)
+8. **Usage of Usages** — every practice declared in the `Usages` header is mentioned in at least one annotation
+   (global, type, method, or property)
+9. **Algorithms in annotations** — annotations for routines and methods contain a description of the operation algorithm if achievable
+10. **Annotation wording** — annotations do not contain technical implementation details
+11. **Resolvability of references in annotations** — every reference in backticks within annotations is resolvable in the context
+    of the current CODEMANIFEST: a variable from the signature, a type from Imports or declared in the document, a practice from Usages or Imports
+12. **Location restrictions** — every `location` value contains only a file name with extension, without directories
+    and without escaping the current level
+13. **Absence of cross-imports** — if cell A imports from cell B, then cell B does not import from cell A
+14. **Embedding from Imports** — every embedded type (via `->`) is available through `Imports`
+15. **Mutations from available types** — base types in mutations (`Object::Target`) are available: imported via `Imports`
+    or declared in the current CODEMANIFEST
+16. **Entity / Routine correctness** — every type with `methods` and/or `properties` is an Entity; every type without
+    `methods` and `properties` is a Routine and does not contain these sections
+17. **Base usages from configuration** — if the `goga-codemanifest-base` skill returned base usages, each
+    base practice is included in the `Usages` directive of all CODEMANIFESTs and is referenced in at least one annotation
+18. **Base annotations from configuration** — if the `goga-codemanifest-base` skill returned base annotations, base
+    annotations are included in the `Annotations` directive of all CODEMANIFESTs and are considered when designing contracts
+    (contracts comply with the requirements from base annotations)
+19. **Language correctness** — type, method, and property names in CODEMANIFEST comply with target language conventions
+    (from the language skill). `location` values contain correct file names for the target language
 
-### Шаг 2: Правка
+### Step 2: Fix
 
-Исправьте найденные проблемы в плане и обновите файл. Представьте финальный результат пользователю для подтверждения.
+Fix the found issues in the plan and update the file. Present the final result to the user for confirmation.
 
 ---

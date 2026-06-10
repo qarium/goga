@@ -1,147 +1,147 @@
-# Шаблон дизайн-документа
+# Design Document Template
 
-Сохраняется в `docs/design/<feature-name>.md`.
+The agent persists this document at `docs/design/<feature-name>.md`.
 
-Это **полное архитектурное решение** — всё проработано до мельчайших деталей.
+This is a **complete architectural specification** — every detail fully elaborated.
 
 ---
 
-# Дизайн-документ: `<feature-name>`
+# Design Document: `<feature-name>`
 
-## Изменения контракта
+## Contract Changes
 
-### Изменённые файлы CODEMANIFEST
-- `<path>`: <краткое описание изменений>
+### Changed CODEMANIFEST Files
+- `<path>`: <summary of changes>
 
-### Новые сущности
-- `<Entity>` — <описание, расположение>
+### New Entities
+- `<Entity>` — <description, location>
 
-### Изменённые сущности
-- `<Entity>` — <что изменилось>
+### Changed Entities
+- `<Entity>` — <what changed>
 
-### Удалённые сущности
-- `<Entity>` — <причина/контекст>
+### Deleted Entities
+- `<Entity>` — <reason/context>
 
-### Изменения в Usages и Annotations
-- `<usage/annotation>`: <что изменилось>
+### Usages and Annotations Changes
+- `<usage/annotation>`: <what changed>
 
-## Применённые исправления
+## Applied Fixes
 
-### Исправленные проблемы CODEMANIFEST
-- `<файл>`: <до → после> (причина: <тип проблемы>)
+### Fixed CODEMANIFEST Defects
+- `<file>`: <before → after> (reason: <defect type>)
 
-## Взаимодействие сущностей и поток данных
+## Entity Interaction and Data Flow
 
-### Диаграмма взаимодействия
-<!-- ASCII-диаграмма. Как сущности взаимодействуют друг с другом -->
+### Interaction Diagram
+<!-- ASCII diagram. How entities interact with each other -->
 
-### Потоки данных
-<!-- Для каждого сценария: какие сущности участвуют, какие данные передаются, в каком порядке -->
+### Data Flows
+<!-- Per scenario: participating entities, data passed, execution order -->
 
-### Зависимости между сущностями
-<!-- Какие сущности зависят от каких, порядок инициализации -->
+### Entity Dependencies
+<!-- Which entities depend on which, initialization order -->
 
 ## Code Stack Trace
 
-<!-- Для каждой точки входа контракта (метод, функция, конструктор) отследите полную логическую цепочку -->
+<!-- For each contract entry point (method, function, constructor), trace the full logical chain -->
 
-### Трассировка: `<Entity.method>` или `<function>`
+### Trace: `<Entity.method>` or `<function>`
 
-#### Цепочка
-1. **Вход**: <что инициирует этот путь>
-2. **Шаг**: <что происходит, что передаётся далее> → контрольная точка: <тип/логика проверены?>
-3. **Шаг**: <что происходит, что передаётся далее> → контрольная точка: <тип/логика проверены?>
-4. ... продолжайте до выхода
-5. **Выход**: <конечный результат, форма, назначение>
+#### Chain
+1. **Input**: <what initiates this path>
+2. **Step**: <what happens, what passes downstream> → checkpoint: <type/logic verified?>
+3. **Step**: <what happens, what passes downstream> → checkpoint: <type/logic verified?>
+4. ... continue to output
+5. **Output**: <final result, form, destination>
 
-#### Сводка контрольных точек
-- <точка 1>: <проверена / проблема — описание>
-- <точка 2>: <проверена / проблема — описание>
+#### Checkpoint Summary
+- <checkpoint 1>: <passed / defect — description>
+- <checkpoint 2>: <passed / defect — description>
 
-<!-- Повторите для каждой точки входа -->
+<!-- Repeat for each entry point -->
 
 ## Algorithm Design
 
-<!-- Для каждой сущности контракта (новой и изменённой): -->
+<!-- For each contract entity (new and changed): -->
 
 ### `<Entity>`
 
-**Ответственность**: <что делает, роль в системе>
+**Responsibility**: <what the entity does, role in the system>
 
-**Алгоритм:**
+**Algorithm:**
 ```
-1. <шаг> — <что делает, какие данные>
-   → <результат шага>
-2. IF <условие>:
-   - <ветка A>: <что происходит>
-   - <ветка B>: <что происходит>
-3. <шаг> — <что делает>
-   → <результат шага>
+1. <step> — <what the entity does, what data>
+   → <step result>
+2. IF <condition>:
+   - <branch A>: <what happens>
+   - <branch B>: <what happens>
+3. <step> — <what the entity does>
+   → <step result>
 ...
 ```
 
-**Ошибки:**
-- `<тип ошибки>` → <обработка> → <что видит потребитель>
+**Errors:**
+- `<error type>` → <handling> → <what the consumer observes>
 
-**Краевые случаи:**
-- <случай> → <что происходит>
+**Edge Cases:**
+- <case> → <what happens>
 
-<!-- Повторите для каждой сущности -->
+<!-- Repeat for each entity -->
 
-## Сквозные проблемы
+## Cross-cutting Concerns
 
-- **Обработка ошибок**: <глобальная стратегия>
-- **Логирование**: <что логируется, уровень, данные>
-- **Валидация**: <где, правила, реакция на некорректные данные>
-- **Кэширование**: <что, стратегия> (если применимо)
-- **Параллельность**: <потокобезопасность> (если применимо)
+- **Error handling**: <global strategy>
+- **Logging**: <what is logged, level, data>
+- **Validation**: <where, rules, behavior on invalid data>
+- **Caching**: <what, strategy> (if applicable)
+- **Concurrency**: <thread safety> (if applicable)
 
 ## Usages Analysis
 
-<!-- Для каждой записи из Usages: -->
+<!-- For each Usages entry: -->
 
 ### `<usage name>`
-- **Что предоставляет**: <описание>
-- **Где используется**: <сущности>
-- **Почему выбран**: <обоснование>
-- **Как именно**: <конкретные API, паттерны>
+- **What it provides**: <description>
+- **Where used**: <entities>
+- **Why chosen**: <justification>
+- **How exactly**: <specific APIs, patterns>
 
-### Импортированные usages
-- `<usage>` из `<cell_path>` — <зачем, что предоставляет>
-  - Путь: `<cell_path>/.usages/<usage>.md`
+### Imported Usages
+- `<usage>` from `<cell_path>` — <why, what it provides>
+  - Path: `<cell_path>/.usages/<usage>.md`
 
-## Обновление `.usages/`
+## `.usages/` Update
 
-### Ячейка: `<cell_path>`
+### Cell: `<cell_path>`
 
-#### Существующие файлы — consistency
-- **`<файл>`** → `<cell_path>/.usages/<file>.md`
-  - Актуальность: <соответствует / устарел>
-  - Необходимые дополнения: <что добавить>
-  - Необходимые обновления: <что заменить>
+#### Existing Files — Consistency
+- **`<file>`** → `<cell_path>/.usages/<file>.md`
+  - Status: <current / outdated>
+  - Additions needed: <what to add>
+  - Updates needed: <what to replace>
 
-#### Новые файлы (если есть)
-- **`<категория>`** → `<cell_path>/.usages/<name>.md`
-  - Причина: <новый домен>
-  - Связанные сущности: <какие>
+#### New Files (if any)
+- **`<category>`** → `<cell_path>/.usages/<name>.md`
+  - Reason: <new domain>
+  - Related entities: <which ones>
 
 ## Test Stack Trace
 
-### Общая подготовка
-<!-- Фикстуры, моки, базовая конфигурация -->
+### General Setup
+<!-- Fixtures, mocks, base configuration -->
 
-### Реестр исходных файлов
-<!-- Файлы, которые проверяют тесты -->
+### Source File Registry
+<!-- Files under test -->
 
 ---
 
-### Позитивные тесты
+### Positive Tests
 
-#### `test_<что>_<сценарий>`
+#### `test_<what>_<scenario>`
 
-**Setup**: <точная настройка фикстур с конкретными значениями>
+**Setup**: <exact fixture configuration with concrete values>
 
-**Input**: <точные значения>
+**Input**: <exact values>
 
 **Trace**:
 ```
@@ -150,26 +150,26 @@ test_function(<input>)
     → helper_a(<value>)               # step 1
       returns: <value>
     → helper_b(<value>)               # step 2
-      side effect: <описание>
+      side effect: <description>
       returns: <value>
   → assert <check>
 ```
 
 **Assertions**:
 ```
-<конкретные проверки с точными значениями>
+<specific checks with exact expected values>
 ```
 
-**Sufficiency**: <зачем нужен, какую регрессию предотвращает>
+**Sufficiency**: <why this test exists, what regression it prevents>
 
 ---
 
-### Негативные тесты
-<!-- тот же формат -->
+### Negative Tests
+<!-- same format -->
 
-### Тесты краевых случаев
-<!-- тот же формат -->
+### Edge Case Tests
+<!-- same format -->
 
-## Дополнительные инструкции для агента реализации
+## Additional Instructions for the Implementation Agent
 
-- <инструкция>
+- <instruction>

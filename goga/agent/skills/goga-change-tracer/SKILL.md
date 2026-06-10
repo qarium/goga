@@ -1,6 +1,6 @@
 ---
 name: goga-change-tracer
-description: Реконструкция семантического поведения через трассировку
+description: Semantic behavior reconstruction via tracing
 ---
 # goga-change-tracer
 

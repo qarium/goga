@@ -1,22 +1,22 @@
 ---
 name: goga-lang-disp
-description: Роутер языковых правил
+description: Language rule router
 ---
-# Роутер языковых правил
+# Language Rule Router
 
-Определяет язык проекта и вызывает соответствующий языковой скилл.
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Detects the project language and dispatches execution to the matching language-specific skill.
+Apply this specification within the calling skill's context. Do not restate the contents — use them
+for decision-making.
 
 ---
 
-## Как работает
+## How it works
 
-1. Выполнить команду `goga config language` чтобы получить язык проекта
-2. Вызвать соответствующий языковой скилл из таблицы диспетчеризации
-3. Если язык не поддерживается — остановиться и сообщить пользователю
+1. Run `goga config language` to retrieve the project language
+2. Dispatch to the matching language skill per the dispatch table
+3. If the language is unsupported — halt and report to the user
 
-## Таблица диспетчеризации
+## Dispatch table
 
 | `language`   | `skill`                |
 |--------------|------------------------|
@@ -27,4 +27,4 @@ description: Роутер языковых правил
 | `swift`      | `goga-cell-swift`      |
 | `cpp`        | `goga-cell-cpp`        |
 
-Используйте **Skill tool** для вызова <`skill`>.
+Invoke the target <`skill`> using the **Skill tool**.

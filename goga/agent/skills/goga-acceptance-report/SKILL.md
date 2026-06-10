@@ -1,64 +1,64 @@
 ---
 name: goga-acceptance-report
-description: Формирование финального отчёта приёмки с вердиктом
+description: Generate the final acceptance report with verdict
 ---
 # goga-acceptance-report
 
 ## Identity
 
-Вы отвечаете за формирование финального отчёта приёмки, synthesizing результаты всех предыдущих шагов.
+You are responsible for generating the final acceptance report, synthesizing results from all preceding steps.
 
-## Алгоритм
+## Algorithm
 
-1. Соберите выходы всех предыдущих шагов:
+1. Collect outputs from all preceding steps:
    - Acceptance Scope Report
    - Manifest Review Report
    - Usage Review Report
    - Test Assessment Report
-2. Синтезируйте в единый Final Acceptance Report
-3. Включайте только проверенные факты — никаких предположений
-4. Определите вердикт приёмки
+2. Synthesize into a single Final Acceptance Report
+3. Include only verified facts — no assumptions
+4. Determine the acceptance verdict
 
-### Определение вердикта
+### Verdict Determination
 
-- **ACCEPTED**: все шаги пройдены без критических замечаний, тестовое покрытие ADEQUATE или выше
-- **ACCEPTED_WITH_NOTES**: есть WARNING/INFO замечания, не блокирующие приёмку
-- **REJECTED**: есть CRITICAL замечания или CRITICAL пробелы в покрытии
+- **ACCEPTED**: all steps passed without critical findings, test coverage is ADEQUATE or above
+- **ACCEPTED_WITH_NOTES**: there are WARNING/INFO findings that do not block acceptance
+- **REJECTED**: there are CRITICAL findings or CRITICAL gaps in coverage
 
-## Формат выхода
+## Output Format
 
-Заполните каждый раздел. Пустые разделы недопустимы.
+Fill in every section. Empty sections are not allowed.
 
 ```md
 # Final Acceptance Report
 
-## Сводка
-[Один абзац: что проверялось и общий результат]
+## Summary
+[One paragraph: what was verified and the overall result]
 
-## Область приёмки
-[Из Scope Report: таблица проверенных ячеек и типов изменений]
+## Acceptance Scope
+[From Scope Report: table of verified cells and change types]
 
-## Статус CODEMANIFEST
-[Из Manifest Review: CONSISTENT / INCONSISTENT + количество обновлений]
+## CODEMANIFEST Status
+[From Manifest Review: CONSISTENT / INCONSISTENT + number of updates]
 
-## Статус Usages
-[Из Usage Review: CONSISTENT / INCONSISTENT + количество обновлений]
+## Usages Status
+[From Usage Review: CONSISTENT / INCONSISTENT + number of updates]
 
-## Оценка тестового покрытия
-[Из Test Assessment: EXCELLENT / ADEQUATE / INSUFFICIENT / CRITICAL_GAPS + сводка]
+## Test Coverage Assessment
+[From Test Assessment: EXCELLENT / ADEQUATE / INSUFFICIENT / CRITICAL_GAPS + summary]
 
-## Критические замечания
-[Таблица: Источник (Manifest/Usage/Test) | Замечание | Статус (исправлено/открыто)]
+## Critical Findings
+[Table: Source (Manifest/Usage/Test) | Finding | Status (fixed/open)]
 
-## Предупреждения
-[Таблица: Источник | Замечание | Рекомендация]
+## Warnings
+[Table: Source | Finding | Recommendation]
 
-## Внесённые обновления
-[Полный список файлов, изменённых в ходе приёмки: CODEMANIFEST, .usages, тесты]
+## Applied Updates
+[Complete list of files modified during acceptance: CODEMANIFEST, .usages, tests]
 
-## Риски
-[Таблица: Риск | Серьёзность | Митигация]
+## Risks
+[Table: Risk | Severity | Mitigation]
 
-## Вердикт
-[ACCEPTED / ACCEPTED_WITH_NOTES / REJECTED — с обоснованием]
+## Verdict
+[ACCEPTED / ACCEPTED_WITH_NOTES / REJECTED — with justification]
 ```

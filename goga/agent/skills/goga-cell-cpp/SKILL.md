@@ -1,21 +1,21 @@
 ---
 name: goga-cell-cpp
-description: C++ правила реализации контрактов CODEMANIFEST
+description: C++ CODEMANIFEST contract implementation rules
 ---
-# C++: правила реализации контрактов
+# C++: Contract Implementation Rules
 
-Языковой скилл для C++.
+Language skill for C++.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply the specification in the context of the calling skill. Do not retell the content — use it
+for decision-making.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoked through the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для C++ со всеми конструкциями DSL:
+Full CODEMANIFEST example for C++ with all DSL constructs:
 
 ```yaml
 Imports:
@@ -105,29 +105,29 @@ cell/
 ├── cell.hpp
 ```
 
-## Особенности языка
+## Language Features
 
-**Facade**: header-файл (`cell.hpp`) определяет публичный API. Всё, что объявлено в header в cell namespace,
-составляет фасад. Реализация — в соответствующих `.cpp` файлах.
+**Facade**: the header file (`cell.hpp`) defines the public API. Everything declared in the header within the cell namespace
+constitutes the facade. Implementation resides in the corresponding `.cpp` files.
 
-**Naming**: PascalCase для пользовательских классов и структур, snake_case для функций и переменных.
-Типы стандартной библиотеки (`std::string`, `std::vector`) используются как есть (snake_case).
+**Naming**: PascalCase for user-defined classes and structs, snake_case for functions and variables.
+Standard library types (`std::string`, `std::vector`) are used as-is (snake_case).
 
-**Namespace**: каждая ячейка использует свой namespace для изоляции.
+**Namespace**: each cell uses its own namespace for isolation.
 
-**Constructors**: Entity signature описывает конструктор класса. Параметры конструктора — входные данные.
+**Constructors**: the Entity signature describes the class constructor. Constructor parameters are the input data.
 
-**Memory**: запрещены указатели, ссылки и smart pointers в контракте. Используйте value semantics.
+**Memory**: pointers, references, and smart pointers are forbidden in the contract. Use value semantics.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| C++                            | CODEMANIFEST     | Примечание                     |
-|--------------------------------|------------------|--------------------------------|
-| `class` / `struct` в namespace | Entity           | Конструктор → Entity signature |
-| Свободная функция в namespace  | Routine          |                                |
-| Public member variable         | Property         |                                |
-| Public member function         | Method           |                                |
-| Конструктор                    | Entity signature |                                |
+| C++                            | CODEMANIFEST     | Note                          |
+|--------------------------------|------------------|-------------------------------|
+| `class` / `struct` in namespace | Entity           | Constructor → Entity signature |
+| Free function in namespace     | Routine          |                               |
+| Public member variable         | Property         |                               |
+| Public member function         | Method           |                               |
+| Constructor                    | Entity signature |                               |
 
 ## Implementation
 

@@ -1,69 +1,71 @@
 ---
 name: goga-acceptance-scope
-description: Определение области приёмки — набора ячеек
+description: Defines the acceptance scope — the set of cells for a given functionality
 ---
 # goga-acceptance-scope
 
 ## Identity
 
-Вы отвечаете за определение области приёмки — набора ячеек, относящихся к определённой функциональности.
+You are responsible for defining the acceptance scope — identifying the set of cells associated with a given functionality.
 
-## Алгоритм
+## Algorithm
 
-### Определение области приёмки
+### Determine acceptance scope
 
-Приёмка работает на уровне функциональности — одна функциональность может затрагивать одну или несколько ячеек.
+Acceptance operates at the functionality level. One functionality may span one or more cells.
 
-Определите область:
+Resolve the scope:
 
-1. **Аргументы содержат описание функциональности или путь** — используйте как `<target>`
-2. **Аргументы пусты** — проанализируйте git diff и определите изменённые файлы
-3. **Изменения не найдены или область неясна** — спросите пользователя через AskUserQuestion:
-   - **question**: "Для какой функциональности провести приёмку?"
-   - **header**: "Область приёмки"
+1. **Arguments contain a functionality description or path** — use as `<target>`
+2. **Arguments are empty** — analyze `git diff` to identify changed files
+3. **No changes found or scope is ambiguous** — prompt the user via AskUserQuestion:
+   - **question**: "Which functionality should undergo acceptance?"
+   - **header**: "Acceptance scope"
    - **multiSelect**: false
    - **options**:
-     - **label**: "Изменения в ветке", **description**: "Определить по git diff"
-     - **label**: "Конкретная функциональность", **description**: "Указать описание функциональности"
-     - **label**: "Все ячейки проекта", **description**: "Полная приёмка"
+     - **label**: "Branch changes", **description**: "Determine from git diff"
+     - **label**: "Specific functionality", **description**: "Provide a functionality description"
+     - **label**: "All project cells", **description**: "Full acceptance"
 
-### Сопоставление с ячейками
+### Map scope to cells
 
-1. Загрузите schema проекта: `goga schema`
-2. По описанию функциональности или результатам git diff определите затронутые ячейки из schema
-3. Для каждой обнаруженной ячейки:
-   a. Проверьте наличие файла CODEMANIFEST
-   b. Загрузите CODEMANIFEST
-   c. Проверьте наличие директории .usages/
-   d. Определите типы изменений: CODE / MANIFEST / USAGE / TEST
-4. Выявите зависимости от найденных ячеек (ячеек, которые импортируют найденные)
-5. Классифицируйте зависимости: DIRECT (импортирует изменённый API) / TRANSITIVE (импортирует DIRECT)
-6. Сформируйте Acceptance Scope Report
+1. Load the project schema: `goga schema`
+2. Match the functionality description or `git diff` results to cells in the schema
+3. For each matched cell:
+   a. Verify the CODEMANIFEST file exists
+   b. Load the CODEMANIFEST
+   c. Verify the `.usages/` directory exists
+   d. Classify change types: CODE / MANIFEST / USAGE / TEST
+4. Discover dependent cells — cells that import the matched cells
+5. Classify each dependency:
+   - **DIRECT** — imports a changed API
+   - **TRANSITIVE** — imports a DIRECT dependency
+6. Generate the Acceptance Scope Report
 
-STOP если:
-- ячейки не обнаружены
-- ячейка не содержит CODEMANIFEST
-- область неоднозначна
+STOP if:
+- No cells are discovered
+- A cell lacks a CODEMANIFEST
+- The scope is ambiguous
 
-## Формат выхода
+## Output format
 
-Заполните каждый раздел. Пустые разделы недопустимы.
+Complete every section. Empty sections are not allowed.
 
 ```md
 # Acceptance Scope Report
 
-## Источник данных
-[Как определена область: аргументы, git diff, выбор пользователя]
+## Data source
+[How the scope was resolved: arguments, git diff, or user selection]
 
-## Функциональность
-[Описание функциональности, если определена]
+## Functionality
+[Functionality description, if determined]
 
-## Ячейки для приёмки
-[Таблица: Ячейка | Путь | Типы изменений (CODE/MANIFEST/USAGE/TEST)]
+## Cells for acceptance
+[Table: Cell | Path | Change types (CODE/MANIFEST/USAGE/TEST)]
 
-## Затронутые зависимости
-[Таблица: Зависимая ячейка | Тип зависимости (DIRECT/TRANSITIVE) | Оценка влияния]
+## Affected dependencies
+[Table: Dependent cell | Dependency type (DIRECT/TRANSITIVE) | Impact assessment]
 
-## Сводка области
-[Всего ячеек, всего файлов, распределение по категориям изменений]
+## Scope summary
+[Total cells, total files, distribution by change categories]
 ```

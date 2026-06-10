@@ -1,6 +1,6 @@
 ---
 name: goga-change-reporting
-description: Формирование финального отчёта о выполнении изменений
+description: Generation of the final change execution report
 ---
 # goga-change-reporting
 

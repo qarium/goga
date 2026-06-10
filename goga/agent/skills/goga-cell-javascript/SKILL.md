@@ -1,21 +1,21 @@
 ---
 name: goga-cell-javascript
-description: JavaScript правила реализации контрактов CODEMANIFEST
+description: JavaScript CODEMANIFEST contract implementation rules
 ---
-# JavaScript: правила реализации контрактов
+# JavaScript: Contract Implementation Rules
 
-Языковой скилл для JavaScript.
+Language skill for JavaScript.
 
-Применяйте спецификацию в контексте вызвавшего скилла. Не пересказывайте содержимое — используйте его
-для принятия решений.
+Apply the specification within the context of the invoking skill. Do not paraphrase the contents — use them
+to drive implementation decisions.
 
-Вызывается через роутер `goga-lang-disp`.
+Invoked via the `goga-lang-disp` router.
 
 ---
 
 ## Examples
 
-Полный пример CODEMANIFEST для JavaScript со всеми конструкциями DSL:
+Complete CODEMANIFEST example for JavaScript covering all DSL constructs:
 
 ```yaml
 Imports:
@@ -105,29 +105,29 @@ cell/
 ├── index.js
 ```
 
-## Особенности языка
+## Language Specifics
 
-**Facade**: `index.js` — единая точка входа. Все экспорты контракта идут через `module.exports` или `export`.
-Только то, что экспортировано из `index.js`, составляет фасад ячейки.
+**Facade**: `index.js` serves as the single entry point. All contract exports flow through `module.exports` or `export`.
+Only symbols exported from `index.js` form the cell facade.
 
-**Naming**: camelCase для функций и методов, PascalCase для классов.
+**Naming**: Use camelCase for functions and methods; use PascalCase for classes.
 
-**Types**: JSDoc используется для аннотаций типов. Без JSDoc сигнатуры не могут быть извлечены.
+**Types**: JSDoc provides type annotations. Signatures cannot be extracted without JSDoc.
 
-**Constructors**: Entity signature описывает вызов `new ClassName()` или фабричную функцию.
+**Constructors**: The entity signature describes a `new ClassName()` invocation or a factory function.
 
-## Маппинг конструкций
+## Construct Mapping
 
-| JavaScript             | CODEMANIFEST     | Примечание                                   |
+| JavaScript Construct   | CODEMANIFEST     | Notes                                        |
 |------------------------|------------------|----------------------------------------------|
-| `class` в экспортах    | Entity           | Class fields → properties, methods → methods |
-| `function` в экспортах | Routine          | Функция на уровне модуля                     |
+| Exported `class`       | Entity           | Class fields → properties, methods → methods |
+| Exported `function`    | Routine          | Module-level function                        |
 | Class method           | Method           |                                              |
-| Class field / getter   | Property         | Тип из JSDoc                                 |
+| Class field / getter   | Property         | Type inferred from JSDoc                     |
 
 ## Implementation
 
-- All exports go through `index.js`
+- All exports must go through `index.js`
 
 ## Signature Rules
 

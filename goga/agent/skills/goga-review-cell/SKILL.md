@@ -1,243 +1,243 @@
 ---
 name: goga-review-cell
-description: Ревью ячейки по трём измерениям
+description: Three-dimension cell review
 ---
-# Ревью ячейки
+# Cell Review
 
-## Цель
+## Purpose
 
-Проверяет ячейку по трём измерениям и предлагает конкретные действия для исправления обнаруженных проблем. Каждое действие требует подтверждения пользователя перед выполнением.
+Reviews a cell across three dimensions and proposes concrete remediation actions for each detected issue. Each action requires explicit user confirmation before execution.
 
-Вы **выявляете** проблемы, **предлагаете** решения и **выполняете** одобренные действия (вызов других команд, редактирование файлов).
-
----
-
-## Ключевой принцип
-
-**Выявите точную проблему до предложения решения.** Три измерения проверки направлены на разные корневые причины и требуют разных исправлений. Не смешивайте их — каждое замечание должно быть чётко классифицировано в одну из трёх категорий до предложения действия.
-
-### Правило взаимодействия с пользователем
-
-**Всегда предлагайте варианты ответа.** При обращении к пользователю за подтверждением, решением или уточнением — всегда предоставляйте 2-4 конкретных варианта ответа. Никогда не задавайте открытые вопросы без предлагаемых для выбора вариантов.
+You **identify** issues, **propose** solutions, and **execute** user-approved actions (invoking other skills, editing files).
 
 ---
 
-## Шаги
+## Key Principle
 
-### Шаг 1: Загрузка контекста
+**Identify the exact problem before proposing a solution.** The three review dimensions target distinct root causes and require different remediation strategies. Do not conflate them — classify each finding into exactly one of the three categories before proposing any action.
 
-1. Используйте **Skill tool** для вызова `goga-lang-disp` — получите языковой скилл целевого языка.
-   Языковой скилл определяет конвенции реализации: структуру cell, фасад, правила сигнатур, **именование**.
-   Примеры в других скиллах могут использовать именование одного языка (например snake_case), а целевой язык
-   требует другого (например PascalCase) — языковой скилл содержит авторитетные правила для целевого языка.
-2. Загрузите DSL спецификацию и принципы применения DSL:
-   - Используйте **Skill tool** для вызова `goga-cell` — для понимания синтаксиса DSL CODEMANIFEST, структурных правил и семантики
-     (структура ячейки, директивы `Imports`, `Usages`, `Annotations`, типы, сигнатуры, мутации, встраивания, ограничения)
-   - Используйте **Skill tool** для вызова `goga-cookbook` — для понимания принципов работы с cell и CODEMANIFEST файлами
-     (когда использовать Entity vs Routine, когда применять мутации и встраивания, принципы написания usage файлов, гранулярность cell)
-   - **Критично для корректного анализа**: без понимания правил DSL вы неверно интерпретируете записи CODEMANIFEST
-   - Обращайтесь к загруженным спецификации и принципам при сомнениях в корректности записи CODEMANIFEST
-3. Прочитайте файл `CODEMANIFEST` ячейки
-4. Разберите все сущности, методы, свойства, импорты, usages, аннотации, реэкспорты и расположения
-5. Перечислите все исходные файлы в директории ячейки (исключая `.usages/`, артефакты сборки, тесты и другие неконтрактные файлы)
-6. Прочитайте все исходные файлы, соответствующие объявленным значениям `location`
-7. Прочитайте все файлы `.usages/*.md`, если директория `.usages/` существует
-8. Проверьте наличие файла фасада
+### User Interaction Rule
+
+**Always provide answer options.** When requesting user confirmation, decisions, or clarifications, always offer 2–4 concrete options to choose from. Never pose open-ended questions without selectable choices.
 
 ---
 
-### Шаг 2: Запуск инструментов
+## Steps
 
-#### 2a. Запуск линтера
+### Step 1: Load Context
+
+1. Invoke `goga-lang-disp` via the **Skill tool** to load the target language skill.
+   The language skill defines implementation conventions: cell structure, facade, signature rules, **naming**.
+   Examples in other skills may follow naming conventions of one language (e.g., snake_case), while the target language
+   requires different conventions (e.g., PascalCase). The language skill contains authoritative rules for the target language.
+2. Load the DSL specification and DSL application principles:
+   - Invoke `goga-cell` via the **Skill tool** to understand CODEMANIFEST DSL syntax, structural rules, and semantics
+     (cell structure, `Imports`, `Usages`, `Annotations` directives, types, signatures, mutations, embeddings, constraints)
+   - Invoke `goga-cookbook` via the **Skill tool** to understand cell and CODEMANIFEST working principles
+     (when to use Entity vs Routine, when to apply mutations and embeddings, usage file authoring principles, cell granularity)
+   - **Critical for accurate analysis**: without understanding DSL rules, CODEMANIFEST entries will be misinterpreted
+   - Consult the loaded specification and principles whenever CODEMANIFEST entry correctness is uncertain
+3. Read the cell's `CODEMANIFEST` file
+4. Parse all entities, methods, properties, imports, usages, annotations, re-exports, and locations
+5. Enumerate all source files in the cell directory (excluding `.usages/`, build artifacts, tests, and other non-contract files)
+6. Read all source files corresponding to declared `location` values
+7. Read all `.usages/*.md` files if the `.usages/` directory exists
+8. Verify the facade file exists
+
+---
+
+### Step 2: Run Tools
+
+#### 2a. Run Linter
 
 ```
 goga lint
 ```
 
-Если линтер сообщает об ошибках — зафиксируйте каждую как проблему синтаксиса DSL. Исправьте ошибки синтаксиса DSL перед продолжением анализа.
+If the linter reports errors, record each as a DSL syntax issue. Fix all DSL syntax errors before proceeding with analysis.
 
-#### 2b. Запуск схемы
+#### 2b. Run Schema
 
 ```
 goga schema
 ```
 
-Извлеките позицию ячейки в иерархии проекта для контекста.
+Extract the cell's position in the project hierarchy for contextual reference.
 
 ---
 
-### Шаг 3: Анализ 1 — Код vs Требования
+### Step 3: Analysis 1 — Code vs Requirements
 
-**Вопрос: Реализует ли код то, что требует CODEMANIFEST?**
+**Question: Does the code implement what CODEMANIFEST requires?**
 
-Для каждой сущности, объявленной в CODEMANIFEST, проверьте, что реализация соответствует контракту.
+For each entity declared in CODEMANIFEST, verify that the implementation satisfies the contract.
 
-#### 3a. Проверки
+#### 3a. Checks
 
-Для каждой сущности:
-- **Совпадение сигнатур**: Сравните `"()"` (сигнатура конструктора) между CODEMANIFEST и исходным кодом
-- **Покрытие методов**: Сравните словарь `"methods"` — отсутствующие, лишние или несовпадающие сигнатуры методов
-- **Покрытие свойств**: Сравните словарь `"properties"` — отсутствующие, лишние или несовпадающие типы свойств
-- **Экспозиция фасада**: Присутствует ли сущность с обеих сторон? Отсутствие в исходном коде означает, что она не экспортируется через фасад
+For each entity:
+- **Signature conformance**: Compare `"()"` (constructor signature) between CODEMANIFEST and source code
+- **Method coverage**: Compare the `"methods"` dictionary — identify missing, extra, or mismatched method signatures
+- **Property coverage**: Compare the `"properties"` dictionary — identify missing, extra, or mismatched property types
+- **Facade exposure**: Verify the entity appears on both sides. Absence in source code means it is not exported via the facade
 
-Для каждой функции (routine):
-- **Совпадение сигнатур**: Сравните строку сигнатуры между CODEMANIFEST и исходным кодом
-- **Существование**: Отсутствие в исходном коде означает, что функция не экспортируется через фасад
+For each function (routine):
+- **Signature conformance**: Compare the signature string between CODEMANIFEST and source code
+- **Existence**: Absence in source code means the function is not exported via the facade
 
-Дополнительные проверки:
-- **Расположение**: Существует ли исходный файл по пути `<cell-path>/<location>`?
-- **Поведенческое соответствие**: Отражает ли реализация поведенческие требования из аннотаций?
-- **Использование импортов**: Действительно ли импортированные типы из `Imports` используются в исходном коде?
+Additional checks:
+- **Location validity**: Does the source file exist at path `<cell-path>/<location>`?
+- **Behavioral conformance**: Does the implementation satisfy behavioral requirements from annotations?
+- **Import utilization**: Are imported types from `Imports` actually referenced in source code?
 
-#### 3b. Представление результатов
+#### 3b. Findings Presentation
 
-Если обнаружены проблемы — представьте каждое замечание пользователю с:
-- Точное местоположение (сущность, метод/свойство, файл)
-- Что требует CODEMANIFEST и что фактически делает код
+When issues are detected, present each finding with:
+- Exact location (entity, method/property, file)
+- What CODEMANIFEST requires vs. what the code actually does
 
-#### 3c. Предлагаемое действие
+#### 3c. Proposed Action
 
-**Сформулируйте задачу**, описывающую расхождение между кодом и контрактом.
+**Formulate a task** describing the discrepancy between code and contract.
 
-Предложите: вызвать `/goga:design` в режиме **brainstorm**, передав задачу как контекст. Это произведёт редизайн реализации для соответствия контракту.
+Propose: invoke `/goga:design` in **brainstorm** mode, passing the task as context. This produces an implementation redesign that satisfies the contract.
 
-Запросите подтверждение пользователя перед выполнением.
-
----
-
-### Шаг 4: Анализ 2 — Требования vs Код и Usages
-
-**Вопросы: Соответствуют ли требования CODEMANIFEST фактическому коду и usages? Хорошо ли написан CODEMANIFEST?**
-
-Контракт может быть неполным, некорректным, устаревшим или плохо написанным по сравнению с тем, что фактически делает код и что описывают usages.
-
-#### 4a. Проверки: Точность
-
-- **Недокументированные сущности**: Есть ли в коде публичные классы/функции, не объявленные в CODEMANIFEST?
-- **Недокументированные методы/свойства**: Есть ли публичные API-члены у задокументированных классов, отсутствующие в CODEMANIFEST?
-- **Точность контракта vs usages**: Ссылаются ли аннотации на реально применимые usages? Используются ли usages в коде, но не упоминаются в аннотациях?
-- **Точность требований**: Соответствуют ли описанные сигнатуры, типы и поведения тому, что фактически делает код? Если код корректен, а контракт ошибочен — контракт требует исправления.
-
-#### 4b. Проверки: Качество написания
-
-Для каждой сущности и функции (routine) в CODEMANIFEST проверьте, что аннотации соответствуют следующим критериям качества написания. Даже если контракт технически корректен, плохо написанные аннотации снижают качество всего контракта.
-
-**Рекомендации по содержанию:**
-- Начинайте каждую аннотацию с ясного заявления о цели — что делает эта сущность/функция/метод и зачем она существует
-- Для каждого параметра предоставьте описание с использованием синтаксиса `` `имя_параметра`: описание ``
-- Если логика нетривиальна (многошаговые трансформации, условные потоки, переходы состояний), включите раздел `Алгоритм:` с пронумерованными шагами, отслеживающими поток выполнения
-- Если есть ограничения, граничные случаи, требования к формату или предусловия — включите раздел `Требования:`, явно их описывающий
-- Документируйте формат возвращаемого значения, когда семантика неочевидна из сигнатуры (например, когда смысл отличается от типа или когда структура сложна)
-- Включайте примеры использования, когда они помогают прояснить контракт — примеры конфигурации для билдеров, пары вход/выход для парсеров, паттерны вызова для фасадов
-
-**Рекомендации по качеству:**
-- Каждая аннотация должна быть достаточно конкретной для реализации по ней — никаких TBD, TODO или расплывчатых формулировок
-- Каждая аннотация должна допускать ровно одну интерпретацию — если можно прочитать двояко, перепишите
-- Поддерживайте единообразный стиль и структуру across all аннотаций в одном файле CODEMANIFEST
-- Все ссылки в обратных кавычках (`` `имя` ``) должны указывать на сущности, реально существующие в текущем контексте CODEMANIFEST — типы из `Imports`, практики из `Usages` или параметры из сигнатуры
-
-#### 4c. Представление результатов
-
-Если обнаружены проблемы — представьте каждое замечание пользователю с:
-- Точное местоположение в CODEMANIFEST (сущность, метод/свойство, раздел)
-- Что не так: отсутствующее объявление, неточное описание, неверный тип, устаревшая ссылка, низкое качество аннотации
-- Для проблем качества написания: конкретная рекомендация по улучшению (например, «добавить раздел `Алгоритм:`», «описать параметр `path`», «переструктурировать аннотацию с разделами `Алгоритм:` и `Требования:`»)
-
-#### 4d. Предлагаемое действие
-
-**Отредактируйте CODEMANIFEST** для исправления неточностей и улучшения качества написания, затем вызовите `/goga:design` в режиме **changes** для обновления документа дизайна на основе исправленного контракта.
-
-Запросите подтверждение пользователя перед выполнением.
+Request user confirmation before execution.
 
 ---
 
-### Шаг 5: Анализ 3 — Существование и адекватность Usages
+### Step 4: Analysis 2 — Requirements vs Code and Usages
 
-**Вопрос: Существуют ли файлы usages и адекватны ли они реализации ячейки?**
+**Questions: Do CODEMANIFEST requirements match the actual code and usages? Is CODEMANIFEST well-authored?**
 
-#### 5a. Проверки
+The contract may be incomplete, incorrect, outdated, or poorly written compared to what the code actually implements and what usages describe.
 
-- **Существование**: Для каждой записи `Usages` с путём к файлу — существует ли файл? (проектные — в `.goga/usages/`, cell-уровень — в директории `.usages/`)
-- **Упоминание в аннотациях**: Упомянут ли каждый объявленный usage в какой-либо аннотации через синтаксис обратных кавычек?
-- **Существование импортированных usages**: Для каждого импортированного usage из `Imports` → `Usages` — существует ли `{from_path}/.usages/{usage_name}.md`?
-- **Адекватность**: Описывает ли каждый файл `.usages/*.md` использование API ячейки? Точно ли содержание и достаточно ли подробно для потребителей?
-- **Отсутствующие usages**: Есть ли импорты внешних библиотек, повторяющиеся паттерны или соглашения в коде, не покрытые ни одной записью Usages?
-- **Категоризация**: Являются ли функциональные категории `.usages/` чётко определёнными и непересекающимися? Стоит ли переместить встроенные usages в файлы категорий?
+#### 4a. Checks: Accuracy
 
-#### 5b. Представление результатов
+- **Undocumented entities**: Are there public classes/functions in the code not declared in CODEMANIFEST?
+- **Undocumented methods/properties**: Are there public API members of documented classes missing from CODEMANIFEST?
+- **Contract accuracy vs usages**: Do annotations reference actually applicable usages? Are usages used in code but not mentioned in annotations?
+- **Requirements accuracy**: Do described signatures, types, and behaviors match what the code actually does? If the code is correct and the contract is wrong — the contract requires correction.
 
-Если обнаружены проблемы — представьте каждое замечание пользователю с:
-- Какой usage отсутствует, устарел или неадекватен
-- Какую практику он должен описывать
+#### 4b. Checks: Authoring Quality
 
-#### 5c. Предлагаемое действие
+For each entity and function (routine) in CODEMANIFEST, verify that annotations satisfy the following authoring quality criteria. Even a technically correct contract degrades overall quality when annotations are poorly written.
 
-**Создайте или обновите файлы `.usages/*.md`** напрямую. Это не требует вызова другой команды — файлы usages являются документацией практик, которые можно редактировать напрямую.
+**Content guidelines:**
+- Begin each annotation with a clear purpose statement — what this entity/function/method does and why it exists
+- For each parameter, provide a description using `` `parameter_name`: description `` syntax
+- For non-trivial logic (multi-step transformations, conditional flows, state transitions), include an `Algorithm:` section with numbered steps tracing the execution flow
+- For constraints, edge cases, format requirements, or preconditions — include a `Requirements:` section with explicit descriptions
+- Document return value format when semantics are non-obvious from the signature (e.g., when meaning differs from type or structure is complex)
+- Include usage examples when they help clarify the contract — configuration examples for builders, input/output pairs for parsers, invocation patterns for facades
 
-Запросите подтверждение пользователя перед выполнением.
+**Quality guidelines:**
+- Each annotation must be specific enough for direct implementation — no TBD, TODO, or vague phrasing
+- Each annotation must permit exactly one interpretation — if ambiguous, rewrite it
+- Maintain consistent style and structure across all annotations within a single CODEMANIFEST file
+- All backtick references (`` `name` ``) must resolve to entities in the current CODEMANIFEST context — types from `Imports`, practices from `Usages`, or parameters from the signature
 
----
+#### 4c. Findings Presentation
 
-### Шаг 6: Выполнение одобренных действий
+When issues are detected, present each finding with:
+- Exact CODEMANIFEST location (entity, method/property, section)
+- Nature of the issue: missing declaration, inaccurate description, incorrect type, outdated reference, poor annotation quality
+- For authoring quality issues: a specific improvement recommendation (e.g., "add `Algorithm:` section", "describe parameter `path`", "restructure annotation with `Algorithm:` and `Requirements:` sections")
 
-Для каждого действия, одобренного пользователем по всем трём анализам:
+#### 4d. Proposed Action
 
-#### 6a. Код vs Требования (Шаг 3)
+**Edit CODEMANIFEST** to correct inaccuracies and improve authoring quality, then invoke `/goga:design` in **changes** mode to update the design document based on the corrected contract.
 
-1. Сформулируйте ясное описание задачи, подлежащей редизайну
-2. Вызовите `/goga:design` и выберите режим **brainstorm**
-3. Передайте задачу как контекст — команда дизайна обработает редизайн
-
-#### 6b. Требования vs Код/Usages (Шаг 4)
-
-1. Примените правки CODEMANIFEST напрямую
-2. Запустите линтер для валидации: `goga lint`
-3. Исправьте все ошибки синтаксиса DSL после правок
-4. Вызовите `/goga:design` и выберите режим **changes**
-5. Команда дизайна обнаружит изменения через git diff и обновит документ соответственно
-
-#### 6c. Usages (Шаг 5)
-
-1. Создайте или обновите соответствующие файлы `.usages/*.md`
-2. Убедитесь, что содержание точно описывает использование API ячейки с достаточной детализацией для потребителей (детали реализации могут присутствовать, но вторичны)
-
-#### 6d. Финальная валидация
-
-После выполнения **всех** одобренных действий (6a, 6b, 6c):
-
-1. Запустите линтер для финальной валидации: `goga lint`
-2. Если линтер сообщает об ошибках — исправьте их
-3. Повторяйте шаги 1-2 пока линтер не пройдёт без ошибок
+Request user confirmation before execution.
 
 ---
 
-## Результат
+### Step 5: Analysis 3 — Usage Existence and Adequacy
 
-- Результаты проверки по всем трём измерениям
-- Для Анализа 1 (Код vs Требования): задача передана в `/goga:design brainstorm`
-- Для Анализа 2 (Требования vs Код/Usages): правки CODEMANIFEST + `/goga:design changes`
-- Для Анализа 3 (Usages): созданные или обновлённые файлы `.usages/*.md`
+**Question: Do usage files exist and are they adequate for the cell implementation?**
+
+#### 5a. Checks
+
+- **Existence**: For each `Usages` entry with a file path — does the file exist? (project-level in `.goga/usages/`, cell-level in `.usages/` directory)
+- **Annotation reference**: Is each declared usage referenced in an annotation via backtick syntax?
+- **Imported usage existence**: For each imported usage from `Imports` → `Usages` — does `{from_path}/.usages/{usage_name}.md` exist?
+- **Adequacy**: Does each `.usages/*.md` file describe cell API usage? Is the content accurate and sufficiently detailed for consumers?
+- **Missing usages**: Are there external library imports, recurring patterns, or code conventions not covered by any Usages entry?
+- **Categorization**: Are `.usages/` functional categories clearly defined and non-overlapping? Should inline usages be extracted into category files?
+
+#### 5b. Findings Presentation
+
+When issues are detected, present each finding with:
+- Which usage is missing, outdated, or inadequate
+- What practice it should describe
+
+#### 5c. Proposed Action
+
+**Create or update `.usages/*.md` files** directly. This does not require invoking another command — usage files are practice documentation editable directly.
+
+Request user confirmation before execution.
 
 ---
 
-## Финальная самопроверка
+### Step 6: Execute Approved Actions
 
-Перед завершением проверьте:
+For each user-approved action across all three analyses:
 
-1. Была ли DSL спецификация загружена через скиллы `goga-cell` и `goga-cookbook` перед анализом?
-2. Был ли полностью разобран CODEMANIFEST ячейки?
-3. Были ли все исходные файлы проверены относительно контракта?
-4. Были ли проанализированы все файлы `.usages/`?
-5. Был ли запущен `goga lint`?
-6. Был ли запущен `goga schema`?
-7. Был ли завершён Анализ 1 (Код vs Требования) с ясными результатами и предложенным действием?
-8. Был ли завершён Анализ 2 (Требования vs Код/Usages) с проверками как точности, так и качества написания?
-9. Был ли завершён Анализ 3 (Существование и адекватность Usages) с ясными результатами и предложенным действием?
-10. Было ли каждое замечание чётко классифицировано в правильную категорию анализа до предложения действия?
-11. Были ли все действия подтверждены пользователем перед выполнением?
-12. Были ли одобренные действия выполнены корректно?
-13. Был ли запущен `goga lint` **после** выполнения всех действий и прошёл ли без ошибок?
+#### 6a. Code vs Requirements (Step 3)
 
-Если хотя бы один ответ «нет» — завершите недостающую работу перед возвратом.
+1. Formulate a clear redesign task description
+2. Invoke `/goga:design` and select **brainstorm** mode
+3. Pass the task as context — the design skill will handle the redesign
+
+#### 6b. Requirements vs Code/Usages (Step 4)
+
+1. Apply CODEMANIFEST edits directly
+2. Run linter for validation: `goga lint`
+3. Fix all DSL syntax errors after edits
+4. Invoke `/goga:design` and select **changes** mode
+5. The design skill will detect changes via git diff and update the document accordingly
+
+#### 6c. Usages (Step 5)
+
+1. Create or update the corresponding `.usages/*.md` files
+2. Ensure content accurately describes cell API usage with sufficient detail for consumers (implementation details may be present but are secondary)
+
+#### 6d. Final Validation
+
+After executing **all** approved actions (6a, 6b, 6c):
+
+1. Run linter for final validation: `goga lint`
+2. If the linter reports errors — fix them
+3. Repeat steps 1–2 until the linter passes without errors
+
+---
+
+## Result
+
+- Review findings across all three dimensions
+- Analysis 1 (Code vs Requirements): task delegated to `/goga:design brainstorm`
+- Analysis 2 (Requirements vs Code/Usages): CODEMANIFEST edits + `/goga:design changes`
+- Analysis 3 (Usages): created or updated `.usages/*.md` files
+
+---
+
+## Final Self-Check
+
+Before completion, verify:
+
+1. Was the DSL specification loaded via `goga-cell` and `goga-cookbook` skills before analysis?
+2. Was the cell's CODEMANIFEST fully parsed?
+3. Were all source files verified against the contract?
+4. Were all `.usages/` files analyzed?
+5. Was `goga lint` executed?
+6. Was `goga schema` executed?
+7. Was Analysis 1 (Code vs Requirements) completed with clear findings and a proposed action?
+8. Was Analysis 2 (Requirements vs Code/Usages) completed with both accuracy and authoring quality checks?
+9. Was Analysis 3 (Usage Existence and Adequacy) completed with clear findings and a proposed action?
+10. Was each finding classified into the correct analysis category before proposing an action?
+11. Were all actions confirmed by the user before execution?
+12. Were approved actions executed correctly?
+13. Was `goga lint` executed **after** all actions and did it pass without errors?
+
+If any answer is "no" — complete the outstanding work before returning.
 
 ---
