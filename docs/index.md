@@ -23,5 +23,5 @@ pip install goga
 
 - [Getting Started](getting-started.md) -- Initialize your first goga project
 - [Configuration](configuration.md) -- Configure `.goga/config.yml`
-- [Examples](examples.md) -- CODEMANIFEST examples for all DSL features
+- [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- Full command reference

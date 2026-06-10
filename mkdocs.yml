@@ -35,7 +35,10 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
-  - Examples: examples.md
+  - Cell:
+      - cell/index.md
+      - CODEMANIFEST: cell/codemanifest.md
+      - Usages: cell/usages.md
   - Configuration: configuration.md
   - CLI:
       - cli/index.md

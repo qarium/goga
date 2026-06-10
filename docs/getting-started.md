@@ -121,5 +121,5 @@ The linter applies 21 document-level rules and 3 tree-level rules to verify stru
 ## Next steps
 
 - [Configuration](configuration.md) -- Full config reference for `.goga/config.yml`
-- [Examples](examples.md) -- CODEMANIFEST examples for all DSL features
+- [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options

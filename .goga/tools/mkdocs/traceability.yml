@@ -8,7 +8,13 @@ docs/getting-started.md:
   - goga/init
   - goga/config
 
-docs/examples.md:
+docs/cell/index.md:
+  - goga
+
+docs/cell/codemanifest.md:
+  - goga
+
+docs/cell/usages.md:
   - goga
 
 docs/configuration.md:
