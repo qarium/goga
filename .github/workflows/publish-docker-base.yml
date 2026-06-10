@@ -2,9 +2,9 @@ name: Publish Docker Base
 
 on:
   workflow_dispatch:
-#  workflow_run:
-#    workflows: ["Publish Release"]
-#    types: [completed]
+  workflow_run:
+    workflows: ["Publish Release"]
+    types: [completed]
 
 permissions:
   contents: read

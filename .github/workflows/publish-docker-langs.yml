@@ -2,9 +2,9 @@ name: Publish Docker Langs
 
 on:
   workflow_dispatch:
-#  workflow_run:
-#    workflows: ["Publish Docker Base"]
-#    types: [completed]
+  workflow_run:
+    workflows: ["Publish Docker Base"]
+    types: [completed]
 
 permissions:
   contents: read

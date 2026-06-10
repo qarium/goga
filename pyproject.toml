@@ -28,6 +28,9 @@ dependencies = [
     "tree-sitter-swift>=0.7.2",
     "tree-sitter-kotlin>=1.1.0",
     "tree-sitter-python>=0.25.0",
+    "goga-tool-viewer>=1.0.0,<1.1.0",
+    "goga-tool-mkdocs>=1.0.0,<1.1.0",
+    "goga-tool-scriba>=1.0.0,<1.1.0",
 ]
 
 [project.scripts]
