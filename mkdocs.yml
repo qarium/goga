@@ -40,6 +40,7 @@ nav:
       - CODEMANIFEST: cell/codemanifest.md
       - Usages: cell/usages.md
   - Configuration: configuration.md
+  - Tools: tools.md
   - CLI:
       - cli/index.md
       - Init: cli/init.md

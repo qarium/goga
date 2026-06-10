@@ -20,6 +20,10 @@ docs/cell/usages.md:
 docs/configuration.md:
   - goga/config
 
+docs/tools.md:
+  - goga/connect
+  - goga/commands/tool
+
 docs/cli/index.md:
   - goga/commands
 
