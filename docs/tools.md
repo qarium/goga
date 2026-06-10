@@ -56,3 +56,22 @@ A valid tool must:
 - Contain a `skills/` directory with at least one skill
 - Each skill directory must include a `SKILL.md` file
 - Expose a `main(args: list[str])` function for CLI execution
+
+## Skill naming
+
+Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-<skill-name>-` is automatically added to every skill.
+
+| In package (`skills/`)      | After `goga connect`         |
+|-----------------------------|------------------------------|
+| `mkdocs/SKILL.md`          | `goga-tool-mkdocs`           |
+| `mkdocs-discovery/SKILL.md`| `goga-tool-mkdocs-discovery` |
+| `mkdocs-writer/SKILL.md`   | `goga-tool-mkdocs-writer`    |
+
+The skill whose directory name matches the tool name becomes the entry point — the dispatcher invoked by `/goga:tool <name>`.
+
+### Naming rules
+
+- Use lowercase with hyphens as separators
+- Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point
+- Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
+- Keep names concise and indicative of the skill's responsibility
