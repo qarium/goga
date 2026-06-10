@@ -37,7 +37,8 @@ jobs:
             exit 1
           fi
           TAG="${TAG#v}"
-          TAGS="qarium/goga:${TAG}"
+          TAG_MINOR="${TAG%.*}"
+          TAGS="qarium/goga:${TAG_MINOR}"
           LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
           LATEST="${LATEST#v}"
           if [ "$TAG" = "$LATEST" ]; then

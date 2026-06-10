@@ -63,7 +63,7 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 ```yaml
 language: python
 build:
-  image: qarium/goga-python-3.12:latest
+  image: qarium/goga-python-3.12:1.0
   task_executor:
     agent: claude
     env: {}

@@ -57,11 +57,11 @@ Questionnaire.ask_goga_config() proceeds in this order:
 4. **codemanifest_annotations** — optional annotations
 5. **agent** — select an AI executor (claude, codex)
 6. **image** — Docker image: display language-specific hints, default to the last entry; accept free-form input
-   - python: qarium/goga-python-3.10:latest .. qarium/goga-python-3.14:latest
-   - golang: qarium/goga-golang-1.23:latest .. qarium/goga-golang-1.26:latest
-   - javascript: qarium/goga-node-22:latest .. qarium/goga-node-24:latest
-   - kotlin: qarium/goga-kotlin-2.0:latest .. qarium/goga-kotlin-2.3:latest
-   - swift: qarium/goga-swift-6.0:latest .. qarium/goga-swift-6.2:latest
+   - python: qarium/goga-python-3.10:1.0 .. qarium/goga-python-3.14:1.0
+   - golang: qarium/goga-golang-1.23:1.0 .. qarium/goga-golang-1.26:1.0
+   - javascript: qarium/goga-node-22:1.0 .. qarium/goga-node-24:1.0
+   - kotlin: qarium/goga-kotlin-2.0:1.0 .. qarium/goga-kotlin-2.3:1.0
+   - swift: qarium/goga-swift-6.0:1.0 .. qarium/goga-swift-6.2:1.0
 7. **dockerfile** — optional custom Dockerfile creation
    - On acceptance, request the path (default: "Dockerfile")
    - The Dockerfile contains `FROM {image}`
