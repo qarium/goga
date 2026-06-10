@@ -29,7 +29,7 @@ jobs:
             'kotlin':     ['2.0.21', '2.1.21', '2.2.21', '2.3.21'],
             'swift':      ['6.0.3', '6.1.3', '6.2.4'],
           }
-          matrix = {'include': [{'language': l, 'version': v} for l, vs in langs.items() for v in vs]}
+          matrix = {'include': [{'language': l, 'version': v, 'short_version': '.'.join(v.split('.')[:2])} for l, vs in langs.items() for v in vs]}
           with open('$GITHUB_OUTPUT', 'a') as f:
             f.write(f'matrix={json.dumps(matrix)}\n')
           "
@@ -63,7 +63,7 @@ jobs:
             exit 1
           fi
           TAG="${TAG#v}"
-          IMAGE="qarium/goga-${{ matrix.language }}-${{ matrix.version }}"
+          IMAGE="qarium/goga-${{ matrix.language }}-${{ matrix.short_version }}"
           TAGS="${IMAGE}:${TAG}"
           LATEST=$(git tag --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
           LATEST="${LATEST#v}"
