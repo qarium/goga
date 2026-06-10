@@ -1,5 +1,5 @@
 # ************************************************************* #
-# Манифест описывает возможные ошибки при работе с CODEMANIFEST #
+# Defines the error types raised during CODEMANIFEST processing #
 # ************************************************************* #
 
 Imports:
@@ -12,53 +12,53 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
+  When developing and testing: follow the practice `conventions`.
 
 ---
 
 "BaseASTError(message: str)":
   location: base.py
   annotations: |
-    Базовое исключение при работе с CODEMANIFEST
+    Base exception for CODEMANIFEST processing errors.
 
-    `message`: текст ошибки
+    `message`: error text
 
-    Требования:
-    - Должен наследоваться от Exception
-    - `message` должен попадать в Exception.args
+    Requirements:
+    - Must inherit from Exception
+    - `message` must be passed into Exception.args
   properties:
     message -> str: |
-      Сообщение с которым была создана ошибка
+      The message with which the error was created
 
 "BaseASTError::DocumentNotFoundError(message: str)":
   location: document.py
   annotations: |
-    Ошибка поиска документа
+    Error raised when a document is not found.
 
 
 "BaseASTError::DocumentParseError(message: str, filepath: str)":
   location: document.py
   annotations: |
-    Ошибка при парсинге документа
+    Error raised during document parsing.
 
-    `message`: текст ошибки
-    `filepath`: путь к файлу в котором произошла ошибка
+    `message`: error text
+    `filepath`: path to the file where the error occurred
   properties:
     filepath -> str: |
-      Путь к файлу с которым была создана ошибка
+      Path to the file associated with the error
 
 "BaseASTError::DocumentRuleError(message: str, rule: str, document: DocumentRoot, node: DocumentNode)":
   location: document.py
   annotations: |
-    Ошибка при не соблюдении правила документа
+    Error raised when a document-level rule is violated.
 
-    `message`: текст ошибки
-    `rule`: имя правила которое было не соблюдено
-    `document`: документ в котором произошла ошибка
-    `node`: нода в которой произошла ошибка
+    `message`: error text
+    `rule`: name of the violated rule
+    `document`: document where the error occurred
+    `node`: node where the error occurred
 
-    Требования:
-    - Ошибка должна приводиться к строке по формату
+    Requirements:
+    - The error must produce a string in the following format:
       ```
       Error: <message>
       Rule: <rule>
@@ -68,24 +68,24 @@ Annotations: |
       ```
   properties:
     rule -> str: |
-      Имя правила с которым была создана ошибка
+      Name of the rule associated with the error
     document -> DocumentNode: |
-      Документ в котором произошла ошибка
+      Document where the error occurred
     node -> DocumentNode: |
-      Нода с которой была создана ошибка
+      Node associated with the error
 
 "BaseASTError::ASTRuleError(message: str, rule: str, document: DocumentRoot | None, node: DocumentNode | None)":
   location: ast.py
   annotations: |
-    Ошибка при не соблюдении правила в рамках всего дерева
+    Error raised when a tree-level rule is violated.
 
-    `message`: текст ошибки
-    `rule`: имя правила которое было не соблюдено
-    `document`: документ в котором произошла ошибка
-    `node`: нода в которой произошла ошибка
+    `message`: error text
+    `rule`: name of the violated rule
+    `document`: document where the error occurred
+    `node`: node where the error occurred
 
-    Требования:
-    - Ошибка должна приводиться к строке по формату
+    Requirements:
+    - The error must produce a string in the following format:
       ```
       Error: <message>
       Rule: <rule>
@@ -95,11 +95,11 @@ Annotations: |
       ```
   properties:
     rule -> str: |
-      Имя правила с которым была создана ошибка
+      Name of the rule associated with the error
     document -> DocumentNode | None: |
-      Документ в котором произошла ошибка
+      Document where the error occurred
     node -> DocumentNode | None: |
-      Нода с которой была создана ошибка
+      Node associated with the error
 
 ---
 
@@ -107,4 +107,4 @@ Author: Mikhail Trifonov
 CreatedAt: 11/04/26
 
 Description: |
-  Манифест описывает возможные ошибки при работе с CODEMANIFEST
+  Defines the error types raised during CODEMANIFEST processing.

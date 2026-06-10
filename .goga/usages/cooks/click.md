@@ -1,34 +1,34 @@
-# Создание command line приложения на базе click
+# Building a Command Line Application with click
 
-## Библиотека
+## Library
 
 **click** — Command Line Interface Creation Kit
 
-Установка: `pip install click`
+Installation: `pip install click`
 
-**ВАЖНО** - библиотека должна быть добавлена в зависимости проекта.
+**IMPORTANT** — the library must be added to the project dependencies.
 
-## Структура приложения
+## Application Structure
 
-CLI-приложение строится из групп и команд. Группа — контейнер подкоманд, команда — конечное действие.
+A CLI application is built from groups and commands. A group is a container for subcommands, a command is a terminal action.
 
 ```
-cli.py          # корневая группа (entry point)
-__main__.py     # для вызова приложения через python -m
+cli.py          # root group (entry point)
+__main__.py     # for invoking the application via python -m
 commands/
     __init__.py
-    cmd_one.py  # подкоманда
-    cmd_two.py  # подкоманда
+    cmd_one.py  # subcommand
+    cmd_two.py  # subcommand
 ```
 
-- Корневая группа располагается в файле, указанном как entry point
-- Каждая подкоманда — отдельный модуль
-- Подкоманды регистрируются через декоратор `@<group>.command()`
+- The root group is located in the file specified as the entry point
+- Each subcommand is a separate module
+- Subcommands are registered via the `@<group>.command()` decorator
 
-## Регистрация команд в корневой группе
+## Registering Commands in the Root Group
 
-Для того чтобы команда попала в корневую группу и стала доступна в CLI интерфейсе,
-ее необходимо импортировать и подключить.
+For a command to be included in the root group and become available in the CLI interface,
+it must be imported and connected.
 
 ```python
 from .commands.module import command
@@ -42,22 +42,22 @@ def app() -> None:
 app.add_command(command)
 ```
 
-**ВАЖНО** - каждая новая команда должна проходить процедуру регистрации в корневой группе.
+**IMPORTANT** — every new command must go through the registration procedure in the root group.
 
-## Базовые декораторы
+## Basic Decorators
 
-| Декоратор             | Назначение                           |
-|-----------------------|--------------------------------------|
-| `@click.group()`      | Группа (контейнер подкоманд)         |
-| `@click.command()`    | Команда (конечное действие)          |
-| `@click.option()`     | Именованный параметр (`--name`)      |
-| `@click.argument()`   | Позиционный параметр                 |
-| `@click.pass_context` | Передача `Context` первым аргументом |
-| `@click.pass_obj`     | Передача `ctx.obj` первым аргументом |
+| Decorator              | Purpose                                    |
+|------------------------|--------------------------------------------|
+| `@click.group()`       | Group (container for subcommands)          |
+| `@click.command()`     | Command (terminal action)                  |
+| `@click.option()`      | Named parameter (`--name`)                 |
+| `@click.argument()`    | Positional parameter                       |
+| `@click.pass_context`  | Pass `Context` as the first argument       |
+| `@click.pass_obj`      | Pass `ctx.obj` as the first argument       |
 
-## Параметры
+## Parameters
 
-### Option — именованные параметры
+### Option — named parameters
 
 ```python
 @click.option('--name', default='World', help='Имя для приветствия')
@@ -69,11 +69,11 @@ app.add_command(command)
 @click.option('--port', envvar='APP_PORT', default=8080, type=int)
 ```
 
-- Всегда указывай `help` для каждого `--option`
-- Используй `type` для валидации (`int`, `click.Path`, `click.Choice`, `click.File`)
-- Используй `envvar` для чтения из переменных окружения
+- Always specify `help` for each `--option`
+- Use `type` for validation (`int`, `click.Path`, `click.Choice`, `click.File`)
+- Use `envvar` to read from environment variables
 
-### Argument — позиционные параметры
+### Argument — positional parameters
 
 ```python
 @click.argument('src')
@@ -81,12 +81,12 @@ app.add_command(command)
 @click.argument('files', nargs=-1, type=click.Path())
 ```
 
-- Применяй только для очевидных позиционных данных (пути, имена файлов)
-- Если смысл параметра неочевиден — используй `option`
+- Use only for obvious positional data (paths, file names)
+- If the meaning of a parameter is not obvious — use `option`
 
-## Передача состояния между командами
+## Passing State Between Commands
 
-Для передачи данных от корневой группы к подкомандам используй `ctx.obj`:
+To pass data from the root group to subcommands, use `ctx.obj`:
 
 ```python
 class AppState:
@@ -106,13 +106,13 @@ def status(state):
     click.echo(f"Debug: {state.debug}")
 ```
 
-- Создавай класс состояния вместо `dict` — обеспечивает типобезопасность
-- Используй `ctx.ensure_object(Cls)` для безопасной инициализации
-- Используй `click.make_pass_decorator(Cls)` для поиска объекта по иерархии контекстов
+- Create a state class instead of a `dict` — it provides type safety
+- Use `ctx.ensure_object(Cls)` for safe initialization
+- Use `click.make_pass_decorator(Cls)` to search for an object up the context hierarchy
 
-## Группы и вложенность
+## Groups and Nesting
 
-Группы вкладываются друг в друга для создания иерархии команд:
+Groups are nested within each other to create a command hierarchy:
 
 ```python
 @click.group()
@@ -130,37 +130,37 @@ def migrate():
     click.echo('Миграция...')
 ```
 
-Вызов: `cli db migrate`
+Invocation: `cli db migrate`
 
-- Каждый уровень — `@click.group()`
-- Конечные команды регистрируются на своём уровне: `@db.command()`
+- Each level is a `@click.group()`
+- Terminal commands are registered at their own level: `@db.command()`
 
-## Вывод и обработка ошибок
+## Output and Error Handling
 
 ```python
-# Вывод в stdout
+# Output to stdout
 click.echo('Сообщение')
 
-# Вывод с цветом
+# Colored output
 click.secho('Ошибка!', fg='red', err=True)
 click.secho('Успех!', fg='green')
 
-# Запрос у пользователя
+# Prompt the user
 name = click.prompt('Ваше имя')
 confirm = click.confirm('Продолжить?')
 
-# Завершение с кодом ошибки
+# Exit with error code
 raise click.ClickException('Что-то пошло не так')
 sys.exit(1)
 ```
 
-- Используй `click.echo` вместо `print`
-- Ошибки выводи через `click.secho(..., err=True)` или `raise click.ClickException`
-- Не используй `print()` напрямую
+- Use `click.echo` instead of `print`
+- Output errors via `click.secho(..., err=True)` or `raise click.ClickException`
+- Do not use `print()` directly
 
-## Тестирование CLI
+## Testing CLI
 
-Click предоставляет утилиту `CliRunner` для тестирования:
+Click provides the `CliRunner` utility for testing:
 
 ```python
 from click.testing import CliRunner
@@ -172,12 +172,12 @@ def test_hello():
     assert 'Usage' in result.output
 ```
 
-- Используй `CliRunner` для всех тестов команд
-- Проверяй `result.exit_code` и `result.output`
-- Для ввода от пользователя: `runner.invoke(cli, input='yes\n')`
+- Use `CliRunner` for all command tests
+- Check `result.exit_code` and `result.output`
+- For user input: `runner.invoke(cli, input='yes\n')`
 
-## Антипаттерны
+## Anti-patterns
 
-- Не используй `argparse` вместе с `click` в одном приложении
-- Не используй `sys.exit()` внутри команд — выбрасывай `click.ClickException` или возвращай код ошибки через `ctx.exit(code)`
-- Не забывай docstring на каждой группе и команде — click формирует из них help
+- Do not use `argparse` together with `click` in the same application
+- Do not use `sys.exit()` inside commands — raise `click.ClickException` or return an error code via `ctx.exit(code)`
+- Do not forget a docstring on every group and command — click generates help text from them

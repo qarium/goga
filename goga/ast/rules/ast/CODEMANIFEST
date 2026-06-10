@@ -10,54 +10,54 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Все типы являются мутациями `ASTRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `ASTRule`.
 
 ---
 
 # ********************************* #
-# Правила на уровне всех документов #
+# Rules at the level of all documents #
 # ********************************* #
 
 "ASTRule::ImportsHasNotCyclicalDeps(tree: list[DocumentRoot], name: str = 'imports_has_not_cyclical_deps')":
   location: rules.py
   annotations: |
-    Правило - ни один импорт в документе не является циклическим.
+    Rule — no import in the document is part of a cycle.
 
-    Если в документе есть импорт из пути и в документе по этому
-    пути тоже есть импорт из текущего документа - это является ошибкой.
+    If the document has an import from a path and the document at that
+    path also has an import from the current document — this is an error.
 
-    Дополнительные требования:
-    - Алгоритм поиска документа из которого происходит импорт при проверке должен иметь алгоритмическую сложность O(1)
+    Additional requirements:
+    - The algorithm for looking up the document being imported during validation must run in O(1) time
 
-    Шаблоны ошибок:
+    Error templates:
     - cycle: "Cyclical import: package '{doc_path}' and '{imported_path}' import from each other"
 
 "ASTRule::ImportTypeExists(tree: list[DocumentRoot], name: str = 'import_type_exists')":
   location: rules.py
   annotations: |
-    Правило - подключаемый тип через Imports существует в указанном в From документе.
+    Rule — imported types via Imports must exist in the document specified in From.
 
-    Требования:
-    - Если путь в From не существует на файловой системе, то проверка игнорируется
+    Requirements:
+    - If the From path does not exist on the filesystem, the check is skipped
 
-    Шаблоны ошибок:
+    Error templates:
     - not_found: "Type '{type_name}' imported from '{from_path}' is not defined in that package's CODEMANIFEST"
 
 "ASTRule::EmbeddedTypeHasLowLevel(tree: list[DocumentRoot], name: str = 'embedded_type_has_low_level')":
   location: rules.py
   annotations: |
-    Правило - все embedded типы располагаются ниже в иерархии файловой системы.
+    Rule — all embedded types are located deeper in the filesystem hierarchy.
 
-    Примеры:
-    - В данном примере level-1 может встраивать level-2, а level-2 не может встраивать level-1
+    Examples:
+    - In this example level-1 can embed level-2, but level-2 cannot embed level-1
       root/
       ├── level-1/
       │   ├── level-2/
       │   │   ├── CODEMANIFEST
       │   └── CODEMANIFEST
 
-    Шаблоны ошибок:
+    Error templates:
     - wrong_level: "Embedded {kind} '{name}' comes from '{source_path}', but can only be embedded from packages nested below '{current_path}'"
 
 ---
@@ -66,4 +66,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки на уровне всех документов AST
+  Validation rules at the AST tree level across all documents.

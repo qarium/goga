@@ -1,12 +1,12 @@
-# Форматирование YAML
+# YAML Formatting
 
-Сделать из python объекта yaml строку с учетом форматирования.
+Convert a Python object to a YAML string with formatting.
 
 ```python
 yaml.dump(data, sort_keys=False, default_flow_style=False, allow_unicode=True, indent=2)
 ```
 
-indent: количество отступов
-sort_keys: используется только для python 3.7 и выше, сохраняет порядок ключей
-default_flow_style: заменяет компактный вид [...] на классические списки с дефисом
-allow_unicode: позволяет выводить Unicode-символы (например, кириллицу) напрямую, а не кодами
+indent: number of indentation spaces
+sort_keys: only used for Python 3.7+, preserves key order
+default_flow_style: replaces compact notation `[...]` with classic dash-prefixed lists
+allow_unicode: allows outputting Unicode characters (e.g., Cyrillic) directly instead of escape codes

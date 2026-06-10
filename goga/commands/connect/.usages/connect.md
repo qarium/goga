@@ -1,33 +1,33 @@
 # CLI Command: connect
 
-## Назначение
+## Purpose
 
-CLI-обёртка команды подключения. Парсит click-аргументы и делегирует бизнес-логику в `goga/connect`.
+CLI wrapper for the connect command. Parses click arguments and delegates business logic to `goga/connect`.
 
-## Синтаксис
+## Syntax
 
 ```
 goga connect <agent> [<agent> ...] [--force-overwrite]
 ```
 
-## Аргументы
+## Arguments
 
-| Аргумент | Тип | Обязательный | Описание |
-|----------|-----|-------------|----------|
-| `agents` | tuple[str, ...] | Да | Один или несколько целевых AI-агентов |
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `agents` | tuple[str, ...] | Yes | One or more target AI agents |
 
-## Опции
+## Options
 
-| Опция | Тип | Дефолт | Описание |
-|-------|-----|--------|----------|
-| `--force-overwrite` | flag | False | Перезаписывать существующие скиллы при установке из пакетов инструментов |
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--force-overwrite` | flag | False | Overwrite existing skills when installing from tool packages |
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка
+- 0 — success
+- 1 — error
 
-## Примеры
+## Examples
 
 ```bash
 goga connect claude

@@ -13,97 +13,97 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Все типы являются мутациями `DocumentRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `DocumentRule`.
 
 ---
 
 # ************************* #
-# Структура entity / routine #
+# Entity / routine structure #
 # ************************* #
 
 "DocumentRule::EntitiesAndRoutinesHasNotConflicts(name: str = 'entities_and_routines_has_not_conflicts')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+    Validates `EntityTypeNode` and `RoutineTypeNode`.
 
-    Правила:
-    - все имена entities и routines не имеют пересечений с именами подключаемых типов в `ImportsNode`
-      (конфликт может быть решен через alias для типа)
+    Rules:
+    - All entity and routine names must not conflict with imported type names in `ImportsNode`
+      (conflicts can be resolved via type alias)
 
-    Требования:
-    - Встраиваемые типы с флагом embedded=True являются исключением из общего правила
+    Requirements:
+    - Embedded types with flag embedded=True are exempt from this rule
 
-    Шаблоны ошибок:
+    Error templates:
     - entity_conflict: "Entity '{entity_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
     - routine_conflict: "Routine '{routine_name}' has the same name as imported type '{type_name}' — use an alias in Imports to resolve"
 
 "DocumentRule::EntityHasOnlyValidKeys(name: str = 'entity_has_only_valid_keys')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode`.
+    Validates `EntityTypeNode`.
 
-    Правила:
-    - node.data не содержит ключей отличных от:
+    Rules:
+    - node.data contains only the following keys:
       - location
       - annotations
       - properties
       - methods
 
-    Шаблоны ошибок:
+    Error templates:
     - unknown_keys: "Entity '{entity_name}' contains unknown keys {unknown_keys} — allowed: location, annotations, methods, properties"
 
 "DocumentRule::RoutineHasOnlyValidKeys(name: str = 'routine_has_only_valid_keys')":
   location: rules.py
   annotations: |
-    Проверяет `RoutineTypeNode`.
+    Validates `RoutineTypeNode`.
 
-    Правила:
-    - node.data не содержит ключей отличных от:
+    Rules:
+    - node.data contains only the following keys:
       - location
       - annotations
 
-    Шаблоны ошибок:
+    Error templates:
     - unknown_keys: "Routine '{routine_name}' contains unknown keys {unknown_keys} — allowed: location, annotations"
 
 "DocumentRule::SignatureIsValid(name: str = 'signature_is_valid')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode`, `RoutineTypeNode`, `MethodNode`.
+    Validates `EntityTypeNode`, `RoutineTypeNode`, `MethodNode`.
 
-    Правила:
-    - строка сигнатуры соответствует паттерну '(...) -> ...' или '(...)'
+    Rules:
+    - Signature string matches the pattern '(...) -> ...' or '(...)'
 
-    Шаблоны ошибок:
+    Error templates:
     - format: "signature '{signature_string}' has invalid format, use '(...) -> ...' or '(...)'"
     - empty: "signature is empty, use '(...) -> ...' or '(...)'"
 
 "DocumentRule::ReturnTypeHasLink(name: str = 'return_type_has_link')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+    Validates `EntityTypeNode` and `RoutineTypeNode`.
 
-    Правила:
-    - возвращаемый тип в сигнатуре имеет ссылку, правильно -> link:Type, не правильно -> Type
+    Rules:
+    - Return type in the signature has a link. Valid: -> label:Type. Invalid: -> Type
 
-    Требования:
-    - сигнатура может ничего не возвращать на выходе - это валидная ситуация
+    Requirements:
+    - A signature with no return type is a valid situation
 
-    Шаблоны ошибок:
+    Error templates:
     - missing_link: "Return type '{return_part}' in '{signature}' is missing a semantic label — use format '-> label:Type'"
 
 "DocumentRule::LocationIsRequired(name: str = 'location_is_required')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode` и `RoutineTypeNode`.
+    Validates `EntityTypeNode` and `RoutineTypeNode`.
 
-    Правила:
-    - entity/routine содержит location — имя файла с расширением, без директорий
-    - location содержит расширение: есть '.' и хотя бы один символ после '.'
-    - location не содержит '/'
-    - embedded типы пропускаются
+    Rules:
+    - entity/routine contains location — filename with extension, without directories
+    - Location contains an extension: has '.' and at least one character after '.'
+    - Location does not contain '/'
+    - Embedded types are skipped
 
-    Шаблоны ошибок:
+    Error templates:
     - missing: "Type '{type_name}' in '{doc_path}' is missing required 'location' — specify the source file"
     - no_extension: "Type '{type_name}' in '{doc_path}' has location '{location_value}' without file extension — use format 'filename.ext'"
     - contains_path: "Type '{type_name}' in '{doc_path}' has location '{location_value}' containing directory path — use a plain filename without directories"
@@ -114,4 +114,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки структуры entity и routine в документе манифеста
+  Validation rules for entity and routine structure in CODEMANIFEST documents.

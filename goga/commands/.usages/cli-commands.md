@@ -1,16 +1,16 @@
-# CLI Commands — фасад goga/commands
+# CLI Commands — goga/commands facade
 
-Пакет `goga.commands` — фасад, реэкспортирующий 9 CLI-команд. Каждая команда — `click.Command`, регистрируемый в click-группе. Каждая подклетка — независимый Python-пакет (`goga/commands/<name>/`) с реализацией в `<name>.py` и реэкспортом через `__init__.py`.
+The `goga.commands` package is a facade that re-exports 9 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
 
-## Импорт
+## Import
 
-Все команды доступны из фасада одной строкой:
+All commands are available from the facade in a single line:
 
 ```python
 from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init
 ```
 
-Каждая команда доступна из своей подклетки (через `__init__.py` реэкспорт):
+Each command is available from its subcell (via `__init__.py` re-export):
 
 ```python
 from goga.commands.lint import lint
@@ -24,7 +24,7 @@ from goga.commands.tool import tool
 from goga.commands.init import init
 ```
 
-Или напрямую из модуля реализации подклетки:
+Or directly from the subcell implementation module:
 
 ```python
 from goga.commands.lint.lint import lint
@@ -38,7 +38,7 @@ from goga.commands.tool.tool import tool
 from goga.commands.init.init import init
 ```
 
-## Регистрация в click-группе
+## Registration in click group
 
 ```python
 import click
@@ -62,7 +62,7 @@ app.add_command(tool)
 app.add_command(init)
 ```
 
-## Тестирование через CliRunner
+## Testing with CliRunner
 
 ```python
 from click.testing import CliRunner
@@ -75,16 +75,16 @@ def test_example():
     assert result.exit_code in (0, 1)
 ```
 
-## Список команд
+## Command list
 
-| Команда    | Подклетка                 | Назначение                        |
-|------------|---------------------------|-----------------------------------|
-| `lint`     | `goga/commands/lint/`     | Валидация CODEMANIFEST файлов     |
-| `build`    | `goga/commands/build/`    | Сборка через ralphex              |
-| `connect`  | `goga/commands/connect/`  | Подключение скиллов goga          |
-| `schema`   | `goga/commands/schema/`   | JSON-схема проекта                |
-| `contract` | `goga/commands/contract/` | Сравнение контракта с реализацией |
-| `config`   | `goga/commands/config/`   | Вывод значений конфигурации       |
-| `sync`     | `goga/commands/sync/`     | Синхронизация .usages/            |
-| `tool`     | `goga/commands/tool/`     | Запуск инструментальных команд    |
-| `init`     | `goga/commands/init/`     | Инициализация проекта goga        |
+| Command     | Subcell                   | Purpose                              |
+|-------------|---------------------------|--------------------------------------|
+| `lint`      | `goga/commands/lint/`     | CODEMANIFEST file validation         |
+| `build`     | `goga/commands/build/`    | Build via ralphex                    |
+| `connect`   | `goga/commands/connect/`  | Connect goga skills                  |
+| `schema`    | `goga/commands/schema/`   | Project JSON schema                  |
+| `contract`  | `goga/commands/contract/` | Compare contract with implementation |
+| `config`    | `goga/commands/config/`   | Output configuration values          |
+| `sync`      | `goga/commands/sync/`     | Synchronize .usages/                 |
+| `tool`      | `goga/commands/tool/`     | Run tool commands                    |
+| `init`      | `goga/commands/init/`     | Initialize goga project              |

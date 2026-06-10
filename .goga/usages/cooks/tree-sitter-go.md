@@ -1,12 +1,12 @@
 # tree-sitter + tree-sitter-go
 
-## Назначение
-Python-биндинги для incremental parsing. tree-sitter-go — грамматика Go.
+## Purpose
+Python bindings for incremental parsing. tree-sitter-go is a Go grammar.
 
-## Установка
+## Installation
 pip install tree-sitter tree-sitter-go
 
-## Базовый паттерн парсинга Go-файла
+## Basic pattern for parsing a Go file
 
 ```python
 import tree_sitter_go as tsgo
@@ -20,42 +20,42 @@ tree = parser.parse(source_bytes)
 root = tree.root_node
 ```
 
-## Ключевые типы узлов Go AST
+## Key Go AST node types
 
-### Декларации
-- `function_declaration` — функция (fields: name, parameters, result)
-- `method_declaration` — метод с ресивером (fields: receiver, name, parameters, result)
-- `type_declaration` — контейнер объявления типа (children: type_spec)
+### Declarations
+- `function_declaration` — function (fields: name, parameters, result)
+- `method_declaration` — method with a receiver (fields: receiver, name, parameters, result)
+- `type_declaration` — type declaration container (children: type_spec)
 
-### Объявления типов
-- `type_spec` — спецификация типа внутри type_declaration (fields: name, type)
-- `struct_type` — структура (children: field_declaration_list)
-- `interface_type` — интерфейс (children: method_elem)
+### Type declarations
+- `type_spec` — type specification inside a type_declaration (fields: name, type)
+- `struct_type` — struct (children: field_declaration_list)
+- `interface_type` — interface (children: method_elem)
 
-### Поля и параметры
-- `field_declaration_list` — список полей структуры (children: field_declaration)
-- `field_declaration` — поле структуры (fields: name, type)
-- `parameter_list` — список параметров (children: parameter_declaration, variadic_parameter_declaration)
-- `parameter_declaration` — параметр (fields: name, type)
-- `variadic_parameter_declaration` — вариативный параметр (fields: name, type)
+### Fields and parameters
+- `field_declaration_list` — struct field list (children: field_declaration)
+- `field_declaration` — struct field (fields: name, type)
+- `parameter_list` — parameter list (children: parameter_declaration, variadic_parameter_declaration)
+- `parameter_declaration` — parameter (fields: name, type)
+- `variadic_parameter_declaration` — variadic parameter (fields: name, type)
 
-### Методы интерфейса
-- `method_elem` — метод интерфейса внутри interface_type (fields: name, parameters, result)
+### Interface methods
+- `method_elem` — interface method inside an interface_type (fields: name, parameters, result)
 
-### Имена
-- `identifier` — идентификатор (имя переменной, параметра)
-- `field_identifier` — имя поля/метода (в ресивере, структуре)
-- `type_identifier` — имя типа
+### Names
+- `identifier` — identifier (variable name, parameter)
+- `field_identifier` — field/method name (in a receiver, struct)
+- `type_identifier` — type name
 
-## Извлечение сигнатур
+## Signature extraction
 
-Обход AST — `node.children` + проверка `node.type`.
-Текст узла — `node.text.decode('utf-8')`.
-Дочерние по имени поля — `node.child_by_field_name(field)`.
+AST traversal — `node.children` + check `node.type`.
+Node text — `node.text.decode('utf-8')`.
+Children by field name — `node.child_by_field_name(field)`.
 
-### Доступные поля узлов (field names)
-- `name` — имя декларации (функции, метода, типа, поля)
-- `type` — тип (параметра, поля, ресивера)
-- `parameters` — список параметров функции/метода
-- `result` — возвращаемое значение функции/метода
-- `receiver` — ресивер метода (для method_declaration)
+### Available node fields (field names)
+- `name` — declaration name (function, method, type, field)
+- `type` — type (of parameter, field, receiver)
+- `parameters` — function/method parameter list
+- `result` — function/method return value
+- `receiver` — method receiver (for method_declaration)

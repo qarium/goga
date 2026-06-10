@@ -1,14 +1,14 @@
-# Правила валидации структур entity и routine
+# Entity and routine structure validation rules
 
-Область: правила, проверяющие корректность объявления типов (Entity, Routine) в теле CODEMANIFEST.
-Аудитория: потребители системы правил, нуждающиеся в валидации структур документа.
+Scope: Rules validating type declarations (Entity, Routine) in the CODEMANIFEST body section.
+Audience: Consumers of the rule system performing structure validation.
 
-## Доступные правила
+## Available rules
 
 ### EntitiesAndRoutinesHasNotConflicts
 
-Имена entities и routines не должны конфликтовать с именами импортированных типов.
-Конфликт разрешается через алиас в Imports. Встраиваемые типы (embedded=True) — исключение.
+Entity and routine names must not collide with imported type names.
+Collisions are resolved via import aliases. Embedded types (embedded=True) are exempt.
 
 ```python
 from goga.ast.rules.document.structures import EntitiesAndRoutinesHasNotConflicts
@@ -17,7 +17,7 @@ rule = EntitiesAndRoutinesHasNotConflicts()
 
 ### EntityHasOnlyValidKeys
 
-Entity содержит только допустимые ключи: `location`, `annotations`, `methods`, `properties`.
+Entity definitions must contain only: `location`, `annotations`, `methods`, `properties`.
 
 ```python
 from goga.ast.rules.document.structures import EntityHasOnlyValidKeys
@@ -26,7 +26,7 @@ rule = EntityHasOnlyValidKeys()
 
 ### RoutineHasOnlyValidKeys
 
-Routine содержит только допустимые ключи: `location`, `annotations`.
+Routine definitions must contain only: `location`, `annotations`.
 
 ```python
 from goga.ast.rules.document.structures import RoutineHasOnlyValidKeys
@@ -35,7 +35,7 @@ rule = RoutineHasOnlyValidKeys()
 
 ### SignatureIsValid
 
-Сигнатура соответствует формату `(...) -> ...` или `(...)`.
+Signature must match the format `(...) -> ...` or `(...)`.
 
 ```python
 from goga.ast.rules.document.structures import SignatureIsValid
@@ -44,26 +44,26 @@ rule = SignatureIsValid()
 
 ### ReturnTypeHasLink
 
-Возвращаемый тип в сигнатуре имеет семантическую метку: `-> label:Type`, а не просто `-> Type`.
-Если сигнатура ничего не возвращает — это валидная ситуация.
+Return type must include a semantic label: `-> label:Type` (not bare `-> Type`).
+Signatures without a return type are valid.
 
 ```python
 from goga.ast.rules.document.structures import ReturnTypeHasLink
 rule = ReturnTypeHasLink()
 ```
 
-Валидно: `"method() -> result:int"`, `"method()"` (нет возврата)
-Невалидно: `"method() -> int"` (нет семантической метки)
+Valid: `"method() -> result:int"`, `"method()"` (no return)
+Invalid: `"method() -> int"` (missing semantic label)
 
 ### LocationIsRequired
 
-Entity и routine содержат `location` — имя файла с расширением, без директорий.
-Embedded типы пропускаются.
+Entity and routine must specify `location` as a filename with extension, without directory components.
+Embedded types are skipped.
 
 ```python
 from goga.ast.rules.document.structures import LocationIsRequired
 rule = LocationIsRequired()
 ```
 
-Валидно: `location: impl.py`
-Невалидно: отсутствие location, `location: src/impl.py`, `location: noext`
+Valid: `location: impl.py`
+Invalid: missing location, `location: src/impl.py`, `location: noext`

@@ -1,34 +1,34 @@
-# Работа с ошибками CODEMANIFEST
+# CODEMANIFEST error handling
 
-Область: обработка ошибок при парсинге и валидации манифестов.
-Аудитория: потребители, которым нужно перехватывать, логировать или отображать ошибки AST.
+Scope: Error types raised during parsing and validation of CODEMANIFEST documents.
+Audience: Consumers who need to catch, log, or display AST errors.
 
-## Иерархия ошибок
+## Error hierarchy
 
 ```
 BaseASTError (Exception)
-├── DocumentNotFoundError     — документ не найден по пути
-├── DocumentParseError        — ошибка при разборе YAML
-└── DocumentRuleError         — нарушение правила документа
-    └── (наследуется от BaseASTError)
-ASTRuleError                  — нарушение правила уровня дерева
-    └── (наследуется от BaseASTError)
+├── DocumentNotFoundError     — no document found at the given path
+├── DocumentParseError        — invalid YAML structure in CODEMANIFEST
+└── DocumentRuleError         — a document-level rule was violated
+    └── (inherits from BaseASTError)
+ASTRuleError                  — a tree-level rule was violated
+    └── (inherits from BaseASTError)
 ```
 
-Все ошибки имеют свойство `message` с текстом ошибки.
+All error types expose a `message` property containing the error description.
 
-## DocumentRuleError — ошибка правила документа
+## DocumentRuleError — document rule violation
 
 ```python
-error = errors[0]  # из Visitor.analyze()
-print(error.message)   # текст ошибки
-print(error.rule)      # имя нарушенного правила
-print(error.document)  # DocumentRoot документа
-print(error.node)      # проблемная нода (DocumentNode)
-print(str(error))      # форматированный вывод
+error = errors[0]  # obtained from Visitor.analyze()
+error.message   # str — error description
+error.rule      # str — name of the violated rule
+error.document  # DocumentRoot — source document
+error.node      # DocumentNode — offending node
+str(error)      # str — formatted multi-line output
 ```
 
-Строковое представление:
+String representation format:
 ```
 Error: <message>
 Rule: <rule>
@@ -37,32 +37,32 @@ Node:
   <beautiful node data>
 ```
 
-## ASTRuleError — ошибка правила дерева
+## ASTRuleError — tree rule violation
 
 ```python
-error = ast_errors[0]  # из Analyzer.analyze()
-print(error.message)   # текст ошибки
-print(error.rule)      # имя нарушенного правила
-print(error.document)  # DocumentRoot | None
-print(error.node)      # DocumentNode | None
-print(str(error))      # форматированный вывод
+error = ast_errors[0]  # obtained from Analyzer.analyze()
+error.message   # str — error description
+error.rule      # str — name of the violated rule
+error.document  # DocumentRoot | None — source document (may be None)
+error.node      # DocumentNode | None — offending node (may be None)
+str(error)      # str — formatted multi-line output
 ```
 
-`document` и `node` могут быть `None`, так как правило может не привязываться к конкретному документу.
+Properties `document` and `node` may be `None` because tree-level rules are not always bound to a specific document.
 
-## DocumentParseError — ошибка парсинга
+## DocumentParseError — YAML parsing error
 
 ```python
 try:
     factory.create()
 except DocumentParseError as e:
-    print(e.message)    # описание ошибки
-    print(e.filepath)   # путь к файлу CODEMANIFEST
+    e.message    # str — error description
+    e.filepath   # str — path to the CODEMANIFEST file
 ```
 
-Выбрасывается Factory при обнаружении неизвестных ключей в заголовке или подвале.
+`Factory` raises `DocumentParseError` when it encounters unknown keys in the header or footer sections.
 
-## DocumentNotFoundError — документ не найден
+## DocumentNotFoundError — document lookup failure
 
 ```python
 from goga.ast.errors import DocumentNotFoundError
@@ -70,5 +70,5 @@ from goga.ast.errors import DocumentNotFoundError
 try:
     doc = ast.document("nonexistent/path")
 except DocumentNotFoundError as e:
-    print(e.message)  # "Document not found for path: nonexistent/path"
+    e.message  # "Document not found for path: nonexistent/path"
 ```

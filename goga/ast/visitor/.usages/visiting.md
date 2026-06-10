@@ -1,9 +1,9 @@
-# Анализ отдельного документа
+# Analyzing a single document
 
-Область: применение правил уровня документа к одному DocumentRoot.
-Аудитория: потребители, которым нужно валидировать отдельный документ манифеста.
+Scope: Applying document-level validation rules to a single `DocumentRoot`.
+Audience: Consumers who need to validate an individual manifest document.
 
-## Минимальный пример
+## Minimal example
 
 ```python
 from goga.ast.visitor import Visitor
@@ -16,22 +16,22 @@ errors = visitor.analyze([
 ])
 ```
 
-Visitor принимает:
-- `document` — `DocumentRoot` для анализа
-- `rules` — список правил типа `DocumentRule`
+Constructor parameters:
+- `document` — `DocumentRoot`: the document to validate
+- `rules` — `list[DocumentRule]`: the rules to apply
 
-Visitor оборачивает DocumentRoot в `DocumentNode` и вызывает `rule.check(node)` для каждого правила.
-Результат — плоский список `DocumentRuleError`.
+`Visitor` wraps the `DocumentRoot` in a `DocumentNode` and calls `rule.check(node)` for each rule.
+Returns a flat list of `DocumentRuleError` instances.
 
-## Доступ к документу
+## Accessing the document
 
 ```python
 visitor = Visitor(document)
 
-visitor.document  # DocumentRoot — документ, переданный при создании
+visitor.document  # DocumentRoot — the document passed at construction
 ```
 
-## Использование с Factory
+## Integration with Factory
 
 ```python
 from goga.ast.factory import Factory

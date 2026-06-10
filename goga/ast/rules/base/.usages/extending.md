@@ -1,9 +1,11 @@
-# Создание собственных правил
+# Creating custom validation rules
 
-Область: расширение системы правил через наследование базовых типов.
-Аудитория: разработчики, которым нужно добавить новое правило валидации.
+Scope: Extending the validation system by subclassing base rule types.
+Audience: Developers who need to add new validation rules.
 
-## DocumentRule — правило для одного документа
+## DocumentRule — per-document rule base class
+
+Subclass `DocumentRule` to validate a single document in isolation.
 
 ```python
 from goga.ast.rules.base import DocumentRule
@@ -15,11 +17,11 @@ class MyCustomRule(DocumentRule):
 
     def check(self, node):
         errors = []
-        # node — DocumentNode, обёртка над DocumentRoot
-        # node.root — DocumentRoot документа
+        # `node` is a DocumentNode wrapping the DocumentRoot
+        # `node.root` is the underlying DocumentRoot
         document = node.root
 
-        # Логика проверки...
+        # Validation logic...
         if some_violation:
             errors.append(DocumentRuleError(
                 message="Description of error",
@@ -31,10 +33,12 @@ class MyCustomRule(DocumentRule):
         return errors
 ```
 
-`check()` принимает `DocumentNode` (обёртка) и возвращает `list[DocumentRuleError]`.
-Доступ к документу — через `node.root`.
+Method `check(node)` receives a `DocumentNode` wrapper and must return `list[DocumentRuleError]`.
+Access the underlying `DocumentRoot` via `node.root`.
 
-## ASTRule — правило для всего дерева
+## ASTRule — tree-wide rule base class
+
+Subclass `ASTRule` to validate documents in the context of the entire tree.
 
 ```python
 from goga.ast.rules.base import ASTRule
@@ -46,10 +50,10 @@ class MyGlobalRule(ASTRule):
 
     def check(self, document):
         errors = []
-        # document — DocumentRoot, проверяемый в контексте всего дерева
-        # self.tree — list[DocumentRoot], всё дерево документов
+        # `document` is the DocumentRoot being checked
+        # `self.tree` is list[DocumentRoot] — the full document tree
 
-        # Логика проверки...
+        # Validation logic...
         if some_violation:
             errors.append(ASTRuleError(
                 message="Description of error",
@@ -61,10 +65,10 @@ class MyGlobalRule(ASTRule):
         return errors
 ```
 
-`check()` вызывается для каждого документа в дереве.
-Правило имеет доступ ко всему дереву через `self.tree`.
+Method `check(document)` is called once per document in the tree.
+Access the full tree via `self.tree`.
 
-## Когда выбирать базовый тип
+## Choosing a base class
 
-- **DocumentRule** — если правило проверяет один документ изолированно (структура, ключи, локальные ссылки)
-- **ASTRule** — если правило требует знания о других документах дерева (циклы, кросс-ссылки, иерархия)
+- **DocumentRule**: use when the rule validates a single document without needing data from other documents (e.g., structure checks, key validation, local reference resolution).
+- **ASTRule**: use when the rule requires visibility into other documents in the tree (e.g., cycle detection, cross-document references, hierarchy enforcement).

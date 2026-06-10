@@ -1,9 +1,9 @@
-# Парсинг CODEMANIFEST в дерево нод
+# Parsing CODEMANIFEST into a node tree
 
-Область: создание дерева документа из YAML файла CODEMANIFEST.
-Аудитория: потребители, которым нужно программно создать DocumentRoot из файла манифеста.
+Scope: Constructing a `DocumentRoot` tree from a CODEMANIFEST YAML file.
+Audience: Consumers who need to programmatically create a `DocumentRoot` from a manifest file.
 
-## Минимальный пример
+## Minimal example
 
 ```python
 from goga.ast.factory import Factory
@@ -12,10 +12,10 @@ factory = Factory("path/to/cell")
 document = factory.create()
 ```
 
-`path` — путь до папки с файлом CODEMANIFEST относительно CWD.
-Метод `create()` возвращает `DocumentRoot` с заполненными `header`, `body`, `footer`.
+`path` — path to the directory containing the CODEMANIFEST file, relative to CWD.
+`create()` returns a fully populated `DocumentRoot` with `header`, `body`, and `footer`.
 
-## Создание вложенного документа с родителем
+## Creating a nested document with a parent reference
 
 ```python
 from goga.ast.factory import Factory
@@ -27,19 +27,19 @@ child_factory = Factory("path/to/parent/child")
 child_doc = child_factory.create(parent=parent_doc)
 ```
 
-При передаче `parent` устанавливается связь между дочерним и родительским документами.
+Passing `parent` establishes the parent-child relationship between documents.
 
-## Структура результата
+## Result structure
 
-После `create()` документ содержит:
-- `document.header` — `HeaderNode` с `imports`, `usages`, `annotations`
-- `document.body` — `BodyNode` с `entities` и `routines`
-- `document.footer` — `FooterNode` с `author`, `created_at`, `description`
-- `document.embeddings` — список `(type_name, from_path)` для встроенных типов
-- `document.types` — словарь `{name: [nodes]}` всех типов в документе
-- `document.links` — словарь `{link_name: [AnnotationsNode]}` всех ссылок в аннотациях
+After `create()`, the document exposes:
+- `document.header` — `HeaderNode` with `imports`, `usages`, `annotations`
+- `document.body` — `BodyNode` with `entities` and `routines`
+- `document.footer` — `FooterNode` with `author`, `created_at`, `description`
+- `document.embeddings` — list of `(type_name, from_path)` tuples for embedded types
+- `document.types` — dictionary `{name: [nodes]}` of all document types
+- `document.links` — dictionary `{link_name: [AnnotationsNode]}` of all annotation links
 
-## Обработка ошибок парсинга
+## Parsing error handling
 
 ```python
 from goga.ast.errors import DocumentParseError
@@ -47,9 +47,9 @@ from goga.ast.errors import DocumentParseError
 try:
     document = factory.create()
 except DocumentParseError as e:
-    print(f"Ошибка в {e.filepath}: {e.message}")
+    print(f"Error in {e.filepath}: {e.message}")
 ```
 
-Factory выбрасывает `DocumentParseError` при:
-- неизвестных ключах в заголовке (допустимы только Imports, Usages, Annotations)
-- неизвестных ключах в подвале (допустимы только Author, CreatedAt, Description)
+`Factory` raises `DocumentParseError` on:
+- Unknown keys in header (allowed: Imports, Usages, Annotations)
+- Unknown keys in footer (allowed: Author, CreatedAt, Description)

@@ -11,42 +11,42 @@ Usages:
   tree-sitter-python: .goga/usages/cooks/tree-sitter-python.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для парсинга Python-файлов использовать практику `tree-sitter-python`.
+  During development and testing, use practice `conventions`.
+  For parsing Python files, use practice `tree-sitter-python`.
 
 ---
 
 "python_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: python.py
   annotations: |
-    Собрать все публичные определения из .py файлов клетки через AST-парсинг.
-    Использовать практику `contract_data` для формирования результатов.
+    Collect all public definitions from .py files of the cell via AST parsing.
+    Use practice `contract_data` to form results.
 
-    `cell_path`: путь до клетки в формате path/to/cell
+    `cell_path`: path to the cell in the format path/to/cell
 
-    Алгоритм:
-    - найти все .py файлы в каталоге cell_path
-    - для каждого файла — распарсить AST через практику `tree-sitter-python`
-    - собрать все class_definition и function_definition
-    - отфильтровать публичные определения (имя без _-префикса)
-    - для EntityContract:
-      - __init__ параметры → signature (self исключается)
-      - @property decorated methods → properties (тип из return annotation)
-      - type-annotated fields (PEP 526) → properties (тип из annotation)
-      - public methods → methods (self исключается, типы из annotations)
-    - для RoutineContract: параметры и return annotation → signature
-    - сортировать результат через sort_contracts из treesitter_utils
+    Algorithm:
+    - find all .py files in the cell_path directory
+    - for each file — parse AST via practice `tree-sitter-python`
+    - collect all class_definition and function_definition
+    - filter public definitions (name without _-prefix)
+    - for EntityContract:
+      - __init__ parameters → signature (self is excluded)
+      - @property decorated methods → properties (type from return annotation)
+      - type-annotated fields (PEP 526) → properties (type from annotation)
+      - public methods → methods (self is excluded, types from annotations)
+    - for RoutineContract: parameters and return annotation → signature
+    - sort result via sort_contracts from treesitter_utils
 
-    Требования:
-    - публичные определения (не _-префикс) входят в контракт
-    - аннотации типов входят в контракт (строковое представление)
-    - порядок аргументов в сигнатуре важен
-    - дефолтные значения аргументов важны
-    - тип аргументов (позиционные, именованные, *args, **kwargs) важен
-    - self исключается из сигнатуры
-    - для свойств сигнатура — возвращаемый тип данных, если нет — пустая строка
-    - при отсутствии аннотации типа параметра/возврата — пустая строка
-    - только методы/свойства, объявленные непосредственно в классе (без унаследованных)
+    Requirements:
+    - public definitions (no _-prefix) are included in the contract
+    - type annotations are included in the contract (string representation)
+    - argument order in signature is important
+    - default argument values are important
+    - argument type (positional, named, *args, **kwargs) is important
+    - self is excluded from the signature
+    - for properties, signature is the return data type, if absent — empty string
+    - when parameter/return type annotation is missing — empty string
+    - only methods/properties declared directly in the class (no inherited ones)
 
 ---
 
@@ -54,4 +54,4 @@ Author: Goga
 CreatedAt: 19/05/26
 
 Description: |
-  Извлечение контракта с фасада Python-пакета через tree-sitter
+  Extract contract from the facade of a Python package via tree-sitter

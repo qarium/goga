@@ -19,8 +19,8 @@ Usages:
   click: .goga/usages/cooks/click.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Приложение должно быть подключено в __main__.py файл для вызова через python -m.
+  Use the `conventions` practice during development and testing.
+  Wire the application in __main__.py to enable invocation via `python -m`.
 
 ---
 
@@ -29,9 +29,9 @@ Annotations: |
 app():
   location: cli.py
   annotations: |
-    Для создания корневой группы команд использовать практику `click`.
+    Use the `click` practice to create the root command group.
 
-    Команды:
+    Commands:
     - `lint`
     - `build`
     - `connect`
@@ -48,4 +48,4 @@ Author: Mikhail Trifonov
 CreatedAt: 13/04/26
 
 Description: |
-  Манифест описывает сборку основного интерфейса приложения goga
+  This manifest describes the assembly of the goga main application interface.

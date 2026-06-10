@@ -1,48 +1,42 @@
-# Tool command — запуск внешних tool-пакетов
+# CLI Command: tool
 
-Команда `goga tool` динамически загружает и вызывает внешние tool-пакеты.
+## Purpose
 
-## Импорт
+CLI wrapper for running external tool commands. Parses click arguments and dynamically imports the tool package.
 
-```python
-from goga.commands.tool import tool
+## Syntax
+
 ```
-
-## Использование в CLI
-
-```bash
 goga tool <name> [args...]
 ```
 
-- `<name>` — имя tool-пакета (без префикса `goga_tool_`)
-- `[args...]` — произвольные аргументы, передаваемые в `main(argv)` tool-пакета
+## Arguments
 
-## Регистрация в click-группе
+| Argument | Type | Required | Description |
+|----------|------|----------|-------------|
+| `name` | str | Yes | Tool package name (without `goga_tool_` prefix) |
 
-```python
-from goga.commands import tool
+## Tool package arguments
 
-app.add_command(tool)
+All remaining arguments are passed as-is to the tool package's `main(argv)` function.
+
+## Exit code
+
+- 0 — success
+- 1 — error (package not found, main function missing)
+
+## Examples
+
+```bash
+goga tool mytool arg1 --flag value
 ```
 
-## Требования к tool-пакету
+## Tool package requirements
 
-Пакет `goga_tool_<name>` должен предоставлять функцию:
+The `goga_tool_<name>` package must provide a function:
 
 ```python
 def main(argv: list[str]) -> None:
-    """Entry point для tool-пакета."""
+    """Entry point for the tool package."""
     ...
-```
-
-## Тестирование
-
-```python
-from click.testing import CliRunner
-from goga.commands.tool import tool
-
-def test_tool_example():
-    runner = CliRunner()
-    result = runner.invoke(tool, ["mytool", "arg1", "--flag", "value"])
-    # Проверка зависит от установленного tool-пакета
 ```

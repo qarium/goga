@@ -1,63 +1,63 @@
-# Правила валидации практик (Usages)
+# Usage (Usages) validation rules
 
-Область: правила, проверяющие корректность секции Usages в CODEMANIFEST.
-Аудитория: потребители системы правил, нуждающиеся в валидации практик.
+Scope: Rules validating the `Usages` section in CODEMANIFEST documents.
+Audience: Consumers of the rule system performing usage validation.
 
-## Доступные правила
+## Available rules
 
 ### AllUsagesIsUsed
 
-Каждая декларированная практика используется хотя бы в одной аннотации документа.
+Every declared usage must be referenced in at least one annotation node.
 
 ```python
 from goga.ast.rules.document.usages import AllUsagesIsUsed
 rule = AllUsagesIsUsed()
 ```
 
-Поиск ведётся в аннотациях: HeaderNode, UsageItemNode, EntityTypeNode, RoutineTypeNode, MethodNode, PropertyNode.
+Search scope: annotations on `HeaderNode`, `UsageItemNode`, `EntityTypeNode`, `RoutineTypeNode`, `MethodNode`, `PropertyNode`.
 
 ### UsageFilepathExists
 
-Путь к файлу практики:
-- строится относительно корня проекта (CWD)
-- содержит префикс `.goga/usages/`
-- файл существует на файловой системе
+Usage filepath validation:
+- Path is resolved relative to project root (CWD)
+- Path must include the `.goga/usages/` prefix
+- File must exist on disk
 
 ```python
 from goga.ast.rules.document.usages import UsageFilepathExists
 rule = UsageFilepathExists()
 ```
 
-Inline-практики (annotations.text) и URL-практики (annotations.url) пропускаются.
+Inline usages (`annotations.text`) and URL usages (`annotations.url`) are skipped.
 
 ### UsageUrlIsAccessible
 
-URL-практика отвечает HTTP 200.
+Usage URL must respond with HTTP 200.
 
 ```python
 from goga.ast.rules.document.usages import UsageUrlIsAccessible
 rule = UsageUrlIsAccessible()
 ```
 
-- используется HEAD-запрос с fallback на GET
-- таймаут — 10 секунд
-- при сетевой ошибке — ошибка валидации
-- Inline и filepath практики пропускаются
-- результат проверки URL кэшируется в экземпляре правила: повторная проверка того же URL не выполняет сетевой запрос
-- для максимальной эффективности переиспользуйте экземпляр правила между документами (как это делает линтер)
+- Uses HEAD request with GET fallback
+- Timeout: 10 seconds
+- Network errors produce validation errors
+- Inline and filepath usages are skipped
+- URL validation results are cached per rule instance — duplicate URLs do not trigger additional network requests
+- Reuse the rule instance across documents for optimal performance (matching linter behavior)
 
 ### UsageLinksHasNotConflicts
 
-Имена практик не конфликтуют с:
-- именами импортированных типов (конфликт решается через alias)
-- именами entity и routine в теле документа
+Usage names must not conflict with:
+- Imported type names (resolvable via alias)
+- Entity and routine names in the document body
 
 ```python
 from goga.ast.rules.document.usages import UsageLinksHasNotConflicts
 rule = UsageLinksHasNotConflicts()
 ```
 
-## Пример правильного использования практик
+## Correct usage example
 
 ```yaml
 Usages:
@@ -70,4 +70,4 @@ Annotations: |
   Use `pattern` for implementation.
 ```
 
-Обе практики (`conventions`, `pattern`) использованы в аннотациях — правило `AllUsagesIsUsed` соблюдено.
+Both usages (`conventions`, `pattern`) are referenced in annotations — rule `AllUsagesIsUsed` passes.

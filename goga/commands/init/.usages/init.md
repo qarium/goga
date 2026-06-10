@@ -1,42 +1,42 @@
 # CLI Command: init
 
-## Назначение
+## Purpose
 
-CLI-обёртка команды интерактивной инициализации проекта goga. Запускает опрос пользователя и создаёт файлы конфигурации.
+CLI wrapper for the interactive goga project initialization command. Runs a user questionnaire and creates configuration files.
 
-## Синтаксис
+## Syntax
 
 ```
 goga init
 ```
 
-## Интерактивный опрос
+## Interactive questionnaire
 
-Команда последовательно спрашивает:
+The command sequentially asks:
 
-1. **Language** — язык проекта (python, golang, kotlin, swift, javascript)
-2. **Base convention** — скачать ли базовую конвенцию для выбранного языка
-3. **Codemanifest usages** — опционально, дополнительные практики
-4. **Codemanifest annotations** — опционально
+1. **Language** — project language (python, golang, kotlin, swift, javascript)
+2. **Base convention** — whether to download the base convention for the selected language
+3. **Codemanifest usages** — optional, additional practices
+4. **Codemanifest annotations** — optional
 5. **Agent** — AI-executor (claude)
-6. **Docker image** — выбор из списка образов для выбранного языка
-7. **Dockerfile** — опционально, создание кастомного Dockerfile с `FROM {image}`
-8. **Environment variables** — предлагаются env-ключи по агенту, затем опционально произвольные
+6. **Docker image** — select from a list of images for the selected language
+7. **Dockerfile** — optional, create a custom Dockerfile with `FROM {image}`
+8. **Environment variables** — env keys are suggested based on the agent, then optional arbitrary ones
 
-## Создаваемые файлы
+## Created files
 
-- `.goga/config.yml` — конфигурация проекта
-- `.goga/usages/conventions.md` — базовая конвенция по языку (если пользователь согласился)
-- `Dockerfile` (или по указанному пути) — кастомный Dockerfile (если пользователь запросил)
+- `.goga/config.yml` — project configuration
+- `.goga/usages/conventions.md` — base convention for the language (if the user agreed)
+- `Dockerfile` (or at the specified path) — custom Dockerfile (if the user requested one)
 
-## Код возврата
+## Exit code
 
-- 0 — успех
-- 1 — ошибка (отмена пользователем, ошибка при генерации)
+- 0 — success
+- 1 — error (user cancellation, generation error)
 
-## Примеры
+## Examples
 
 ```bash
-# Интерактивная инициализация
+# Interactive initialization
 goga init
 ```

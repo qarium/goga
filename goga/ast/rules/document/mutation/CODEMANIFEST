@@ -11,48 +11,48 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестированием использовать практику `conventions`.
-  Все типы являются мутациями `DocumentRule`.
+  When developing and testing: follow the practice `conventions`.
+  All types are mutations of `DocumentRule`.
 
 ---
 
 # ********************* #
-# Мутации и встраивания #
+# Mutations and embeddings #
 # ********************* #
 
 "DocumentRule::MutationExists(name: str = 'mutation_exists')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode`.
+    Validates `EntityTypeNode`.
 
-    Одно из правил должно совпасть:
-    - все mutation_name (первый элемент кортежа) существуют среди имен entities
-    - все mutation_name (первый элемент кортежа) существуют среди имен routines
-    - все mutation_name (первый элемент кортежа) существуют среди типов в items `ImportsNode`
+    At least one of the following must hold:
+    - All mutation_name (first element of tuple) exist among entity names
+    - All mutation_name (first element of tuple) exist among routine names
+    - All mutation_name (first element of tuple) exist among types in `ImportsNode` items
 
-    Шаблоны ошибок:
+    Error templates:
     - not_found: "Base type '{mutation_name}' for mutation of '{entity_name}' not found in imports, entities, or routines of this package"
 
 "DocumentRule::MutationIsValid(name: str = 'mutation_is_valid')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode`.
+    Validates `EntityTypeNode`.
 
-    Правила:
-    - mutation_name (первый элемент кортежа) не совпадает с именем entity
+    Rules:
+    - mutation_name (first element of tuple) must not match the entity name
 
-    Шаблоны ошибок:
+    Error templates:
     - self_mutation: "Mutation '{mutation_name}' on '{entity_name}' references itself — a type cannot mutate from its own signature"
 
 "DocumentRule::EmbeddedEntityCanNotHasMutations(name: str = 'embedded_entity_can_not_has_mutations')":
   location: rules.py
   annotations: |
-    Проверяет `EntityTypeNode`.
+    Validates `EntityTypeNode`.
 
-    Правила:
-    - embedded сущность не может иметь мутации
+    Rules:
+    - Embedded entities must not define mutations
 
-    Шаблоны ошибок:
+    Error templates:
     - has_mutations: "Embedded entity '{entity_name}' (->Entity) cannot define mutations — embedded types are included as-is from their source package"
 
 ---
@@ -61,4 +61,4 @@ Author: Mikhail Trifonov
 CreatedAt: 14/05/26
 
 Description: |
-  Правила проверки мутаций и встраиваний в документе манифеста
+  Validation rules for mutations and embeddings in CODEMANIFEST documents.

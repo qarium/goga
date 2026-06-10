@@ -1,12 +1,12 @@
 # tree-sitter + tree-sitter-kotlin
 
-## Назначение
-Python-биндинги для incremental parsing. tree-sitter-kotlin — грамматика Kotlin.
+## Purpose
+Python bindings for incremental parsing. tree-sitter-kotlin is a Kotlin grammar.
 
-## Установка
+## Installation
 pip install tree-sitter tree-sitter-kotlin
 
-## Базовый паттерн парсинга Kotlin-файла
+## Basic pattern for parsing a Kotlin file
 
 ```python
 import tree_sitter_kotlin as tskotlin
@@ -20,48 +20,48 @@ tree = parser.parse(source_bytes)
 root = tree.root_node
 ```
 
-## Ключевые типы узлов Kotlin AST
+## Key Kotlin AST node types
 
-### Декларации
-- `function_declaration` — функция (field: receiver; children: modifiers, type_parameters, simple_identifier(имя), function_value_parameters, _type(возврат), function_body)
-- `property_declaration` — свойство (field: receiver; children: modifiers, binding_pattern_kind(val/var), variable_declaration, property_delegate, getter, setter)
-- `class_declaration` — класс/интерфейс/enum/annotation/data/sealed (children: modifiers, type_identifier(имя), type_parameters, primary_constructor, class_body/enum_class_body)
-- `object_declaration` — объект (children: modifiers, type_identifier(имя), class_body)
-- `companion_object` — companion object (children: modifiers, type_identifier(имя), class_body)
-- `type_alias` — псевдоним типа (children: type_identifier(имя), type_parameters, _type)
-- `secondary_constructor` — вторичный конструктор (children: modifiers, function_value_parameters, constructor_delegation_call, _block)
-- `anonymous_initializer` — блок init (children: _block)
+### Declarations
+- `function_declaration` — function (field: receiver; children: modifiers, type_parameters, simple_identifier(name), function_value_parameters, _type(return), function_body)
+- `property_declaration` — property (field: receiver; children: modifiers, binding_pattern_kind(val/var), variable_declaration, property_delegate, getter, setter)
+- `class_declaration` — class/interface/enum/annotation/data/sealed (children: modifiers, type_identifier(name), type_parameters, primary_constructor, class_body/enum_class_body)
+- `object_declaration` — object (children: modifiers, type_identifier(name), class_body)
+- `companion_object` — companion object (children: modifiers, type_identifier(name), class_body)
+- `type_alias` — type alias (children: type_identifier(name), type_parameters, _type)
+- `secondary_constructor` — secondary constructor (children: modifiers, function_value_parameters, constructor_delegation_call, _block)
+- `anonymous_initializer` — init block (children: _block)
 
-### Конструктор и параметры
-- `primary_constructor` — первичный конструктор (children: class_parameter...)
-- `class_parameter` — параметр конструктора класса (children: modifiers, binding_pattern_kind(val/var), simple_identifier(имя), _type, default)
-- `function_value_parameters` — список параметров функции (children: parameter_modifiers, parameter, default)
-- `parameter` — параметр (children: simple_identifier(имя), _type)
+### Constructor and parameters
+- `primary_constructor` — primary constructor (children: class_parameter...)
+- `class_parameter` — class constructor parameter (children: modifiers, binding_pattern_kind(val/var), simple_identifier(name), _type, default)
+- `function_value_parameters` — function parameter list (children: parameter_modifiers, parameter, default)
+- `parameter` — parameter (children: simple_identifier(name), _type)
 
-### Тела
-- `function_body` — тело функции (блок или expression body через `=`)
-- `class_body` — тело класса (children: декларации)
-- `enum_class_body` — тело enum (children: enum_entry, декларации)
-- `control_structure_body` — тело управляющей конструкции (блок или одно выражение)
-- `statements` — список инструкций внутри блока
+### Bodies
+- `function_body` — function body (block or expression body via `=`)
+- `class_body` — class body (children: declarations)
+- `enum_class_body` — enum body (children: enum_entry, declarations)
+- `control_structure_body` — control structure body (block or single expression)
+- `statements` — list of statements inside a block
 
-### Типы
-- `user_type` — пользовательский тип (children: type_identifier, type_arguments)
-- `nullable_type` — nullable тип `Type?` (children: user_type/parenthesized_type, quest)
-- `function_type` — функциональный тип `(Params) -> Ret` (field: receiver; children: function_type_parameters, _type)
-- `parenthesized_type` — тип в скобках `(Type)`
-- `receiver_type` — тип ресивера для extension (children: type_modifiers, user_type/nullable_type)
+### Types
+- `user_type` — user-defined type (children: type_identifier, type_arguments)
+- `nullable_type` — nullable type `Type?` (children: user_type/parenthesized_type, quest)
+- `function_type` — function type `(Params) -> Ret` (field: receiver; children: function_type_parameters, _type)
+- `parenthesized_type` — type in parentheses `(Type)`
+- `receiver_type` — receiver type for extensions (children: type_modifiers, user_type/nullable_type)
 - `type_parameters` — `<T, U>` (children: type_parameter)
 - `type_arguments` — `<Arg>` (children: type_projection)
-- `type_modifiers` — модификаторы типа (children: annotation, suspend)
+- `type_modifiers` — type modifiers (children: annotation, suspend)
 
-### Имена и идентификаторы
-- `simple_identifier` — идентификатор (имя переменной, параметра, функции)
-- `type_identifier` — имя типа (alias от simple_identifier)
-- `binding_pattern_kind` — `val` или `var`
+### Names and identifiers
+- `simple_identifier` — identifier (variable, parameter, or function name)
+- `type_identifier` — type name (alias of simple_identifier)
+- `binding_pattern_kind` — `val` or `var`
 
-### Модификаторы
-- `modifiers` — контейнер модификаторов (children: annotation, class_modifier, visibility_modifier, ...)
+### Modifiers
+- `modifiers` — modifier container (children: annotation, class_modifier, visibility_modifier, ...)
 - `visibility_modifier` — `public`, `private`, `internal`, `protected`
 - `class_modifier` — `sealed`, `annotation`, `data`, `inner`, `value`
 - `member_modifier` — `override`, `lateinit`
@@ -73,67 +73,67 @@ root = tree.root_node
 - `variance_modifier` — `in`, `out`
 - `reification_modifier` — `reified`
 
-### Аннотации
-- `annotation` — аннотация (children: use_site_target, user_type/constructor_invocation)
-- `use_site_target` — target аннотации: `field`, `property`, `get`, `set`, `receiver`, `param`, `setparam`, `delegate`
+### Annotations
+- `annotation` — annotation (children: use_site_target, user_type/constructor_invocation)
+- `use_site_target` — annotation target: `field`, `property`, `get`, `set`, `receiver`, `param`, `setparam`, `delegate`
 
 ### Enum
-- `enum_entry` — элемент enum (children: modifiers, simple_identifier(имя), value_arguments, class_body)
+- `enum_entry` — enum element (children: modifiers, simple_identifier(name), value_arguments, class_body)
 
-### Выражения
-- `call_expression` — вызов функции (children: _expression, call_suffix)
-- `navigation_expression` — доступ к члену `a.b` (children: _expression, navigation_suffix)
-- `indexing_expression` — индексация `a[i]` (children: _expression, indexing_suffix)
-- `as_expression` — приведение типа `x as Type` (children: _expression, _type)
+### Expressions
+- `call_expression` — function call (children: _expression, call_suffix)
+- `navigation_expression` — member access `a.b` (children: _expression, navigation_suffix)
+- `indexing_expression` — indexing `a[i]` (children: _expression, indexing_suffix)
+- `as_expression` — type cast `x as Type` (children: _expression, _type)
 - `elvis_expression` — elvis `x ?: y` (children: _expression)
-- `range_expression` — диапазон `a..b`, `a..<b` (children: _expression)
-- `lambda_literal` — лямбда `{ params -> body }` (children: lambda_parameters, statements)
-- `anonymous_function` — анонимная функция `fun(params) { body }` (children: function_value_parameters, function_body)
+- `range_expression` — range `a..b`, `a..<b` (children: _expression)
+- `lambda_literal` — lambda `{ params -> body }` (children: lambda_parameters, statements)
+- `anonymous_function` — anonymous function `fun(params) { body }` (children: function_value_parameters, function_body)
 - `if_expression` — if (fields: condition, consequence, alternative)
 - `when_expression` — when (children: when_subject, when_entry)
 - `try_expression` — try/catch/finally (children: _block, catch_block, finally_block)
-- `string_literal` — строка с интерполяцией (children: string_content, interpolated_expression, interpolated_identifier)
-- `callable_reference` — ссылка на функцию `Class::method` (children: type_identifier, simple_identifier)
-- `this_expression` — `this` или `this@Label`
-- `super_expression` — `super` или `super<Type>`
+- `string_literal` — string with interpolation (children: string_content, interpolated_expression, interpolated_identifier)
+- `callable_reference` — function reference `Class::method` (children: type_identifier, simple_identifier)
+- `this_expression` — `this` or `this@Label`
+- `super_expression` — `super` or `super<Type>`
 - `jump_expression` — return, throw, continue, break
 - `spread_expression` — spread `*args` (children: _expression)
-- `object_literal` — объект-выражение `object : Base { ... }`
+- `object_literal` — object expression `object : Base { ... }`
 - `collection_literal` — `[a, b, c]`
 
-### Когда/When
-- `when_entry` — ветка when (children: when_condition/guard_condition, control_structure_body)
-- `when_condition` — условие ветки (children: _expression, range_test, type_test)
-- `when_subject` — субъект when `when(x)` (children: _expression)
-- `guard_condition` — guard-условие в when-entry (children: _expression)
+### When
+- `when_entry` — when branch (children: when_condition/guard_condition, control_structure_body)
+- `when_condition` — branch condition (children: _expression, range_test, type_test)
+- `when_subject` — when subject `when(x)` (children: _expression)
+- `guard_condition` — guard condition in when-entry (children: _expression)
 
-### Делегирование и делегаты
-- `property_delegate` — делегат свойства `by expr` (children: _expression)
-- `explicit_delegation` — делегирование в наследовании `Type by expr`
-- `constructor_delegation_call` — `this(...)` или `super(...)` в конструкторе
+### Delegation and delegates
+- `property_delegate` — property delegate `by expr` (children: _expression)
+- `explicit_delegation` — delegation in inheritance `Type by expr`
+- `constructor_delegation_call` — `this(...)` or `super(...)` in a constructor
 
-### Импорт и пакет
-- `package_header` — объявление пакета (children: identifier)
-- `import_header` — импорт (children: identifier, import_alias)
-- `import_list` — список импортов (children: import_header)
-- `import_alias` — алиас импорта `as Name`
-- `wildcard_import` — звёздочный импорт `.*`
+### Import and package
+- `package_header` — package declaration (children: identifier)
+- `import_header` — import (children: identifier, import_alias)
+- `import_list` — import list (children: import_header)
+- `import_alias` — import alias `as Name`
+- `wildcard_import` — wildcard import `.*`
 
 ### Getter/Setter
-- `getter` — геттер свойства (children: modifiers, function_body)
-- `setter` — сеттер свойства (children: modifiers, parameter_with_optional_type, function_body)
+- `getter` — property getter (children: modifiers, function_body)
+- `setter` — property setter (children: modifiers, parameter_with_optional_type, function_body)
 
-## Извлечение сигнатур
+## Signature extraction
 
-Обход AST — `node.children` + проверка `node.type`.
-Текст узла — `node.text.decode('utf-8')`.
-Дочерние по имени поля — `node.child_by_field_name(field)`.
+AST traversal — `node.children` + checking `node.type`.
+Node text — `node.text.decode('utf-8')`.
+Children by field name — `node.child_by_field_name(field)`.
 
-**ВАЖНО**: большинство узлов Kotlin AST не имеют именованных полей. Дети доступны позиционно через `node.children`.
-Именованные поля только у: `function_declaration.receiver`, `property_declaration.receiver`, `function_type.receiver`,
+**IMPORTANT**: most Kotlin AST nodes do not have named fields. Children are accessible positionally via `node.children`.
+Named fields only exist for: `function_declaration.receiver`, `property_declaration.receiver`, `function_type.receiver`,
 `if_expression.condition/consequence/alternative`.
 
-### Паттерн: извлечение параметров функции
+### Pattern: extracting function parameters
 ```python
 def _extract_params(params_node):
     if params_node is None or params_node.type != "function_value_parameters":
@@ -152,7 +152,7 @@ def _extract_params(params_node):
     return ", ".join(parts)
 ```
 
-### Паттерн: обход деклараций верхнего уровня
+### Pattern: traversing top-level declarations
 ```python
 for node in root.children:
     if node.type == "function_declaration":
@@ -163,7 +163,7 @@ for node in root.children:
     elif node.type == "class_declaration":
         name = _first_child_by_type(node, "type_identifier")
         body = _first_child_by_type(node, "class_body")
-        # проверить modifiers на data/sealed/annotation/inner/value
+        # check modifiers for data/sealed/annotation/inner/value
     elif node.type == "property_declaration":
         binding = _first_child_by_type(node, "binding_pattern_kind")  # val/var
         var_decl = _first_child_by_type(node, "variable_declaration")
@@ -179,7 +179,7 @@ def _first_child_by_type(node, type_name):
     return None
 ```
 
-### Паттерн: извлечение методов и свойств класса
+### Pattern: extracting class methods and properties
 ```python
 def _extract_class_members(class_body_node):
     methods = []
@@ -199,7 +199,7 @@ def _extract_class_members(class_body_node):
     return methods, properties
 ```
 
-### Паттерн: определение типа класса (data/sealed/enum/annotation/interface)
+### Pattern: determining class kind (data/sealed/enum/annotation/interface)
 ```python
 def _class_kind(class_decl_node):
     has_enum_body = any(c.type == "enum_class_body" for c in class_decl_node.children)
@@ -211,14 +211,14 @@ def _class_kind(class_decl_node):
             for mod in child.children:
                 if mod.type == "class_modifier":
                     return mod.text.decode("utf-8")  # "data", "sealed", "annotation", "inner", "value"
-        # проверить наличие "interface" среди анонимных токенов
+        # check for "interface" among anonymous tokens
         if child.type == "fun":
             return "fun_interface"
 
     return "class"
 ```
 
-### Паттерн: поиск companion object
+### Pattern: finding companion object
 ```python
 def _find_companion(class_body_node):
     for child in class_body_node.children:

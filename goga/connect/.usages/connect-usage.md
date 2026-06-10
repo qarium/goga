@@ -1,51 +1,51 @@
 # Connect API — goga/connect
 
-## Обзор
+## Overview
 
-Модуль `goga.connect` реализует логику подключения скиллов и команд goga
-в конфигурацию одного или нескольких целевых AI-агентов.
+The `goga.connect` module installs goga skills and commands
+into the configuration directory of one or more target AI agents.
 
-## Использование
+## Usage
 
 ```python
 from goga.connect import connect
 
-# Подключение для одного агента
+# Install for a single agent
 exit_code = connect(agents=["claude"])
 
-# Подключение для нескольких агентов
+# Install for multiple agents
 exit_code = connect(agents=["claude", "codex"])
 
-# Подключение с перезаписью tool skills
+# Install with tool skill overwrite
 exit_code = connect(agents=["claude"], force_overwrite=True)
 ```
 
-## Параметры
+## Parameters
 
-- `agents` — список целевых AI-агентов (обязательный, не пустой). Поддерживаемые: "claude", "codex", "cursor"
-- `force_overwrite` — разрешить перезапись существующих скиллов из пакетов инструментов. По умолчанию False
+- `agents` — list of target AI agents (required, non-empty). Supported: "claude", "codex", "cursor"
+- `force_overwrite` — allow overwriting existing skills from tool packages. Defaults to False
 
-## Возвращаемое значение
+## Return Value
 
-- `0` — успех
-- `1` — ошибка (пустой список агентов, неподдерживаемый агент, ресурсы не найдены, ошибка скачивания)
+- `0` — success
+- `1` — error (empty agent list, unsupported agent, resources not found, download failure)
 
-## Побочные эффекты
+## Side Effects
 
-Для каждого агента из списка:
-- Удаляет подпапки goga-* в <target>/skills/
-- Копирует goga/agent/commands/* → <target>/commands/goga/
-- Копирует goga/agent/skills/* → <target>/skills/
-- Скачивает dsl.md из GitHub и записывает в <target>/skills/goga-cell/dsl.md
-- Обнаруживает Python-пакеты с префиксом `goga_tool_*` через importlib.metadata
-- Копирует скиллы из обнаруженных пакетов в <target>/skills/ с префиксом `goga-tool-`
-- При `force_overwrite=False` — пропускает существующие скиллы с предупреждением
-- При `force_overwrite=True` — перезаписывает существующие скиллы
+For each agent in the list:
+- Removes goga-* subdirectories under <target>/skills/
+- Copies goga/agent/commands/* → <target>/commands/goga/
+- Copies goga/agent/skills/* → <target>/skills/
+- Downloads dsl.md from GitHub and writes to <target>/skills/goga-cell/dsl.md
+- Discovers Python packages with the `goga_tool_*` prefix via importlib.metadata
+- Copies skills from discovered packages to <target>/skills/ with the `goga-tool-` prefix
+- When `force_overwrite=False` — skips existing skills, logs warning
+- When `force_overwrite=True` — overwrites existing skills
 
-## Целевые каталоги
+## Target Directories
 
-| Агент  | Путь       | Команды | Скиллы |
-|--------|------------|---------|--------|
-| claude | ~/.claude/ | Да      | Да     |
-| codex  | ~/.codex/  | Нет     | Да     |
-| cursor | ~/.cursor/ | Нет     | Да     |
+| Agent  | Path       | Commands | Skills |
+|--------|------------|----------|--------|
+| claude | ~/.claude/ | Yes      | Yes    |
+| codex  | ~/.codex/  | No       | Yes    |
+| cursor | ~/.cursor/ | No       | Yes    |

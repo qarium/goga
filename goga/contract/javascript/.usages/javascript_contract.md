@@ -1,4 +1,4 @@
-Извлечение контракта с фасада JavaScript-модуля
+Extracting the contract from a JavaScript module facade
 
 ```python
 from goga.contract.javascript import javascript_contract

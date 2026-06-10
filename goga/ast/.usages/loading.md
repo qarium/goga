@@ -1,9 +1,9 @@
-# Загрузка и валидация дерева CODEMANIFEST
+# Loading and validating a CODEMANIFEST tree
 
-Область: загрузка проекта манифестов и получение результатов анализа.
-Аудитория: потребители, которым нужно загрузить CODEMANIFEST дерево и проверить его на ошибки.
+Scope: Loading a project manifest tree and retrieving analysis results.
+Audience: Consumers who need to load a CODEMANIFEST document tree and inspect validation errors.
 
-## Минимальный пример
+## Minimal example
 
 ```python
 from goga.ast import AST
@@ -12,11 +12,11 @@ ast = AST("path/to/project")
 ast.load()
 ```
 
-После вызова `load()` доступны два свойства:
-- `ast.tree` — список корневых документов (`DocumentRoot`), каждый из которых может содержать вложенные `children`
-- `ast.errors` — список ошибок (`DocumentRuleError` | `ASTRuleError`), найденных при валидации
+After `load()` completes, two properties are available:
+- `ast.tree` — list of root documents (`DocumentRoot`), each potentially containing nested `children`
+- `ast.errors` — list of validation errors (`DocumentRuleError` | `ASTRuleError`)
 
-## Поиск документа по пути
+## Document lookup by path
 
 ```python
 from goga.ast import AST
@@ -27,13 +27,13 @@ ast.load()
 doc = ast.document("path/to/project/some/cell")
 ```
 
-Метод `document()` принимает любой формат пути:
-- относительный: `./some/cell`, `some/cell`
-- полный: `/abs/path/to/project/some/cell`
+The `document()` method accepts all path formats:
+- Relative: `./some/cell`, `some/cell`
+- Absolute: `/abs/path/to/project/some/cell`
 
-Поиск выполняется за O(1). Если документ не найден — выбрасывается `DocumentNotFoundError`.
+Lookup runs in O(1). Raises `DocumentNotFoundError` if the document does not exist.
 
-## Проверка наличия ошибок
+## Inspecting errors
 
 ```python
 if ast.errors:
@@ -41,4 +41,4 @@ if ast.errors:
         print(error)
 ```
 
-Каждая ошибка приводится к строке с указанием правила, пути и проблемной ноды.
+Each error renders as a formatted string with rule name, document path, and offending node.

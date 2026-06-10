@@ -11,35 +11,35 @@ Usages:
   tree-sitter-swift: .goga/usages/cooks/tree-sitter-swift.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Для парсинга Swift-файлов использовать практику `tree-sitter-swift`.
+  During development and testing, use the practice `conventions`.
+  For parsing Swift files, use the practice `tree-sitter-swift`.
 
 ---
 
 "swift_contract(cell_path: str) -> contracts:list[EntityContract | RoutineContract]":
   location: swift.py
   annotations: |
-    Собрать все экспортируемые объекты с фасада Swift-модуля по указанному пути.
-    Использовать практику `contract_data` для формирования результатов.
+    Collect all exported objects from the Swift module facade at the specified path.
+    Use the practice `contract_data` to form the results.
 
-    `cell_path`: путь до Swift-модуля (каталог с .swift файлами)
+    `cell_path`: path to the Swift module (directory with .swift files)
 
-    Алгоритм:
-    - найти все .swift файлы в каталоге
-    - для каждого файла — распарсить AST через практику `tree-sitter-swift`
-    - извлечь public декларации:
+    Algorithm:
+    - find all .swift files in the directory
+    - for each file — parse AST via the practice `tree-sitter-swift`
+    - extract public declarations:
       - public class/struct/actor/enum → EntityContract (init params → signature, properties, methods)
-      - public func верхнего уровня → RoutineContract
-      - public protocol → EntityContract (только methods, без properties)
-    - собрать сигнатуры: параметры (имя + тип), возвращаемые типы
+      - top-level public func → RoutineContract
+      - public protocol → EntityContract (only methods, without properties)
+    - collect signatures: parameters (name + type), return types
 
-    Требования:
-    - только public декларации входят в контракт (internal/private пропускаются)
-    - аннотации типов Swift входят в контракт
-    - порядок аргументов важен
-    - optionals (T?) входят в тип
-    - camelCase для имён функций/свойств, PascalCase для типов
-    - EntityContract для class/struct получает signature из init
+    Requirements:
+    - only public declarations are included in the contract (internal/private are skipped)
+    - Swift type annotations are included in the contract
+    - argument order matters
+    - optionals (T?) are included in the type
+    - camelCase for function/property names, PascalCase for types
+    - EntityContract for class/struct gets signature from init
 
 ---
 
@@ -47,4 +47,4 @@ Author: Goga
 CreatedAt: 21/05/26
 
 Description: |
-  Извлечение контракта с фасада Swift-модуля через tree-sitter-swift
+  Extracting the contract from the Swift module facade via tree-sitter-swift

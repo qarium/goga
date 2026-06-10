@@ -11,30 +11,30 @@ Usages:
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development loop
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles and rules in the project
+  Use the `click` practice to create CLI commands.
 
 ---
 
 "lint(path: str = '.')":
   location: lint.py
   annotations: |
-    Команда валидации CODEMANIFEST файлов в проекте.
+    Validates CODEMANIFEST files across the project.
 
-    `path`: путь для создания контекста CWD
+    `path`: directory path for CWD context initialization
 
-    Алгоритм:
-    - Сменить CWD на указанный `path`
-    - Создать объект `AST` и загрузить проект с использованием практики `loading`
-    - Вывести все ошибки в указанном формате
-    - Вывести итоговую сводку
+    Algorithm:
+    - Set CWD to the specified `path`
+    - Instantiate `AST` and load the project via the `loading` practice
+    - Print all errors in the defined format
+    - Print the validation summary
 
-    Формат ошибки:
+    Error format:
     ```
     [rule_name] <message>
       --> <path>
@@ -42,23 +42,21 @@ Annotations: |
           <yaml_data>
     ```
 
-    Формат итоговой сводки:
+    Summary format:
     ```
     goga lint
     -------------------------
     cells: <N> errors: <M>
     ```
-    Где <N> — количество проверенных клеток (cells), <M> — количество найденных ошибок.
+    Where <N> is the number of validated cells, <M> is the count of detected errors.
 
-    Требования:
-    - Данный yaml должны выводиться, в yaml формате с использованием практики `beautiful_yaml`
-    - Отступы в формате важны, [rule_name] - с начала строки, --> - на следующей строке через
-      2 пробела от начала строки, далее идет разделитель "---" с отступом 6 пробелов от начала
-      строки, данные yaml через 6 проделов от начала строки при этом каждая новая строка yaml
-      должна так же отступать 6 пробелов
-    - [rule_name] необходимо выводить красным цветом
-    - Итоговая сводка выводится после всех ошибок, через пустую строку
-    - В случаи наличия ошибок команда выходит с кодом 1 иначе 0
+    Requirements:
+    - Output YAML data using the `beautiful_yaml` practice
+    - Strict indentation: `[rule_name]` at column 0, `-->` indented 2 spaces,
+      `---` separator indented 6 spaces, YAML data indented 6 spaces per line
+    - Render `[rule_name]` in red
+    - Append the summary after all errors, preceded by a blank line
+    - Exit with code 1 on errors, 0 otherwise
 
 ---
 
@@ -66,4 +64,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  Команда валидации CODEMANIFEST файлов в проекте
+  Project-wide CODEMANIFEST validation command

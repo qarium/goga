@@ -2,59 +2,59 @@ Usages:
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  При разработке и тестировании использовать практику `conventions`.
-  Вывод ошибок через sys.stderr (click не используется).
-  Использовать shutil, subprocess, tempfile, pathlib из стандартной библиотеки.
+  The developer must apply the `conventions` practice during development and testing.
+  Error output is routed through sys.stderr (click is not used).
+  The module uses shutil, subprocess, tempfile, pathlib from the Python standard library only.
 
 ---
 
 "sync(source: str, token: str | None = None, branch: str | None = None) -> exit_code:int":
   location: sync.py
   annotations: |
-    Синхронизация .usages/ из локального пути или git-репозитория.
+    Synchronization of .usages/ directories from a local path or git repository.
 
-    `source`: путь к каталогу-источнику или URL git-репозитория
-    `token`: токен авторизации для HTTPS git-репозитория
-    `branch`: ветка или тег для checkout при клонировании
-    `exit_code`: 0 при успехе, 1 при ошибке
+    `source`: path to the source directory or URL of a git repository
+    `token`: authentication token for HTTPS git repositories
+    `branch`: branch or tag to check out during cloning
+    `exit_code`: 0 on success, 1 on failure
 
-    Диспетчеризация:
-    - http://, https://, git@, ssh:// → git-режим
-    - иначе → локальный режим
+    Dispatch:
+    - http://, https://, git@, ssh:// → git-mode
+    - otherwise → local mode
 
-    Алгоритм (локальный режим):
-    1. Разрешить `source` в абсолютный путь через Path.resolve()
-    2. Валидация: путь существует, является каталогом, содержит .usages/
-    3. Имя зависимости: basename переданного пути
-    4. Выполнить синхронизацию
+    Algorithm (local mode):
+    1. Resolve `source` to an absolute path via Path.resolve()
+    2. Validate: path exists, is a directory, contains .usages/
+    3. Derive dependency name from the path basename
+    4. Execute synchronization
 
-    Алгоритм (git-режим):
-    1. Извлечь имя зависимости из URL (последний сегмент без .git)
-    2. Подготовить URL (встроить `token` для HTTPS)
-    3. Клонировать во временный каталог через tempfile.mkdtemp()
-    4. Валидация: содержит .usages/
-    5. Синхронизация
-    6. В блоке finally — удалить временный каталог через shutil.rmtree()
+    Algorithm (git-mode):
+    1. Extract dependency name from the URL (last segment without .git)
+    2. Prepare the clone URL (inject `token` for HTTPS)
+    3. Clone into a temporary directory via tempfile.mkdtemp()
+    4. Validate: contains .usages/
+    5. Run synchronization
+    6. In the finally block — delete the temporary directory via shutil.rmtree()
 
-    Синхронизация (общий шаг):
-    1. Целевой каталог: .goga/usages/deps/<name>/
-    2. Удалить целевой каталог если существует (полная пересинхронизация)
-    3. Найти все .usages/ в источнике рекурсивно
-    4. Для каждого найденного .usages/:
-       - Вычислить относительный путь от корня источника до родителя .usages/
-       - Создать структуру в целевом пути: .goga/usages/deps/<name>/<relative>/.usages/
-       - Скопировать содержимое .usages/ (файлы и подкаталоги)
-    5. Вывести результат: имя зависимости, количество синхронизированных .usages/
+    Synchronization (shared step):
+    1. Target directory: .goga/usages/deps/<name>/
+    2. Remove target directory if it exists (full re-sync)
+    3. Recursively discover all .usages/ in the source tree
+    4. For each discovered .usages/:
+       - Compute relative path from source root to .usages/ parent
+       - Create directory structure at .goga/usages/deps/<name>/<relative>/.usages/
+       - Copy .usages/ contents (files and subdirectories)
+    5. Report: dependency name, count of synchronized .usages/ directories
 
-    Требования:
-    - Использовать shutil.copytree для копирования
-    - Использовать shutil.rmtree для удаления
-    - git clone через subprocess.run с capture_output=True, check=True
-    - Временные файлы через tempfile.mkdtemp()
-    - Временные файлы удалять в блоке finally
-    - GIT_TERMINAL_PROMPT=0 в env для запрета интерактивных промптов
-    - Ошибки I/O и git выводить в stderr
-    - Минимальный вывод: имя зависимости, источник, количество синхронизированных usages
+    Requirements:
+    - Use shutil.copytree for directory copying
+    - Use shutil.rmtree for directory removal
+    - Invoke git clone via subprocess.run with capture_output=True, check=True
+    - Allocate temporary directories via tempfile.mkdtemp()
+    - Delete temporary directories in a finally block
+    - Set GIT_TERMINAL_PROMPT=0 in env to suppress interactive prompts
+    - Write I/O and git errors to stderr
+    - Produce minimal output: dependency name, source, count of synchronized usages
 
 ---
 
@@ -62,4 +62,4 @@ Author: Mikhail Trifonov
 CreatedAt: 15/05/26
 
 Description: |
-  Манифест описывает синхронизацию .usages/ из локального пути или git-репозитория
+  Manifest describing synchronization of .usages/ from a local path or git repository

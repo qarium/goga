@@ -1,38 +1,41 @@
 # Schema API — goga/schema
 
-## Обзор
+## Overview
 
-Модуль `goga.schema` формирует JSON-схему структуры проекта CODEMANIFEST
-в виде иерархического дерева.
+The `goga.schema` module generates a JSON schema of the CODEMANIFEST project structure
+as a hierarchical tree.
 
-## Использование
+## Usage
 
 ```python
 from goga.schema import schema
 
-# Полная схема проекта
+# Full project schema
 json_str = schema(cells=[], max_depth=None, depends_on=[])
 
-# Фильтрация по конкретным cells
+# Filter by specific cells
 json_str = schema(cells=["goga/config", "goga/ast"], max_depth=None, depends_on=[])
 
-# Ограничение вложенности
+# Limit nesting depth
 json_str = schema(cells=[], max_depth=2, depends_on=[])
 
-# Фильтр по зависимостям
+# Filter by dependencies
 json_str = schema(cells=[], max_depth=None, depends_on=["goga/ast"])
 ```
 
-## Возвращаемое значение
+## Return Value
 
-JSON-строка со схемой проекта. Пустое дерево → `"[]"`.
+The `schema` routine returns a JSON string representing the project schema.
+An empty tree returns `"[]"`.
 
-## Структура узла
+## Node Structure
+
+Each node in the tree follows this structure:
 
 ```json
 {
   "cell": "goga/config",
-  "description": "Описание cell",
+  "description": "Cell description",
   "types": ["Config", "load_config"],
   "usages": ["configuration.md"],
   "dependencies": {
@@ -42,7 +45,7 @@ JSON-строка со схемой проекта. Пустое дерево �
 }
 ```
 
-## Побочные эффекты
+## Side Effects
 
-- Читает CODEMANIFEST файлы из текущего CWD
-- Не модифицирует файловую систему
+- The routine reads CODEMANIFEST files from the current working directory
+- The routine does not modify the file system

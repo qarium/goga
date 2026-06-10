@@ -12,43 +12,43 @@ Usages:
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
 
 Annotations: |
-  Практика `conventions` используется для:
-  - работы с кодовой базой
-  - организации REPL цикла разработки
-  - отладки и тестирования
-  - организации тестовой инфраструктуры
-  - понимания общих принципов/правил разработки и тестирования в проекте
-  Для создания команды использовать практику `click`.
+  The `conventions` practice is used for:
+  - working with the codebase
+  - organizing the REPL development cycle
+  - debugging and testing
+  - organizing test infrastructure
+  - understanding general development and testing principles/rules in the project
+  Use the `click` practice to create the command.
 
 ---
 
 "config(options: tuple[str, ...])":
   location: config.py
   annotations: |
-    Команда выводит значения опций из конфигурации проекта .goga/config.yml.
-    Структура конфигурации описана в практике `configuration`, конфигурация загружается через `load_config`.
-    Команда поддерживает навигацию по всем полям объекта `Config` через точечную нотацию.
-    Каждая опция выводится отдельно с заголовком, идентифицирующим путь.
+    The command outputs option values from the project configuration .goga/config.yml.
+    The configuration structure is described in the `configuration` practice, configuration is loaded via `load_config`.
+    The command supports navigation across all fields of the `Config` object via dot notation.
+    Each option is output separately with a header identifying the path.
 
-    `options`: пути к опциям в точечной нотации, один или несколько.
-    Например: build.task_executor.agent build.worktree
+    `options`: paths to options in dot notation, one or more.
+    For example: build.task_executor.agent build.worktree
 
-    Алгоритм:
-    1. Загрузить конфигурацию через `load_config` → `Config`
-    2. Для каждого пути из `options`:
-       a. Разрешить путь: разбить по "." на компоненты
-       b. Обойти структуру `Config` по компонентам:
-          - Начать с корневого объекта Config
-          - Для каждого компонента: получить атрибут объекта
-          - Если атрибут не существует — ошибка
-       c. Вывести заголовок: # <path>
-       d. Вывести значение:
-          - Для примитивов (str, int, bool) — сырое значение через click.echo
-          - Для None — вывести "null"
-          - Для сложных (dict, dataclass) — вывести через практику `beautiful_yaml`
-    3. Если путь не найден — вывести ошибку в stderr, exit 1
+    Algorithm:
+    1. Load configuration via `load_config` → `Config`
+    2. For each path from `options`:
+       a. Resolve path: split by "." into components
+       b. Traverse the `Config` structure by components:
+          - Start with the root Config object
+          - For each component: get the object attribute
+          - If attribute does not exist — error
+       c. Output header: # <path>
+       d. Output value:
+          - For primitives (str, int, bool) — raw value via click.echo
+          - For None — output "null"
+          - For complex types (dict, dataclass) — output via the `beautiful_yaml` practice
+    3. If path not found — output error to stderr, exit 1
 
-    Формат вывода при нескольких опциях:
+    Output format for multiple options:
     ```
     # language
     python
@@ -59,16 +59,16 @@ Annotations: |
     # build.worktree
     True
     ```
-    Формат вывода при одной опции — то же самое: заголовок и значение.
+    Output format for a single option is the same: header and value.
 
-    Требования:
-    - Ошибки конфигурации (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
-      преобразуются в click.ClickException
-    - Ошибка "option not found" выводится в stderr (click.echo с err=True)
-    - Код возврата: 0 при успехе, 1 при ошибке
-    - Заголовок каждой опции начинается с "# "
-    - Между значениями разных опций — пустая строка
-    - Для YAML-вывода сложных типов заголовок выводится перед YAML-блоком
+    Requirements:
+    - Configuration errors (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
+      are converted to click.ClickException
+    - "option not found" error is output to stderr (click.echo with err=True)
+    - Exit code: 0 on success, 1 on error
+    - Header of each option starts with "# "
+    - Between values of different options — empty line
+    - For YAML output of complex types, the header is output before the YAML block
 
 ---
 
@@ -76,4 +76,4 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  Команда вывода значений опций из конфигурации проекта
+  Command for outputting option values from the project configuration

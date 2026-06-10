@@ -1,20 +1,20 @@
 # Build API — goga/build
 
-## Обзор
+## Overview
 
-Модуль `goga.build` реализует логику сборки кода через ralphex —
-подготовку окружения, создание конфигураций AI-агента и запуск процесса сборки.
+The `goga.build` module orchestrates code builds through ralphex — handling
+environment preparation, AI agent configuration, and build process execution.
 
-## Использование
+## Usage
 
 ```python
 from goga.config import load_config
 from goga.build import build
 
-# Загрузить конфигурацию
+# Load project configuration
 config = load_config()
 
-# Запустить сборку
+# Execute build
 exit_code = build(
     plan="docs/plans/my-plan.md",
     config=config,
@@ -27,43 +27,44 @@ exit_code = build(
 )
 ```
 
-## Параметры
+## Parameters
 
-- `plan` — путь к файлу плана (markdown)
-- `config` — объект Config, загруженный через `load_config`
-- `cli_options` — словарь опций:
-  - `dry_run` (bool) — показать команду без выполнения
-  - `worktree` (bool) — режим git worktree
-  - `skip_finalize` (bool) — пропустить финализацию
-  - `skip_manifest_check` (bool) — пропустить проверку CODEMANIFEST
-  - `session_timeout`, `idle_timeout`, `wait` (str) — таймауты
-  - `max_iterations`, `review_patience` (int) — лимиты
+- `plan` — path to the plan file (markdown)
+- `config` — Config object loaded via `load_config`
+- `cli_options` — options dictionary:
+  - `dry_run` (bool) — print the command without executing
+  - `worktree` (bool) — enable git worktree isolation mode
+  - `skip_finalize` (bool) — skip the finalization step
+  - `skip_manifest_check` (bool) — skip CODEMANIFEST commit verification
+  - `session_timeout`, `idle_timeout`, `wait` (str) — timeout settings
+  - `max_iterations`, `review_patience` (int) — iteration limits
 
-## Поддерживаемые агенты
+## Supported agents
 
-| Агент | Прекондишены |
-|-------|-------------|
-| `claude` | Создание .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config |
-| `codex` | Создание .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex) |
+| Agent | Preconditions |
+|-------|--------------|
+| `claude` | Creates .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config |
+| `codex` | Creates .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex) |
 
-## Возвращаемое значение
+## Return value
 
-- `0` — успех
-- `1` — ошибка (uncommitted manifests, ralphex не найден, ошибка сборки)
+- `0` — success
+- `1` — failure (uncommitted manifests, ralphex not found, build error)
 
-## Побочные эффекты
+## Side effects
 
-- Удаляет `.ralphex/` перед каждым запуском (cleanup)
-- Создаёт/обновляет `.claude/settings.json` (для agent=claude)
-- Создаёт `.ralphex/claude-wrapper.sh` и `.ralphex/config` (для agent=claude)
-- Создаёт `.ralphex/codex-wrapper.sh` и `.ralphex/config` (для agent=codex)
-- Копирует prompts и agents в `.ralphex/`
-- Запускает subprocess (`ralphex`)
+- Removes `.ralphex/` before each run (cleanup)
+- Creates or updates `.claude/settings.json` (when agent=claude)
+- Creates `.ralphex/claude-wrapper.sh` and `.ralphex/config` (when agent=claude)
+- Creates `.ralphex/codex-wrapper.sh` and `.ralphex/config` (when agent=codex)
+- Copies prompts and agents into `.ralphex/`
+- Spawns a subprocess (`ralphex`)
 
 ## Docker entry point
 
-Модуль поддерживает запуск через `python -m goga.build` — используется внутри Docker-контейнера
-при вызове CLI-команды `goga build`. В этом режиме argparse парсит CLI-опции и вызывает `build()` напрямую.
+The module supports invocation via `python -m goga.build` for use inside Docker
+containers through the `goga build` CLI command. In this mode, argparse handles
+CLI option parsing and calls `build()` directly.
 
 ```bash
 python -m goga.build plan.md --worktree --skip-manifest-check
