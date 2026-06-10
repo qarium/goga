@@ -30,8 +30,8 @@ Annotations: |
 
     Algorithm:
     1. Invoke `schema_logic`(`cells`, `max_depth`, `depends_on`)
-    2. On `ValueError` from `schema_logic` (AST parse errors) — write error to stderr, exit 1
-    3. Output the result via `click.echo`
+    2. On ValueError from `schema_logic` (AST parse errors) — write error to stderr, exit 1
+    3. Output the result via `click`.echo
 
 ---
 

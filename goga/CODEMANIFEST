@@ -20,7 +20,7 @@ Usages:
 
 Annotations: |
   Use the `conventions` practice during development and testing.
-  Wire the application in __main__.py to enable invocation via `python -m`.
+  Wire the application in __main__.py to enable invocation via python -m.
 
 ---
 

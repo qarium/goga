@@ -35,7 +35,7 @@ Annotations: |
           - goga/agent/commands/* → <target>/commands/goga/
           - goga/agent/skills/* → <target>/skills/
        d. Fetch the DSL specification:
-          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
+          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
           - Perform HTTP GET via urllib.request
           - Write response to <target>/skills/goga-cell/dsl.md
           - On network failure, exit with code 1

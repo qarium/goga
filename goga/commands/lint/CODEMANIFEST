@@ -52,9 +52,9 @@ Annotations: |
 
     Requirements:
     - Output YAML data using the `beautiful_yaml` practice
-    - Strict indentation: `[rule_name]` at column 0, `-->` indented 2 spaces,
-      `---` separator indented 6 spaces, YAML data indented 6 spaces per line
-    - Render `[rule_name]` in red
+    - Strict indentation: [rule_name] at column 0, --> indented 2 spaces,
+      --- separator indented 6 spaces, YAML data indented 6 spaces per line
+    - Render [rule_name] in red
     - Append the summary after all errors, preceded by a blank line
     - Exit with code 1 on errors, 0 otherwise
 

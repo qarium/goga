@@ -16,7 +16,7 @@ AGENT_DIRS: dict[str, str] = {
 
 AGENTS_WITH_COMMANDS: frozenset[str] = frozenset({"claude"})
 
-DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md"
+DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md"
 
 
 def _resolve_target_dir(agent: str) -> Path:

@@ -1,7 +1,7 @@
 Usages:
   conventions: .goga/usages/conventions.md
   yaml: |
-    Use `yaml.safe_load()` to parse `.goga/config.yml`.
+    Use yaml.safe_load() to parse .goga/config.yml.
     Requires the PyYAML library.
 
 Annotations: |
@@ -17,91 +17,91 @@ Annotations: |
 "load_config() -> config:Config":
   location: loader.py
   annotations: |
-    Parses `.goga/config.yml` from the project root and returns a `Config` instance.
+    Parses .goga/config.yml from the project root and returns a Config instance.
 
     Algorithm:
-    1. Resolve path: `./.goga/config.yml`
+    1. Resolve path: ./.goga/config.yml
     2. Read and parse YAML via the `yaml` practice
-    3. If the file is absent or empty (`yaml.safe_load` returns `None`) —
-       raise `FileNotFoundError` with message ".goga/config.yml not found in project root"
+    3. If the file is absent or empty (yaml.safe_load returns None) —
+       raise FileNotFoundError with message ".goga/config.yml not found in project root"
     4. If the YAML is malformed — propagate the parse exception with its message
-    5. If `yaml.safe_load` yields a non-dict result —
-       raise `ValueError` with message ".goga/config.yml must be a YAML mapping"
-    6. Extract `language`: `data["language"]`
-       On `KeyError` — raise `KeyError("language is required in .goga/config.yml")`
-    7. Extract `commands`: `data.get("commands", {})`
-    8. Extract the `build` dict: `data["build"]`
-       On `KeyError` — raise `KeyError("build is required in .goga/config.yml")`
-    9. Extract the `task_executor` dict: `build_data["task_executor"]`
-       On `KeyError` — raise `KeyError("build.task_executor is required in .goga/config.yml")`
-    10. Extract `agent`: `task_executor_data.get("agent")`
-       If `None` or empty string — raise `ValueError("build.task_executor.agent is required in .goga/config.yml")`
-    11. Extract `env`: `task_executor_data.get("env", {})`
-    12. Construct `TaskExecutor(agent=agent, env=env)`
-    13. Extract `image`: `build_data.get("image")`
-    14. Extract remaining `BuildConfig` fields from `build_data` via `.get(field_name)`
-    15. Construct `BuildConfig(task_executor=task_executor, image=image, worktree=..., ...)`
-    16. Extract the `codemanifest` dict: `data.get("codemanifest")`
-    17. If `codemanifest_data` exists and is not `None`:
-        a. Extract `usages`: `codemanifest_data.get("usages", {})`
-           If not a `dict` — raise `ValueError("codemanifest.usages must be a mapping")`
-        b. Extract `annotations`: `codemanifest_data.get("annotations")`
-           If not `str` and not `None` — raise `ValueError("codemanifest.annotations must be a string")`
-        c. Construct `CodemanifestConfig(usages=usages, annotations=annotations)`
-    18. Else set `codemanifest = None`
-    19. Return `Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)`
+    5. If yaml.safe_load yields a non-dict result —
+       raise ValueError with message ".goga/config.yml must be a YAML mapping"
+    6. Extract language: data["language"]
+       On KeyError — raise KeyError("language is required in .goga/config.yml")
+    7. Extract commands: data.get("commands", {}) 
+    8. Extract the build dict: data["build"]
+       On KeyError — raise KeyError("build is required in .goga/config.yml")
+    9. Extract the task_executor dict: build_data["task_executor"]
+       On KeyError — raise KeyError("build.task_executor is required in .goga/config.yml")
+    10. Extract agent: task_executor_data.get("agent")
+       If None or empty string — raise ValueError("build.task_executor.agent is required in .goga/config.yml")
+    11. Extract env: task_executor_data.get("env", {})
+    12. Construct TaskExecutor(agent=agent, env=env)
+    13. Extract image: build_data.get("image")
+    14. Extract remaining BuildConfig fields from build_data via .get(field_name)
+    15. Construct BuildConfig(task_executor=task_executor, image=image, worktree=..., ...)
+    16. Extract the codemanifest dict: data.get("codemanifest")
+    17. If codemanifest_data exists and is not None:
+        a. Extract usages: codemanifest_data.get("usages", {})
+           If not a dict — raise ValueError("codemanifest.usages must be a mapping")
+        b. Extract annotations: codemanifest_data.get("annotations")
+           If not str and not None — raise ValueError("codemanifest.annotations must be a string")
+        c. Construct CodemanifestConfig(usages=usages, annotations=annotations)
+    18. Else set codemanifest = None
+    19. Return Config(lang=lang, build=build, commands=commands, codemanifest=codemanifest)
 
     Requirements:
-    - Configuration file location: `.goga/config.yml` (dot-prefixed directory) in the project root
-    - The file is mandatory — raises `FileNotFoundError` when absent or empty
-    - Root YAML element must be a mapping (`dict`) — raises `ValueError` otherwise
+    - Configuration file location: .goga/config.yml (dot-prefixed directory) in the project root
+    - The file is mandatory — raises FileNotFoundError when absent or empty
+    - Root YAML element must be a mapping (dict) — raises ValueError otherwise
     - Invalid YAML propagates the parse exception
-    - `language` is required — raises `KeyError` when missing
-    - `build` is required — raises `KeyError` when missing
-    - `task_executor` is required within `build` — raises `KeyError` when missing
-    - `agent` is required and must be a non-empty string — raises `ValueError` otherwise
-    - `codemanifest` is optional
+    - language is required — raises KeyError when missing
+    - build is required — raises KeyError when missing
+    - task_executor is required within build — raises KeyError when missing
+    - agent is required and must be a non-empty string — raises ValueError otherwise
+    - codemanifest is optional
     - Values are exposed as-is without default merging — consumers apply their own defaults
 
 "Config(lang: str, build: BuildConfig, commands: dict, codemanifest: CodemanifestConfig | None)":
   location: config.py
   annotations: |
-    Root project configuration object. Constructed by `load_config`.
+    Root project configuration object. Constructed by load_config.
 
-    `lang`: project language directive
-    `build`: build configuration as a `BuildConfig` instance
-    `commands`: command hooks — reserved for future prompt customization
-    `codemanifest`: CODEMANIFEST configuration as a `CodemanifestConfig` instance
+    lang: project language directive
+    build: build configuration as a BuildConfig instance
+    commands: command hooks — reserved for future prompt customization
+    codemanifest: CODEMANIFEST configuration as a CodemanifestConfig instance
   properties:
     lang -> str: |
-      Project language. Sourced from the root `language` directive in `.goga/config.yml`.
+      Project language. Sourced from the root language directive in .goga/config.yml.
     build -> BuildConfig: |
-      Build configuration from `.goga/config.yml`. Instance of `BuildConfig`.
+      Build configuration from .goga/config.yml. Instance of BuildConfig.
     commands -> dict: |
-      Command hooks from `.goga/config.yml`.
+      Command hooks from .goga/config.yml.
       Reserved for future prompt customization — currently unused.
       Defaults to an empty dict when the section is absent.
     codemanifest -> CodemanifestConfig | None: |
-      CODEMANIFEST configuration from `.goga/config.yml`.
-      Instance of `CodemanifestConfig`.
-      Returns `None` when the `codemanifest` section is absent.
+      CODEMANIFEST configuration from .goga/config.yml.
+      Instance of CodemanifestConfig.
+      Returns None when the codemanifest section is absent.
 
 "BuildConfig(task_executor: TaskExecutor, image: str | None = None, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
   location: config.py
   annotations: |
-    Build execution configuration. Constructed by `load_config` from the `build` section of `.goga/config.yml`.
+    Build execution configuration. Constructed by load_config from the build section of .goga/config.yml.
 
-    `task_executor`: AI agent configuration. Required.
-    `image`: Docker image for build execution. Optional, defaults to `None`.
-    All remaining fields are optional and default to `None`.
+    task_executor: AI agent configuration. Required.
+    image: Docker image for build execution. Optional, defaults to None.
+    All remaining fields are optional and default to None.
 
     Requirements:
-    - `task_executor` is required
-    - `image` is optional and may be `None` — consumers must handle the `None` case
-    - All other fields may be `None`
+    - task_executor is required
+    - image is optional and may be None — consumers must handle the None case
+    - All other fields may be None
   properties:
     task_executor -> TaskExecutor: |
-      AI agent configuration. `TaskExecutor` instance.
+      AI agent configuration. TaskExecutor instance.
       Required field.
     image -> str | None: |
       Docker image for build execution.
@@ -130,43 +130,43 @@ Annotations: |
   location: config.py
   annotations: |
     AI agent configuration for task execution.
-    Constructed by `load_config` from the `task_executor` section.
+    Constructed by load_config from the task_executor section.
 
-    `agent`: AI executor identifier
-    `env`: environment variable dictionary
+    agent: AI executor identifier
+    env: environment variable dictionary
 
     Requirements:
-    - `agent` is required and must be a non-empty string
-    - `env` is optional and defaults to an empty dict
+    - agent is required and must be a non-empty string
+    - env is optional and defaults to an empty dict
   properties:
     agent -> str: |
-      AI executor identifier. Accepted values: `claude`, `codex`, `copilot`, `gemini`, `custom:/path/to/script`.
+      AI executor identifier. Accepted values: claude, codex, copilot, gemini, custom:/path/to/script.
       Required — must not be an empty string.
     env -> dict: |
-      Environment variable dictionary (`{str: str}`).
+      Environment variable dictionary ({str: str}).
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
 
 "CodemanifestConfig(usages: dict, annotations: str | None)":
   location: config.py
   annotations: |
-    CODEMANIFEST section configuration from `.goga/config.yml`.
-    Constructed by `load_config` from the `codemanifest` section.
+    CODEMANIFEST section configuration from .goga/config.yml.
+    Constructed by load_config from the codemanifest section.
 
-    `usages`: usage name-to-path mapping (`{usage_name: path/to/file.md}`)
-    `annotations`: freeform annotations for the AI agent
+    usages: usage name-to-path mapping ({usage_name: path/to/file.md})
+    annotations: freeform annotations for the AI agent
 
     Requirements:
-    - `usages` is required — defaults to an empty dict when absent
-    - `annotations` is optional and defaults to `None`
+    - usages is required — defaults to an empty dict when absent
+    - annotations is optional and defaults to None
   properties:
     usages -> dict: |
-      Usage name-to-path mapping (`{usage_name: path/to/file.md}`).
+      Usage name-to-path mapping ({usage_name: path/to/file.md}).
       Named practices referenced in project CODEMANIFEST files.
-      Defaults to an empty dict when the `usages` section is absent.
+      Defaults to an empty dict when the usages section is absent.
     annotations -> str | None: |
       Freeform annotations — instructions for the AI agent.
-      Optional — defaults to `None`.
+      Optional — defaults to None.
 
 ---
 

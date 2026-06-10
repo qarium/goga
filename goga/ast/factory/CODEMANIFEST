@@ -22,7 +22,7 @@ Imports:
     From: goga/ast/errors
 
 Usages:
-  dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/ru.md
+  dsl: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
   conventions: .goga/usages/conventions.md
   yaml: |
     The pyyaml library for parsing YAML documents.

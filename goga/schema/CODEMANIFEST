@@ -33,7 +33,7 @@ Annotations: |
 
     Algorithm:
     1. Load the project document tree using the `documents` practice
-    2. Recursively build a JSON tree with nested `children` nodes
+    2. Recursively build a JSON tree with nested children nodes
     3. Apply filters: `cells`, `max_depth`, `depends_on`
     4. Return the JSON string using the `beautiful_json` practice
 
