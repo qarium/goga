@@ -1,0 +1,21 @@
+name: Open New Version
+
+on:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: "New version type"
+        required: true
+        type: choice
+        options: [minor, major]
+
+permissions:
+  contents: write
+
+jobs:
+  create-branch:
+    uses: qarium/ci/.github/workflows/library-new-version.yml@0.0.x
+    with:
+      type: ${{ inputs.type }}
+    secrets:
+      GH_TOKEN: ${{ secrets.GH_TOKEN }}
