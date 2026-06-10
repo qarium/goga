@@ -19,7 +19,7 @@ build:
     agent: claude
     env:
       ANTHROPIC_API_KEY: sk-ant-...
-  image: qarium/goga-python-3.14:1.0
+  image: qarium/goga-python-3.14:latest
   worktree: false
   skip_finalize: false
   session_timeout: 30m
@@ -48,7 +48,7 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `task_executor` | mapping | Yes | AI agent configuration |
-| `image` | `string` | No | Docker image for build execution (e.g. `qarium/goga-python-3.14:1.0`) |
+| `image` | `string` | No | Docker image for build execution (e.g. `qarium/goga-python-3.14:latest`) |
 | `worktree` | `bool` | No | Use isolated git worktree for builds |
 | `skip_finalize` | `bool` | No | Skip the ralphex finalization step |
 | `session_timeout` | `string` | No | Session timeout in Go duration format (e.g. `30m`, `1h`) |
@@ -80,11 +80,11 @@ goga provides prebuilt language images for build execution:
 
 | Language | Images |
 |----------|--------|
-| Python | `qarium/goga-python-3.10:1.0` through `qarium/goga-python-3.14:1.0` |
-| Go | `qarium/goga-golang-1.23.12:1.0` through `qarium/goga-golang-1.26.4:1.0` |
-| JavaScript | `qarium/goga-node-22:1.0`, `qarium/goga-node-24:1.0` |
-| Kotlin | `qarium/goga-kotlin-2.0.21:1.0` through `qarium/goga-kotlin-2.3.21:1.0` |
-| Swift | `qarium/goga-swift-6.0.3:1.0` through `qarium/goga-swift-6.2.4:1.0` |
+| Python | `qarium/goga-python-3.10:latest` through `qarium/goga-python-3.14:latest` |
+| Go | `qarium/goga-golang-1.23:latest` through `qarium/goga-golang-1.26:latest` |
+| JavaScript | `qarium/goga-node-22:latest`, `qarium/goga-node-24:latest` |
+| Kotlin | `qarium/goga-kotlin-2.0:latest` through `qarium/goga-kotlin-2.3:latest` |
+| Swift | `qarium/goga-swift-6.0:latest` through `qarium/goga-swift-6.2:latest` |
 
 ## Validation errors
 

@@ -77,7 +77,7 @@ Build settings are loaded from `.goga/config.yml`. Required fields:
 ```yaml
 language: python
 build:
-  image: qarium/goga-python-3.12:1.0
+  image: qarium/goga-python-3.12:latest
   task_executor:
     agent: claude
     env: {}
