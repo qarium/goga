@@ -5,7 +5,7 @@ Generate a JSON schema tree from project CODEMANIFEST files.
 ## Synopsis
 
 ```bash
-goga schema [CELLS]... [--max-depth N] [--depends-on PATH]...
+goga schema [CELLS]... [--max-depth N] [--depends-on CELL]...
 ```
 
 ## Description
@@ -14,16 +14,16 @@ goga schema [CELLS]... [--max-depth N] [--depends-on PATH]...
 
 ## Arguments
 
-| Argument | Required | Description |
-|---|---|---|
-| `CELLS` | no | Zero or more cell paths to filter the output. When omitted, all cells are included. |
+| Argument | Required | Description                                                                         |
+|----------|----------|-------------------------------------------------------------------------------------|
+| `CELLS`  | no       | Zero or more cell paths to filter the output. When omitted, all cells are included. |
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `--max-depth` | unlimited | Maximum nesting depth for the cell tree. |
-| `--depends-on` | (none) | Filter cells to those that depend on the specified cell path. Repeatable. |
+| Option         | Default   | Description                                                               |
+|----------------|-----------|---------------------------------------------------------------------------|
+| `--max-depth`  | unlimited | Maximum nesting depth for the cell tree.                                  |
+| `--depends-on` | (none)    | Filter cells to those that depend on the specified cell path. Repeatable. |
 
 ## Output
 

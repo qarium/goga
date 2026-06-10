@@ -22,7 +22,7 @@ Goga enforces 21 rules split into two scopes:
 
 | Scope | Count | Applied by |
 |---|---|---|
-| Document-level | 18 | Visitor |
+| Document-level | 21 | Visitor |
 | Tree-level | 3 | Analyzer |
 
 Document-level rules validate a single CODEMANIFEST file in isolation. Tree-level rules validate relationships between multiple files, such as import resolution and cyclic dependency detection.
@@ -49,7 +49,7 @@ A Click-based command-line interface orchestrates the pipeline. Commands accept 
                     v                   v
           +----------------+   +----------------+
           |    Visitor     |   |   Analyzer     |
-          | (18 doc rules) |   | (3 tree rules) |
+          | (21 doc rules) |   | (3 tree rules) |
           +----------------+   +----------------+
                     |                   |
                     v                   v

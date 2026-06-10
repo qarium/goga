@@ -30,7 +30,6 @@ python -m goga --help
 | [`goga contract`](contract.md) | Compare CODEMANIFEST with implementation |
 | [`goga config`](config.md) | Display configuration values |
 | [`goga schema`](schema.md) | Generate JSON schema from project cells |
-| [`goga sync`](sync.md) | Synchronize `.usages/` from external sources |
 | [`goga connect`](connect.md) | Install goga skills for AI agents |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 

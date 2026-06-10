@@ -16,7 +16,7 @@ goga connect AGENTS... [--force-overwrite]
 
 | Argument | Required | Description |
 |---|---|---|
-| `AGENTS` | yes | One or more target AI agent names. Currently supported: `claude`. |
+| `AGENTS` | yes | One or more target AI agent names. Currently supported: `claude`, `codex`, `cursor`. |
 
 ## Options
 
@@ -29,7 +29,7 @@ goga connect AGENTS... [--force-overwrite]
 For each specified agent, `goga connect` performs the following steps:
 
 1. **Cleanup** -- Removes all existing `goga-*` subfolders from the agent's skills directory.
-2. **Install commands** -- Copies goga command definitions to `<agent_dir>/commands/goga/`.
+2. **Install commands** -- Copies goga command definitions to `<agent_dir>/commands/goga/` (only for agents with command support).
 3. **Install skills** -- Copies goga skill packages to `<agent_dir>/skills/`.
 4. **Download DSL spec** -- Fetches the CODEMANIFEST DSL specification from GitHub and writes it to `<agent_dir>/skills/goga-cell/dsl.md`.
 5. **Discover tool packages** -- Scans installed Python packages with the `goga_tool_*` prefix via `importlib.metadata` and installs any that contain a valid `skills/<name>/SKILL.md` structure.
@@ -39,6 +39,8 @@ For each specified agent, `goga connect` performs the following steps:
 | Agent | Target Directory |
 |---|---|
 | `claude` | `~/.claude/` |
+| `codex` | `~/.codex/` |
+| `cursor` | `~/.cursor/` |
 
 ## Examples
 

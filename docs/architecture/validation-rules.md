@@ -1,6 +1,6 @@
 # Validation Rules Reference
 
-Goga enforces 21 validation rules across two scopes: 18 document-level rules applied by the [Visitor](ast-visitor.md) and 3 tree-level rules applied by the [Analyzer](ast-analyzer.md).
+Goga enforces 24 validation rules across two scopes: 21 document-level rules applied by the [Visitor](ast-visitor.md) and 3 tree-level rules applied by the [Analyzer](ast-analyzer.md).
 
 ## Import Rules (8)
 
@@ -28,7 +28,7 @@ Rules that validate the `usages` section of a CODEMANIFEST header.
 | `UsageUrlIsAccessible` | Document | Checks that URLs declared in usages are reachable (results are cached). |
 | `UsageLinksHasNotConflicts` | Document | Ensures no naming conflicts exist among usage links. |
 
-## Structure Rules (5)
+## Structure Rules (6)
 
 Rules that validate the `body` section -- entities, routines, their signatures, and locations.
 

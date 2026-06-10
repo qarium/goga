@@ -45,8 +45,8 @@ The command outputs a JSON object to stdout. Each top-level key is a normalized 
     "path/to/cell": {
         "EntityName": {
             "signature": {
-                "codemanifest": "entity EntityName { ... }",
-                "implementation": "class EntityName: ..."
+                "codemanifest": "(...)",
+                "implementation": "(...)"
             },
             "properties": {
                 "fieldName": {
@@ -56,15 +56,15 @@ The command outputs a JSON object to stdout. Each top-level key is a normalized 
             },
             "methods": {
                 "methodName": {
-                    "codemanifest": "methodName() -> String",
-                    "implementation": "def methodName(self) -> str: ..."
+                    "codemanifest": "(...) -> String",
+                    "implementation": "(...) -> str"
                 }
             }
         },
         "RoutineName": {
             "signature": {
-                "codemanifest": "routine RoutineName() -> void",
-                "implementation": "def RoutineName(): ..."
+                "codemanifest": "() -> void",
+                "implementation": "(...)"
             }
         }
     }

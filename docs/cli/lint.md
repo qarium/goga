@@ -5,20 +5,20 @@ Validate CODEMANIFEST files in a project.
 ## Synopsis
 
 ```bash
-goga lint [PATH]
+goga lint [CELL_PATH]
 ```
 
 ## Description
 
 `goga lint` parses all CODEMANIFEST files found in the project tree and validates them against a comprehensive rule set. It reports any errors with the document path, rule name, message, and the offending YAML fragment.
 
-The linter validates against **18 document-level rules** and **3 tree-level rules**, covering structural correctness, required fields, type signatures, and cross-reference integrity.
+The linter validates against **document-level rules** and **tree-level rules**, covering structural correctness, required fields, type signatures, and cross-reference integrity.
 
 ## Arguments
 
-| Argument | Default | Description |
-|---|---|---|
-| `PATH` | `.` | Path to the project root directory to lint. |
+| Argument    | Default | Description                          |
+|-------------|---------|--------------------------------------|
+| `CELL_PATH` | `.`     | Path to the cell of project to lint. |
 
 ## Output
 
@@ -56,7 +56,7 @@ goga lint /path/to/project
 
 ## Exit Codes
 
-| Code | Meaning |
-|---|---|
-| `0` | All CODEMANIFEST files are valid |
-| `1` | One or more validation errors found |
+| Code | Meaning                             |
+|------|-------------------------------------|
+| `0`  | All CODEMANIFEST files are valid    |
+| `1`  | One or more validation errors found |

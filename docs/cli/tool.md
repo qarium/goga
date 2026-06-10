@@ -16,10 +16,10 @@ This mechanism allows extending goga with arbitrary tools without modifying the 
 
 ## Arguments
 
-| Argument | Required | Description |
-|---|---|---|
-| `NAME` | yes | The tool name (without the `goga_tool_` prefix). |
-| `ARGS` | no | Arbitrary arguments passed through to the tool's `main` function. |
+| Argument | Required | Description                                                       |
+|----------|----------|-------------------------------------------------------------------|
+| `NAME`   | yes      | The tool name (without the `goga_tool_` prefix).                  |
+| `ARGS`   | no       | Arbitrary arguments passed through to the tool's `main` function. |
 
 ## How It Works
 
@@ -38,7 +38,7 @@ goga tool mkdocs
 Run with extra arguments:
 
 ```bash
-goga tool mkdocs --section api
+goga tool hello --help
 ```
 
 ## Creating a Tool Package
@@ -59,7 +59,7 @@ def main(args: list[str]) -> None:
 
 ## Exit Codes
 
-| Code | Meaning |
-|---|---|
-| `0` | Tool executed successfully |
-| `1` | Tool package not found or has no `main` function |
+| Code | Meaning                                          |
+|------|--------------------------------------------------|
+| `0`  | Tool executed successfully                       |
+| `1`  | Tool package not found or has no `main` function |

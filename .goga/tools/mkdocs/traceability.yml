@@ -41,10 +41,6 @@ docs/cli/schema.md:
   - goga/commands/schema
   - goga/schema
 
-docs/cli/sync.md:
-  - goga/commands/sync
-  - goga/sync
-
 docs/cli/connect.md:
   - goga/commands/connect
   - goga/connect

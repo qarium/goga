@@ -25,7 +25,7 @@ The wizard proceeds through the following steps in order:
 
 4. **Codemanifest Annotations** -- Add custom annotations (global directives for the AI agent) that will be stored in the configuration.
 
-5. **AI Agent** -- Select the AI agent that will build the implementation. Currently supported: `claude`.
+5. **AI Agent** -- Select the AI agent that will build the implementation. Supported: `claude`, `codex`.
 
 6. **Docker Image** -- Select a Docker image for the build environment. Available images depend on the chosen language:
 
@@ -39,7 +39,7 @@ The wizard proceeds through the following steps in order:
 
 7. **Custom Dockerfile** -- Optionally create a custom Dockerfile based on the selected image.
 
-8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_API_KEY` for Claude). You can also add arbitrary custom variables.
+8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
 ### Generated Files
 

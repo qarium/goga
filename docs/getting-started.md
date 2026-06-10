@@ -3,12 +3,20 @@
 ## Prerequisites
 
 - Python 3.10 or later
-- pip or uv package manager
+- pip package manager
 
 ## Install goga
 
 ```bash
 pip install goga
+```
+
+## Connect to agent
+
+Install skills into an agent:
+
+```bash
+goga connect <agent>
 ```
 
 ## Initialize a project
@@ -25,7 +33,7 @@ The wizard will prompt you for:
 2. **Convention** -- Optionally download language-specific conventions from the goga-lang-conventions repository
 3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
 4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
-5. **Agent** -- Select your AI executor: `claude` (more agents coming soon)
+5. **Agent** -- Select your AI executor: `claude`, `codex`
 6. **Docker image** -- Choose a prebuilt language image or enter a custom one
 7. **Dockerfile** -- Optionally generate a `Dockerfile` based on the selected image
 8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
@@ -108,10 +116,10 @@ Run the linter to check all CODEMANIFEST files in your project:
 goga lint .
 ```
 
-The linter applies 21 document-level rules and 3 project-level rules to verify structural correctness, import consistency, usage validity, and more.
+The linter applies 21 document-level rules and 3 tree-level rules to verify structural correctness, import consistency, usage validity, and more.
 
 ## Next steps
 
 - [Configuration](configuration.md) -- Full config reference for `.goga/config.yml`
 - [Examples](examples.md) -- CODEMANIFEST examples for all DSL features
-- [CLI Reference](cli-reference.md) -- All available commands and options
+- [CLI Reference](cli/index.md) -- All available commands and options

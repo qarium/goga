@@ -15,21 +15,25 @@ The config loader looks for this file relative to the current working directory.
 ```yaml
 language: python
 build:
+  image: qarium/goga-python-3.14:latest
+
   task_executor:
     agent: claude
     env:
       ANTHROPIC_API_KEY: sk-ant-...
-  image: qarium/goga-python-3.14:latest
+
   worktree: false
   skip_finalize: false
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
+
 codemanifest:
   usages:
     conventions: .goga/usages/conventions.md
+
   annotations: |
-    Follow the project conventions for all code generation.
+    Follow the project `conventions` for all code generation.
 ```
 
 ## Fields reference
@@ -74,7 +78,7 @@ codemanifest:
 | `usages` | mapping | No | Named practices available in CODEMANIFEST files. Format: `{name: path/to/file.md}`. Defaults to `{}` |
 | `annotations` | `string` | No | Free-text instructions for AI agents. Defaults to `None` |
 
-## Prebuilt Docker images
+## Pre-built Docker images
 
 goga provides prebuilt language images for build execution:
 

@@ -45,7 +45,6 @@ nav:
       - Contract: cli/contract.md
       - Config: cli/config.md
       - Schema: cli/schema.md
-      - Sync: cli/sync.md
       - Connect: cli/connect.md
       - Tool: cli/tool.md
   - Architecture:
