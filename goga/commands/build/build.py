@@ -58,7 +58,7 @@ def _write_env_file(
 ) -> Path:
     fd, path = tempfile.mkstemp(prefix="goga-env-")
     with os.fdopen(fd, "w") as f:
-        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
         for k, v in env.items():
             f.write(f"{k}={v}\n")
         for pair in extra_env:
@@ -165,7 +165,7 @@ def build(  # noqa: PLR0913
 
     container_name = f"goga-build-{os.getpid()}"
 
-    def _on_sigterm(signum: int, frame: object) -> None:
+    def _on_sigterm(signum: int, _frame: object) -> None:
         raise SystemExit(128 + signum)
 
     _prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)

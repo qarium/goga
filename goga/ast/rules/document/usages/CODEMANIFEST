@@ -81,7 +81,7 @@ Annotations: |
     - Usages with annotations.filepath are skipped
     - On network error (timeout, connection error) — validation error
     - Use HEAD request for efficiency (fallback to GET if server does not support it)
-    - Request timeout — 10 seconds
+    - Request timeout — 5 seconds
     - URL validation result is cached: on repeated check of the same URL
       the stored result is returned without a new network request
     - Cache is stored in the rule instance as a dict, key is the URL

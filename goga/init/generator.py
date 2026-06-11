@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import urllib.request
 from pathlib import Path
 
+import requests
 import yaml
+
+from .answers import GogaConfigAnswers, InitAnswers
 
 
 class _LiteralStr(str):
@@ -16,8 +18,6 @@ def _represent_literal_str(dumper: yaml.Dumper, data: _LiteralStr) -> yaml.Scala
 
 
 yaml.add_representer(_LiteralStr, _represent_literal_str)
-
-from .answers import GogaConfigAnswers, InitAnswers
 
 _CONVENTION_URL_TEMPLATE = (
     "https://raw.githubusercontent.com/qarium/goga-lang-conventions/"
@@ -58,8 +58,9 @@ class FileGenerator:
             url = _CONVENTION_URL_TEMPLATE.format(language=config.language)
 
             try:
-                with urllib.request.urlopen(url, timeout=30) as response:
-                    content = response.read().decode("utf-8")
+                response = requests.get(url, timeout=30)
+                response.raise_for_status()
+                content = response.text
             except Exception as exc:
                 raise RuntimeError(
                     f"Failed to download convention from {url}: {exc}"

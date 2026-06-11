@@ -67,9 +67,9 @@ def _make_find_spec_side_effect(spec_map: dict[str, Path]):
 
 def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = content
-    mock_response.__enter__ = mock.MagicMock(return_value=mock_response)
-    mock_response.__exit__ = mock.MagicMock(return_value=False)
+    mock_response.content = content
+    mock_response.status_code = 200
+    mock_response.raise_for_status = mock.MagicMock()
     return mock_response
 
 
@@ -272,7 +272,7 @@ class TestCLIForceOverwriteEndToEnd:
 
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path / "home"),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_urlopen_response()),
             mock.patch.object(
                 _install_mod.importlib.metadata,
                 "packages_distributions",
@@ -327,7 +327,7 @@ class TestCLIWithoutForceOverwrite:
 
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path / "home"),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_urlopen_response()),
             mock.patch.object(
                 _install_mod.importlib.metadata,
                 "packages_distributions",

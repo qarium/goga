@@ -3,11 +3,11 @@ from __future__ import annotations
 import importlib
 import inspect
 import sys
-import urllib.error
 from pathlib import Path
 from unittest import mock
 
 import click
+import requests.exceptions
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands import connect
@@ -18,17 +18,18 @@ _cmd_connect_module = importlib.import_module("goga.commands.connect.connect")
 _AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "agent"
 
 
-def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
+def _mock_requests_response(content: bytes = b"dsl content") -> mock.MagicMock:
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = content
-    mock_response.__enter__.return_value = mock_response
+    mock_response.content = content
+    mock_response.status_code = 200
+    mock_response.raise_for_status = mock.MagicMock()
     return mock_response
 
 
 def _invoke_install(tmp_path: Path, agents: tuple[str, ...] = ("claude",)) -> click.testing.Result:
     with (
         mock.patch("pathlib.Path.home", return_value=tmp_path),
-        mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+        mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
     ):
         return CliRunner().invoke(app, ["connect", *agents])
 
@@ -118,14 +119,14 @@ class TestDownloadDslSpecContract:
         )
 
     def test_download_dsl_spec_integrated_in_install(self, tmp_path: Path) -> None:
-        mock_response = _mock_urlopen_response(b"dsl content")
+        mock_response = _mock_requests_response(b"dsl content")
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response) as mock_get,
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
-        mock_urlopen.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
+        mock_get.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
 
 
 class TestLogicPositive:
@@ -134,7 +135,7 @@ class TestLogicPositive:
     def test_install_single_agent(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
@@ -156,7 +157,7 @@ class TestLogicPositive:
     def test_install_codex_agent(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "codex"])
         assert result.exit_code == 0
@@ -165,12 +166,13 @@ class TestLogicPositive:
         assert (codex_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
         assert not (codex_dir / "commands").exists()
         assert "Installed goga commands" not in result.output
-        assert "Installed" in result.output and "skills" in result.output
+        assert "Installed" in result.output
+        assert "skills" in result.output
 
     def test_install_cursor_agent(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "cursor"])
         assert result.exit_code == 0
@@ -179,12 +181,13 @@ class TestLogicPositive:
         assert (cursor_dir / "skills" / "goga-review-design" / "SKILL.md").is_file()
         assert not (cursor_dir / "commands").exists()
         assert "Installed goga commands" not in result.output
-        assert "Installed" in result.output and "skills" in result.output
+        assert "Installed" in result.output
+        assert "skills" in result.output
 
     def test_install_multiple_agents(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "claude", "codex"])
         assert result.exit_code == 0
@@ -192,7 +195,8 @@ class TestLogicPositive:
         assert (tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md").is_file()
         assert (tmp_path / ".codex" / "skills" / "goga-cell" / "dsl.md").is_file()
         assert not (tmp_path / ".codex" / "commands").exists()
-        assert "Installed" in result.output and "skills" in result.output
+        assert "Installed" in result.output
+        assert "skills" in result.output
     """Negative scenario tests for the connect command."""
 
     def test_install_unknown_agent(self, tmp_path: Path) -> None:
@@ -214,7 +218,7 @@ class TestLogicEdgeCases:
     def test_install_creates_target_dir(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
@@ -462,33 +466,33 @@ class TestDownloadDslSpecLogic:
     """Logical tests for _download_dsl_spec behavior during install."""
 
     def test_download_dsl_spec_success(self, tmp_path: Path) -> None:
-        mock_response = _mock_urlopen_response(b"dsl content")
+        mock_response = _mock_requests_response(b"dsl content")
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response) as mock_urlopen,
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response) as mock_get,
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.is_file()
         assert dsl_file.read_bytes() == b"dsl content"
-        mock_urlopen.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
+        mock_get.assert_called_once_with(_connect_module.DSL_SPEC_URL, timeout=30)
 
     def test_download_dsl_spec_idempotent(self, tmp_path: Path) -> None:
-        mock_response_old = _mock_urlopen_response(b"old dsl")
+        mock_response_old = _mock_requests_response(b"old dsl")
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response_old),
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response_old),
         ):
             first = CliRunner().invoke(app, ["connect", "claude"])
         assert first.exit_code == 0
         dsl_file = tmp_path / ".claude" / "skills" / "goga-cell" / "dsl.md"
         assert dsl_file.read_bytes() == b"old dsl"
 
-        mock_response_new = _mock_urlopen_response(b"new dsl content")
+        mock_response_new = _mock_requests_response(b"new dsl content")
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response_new),
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response_new),
         ):
             second = CliRunner().invoke(app, ["connect", "claude"])
         assert second.exit_code == 0
@@ -498,8 +502,8 @@ class TestDownloadDslSpecLogic:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch(
-                "urllib.request.urlopen",
-                side_effect=urllib.error.URLError("connection refused"),
+                "goga.connect.connect.requests.get",
+                side_effect=requests.exceptions.ConnectionError("connection refused"),
             ),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
@@ -508,11 +512,15 @@ class TestDownloadDslSpecLogic:
         assert "connection refused" in result.output
 
     def test_download_dsl_spec_http_error(self, tmp_path: Path) -> None:
+        mock_resp = mock.MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.reason = "Not Found"
+        http_error = requests.exceptions.HTTPError(response=mock_resp)
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch(
-                "urllib.request.urlopen",
-                side_effect=urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None),
+                "goga.connect.connect.requests.get",
+                side_effect=http_error,
             ),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
@@ -525,8 +533,8 @@ class TestDownloadDslSpecLogic:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch(
-                "urllib.request.urlopen",
-                side_effect=urllib.error.URLError(TimeoutError("timed out")),
+                "goga.connect.connect.requests.get",
+                side_effect=requests.exceptions.Timeout("timed out"),
             ),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
@@ -535,10 +543,10 @@ class TestDownloadDslSpecLogic:
         assert "timed out" in result.output
 
     def test_download_dsl_spec_empty_response(self, tmp_path: Path) -> None:
-        mock_response = _mock_urlopen_response(b"")
+        mock_response = _mock_requests_response(b"")
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response),
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
         assert result.exit_code == 0
@@ -547,7 +555,7 @@ class TestDownloadDslSpecLogic:
         assert dsl_file.read_bytes() == b""
 
     def test_download_dsl_spec_file_write_error(self, tmp_path: Path) -> None:
-        mock_response = _mock_urlopen_response(b"dsl content")
+        mock_response = _mock_requests_response(b"dsl content")
 
         def _write_bytes_only_dsl(self, data):
             if "dsl.md" in str(self):
@@ -556,7 +564,7 @@ class TestDownloadDslSpecLogic:
 
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=mock_response),
+            mock.patch("goga.connect.connect.requests.get", return_value=mock_response),
             mock.patch.object(Path, "write_bytes", _write_bytes_only_dsl),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])
@@ -570,7 +578,7 @@ class TestForceOverwriteLogic:
     def test_install_cli_force_overwrite_flag(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             result = CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
         assert result.exit_code == 0
@@ -578,7 +586,7 @@ class TestForceOverwriteLogic:
     def test_install_cli_default_no_force(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
             mock.patch.object(_cmd_connect_module, "connect_logic") as mock_logic,
         ):
             mock_logic.return_value = 0
@@ -589,7 +597,7 @@ class TestForceOverwriteLogic:
     def test_install_cli_passes_force_overwrite_true(self, tmp_path: Path) -> None:
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
             mock.patch.object(_cmd_connect_module, "connect_logic") as mock_logic,
         ):
             mock_logic.return_value = 0

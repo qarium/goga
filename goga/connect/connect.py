@@ -4,9 +4,9 @@ import importlib.metadata
 import importlib.util
 import shutil
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+import requests
 
 AGENT_DIRS: dict[str, str] = {
     "claude": ".claude",
@@ -52,12 +52,13 @@ def _install_skills(source: Path, target: Path) -> list[str]:
 def _download_dsl_spec(target: Path) -> None:
     dsl_path = target / "skills" / "goga-cell" / "dsl.md"
     try:
-        with urllib.request.urlopen(DSL_SPEC_URL, timeout=30) as response:
-            data = response.read()
-    except urllib.error.HTTPError as e:
-        raise OSError(f"Failed to download DSL spec: HTTP {e.code} {e.reason}") from e
-    except urllib.error.URLError as e:
-        raise OSError(f"Failed to download DSL spec: {e.reason}") from e
+        response = requests.get(DSL_SPEC_URL, timeout=30)
+        response.raise_for_status()
+        data = response.content
+    except requests.exceptions.HTTPError as e:
+        raise OSError(f"Failed to download DSL spec: HTTP {e.response.status_code} {e.response.reason}") from e
+    except requests.exceptions.RequestException as e:
+        raise OSError(f"Failed to download DSL spec: {e}") from e
     dsl_path.parent.mkdir(parents=True, exist_ok=True)
     dsl_path.write_bytes(data)
 

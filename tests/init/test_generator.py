@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from urllib.error import URLError
 
 import pytest
+import requests.exceptions
 import yaml
 from goga.init.answers import GogaConfigAnswers, InitAnswers
 from goga.init.generator import FileGenerator
@@ -111,14 +111,15 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = b"# Go conventions"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.text = "# Go conventions"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.urllib.request.urlopen", return_value=mock_response) as mock_urlopen:
+        with patch("goga.init.generator.requests.get", return_value=mock_response) as mock_get:
             gen.generate(answers)
 
-        called_url = mock_urlopen.call_args[0][0]
+        called_url = mock_get.call_args[0][0]
         assert "golang" in called_url
 
     def test_generate_skips_convention_when_no_usages(self, tmp_path: Path) -> None:
@@ -127,10 +128,10 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.urllib.request.urlopen") as mock_urlopen:
+        with patch("goga.init.generator.requests.get") as mock_get:
             gen.generate(answers)
 
-        mock_urlopen.assert_not_called()
+        mock_get.assert_not_called()
 
         config_path = tmp_path / ".goga" / "config.yml"
         assert config_path.exists()
@@ -146,10 +147,10 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.urllib.request.urlopen") as mock_urlopen:
+        with patch("goga.init.generator.requests.get") as mock_get:
             gen.generate(answers)
 
-        mock_urlopen.assert_not_called()
+        mock_get.assert_not_called()
 
         config_path = tmp_path / ".goga" / "config.yml"
         assert config_path.exists()
@@ -167,11 +168,12 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = b"# Python conventions content"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.text = "# Python conventions content"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.urllib.request.urlopen", return_value=mock_response):
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
             gen.generate(answers)
 
         conventions_path = tmp_path / ".goga" / "usages" / "conventions.md"
@@ -189,7 +191,7 @@ class TestLogic:
 
         gen = self._make_gen(tmp_path)
         with (
-            patch("goga.init.generator.urllib.request.urlopen", side_effect=URLError("Network error")),
+            patch("goga.init.generator.requests.get", side_effect=requests.exceptions.ConnectionError("Network error")),
             pytest.raises(RuntimeError, match="Failed to download convention"),
         ):
             gen.generate(answers)
@@ -234,7 +236,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.urllib.request.urlopen"):
+        with patch("goga.init.generator.requests.get"):
             gen.generate(answers)
 
         assert not (tmp_path / "Dockerfile").exists()

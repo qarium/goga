@@ -1,9 +1,10 @@
 Usages:
   conventions: .goga/usages/conventions.md
+  requests: .goga/usages/cooks/requests.md
 
 Annotations: |
   Apply the `conventions` practice during development and testing.
-  Use urllib.request from the standard library for HTTP requests.
+  Use `requests` library for HTTP requests.
   Use shutil for file copying.
   Route all output through sys.stderr (click is not used).
 
@@ -36,7 +37,7 @@ Annotations: |
           - goga/agent/skills/* → <target>/skills/
        d. Fetch the DSL specification:
           - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
-          - Perform HTTP GET via urllib.request
+          - Perform HTTP GET via `requests`
           - Write response to <target>/skills/goga-cell/dsl.md
           - On network failure, exit with code 1
        e. Install skills from tool packages:
@@ -59,7 +60,6 @@ Annotations: |
     - Do not modify content belonging to other extensions
     - Do not touch CLAUDE.md, settings.json, README.md in the target directory
     - Download dsl.md from the external repository on every installation
-    - Use urllib.request exclusively (no external dependencies)
     - Use importlib.metadata from the standard library
     - Abort with code 1 if dsl.md download fails
     - Derive tool skill names as goga-tool-<skill_dir_name>

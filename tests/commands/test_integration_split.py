@@ -118,7 +118,11 @@ class TestSchemaDelegation:
 
 def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
-    (tmp_path / ".goga" / "config.yml").write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n  image: qarium/goga:latest\n")
+    (tmp_path / ".goga" / "config.yml").write_text(
+        "language: python\nbuild:\n"
+        "  task_executor:\n    agent: claude\n"
+        "  image: qarium/goga:latest\n"
+    )
 
 
 class TestBuildDelegation:
@@ -220,10 +224,11 @@ class TestBuildDelegation:
 # --- install delegation ---
 
 
-def _mock_urlopen_response(content: bytes = b"dsl content") -> mock.MagicMock:
+def _mock_requests_response(content: bytes = b"dsl content") -> mock.MagicMock:
     mock_response = mock.MagicMock()
-    mock_response.read.return_value = content
-    mock_response.__enter__.return_value = mock_response
+    mock_response.content = content
+    mock_response.status_code = 200
+    mock_response.raise_for_status = mock.MagicMock()
     return mock_response
 
 
@@ -232,7 +237,7 @@ class TestInstallDelegation:
         with (
             mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("urllib.request.urlopen", return_value=_mock_urlopen_response()),
+            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
         ):
             runner = CliRunner()
             result = runner.invoke(connect_cli, ["claude"])

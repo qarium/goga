@@ -1,10 +1,10 @@
 """Contract tests for the goga.ast.rules package."""
 
-import urllib.error
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests.exceptions
 from goga.ast.errors import ASTRuleError, DocumentRuleError
 from goga.ast.nodes import (
     AnnotationsNode,
@@ -2158,10 +2158,8 @@ class TestUsageUrlIsAccessible:
 
     def test_usage_url_is_accessible_returns_200(self):
         mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
-        mock_response.__exit__ = MagicMock(return_value=False)
-        with patch("urllib.request.urlopen", return_value=mock_response):
+        mock_response.status_code = 200
+        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_response):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2198,8 +2196,9 @@ class TestUsageUrlIsAccessible:
         assert errors == []
 
     def test_usage_url_http_error_non_200(self):
-        http_error = urllib.error.HTTPError("https://example.com/docs.md", 404, "Not Found", None, None)
-        with patch("urllib.request.urlopen", side_effect=http_error):
+        mock_response = MagicMock()
+        mock_response.status_code = 404
+        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_response):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2220,8 +2219,9 @@ class TestUsageUrlIsAccessible:
             assert "HTTP 404" in errors[0].message
 
     def test_usage_url_http_error_500(self):
-        http_error = urllib.error.HTTPError("https://example.com/docs.md", 500, "Internal Server Error", None, None)
-        with patch("urllib.request.urlopen", side_effect=http_error):
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_response):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2242,8 +2242,8 @@ class TestUsageUrlIsAccessible:
 
     def test_usage_url_request_failed_timeout(self):
         with patch(
-            "urllib.request.urlopen",
-            side_effect=urllib.error.URLError(TimeoutError("timed out")),
+            "goga.ast.rules.document.usages.rules.requests.head",
+            side_effect=requests.exceptions.ConnectionError(TimeoutError("timed out")),
         ):
             root = DocumentRoot(
                 header=HeaderNode(
@@ -2265,13 +2265,14 @@ class TestUsageUrlIsAccessible:
             assert "request failed" in errors[0].message
 
     def test_usage_url_head_fallback_to_get(self):
-        mock_get_response = MagicMock()
-        mock_get_response.status = 200
-        mock_get_response.__enter__ = MagicMock(return_value=mock_get_response)
-        mock_get_response.__exit__ = MagicMock(return_value=False)
-        head_error = urllib.error.HTTPError("https://example.com/docs.md", 405, "Method Not Allowed", None, None)
+        mock_head_response = MagicMock()
+        mock_head_response.status_code = 405
 
-        with patch("urllib.request.urlopen", side_effect=[head_error, mock_get_response]):
+        mock_get_response = MagicMock()
+        mock_get_response.status_code = 200
+
+        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response), \
+             patch("goga.ast.rules.document.usages.rules.requests.get", return_value=mock_get_response):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2290,9 +2291,12 @@ class TestUsageUrlIsAccessible:
             assert errors == []
 
     def test_usage_url_head_fallback_get_also_fails(self):
-        head_error = urllib.error.HTTPError("https://example.com/docs.md", 405, "Method Not Allowed", None, None)
-        get_error = urllib.error.URLError("connection refused")
-        with patch("urllib.request.urlopen", side_effect=[head_error, get_error]):
+        mock_head_response = MagicMock()
+        mock_head_response.status_code = 405
+
+        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response), \
+             patch("goga.ast.rules.document.usages.rules.requests.get",
+                   side_effect=requests.exceptions.ConnectionError("connection refused")):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2332,7 +2336,7 @@ class TestUsageUrlIsAccessible:
 
     def test_usage_url_invalid_format(self):
         with patch(
-            "urllib.request.urlopen",
+            "goga.ast.rules.document.usages.rules.requests.head",
             side_effect=ValueError("unknown url type: 'not-a-valid-url'"),
         ):
             root = DocumentRoot(

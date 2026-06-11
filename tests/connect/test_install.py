@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import importlib
 import inspect
-import urllib.error
 from pathlib import Path
 from unittest import mock
 
 import pytest
+import requests.exceptions
 from goga.connect.connect import (
     AGENTS_WITH_COMMANDS,
     _cleanup_goga_skills,
@@ -128,11 +128,11 @@ class TestDownloadDslSpec:
         dsl_dir.mkdir(parents=True)
 
         mock_response = mock.MagicMock()
-        mock_response.read.return_value = b"dsl content"
-        mock_response.__enter__ = mock.MagicMock(return_value=mock_response)
-        mock_response.__exit__ = mock.MagicMock(return_value=False)
+        mock_response.content = b"dsl content"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = mock.MagicMock()
 
-        with mock.patch.object(_install_mod.urllib.request, "urlopen", return_value=mock_response):
+        with mock.patch.object(_install_mod.requests, "get", return_value=mock_response):
             _download_dsl_spec(tmp_path)
 
         assert (dsl_dir / "dsl.md").read_bytes() == b"dsl content"
@@ -141,11 +141,16 @@ class TestDownloadDslSpec:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
+        mock_resp = mock.MagicMock()
+        mock_resp.status_code = 404
+        mock_resp.reason = "Not Found"
+        http_error = requests.exceptions.HTTPError(response=mock_resp)
+
         with (
             mock.patch.object(
-                _install_mod.urllib.request,
-                "urlopen",
-                side_effect=urllib.error.HTTPError("url", 404, "Not Found", {}, None),
+                _install_mod.requests,
+                "get",
+                side_effect=http_error,
             ),
             pytest.raises(OSError, match="HTTP 404"),
         ):
@@ -157,9 +162,9 @@ class TestDownloadDslSpec:
 
         with (
             mock.patch.object(
-                _install_mod.urllib.request,
-                "urlopen",
-                side_effect=urllib.error.URLError("connection refused"),
+                _install_mod.requests,
+                "get",
+                side_effect=requests.exceptions.ConnectionError("connection refused"),
             ),
             pytest.raises(OSError, match="Failed to download DSL spec"),
         ):

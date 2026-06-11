@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import argparse
-import sys
 
-from .build import build
 from ..config import load_config
+from .build import build
 
 
 def main() -> int:

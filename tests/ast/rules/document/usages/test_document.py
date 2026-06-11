@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import inspect
-import urllib.error
 from typing import ClassVar
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+import requests.exceptions
 from goga.ast.nodes.body import BodyNode, EntityTypeNode, MethodNode, PropertyNode, RoutineTypeNode
 from goga.ast.nodes.common import AnnotationsNode
 from goga.ast.nodes.document import DocumentNode, DocumentRoot
@@ -24,20 +24,12 @@ from goga.ast.rules.document.usages.rules import (
 )
 
 
-def _mock_response(status: int = 200):
-    """Create a mock HTTP response supporting the context manager protocol."""
-
-    class MockResp:
-        def __init__(self) -> None:
-            self.status = status
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args: object) -> None:
-            pass
-
-    return MockResp()
+def _mock_response(status_code: int = 200):
+    """Create a mock HTTP response for requests library."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.raise_for_status = MagicMock()
+    return resp
 
 
 class TestContract:
@@ -248,10 +240,10 @@ class TestUsageFilepathExists:
 class TestUsageUrlIsAccessible:
     """UsageUrlIsAccessible: URL usages must be accessible via HTTP 200."""
 
-    @patch("urllib.request.urlopen")
-    def test_accessible_url_returns_empty(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_accessible_url_returns_empty(self, mock_head):
         mock_response = _mock_response(200)
-        mock_urlopen.return_value = mock_response
+        mock_head.return_value = mock_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -265,10 +257,10 @@ class TestUsageUrlIsAccessible:
         rule = UsageUrlIsAccessible()
         assert rule.check(node) == []
 
-    @patch("urllib.request.urlopen")
-    def test_not_accessible_returns_error(self, mock_urlopen):
-
-        mock_urlopen.side_effect = urllib.error.HTTPError("https://example.com", 404, "Not Found", {}, None)
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_not_accessible_returns_error(self, mock_head):
+        mock_response = _mock_response(404)
+        mock_head.return_value = mock_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -284,10 +276,10 @@ class TestUsageUrlIsAccessible:
         assert len(errors) == 1
         assert "not_accessible" in errors[0].message.lower() or "404" in errors[0].message
 
-    @patch("urllib.request.urlopen")
-    def test_request_failed_returns_error(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_request_failed_returns_error(self, mock_head):
 
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        mock_head.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         usage_item = UsageItemNode(
             name="remote",
@@ -329,12 +321,13 @@ class TestUsageUrlIsAccessible:
         rule = UsageUrlIsAccessible()
         assert rule.check(node) == []
 
-    @patch("urllib.request.urlopen")
-    def test_head_405_fallback_get_ok(self, mock_urlopen):
-
-        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
-        mock_response = _mock_response(200)
-        mock_urlopen.side_effect = [head_error, mock_response]
+    @patch("goga.ast.rules.document.usages.rules.requests.get")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_head_405_fallback_get_ok(self, mock_head, mock_get):
+        head_response = _mock_response(405)
+        get_response = _mock_response(200)
+        mock_head.return_value = head_response
+        mock_get.return_value = get_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -506,11 +499,12 @@ class TestAllUsagesIsUsedExtra:
 class TestUsageUrlIsAccessibleExtra:
     """Extra edge cases for UsageUrlIsAccessible."""
 
-    @patch("urllib.request.urlopen")
-    def test_head_405_fallback_get_fails(self, mock_urlopen):
-        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
-        get_error = urllib.error.URLError("Connection refused")
-        mock_urlopen.side_effect = [head_error, get_error]
+    @patch("goga.ast.rules.document.usages.rules.requests.get")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_head_405_fallback_get_fails(self, mock_head, mock_get):
+        head_response = _mock_response(405)
+        mock_head.return_value = head_response
+        mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         usage_item = UsageItemNode(
             name="remote",
@@ -526,11 +520,13 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors) == 1
         assert "failed" in errors[0].message.lower()
 
-    @patch("urllib.request.urlopen")
-    def test_head_405_fallback_get_non_200(self, mock_urlopen):
-        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
+    @patch("goga.ast.rules.document.usages.rules.requests.get")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_head_405_fallback_get_non_200(self, mock_head, mock_get):
+        head_response = _mock_response(405)
         get_response = _mock_response(503)
-        mock_urlopen.side_effect = [head_error, get_response]
+        mock_head.return_value = head_response
+        mock_get.return_value = get_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -547,10 +543,10 @@ class TestUsageUrlIsAccessibleExtra:
         assert "503" in errors[0].message
 
 
-    @patch("urllib.request.urlopen")
-    def test_cache_hit_returns_cached_result(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_hit_returns_cached_result(self, mock_head):
         mock_response = _mock_response(200)
-        mock_urlopen.return_value = mock_response
+        mock_head.return_value = mock_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -563,18 +559,16 @@ class TestUsageUrlIsAccessibleExtra:
         node = DocumentNode(root=root)
         rule = UsageUrlIsAccessible()
         rule.check(node)
-        mock_urlopen.assert_called_once()
+        mock_head.assert_called_once()
 
-        mock_urlopen.reset_mock()
+        mock_head.reset_mock()
         errors = rule.check(node)
         assert errors == []
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_cache_stores_error_result(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.HTTPError(
-            "https://example.com", 404, "Not Found", {}, None,
-        )
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_stores_error_result(self, mock_head):
+        mock_head.return_value = _mock_response(404)
 
         usage_item = UsageItemNode(
             name="remote",
@@ -589,16 +583,16 @@ class TestUsageUrlIsAccessibleExtra:
         errors1 = rule.check(node)
         assert len(errors1) == 1
 
-        mock_urlopen.reset_mock()
+        mock_head.reset_mock()
         errors2 = rule.check(node)
         assert len(errors2) == 1
         assert errors1[0].message == errors2[0].message
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_different_urls_both_checked(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_different_urls_both_checked(self, mock_head):
         mock_response = _mock_response(200)
-        mock_urlopen.return_value = mock_response
+        mock_head.return_value = mock_response
 
         usage_a = UsageItemNode(
             name="alpha",
@@ -615,12 +609,12 @@ class TestUsageUrlIsAccessibleExtra:
         node = DocumentNode(root=root)
         rule = UsageUrlIsAccessible()
         assert rule.check(node) == []
-        assert mock_urlopen.call_count == 2
+        assert mock_head.call_count == 2
 
-    @patch("urllib.request.urlopen")
-    def test_cache_persists_across_documents(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_persists_across_documents(self, mock_head):
         mock_response = _mock_response(200)
-        mock_urlopen.return_value = mock_response
+        mock_head.return_value = mock_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -639,14 +633,14 @@ class TestUsageUrlIsAccessibleExtra:
         rule = UsageUrlIsAccessible()
 
         rule.check(node1)
-        assert mock_urlopen.call_count == 1
+        assert mock_head.call_count == 1
 
         rule.check(node2)
-        assert mock_urlopen.call_count == 1
+        assert mock_head.call_count == 1
 
-    @patch("urllib.request.urlopen")
-    def test_cache_hit_with_network_error_returns_cached_error(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_hit_with_network_error_returns_cached_error(self, mock_head):
+        mock_head.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         usage_item = UsageItemNode(
             name="remote",
@@ -662,17 +656,17 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors1) == 1
         assert "failed" in errors1[0].message.lower()
 
-        mock_urlopen.reset_mock()
-        mock_urlopen.return_value = _mock_response(200)
+        mock_head.reset_mock()
+        mock_head.return_value = _mock_response(200)
         errors2 = rule.check(node)
         assert len(errors2) == 1
         assert errors1[0].message == errors2[0].message
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_cache_empty_for_new_rule_instance(self, mock_urlopen):
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_empty_for_new_rule_instance(self, mock_head):
         mock_response = _mock_response(200)
-        mock_urlopen.return_value = mock_response
+        mock_head.return_value = mock_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -685,19 +679,19 @@ class TestUsageUrlIsAccessibleExtra:
         node = DocumentNode(root=root)
         rule1 = UsageUrlIsAccessible()
         rule1.check(node)
-        assert mock_urlopen.call_count == 1
+        assert mock_head.call_count == 1
 
         rule2 = UsageUrlIsAccessible()
         rule2.check(node)
-        assert mock_urlopen.call_count == 2
+        assert mock_head.call_count == 2
 
-    @patch("urllib.request.urlopen")
-    def test_cache_with_head_fallback_get(self, mock_urlopen):
-        head_error = urllib.error.HTTPError(
-            "https://example.com", 405, "Method Not Allowed", {}, None,
-        )
-        mock_response = _mock_response(200)
-        mock_urlopen.side_effect = [head_error, mock_response]
+    @patch("goga.ast.rules.document.usages.rules.requests.get")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_with_head_fallback_get(self, mock_head, mock_get):
+        head_response = _mock_response(405)
+        get_response = _mock_response(200)
+        mock_head.return_value = head_response
+        mock_get.return_value = get_response
 
         usage_item = UsageItemNode(
             name="remote",
@@ -710,17 +704,21 @@ class TestUsageUrlIsAccessibleExtra:
         node = DocumentNode(root=root)
         rule = UsageUrlIsAccessible()
         assert rule.check(node) == []
-        assert mock_urlopen.call_count == 2
+        assert mock_head.call_count == 1
+        assert mock_get.call_count == 1
 
-        mock_urlopen.reset_mock()
+        mock_head.reset_mock()
+        mock_get.reset_mock()
         assert rule.check(node) == []
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
+        mock_get.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_cache_with_head_fallback_get_failure(self, mock_urlopen):
-        head_error = urllib.error.HTTPError("https://example.com", 405, "Method Not Allowed", {}, None)
-        get_error = urllib.error.URLError("Connection refused")
-        mock_urlopen.side_effect = [head_error, get_error]
+    @patch("goga.ast.rules.document.usages.rules.requests.get")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_with_head_fallback_get_failure(self, mock_head, mock_get):
+        head_response = _mock_response(405)
+        mock_head.return_value = head_response
+        mock_get.side_effect = requests.exceptions.ConnectionError("Connection refused")
 
         usage_item = UsageItemNode(
             name="remote",
@@ -736,15 +734,17 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors1) == 1
         assert "failed" in errors1[0].message.lower()
 
-        mock_urlopen.reset_mock()
+        mock_head.reset_mock()
+        mock_get.reset_mock()
         errors2 = rule.check(node)
         assert len(errors2) == 1
         assert errors1[0].message == errors2[0].message
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
+        mock_get.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_cache_generic_exception(self, mock_urlopen):
-        mock_urlopen.side_effect = ValueError("unexpected error")
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_generic_exception(self, mock_head):
+        mock_head.side_effect = ValueError("unexpected error")
 
         usage_item = UsageItemNode(
             name="remote",
@@ -760,17 +760,15 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors1) == 1
         assert "unexpected error" in errors1[0].message
 
-        mock_urlopen.reset_mock()
+        mock_head.reset_mock()
         errors2 = rule.check(node)
         assert len(errors2) == 1
         assert errors1[0].message == errors2[0].message
-        mock_urlopen.assert_not_called()
+        mock_head.assert_not_called()
 
-    @patch("urllib.request.urlopen")
-    def test_cache_rebuilds_errors_with_current_context(self, mock_urlopen):
-        mock_urlopen.side_effect = urllib.error.HTTPError(
-            "https://example.com", 404, "Not Found", {}, None,
-        )
+    @patch("goga.ast.rules.document.usages.rules.requests.head")
+    def test_cache_rebuilds_errors_with_current_context(self, mock_head):
+        mock_head.return_value = _mock_response(404)
 
         usage_a = UsageItemNode(
             name="alpha",
@@ -801,7 +799,7 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors2) == 1
         assert "beta" in errors2[0].message
         assert errors2[0].document.path == "doc_b.md"
-        mock_urlopen.assert_called_once()
+        mock_head.assert_called_once()
 
 
 class TestUsageLinksHasNotConflictsExtra:

@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+import requests
 
 from ....errors import DocumentRuleError
 from ....nodes.header import ImportTypeItemNode, ImportUsageItemNode
@@ -148,25 +148,22 @@ class UsageUrlIsAccessible(DocumentRule):
 
     def _http_check(self, url: str) -> None | tuple[str, int | object]:
         try:
-            request = urllib.request.Request(url, method="HEAD")
-            with urllib.request.urlopen(request, timeout=_REQUEST_TIMEOUT) as response:
-                if response.status != _OK_STATUS:
-                    return ("http", response.status)
-                return None
-        except urllib.error.HTTPError as e:
-            if e.code == _METHOD_NOT_ALLOWED:
+            response = requests.head(url, timeout=_REQUEST_TIMEOUT)
+            if response.status_code == _METHOD_NOT_ALLOWED:
                 return self._check_via_get(url)
-            return ("http", e.code)
-        except urllib.error.URLError as e:
-            return ("error", e.reason)
+            if response.status_code != _OK_STATUS:
+                return ("http", response.status_code)
+            return None
+        except requests.exceptions.RequestException as e:
+            return ("error", e)
         except Exception as e:
             return ("error", e)
 
     def _check_via_get(self, url: str) -> None | tuple[str, int | object]:
         try:
-            with urllib.request.urlopen(url, timeout=_REQUEST_TIMEOUT) as response:
-                if response.status != _OK_STATUS:
-                    return ("http", response.status)
+            response = requests.get(url, timeout=_REQUEST_TIMEOUT)
+            if response.status_code != _OK_STATUS:
+                return ("http", response.status_code)
         except Exception as e:
             return ("error", e)
         return None

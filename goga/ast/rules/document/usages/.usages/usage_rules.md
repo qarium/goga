@@ -40,7 +40,7 @@ rule = UsageUrlIsAccessible()
 ```
 
 - Uses HEAD request with GET fallback
-- Timeout: 10 seconds
+- Timeout: 5 seconds
 - Network errors produce validation errors
 - Inline and filepath usages are skipped
 - URL validation results are cached per rule instance — duplicate URLs do not trigger additional network requests

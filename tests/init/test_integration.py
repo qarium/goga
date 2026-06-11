@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from urllib.error import URLError
 
 import click
+import requests.exceptions
 import yaml
 from goga.init.answers import GogaConfigAnswers, InitAnswers
 from goga.init.generator import FileGenerator
@@ -44,10 +44,11 @@ class TestIntegration:
         logic = InitLogic(mock_q, gen)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = b"# Python conventions mock"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.text = "# Python conventions mock"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.urllib.request.urlopen", return_value=mock_response):
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -77,7 +78,7 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.urllib.request.urlopen") as mock_urlopen:
+        with patch("goga.init.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
@@ -87,7 +88,7 @@ class TestIntegration:
         assert data["language"] == "golang"
         assert "codemanifest" not in data
         assert not (tmp_path / ".goga" / "usages").exists()
-        mock_urlopen.assert_not_called()
+        mock_get.assert_not_called()
 
     def test_init_with_env_vars(self, tmp_path: Path) -> None:
         """Environment variables are written to config.yml."""
@@ -132,10 +133,11 @@ class TestIntegration:
         logic = InitLogic(mock_q, gen)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = b"# mock"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.text = "# mock"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.urllib.request.urlopen", return_value=mock_response):
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -161,11 +163,11 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.urllib.request.urlopen") as mock_urlopen:
+        with patch("goga.init.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
-        mock_urlopen.assert_not_called()
+        mock_get.assert_not_called()
 
         data = _load_yaml(tmp_path / ".goga" / "config.yml")
         assert data["codemanifest"]["usages"] == {"custom": ".goga/usages/custom.md"}
@@ -238,10 +240,11 @@ class TestIntegration:
         logic = InitLogic(mock_q, gen)
 
         mock_response = MagicMock()
-        mock_response.read.return_value = b"# mock"
-        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.text = "# mock"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.urllib.request.urlopen", return_value=mock_response):
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -280,7 +283,10 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.urllib.request.urlopen", side_effect=URLError("Network error")):
+        with patch(
+            "goga.init.generator.requests.get",
+            side_effect=requests.exceptions.ConnectionError("Network error"),
+        ):
             result = logic.run()
 
         assert result == 1

@@ -1,4 +1,4 @@
-"""Goga — tool for working with the codemanifest specification."""
+"""Goga — CLI and library for the CODEMANIFEST specification lifecycle."""
 
 from .ast import AST
 from .cli import app

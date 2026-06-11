@@ -7,7 +7,7 @@ from .commands import build, config, connect, contract, init, lint, schema, sync
 
 @click.group()
 def app() -> None:
-    """Goga — CODEMANIFEST validation tool."""
+    """Goga — CLI tool suite for CODEMANIFEST-based development."""
 
 
 app.add_command(build)
