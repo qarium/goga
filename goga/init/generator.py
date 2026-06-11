@@ -20,8 +20,7 @@ def _represent_literal_str(dumper: yaml.Dumper, data: _LiteralStr) -> yaml.Scala
 yaml.add_representer(_LiteralStr, _represent_literal_str)
 
 _CONVENTION_URL_TEMPLATE = (
-    "https://raw.githubusercontent.com/qarium/goga-lang-conventions/"
-    "refs/heads/0.0.x/{language}/project.md"
+    "https://raw.githubusercontent.com/qarium/goga-lang-conventions/refs/heads/0.0.x/{language}/project.md"
 )
 
 
@@ -62,9 +61,7 @@ class FileGenerator:
                 response.raise_for_status()
                 content = response.text
             except Exception as exc:
-                raise RuntimeError(
-                    f"Failed to download convention from {url}: {exc}"
-                ) from exc
+                raise RuntimeError(f"Failed to download convention from {url}: {exc}") from exc
 
             usages_dir = self._base_dir / ".goga" / "usages"
             usages_dir.mkdir(parents=True, exist_ok=True)
@@ -91,9 +88,7 @@ class FileGenerator:
             if config.codemanifest_usages:
                 codemanifest["usages"] = config.codemanifest_usages
             if config.codemanifest_annotations is not None:
-                codemanifest["annotations"] = _LiteralStr(
-                    config.codemanifest_annotations
-                )
+                codemanifest["annotations"] = _LiteralStr(config.codemanifest_annotations)
             data["codemanifest"] = codemanifest
 
         with (goga_dir / "config.yml").open("w", encoding="utf-8") as f:

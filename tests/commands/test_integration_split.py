@@ -21,6 +21,7 @@ _sync_mod = importlib.import_module("goga.commands.sync.sync")
 _schema_mod = importlib.import_module("goga.commands.schema.schema")
 _build_mod = importlib.import_module("goga.commands.build.build")
 _connect_mod = importlib.import_module("goga.commands.connect.connect")
+_connect_impl = importlib.import_module("goga.connect.connect")
 
 # --- sync delegation ---
 
@@ -119,9 +120,7 @@ class TestSchemaDelegation:
 def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
-        "language: python\nbuild:\n"
-        "  task_executor:\n    agent: claude\n"
-        "  image: qarium/goga:latest\n"
+        "language: python\nbuild:\n  task_executor:\n    agent: claude\n  image: qarium/goga:latest\n"
     )
 
 
@@ -237,7 +236,7 @@ class TestInstallDelegation:
         with (
             mock.patch.object(_connect_mod, "connect_logic", return_value=0) as mock_logic,
             mock.patch("pathlib.Path.home", return_value=tmp_path),
-            mock.patch("goga.connect.connect.requests.get", return_value=_mock_requests_response()),
+            mock.patch.object(_connect_impl.requests, "get", return_value=_mock_requests_response()),
         ):
             runner = CliRunner()
             result = runner.invoke(connect_cli, ["claude"])

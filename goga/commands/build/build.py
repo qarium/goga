@@ -30,11 +30,15 @@ def _read_git_config() -> dict[str, str]:
     try:
         name_result = subprocess.run(
             ["git", "config", "user.name"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         email_result = subprocess.run(
             ["git", "config", "user.email"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
     except (FileNotFoundError, PermissionError, OSError):
         return {}
@@ -75,10 +79,21 @@ def _build_docker_cmd(
 ) -> list[str]:
     project_dir = Path.cwd().resolve()
 
-    cmd: list[str] = ["docker", "run", "--rm", "--name", container_name,
-                      "--entrypoint", "python3", "-v",
-                      f"{project_dir}:/workspace", "-w",
-                      "/workspace", "--env-file", str(env_file)]
+    cmd: list[str] = [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        container_name,
+        "--entrypoint",
+        "python3",
+        "-v",
+        f"{project_dir}:/workspace",
+        "-w",
+        "/workspace",
+        "--env-file",
+        str(env_file),
+    ]
 
     codex_auth = Path.home() / ".codex" / "auth.json"
     if codex_auth.is_file():
@@ -188,7 +203,7 @@ def build(  # noqa: PLR0913
         env_file.unlink(missing_ok=True)
         subprocess.run(
             ["docker", "kill", container_name],
-            check=False, capture_output=True,
+            check=False,
+            capture_output=True,
         )
         signal.signal(signal.SIGTERM, _prev_sigterm)
-

@@ -40,6 +40,7 @@ class BuildConfig:
 @dataclass(kw_only=True, frozen=True)
 class Config:
     """Root project configuration loaded from .goga/config.yml."""
+
     lang: str
     build: BuildConfig
     commands: dict = field(default_factory=dict)

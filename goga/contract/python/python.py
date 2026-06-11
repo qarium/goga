@@ -91,10 +91,7 @@ def _extract_return_type(node) -> str:
 
 
 def _is_property_decorator(decorator_node) -> bool:
-    return any(
-        child.type == "identifier" and _node_text(child) == "property"
-        for child in decorator_node.children
-    )
+    return any(child.type == "identifier" and _node_text(child) == "property" for child in decorator_node.children)
 
 
 def _func_name(func_node) -> str:

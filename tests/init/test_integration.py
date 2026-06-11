@@ -226,10 +226,7 @@ class TestIntegration:
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
-            codemanifest_annotations=(
-                "Использовать `conventions` для правил написания кода и тестов."
-                "\nCustom rule"
-            ),
+            codemanifest_annotations=("Использовать `conventions` для правил написания кода и тестов.\nCustom rule"),
         )
         answers = InitAnswers(goga_config=config)
 

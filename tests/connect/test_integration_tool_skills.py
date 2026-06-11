@@ -110,9 +110,7 @@ class TestFullInstallCycleWithToolPackages:
         # Tool skills installed
         assert (target / "skills" / "goga-tool-debug" / "SKILL.md").is_file()
 
-    def test_print_summary_includes_tool_skills_count(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_print_summary_includes_tool_skills_count(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         _create_agent_resources(tmp_path)
         mock_source = tmp_path / "goga" / "agent"
         mock_home = tmp_path / "home"
@@ -192,9 +190,7 @@ class TestCleanupObsoleteToolSkills:
 class TestTwoPackagesSameSkillName:
     """Test: two packages with same skill name — first wins, stderr has warning."""
 
-    def test_first_package_wins_on_name_conflict(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_first_package_wins_on_name_conflict(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         # Package 1: goga_tool_debug with skill "debug"
         pkg1 = tmp_path / "goga_tool_debug"
         pkg1.mkdir(parents=True)
@@ -226,9 +222,7 @@ class TestTwoPackagesSameSkillName:
             mock.patch.object(
                 _install_mod.importlib.util,
                 "find_spec",
-                side_effect=_make_find_spec_side_effect(
-                    {"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}
-                ),
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}),
             ),
         ):
             result = _install_tool_skills(target, False)
@@ -272,7 +266,7 @@ class TestCLIForceOverwriteEndToEnd:
 
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path / "home"),
-            mock.patch("goga.connect.connect.requests.get", return_value=_mock_urlopen_response()),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_urlopen_response()),
             mock.patch.object(
                 _install_mod.importlib.metadata,
                 "packages_distributions",
@@ -284,9 +278,7 @@ class TestCLIForceOverwriteEndToEnd:
             mock.patch.object(
                 _install_mod.importlib.util,
                 "find_spec",
-                side_effect=_make_find_spec_side_effect(
-                    {"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}
-                ),
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}),
             ),
         ):
             result = CliRunner().invoke(app, ["connect", "claude", "--force-overwrite"])
@@ -302,9 +294,7 @@ class TestCLIWithoutForceOverwrite:
     """Test: CLI without --force-overwrite — when two packages provide the
     same skill name, the second package's skill is NOT installed."""
 
-    def test_cli_no_force_preserves_existing_tool_skills(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_cli_no_force_preserves_existing_tool_skills(self, tmp_path: Path, monkeypatch) -> None:
         (tmp_path / ".goga").mkdir()
         (tmp_path / ".goga" / "config.yml").write_text(
             "language: python\nbuild:\n  task_executor:\n    agent: claude\n"
@@ -327,7 +317,7 @@ class TestCLIWithoutForceOverwrite:
 
         with (
             mock.patch("pathlib.Path.home", return_value=tmp_path / "home"),
-            mock.patch("goga.connect.connect.requests.get", return_value=_mock_urlopen_response()),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_urlopen_response()),
             mock.patch.object(
                 _install_mod.importlib.metadata,
                 "packages_distributions",
@@ -339,9 +329,7 @@ class TestCLIWithoutForceOverwrite:
             mock.patch.object(
                 _install_mod.importlib.util,
                 "find_spec",
-                side_effect=_make_find_spec_side_effect(
-                    {"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}
-                ),
+                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}),
             ),
         ):
             result = CliRunner().invoke(app, ["connect", "claude"])

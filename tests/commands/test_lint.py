@@ -246,7 +246,7 @@ class TestSummaryBehavior:
         empty_dir = tmp_path / "empty_project"
         empty_dir.mkdir()
         (empty_dir / "CODEMANIFEST").write_text(
-            "Usages: {}\nAnnotations: \"\"\n",
+            'Usages: {}\nAnnotations: ""\n',
             encoding="utf-8",
         )
 

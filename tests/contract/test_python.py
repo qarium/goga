@@ -14,6 +14,7 @@ class TestContractFacade:
 
     def test_facade_importable(self):
         from goga.contract.python import python_contract as fn
+
         assert callable(fn)
 
     def test_signature_accepts_str_returns_list(self, tmp_path):
@@ -30,14 +31,16 @@ class TestPositiveBehavioral:
     def test_extracts_entity_and_routine(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class MyClass:
                 def __init__(self, name: str):
                     self.name = name
 
             def my_func(x: int) -> str:
                 return str(x)
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 2
         entity = next(r for r in result if r.name == "MyClass")
@@ -50,7 +53,8 @@ class TestPositiveBehavioral:
     def test_extracts_properties(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Config:
                 def __init__(self):
                     self._host = ""
@@ -63,7 +67,8 @@ class TestPositiveBehavioral:
                 @property
                 def port(self) -> int:
                     return self._port
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
@@ -78,10 +83,12 @@ class TestPositiveBehavioral:
     def test_handles_default_params(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             def connect(host: str = "localhost", port: int = 8080) -> None:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         assert result[0].name == "connect"
@@ -91,10 +98,12 @@ class TestPositiveBehavioral:
     def test_handles_args_kwargs(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             def func(x: int, *args, **kwargs) -> None:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         sig = result[0].signature
@@ -105,7 +114,8 @@ class TestPositiveBehavioral:
     def test_extracts_mixed_entity(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Service:
                 def __init__(self, name: str) -> None:
                     self.name = name
@@ -119,7 +129,8 @@ class TestPositiveBehavioral:
 
                 def _internal(self) -> None:
                     pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
@@ -135,7 +146,8 @@ class TestPositiveBehavioral:
     def test_extracts_public_methods(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Worker:
                 def __init__(self) -> None:
                     pass
@@ -145,7 +157,8 @@ class TestPositiveBehavioral:
 
                 def execute(self, cmd: str) -> str:
                     return cmd
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
@@ -157,7 +170,8 @@ class TestPositiveBehavioral:
     def test_extracts_decorated_methods(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Calc:
                 def __init__(self) -> None:
                     pass
@@ -169,7 +183,8 @@ class TestPositiveBehavioral:
                 @classmethod
                 def create(cls, value: int):
                     return Calc()
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
@@ -184,7 +199,8 @@ class TestPositiveBehavioral:
     def test_returns_sorted(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Zebra:
                 def __init__(self) -> None:
                     pass
@@ -198,7 +214,8 @@ class TestPositiveBehavioral:
 
             def alpha_func() -> None:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 4
         assert result[0].name == "Apple"
@@ -210,15 +227,19 @@ class TestPositiveBehavioral:
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("")
-        (pkg / "models.py").write_text(dedent("""\
+        (pkg / "models.py").write_text(
+            dedent("""\
             class User:
                 def __init__(self, name: str) -> None:
                     pass
-        """))
-        (pkg / "utils.py").write_text(dedent("""\
+        """)
+        )
+        (pkg / "utils.py").write_text(
+            dedent("""\
             def helper(x: int) -> str:
                 return str(x)
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         names = {r.name for r in result}
         assert "User" in names
@@ -228,10 +249,12 @@ class TestPositiveBehavioral:
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
         (pkg / "__init__.py").write_text("")
-        (pkg / "__main__.py").write_text(dedent("""\
+        (pkg / "__main__.py").write_text(
+            dedent("""\
             def main() -> None:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         names = [r.name for r in result]
         assert "main" in names
@@ -242,12 +265,14 @@ class TestPositiveBehavioral:
     def test_extracts_type_annotated_fields_as_properties(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class CellData:
                 name: str
                 description: str
                 children: list[str]
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         entity = result[0]
@@ -262,11 +287,13 @@ class TestPositiveBehavioral:
     def test_type_annotated_field_with_default(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Config:
                 host: str = "localhost"
                 port: int = 8080
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         entity = result[0]
         prop_names = {p.name for p in entity.properties}
@@ -277,7 +304,8 @@ class TestPositiveBehavioral:
     def test_mixed_property_and_annotated_field(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Service:
                 name: str
                 timeout: int = 30
@@ -288,7 +316,8 @@ class TestPositiveBehavioral:
 
                 def run(self) -> bool:
                     return True
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         entity = result[0]
         prop_names = {p.name for p in entity.properties}
@@ -299,11 +328,13 @@ class TestPositiveBehavioral:
     def test_plain_assignment_not_extracted_as_property(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Foo:
                 name: str
                 counter = 0
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         entity = result[0]
         prop_names = {p.name for p in entity.properties}
@@ -333,10 +364,12 @@ class TestEdgeCases:
     def test_no_type_annotations(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             def func(x, y):
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         assert result[0].signature == "(x, y)"
@@ -344,10 +377,12 @@ class TestEdgeCases:
     def test_class_without_init(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Plain:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         assert result[0].name == "Plain"
@@ -356,7 +391,8 @@ class TestEdgeCases:
     def test_property_without_return_type(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class Container:
                 def __init__(self) -> None:
                     pass
@@ -364,7 +400,8 @@ class TestEdgeCases:
                 @property
                 def data(self):
                     return None
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         entity = result[0]
         assert len(entity.properties) == 1
@@ -374,7 +411,8 @@ class TestEdgeCases:
     def test_private_members_excluded(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             class MyClass:
                 def __init__(self) -> None:
                     pass
@@ -391,7 +429,8 @@ class TestEdgeCases:
 
                 def public(self) -> None:
                     pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         entity = result[0]
         method_names = [m.name for m in entity.methods]
@@ -404,7 +443,8 @@ class TestEdgeCases:
     def test_private_module_level_excluded(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             def public_func() -> None:
                 pass
 
@@ -416,7 +456,8 @@ class TestEdgeCases:
 
             class _PrivateClass:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         names = [r.name for r in result]
         assert "public_func" in names
@@ -427,14 +468,18 @@ class TestEdgeCases:
     def test_last_definition_wins(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             def func(x: int) -> str:
                 return str(x)
-        """))
-        (pkg / "b.py").write_text(dedent("""\
+        """)
+        )
+        (pkg / "b.py").write_text(
+            dedent("""\
             def func(y: float) -> int:
                 return int(y)
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         assert len(result) == 1
         assert "y: float" in result[0].signature
@@ -442,12 +487,14 @@ class TestEdgeCases:
     def test_non_callable_in_definitions(self, tmp_path):
         pkg = tmp_path / "testpkg"
         pkg.mkdir()
-        (pkg / "__init__.py").write_text(dedent("""\
+        (pkg / "__init__.py").write_text(
+            dedent("""\
             VALUE = 42
 
             def foo() -> None:
                 pass
-        """))
+        """)
+        )
         result = python_contract(str(pkg))
         names = [item.name for item in result]
         assert "VALUE" not in names

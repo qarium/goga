@@ -10,6 +10,7 @@ from .document import DocumentNode
 @dataclass(kw_only=True)
 class BodyNode(DocumentNode):
     """Body section containing entity and routine type definitions."""
+
     types: dict[str, list[Node]] = field(default_factory=dict)
     entities: list[EntityTypeNode] = field(default_factory=list)
     routines: list[RoutineTypeNode] = field(default_factory=list)
@@ -18,6 +19,7 @@ class BodyNode(DocumentNode):
 @dataclass(kw_only=True)
 class RoutineTypeNode(DocumentNode):
     """Routine (function/procedure) definition with name and signature."""
+
     name: str = ""
     signature: str = ""
     location: str = ""
@@ -28,6 +30,7 @@ class RoutineTypeNode(DocumentNode):
 @dataclass(kw_only=True)
 class EntityTypeNode(DocumentNode):
     """Entity (class/struct) definition with properties and methods."""
+
     name: str = ""
     signature: str = ""
     location: str = ""
@@ -41,6 +44,7 @@ class EntityTypeNode(DocumentNode):
 @dataclass(kw_only=True)
 class MethodNode(DocumentNode):
     """Method definition belonging to an entity."""
+
     name: str = ""
     signature: str = ""
     annotations: AnnotationsNode = field(default_factory=lambda: AnnotationsNode(root=None))
@@ -49,6 +53,7 @@ class MethodNode(DocumentNode):
 @dataclass(kw_only=True)
 class PropertyNode(DocumentNode):
     """Property definition belonging to an entity."""
+
     name: str = ""
     type: str = ""
     annotations: AnnotationsNode = field(default_factory=lambda: AnnotationsNode(root=None))

@@ -53,22 +53,25 @@ class TestLogic:
     """
 
     def test_questionnaire_ask_goga_config_python_with_convention(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            True,   # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                True,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -82,22 +85,25 @@ class TestLogic:
         assert result.codemanifest_annotations == "Use `conventions` for code writing rules and testing."
 
     def test_questionnaire_ask_goga_config_golang_without_convention(self) -> None:
-        prompts = iter([
-            "golang",                          # language
-            "claude",                          # agent
-            "qarium/goga-golang-1.23:1.0",     # image
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "golang",  # language
+                "claude",  # agent
+                "qarium/goga-golang-1.23:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -108,53 +114,59 @@ class TestLogic:
         assert result.dockerfile_path is None
 
     def test_questionnaire_ask_goga_config_with_env_vars(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-            "API_KEY",                         # env key 1
-            "secret",                          # env value 1
-            "MODEL",                           # env key 2
-            "gpt-4",                           # env value 2
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            True,   # Add custom environment variable? (first)
-            True,   # Add custom environment variable? (second)
-            False,  # Add custom environment variable? (stop)
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "API_KEY",  # env key 1
+                "secret",  # env value 1
+                "MODEL",  # env key 2
+                "gpt-4",  # env value 2
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                True,  # Add custom environment variable? (first)
+                True,  # Add custom environment variable? (second)
+                False,  # Add custom environment variable? (stop)
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
         assert result.env == {"API_KEY": "secret", "MODEL": "gpt-4"}
 
     def test_questionnaire_ask_goga_config_custom_usages_merge(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "custom",                          # usage name
-            ".goga/usages/custom.md",          # usage path
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            True,   # Download base convention?
-            True,   # Add codemanifest usages?
-            False,  # Add another codemanifest usage? (stop)
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "custom",  # usage name
+                ".goga/usages/custom.md",  # usage path
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                True,  # Download base convention?
+                True,  # Add codemanifest usages?
+                False,  # Add another codemanifest usage? (stop)
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -163,48 +175,54 @@ class TestLogic:
         assert result.codemanifest_usages["custom"] == ".goga/usages/custom.md"
 
     def test_questionnaire_ask_goga_config_custom_usages_no_convention(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "custom",                          # usage name
-            ".goga/usages/custom.md",          # usage path
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            True,   # Add codemanifest usages?
-            False,  # Add another codemanifest usage? (stop)
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "custom",  # usage name
+                ".goga/usages/custom.md",  # usage path
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                True,  # Add codemanifest usages?
+                False,  # Add another codemanifest usage? (stop)
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
         assert result.codemanifest_usages == {"custom": ".goga/usages/custom.md"}
 
     def test_questionnaire_ask_goga_config_custom_annotations_appended(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "Custom rule for project",         # annotations text
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            True,   # Download base convention?
-            False,  # Add codemanifest usages?
-            True,   # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "Custom rule for project",  # annotations text
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                True,  # Download base convention?
+                False,  # Add codemanifest usages?
+                True,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -214,22 +232,25 @@ class TestLogic:
         assert "\n" in result.codemanifest_annotations
 
     def test_questionnaire_ask_goga_config_custom_image_with_predefined(self) -> None:
-        prompts = iter([
-            "golang",                          # language
-            "claude",                          # agent
-            "my-custom/golang:2.0",            # image (custom, not from predefined list)
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "golang",  # language
+                "claude",  # agent
+                "my-custom/golang:2.0",  # image (custom, not from predefined list)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -237,22 +258,25 @@ class TestLogic:
         assert result.image == "my-custom/golang:2.0"
 
     def test_questionnaire_ask_goga_config_kotlin_with_predefined_images(self) -> None:
-        prompts = iter([
-            "kotlin",                          # language
-            "claude",                          # agent
-            "qarium/goga-kotlin-2.3.21:1.0",   # image (default from predefined list)
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "kotlin",  # language
+                "claude",  # agent
+                "qarium/goga-kotlin-2.3.21:1.0",  # image (default from predefined list)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -260,22 +284,25 @@ class TestLogic:
         assert result.image == "qarium/goga-kotlin-2.3.21:1.0"
 
     def test_questionnaire_ask_goga_config_swift_with_predefined_images(self) -> None:
-        prompts = iter([
-            "swift",                           # language
-            "claude",                          # agent
-            "qarium/goga-swift-6.2.4:1.0",     # image (default from predefined list)
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "swift",  # language
+                "claude",  # agent
+                "qarium/goga-swift-6.2.4:1.0",  # image (default from predefined list)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -283,22 +310,25 @@ class TestLogic:
         assert result.image == "qarium/goga-swift-6.2.4:1.0"
 
     def test_questionnaire_ask_goga_config_javascript_with_predefined_images(self) -> None:
-        prompts = iter([
-            "javascript",                      # language
-            "claude",                          # agent
-            "qarium/goga-node-24:1.0",         # image (default from predefined list)
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "javascript",  # language
+                "claude",  # agent
+                "qarium/goga-node-24:1.0",  # image (default from predefined list)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -312,55 +342,61 @@ class TestLogic:
             assert language in _IMAGE_MAP, f"Language '{language}' missing from _IMAGE_MAP"
 
     def test_questionnaire_ask_goga_config_duplicate_usage_name_skipped(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "conventions",                     # duplicate usage name (already set by convention)
-            "custom",                          # usage name (new, after loop continues)
-            ".goga/usages/custom.md",          # usage path
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            True,   # Download base convention?
-            True,   # Add codemanifest usages?
-            True,   # Add another codemanifest usage? (continue after duplicate skip)
-            False,  # Add another codemanifest usage? (stop after custom added)
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "conventions",  # duplicate usage name (already set by convention)
+                "custom",  # usage name (new, after loop continues)
+                ".goga/usages/custom.md",  # usage path
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                True,  # Download base convention?
+                True,  # Add codemanifest usages?
+                True,  # Add another codemanifest usage? (continue after duplicate skip)
+                False,  # Add another codemanifest usage? (stop after custom added)
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.echo") as mock_echo, \
-             patch("click.confirm", side_effect=confirms):
+        with (
+            patch("click.prompt", side_effect=prompts),
+            patch("click.echo") as mock_echo,
+            patch("click.confirm", side_effect=confirms),
+        ):
             q = Questionnaire()
             result = q.ask_goga_config()
 
         assert result.codemanifest_usages["conventions"] == ".goga/usages/conventions.md"
         assert "custom" in result.codemanifest_usages
-        assert any(
-            'Usage "conventions" already exists, skipping.' in str(c)
-            for c in mock_echo.call_args_list
-        )
+        assert any('Usage "conventions" already exists, skipping.' in str(c) for c in mock_echo.call_args_list)
 
     def test_questionnaire_ask_returns_init_answers(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask()
 
@@ -376,71 +412,80 @@ class TestLogic:
         assert "cpp" not in _LANGUAGES
 
     def test_questionnaire_ask_goga_config_with_dockerfile(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-            "Dockerfile",                      # dockerfile path
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            True,   # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "Dockerfile",  # dockerfile path
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
         assert result.dockerfile_path == "Dockerfile"
 
     def test_questionnaire_ask_goga_config_without_dockerfile(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
         assert result.dockerfile_path is None
 
     def test_questionnaire_env_suggested_keys_for_claude(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-            "glm-4.7",                         # ANTHROPIC_DEFAULT_HAIKU_MODEL
-            "glm-5-turbo",                     # ANTHROPIC_DEFAULT_SONNET_MODEL
-            "glm-5.1",                         # ANTHROPIC_DEFAULT_OPUS_MODEL
-            "https://api.z.ai/api/anthropic",  # ANTHROPIC_BASE_URL
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            True,   # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "glm-4.7",  # ANTHROPIC_DEFAULT_HAIKU_MODEL
+                "glm-5-turbo",  # ANTHROPIC_DEFAULT_SONNET_MODEL
+                "glm-5.1",  # ANTHROPIC_DEFAULT_OPUS_MODEL
+                "https://api.z.ai/api/anthropic",  # ANTHROPIC_BASE_URL
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                True,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -452,22 +497,25 @@ class TestLogic:
         }
 
     def test_questionnaire_ask_goga_config_codex_agent(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "codex",                           # agent
-            "qarium/goga-python-3.12:1.0",     # image
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "codex",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -475,23 +523,26 @@ class TestLogic:
         assert result.env is None
 
     def test_questionnaire_codex_env_suggested_keys(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "codex",                           # agent
-            "qarium/goga-python-3.12:1.0",     # image
-            "o4-mini",                         # CODEX_MODEL
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            True,   # Set suggested env variables?
-            False,  # Add custom environment variable?
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "codex",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "o4-mini",  # CODEX_MODEL
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                True,  # Set suggested env variables?
+                False,  # Add custom environment variable?
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -504,25 +555,28 @@ class TestLogic:
         assert _AGENT_ENV_MAP["codex"] == ["CODEX_MODEL"]
 
     def test_questionnaire_env_skip_suggested_custom_only(self) -> None:
-        prompts = iter([
-            "python",                          # language
-            "claude",                          # agent
-            "qarium/goga-python-3.12:1.0",     # image
-            "MY_KEY",                          # custom env key
-            "my_value",                        # custom env value
-        ])
-        confirms = iter([
-            False,  # Download base convention?
-            False,  # Add codemanifest usages?
-            False,  # Add codemanifest annotations?
-            False,  # Create Dockerfile?
-            False,  # Set suggested env variables?
-            True,   # Add custom environment variable?
-            False,  # Add custom environment variable? (stop)
-        ])
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "MY_KEY",  # custom env key
+                "my_value",  # custom env value
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested env variables?
+                True,  # Add custom environment variable?
+                False,  # Add custom environment variable? (stop)
+            ]
+        )
 
-        with patch("click.prompt", side_effect=prompts), \
-             patch("click.confirm", side_effect=confirms):
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
             q = Questionnaire()
             result = q.ask_goga_config()
 

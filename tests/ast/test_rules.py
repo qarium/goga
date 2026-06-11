@@ -2271,8 +2271,10 @@ class TestUsageUrlIsAccessible:
         mock_get_response = MagicMock()
         mock_get_response.status_code = 200
 
-        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response), \
-             patch("goga.ast.rules.document.usages.rules.requests.get", return_value=mock_get_response):
+        with (
+            patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response),
+            patch("goga.ast.rules.document.usages.rules.requests.get", return_value=mock_get_response),
+        ):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(
@@ -2294,9 +2296,13 @@ class TestUsageUrlIsAccessible:
         mock_head_response = MagicMock()
         mock_head_response.status_code = 405
 
-        with patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response), \
-             patch("goga.ast.rules.document.usages.rules.requests.get",
-                   side_effect=requests.exceptions.ConnectionError("connection refused")):
+        with (
+            patch("goga.ast.rules.document.usages.rules.requests.head", return_value=mock_head_response),
+            patch(
+                "goga.ast.rules.document.usages.rules.requests.get",
+                side_effect=requests.exceptions.ConnectionError("connection refused"),
+            ),
+        ):
             root = DocumentRoot(
                 header=HeaderNode(
                     usages=UsagesNode(

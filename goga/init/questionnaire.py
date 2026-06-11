@@ -82,9 +82,7 @@ class Questionnaire:
         click.echo("Download the default code conventions for your language?")
         if click.confirm("Download base convention"):
             codemanifest_usages = {"conventions": ".goga/usages/conventions.md"}
-            codemanifest_annotations = (
-                "Use `conventions` for code writing rules and testing."
-            )
+            codemanifest_annotations = "Use `conventions` for code writing rules and testing."
 
         # 3. Additional codemanifest usages
         click.echo("\n--- Codemanifest Usages ---")

@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 @dataclass(kw_only=True)
 class DocumentRoot(Node):
     """Root node representing a parsed document with header, body, and footer."""
+
     path: str = ""
     links: dict[str, list[Node]] = field(default_factory=dict)
     embeddings: list[tuple[str, str]] = field(default_factory=list)
@@ -27,6 +28,7 @@ class DocumentRoot(Node):
 @dataclass(kw_only=True)
 class DocumentNode(Node):
     """Node that belongs to a specific document and holds a reference to its root."""
+
     root: Optional[DocumentRoot] = None
 
 

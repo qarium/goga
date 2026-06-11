@@ -542,7 +542,6 @@ class TestUsageUrlIsAccessibleExtra:
         assert len(errors) == 1
         assert "503" in errors[0].message
 
-
     @patch("goga.ast.rules.document.usages.rules.requests.head")
     def test_cache_hit_returns_cached_result(self, mock_head):
         mock_response = _mock_response(200)
