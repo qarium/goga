@@ -174,6 +174,29 @@ Use backtick references (`` ` ``) for:
 
 **Do not reference** anything outside the document context — every reference must resolve to an entity within the CODEMANIFEST file.
 
+### Contract boundary isolation
+
+Imports connect the current cell to external types and practices, but they do not transfer obligations across the boundary.
+
+**Imported Types** (`Imports.Types`) constrain the current contract only through the type's signature — argument types,
+return types, embedded/mutated forms. The internal behavior of the imported type (error handling, side effects, failure modes)
+does not become an obligation of the current contract unless the current contract explicitly commits to that behavior in its own annotations.
+A type used as an argument or return value is a dependency, not a behavioral mandate.
+
+**Imported Usages** (`Imports.Usages`) document how to consume the provider cell's API.
+They describe the provider cell's facade — not requirements imposed on the current cell.
+The current contract is free to decide how to react to the provider's behavior (propagate, wrap, translate, recover),
+because that decision belongs to the current cell's own contract.
+
+The boundary rule:
+- A dependency's behavior is a fact about the dependency, not a constraint on the dependent.
+- Only the current cell's own contract text (signatures + annotations) defines what the current cell is obliged to do.
+- When the current contract references an imported practice, the practice supplies context for implementation — it does not rewrite the current contract's obligations.
+
+Example: if cell A imports a `Type` type whose `method` raises `Error`, that fact describes `Type`.
+Cell A's own tool contract decides independently whether to propagate the exception, wrap it, or return an error result — unless cell
+A's annotation explicitly commits to one of these behaviors.
+
 ### Body
 
 #### Entity vs Routine — when to use which
