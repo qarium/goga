@@ -2,7 +2,7 @@
 
 <img src="docs/assets/goga.svg" alt="goga" width="180" />
 
-# goga
+# Goga
 
 A CLI and Agent tools for working with the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification.
 
@@ -38,10 +38,10 @@ goga init
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
-**3. Formulate the first feature** — describe what you want to build:
+**3. Formulate the first feature** — describe what you want to create:
 
 ```text
-/goga:propose <what you want to build>
+/goga:propose <what you want to create>
 ```
 
 The example above uses Claude Code style. For other agents, invoke the skill directly: `goga-propose`.
