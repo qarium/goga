@@ -74,15 +74,23 @@ The example above uses Claude Code style (`/goga:<command>`). For other agents, 
 
 The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step, including two shortcut paths for smaller changes.
 
-## Validate
+## View
 
-At any point you can verify the structural correctness of all CODEMANIFEST files in the project:
+After the first task has produced cells on disk — for example, once you have run `/goga:apply` and the cell structure exists — you can visualize the project to inspect the result.
+
+Get a textual hierarchy of all cells:
 
 ```bash
-goga lint .
+goga schema
 ```
 
-The linter applies 21 document-level rules and 3 tree-level rules to verify structural correctness, import consistency, usage validity, and more.
+Open an interactive dependency graph in the browser via the built-in `viewer` tool:
+
+```bash
+goga schema | goga tool viewer
+```
+
+The graph shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
 
 ## Next steps
 
