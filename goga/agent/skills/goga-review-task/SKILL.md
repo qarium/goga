@@ -6,7 +6,7 @@ description: Review a task for completeness, correctness, and consistency
 
 ## Objective
 
-Validates a task (`docs/tasks/<topic>.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-arch-by-brainstorm`).
+Validates a task (`docs/tasks/<topic>.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-brainstorm`).
 
 You **verify** the task, **report** findings, and **fix** the task when issues are discovered (with user approval).
 

@@ -8,7 +8,7 @@ description: Interactive task formulation from a raw request
 
 Transforms a raw user request (e.g., "add authorization") into a **formulated task** — a structured document containing
 the description, technology stack, dependencies, and scope estimate. The output is persisted to `docs/tasks/<topic>.md`
-and serves as input for the `goga-arch-by-brainstorm` skill.
+and serves as input for the `goga-brainstorm` skill.
 
 ---
 
