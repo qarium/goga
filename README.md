@@ -21,7 +21,7 @@ A full-fledged **Specification-Driven Development (SDD)** framework: describe ce
 <img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
 <img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">
 
-[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/)
+[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/) · [Configuration](https://qarium.github.io/goga/configuration/)
 
 </div>
 
@@ -73,17 +73,71 @@ Reviews are optional at every stage. For smaller changes, use one of the shortcu
 goga schema | goga tool viewer
 ```
 
-## What is CODEMANIFEST?
+## What is a cell?
 
-CODEMANIFEST is a YAML DSL that defines **cell contracts** — language-agnostic API specifications with types, routines, imports, usages, and annotations.
+A **cell** is a directory that encapsulates a distinct responsibility domain with a well-defined API boundary. Each cell contains a `CODEMANIFEST` file describing its contract and an optional `.usages/` directory with documentation for API consumers.
+
+```
+cell/
+├── CODEMANIFEST       # YAML DSL describing the API contract
+└── .usages/*.md       # Practices for working with the cell
+```
+
+The rule of thumb is **one responsibility zone — one cell**. A new cell is born when logic can be decoupled, owns distinct data models, must be reused, or can be stated in a single phrase without "and".
+
+### Anatomy of a contract
+
+A `CODEMANIFEST` consists of three sections separated by `---`:
+
+- **Header** — `Imports` (types and usages from other cells), `Usages` (named practices), `Annotations` (global directives)
+- **Body** — entities and routines that form the cell's public API
+- **Footer** — `Author`, `CreatedAt`, `Description`
+
+Cells expose three kinds of types:
+
+- **Entity types** — objects with state and behavior (services, configurations, data models): properties + methods
+- **Routine types** — single operations (transformers, factories, validators, parsers): no state
+- **Embedded types** — re-exports of imported types: `->ExternalService`
+
+Specialization is expressed with the `::` mutation syntax. The DSL stays language-agnostic — `BaseEntity::ExtendedEntity` may be realized through inheritance, composition, an adapter, or an interface implementation in the target language.
+
+### Example
 
 ```yaml
-"calculate_total(a: int, b: int) -> total:int":
-  location: calculator.py
+Imports:
+  - Types:
+      - AnotherCellType
+    From: path/to/another_cell
+
+Usages:
+  conventions: .goga/usages/conventions.md
+
+Annotations: |
+  Use `conventions` when writing code.
+
+---
+
+"ParseInput(input: string) -> data:List<byte>":
+  location: parser.py
   annotations: |
-    Calculates the sum of two operands.
-    `a`: first operand
-    `b`: second operand
+    Parses raw input into a byte buffer.
+    `input`: raw request payload
+
+"HTTPServer(name: String)":
+  location: server.py
+  properties:
+    "host -> String": |
+      Bind address for incoming connections.
+  methods:
+    "handleRequest(req: Request) -> resp:Response": |
+      Dispatches a single HTTP request.
+
+---
+
+Author: Goga
+CreatedAt: 01/01/26
+Description: |
+  HTTP entry point cell.
 ```
 
 ## Features
