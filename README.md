@@ -4,9 +4,22 @@
 
 # Goga
 
-A CLI and Agent tools for working with the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification.
+A new semantic layer between specification and implementation based on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification — helping humans and AI agents reason about project structure at a higher level of abstraction.
 
 A full-fledged **Specification-Driven Development (SDD)** framework: describe cell contracts with a structured YAML DSL, validate them, extract contracts from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
+
+**Languages**
+
+<img src="docs/assets/brands/python.svg" alt="Python" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/javascript.svg" alt="JavaScript" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40">
+
+**Agents**
+
+<img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">
 
 [Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/)
 
@@ -82,23 +95,6 @@ CODEMANIFEST is a YAML DSL that defines **cell contracts** — language-agnostic
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, and contract extraction commands
 - **Docker builds** — Execute build plans via ralphex in isolated containers
-
-## Supported Languages
-
-goga extracts CODEMANIFEST contracts from source code via tree-sitter parsers:
-
-- <img src="docs/assets/brands/python.svg" alt="Python" height="16"> **Python**
-- <img src="docs/assets/brands/javascript.svg" alt="JavaScript" height="16"> **JavaScript**
-- <img src="docs/assets/brands/kotlin.svg" alt="Kotlin" height="16"> **Kotlin**
-- <img src="docs/assets/brands/swift.svg" alt="Swift" height="16"> **Swift**
-- <img src="docs/assets/brands/go.svg" alt="Go" height="16"> **Go**
-
-## Supported Agents
-
-goga connects to coding agents and exposes its skills through their slash-command interfaces:
-
-- <img src="docs/assets/brands/claude.svg" alt="Claude" height="16"> **Claude Code**
-- <img src="docs/assets/brands/cursor.svg" alt="Cursor" height="16"> **Cursor**
 
 ## Documentation
 
