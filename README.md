@@ -1,8 +1,10 @@
 <div align="center">
 
+<img src="docs/assets/goga.svg" alt="goga" width="180" />
+
 # goga
 
-A CLI and Agent tools for working with the **CODEMANIFEST** specification.
+A CLI and Agent tools for working with the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification.
 
 A full-fledged **Specification-Driven Development (SDD)** framework: describe cell contracts with a structured YAML DSL, validate them, extract contracts from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
 
