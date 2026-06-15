@@ -22,6 +22,7 @@ pip install goga
 ## Next steps
 
 - [Getting Started](getting-started.md) -- Initialize your first goga project
+- [Workflow](workflow/index.md) -- The agent-driven feature development cycle
 - [Configuration](configuration.md) -- Configure `.goga/config.yml`
 - [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- Full command reference
