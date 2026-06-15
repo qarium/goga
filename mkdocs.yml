@@ -46,11 +46,11 @@ nav:
       - Build: workflow/build.md
       - Change: workflow/change.md
       - Acceptance: workflow/acceptance.md
+  - Tools: tools.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
       - Usages: cell/usages.md
-  - Tools: tools.md
   - CLI:
       - cli/index.md
       - Init: cli/init.md
