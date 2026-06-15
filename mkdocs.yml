@@ -1,6 +1,6 @@
 docs_dir: docs
 
-site_name: goga
+site_name: Goga
 site_description: A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow
 site_url: https://qarium.github.io/goga/
 repo_url: https://github.com/qarium/goga

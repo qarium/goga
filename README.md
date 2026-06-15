@@ -121,6 +121,7 @@ Annotations: |
   location: parser.py
   annotations: |
     Parses raw input into a byte buffer.
+  
     `input`: raw request payload
 
 "HTTPServer(name: String)":
@@ -131,6 +132,12 @@ Annotations: |
   methods:
     "handleRequest(req: Request) -> resp:Response": |
       Dispatches a single HTTP request.
+
+      Algorithm:
+      1. Parse input from `req` with `ParseInput`
+      2. Filter result by some logic
+      3. Save filtered result in `resp`
+      4. Return `resp` object
 
 ---
 
