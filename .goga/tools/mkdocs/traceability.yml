@@ -1,6 +1,9 @@
 # Traceability: documentation page → cell paths
 # Each entry maps a doc page to the cells whose CODEMANIFEST/.usages it draws from.
 
+README.md:
+  - goga
+
 docs/index.md:
   - goga
 
