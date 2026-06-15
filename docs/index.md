@@ -1,6 +1,6 @@
 **A new semantic layer between specification and implementation** — helping humans and AI agents reason about project structure at a higher level of abstraction.
 
-A full-fledged **Specification-Driven Development (SDD)** framework built on the CODEMANIFEST specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
+A full-fledged **Specification-Driven Development (SDD)** framework built on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
 
 <div align="center">
   <p><strong>Languages</strong></p>
@@ -22,7 +22,7 @@ A full-fledged **Specification-Driven Development (SDD)** framework built on the
 
 Code and contracts drift apart. Comments rot, types lie, and architecture lives only in someone's head — invisible to the agent that needs to extend it.
 
-goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source. An agent workflow carries a feature from a one-line proposal all the way to acceptance — without losing the thread.
+Goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source. An agent workflow carries a feature from a one-line proposal all the way to acceptance — without losing the thread.
 
 The result: a project that humans and AI agents can navigate, change, and reason about at the same level of abstraction.
 
