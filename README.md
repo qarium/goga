@@ -83,6 +83,23 @@ CODEMANIFEST is a YAML DSL that defines **cell contracts** — language-agnostic
 - **CLI toolkit** — init, lint, build, schema, connect, and contract extraction commands
 - **Docker builds** — Execute build plans via ralphex in isolated containers
 
+## Supported Languages
+
+goga extracts CODEMANIFEST contracts from source code via tree-sitter parsers:
+
+- <img src="docs/assets/brands/python.svg" alt="Python" height="16"> **Python**
+- <img src="docs/assets/brands/javascript.svg" alt="JavaScript" height="16"> **JavaScript**
+- <img src="docs/assets/brands/kotlin.svg" alt="Kotlin" height="16"> **Kotlin**
+- <img src="docs/assets/brands/swift.svg" alt="Swift" height="16"> **Swift**
+- <img src="docs/assets/brands/go.svg" alt="Go" height="16"> **Go**
+
+## Supported Agents
+
+goga connects to coding agents and exposes its skills through their slash-command interfaces:
+
+- <img src="docs/assets/brands/claude.svg" alt="Claude" height="16"> **Claude Code**
+- <img src="docs/assets/brands/cursor.svg" alt="Cursor" height="16"> **Cursor**
+
 ## Documentation
 
 Full documentation is available at [qarium.github.io/goga](https://qarium.github.io/goga/).
