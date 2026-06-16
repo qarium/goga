@@ -310,7 +310,7 @@ class TestIntegration:
 
         installed_files = sorted(p.name for p in goga_cmds.iterdir())
         assert installed_files == [
-            "acceptance.md",
+            "accept.md",
             "apply.md",
             "brainstorm.md",
             "change.md",

@@ -25,7 +25,7 @@ propose → review(task)
          → plan → review(plan)
             → goga build
                → change (bugfix loop)
-                  → acceptance
+                  → accept
 ```
 
 > Reviews are **optional** at every stage — you decide how much verification each artifact needs. Skipping a review is acceptable when the change is small, the artifact is straightforward, or you are confident in the result. Run a review when the artifact introduces risk: large architectural changes, ambiguous contracts, or unfamiliar domains. Reviews catch drift while it is still cheap to fix.
@@ -36,17 +36,17 @@ Use when a cell's contract stays the same, but an external dependency changes: a
 
 ```
 propose → review(task)
-   → change → acceptance
+   → change → accept
 ```
 
 This path significantly speeds up delivery when the contract is stable.
 
 ### Standalone change
 
-Use for point fixes: bug fix, behavior tweak that does not touch contracts. `change` is followed by `acceptance` to formally close the fix.
+Use for point fixes: bug fix, behavior tweak that does not touch contracts. `change` is followed by `accept` to formally close the fix.
 
 ```
-change → acceptance
+change → accept
 ```
 
 ## Choosing a path
@@ -76,10 +76,10 @@ Does the contract (CODEMANIFEST) change?
 | [`plan`](plan.md) | `docs/design/<topic>.md` | `docs/plans/<topic>.md` |
 | [`build`](build.md) | `docs/plans/<topic>.md` | Implemented code (via ralphex) |
 | [`change`](change.md) | Change description | Modified code + reconciled contracts and usages |
-| [`acceptance`](acceptance.md) | Completed implementation | Final acceptance report |
+| [`accept`](accept.md) | Completed implementation | Final acceptance report |
 
 ## Next steps
 
 - Starting a new feature — open [`propose`](propose.md).
 - Need a point fix — [`change`](change.md).
-- Want to accept completed work — [`acceptance`](acceptance.md).
+- Want to accept completed work — [`accept`](accept.md).

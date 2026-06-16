@@ -76,6 +76,6 @@ goga build docs/plans/json-export.md -e ANTHROPIC_API_KEY=sk-xxx
 
 - Test the produced implementation manually.
 - If bugs or defects are found — fix them with [`change`](change.md).
-- Once the implementation is stable — run [`acceptance`](acceptance.md) for final sign-off.
+- Once the implementation is stable — run [`accept`](accept.md) for final sign-off.
 
 See the full CLI reference: [`goga build`](../cli/build.md).

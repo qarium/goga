@@ -164,18 +164,18 @@ The agent never decides whether a breaking change is acceptable. Only the user c
 
 ### 1. Post-build bugfix loop (full cycle)
 
-After `goga build` produces an implementation, you test it. If bugs or defects appear, run `change` to fix them. Repeat the build-test-change loop until stable, then run `acceptance`.
+After `goga build` produces an implementation, you test it. If bugs or defects appear, run `change` to fix them. Repeat the build-test-change loop until stable, then run `accept`.
 
 ```
-... build → change (loop) → acceptance
+... build → change (loop) → accept
 ```
 
 ### 2. Standalone point fix
 
-For small fixes that do not touch contracts — bug fixes, behavior tweaks, refactors that preserve the API. `change` is followed by `acceptance` to formally close the fix.
+For small fixes that do not touch contracts — bug fixes, behavior tweaks, refactors that preserve the API. `change` is followed by `accept` to formally close the fix.
 
 ```
-change → acceptance
+change → accept
 ```
 
 ### 3. Propose → Change shortcut
@@ -183,7 +183,7 @@ change → acceptance
 When the cell contract is stable but an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `propose`, then run `change` to perform the rewrite.
 
 ```
-propose → change → acceptance
+propose → change → accept
 ```
 
 This path is significantly faster than the full cycle while preserving quality.
@@ -197,6 +197,6 @@ This path is significantly faster than the full cycle while preserving quality.
 
 ## What happens next
 
-- Bugfix loop — re-test, then re-run `change` if needed, or proceed to `acceptance`.
+- Bugfix loop — re-test, then re-run `change` if needed, or proceed to `accept`.
 - Standalone — verify the fix manually.
-- Propose → Change shortcut — run [`acceptance`](acceptance.md) for final sign-off.
+- Propose → Change shortcut — run [`accept`](accept.md) for final sign-off.

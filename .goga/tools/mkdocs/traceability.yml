@@ -55,7 +55,7 @@ docs/workflow/build.md:
 docs/workflow/change.md:
   - goga/connect
 
-docs/workflow/acceptance.md:
+docs/workflow/accept.md:
   - goga/connect
 
 docs/cli/index.md:

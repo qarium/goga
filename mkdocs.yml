@@ -45,7 +45,7 @@ nav:
       - Plan: workflow/plan.md
       - Build: workflow/build.md
       - Change: workflow/change.md
-      - Acceptance: workflow/acceptance.md
+      - Accept: workflow/accept.md
   - Tools: tools.md
   - Cell:
       - cell/index.md

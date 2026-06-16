@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance-manifest-review
+name: goga-accept-manifest-review
 description: Verify each Cell's CODEMANIFEST against the implementation
 ---
-# goga-acceptance-manifest-review
+# goga-accept-manifest-review
 
 ## Identity
 

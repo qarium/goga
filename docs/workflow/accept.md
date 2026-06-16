@@ -1,18 +1,18 @@
-# Acceptance
+# Accept
 
 Final acceptance orchestrator. Verifies that completed work satisfies its contracts and tests before the task is considered done. Enforces triple consistency across CODEMANIFEST, implementation, and `.usages/*.md`.
 
 ## Synopsis
 
 ```text
-/goga:acceptance [<target>]
+/goga:accept [<target>]
 ```
 
 `<target>` is optional. When omitted, the skill determines scope from `git diff` (branch changes) or asks via `AskUserQuestion` (specific functionality / branch changes / all project cells).
 
 When provided, `<target>` is a **functionality description or path** — free-text that the scope resolver matches to cells in the project schema. For example, `auth`, `goga/ast/nodes`, or a short phrase describing the feature.
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-acceptance`.
+Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-accept`.
 
 ## Output artifact
 
@@ -37,7 +37,7 @@ A **Final Acceptance Report** with a verdict:
 
 Execute steps strictly sequentially. Each step produces complete output before the next begins.
 
-### Step 1. Scope definition (`goga-acceptance-scope`)
+### Step 1. Scope definition (`goga-accept-scope`)
 
 Define the set of cells associated with the functionality. Scope is resolved in priority order:
 
@@ -55,7 +55,7 @@ Define the set of cells associated with the functionality. Scope is resolved in 
 
 **Output:** Acceptance Scope Report. **STOP** if no cells discovered, a cell lacks CODEMANIFEST, or scope ambiguous.
 
-### Step 2. CODEMANIFEST review (`goga-acceptance-manifest-review`)
+### Step 2. CODEMANIFEST review (`goga-accept-manifest-review`)
 
 Verify each cell's CODEMANIFEST against its implementation.
 
@@ -67,7 +67,7 @@ Verify each cell's CODEMANIFEST against its implementation.
 
 **Output:** Manifest Review Report. **STOP** on unresolvable inconsistency.
 
-### Step 3. Usages review (`goga-acceptance-usage-review`)
+### Step 3. Usages review (`goga-accept-usage-review`)
 
 Validate cell-level usage files against actual implementation.
 
@@ -80,7 +80,7 @@ Validate cell-level usage files against actual implementation.
 
 **Output:** Usage Review Report. **STOP** on unresolvable inconsistency.
 
-### Step 4. Test coverage assessment (`goga-acceptance-test-assessment`)
+### Step 4. Test coverage assessment (`goga-accept-test-assessment`)
 
 Evaluate test coverage of cells.
 
@@ -93,7 +93,7 @@ Evaluate test coverage of cells.
 
 **Output:** Test Assessment Report. **STOP** on critical coverage gaps in changed behavior.
 
-### Step 5. Acceptance report (`goga-acceptance-report`)
+### Step 5. Acceptance report (`goga-accept-report`)
 
 Synthesize the Final Acceptance Report from all preceding outputs.
 
@@ -138,5 +138,5 @@ Each stop produces a structured report explaining what to fix.
 
 ## What happens next
 
-- If acceptance passes — the task is complete; merge, deploy, or move on.
-- If acceptance stops — fix the reported issues (typically via [`change`](change.md)) and re-run acceptance.
+- If `accept` passes — the task is complete; merge, deploy, or move on.
+- If `accept` stops — fix the reported issues (typically via [`change`](change.md)) and re-run `accept`.

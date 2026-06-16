@@ -6,7 +6,7 @@
 
 A new semantic layer between specification and implementation based on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification — helping humans and AI agents reason about project structure at a higher level of abstraction.
 
-A full-fledged **Specification-Driven Development (SDD)** framework: describe cell contracts with a structured YAML DSL, validate them, extract contracts from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
+A full-fledged **Specification-Driven Development (SDD)** framework: describe cell contracts with a structured YAML DSL, validate them, extract contracts from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and accept — under the hood.
 
 **Languages**
 
@@ -62,7 +62,7 @@ The example above uses Claude Code style. For other agents, invoke the skill dir
 **4. Run the workflow** — each subsequent command takes the previous artifact as input and produces the next one:
 
 ```
-propose → brainstorm → apply → design → plan → goga build → change → acceptance
+propose → brainstorm → apply → design → plan → goga build → change → accept
 ```
 
 Reviews are optional at every stage. For smaller changes, use one of the shortcut paths described in the [Workflow](https://qarium.github.io/goga/workflow/) section.
@@ -151,7 +151,7 @@ Description: |
 
 - **Specification-Driven Development** — Contracts are the source of truth; the agent workflow produces architecture, code, and tests from them
 - **CODEMANIFEST DSL** — Describe cell contracts with types, routines, imports, usages, and annotations
-- **Agent workflow** — Built-in cycle: `propose → brainstorm → apply → design → plan → build → change → acceptance`, with review checkpoints and shortcut paths for smaller changes
+- **Agent workflow** — Built-in cycle: `propose → brainstorm → apply → design → plan → build → change → accept`, with review checkpoints and shortcut paths for smaller changes
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, and contract extraction commands

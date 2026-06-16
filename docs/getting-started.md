@@ -61,7 +61,7 @@ propose → review(task)
          → plan → review(plan)
             → goga build
                → change (bugfix loop)
-                  → acceptance
+                  → accept
 ```
 
 Start by formulating the task:

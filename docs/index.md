@@ -1,6 +1,6 @@
 **A new semantic layer between specification and implementation** — helping humans and AI agents reason about project structure at a higher level of abstraction.
 
-A full-fledged **Specification-Driven Development (SDD)** framework built on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and acceptance — under the hood.
+A full-fledged **Specification-Driven Development (SDD)** framework built on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and accept — under the hood.
 
 <div align="center">
   <p><strong>Languages</strong></p>
