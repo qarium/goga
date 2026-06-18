@@ -16,7 +16,8 @@ Use these skills for every design decision (never improvise annotation or usage 
 - **`goga-cell`** — the DSL specification: the exact syntax and semantics of the `Annotations`, `Usages`, `Imports`,
   `Entity`, `Routine`, `Mutation`, and `Embedding` directives — what may appear in a CODEMANIFEST and how it is written.
 - **`goga-cookbook`** — the principles of **applying** that DSL: the annotation levels (global / type-level /
-  member-level), the **mandatory type-level structure** (`Description` → `Algorithm:` → `Requirements:`), that
+  member-level), the **annotation writing standard** (good-practice elements — description, `Algorithm:`,
+  `Requirements:`, `Constraints:` — applied by the **sufficiency criterion**, not a fixed structure), that
   annotations must not duplicate each other or carry implementation details, that a connected practice applies only via
   an annotation, and the rules for writing `<cell_path>/.usages/` files. Use it to decide how to phrase annotations,
   where each instruction belongs, and how to write consumer usage files.
@@ -51,8 +52,8 @@ forbidden to begin, sketch, or pre-compute the next cell before the current one 
    (responsibility, methods/properties/signatures) and the usages-inline result (connected Usages keys). It returns the
    global/type-level/member-level annotations.
 3. **Cell usage files** — invoke **`goga-brainstorm-contracts-usages-file`**, giving it `[TYPE_DETAIL_REPORT]` (the
-   cell's contract) and the usages-inline and annotations results. It returns the `<cell_path>/.usages/<domain>.md`
-   files (full content) and the cell-level `Usages` keys.
+   cell's contract) and the usages-inline and annotations results. It returns paths: `<cell_path>/.usages/<domain>.md`
+   and Full usage-files content
 4. **STOP and show the result** — once step 3 returns, **halt the loop immediately.** Present this
    result to the user — the cell path, the usages, the annotations (global / type-level / member-level), and the usage
    files in full — exactly as they will be assembled into the `[CONTRACTS_REPORT]`. Then **STOP**: end your turn and
