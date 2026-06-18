@@ -165,6 +165,47 @@ Annotations at different levels must not:
 - duplicate each other
 - contain implementation details
 
+##### Annotations writing standard
+
+Well-written annotations raise implementation quality.
+This standard describes the elements whose presence is good practice when writing an annotation.
+The standard does not impose a fixed structure — an annotation may include only some of the elements.
+A data Entity with no behavior may need nothing beyond a purpose description; a routine with non-trivial logic may use them all.
+
+Key criterion: an annotation must be sufficient for implementation without further clarification. Use this criterion to decide which elements an annotation needs.
+
+Good-practice elements, in order:
+
+**1. Purpose description — without label.** A concise description of the entity / routine / method / property and the responsibility it owns. For methods and routines with parameters, describe each parameter on its own line right after, as `` `param`: ... ``.
+**2. `Algorithm:` — for logic.** Numbered, step-by-step behavior. Use this element when the type or operation has non-trivial logic. Capture logic, not implementation ("filter then sort" is logic; "use a TreeMap" is implementation). Reference practices/types via backticks where part of a step.
+**Placement of `Algorithm:` — describe behavior where it is implemented.** An `Algorithm` belongs to the annotation of the element that realizes that behavior, never to a higher level that merely aggregates it. For a `Routine` (a single operation), the `Algorithm` is written at the type level — the type is the operation. For an `Entity` with methods, the `Algorithm` of each operation goes in that method's member-level annotation; the type-level `Algorithm` describes only behavior inherent to the type itself — construction, initialization, or coordination shared across operations — and must not recount what individual methods do.
+**3. `Requirements:` — when present.** Concrete requirements: data formats, preconditions, and postconditions — what the implementation guarantees. One bullet each.
+**4. `Constraints:` — when present.** Limits and out-of-scope behavior — what the implementation must not do. One bullet each.
+**No code in `Algorithm:`.** Algorithm steps express actions through references to Usages and types, never through code.
+
+Example:
+
+```yaml
+"connect(agents: list[str]) -> exit_code:int":
+  location: connect.py
+  annotations: |
+    Install goga skills for one or more AI agents.
+
+    `agents`: list of target AI agents (required, non-empty)
+    `exit_code`: return code (0 success, 1 error)
+
+    Algorithm:
+    1. Validate that `agents` is non-empty; otherwise exit with code 1
+    2. For each agent, resolve its target directory and copy skills
+    3. Return 0 on success, otherwise 1
+
+    Requirements:
+    - Recreate goga directories fully on each run (delete then copy)
+
+    Constraints:
+    - Do not modify content belonging to other extensions
+```
+
 ### References in annotations
 
 Use backtick references (`` ` ``) for:
