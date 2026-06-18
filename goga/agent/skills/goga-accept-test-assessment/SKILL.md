@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance-test-assessment
+name: goga-accept-test-assessment
 description: Cell test coverage assessment for acceptance review
 ---
-# goga-acceptance-test-assessment
+# goga-accept-test-assessment
 
 ## Identity
 

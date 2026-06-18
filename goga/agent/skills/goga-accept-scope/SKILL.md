@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance-scope
+name: goga-accept-scope
 description: Defines the acceptance scope — the set of cells for a given functionality
 ---
-# goga-acceptance-scope
+# goga-accept-scope
 
 ## Identity
 

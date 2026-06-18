@@ -1,27 +1,64 @@
-# goga
+**A new semantic layer between specification and implementation** — helping humans and AI agents reason about project structure at a higher level of abstraction.
 
-A CLI and Agent tools for working with the CODEMANIFEST specification -- assembly, extension, and plan-building workflow.
+A full-fledged **Specification-Driven Development (SDD)** framework built on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and accept — under the hood.
 
-[goga](https://github.com/qarium/goga) provides a DSL for describing cell contracts, validates them against structural rules, extracts contracts from source code in multiple languages, and integrates with AI agents for automated development.
+<div align="center">
+  <p><strong>Languages</strong></p>
+  <p>
+    <img src="assets/brands/python.svg" alt="Python" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/javascript.svg" alt="JavaScript" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/kotlin.svg" alt="Kotlin" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/swift.svg" alt="Swift" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/go.svg" alt="Go" width="36" height="36">
+  </p>
+  <p><strong>Agents</strong></p>
+  <p>
+    <img src="assets/brands/claude.svg" alt="Claude" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/cursor.svg" alt="Cursor" width="36" height="36">
+  </p>
+</div>
 
-## Features
+## Why goga?
 
-- **CODEMANIFEST** -- Describe cell contracts with types, routines, imports, usages, and annotations in a structured YAML format
-- **Validation rules** -- AST-based linter checks your CODEMANIFEST files for structural correctness, import consistency, usage validity, mutation rules, and more
-- **Language parsers** -- Extract contracts from Python, Go, Kotlin, Swift, and JavaScript source code via tree-sitter
-- **CLI toolkit** -- Commands for project initialization, linting, building, schema generation, synchronization and contract extraction
-- **AI agent skills** -- Built-in agent skills for architecture, design, planning, review, acceptance and change management workflows
-- **Docker-based builds** -- Execute build plans via ralphex in isolated containers
+Code and contracts drift apart. Comments rot, types lie, and architecture lives only in someone's head — invisible to the agent that needs to extend it.
 
-## Quick install
+Goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source. An agent workflow carries a feature from a one-line proposal all the way to acceptance — without losing the thread.
+
+The result: a project that humans and AI agents can navigate, change, and reason about at the same level of abstraction.
+
+## Quick start
+
+Install goga:
 
 ```bash
 pip install goga
 ```
 
+Connect goga to your agent:
+
+```bash
+goga connect <agent>
+```
+
+Initialize a project — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:
+
+```bash
+goga init
+```
+
+From there, open your agent in the project directory and describe what you want to build:
+
+```text
+/goga:propose <what you want to create>
+```
+
+The example above uses Claude Code style. For other agents, invoke the skill directly: `goga-propose`.
+
 ## Next steps
 
-- [Getting Started](getting-started.md) -- Initialize your first goga project
-- [Configuration](configuration.md) -- Configure `.goga/config.yml`
-- [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
-- [CLI Reference](cli/index.md) -- Full command reference
+- [Getting Started](getting-started.md) — Initialize your first goga project
+- [Workflow](workflow/index.md) — The agent-driven feature development cycle
+- [Cell](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference
+- [Configuration](configuration.md) — Configure `.goga/config.yml`
+- [CLI Reference](cli/index.md) — Full command reference
+- [Languages](languages/index.md) — Contract extraction per language

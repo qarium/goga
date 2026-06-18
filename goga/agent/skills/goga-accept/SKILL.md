@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance
+name: goga-accept
 description: Final acceptance orchestrator for contract-oriented workflows
 ---
-# goga-acceptance
+# goga-accept
 
 ## Identity
 
@@ -29,27 +29,27 @@ Execute steps strictly sequentially — one step at a time. Validate each step's
 - Treat each step as an independent atomic operation
 
 ### Step 1. Scope Definition
-- Invoke: goga-acceptance-scope with arguments $ARGUMENTS
+- Invoke: goga-accept-scope with arguments $ARGUMENTS
 - Output: Acceptance Scope Report (all sections populated)
 - STOP if: no cells detected OR output sections unpopulated
 
 ### Step 2. CODEMANIFEST Review
-- Invoke: goga-acceptance-manifest-review
+- Invoke: goga-accept-manifest-review
 - Output: Manifest Review Report (all sections populated)
 - STOP if: unresolvable inconsistency between manifest and implementation OR output sections unpopulated
 
 ### Step 3. Usages Review
-- Invoke: goga-acceptance-usage-review
+- Invoke: goga-accept-usage-review
 - Output: Usage Review Report (all sections populated)
 - STOP if: unresolvable inconsistency between usages and implementation OR output sections unpopulated
 
 ### Step 4. Test Coverage Assessment
-- Invoke: goga-acceptance-test-assessment
+- Invoke: goga-accept-test-assessment
 - Output: Test Assessment Report (all sections populated)
 - STOP if: critical coverage gaps in changed behavior
 
 ### Step 5. Acceptance Report
-- Invoke: goga-acceptance-report
+- Invoke: goga-accept-report
 - Output: Final Acceptance Report (all sections populated)
 
 ## Output Rule

@@ -18,6 +18,16 @@ goga connect <agent>
 
 `goga connect` auto-discovers all installed `goga_tool_*` packages and copies their skills into the agent's skills directory. The tool becomes available both as an agent skill and as a CLI command.
 
+## Built-in tools
+
+The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.
+
+| Tool | Description                                                                                             | Docs | GitHub |
+|---|---------------------------------------------------------------------------------------------------------|---|---|
+| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells                                              | [Documentation](https://qarium.github.io/goga-tool-viewer/) | [Source](https://github.com/qarium/goga-tool-viewer) |
+| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files                                      | [Documentation](https://qarium.github.io/goga-tool-mkdocs/) | [Source](https://github.com/qarium/goga-tool-mkdocs) |
+| **scriba** | The writer — translates texts between languages and reviews texts against prompt-engineering principles | [Documentation](https://qarium.github.io/goga-tool-scriba/) | [Source](https://github.com/qarium/goga-tool-scriba) |
+
 ## Using a tool
 
 **Via CLI:**
@@ -29,14 +39,6 @@ goga tool <name> [args...]
 **Via agent skill:**
 
 Invoke the `/goga:tool <name>` command in your agent session. The dispatcher routes the request to the matching skill.
-
-## Available tools
-
-| Tool | Description | Docs | GitHub |
-|---|---|---|---|
-| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells | [Documentation](https://qarium.github.io/goga-tool-viewer/) | [Source](https://github.com/qarium/goga-tool-viewer) |
-| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files | [Documentation](https://qarium.github.io/goga-tool-mkdocs/) | [Source](https://github.com/qarium/goga-tool-mkdocs) |
-| **scriba** | Translate DSL keywords between languages | [Documentation](https://qarium.github.io/goga-tool-scriba/) | [Source](https://github.com/qarium/goga-tool-scriba) |
 
 ## Tool structure
 

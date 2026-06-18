@@ -1,6 +1,9 @@
 # Traceability: documentation page → cell paths
 # Each entry maps a doc page to the cells whose CODEMANIFEST/.usages it draws from.
 
+README.md:
+  - goga
+
 docs/index.md:
   - goga
 
@@ -23,6 +26,37 @@ docs/configuration.md:
 docs/tools.md:
   - goga/connect
   - goga/commands/tool
+
+docs/workflow/index.md:
+  - goga/connect
+
+docs/workflow/propose.md:
+  - goga/connect
+
+docs/workflow/review.md:
+  - goga/connect
+
+docs/workflow/brainstorm.md:
+  - goga/connect
+
+docs/workflow/apply.md:
+  - goga/connect
+
+docs/workflow/design.md:
+  - goga/connect
+
+docs/workflow/plan.md:
+  - goga/connect
+
+docs/workflow/build.md:
+  - goga/build
+  - goga/commands/build
+
+docs/workflow/change.md:
+  - goga/connect
+
+docs/workflow/accept.md:
+  - goga/connect
 
 docs/cli/index.md:
   - goga/commands

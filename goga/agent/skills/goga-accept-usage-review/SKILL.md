@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance-usage-review
+name: goga-accept-usage-review
 description: Validate cell-level usage files against actual implementation during acceptance
 ---
-# goga-acceptance-usage-review
+# goga-accept-usage-review
 
 ## Identity
 

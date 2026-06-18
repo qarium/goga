@@ -1,6 +1,6 @@
 docs_dir: docs
 
-site_name: goga
+site_name: Goga
 site_description: A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow
 site_url: https://qarium.github.io/goga/
 repo_url: https://github.com/qarium/goga
@@ -35,12 +35,22 @@ theme:
 nav:
   - Home: index.md
   - Getting Started: getting-started.md
+  - Workflow:
+      - workflow/index.md
+      - Propose: workflow/propose.md
+      - Review: workflow/review.md
+      - Brainstorm: workflow/brainstorm.md
+      - Apply: workflow/apply.md
+      - Design: workflow/design.md
+      - Plan: workflow/plan.md
+      - Build: workflow/build.md
+      - Change: workflow/change.md
+      - Accept: workflow/accept.md
+  - Tools: tools.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
       - Usages: cell/usages.md
-  - Configuration: configuration.md
-  - Tools: tools.md
   - CLI:
       - cli/index.md
       - Init: cli/init.md
@@ -60,6 +70,7 @@ nav:
       - AST Errors: architecture/ast-errors.md
       - Validation Rules: architecture/validation-rules.md
       - Contract Extraction: architecture/contract-extraction.md
+  - Configuration: configuration.md
   - Languages:
       - languages/index.md
       - Python: languages/python.md

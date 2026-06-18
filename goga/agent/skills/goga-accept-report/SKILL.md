@@ -1,8 +1,8 @@
 ---
-name: goga-acceptance-report
+name: goga-accept-report
 description: Generate the final acceptance report with verdict
 ---
-# goga-acceptance-report
+# goga-accept-report
 
 ## Identity
 

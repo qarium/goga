@@ -48,78 +48,53 @@ The wizard will prompt you for:
 Dockerfile                # Optional, if you chose to create one
 ```
 
-## Create a CODEMANIFEST
+## Develop your first feature
 
-A CODEMANIFEST file describes the contract of a cell (a self-contained module). Place it in the root directory of your cell.
+Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan.
 
-### Basic structure
+The full cycle:
 
-A CODEMANIFEST consists of three YAML documents separated by `---`:
-
-**Header** -- Imports, usages, and annotations:
-
-```yaml
-Imports:
-  - Types:
-      - MyType
-    From: path/to/other/cell
-
-Usages:
-  conventions: .goga/usages/conventions.md
-
-Annotations: |
-  Description of this cell's purpose and instructions.
+```
+propose → review(task)
+   → brainstorm → review(arch)
+      → apply → design → review(design)
+         → plan → review(plan)
+            → goga build
+               → change (bugfix loop)
+                  → accept
 ```
 
-**Body** -- Type declarations (entities and routines):
+Start by formulating the task:
 
-```yaml
-"process_data(input: str) -> result:dict":
-  location: processor.py
-  annotations: |
-    Processes the input and returns a result.
+```text
+/goga:propose <what you want to build>
 ```
 
-**Footer** -- Metadata:
+The example above uses Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-propose`.
 
-```yaml
----
-Author: Your Name
-CreatedAt: 08/06/26
-Description: |
-  A brief description of this cell.
-```
+The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step, including two shortcut paths for smaller changes.
 
-### Minimal example
+## View
 
-```yaml
----
+After the first task has produced cells on disk — for example, once you have run `/goga:apply` and the cell structure exists — you can visualize the project to inspect the result.
 
----
-
-"hello() -> void:null":
-  location: main.py
-  annotations: |
-    Prints hello world.
-
----
-Author: Developer
-CreatedAt: 08/06/26
-Description: Hello world cell
-```
-
-## Validate
-
-Run the linter to check all CODEMANIFEST files in your project:
+Get a textual hierarchy of all cells:
 
 ```bash
-goga lint .
+goga schema
 ```
 
-The linter applies 21 document-level rules and 3 tree-level rules to verify structural correctness, import consistency, usage validity, and more.
+Open an interactive dependency graph in the browser via the built-in `viewer` tool:
+
+```bash
+goga schema | goga tool viewer
+```
+
+The graph shows cells, their imports, and the connections between them — useful for verifying that the materialized architecture matches what you designed.
 
 ## Next steps
 
+- [Workflow](workflow/index.md) -- The agent-driven feature development cycle
 - [Configuration](configuration.md) -- Full config reference for `.goga/config.yml`
 - [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options
