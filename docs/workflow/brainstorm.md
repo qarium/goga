@@ -94,13 +94,13 @@ Identify the key concepts, dark zones, connection to the existing architecture, 
 
 ### Phase 4. Type Map
 
-Build a "table of contents" of types: names, character (Entity/Routine), brief purpose, and connections. Iterate with the user until approved.
+Build a "table of contents" of types as a Type Table: name, character (Entity/Routine), brief description, and connected types. Iterate with the user until approved.
 
 **WAIT:** present the type map and obtain approval. **STOP if:** map incomplete; approval denied after iteration.
 
 ### Phase 5. Type Detailing
 
-For each type: methods, properties, signatures, and interactions. Check consistency against already-approved types.
+For each type: signature, properties, methods, and mutations/embeddings. Check interactions for consistency against already-approved types.
 
 **WAIT:** present per-type detailing and obtain approval per type. **STOP if:** interactions inconsistent; approval denied after iteration.
 
