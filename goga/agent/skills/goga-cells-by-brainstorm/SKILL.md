@@ -103,7 +103,7 @@ For each CODEMANIFEST in the plan, the agent must verify compliance with the DSL
 If errors are detected:
 
 - Output an error list specifying the cell and the specific violation
-- Recommend that the user return to `arch-by-brainstorm` to fix the plan
+- Recommend that the user return to `goga-brainstorm` to fix the plan
 - **Do not proceed** until the plan is corrected
 
 ---

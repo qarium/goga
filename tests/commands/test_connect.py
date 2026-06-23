@@ -147,7 +147,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-design-by-changes" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-plan-by-design" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-review-plan" / "SKILL.md").is_file()
-        assert (claude_dir / "skills" / "goga-arch-by-brainstorm" / "SKILL.md").is_file()
+        assert (claude_dir / "skills" / "goga-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
         assert "Installed 9 commands" in result.output

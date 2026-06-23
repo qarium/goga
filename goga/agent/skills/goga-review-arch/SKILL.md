@@ -204,22 +204,34 @@ Unjustified mutation/embedding — log as **Medium**.
 Incorrect Entity/Routine classification — log as **High**.
 Non-conformant naming — log as **High**.
 
-#### Step 2. Annotation Quality
+#### Step 2. Usages Quality
+
+For each CODEMANIFEST of the plan:
+
+- The header `Usages:` directive must include the project's base usages retrieved via `goga-codemanifest-base`
+  (`goga config codemanifest.usages`) — these practices are mandatory for every CODEMANIFEST in the project
+
+Missing base usage in `Usages:` — log as **High**.
+
+#### Step 3. Annotation Quality
 
 For each annotation in every CODEMANIFEST of the plan:
 
+- The global `Annotations:` directive (document header) must contain the project's base annotations retrieved via skill `goga-codemanifest-base`, transferred **as-is (verbatim)** — without rephrasing, summarizing, or modifying the original text
 - Annotations must not contain technical implementation details
 - Annotations must contain sufficient information for implementation — implementers must not need to guess behavior
 - For non-trivial logic, describe an algorithm or execution flow (step-by-step) where achievable
 - Document constraints and edge cases: empty input, None/null, errors, boundary values
 - No placeholders (TBD, TODO) — annotations must be complete
 
+Missing base annotation in global `Annotations:` — log as **High**.
+Base annotation rephrased or modified (not transferred as-is) — log as **High**.
 Insufficient annotation — log as **Critical**.
 Non-conformant annotation format — log as **High**.
 Missing step-by-step logic description — log as **High**.
 Missing edge cases — log as **Medium**.
 
-#### Step 3. Task Requirements Coverage
+#### Step 4. Task Requirements Coverage
 
 If the task file `docs/tasks/<topic>.md` exists:
 
@@ -319,7 +331,7 @@ Before completion, verify:
 5. Was flat model cohesion validated (completeness, reachability, consistency)?
 6. Was cell cohesion validated (internal cohesion, boundaries, directionality, minimal coupling, usages connections)?
 7. Was usages isolation validated (no cross-references to other practices, self-contained files)?
-8. Was requirements sufficiency validated (contract precision, annotation quality)?
+8. Was requirements sufficiency validated (contract precision, usages quality, annotation quality)?
 9. If a task file exists — was task requirements coverage verified?
 10. Was consistency with existing architecture validated (modifications, dependent cells)?
 11. Was each finding presented individually with a fix decision?
