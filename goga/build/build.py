@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import os
 import shlex
 import shutil
 import stat
@@ -10,7 +10,13 @@ from pathlib import Path
 
 from ..config import Config
 
-CLAUDE_WRAPPER_SCRIPT = '#!/bin/bash\nexec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"\n'
+CLAUDE_WRAPPER_SCRIPT = (
+    "#!/bin/bash\n"
+    'exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude '
+    "--setting-sources user "
+    '--settings \'{"attribution":{"commit":"","pr":""}}\' '
+    '"$@"\n'
+)
 CODEX_WRAPPER_SCRIPT = '#!/bin/bash\nexec codex "$@" -m "$CODEX_MODEL"\n'
 
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
@@ -87,35 +93,7 @@ def _run_precondition(config: Config) -> int:
 
 
 def _precondition_claude(config: Config) -> None:
-    _create_claude_settings(config)
     _create_claude_wrapper(config)
-
-
-def _create_claude_settings(config: Config) -> None:
-    print("Creating .claude/settings.json...", file=sys.stderr)
-
-    claude_dir = Path(".claude")
-    claude_dir.mkdir(exist_ok=True)
-
-    settings_path = claude_dir / "settings.json"
-    settings: dict = {}
-    if settings_path.is_file():
-        try:
-            with settings_path.open() as f:
-                settings = json.load(f)
-        except json.JSONDecodeError as exc:
-            print(f"Invalid JSON in .claude/settings.json: {exc}", file=sys.stderr)
-            raise RuntimeError(f"Invalid JSON in .claude/settings.json: {exc}") from exc
-
-    settings.setdefault("env", {})
-    for key, value in config.build.task_executor.env.items():
-        settings["env"][key] = value
-
-    settings["attribution"] = {"commit": "", "pr": ""}
-
-    with settings_path.open("w") as f:
-        json.dump(settings, f, indent=2)
-        f.write("\n")
 
 
 def _precondition_codex() -> None:
@@ -276,4 +254,4 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
         return 1
 
     print(f"Running: {cmd_str}", file=sys.stderr)
-    return subprocess.call(cmd)
+    return subprocess.call(cmd, env={**os.environ, **config.build.task_executor.env})
