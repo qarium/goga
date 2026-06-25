@@ -41,10 +41,10 @@ exit_code = build(
 
 ## Supported agents
 
-| Agent | Preconditions |
-|-------|--------------|
-| `claude` | Creates .claude/settings.json, .ralphex/claude-wrapper.sh, .ralphex/config |
-| `codex` | Creates .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex) |
+| Agent    | Preconditions                                                                                                                                                         |
+|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `claude` | Creates .ralphex/claude-wrapper.sh, .ralphex/config. claude is launched with `--setting-sources user` so the build does not touch the project `.claude/settings.json` |
+| `codex`  | Creates .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex)                                                                                                   |
 
 ## Return value
 
@@ -54,8 +54,8 @@ exit_code = build(
 ## Side effects
 
 - Removes `.ralphex/` before each run (cleanup)
-- Creates or updates `.claude/settings.json` (when agent=claude)
 - Creates `.ralphex/claude-wrapper.sh` and `.ralphex/config` (when agent=claude)
+- Delivers build env (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, etc.) through the `ralphex` subprocess environment; the project `.claude/settings.json` is intentionally not written or modified (when agent=claude)
 - Creates `.ralphex/codex-wrapper.sh` and `.ralphex/config` (when agent=codex)
 - Copies prompts and agents into `.ralphex/`
 - Spawns a subprocess (`ralphex`)

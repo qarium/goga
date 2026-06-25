@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-import json
 import shutil
 import stat
 import subprocess
 from pathlib import Path
 from unittest import mock
 
-import pytest
 from goga.build.build import (
     CLAUDE_WRAPPER_SCRIPT,
     _assemble_command,
     _copy_defaults,
-    _create_claude_settings,
     _create_claude_wrapper,
     _parse_porcelain_path,
     _run_precondition,
@@ -138,52 +135,6 @@ class TestRunPrecondition:
         assert _run_precondition(config) == 1
 
 
-class TestCreateClaudeSettings:
-    def test_creates_settings_json(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(env=TEST_ENV_VARS)
-        _create_claude_settings(config)
-
-        settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
-        for key, value in TEST_ENV_VARS.items():
-            assert settings["env"][key] == value
-        assert settings["attribution"] == {"commit": "", "pr": ""}
-
-    def test_empty_env_creates_empty_section(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        _create_claude_settings(config)
-
-        settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
-        assert settings["env"] == {}
-        assert settings["attribution"] == {"commit": "", "pr": ""}
-
-    def test_merge_preserves_existing_fields(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        claude_dir = tmp_path / ".claude"
-        claude_dir.mkdir()
-        existing = {"custom_field": "preserved", "env": {"EXISTING_VAR": "val"}}
-        (claude_dir / "settings.json").write_text(json.dumps(existing))
-
-        config = _make_config(env={"NEW_VAR": "new_val"})
-        _create_claude_settings(config)
-
-        settings = json.loads((claude_dir / "settings.json").read_text())
-        assert settings["custom_field"] == "preserved"
-        assert settings["env"]["EXISTING_VAR"] == "val"
-        assert settings["env"]["NEW_VAR"] == "new_val"
-
-    def test_invalid_json_raises_runtime_error(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        claude_dir = tmp_path / ".claude"
-        claude_dir.mkdir()
-        (claude_dir / "settings.json").write_text("{broken json")
-
-        config = _make_config()
-        with pytest.raises(RuntimeError, match="Invalid JSON"):
-            _create_claude_settings(config)
-
-
 class TestCreateClaudeWrapper:
     def test_wrapper_created(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -193,6 +144,16 @@ class TestCreateClaudeWrapper:
         wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
         assert wrapper_path.is_file()
         assert wrapper_path.read_text() == CLAUDE_WRAPPER_SCRIPT
+
+    def test_wrapper_isolates_project_settings(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+        _create_claude_wrapper(config)
+
+        body = (tmp_path / ".ralphex" / "claude-wrapper.sh").read_text()
+        assert "--setting-sources user" in body
+        assert "--settings" in body
+        assert '"attribution":{"commit":"","pr":""}' in body
 
     def test_wrapper_is_executable(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -400,10 +361,11 @@ class TestBuildFullExecution:
         assert result == 42
 
 
-class TestBuildEnvVarsInSettings:
+class TestBuildEnvDelivery:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_env_vars_in_settings_json(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    def test_env_passed_to_subprocess(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("PARENT_VAR", "parent_val")
         config = _make_config(env=TEST_ENV_VARS)
         result = _run_build_in_tmp(
             tmp_path,
@@ -413,10 +375,39 @@ class TestBuildEnvVarsInSettings:
         )
         assert result == 0
 
-        settings = json.loads((tmp_path / ".claude" / "settings.json").read_text())
+        passed_env = mock_call.call_args.kwargs["env"]
         for key, value in TEST_ENV_VARS.items():
-            assert settings["env"][key] == value
-        assert settings["attribution"] == {"commit": "", "pr": ""}
+            assert passed_env[key] == value
+        assert passed_env["PARENT_VAR"] == "parent_val"
+        assert "PATH" in passed_env
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_env_overrides_os_environ(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://host.example")
+        config = _make_config(env={"ANTHROPIC_BASE_URL": "https://build.example"})
+        _run_build_in_tmp(
+            tmp_path,
+            monkeypatch,
+            config=config,
+            cli_options={"skip_manifest_check": True},
+        )
+
+        passed_env = mock_call.call_args.kwargs["env"]
+        assert passed_env["ANTHROPIC_BASE_URL"] == "https://build.example"
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_does_not_write_claude_settings(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        config = _make_config(env=TEST_ENV_VARS)
+        _run_build_in_tmp(
+            tmp_path,
+            monkeypatch,
+            config=config,
+            cli_options={"skip_manifest_check": True},
+        )
+
+        assert not (tmp_path / ".claude" / "settings.json").exists()
 
 
 class TestBuildUnsupportedAgent:
@@ -553,20 +544,6 @@ class TestManifestCheck:
 
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={})
         assert result == 1
-
-
-class TestBuildNegativeCases:
-    def test_invalid_settings_json_returns_nonzero(self, tmp_path, monkeypatch) -> None:
-        claude_dir = tmp_path / ".claude"
-        claude_dir.mkdir()
-        (claude_dir / "settings.json").write_text("{broken json")
-
-        result = _run_build_in_tmp(
-            tmp_path,
-            monkeypatch,
-            cli_options={"skip_manifest_check": True},
-        )
-        assert result != 0
 
 
 class TestBuildConfigFlags:

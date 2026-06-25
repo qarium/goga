@@ -39,14 +39,15 @@ Annotations: |
     2. Dispatch agent-specific preconditions based on the agent field from `TaskExecutor`:
        - If agent is not in ("claude", "codex") → fail with "Unsupported agent", exit 1
        - If agent == "claude":
-         a. Create or update .claude/settings.json:
-            - Merge with the existing file if present
-            - Inject env from `TaskExecutor` into settings["env"]
-            - Set settings["attribution"] = {"commit": "", "pr": ""}
-         b. Create .ralphex/claude-wrapper.sh:
-            - Script body: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude "$@"
+         a. Create .ralphex/claude-wrapper.sh:
+            - Script body: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" \
+              claude --setting-sources user \
+              --settings '{"attribution":{"commit":"","pr":""}}' "$@"
+            - --setting-sources user makes claude skip the bind-mounted project
+              .claude/settings.json (avoids polluting the host file with build env)
+            - inline --settings carries the attribution (commit/pr disabled)
             - Apply chmod +x
-         c. Update .ralphex/config:
+         b. Update .ralphex/config:
             - Add defaults (claude_command, claude_args) if missing
             - Overwrite codex_enabled from `BuildConfig`
        - If agent == "codex":
@@ -64,7 +65,9 @@ Annotations: |
        - Base command: ["ralphex", plan, "--config-dir", ".ralphex/"]
        - Apply flags with precedence: CLI options > `Config` > omit
     5. On dry_run: print the assembled command and return 0
-    6. Execute `ralphex` via subprocess.call and propagate its exit code
+    6. Execute `ralphex` via subprocess.call with
+       env={**os.environ, **TaskExecutor.env} (build env delivered through the
+       process environment, not via a settings file) and propagate its exit code
 
     Requirements:
     - `ralphex` must be available on PATH; fail otherwise
