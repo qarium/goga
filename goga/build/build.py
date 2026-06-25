@@ -12,10 +12,10 @@ from ..config import Config
 
 CLAUDE_WRAPPER_SCRIPT = (
     "#!/bin/bash\n"
-    "exec env ANTHROPIC_API_KEY=\"$ANTHROPIC_API_TOKEN\" claude "
+    'exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude '
     "--setting-sources user "
-    "--settings '{\"attribution\":{\"commit\":\"\",\"pr\":\"\"}}' "
-    "\"$@\"\n"
+    '--settings \'{"attribution":{"commit":"","pr":""}}\' '
+    '"$@"\n'
 )
 CODEX_WRAPPER_SCRIPT = '#!/bin/bash\nexec codex "$@" -m "$CODEX_MODEL"\n'
 
