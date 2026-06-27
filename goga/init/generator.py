@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import requests
 import yaml
 
 from .answers import GogaConfigAnswers, InitAnswers
+
+logger = logging.getLogger(__name__)
 
 
 class _LiteralStr(str):
@@ -34,6 +37,12 @@ class FileGenerator:
         """Create all files based on answers.
 
         If dockerfile_path is set — creates Dockerfile, then generates config.yml.
+
+        Args:
+            answers: User answers container with goga config payload.
+
+        Raises:
+            RuntimeError: If convention download fails.
         """
         config = answers.goga_config
 
@@ -50,17 +59,25 @@ class FileGenerator:
 
         Downloads convention if codemanifest_usages contains 'conventions'.
         Raises on download failure — config.yml is NOT created.
+
+        Args:
+            config: Goga config payload with language, agent, image, and codemanifest fields.
+
+        Raises:
+            RuntimeError: If convention download fails when 'conventions' usage is requested.
         """
         usages = config.codemanifest_usages
 
         if usages is not None and "conventions" in usages:
             url = _CONVENTION_URL_TEMPLATE.format(language=config.language)
 
+            logger.info("downloading convention", extra={"language": config.language, "url": url})
             try:
                 response = requests.get(url, timeout=30)
                 response.raise_for_status()
                 content = response.text
-            except Exception as exc:
+            except requests.RequestException as exc:
+                logger.error("convention download failed", extra={"url": url, "error": str(exc)})
                 raise RuntimeError(f"Failed to download convention from {url}: {exc}") from exc
 
             usages_dir = self._base_dir / ".goga" / "usages"

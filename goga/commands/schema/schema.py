@@ -31,13 +31,16 @@ def schema(
                       each value has "types" and "usages" lists
       children      - nested child cells (same structure, recursively)
 
-    \b
-    Options:
-      cells          - zero or more cell paths to filter output (variadic)
-      --max-depth N  - limit nesting depth of children (default: unlimited)
-      --depends-on   - filter cells by dependency on specified cell paths (repeatable)
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        cells: Zero or more cell paths to filter output (variadic).
+        max_depth: Maximum nesting depth of children. None means unlimited.
+        depends_on: Repeatable list of cell paths used to filter cells by
+            their dependencies.
 
-    Exit codes: 0 on success, 1 if AST parsing errors found.
+    Raises:
+        click.ClickException: When schema construction fails. Exit code 1 is
+            used when AST parsing errors are found.
     """
     try:
         result = schema_logic(list(cells), max_depth, list(depends_on))

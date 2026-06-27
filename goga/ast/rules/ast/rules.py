@@ -18,6 +18,14 @@ class ImportsHasNotCyclicalDeps(ASTRule):
         super().__init__(tree=tree, name="imports_has_not_cyclical_deps")
 
     def check(self, document: DocumentRoot) -> list[ASTRuleError]:
+        """Detect cyclic import dependencies between documents.
+
+        Args:
+            document: Document root to validate against the full tree.
+
+        Returns:
+            Errors for import paths that form a cycle with the current document.
+        """
         import_map: dict[str, set[str]] = {}
         for doc in self._tree:
             doc_path = doc.path
@@ -51,6 +59,14 @@ class ImportTypeExists(ASTRule):
         super().__init__(tree=tree, name="import_type_exists")
 
     def check(self, document: DocumentRoot) -> list[ASTRuleError]:
+        """Validate that imported types exist in their target documents.
+
+        Args:
+            document: Document root to validate against the full tree.
+
+        Returns:
+            Errors for imported types missing from the source package.
+        """
         errors: list[ASTRuleError] = []
 
         path_lookup: dict[str, DocumentRoot] = {str(Path(doc.path).resolve()): doc for doc in self._tree}
@@ -94,6 +110,14 @@ class EmbeddedTypeHasLowLevel(ASTRule):
         super().__init__(tree=tree, name="embedded_type_has_low_level")
 
     def check(self, document: DocumentRoot) -> list[ASTRuleError]:  # noqa: C901
+        """Validate that embedded types originate from packages nested below the current one.
+
+        Args:
+            document: Document root to validate against the full tree.
+
+        Returns:
+            Errors for embedded types sourced from invalid locations.
+        """
         errors: list[ASTRuleError] = []
         current_path = os.path.normpath(document.path)
 
@@ -117,6 +141,7 @@ class EmbeddedTypeHasLowLevel(ASTRule):
                     type_source[routine.name] = doc
 
         def _resolve_source(name: str) -> str | None:
+            """Resolve a type name to its source path via imports or global name map."""
             if name in import_source:
                 return import_source[name]
             source_doc = type_source.get(name)

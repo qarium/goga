@@ -1,5 +1,3 @@
-# goga/config/config.py — Config, BuildConfig, TaskExecutor dataclasses
-
 from dataclasses import dataclass, field
 
 

@@ -18,6 +18,8 @@ class HeaderNode(DocumentNode):
 
 @dataclass(kw_only=True)
 class ImportsNode(DocumentNode):
+    """Container for type and usage import declarations from the header."""
+
     types: list[ImportTypeItemNode] = field(default_factory=list)
     usages: list[ImportUsageItemNode] = field(default_factory=list)
 

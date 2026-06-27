@@ -16,7 +16,19 @@ class DocumentRule:
 
     @property
     def name(self) -> str:
+        """Stable identifier of the rule used in error reports."""
         return self._name
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Run the rule against a document node and return collected errors.
+
+        Args:
+            node: Document node to validate.
+
+        Returns:
+            List of errors produced by this rule for the node.
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method.
+        """
         raise NotImplementedError

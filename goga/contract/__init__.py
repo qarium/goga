@@ -1,3 +1,5 @@
+"""Contract package — public API for source code contract extraction."""
+
 from .data import (
     BaseContract,
     EntityContract,

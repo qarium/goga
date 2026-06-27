@@ -23,6 +23,14 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
         super().__init__(name=name)
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that entity and routine names do not shadow imported names without aliases.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for names colliding with imported names.
+        """
         active_type_names = self._collect_active_import_names(node)
         if not active_type_names:
             return []
@@ -65,7 +73,9 @@ class EntitiesAndRoutinesHasNotConflicts(DocumentRule):
 
     @staticmethod
     def _collect_active_import_names(node: DocumentNode) -> set[str]:
+        """Collect imported names that have no alias."""
         names: set[str] = set()
+
         for import_item in node.root.header.imports.types + node.root.header.imports.usages:
             if import_item.alias:
                 continue
@@ -83,6 +93,14 @@ class EntityHasOnlyValidKeys(DocumentRule):
         super().__init__(name="entity_has_only_valid_keys")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that entity entries contain only allowed keys.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for entity entries with unknown keys.
+        """
         errors: list[DocumentRuleError] = []
         valid_keys = {"location", "annotations", "properties", "methods"}
 
@@ -111,6 +129,14 @@ class RoutineHasOnlyValidKeys(DocumentRule):
         super().__init__(name="routine_has_only_valid_keys")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that routine entries contain only allowed keys.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for routine entries with unknown keys.
+        """
         errors: list[DocumentRuleError] = []
         valid_keys = {"location", "annotations"}
 
@@ -141,6 +167,14 @@ class SignatureIsValid(DocumentRule):
     _PATTERN = re.compile(r"^\([^)]*\)(\s*->.*)?$")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that entity, method, and routine signatures match the expected format.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for malformed or empty signatures.
+        """
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:
@@ -164,6 +198,7 @@ class SignatureIsValid(DocumentRule):
         node: DocumentNode,
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate a single signature and append errors for malformed values."""
         if not signature:
             errors.append(
                 DocumentRuleError(
@@ -192,6 +227,14 @@ class ReturnTypeHasLink(DocumentRule):
         super().__init__(name=name)
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that return types in signatures carry a semantic label.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for return types without a label.
+        """
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:
@@ -215,6 +258,7 @@ class ReturnTypeHasLink(DocumentRule):
         node: DocumentNode,
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate the return type part of a single signature carries a semantic label."""
         if not signature or "->" not in signature:
             return
 
@@ -241,6 +285,14 @@ class LocationIsRequired(DocumentRule):
         super().__init__(name="location_is_required")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that non-embedded entities and routines declare a valid location.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for missing or malformed location values.
+        """
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:
@@ -303,6 +355,7 @@ class LocationIsRequired(DocumentRule):
         node: EntityTypeNode | RoutineTypeNode,
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate the location format and append errors for malformed values."""
         if "/" in location_value:
             errors.append(
                 DocumentRuleError(

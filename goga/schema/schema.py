@@ -129,6 +129,7 @@ def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> st
     allowed = frozenset(os.path.normpath(c) for c in cells) if cells else None
     result = [_build_cell_tree(doc, allowed) for doc in tree]
     result = _filter_by_depends_on(result, depends_on)
+
     if max_depth is not None:
         result = [_prune_depth(cell, max_depth) for cell in result]
 

@@ -33,12 +33,14 @@ def _install_commands(source: Path, target: Path) -> list[str]:
     target_commands = target / "commands" / "goga"
     shutil.rmtree(target_commands, ignore_errors=True)
     shutil.copytree(source / "commands", target_commands)
+
     return sorted(p.stem for p in target_commands.glob("*.md"))
 
 
 def _install_skills(source: Path, target: Path) -> list[str]:
     target_skills = target / "skills"
     target_skills.mkdir(exist_ok=True)
+
     installed = []
     for entry in (source / "skills").iterdir():
         if entry.is_dir():
@@ -46,6 +48,7 @@ def _install_skills(source: Path, target: Path) -> list[str]:
             shutil.rmtree(dest, ignore_errors=True)
             shutil.copytree(entry, dest)
             installed.append(entry.name)
+
     return sorted(installed)
 
 
@@ -59,6 +62,7 @@ def _download_dsl_spec(target: Path) -> None:
         raise OSError(f"Failed to download DSL spec: HTTP {e.response.status_code} {e.response.reason}") from e
     except requests.exceptions.RequestException as e:
         raise OSError(f"Failed to download DSL spec: {e}") from e
+
     dsl_path.parent.mkdir(parents=True, exist_ok=True)
     dsl_path.write_bytes(data)
 
@@ -67,11 +71,13 @@ def _cleanup_goga_skills(target: Path) -> int:
     target_skills = target / "skills"
     if not target_skills.is_dir():
         return 0
+
     removed = 0
     for entry in target_skills.iterdir():
         if entry.is_dir() and entry.name.startswith("goga-"):
             shutil.rmtree(entry)
             removed += 1
+
     return removed
 
 
@@ -86,15 +92,19 @@ def _print_summary(commands: list[str], skills: list[str], target: Path) -> None
 def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # noqa: C901
     pkg_map = importlib.metadata.packages_distributions()
     tool_skills: list[str] = []
+
     for top_level_name in sorted(pkg_map):
         if not top_level_name.startswith("goga_tool_"):
             continue
+
         try:
             spec = importlib.util.find_spec(top_level_name)
         except (ModuleNotFoundError, ValueError):
             continue
+
         if spec is None or spec.origin is None:
             continue
+
         package_path = Path(spec.origin).parent
         tool_name = top_level_name.removeprefix("goga_tool_")
         if not (package_path / "skills" / tool_name / "SKILL.md").is_file():
@@ -103,6 +113,7 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
                 file=sys.stderr,
             )
             continue
+
         try:
             skills_dir = package_path / "skills"
             for skill_entry in skills_dir.iterdir():
@@ -122,6 +133,7 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
                     tool_skills.append(dest.name)
         except (OSError, shutil.Error) as e:
             print(f"Warning: failed to install skills from {top_level_name}: {e}", file=sys.stderr)
+
     return tool_skills
 
 

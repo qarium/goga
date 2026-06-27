@@ -13,7 +13,15 @@ from ...ast.ast import _flatten_tree
 @click.argument("path", default=".")
 @click.pass_context
 def lint(ctx: click.Context, path: str) -> None:
-    """Validate CODEMANIFEST files in the project."""
+    """Validate CODEMANIFEST files in the project.
+
+    Loads the AST for the target path, prints each validation error with its
+    source location, and emits a cell/error count summary.
+
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        path: Project path to lint. Defaults to the current directory.
+    """
     os.chdir(path)
 
     ast_obj = AST(".")
@@ -29,6 +37,7 @@ def lint(ctx: click.Context, path: str) -> None:
 
         if error.node is not None and hasattr(error.node, "data") and error.node.data is not None:
             click.echo("      ---")
+
             yaml_str = yaml.dump(
                 error.node.data,
                 sort_keys=False,
@@ -40,8 +49,10 @@ def lint(ctx: click.Context, path: str) -> None:
                 click.echo(f"      {line}")
 
     click.echo("")
+
     cell_count = len(_flatten_tree(ast_obj.tree))
     error_count = len(ast_obj.errors)
     summary = f"goga lint\n-------------------------\ncells: {cell_count} errors: {error_count}"
     click.echo(summary)
+
     ctx.exit(1 if error_count > 0 else 0)

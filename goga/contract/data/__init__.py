@@ -1,3 +1,5 @@
+"""Contract data models — base dataclasses for extracted definitions."""
+
 from .contract import (
     BaseContract,
     EntityContract,

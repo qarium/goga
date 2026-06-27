@@ -12,8 +12,8 @@ from ..data import EntityContract, MethodContract, PropertyContract, RoutineCont
 from ..treesitter_utils import node_text as _node_text
 from ..treesitter_utils import sort_contracts
 
-JS_LANG = Language(tsjs.language())
-_PARSER = Parser(JS_LANG)
+_JS_LANG = Language(tsjs.language())
+_PARSER = Parser(_JS_LANG)
 
 _RE_PARAM_KEYWORD = re.compile(r"@param\s+")
 _RE_RETURN_KEYWORD = re.compile(r"@returns?\s+")

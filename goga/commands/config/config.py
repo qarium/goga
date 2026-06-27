@@ -12,15 +12,22 @@ _NOT_FOUND = object()
 
 
 def _resolve_option(config: object, option: str) -> object:
-    """Traverse config by dot-notation path, returning the resolved value.
+    """Traverse config by dot-notation path and return the resolved value.
 
-    Returns _NOT_FOUND sentinel if any attribute in the path does not exist.
+    Args:
+        config: The root configuration object to traverse.
+        option: Dot-notation path identifying the option to resolve.
+
+    Returns:
+        The resolved value, or the `_NOT_FOUND` sentinel if any attribute in
+        the path does not exist.
     """
     parts = option.split(".")
     if parts[0] in _ALIAS_MAP:
         parts[0] = _ALIAS_MAP[parts[0]]
 
     current = config
+
     for part in parts:
         if isinstance(current, dict):
             if part.startswith("_") or part not in current:
@@ -39,7 +46,12 @@ def _resolve_option(config: object, option: str) -> object:
 
 
 def _output_value(value: object) -> None:
-    """Output a value to stdout, formatting by type."""
+    """Output a value to stdout, formatting it according to its type.
+
+    Args:
+        value: The value to render. Dicts and dataclasses are emitted as YAML,
+            scalars as plain strings, and `None` as the literal "null".
+    """
     if value is None:
         click.echo("null")
     elif isinstance(value, (bool, str, int)):
@@ -64,7 +76,16 @@ def _output_value(value: object) -> None:
 @click.argument("options", nargs=-1, required=True)
 @click.pass_context
 def config(ctx: click.Context, options: tuple[str, ...]) -> None:
-    """Read and output configuration options from .goga/config.yml."""
+    """Read and output configuration options from .goga/config.yml.
+
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        options: One or more dot-notation option paths to resolve and print.
+
+    Raises:
+        click.ClickException: When the configuration file cannot be loaded or
+            parsed.
+    """
     try:
         cfg = load_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:

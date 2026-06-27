@@ -1,7 +1,7 @@
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
-from goga.init.logic import InitLogic
-from goga.init.questionnaire import Questionnaire
+from .answers import GogaConfigAnswers, InitAnswers
+from .generator import FileGenerator
+from .logic import InitLogic
+from .questionnaire import Questionnaire
 
 __all__ = [
     "FileGenerator",

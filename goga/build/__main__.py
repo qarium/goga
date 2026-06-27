@@ -7,6 +7,13 @@ from .build import build
 
 
 def main() -> int:
+    """Run the goga build command as a standalone entry point.
+
+    Parses CLI arguments, loads project configuration, and invokes the build pipeline.
+
+    Returns:
+        0 on success, 1 on failure.
+    """
     parser = argparse.ArgumentParser(prog="goga.build", description="Run goga build inside Docker")
     parser.add_argument("plan", help="Path to the build plan file")
     parser.add_argument("--dry-run", action="store_true")

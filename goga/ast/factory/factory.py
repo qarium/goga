@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 
@@ -39,8 +39,15 @@ class Factory:
         """Directory path of the CODEMANIFEST being parsed."""
         return self._path
 
-    def create(self, parent: Optional[DocumentRoot] = None) -> DocumentRoot:
-        """Load and parse the CODEMANIFEST file, returning a DocumentRoot tree."""
+    def create(self, parent: DocumentRoot | None = None) -> DocumentRoot:
+        """Load and parse the CODEMANIFEST file, returning a DocumentRoot tree.
+
+        Args:
+            parent: Parent document root for nested documents, or None for top-level.
+
+        Returns:
+            Parsed DocumentRoot with header, body, footer, and wired references.
+        """
         filepath = Path(self._path) / "CODEMANIFEST"
 
         with filepath.open(encoding="utf-8") as fh:
@@ -225,7 +232,10 @@ class Factory:
 
     @staticmethod
     def _split_alias(raw: str) -> tuple[str, str]:
-        """Split "Name AS Alias" into (name, alias). Returns (raw, "") if no AS."""
+        """Split "Name AS Alias" into (name, alias).
+
+        Returns (raw, "") if no AS.
+        """
         if " AS " in raw:
             parts = raw.split(" AS ", 1)
             return parts[0].strip(), parts[1].strip()

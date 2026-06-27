@@ -26,7 +26,11 @@ def connect(ctx: click.Context, agents: tuple[str, ...], force_overwrite: bool) 
     Options:
       --force-overwrite - overwrite existing tool skills without prompting
 
-    Exit codes: 0 on success, 1 on error (unsupported agent, resources not found, download failure).
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        agents: One or more target AI agent names to connect to.
+        force_overwrite: When True, overwrite existing tool skills without
+            prompting the user.
     """
     exit_code = connect_logic(list(agents), force_overwrite=force_overwrite)
     ctx.exit(exit_code)

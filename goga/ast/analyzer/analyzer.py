@@ -21,8 +21,17 @@ class Analyzer:
         return self._tree
 
     def analyze(self, rules: list[ASTRule]) -> list[ASTRuleError]:
+        """Run each AST rule against every document in the tree.
+
+        Args:
+            rules: AST-level rules to evaluate.
+
+        Returns:
+            All errors collected from every rule and document.
+        """
         errors: list[ASTRuleError] = []
         for rule in rules:
             for document in self._tree:
                 errors.extend(rule.check(document))
+
         return errors

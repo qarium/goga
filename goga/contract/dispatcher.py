@@ -1,10 +1,12 @@
+"""Language dispatcher for contract extraction."""
+
 from __future__ import annotations
 
 # ruff: noqa: PLC0415 — lazy imports required by contract
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from goga.contract.data import EntityContract, RoutineContract
+    from .data import EntityContract, RoutineContract
 
 
 def contract(lang: str, cell_path: str) -> list[EntityContract | RoutineContract]:

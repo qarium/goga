@@ -31,8 +31,10 @@ def _extract_dep_name(source: str) -> str:
         path_part = urlparse(source).path
         name = path_part.rstrip("/").split("/")[-1]
         name = name.removesuffix(".git")
+
     if not name or name == "." or ".." in name.split("/"):
         raise ValueError(f"Cannot extract dependency name from: {source}")
+
     return name
 
 
@@ -41,7 +43,9 @@ def _prepare_clone_url(source: str, token: str | None) -> str:
         parsed = urlparse(source)
         host = parsed.netloc.rsplit("@", 1)[-1]
         new_netloc = f"{token}@{host}"
+
         return urlunparse(parsed._replace(netloc=new_netloc))
+
     return source
 
 
@@ -82,6 +86,7 @@ def _sync_from_git(source: str, token: str | None, branch: str | None) -> int:
             clone_cmd.extend(["--branch", branch])
         clone_cmd.extend([clone_url, str(tmp_dir)])
         env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
         try:
             subprocess.run(clone_cmd, capture_output=True, check=True, env=env)
         except FileNotFoundError:
@@ -125,6 +130,7 @@ def _sync_from_local(source: str) -> int:
     if not dep_name:
         print("Cannot extract dependency name from path", file=sys.stderr)
         return 1
+
     try:
         count = _sync_usages(source_path, dep_name, usages_dirs)
         print(f"Synced {dep_name} from {source_path} ({count} usages)")

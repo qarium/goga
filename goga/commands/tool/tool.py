@@ -9,16 +9,27 @@ import click
 @click.argument("name")
 @click.pass_context
 def tool(ctx: click.Context, name: str) -> None:
-    """Run an external tool package by name."""
+    """Run an external tool package by name.
+
+    Imports the package `goga_tool_<name>` and invokes its `main` entrypoint
+    with the remaining CLI arguments.
+
+    Args:
+        ctx: Click execution context used to forward extra args and exit codes.
+        name: Identifier of the tool package to run (without the `goga_tool_`
+            prefix).
+    """
     package_name = f"goga_tool_{name}"
     try:
         module = importlib.import_module(package_name)
     except ModuleNotFoundError:
         click.secho(f"Tool package '{package_name}' not found", fg="red", err=True)
         ctx.exit(1)
+
     try:
         main_fn = module.main
     except AttributeError:
         click.secho(f"Tool package '{package_name}' has no 'main' function", fg="red", err=True)
         ctx.exit(1)
+
     main_fn(list(ctx.args))

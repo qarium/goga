@@ -19,6 +19,14 @@ class ImportsCanNotBeEmpty(DocumentRule):
         super().__init__(name="imports_can_not_be_empty")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that declared imports are not empty.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for declared but empty import blocks.
+        """
         if "Imports" not in node.root.header.data:
             return []
         errors: list[DocumentRuleError] = []
@@ -44,6 +52,14 @@ class ImportItemIsValid(DocumentRule):
         super().__init__(name="import_item_is_valid")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that every import item declares at least one type or usage.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for import items without Types or Usages.
+        """
         errors: list[DocumentRuleError] = []
         for item in node.root.header.imports.types:
             if not item.type_name:
@@ -80,6 +96,14 @@ class ImportUsageExists(DocumentRule):
         super().__init__(name="import_usage_exists")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that imported usages exist as files in the source package.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for imported usages missing on the filesystem.
+        """
         errors: list[DocumentRuleError] = []
 
         for item in node.root.header.imports.usages:
@@ -109,6 +133,14 @@ class ImportHasValidFromPath(DocumentRule):
         super().__init__(name="import_has_valid_from_path")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that import source paths exist and stay within the project root.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for empty, missing, or escaping import source paths.
+        """
         errors: list[DocumentRuleError] = []
         cwd = Path.cwd().resolve()
 
@@ -164,6 +196,14 @@ class ImportsHasOnlyValidKeys(DocumentRule):
         super().__init__(name="imports_has_only_valid_keys")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that import entries contain only allowed keys.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for import entries with unknown keys.
+        """
         errors: list[DocumentRuleError] = []
         valid_keys = {"Types", "Usages", "From"}
 
@@ -192,6 +232,14 @@ class ImportHasNotDuplicate(DocumentRule):
         super().__init__(name="import_has_not_duplicate")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that imported type and usage names are not duplicated.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for names imported more than once.
+        """
         errors: list[DocumentRuleError] = []
         seen_types: dict[str, str] = {}
         seen_usages: dict[str, str] = {}
@@ -229,6 +277,14 @@ class ImportIsUsed(DocumentRule):
         super().__init__(name="import_is_used")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that every imported type and usage is referenced somewhere in the document.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for imported names that are never used.
+        """
         all_links = self._collect_links(node, include_embedded=True)
         all_signatures = self._collect_signatures(node)
         property_types = self._collect_property_types(node)
@@ -268,6 +324,7 @@ class ImportIsUsed(DocumentRule):
         property_types: set[str] | None = None,
         mutation_names: set[str] | None = None,
     ) -> list[DocumentRuleError]:
+        """Check a single type import item against all known usages."""
         names = [item.alias] if item.alias else list(item.type_name)
         errors: list[DocumentRuleError] = []
         for name in names:
@@ -298,6 +355,7 @@ class ImportIsUsed(DocumentRule):
         document,
         usage_links: set[str],
     ) -> list[DocumentRuleError]:
+        """Check a single usage import item against collected usage links."""
         names = [item.alias] if item.alias else list(item.usage_name)
         errors: list[DocumentRuleError] = []
         for name in names:
@@ -314,6 +372,7 @@ class ImportIsUsed(DocumentRule):
         return errors
 
     def _collect_links(self, node: DocumentNode, include_embedded: bool = False) -> set[str]:
+        """Collect all annotation link names across the document."""
         links: set[str] = set()
         header = node.root.header
 
@@ -339,6 +398,7 @@ class ImportIsUsed(DocumentRule):
         return links
 
     def _collect_property_types(self, node: DocumentNode) -> set[str]:
+        """Collect all property type names from entity properties."""
         types: set[str] = set()
         for entity in node.root.body.entities:
             for prop in entity.properties:
@@ -347,6 +407,7 @@ class ImportIsUsed(DocumentRule):
         return types
 
     def _collect_signatures(self, node: DocumentNode) -> list[str]:
+        """Collect all signatures from entities, methods, and routines."""
         signatures: list[str] = []
         for entity in node.root.body.entities:
             signatures.append(entity.signature)
@@ -357,6 +418,7 @@ class ImportIsUsed(DocumentRule):
         return signatures
 
     def _collect_mutation_names(self, node: DocumentNode) -> set[str]:
+        """Collect all mutation base type names from entity mutations."""
         types: set[str] = set()
         for entity in node.root.body.entities:
             for mutation_name, _ in entity.mutations:

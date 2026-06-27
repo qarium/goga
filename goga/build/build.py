@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import logging
 import os
 import shlex
 import shutil
 import stat
 import subprocess
-import sys
 from pathlib import Path
 
 from ..config import Config
+
+logger = logging.getLogger(__name__)
 
 CLAUDE_WRAPPER_SCRIPT = (
     "#!/bin/bash\n"
@@ -59,8 +61,9 @@ def _find_uncommitted_manifests() -> list[str]:
     )
     if result.returncode != 0:
         detail = result.stderr.strip() or "unknown error"
-        print(f"git status failed: {detail}", file=sys.stderr)
+        logger.error("git status failed", extra={"detail": detail})
         raise RuntimeError(f"git status failed: {detail}")
+
     uncommitted: list[str] = []
     for line in result.stdout.splitlines():
         path = _parse_porcelain_path(line)
@@ -73,19 +76,19 @@ def _cleanup_ralphex_dir() -> None:
     ralphex_dir = Path(".ralphex")
     if ralphex_dir.is_dir():
         shutil.rmtree(ralphex_dir)
-        print("Removed .ralphex/", file=sys.stderr)
+        logger.info("removed .ralphex directory")
 
 
 def _run_precondition(config: Config) -> int:
     agent = config.build.task_executor.agent
     if agent not in ("claude", "codex"):
-        print(f"Unsupported agent: {agent}", file=sys.stderr)
+        logger.error("unsupported agent", extra={"agent": agent})
         return 1
     if agent == "claude":
         try:
             _precondition_claude(config)
         except RuntimeError as exc:
-            print(str(exc), file=sys.stderr)
+            logger.error("claude precondition failed", extra={"error": str(exc)})
             return 1
     if agent == "codex":
         _precondition_codex()
@@ -101,7 +104,7 @@ def _precondition_codex() -> None:
 
 
 def _create_codex_wrapper() -> None:
-    print("Creating .ralphex/config for codex...", file=sys.stderr)
+    logger.info("creating .ralphex/config for codex")
 
     ralphex_dir = Path(".ralphex")
     ralphex_dir.mkdir(exist_ok=True)
@@ -119,7 +122,7 @@ def _create_codex_wrapper() -> None:
 
 
 def _create_claude_wrapper(config: Config) -> None:
-    print("Creating .ralphex/claude-wrapper.sh...", file=sys.stderr)
+    logger.info("creating .ralphex/claude-wrapper.sh")
 
     ralphex_dir = Path(".ralphex")
     ralphex_dir.mkdir(exist_ok=True)
@@ -159,12 +162,12 @@ def _create_claude_wrapper(config: Config) -> None:
 
 
 def _copy_defaults(config: Config) -> int:
-    print("Copying defaults...", file=sys.stderr)
+    logger.info("copying defaults")
 
     defaults_dir = DEFAULTS_PACKAGE_DIR.resolve()
 
     if not defaults_dir.is_dir():
-        print(f"Error: defaults directory not found: {defaults_dir}", file=sys.stderr)
+        logger.error("defaults directory not found", extra={"path": str(defaults_dir)})
         return 1
 
     ralphex_dir = Path(".ralphex")
@@ -230,9 +233,7 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
         except RuntimeError:
             return 1
         if uncommitted:
-            print("Error: Uncommitted CODEMANIFEST files found:", file=sys.stderr)
-            for path in uncommitted:
-                print(f"  {path}", file=sys.stderr)
+            logger.error("uncommitted codemanifest files found", extra={"paths": uncommitted})
             return 1
 
     _cleanup_ralphex_dir()
@@ -246,12 +247,12 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
     cmd_str = shlex.join(cmd)
 
     if cli_options.get("dry_run"):
-        print(f"Dry run: {cmd_str}", file=sys.stderr)
+        logger.info("dry run", extra={"command": cmd_str})
         return 0
 
     if not shutil.which("ralphex"):
-        print("Error: ralphex not found in PATH", file=sys.stderr)
+        logger.error("ralphex not found in path")
         return 1
 
-    print(f"Running: {cmd_str}", file=sys.stderr)
+    logger.info("running build", extra={"command": cmd_str})
     return subprocess.call(cmd, env={**os.environ, **config.build.task_executor.env})

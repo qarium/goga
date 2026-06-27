@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -11,10 +10,10 @@ class GogaConfigAnswers:
     language: str
     agent: str
     image: str
-    env: Optional[dict] = None
-    codemanifest_usages: Optional[dict] = None
-    codemanifest_annotations: Optional[str] = None
-    dockerfile_path: Optional[str] = None
+    env: dict | None = None
+    codemanifest_usages: dict | None = None
+    codemanifest_annotations: str | None = None
+    dockerfile_path: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

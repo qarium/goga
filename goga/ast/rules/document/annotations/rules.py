@@ -50,6 +50,7 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate annotation links in the header and usage items."""
         header = node.root.header
         for link in header.annotations.links:
             if link not in valid_names:
@@ -86,6 +87,7 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate annotation links across entities, methods, properties, and routines."""
         for entity in node.root.body.entities:
             if entity.embedded:
                 continue
@@ -103,6 +105,7 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate annotation links of an entity and its methods and properties."""
         self._check_node_links(entity, entity.annotations, node, valid_names, errors)
         for method in entity.methods:
             self._check_node_links(method, method.annotations, node, valid_names, errors)
@@ -117,6 +120,7 @@ class AnnotationLinksExists(DocumentRule):
         valid_names: set[str],
         errors: list[DocumentRuleError],
     ) -> None:
+        """Validate links of a single annotations node against valid names and signature."""
         context = type(owner).__name__
         signature = getattr(owner, "signature", None)
         for link in annotations.links:
@@ -137,6 +141,14 @@ class AnnotationLinksExists(DocumentRule):
             )
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that every annotation link resolves to a known name or signature token.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for annotation links with no matching target.
+        """
         valid_names = _collect_valid_names(node)
         errors: list[DocumentRuleError] = []
         self._check_header_links(node, valid_names, errors)

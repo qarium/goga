@@ -1,5 +1,3 @@
-# goga/config/loader.py — load_config function
-
 from pathlib import Path
 
 import yaml

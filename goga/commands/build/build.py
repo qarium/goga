@@ -14,6 +14,11 @@ from ...config import load_config
 
 
 def _check_docker() -> bool:
+    """Check whether the docker CLI is available on PATH.
+
+    Returns:
+        True if `docker --version` exits successfully, False otherwise.
+    """
     try:
         result = subprocess.run(
             ["docker", "--version"],
@@ -27,6 +32,12 @@ def _check_docker() -> bool:
 
 
 def _read_git_config() -> dict[str, str]:
+    """Read git author/committer identity from the local git config.
+
+    Returns:
+        A dict of git identity environment variables, or an empty dict when
+        git is unavailable or name/email are not configured.
+    """
     try:
         name_result = subprocess.run(
             ["git", "config", "user.name"],
@@ -60,6 +71,17 @@ def _write_env_file(
     env: dict[str, str],
     extra_env: tuple[str, ...],
 ) -> Path:
+    """Write environment variables to a private temporary env file.
+
+    The file is created with mode 0600 so only the owner can read it.
+
+    Args:
+        env: Mapping of environment variables to write as KEY=VALUE lines.
+        extra_env: Additional raw KEY=VALUE strings to append verbatim.
+
+    Returns:
+        Path to the written temporary file.
+    """
     fd, path = tempfile.mkstemp(prefix="goga-env-")
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
@@ -77,6 +99,18 @@ def _build_docker_cmd(
     cli_flags: dict[str, bool | str | int | None],
     container_name: str,
 ) -> list[str]:
+    """Assemble the docker run command that launches goga.build inside a container.
+
+    Args:
+        plan: Plan identifier passed to `goga.build` as the positional argument.
+        image: Docker image to run.
+        env_file: Path to the env file mounted via `--env-file`.
+        cli_flags: Build flags forwarded to the in-container entrypoint.
+        container_name: Name assigned to the container via `--name`.
+
+    Returns:
+        The full docker command as a list of string arguments.
+    """
     project_dir = Path.cwd().resolve()
 
     cmd: list[str] = [
@@ -150,7 +184,26 @@ def build(  # noqa: PLR0913
     review_patience: int | None,
     extra_env: tuple[str, ...],
 ) -> None:
-    """Build code via ralphex. Launches goga.build inside a Docker container."""
+    """Build code via ralphex by launching goga.build inside a Docker container.
+
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        plan: Plan identifier forwarded to the in-container `goga.build` module.
+        dry_run: When True, assemble the command but do not execute it.
+        worktree: Enable ralphex worktree mode inside the container.
+        skip_finalize: Skip the ralphex finalization step.
+        skip_manifest_check: Skip the CODEMANIFEST uncommitted-files check.
+        session_timeout: Optional session timeout forwarded to the build.
+        idle_timeout: Optional idle timeout forwarded to the build.
+        wait: Optional wait time forwarded to the build.
+        max_iterations: Optional iteration cap forwarded to the build.
+        review_patience: Optional review patience forwarded to the build.
+        extra_env: Additional KEY=VALUE environment variables for the container.
+
+    Raises:
+        click.ClickException: When docker is missing, configuration cannot be
+            loaded, or the build image is not configured.
+    """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")
 
@@ -198,6 +251,7 @@ def build(  # noqa: PLR0913
             ctx.exit(0)
 
         docker_proc = subprocess.Popen(docker_cmd)
+
         ctx.exit(docker_proc.wait())
     finally:
         env_file.unlink(missing_ok=True)

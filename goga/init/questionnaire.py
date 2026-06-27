@@ -53,18 +53,23 @@ _AGENT_ENV_MAP: dict[str, list[str]] = {
 class Questionnaire:
     """Interactive questionnaire for project initialization."""
 
-    def __init__(self) -> None:
-        pass
-
     def ask(self) -> InitAnswers:
-        """Run full questionnaire and return collected answers."""
+        """Run full questionnaire and return collected answers.
+
+        Returns:
+            InitAnswers container with the collected goga config payload.
+        """
         click.echo("=== Goga Project Initialization ===")
         click.echo("This wizard will help you set up a new goga project.\n")
         config = self.ask_goga_config()
         return InitAnswers(goga_config=config)
 
     def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912, PLR0915
-        """Run questionnaire for .goga/config.yml creation."""
+        """Run questionnaire for .goga/config.yml creation.
+
+        Returns:
+            GogaConfigAnswers with all collected goga config fields.
+        """
         click.echo("Collecting .goga/config.yml settings...\n")
 
         # 1. Language

@@ -16,6 +16,14 @@ class MutationExists(DocumentRule):
         super().__init__(name=name)
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that mutation base types exist in the document.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for mutation names with unknown base types.
+        """
         errors: list[DocumentRuleError] = []
 
         valid_names: set[str] = set()
@@ -51,6 +59,14 @@ class MutationIsValid(DocumentRule):
         super().__init__(name=name)
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that mutation base types do not equal the entity's own name.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for self-referencing mutations.
+        """
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:
@@ -80,6 +96,14 @@ class EmbeddedEntityCanNotHasMutations(DocumentRule):
         super().__init__(name=name)
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that embedded entities do not declare mutations.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for embedded entities carrying mutations.
+        """
         errors: list[DocumentRuleError] = []
 
         for entity in node.root.body.entities:

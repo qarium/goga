@@ -22,9 +22,17 @@ class Visitor:
         return self._document
 
     def analyze(self, rules: list[DocumentRule]) -> list[DocumentRuleError]:
-        """Run document-level rules against the wrapped document and collect errors."""
+        """Run document-level rules against the wrapped document and collect errors.
+
+        Args:
+            rules: Document-level rules to evaluate.
+
+        Returns:
+            All errors collected from every rule.
+        """
         wrapper = DocumentNode(root=self._document)
         errors: list[DocumentRuleError] = []
         for rule in rules:
             errors.extend(rule.check(wrapper))
+
         return errors

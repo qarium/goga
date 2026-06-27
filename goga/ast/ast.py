@@ -42,6 +42,7 @@ def _flatten_tree(tree: list[DocumentRoot]) -> list[DocumentRoot]:
     for root in tree:
         result.append(root)
         result.extend(_flatten_tree(root.children))
+
     return result
 
 
@@ -173,6 +174,7 @@ class AST:
         # Build lookup: type name -> original (non-embedded) node
         entity_by_name: dict[str, EntityTypeNode] = {}
         routine_by_name: dict[str, RoutineTypeNode] = {}
+
         for doc in all_documents:
             for entity in doc.body.entities:
                 if not entity.embedded and entity.name not in entity_by_name:
@@ -275,7 +277,17 @@ class AST:
             )
 
     def document(self, path: str) -> DocumentRoot:
-        """Look up a DocumentRoot by its directory path at O(1)."""
+        """Look up a DocumentRoot by its directory path at O(1).
+
+        Args:
+            path: Directory path of the document to resolve.
+
+        Returns:
+            DocumentRoot registered for the resolved path.
+
+        Raises:
+            DocumentNotFoundError: When no document was loaded for the path.
+        """
         resolved = str(Path(path).resolve())
         if resolved not in self._index:
             raise DocumentNotFoundError(f"Document not found for path: {path}")

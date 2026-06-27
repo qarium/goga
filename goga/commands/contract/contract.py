@@ -28,6 +28,15 @@ def _compare_property(
     prop_node: PropertyNode,
     impl_props: dict[str, PropertyContract],
 ) -> dict:
+    """Build a codemanifest/implementation comparison for a single property.
+
+    Args:
+        prop_node: The property definition declared in the CODEMANIFEST.
+        impl_props: Implementation-side properties keyed by name.
+
+    Returns:
+        A dict with `codemanifest` and `implementation` signature entries.
+    """
     impl = impl_props[prop_node.name].signature if prop_node.name in impl_props else None
     return {"codemanifest": prop_node.type, "implementation": impl}
 
@@ -36,6 +45,15 @@ def _compare_method(
     method_node: MethodNode,
     impl_methods: dict[str, MethodContract],
 ) -> dict:
+    """Build a codemanifest/implementation comparison for a single method.
+
+    Args:
+        method_node: The method definition declared in the CODEMANIFEST.
+        impl_methods: Implementation-side methods keyed by name.
+
+    Returns:
+        A dict with `codemanifest` and `implementation` signature entries.
+    """
     impl = impl_methods[method_node.name].signature if method_node.name in impl_methods else None
     return {"codemanifest": method_node.signature, "implementation": impl}
 
@@ -44,6 +62,16 @@ def _match_entity(
     entity_node: EntityTypeNode,
     impl_entity: EntityContract | None,
 ) -> dict:
+    """Build the full comparison structure for one entity.
+
+    Args:
+        entity_node: The entity definition declared in the CODEMANIFEST.
+        impl_entity: Matching implementation entity contract, or None when the
+            entity has no implementation.
+
+    Returns:
+        A dict carrying signature, property, and method comparisons.
+    """
     result: dict = {
         "signature": {
             "codemanifest": entity_node.signature,
@@ -53,11 +81,15 @@ def _match_entity(
         "methods": {},
     }
     impl_props = {p.name: p for p in impl_entity.properties} if impl_entity else {}
+
     for prop in entity_node.properties:
         result["properties"][prop.name] = _compare_property(prop, impl_props)
+
     impl_methods = {m.name: m for m in impl_entity.methods} if impl_entity else {}
+
     for method in entity_node.methods:
         result["methods"][method.name] = _compare_method(method, impl_methods)
+
     return result
 
 
@@ -66,23 +98,38 @@ def _build_cell_compare(
     routines: list[RoutineTypeNode],
     impl_contracts: list[EntityContract | RoutineContract],
 ) -> dict:
+    """Build the comparison structure for all entities and routines in a cell.
+
+    Args:
+        entities: Entity definitions declared in the CODEMANIFEST body.
+        routines: Routine definitions declared in the CODEMANIFEST body.
+        impl_contracts: Implementation-side contracts matched by name.
+
+    Returns:
+        A dict keyed by entity/routine name carrying their comparisons.
+    """
     impl_by_name: dict[str, EntityContract | RoutineContract] = {c.name: c for c in impl_contracts}
     result: dict = {}
+
     for entity in entities:
         impl = impl_by_name.get(entity.name)
         if not isinstance(impl, EntityContract):
             impl = None
+
         result[entity.name] = _match_entity(entity, impl)
+
     for routine in routines:
         impl = impl_by_name.get(routine.name)
         if not isinstance(impl, RoutineContract):
             impl = None
+
         result[routine.name] = {
             "signature": {
                 "codemanifest": routine.signature,
                 "implementation": impl.signature if impl else None,
             }
         }
+
     return result
 
 
@@ -93,10 +140,9 @@ def _build_cell_compare(
 def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> None:
     """Compare CODEMANIFEST contract with implementation.
 
-    For each specified cell, loads the CODEMANIFEST definitions and
-    Lang implementation, then outputs a JSON object with
-    codemanifest/implementation pairs for every signature, property,
-    and method.
+    For each specified cell, loads the CODEMANIFEST definitions and the
+    implementation, then outputs a JSON object with codemanifest/implementation
+    pairs for every signature, property, and method.
 
     \b
     JSON output per cell:
@@ -108,12 +154,14 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
         <RoutineName>      - routine with:
           signature        - {codemanifest, implementation} pair
 
-    \b
-    Options:
-      cells          - one or more cell paths to compare (variadic)
-      --lang         - implementation language (default: from .goga/config.yml config.lang)
+    Args:
+        ctx: Click execution context used to control process exit codes.
+        cells: One or more cell paths to compare (variadic).
+        lang: Implementation language. Defaults to the value of
+            `config.lang` in `.goga/config.yml`.
 
-    Exit codes: 0 on success, 1 on error (cell not found, package not importable, or other failure).
+    Raises:
+        click.ClickException: When the configuration cannot be loaded.
     """
     try:
         config = load_config()
@@ -126,6 +174,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
     ast_obj.load()
 
     result: dict = {}
+
     for cell_path in cells:
         try:
             doc = ast_obj.document(cell_path)
@@ -142,7 +191,8 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
             click.echo(f"Error: {exc}", err=True)
             ctx.exit(1)
 
-        result[os.path.normpath(doc.path)] = _build_cell_compare(doc.body.entities, doc.body.routines, impl_contracts)
+        compare = _build_cell_compare(doc.body.entities, doc.body.routines, impl_contracts)
+        result[os.path.normpath(doc.path)] = compare
 
     json_str = json.dumps(result, indent=4, sort_keys=True, ensure_ascii=False)
     click.echo(json_str)

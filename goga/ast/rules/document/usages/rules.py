@@ -24,6 +24,14 @@ class AllUsagesIsUsed(DocumentRule):
         super().__init__(name="all_usages_is_used")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that every declared usage is referenced by at least one annotation link.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for declared but unused usages.
+        """
         usage_names = [item.name for item in node.root.header.usages.items]
         if not usage_names:
             return []
@@ -70,6 +78,14 @@ class UsageFilepathExists(DocumentRule):
         super().__init__(name="usage_filepath_exists")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that usage filepaths exist within the project usages directory.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for usage filepaths that are out of scope or missing.
+        """
         errors: list[DocumentRuleError] = []
         cwd = Path.cwd().resolve()
 
@@ -125,6 +141,14 @@ class UsageUrlIsAccessible(DocumentRule):
         self._url_cache: dict[str, None | tuple[str, int | object]] = {}
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that usage URLs are reachable over HTTP.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for usage URLs that are not accessible.
+        """
         errors: list[DocumentRuleError] = []
 
         for item in node.root.header.usages.items:
@@ -139,6 +163,7 @@ class UsageUrlIsAccessible(DocumentRule):
         return errors
 
     def _check_url(self, item, url: str, document) -> list[DocumentRuleError]:
+        """Check a single URL using cached outcomes to avoid duplicate requests."""
         if url in self._url_cache:
             return self._outcome_to_errors(self._url_cache[url], item, url, document)
 
@@ -147,6 +172,7 @@ class UsageUrlIsAccessible(DocumentRule):
         return self._outcome_to_errors(outcome, item, url, document)
 
     def _http_check(self, url: str) -> None | tuple[str, int | object]:
+        """Perform an HTTP HEAD check and return None or an error outcome tuple."""
         try:
             response = requests.head(url, timeout=_REQUEST_TIMEOUT)
             if response.status_code == _METHOD_NOT_ALLOWED:
@@ -160,6 +186,7 @@ class UsageUrlIsAccessible(DocumentRule):
             return ("error", e)
 
     def _check_via_get(self, url: str) -> None | tuple[str, int | object]:
+        """Fallback HTTP GET check when HEAD is not allowed."""
         try:
             response = requests.get(url, timeout=_REQUEST_TIMEOUT)
             if response.status_code != _OK_STATUS:
@@ -169,6 +196,7 @@ class UsageUrlIsAccessible(DocumentRule):
         return None
 
     def _outcome_to_errors(self, outcome, item, url: str, document) -> list[DocumentRuleError]:
+        """Convert an HTTP outcome tuple into a list of rule errors."""
         if outcome is None:
             return []
         kind, detail = outcome
@@ -177,6 +205,7 @@ class UsageUrlIsAccessible(DocumentRule):
         return [self._request_failed(item, url, detail, document)]
 
     def _not_accessible(self, item, url: str, status_code: int, document) -> DocumentRuleError:
+        """Build an error for a URL that returned a non-200 HTTP status."""
         return DocumentRuleError(
             message=f"Usage '{item.name}' URL '{url}' returned HTTP {status_code} — expected {_OK_STATUS}",
             rule=self.name,
@@ -185,6 +214,7 @@ class UsageUrlIsAccessible(DocumentRule):
         )
 
     def _request_failed(self, item, url: str, reason, document) -> DocumentRuleError:
+        """Build an error for a URL that failed with a transport-level exception."""
         return DocumentRuleError(
             message=f"Usage '{item.name}' URL '{url}' request failed: {reason!s}",
             rule=self.name,
@@ -200,6 +230,14 @@ class UsageLinksHasNotConflicts(DocumentRule):
         super().__init__(name="usage_links_has_not_conflicts")
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
+        """Validate that usage names do not conflict with imported or entity/routine names.
+
+        Args:
+            node: Document node wrapping the root to validate.
+
+        Returns:
+            Errors for usage names that collide with other declarations.
+        """
         usage_names = [item.name for item in node.root.header.usages.items]
         if not usage_names:
             return []
@@ -209,6 +247,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
         return self._check_conflicts(node, usage_names, type_names_without_alias, entity_names)
 
     def _collect_import_type_names(self, node: DocumentNode) -> set[str]:
+        """Collect imported type names that have no alias."""
         names: set[str] = set()
         for import_item in node.root.header.imports.types + node.root.header.imports.usages:
             if import_item.alias:
@@ -220,6 +259,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
         return names
 
     def _collect_entity_routine_names(self, node: DocumentNode) -> dict[str, str]:
+        """Collect non-embedded entity and routine names mapped to their kind."""
         names: dict[str, str] = {}
         for entity in node.root.body.entities:
             if not entity.embedded:
@@ -236,6 +276,7 @@ class UsageLinksHasNotConflicts(DocumentRule):
         type_names_without_alias: set[str],
         entity_names: dict[str, str],
     ) -> list[DocumentRuleError]:
+        """Check usage names against imported and entity/routine names for conflicts."""
         errors: list[DocumentRuleError] = []
         for name in usage_names:
             if name in type_names_without_alias:

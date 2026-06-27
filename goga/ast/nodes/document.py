@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from .base import Node
 
@@ -29,23 +29,26 @@ class DocumentRoot(Node):
 class DocumentNode(Node):
     """Node that belongs to a specific document and holds a reference to its root."""
 
-    root: Optional[DocumentRoot] = None
+    root: DocumentRoot | None = None
 
 
 # Lazy import helpers to avoid circular imports at module level
 def _create_header() -> Any:
+    """Create a default HeaderNode via lazy import to avoid circular dependencies."""
     from .header import HeaderNode  # noqa: PLC0415
 
     return HeaderNode()
 
 
 def _create_body() -> Any:
+    """Create a default BodyNode via lazy import to avoid circular dependencies."""
     from .body import BodyNode  # noqa: PLC0415
 
     return BodyNode()
 
 
 def _create_footer() -> Any:
+    """Create a default FooterNode via lazy import to avoid circular dependencies."""
     from .footer import FooterNode  # noqa: PLC0415
 
     return FooterNode()

@@ -9,8 +9,8 @@ from ..data import EntityContract, MethodContract, PropertyContract, RoutineCont
 from ..treesitter_utils import node_text as _node_text
 from ..treesitter_utils import sort_contracts
 
-GO_LANG = Language(tsgo.language())
-_PARSER = Parser(GO_LANG)
+_GO_LANG = Language(tsgo.language())
+_PARSER = Parser(_GO_LANG)
 
 
 def _is_exported(name: str) -> bool:
