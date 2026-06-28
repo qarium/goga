@@ -8,6 +8,8 @@ from pathlib import Path
 
 import requests
 
+from .install_flows import install_flows
+
 AGENT_DIRS: dict[str, str] = {
     "claude": ".claude",
     "codex": ".codex",
@@ -140,6 +142,11 @@ def _install_tool_skills(target: Path, force_overwrite: bool) -> list[str]:  # n
 def connect(agents: list[str], force_overwrite: bool = False) -> int:
     """Connect goga agent commands, skills, and DSL spec to the target directory.
 
+    After every agent is processed, the shared user-level flow files are
+    installed once into ``~/.goga/flows/`` via :func:`install_flows`, forwarding
+    ``force_overwrite``. The final exit code is nonzero if any agent step failed
+    or if ``install_flows`` returned nonzero.
+
     Args:
         agents: List of target agent names (e.g. ['claude']). Must not be empty.
         force_overwrite: Overwrite existing tool skills without prompting.
@@ -151,6 +158,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
         print("Error: at least one agent is required", file=sys.stderr)
         return 1
 
+    success = True
     for agent in agents:
         try:
             target = _resolve_target_dir(agent)
@@ -177,4 +185,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    return 0
+    flows_dir = Path.home() / ".goga" / "flows"
+    success &= install_flows(flows_dir, force_overwrite=force_overwrite) == 0
+
+    return 0 if success else 1
