@@ -37,9 +37,7 @@ class TestRunFlowContract:
 
 
 class TestRunFlowLogic:
-    def test_run_flow_invokes_flowmanager_with_absolute_path(
-        self, tmp_path: Path
-    ) -> None:
+    def test_run_flow_invokes_flowmanager_with_absolute_path(self, tmp_path: Path) -> None:
         """The flow file's absolute path (not the bare name) reaches flowmanager."""
         project_dir = tmp_path / "flows"
         project_dir.mkdir()
@@ -73,9 +71,7 @@ class TestRunFlowLogic:
         assert "nonexistent" in captured.err
         assert "not found" in captured.err
 
-    def test_run_flow_resolves_user_source_when_only_in_user_dir(
-        self, tmp_path: Path
-    ) -> None:
+    def test_run_flow_resolves_user_source_when_only_in_user_dir(self, tmp_path: Path) -> None:
         """A flow present only in user_dir is resolved against the user directory."""
         project_dir = tmp_path / "flows"
         project_dir.mkdir()
@@ -102,9 +98,7 @@ class TestRunFlowLogic:
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("flow")
 
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=FileNotFoundError):
             exit_code = run_flow("deploy", project_dir, tmp_path / "user_flows")
 
         assert exit_code != 0
@@ -112,3 +106,19 @@ class TestRunFlowLogic:
         captured = capsys.readouterr()
         assert "flowmanager" in captured.err
         assert "PATH" in captured.err
+
+    def test_run_flow_handles_non_executable_flowmanager_binary(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A present-but-not-executable flowmanager yields a nonzero code and a clear message, without raising."""
+        project_dir = tmp_path / "flows"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text("flow")
+
+        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=PermissionError("denied")):
+            exit_code = run_flow("deploy", project_dir, tmp_path / "user_flows")
+
+        assert exit_code != 0
+        assert exit_code == 126
+        captured = capsys.readouterr()
+        assert "flowmanager" in captured.err

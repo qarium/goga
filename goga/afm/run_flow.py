@@ -27,8 +27,9 @@ def run_flow(name: str, project_dir: Path, user_dir: Path) -> int:
 
     Returns:
         ``0`` on success; ``1`` when the named flow is not found; ``127`` when
-        the ``flowmanager`` binary is missing from ``PATH``; otherwise the
-        ``flowmanager`` exit code.
+        the ``flowmanager`` binary is missing from ``PATH``; ``126`` when the
+        binary cannot be invoked (e.g. present but not executable); otherwise
+        the ``flowmanager`` exit code.
     """
     entries = list_flows(project_dir, user_dir)
     match = next((entry for entry in entries if entry.name == name), None)
@@ -38,15 +39,16 @@ def run_flow(name: str, project_dir: Path, user_dir: Path) -> int:
         return 1
 
     source_dir = project_dir if match.source == Source.PROJECT else user_dir
-    flow_path = source_dir / f"{name}.yml"
+    flow_path = source_dir / f"{match.name}.yml"
 
     try:
-        result = subprocess.run(
-            ["flowmanager", "run", str(flow_path)], check=False
-        )
+        result = subprocess.run(["flowmanager", "run", str(flow_path)], check=False)
         exit_code = result.returncode
     except FileNotFoundError:
         print("Error: flowmanager binary not found in PATH", file=sys.stderr)
         exit_code = 127
+    except OSError as e:
+        print(f"Error: failed to invoke flowmanager: {e}", file=sys.stderr)
+        exit_code = 126
 
     return exit_code
