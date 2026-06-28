@@ -26,8 +26,8 @@ def _create_agent_resources(target: Path) -> Path:
     (source / "commands" / "install.md").write_text("# install command")
     (source / "skills" / "goga-cell").mkdir(parents=True)
     (source / "skills" / "goga-cell" / "SKILL.md").write_text("# cell skill")
-    (source / "skills" / "other-skill").mkdir(parents=True)
-    (source / "skills" / "other-skill" / "SKILL.md").write_text("# other")
+    (source / "skills" / "goga-other-skill").mkdir(parents=True)
+    (source / "skills" / "goga-other-skill" / "SKILL.md").write_text("# other")
     return source
 
 
@@ -104,9 +104,9 @@ class TestFullInstallCycleWithToolPackages:
 
         assert result == 0
         target = mock_home / ".claude"
-        # Core skills installed
+        # Core skills installed (symlinked into the agent dir)
         assert (target / "skills" / "goga-cell" / "SKILL.md").is_file()
-        assert (target / "skills" / "other-skill" / "SKILL.md").is_file()
+        assert (target / "skills" / "goga-other-skill" / "SKILL.md").is_file()
         # Tool skills installed
         assert (target / "skills" / "goga-tool-debug" / "SKILL.md").is_file()
 

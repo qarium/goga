@@ -247,7 +247,7 @@ class TestLogicEdgeCases:
             mock.patch("pathlib.Path.home", return_value=tmp_path),
             mock.patch.object(
                 _connect_module,
-                "_install_commands",
+                "_install_central",
                 side_effect=OSError("permission denied"),
             ),
         ):

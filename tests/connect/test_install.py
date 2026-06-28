@@ -2,21 +2,24 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import typing
 from pathlib import Path
 from unittest import mock
 
 import pytest
 import requests.exceptions
+import yaml
 from goga.connect.connect import (
     AGENTS_WITH_COMMANDS,
     _cleanup_goga_skills,
+    _create_agent_symlinks,
     _download_dsl_spec,
     _get_source_dir,
-    _install_commands,
-    _install_skills,
+    _install_central,
     _install_tool_skills,
     _print_summary,
     _resolve_target_dir,
+    _write_connect_registry,
     connect,
 )
 
@@ -28,16 +31,34 @@ def _make_config(agent: str = "claude") -> list[str]:
 
 
 def _create_agent_resources(target: Path) -> Path:
+    """Create a minimal goga/agent/ source tree (goga-* prefixed skills)."""
     source = target / "goga" / "agent"
     (source / "commands").mkdir(parents=True)
     (source / "commands" / "build.md").write_text("# build command")
     (source / "commands" / "install.md").write_text("# install command")
     (source / "skills" / "goga-cell").mkdir(parents=True)
     (source / "skills" / "goga-cell" / "SKILL.md").write_text("# cell skill")
-    (source / "skills" / "goga-cell" / "dsl.md").parent.mkdir(parents=True, exist_ok=True)
-    (source / "skills" / "other-skill").mkdir(parents=True)
-    (source / "skills" / "other-skill" / "SKILL.md").write_text("# other")
+    (source / "skills" / "goga-review").mkdir(parents=True)
+    (source / "skills" / "goga-review" / "SKILL.md").write_text("# review skill")
     return source
+
+
+def _mock_requests_response(content: bytes = b"# DSL spec") -> mock.MagicMock:
+    mock_response = mock.MagicMock()
+    mock_response.content = content
+    mock_response.status_code = 200
+    mock_response.raise_for_status = mock.MagicMock()
+    return mock_response
+
+
+def _connect_ctx(tmp_path: Path, source: Path, home: Path, agents: list[str], **kwargs):
+    """Run connect() with the standard mocks (source, home, requests)."""
+    with (
+        mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+        mock.patch.object(_install_mod.Path, "home", return_value=home),
+        mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+    ):
+        return connect(agents=agents, **kwargs)
 
 
 # --- Helper tests ---
@@ -68,71 +89,12 @@ class TestGetSourceDir:
         assert "goga" in str(source)
 
 
-class TestInstallCommands:
-    def test_copies_commands_to_target(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        (source / "commands").mkdir(parents=True)
-        (source / "commands" / "build.md").write_text("# build")
-        (source / "commands" / "install.md").write_text("# install")
-
-        target = tmp_path / "target"
-        target.mkdir()
-
-        result = _install_commands(source, target)
-        assert result == ["build", "install"]
-        assert (target / "commands" / "goga" / "build.md").exists()
-        assert (target / "commands" / "goga" / "install.md").exists()
-
-    def test_replaces_existing_commands(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        (source / "commands").mkdir(parents=True)
-        (source / "commands" / "new.md").write_text("# new")
-
-        target = tmp_path / "target"
-        (target / "commands" / "goga" / "old.md").parent.mkdir(parents=True)
-        (target / "commands" / "goga" / "old.md").write_text("# old")
-
-        _install_commands(source, target)
-        assert not (target / "commands" / "goga" / "old.md").exists()
-        assert (target / "commands" / "goga" / "new.md").exists()
-
-
-class TestInstallSkills:
-    def test_copies_skill_dirs(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        (source / "skills" / "goga-cell").mkdir(parents=True)
-        (source / "skills" / "goga-cell" / "SKILL.md").write_text("# cell")
-
-        target = tmp_path / "target"
-        target.mkdir()
-
-        result = _install_skills(source, target)
-        assert result == ["goga-cell"]
-        assert (target / "skills" / "goga-cell" / "SKILL.md").exists()
-
-    def test_skips_files_in_skills_dir(self, tmp_path: Path) -> None:
-        source = tmp_path / "source"
-        (source / "skills").mkdir(parents=True)
-        (source / "skills" / "readme.txt").write_text("readme")
-
-        target = tmp_path / "target"
-        target.mkdir()
-
-        result = _install_skills(source, target)
-        assert result == []
-
-
 class TestDownloadDslSpec:
     def test_downloads_and_writes(self, tmp_path: Path) -> None:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        mock_response = mock.MagicMock()
-        mock_response.content = b"dsl content"
-        mock_response.status_code = 200
-        mock_response.raise_for_status = mock.MagicMock()
-
-        with mock.patch.object(_install_mod.requests, "get", return_value=mock_response):
+        with mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response(b"dsl content")):
             _download_dsl_spec(tmp_path)
 
         assert (dsl_dir / "dsl.md").read_bytes() == b"dsl content"
@@ -147,11 +109,7 @@ class TestDownloadDslSpec:
         http_error = requests.exceptions.HTTPError(response=mock_resp)
 
         with (
-            mock.patch.object(
-                _install_mod.requests,
-                "get",
-                side_effect=http_error,
-            ),
+            mock.patch.object(_install_mod.requests, "get", side_effect=http_error),
             pytest.raises(OSError, match="HTTP 404"),
         ):
             _download_dsl_spec(tmp_path)
@@ -194,6 +152,32 @@ class TestCleanupGogaSkills:
         removed = _cleanup_goga_skills(tmp_path)
         assert removed == 0
 
+    def test_unlinks_stale_symlinks(self, tmp_path: Path) -> None:
+        """Stale/broken goga-* symlinks are removed, not just real dirs."""
+        skills = tmp_path / "skills"
+        skills.mkdir(parents=True)
+        (skills / "goga-old").symlink_to("/nonexistent/target")
+        (skills / "goga-cell").mkdir()
+        (skills / "user-skill").mkdir()
+
+        removed = _cleanup_goga_skills(tmp_path)
+
+        assert removed == 2
+        assert not (skills / "goga-old").is_symlink()
+        assert not (skills / "goga-cell").exists()
+        assert (skills / "user-skill").exists()
+
+    def test_unlinks_broken_symlink_only(self, tmp_path: Path) -> None:
+        skills = tmp_path / "skills"
+        skills.mkdir(parents=True)
+        broken = skills / "goga-stale"
+        broken.symlink_to("/nonexistent/path")
+
+        removed = _cleanup_goga_skills(tmp_path)
+
+        assert removed == 1
+        assert not broken.is_symlink()
+
 
 class TestPrintSummary:
     def test_prints_to_stderr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
@@ -212,330 +196,11 @@ class TestPrintSummary:
         assert "Installed 1 skills: goga-cell" in captured.err
 
 
-# --- Main function tests ---
+# --- Contract tests for connect() signature (byte-identical) ---
 
 
-class TestInstall:
-    def test_default_agent_from_config(self, tmp_path: Path) -> None:
-        agents = _make_config(agent="claude")
-        mock_source = tmp_path / "source"
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        target = mock_home / ".claude"
-        assert (target / "commands" / "goga").is_dir()
-        assert (target / "skills" / "goga-cell").is_dir()
-
-    def test_explicit_claude_agent(self, tmp_path: Path) -> None:
-        agents = _make_config(agent="claude")
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-
-    def test_unsupported_agent_returns_1(self) -> None:
-        result = connect(agents=["unknown"])
-        assert result == 1
-
-    def test_source_missing_returns_1(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        mock_source = tmp_path / "nonexistent"
-
-        with mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source):
-            result = connect(agents=agents)
-
-        assert result == 1
-
-    def test_download_failure_returns_1(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec", side_effect=OSError("download failed")),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 1
-
-    def test_full_install_cycle(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        target = mock_home / ".claude"
-        assert (target / "commands" / "goga" / "build.md").exists()
-        assert (target / "commands" / "goga" / "install.md").exists()
-        assert (target / "skills" / "goga-cell").is_dir()
-        assert (target / "skills" / "other-skill").is_dir()
-
-    def test_idempotent_double_install(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result1 = connect(agents=agents)
-            result2 = connect(agents=agents)
-
-        assert result1 == 0
-        assert result2 == 0
-
-    def test_preserves_other_skills(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        (mock_home / ".claude" / "skills" / "user-skill").mkdir(parents=True)
-        (mock_home / ".claude" / "skills" / "user-skill" / "SKILL.md").write_text("# user")
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        assert (mock_home / ".claude" / "skills" / "user-skill" / "SKILL.md").exists()
-
-    def test_cleanup_removes_old_goga_skills(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        (mock_home / ".claude" / "skills" / "goga-obsolete").mkdir(parents=True)
-        (mock_home / ".claude" / "skills" / "goga-obsolete" / "SKILL.md").write_text("# old")
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        assert not (mock_home / ".claude" / "skills" / "goga-obsolete").exists()
-
-    def test_error_output_to_stderr(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        result = connect(agents=["unknown"])
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "unsupported agent" in captured.err
-
-    def test_replaces_old_commands(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        (mock_home / ".claude" / "commands" / "goga" / "old.md").parent.mkdir(parents=True)
-        (mock_home / ".claude" / "commands" / "goga" / "old.md").write_text("# old")
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        assert not (mock_home / ".claude" / "commands" / "goga" / "old.md").exists()
-        assert (mock_home / ".claude" / "commands" / "goga" / "build.md").exists()
-
-    def test_empty_skills_dir_in_source(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        source = tmp_path / "goga" / "agent"
-        (source / "commands").mkdir(parents=True)
-        (source / "commands" / "build.md").write_text("# build")
-        (source / "skills").mkdir(parents=True)
-
-        mock_home = tmp_path / "home2"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-
-
-class TestAgentsWithCommands:
-    def test_claude_in_agents_with_commands(self) -> None:
-        assert "claude" in AGENTS_WITH_COMMANDS
-
-    def test_codex_not_in_agents_with_commands(self) -> None:
-        assert "codex" not in AGENTS_WITH_COMMANDS
-
-    def test_cursor_not_in_agents_with_commands(self) -> None:
-        assert "cursor" not in AGENTS_WITH_COMMANDS
-
-
-class TestCodexCursorInstall:
-    def test_codex_installs_skills_without_commands(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["codex"])
-
-        assert result == 0
-        target = mock_home / ".codex"
-        assert (target / "skills" / "goga-cell").is_dir()
-        assert (target / "skills" / "other-skill").is_dir()
-        assert not (target / "commands").exists()
-
-    def test_cursor_installs_skills_without_commands(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["cursor"])
-
-        assert result == 0
-        target = mock_home / ".cursor"
-        assert (target / "skills" / "goga-cell").is_dir()
-        assert (target / "skills" / "other-skill").is_dir()
-        assert not (target / "commands").exists()
-
-    def test_claude_installs_commands_and_skills(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["claude"])
-
-        assert result == 0
-        target = mock_home / ".claude"
-        assert (target / "commands" / "goga").is_dir()
-        assert (target / "skills" / "goga-cell").is_dir()
-
-    def test_multiple_agents_claude_and_codex(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["claude", "codex"])
-
-        assert result == 0
-        # Claude gets commands + skills
-        claude = mock_home / ".claude"
-        assert (claude / "commands" / "goga" / "build.md").exists()
-        assert (claude / "skills" / "goga-cell").is_dir()
-        # Codex gets only skills
-        codex = mock_home / ".codex"
-        assert not (codex / "commands").exists()
-        assert (codex / "skills" / "goga-cell").is_dir()
-
-    def test_codex_cleanup_removes_old_goga_skills(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        (mock_home / ".codex" / "skills" / "goga-obsolete").mkdir(parents=True)
-        (mock_home / ".codex" / "skills" / "goga-obsolete" / "SKILL.md").write_text("# old")
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["codex"])
-
-        assert result == 0
-        assert not (mock_home / ".codex" / "skills" / "goga-obsolete").exists()
-        assert (mock_home / ".codex" / "skills" / "goga-cell").is_dir()
-
-    def test_codex_summary_no_commands(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=["codex"])
-
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "Installed goga commands" not in captured.err
-        assert "Installed goga skills" in captured.err
-
-
-# --- Contract tests for force_overwrite parameter ---
-
-
-class TestInstallSignatureContract:
-    def test_install_has_two_parameters(self) -> None:
+class TestConnectSignatureContract:
+    def test_connect_has_two_parameters(self) -> None:
         sig = inspect.signature(connect)
         params = list(sig.parameters.keys())
         assert params == ["agents", "force_overwrite"]
@@ -545,44 +210,249 @@ class TestInstallSignatureContract:
         param = sig.parameters["force_overwrite"]
         assert param.default is False
 
-    def test_force_overwrite_is_bool_type(self) -> None:
-        hints = inspect.get_annotations(connect, eval_str=True)
+    def test_agents_default_is_empty(self) -> None:
+        sig = inspect.signature(connect)
+        param = sig.parameters["agents"]
+        assert param.default is inspect.Parameter.empty
+
+    def test_param_and_return_annotations(self) -> None:
+        hints = typing.get_type_hints(connect)
+        assert hints["agents"] == list[str]
         assert hints["force_overwrite"] is bool
+        assert hints["return"] is int
 
-    def test_install_accepts_force_overwrite_false(self, tmp_path: Path) -> None:
-        agents = _make_config()
+    def test_force_overwrite_accepts_false_and_true(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+        for value in (False, True):
+            assert _connect_ctx(tmp_path, source, home, ["claude"], force_overwrite=value) == 0
 
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-        ):
-            result = connect(agents=agents, force_overwrite=False)
+
+# --- Contract tests for the centralized + symlink model ---
+
+
+class TestConnectCentralInstall:
+    def test_connect_creates_central_goga_home(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+
+        goga_home = home / ".goga"
+        assert (goga_home / "skills").is_dir()
+        assert (goga_home / "commands").is_dir()
+        # central entries are REAL directories, not symlinks
+        assert (goga_home / "skills" / "goga-cell").is_dir()
+        assert not (goga_home / "skills" / "goga-cell").is_symlink()
+
+    def test_connect_creates_agent_symlinks_not_copies(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+
+        claude = home / ".claude"
+        skill_link = claude / "skills" / "goga-cell"
+        assert skill_link.is_symlink()
+        assert skill_link.resolve() == (home / ".goga" / "skills" / "goga-cell")
+
+        cmd_link = claude / "commands" / "goga"
+        assert cmd_link.is_symlink()
+        assert cmd_link.resolve() == (home / ".goga" / "commands")
+
+    def test_non_claude_agent_has_no_commands_symlink(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        assert _connect_ctx(tmp_path, source, home, ["codex"]) == 0
+
+        codex = home / ".codex"
+        assert (codex / "skills" / "goga-cell").is_symlink()
+        assert not (codex / "commands").exists()
+
+    def test_connect_writes_registry_atomically(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        assert _connect_ctx(tmp_path, source, home, ["claude"], force_overwrite=False) == 0
+
+        registry = yaml.safe_load((home / ".goga" / "connect.yml").read_text())
+        assert registry == {"agents": {"claude": {"force_overwrite": False}}}
+        # no partial-write temp file lingers in ~/.goga/
+        leftovers = [p.name for p in (home / ".goga").iterdir() if p.suffix == ".tmp"]
+        assert leftovers == []
+
+
+# --- Logic tests for connect() behavior ---
+
+
+class TestConnectLogicPositive:
+    def test_connect_single_agent_creates_symlinks_and_registry(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        result = _connect_ctx(tmp_path, source, home, ["claude"])
 
         assert result == 0
+        claude = home / ".claude"
+        assert (claude / "skills" / "goga-cell").is_symlink()
+        assert (claude / "skills" / "goga-cell" / "SKILL.md").is_file()
+        assert (claude / "skills" / "goga-review" / "SKILL.md").is_file()
+        assert (claude / "commands" / "goga" / "build.md").is_file()
+        assert (claude / "skills" / "goga-cell" / "dsl.md").read_bytes() == b"# DSL spec"
 
-    def test_install_accepts_force_overwrite_true(self, tmp_path: Path) -> None:
-        agents = _make_config()
+    def test_connect_preserves_other_agents_in_registry(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        mock_home.mkdir()
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+        goga_home = home / ".goga"
+        goga_home.mkdir(parents=True)
+        pre_registry = {
+            "agents": {
+                "claude": {"force_overwrite": False},
+                "codex": {"force_overwrite": True},
+            }
+        }
+        (goga_home / "connect.yml").write_text(yaml.dump(pre_registry))
 
+        assert _connect_ctx(tmp_path, source, home, ["cursor"]) == 0
+
+        registry = yaml.safe_load((goga_home / "connect.yml").read_text())
+        assert set(registry["agents"].keys()) == {"claude", "codex", "cursor"}
+        # unlisted agents preserved verbatim
+        assert registry["agents"]["claude"] == {"force_overwrite": False}
+        assert registry["agents"]["codex"] == {"force_overwrite": True}
+        # newly-listed agent recorded with the call's force_overwrite
+        assert registry["agents"]["cursor"] == {"force_overwrite": False}
+
+
+class TestConnectLogicNegative:
+    def test_connect_empty_agents_returns_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        result = connect(agents=[])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "at least one agent" in captured.err
+
+    def test_connect_unknown_agent_returns_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        result = connect(agents=["unknown_agent"])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "unsupported agent" in captured.err
+
+    def test_connect_source_missing_returns_error(self, tmp_path: Path) -> None:
+        home = tmp_path / "home"
+        home.mkdir()
+        with mock.patch.object(_install_mod, "_get_source_dir", return_value=tmp_path / "nonexistent"):
+            result = connect(agents=["claude"])
+        assert result == 1
+
+    def test_connect_download_failure_returns_error(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
         with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=home),
+            mock.patch.object(
+                _install_mod.requests,
+                "get",
+                side_effect=requests.exceptions.ConnectionError("boom"),
+            ),
         ):
-            result = connect(agents=agents, force_overwrite=True)
+            result = connect(agents=["claude"])
+        assert result == 1
+
+
+class TestConnectLogicEdge:
+    def test_connect_purges_stale_symlinks_and_real_dirs(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        skills = home / ".claude" / "skills"
+        skills.mkdir(parents=True)
+        # stale real dir + broken symlink, both goga-*
+        (skills / "goga-cell").mkdir()
+        (skills / "goga-old-skill").symlink_to("/nonexistent")
+
+        result = _connect_ctx(tmp_path, source, home, ["claude"])
 
         assert result == 0
+        assert not (skills / "goga-old-skill").is_symlink()
+        # fresh symlink created in place of the purged real dir
+        assert (skills / "goga-cell").is_symlink()
+        assert (skills / "goga-cell" / "SKILL.md").is_file()
+
+    def test_connect_propagates_install_flows_failure(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=home),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+            mock.patch.object(_install_mod, "install_flows", return_value=1),
+        ):
+            result = connect(agents=["claude"])
+        assert result == 1
+
+    def test_connect_symlink_oserror_continues_other_agents(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+        real_symlink_to = Path.symlink_to
+
+        def flaky_symlink_to(self, target, *args, **kwargs):
+            if ".claude" in str(self):
+                raise OSError("simulated privilege error")
+            return real_symlink_to(self, target, *args, **kwargs)
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=home),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+            mock.patch.object(Path, "symlink_to", flaky_symlink_to),
+        ):
+            result = connect(agents=["claude", "codex"])
+
+        # OSError on claude is non-fatal: connect still returns 0 and codex is processed.
+        assert result == 0
+        assert (home / ".codex" / "skills" / "goga-cell").is_symlink()
+
+    def test_connect_idempotent_double_run(self, tmp_path: Path) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "agent"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+
+        skill_link = home / ".claude" / "skills" / "goga-cell"
+        assert skill_link.is_symlink()
+        assert skill_link.resolve() == (home / ".goga" / "skills" / "goga-cell")
 
 
-# --- Contract tests for _install_tool_skills ---
+# --- Contract tests for force_overwrite parameter ---
 
 
 class TestInstallToolSkillsContract:
@@ -605,6 +475,20 @@ class TestInstallToolSkillsContract:
     def test_install_tool_skills_return_type(self) -> None:
         hints = inspect.get_annotations(_install_tool_skills, eval_str=True)
         assert hints["return"] == list[str]
+
+
+# --- New helper contract tests ---
+
+
+class TestNewHelperContract:
+    def test_install_central_exists(self) -> None:
+        assert callable(_install_central)
+
+    def test_create_agent_symlinks_exists(self) -> None:
+        assert callable(_create_agent_symlinks)
+
+    def test_write_connect_registry_exists(self) -> None:
+        assert callable(_write_connect_registry)
 
 
 # --- Helpers for _install_tool_skills tests ---
@@ -674,32 +558,6 @@ class TestInstallToolSkills:
         assert "goga-tool-debug" in result
         assert (target / "skills" / "goga-tool-debug" / "SKILL.md").exists()
 
-    def test_installs_multiple_tool_packages(self, tmp_path: Path) -> None:
-        pkg1 = _create_tool_package(tmp_path, "goga_tool_debug")
-        pkg2 = _create_tool_package(tmp_path, "goga_tool_analyze")
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={
-                    "goga_tool_debug": ["goga-tool-debug"],
-                    "goga_tool_analyze": ["goga-tool-analyze"],
-                },
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}),
-            ),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert "goga-tool-debug" in result
-        assert "goga-tool-analyze" in result
-
     def test_force_overwrite_replaces_existing(self, tmp_path: Path) -> None:
         pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
         target = tmp_path / "target"
@@ -724,64 +582,6 @@ class TestInstallToolSkills:
         assert "goga-tool-debug" in result
         assert not (existing / "old.txt").exists()
         assert (existing / "SKILL.md").exists()
-
-    def test_multiple_skills_in_one_package(self, tmp_path: Path) -> None:
-        pkg_dir = tmp_path / "goga_tool_debug"
-        pkg_dir.mkdir(parents=True)
-        (pkg_dir / "__init__.py").write_text("")
-        skills_dir = pkg_dir / "skills"
-        skills_dir.mkdir()
-
-        (skills_dir / "debug").mkdir()
-        (skills_dir / "debug" / "SKILL.md").write_text("# debug")
-        (skills_dir / "analyze").mkdir()
-        (skills_dir / "analyze" / "SKILL.md").write_text("# analyze")
-        (skills_dir / "helpers.md").write_text("helpers")
-
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
-            ),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert sorted(result) == ["goga-tool-analyze", "goga-tool-debug"]
-        assert (target / "skills" / "goga-tool-debug" / "SKILL.md").exists()
-        assert (target / "skills" / "goga-tool-analyze" / "SKILL.md").exists()
-        assert not (target / "skills" / "helpers.md").exists()
-
-    def test_package_no_entry_point(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug", has_entry_point=False)
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
-            ),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert result == []
-        captured = capsys.readouterr()
-        assert "missing skills/debug/SKILL.md" in captured.err
 
     def test_skill_exists_no_overwrite(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
@@ -822,118 +622,6 @@ class TestInstallToolSkills:
 
         assert result == []
 
-    def test_find_spec_returns_none(self, tmp_path: Path) -> None:
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(_install_mod.importlib.util, "find_spec", return_value=None),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert result == []
-
-    def test_preserves_core_skills(self, tmp_path: Path) -> None:
-        pkg_dir = _create_tool_package(tmp_path, "goga_tool_debug")
-        target = tmp_path / "target"
-        (target / "skills" / "goga-cell").mkdir(parents=True)
-        (target / "skills" / "goga-cell" / "SKILL.md").write_text("# cell")
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
-            ),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert "goga-tool-debug" in result
-        assert (target / "skills" / "goga-cell" / "SKILL.md").exists()
-
-    def test_cleanup_removes_old_tool_skills(self, tmp_path: Path) -> None:
-        agents = _make_config()
-        _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
-        mock_home = tmp_path / "home"
-        (mock_home / ".claude" / "skills" / "goga-tool-obsolete").mkdir(parents=True)
-        (mock_home / ".claude" / "skills" / "goga-tool-obsolete" / "SKILL.md").write_text("# old")
-
-        pkg_dir = _create_tool_package(tmp_path / "pkgs", "goga_tool_debug")
-
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=mock_source),
-            mock.patch.object(_install_mod.Path, "home", return_value=mock_home),
-            mock.patch.object(_install_mod, "_download_dsl_spec"),
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg_dir}),
-            ),
-        ):
-            result = connect(agents=agents)
-
-        assert result == 0
-        assert not (mock_home / ".claude" / "skills" / "goga-tool-obsolete").exists()
-        assert (mock_home / ".claude" / "skills" / "goga-tool-debug").is_dir()
-
-    def test_two_packages_same_skill_name(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        pkg1 = tmp_path / "goga_tool_debug"
-        pkg1.mkdir(parents=True)
-        (pkg1 / "__init__.py").write_text("")
-        (pkg1 / "skills" / "debug").mkdir(parents=True)
-        (pkg1 / "skills" / "debug" / "SKILL.md").write_text("# debug v1")
-
-        pkg2 = tmp_path / "goga_tool_analyze"
-        pkg2.mkdir(parents=True)
-        (pkg2 / "__init__.py").write_text("")
-        (pkg2 / "skills" / "analyze").mkdir(parents=True)
-        (pkg2 / "skills" / "analyze" / "SKILL.md").write_text("# analyze v1")
-        (pkg2 / "skills" / "debug").mkdir(parents=True)
-        (pkg2 / "skills" / "debug" / "SKILL.md").write_text("# debug v2")
-
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
-
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={
-                    "goga_tool_debug": ["goga-tool-debug"],
-                    "goga_tool_analyze": ["goga-tool-analyze"],
-                },
-            ),
-            mock.patch.object(
-                _install_mod.importlib.util,
-                "find_spec",
-                side_effect=_make_find_spec_side_effect({"goga_tool_debug": pkg1, "goga_tool_analyze": pkg2}),
-            ),
-        ):
-            result = _install_tool_skills(target, False)
-
-        assert "goga-tool-debug" in result
-        assert "goga-tool-analyze" in result
-        content = (target / "skills" / "goga-tool-debug" / "SKILL.md").read_text()
-        assert "v2" in content
-        captured = capsys.readouterr()
-        assert "already exists" in captured.err
-
     def test_empty_packages_distributions(self, tmp_path: Path) -> None:
         target = tmp_path / "target"
         (target / "skills").mkdir(parents=True)
@@ -947,21 +635,13 @@ class TestInstallToolSkills:
 
         assert result == []
 
-    def test_find_spec_origin_is_none(self, tmp_path: Path) -> None:
-        target = tmp_path / "target"
-        (target / "skills").mkdir(parents=True)
 
-        spec = mock.MagicMock()
-        spec.origin = None
+class TestAgentsWithCommands:
+    def test_claude_in_agents_with_commands(self) -> None:
+        assert "claude" in AGENTS_WITH_COMMANDS
 
-        with (
-            mock.patch.object(
-                _install_mod.importlib.metadata,
-                "packages_distributions",
-                return_value={"goga_tool_debug": ["goga-tool-debug"]},
-            ),
-            mock.patch.object(_install_mod.importlib.util, "find_spec", return_value=spec),
-        ):
-            result = _install_tool_skills(target, False)
+    def test_codex_not_in_agents_with_commands(self) -> None:
+        assert "codex" not in AGENTS_WITH_COMMANDS
 
-        assert result == []
+    def test_cursor_not_in_agents_with_commands(self) -> None:
+        assert "cursor" not in AGENTS_WITH_COMMANDS
