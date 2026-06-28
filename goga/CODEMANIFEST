@@ -9,6 +9,7 @@ Imports:
       - sync
       - tool
       - init
+      - flow
     From: goga/commands
   - Types:
       - AST
@@ -41,6 +42,7 @@ app():
     - `sync`
     - `tool`
     - `init`
+    - `flow`
 
 ---
 

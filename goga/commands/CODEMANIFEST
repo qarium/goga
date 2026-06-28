@@ -26,6 +26,9 @@ Imports:
   - Types:
       - init
     From: goga/commands/init
+  - Types:
+      - flow
+    From: goga/commands/flow
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -49,6 +52,7 @@ Annotations: |
 ->sync: {}
 ->tool: {}
 ->init: {}
+->flow: {}
 
 ---
 

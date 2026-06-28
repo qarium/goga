@@ -42,6 +42,17 @@ For each agent in the list:
 - When `force_overwrite=False` — skips existing skills, logs warning
 - When `force_overwrite=True` — overwrites existing skills
 
+## Flow Installation
+
+For each agent in the list (in addition to skills/commands):
+- Recreates `~/.goga/flows/` (delete + create)
+- Copies flat `*.yml` from `goga/flows/` (repository source)
+- Discovers `goga_tool_*` packages via importlib.metadata
+- Copies flat `*.yml` from each discovered package's `flows/` directory
+
+Flow files are installed once per `~/.goga/flows/` (shared across all agents),
+not into per-agent directories. Flows are goga resources, not agent-specific.
+
 ## Target Directories
 
 | Agent  | Path       | Commands | Skills |
