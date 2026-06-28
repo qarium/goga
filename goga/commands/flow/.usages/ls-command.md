@@ -2,14 +2,14 @@
 
 ## Overview
 
-`goga flows ls` lists flow names discovered across two source directories:
+`goga flow ls` lists flow names discovered across two source directories:
 the project-level `.goga/flows/` (relative to CWD) and the user-level `~/.goga/flows/`.
 It is a read-only command and does not invoke `flowmanager`.
 
 ## Usage
 
 ```bash
-goga flows ls
+goga flow ls
 ```
 
 Example output (project flows are annotated with `(project)`):

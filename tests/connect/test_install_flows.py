@@ -229,3 +229,22 @@ class TestInstallFlowsLogic:
         captured = capsys.readouterr()
         assert "conflict.yml" in captured.err
         assert "already exists" in captured.err
+
+    def test_install_flows_returns_nonzero_on_copy_error(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """An OSError during copying makes install_flows return 1 with a message."""
+        flows_dir = tmp_path / "flows_target"
+        internal_flows = _make_internal_flows(
+            tmp_path / "internal", {"deploy.yml": "deploy"}
+        )
+        _patch_discovery(monkeypatch, internal_flows)
+
+        def raise_oserror(*args, **kwargs):
+            raise OSError("copy boom")
+
+        monkeypatch.setattr(_install_flows_mod.shutil, "copy2", raise_oserror)
+
+        exit_code = install_flows(flows_dir)
+
+        assert exit_code == 1

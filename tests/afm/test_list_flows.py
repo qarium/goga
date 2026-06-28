@@ -51,6 +51,24 @@ class TestListFlowsLogic:
         assert by_name["deploy"].source == Source.PROJECT
         assert by_name["test"].source == Source.USER
 
+    def test_list_flows_orders_project_entries_before_user_entries(
+        self, tmp_path
+    ) -> None:
+        """Project entries precede user entries even when sorted after the user name."""
+        project_dir = tmp_path / "project_flows"
+        project_dir.mkdir()
+        (project_dir / "zeta.yml").write_text("project")
+
+        user_dir = tmp_path / "user_flows"
+        user_dir.mkdir()
+        (user_dir / "alpha.yml").write_text("user")
+
+        entries = list_flows(project_dir, user_dir)
+
+        assert [entry.name for entry in entries] == ["zeta", "alpha"]
+        assert entries[0].source == Source.PROJECT
+        assert entries[1].source == Source.USER
+
     def test_list_flows_treats_missing_directories_as_empty(
         self, tmp_path
     ) -> None:
@@ -77,3 +95,18 @@ class TestListFlowsLogic:
         entries = list_flows(project_dir, user_dir)
 
         assert [entry.name for entry in entries] == ["top"]
+
+    def test_list_flows_skips_files_with_invalid_stem(self, tmp_path) -> None:
+        """A stray top-level .yml (stem is not a valid flow name) is skipped, not crashed on."""
+        project_dir = tmp_path / "project_flows"
+        project_dir.mkdir()
+        (project_dir / ".yml").write_text("hidden")
+        (project_dir / "deploy.yml").write_text("flow")
+
+        user_dir = tmp_path / "user_flows"
+        user_dir.mkdir()
+        (user_dir / ".yml").write_text("hidden")
+
+        entries = list_flows(project_dir, user_dir)
+
+        assert [entry.name for entry in entries] == ["deploy"]

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .flow_entry import FlowEntry, Source
 
 
@@ -13,7 +15,9 @@ def list_flows(project_dir: Path, user_dir: Path) -> list[FlowEntry]:
     ``FlowEntry`` per unique name. The project source wins on name conflicts:
     when a name exists in both directories, only the project entry is kept.
 
-    A missing source directory is treated as empty (no error is raised).
+    A missing source directory is treated as empty (no error is raised). Files
+    whose stem is not a valid flow name (e.g. a stray top-level ``.yml``) are
+    skipped rather than raising.
 
     Args:
         project_dir: project-level flows directory (typically
@@ -27,16 +31,20 @@ def list_flows(project_dir: Path, user_dir: Path) -> list[FlowEntry]:
     entries: list[FlowEntry] = []
     seen_names: set[str] = set()
 
-    if project_dir.is_dir():
-        for yml_path in sorted(project_dir.glob("*.yml")):
-            name = yml_path.stem
-            entries.append(FlowEntry(name=name, source=Source.PROJECT))
-            seen_names.add(name)
+    def _scan(source_dir: Path, source: Source) -> None:
+        if not source_dir.is_dir():
+            return
+        for yml_path in sorted(source_dir.glob("*.yml")):
+            try:
+                entry = FlowEntry(name=yml_path.stem, source=source)
+            except ValidationError:
+                continue
+            if entry.name in seen_names:
+                continue
+            entries.append(entry)
+            seen_names.add(entry.name)
 
-    if user_dir.is_dir():
-        for yml_path in sorted(user_dir.glob("*.yml")):
-            name = yml_path.stem
-            if name not in seen_names:
-                entries.append(FlowEntry(name=name, source=Source.USER))
+    _scan(project_dir, Source.PROJECT)
+    _scan(user_dir, Source.USER)
 
     return entries

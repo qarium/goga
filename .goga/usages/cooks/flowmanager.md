@@ -56,9 +56,9 @@ flowmanager list [flags]
 - `~/.goga/flows/` — the single storage location for flow files owned by `goga`; populated by the `goga connect` command.
 - `.flowManager/flows/` — the `flowmanager` runner's working directory within a specific project; used by `flowmanager list` / `flowmanager run` when invoked without arguments.
 
-### Invocation pattern from `goga flows run`
+### Invocation pattern from `goga flow run`
 
-To run a flow stored in `~/.goga/flows/` without copying it into the project's `.flowManager/flows/`, `goga flows run` passes an **absolute path**:
+To run a flow stored in `~/.goga/flows/` without copying it into the project's `.flowManager/flows/`, `goga flow run` passes an **absolute path**:
 
 ```python
 import subprocess
@@ -76,7 +76,7 @@ result = subprocess.run(
 
 ### Handling subprocess errors
 
-| Case                                                  | `subprocess.run` behavior             | Requirement for `goga flows run`                     |
+| Case                                                  | `subprocess.run` behavior             | Requirement for `goga flow run`                     |
 |-------------------------------------------------------|---------------------------------------|------------------------------------------------------|
 | `flowmanager` binary not found on `PATH`              | `FileNotFoundError`                   | Catch it, emit a clear message, exit ≠ 0             |
 | `flowmanager` exits with a non-zero code              | `result.returncode != 0`              | Propagate the return code, or emit diagnostics       |
@@ -88,5 +88,5 @@ result = subprocess.run(
 
 - Do not pass a flow name as an identifier to `flowmanager run` (e.g., `flowmanager run my-flow`). `flowmanager` interprets the argument as a path, not as a name — pass the file path instead.
 - Do not copy flows from `~/.goga/flows/` into `.flowManager/flows/` solely to run them. An absolute path resolves the task without duplication.
-- Do not rely on `flowmanager list` seeing flows in `~/.goga/flows/` — it exposes no directory-override flag. `goga flows ls` must read `~/.goga/flows/` directly, rather than via `flowmanager list`.
+- Do not rely on `flowmanager list` seeing flows in `~/.goga/flows/` — it exposes no directory-override flag. `goga flow ls` must read `~/.goga/flows/` directly, rather than via `flowmanager list`.
 - Do not modify the external `flowmanager` to accommodate the integration. It is developed independently; `goga` adapts to its CLI contract.

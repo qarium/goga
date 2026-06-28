@@ -47,14 +47,12 @@ def _copy_tool_flows(flows_dir: Path, force_overwrite: bool) -> None:
 
         for yml_path in sorted(pkg_flows.glob("*.yml")):
             dest = flows_dir / yml_path.name
-            if dest.exists():
-                if not force_overwrite:
-                    print(
-                        f"Warning: flow {dest.name} already exists, skipping",
-                        file=sys.stderr,
-                    )
-                    continue
-                dest.unlink()
+            if dest.exists() and not force_overwrite:
+                print(
+                    f"Warning: flow {dest.name} already exists, skipping",
+                    file=sys.stderr,
+                )
+                continue
             shutil.copy2(yml_path, dest)
 
 

@@ -1,13 +1,13 @@
 # CLI Commands — goga/commands facade
 
-The `goga.commands` package is a facade that re-exports 9 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
+The `goga.commands` package is a facade that re-exports 10 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
 
 ## Import
 
 All commands are available from the facade in a single line:
 
 ```python
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init
+from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, flow
 ```
 
 Each command is available from its subcell (via `__init__.py` re-export):
@@ -22,6 +22,7 @@ from goga.commands.config import config
 from goga.commands.sync import sync
 from goga.commands.tool import tool
 from goga.commands.init import init
+from goga.commands.flow import flow
 ```
 
 Or directly from the subcell implementation module:
@@ -36,6 +37,7 @@ from goga.commands.config.config import config
 from goga.commands.sync.sync import sync
 from goga.commands.tool.tool import tool
 from goga.commands.init.init import init
+from goga.commands.flow.flow import flow
 ```
 
 ## Registration in click group
@@ -43,7 +45,7 @@ from goga.commands.init.init import init
 ```python
 import click
 
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init
+from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, flow
 
 
 @click.group()
@@ -60,6 +62,7 @@ app.add_command(config)
 app.add_command(sync)
 app.add_command(tool)
 app.add_command(init)
+app.add_command(flow)
 ```
 
 ## Testing with CliRunner
@@ -88,3 +91,4 @@ def test_example():
 | `sync`      | `goga/commands/sync/`     | Synchronize .usages/                 |
 | `tool`      | `goga/commands/tool/`     | Run tool commands                    |
 | `init`      | `goga/commands/init/`     | Initialize goga project              |
+| `flow`      | `goga/commands/flow/`     | List and run goga flows              |

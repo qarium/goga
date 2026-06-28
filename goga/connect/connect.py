@@ -158,7 +158,6 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
         print("Error: at least one agent is required", file=sys.stderr)
         return 1
 
-    success = True
     for agent in agents:
         try:
             target = _resolve_target_dir(agent)
@@ -186,6 +185,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
             return 1
 
     flows_dir = Path.home() / ".goga" / "flows"
-    success &= install_flows(flows_dir, force_overwrite=force_overwrite) == 0
+    if install_flows(flows_dir, force_overwrite=force_overwrite) != 0:
+        return 1
 
-    return 0 if success else 1
+    return 0

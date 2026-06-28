@@ -80,7 +80,7 @@ class TestConnectFlowsLogic:
         assert exit_code == 0
         flows_dir = tmp_path / ".goga" / "flows"
         assert flows_dir.is_dir()
-        assert len(list(flows_dir.glob("*.yml"))) >= 1
+        assert (flows_dir / "deploy.yml").read_text() == "deploy"
 
     def test_connect_propagates_force_overwrite_to_install_flows(self, tmp_path: Path, monkeypatch) -> None:
         """connect forwards force_overwrite to install_flows."""

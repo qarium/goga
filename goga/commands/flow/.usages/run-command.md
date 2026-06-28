@@ -2,13 +2,13 @@
 
 ## Overview
 
-`goga flows run <name>` runs a flow by name via the external `flowmanager` binary.
+`goga flow run <name>` runs a flow by name via the external `flowmanager` binary.
 The `.yml` extension is added internally during path resolution — pass the bare name only.
 
 ## Usage
 
 ```bash
-goga flows run deploy
+goga flow run deploy
 ```
 
 ## Argument

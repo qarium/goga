@@ -58,9 +58,9 @@ class TestRunFlowLogic:
         assert called_args[2] == str(project_dir / "deploy.yml")
 
     def test_run_flow_returns_nonzero_when_flow_not_found(
-        self, tmp_path: Path
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """A missing flow name returns nonzero without invoking flowmanager."""
+        """A missing flow name returns nonzero with a clear message, without invoking flowmanager."""
         project_dir = tmp_path / "flows"
         user_dir = tmp_path / "user_flows"
 
@@ -69,6 +69,30 @@ class TestRunFlowLogic:
 
         assert exit_code == 1
         mock_subprocess.assert_not_called()
+        captured = capsys.readouterr()
+        assert "nonexistent" in captured.err
+        assert "not found" in captured.err
+
+    def test_run_flow_resolves_user_source_when_only_in_user_dir(
+        self, tmp_path: Path
+    ) -> None:
+        """A flow present only in user_dir is resolved against the user directory."""
+        project_dir = tmp_path / "flows"
+        project_dir.mkdir()
+        user_dir = tmp_path / "user_flows"
+        user_dir.mkdir()
+        (user_dir / "deploy.yml").write_text("flow")
+
+        with mock.patch(
+            "goga.afm.run_flow.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow("deploy", project_dir, user_dir)
+
+        assert exit_code == 0
+        mock_subprocess.assert_called_once()
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args[2] == str(user_dir / "deploy.yml")
 
     def test_run_flow_handles_missing_flowmanager_binary(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]

@@ -28,7 +28,7 @@ exit_code = connect(agents=["claude"], force_overwrite=True)
 ## Return Value
 
 - `0` — success
-- `1` — error (empty agent list, unsupported agent, resources not found, download failure)
+- `1` — error (empty agent list, unsupported agent, resources not found, download failure, flow installation failure)
 
 ## Side Effects
 
@@ -44,11 +44,13 @@ For each agent in the list:
 
 ## Flow Installation
 
-For each agent in the list (in addition to skills/commands):
+After the agent loop (in addition to skills/commands), once for all agents:
 - Recreates `~/.goga/flows/` (delete + create)
 - Copies flat `*.yml` from `goga/flows/` (repository source)
 - Discovers `goga_tool_*` packages via importlib.metadata
 - Copies flat `*.yml` from each discovered package's `flows/` directory
+- When `force_overwrite=False` — on a name conflict, the internal-source flow wins; the tool flow is skipped with a warning
+- When `force_overwrite=True` — tool flows overwrite internal-source flows on name conflicts
 
 Flow files are installed once per `~/.goga/flows/` (shared across all agents),
 not into per-agent directories. Flows are goga resources, not agent-specific.
