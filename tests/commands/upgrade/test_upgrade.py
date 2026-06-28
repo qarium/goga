@@ -37,8 +37,10 @@ class TestUpgradeFacade:
         assert upgrade is not None
 
     def test_upgrade_facade_all(self) -> None:
-        import goga.commands.upgrade as facade
-
+        # ``import ... as`` would resolve to the Click command re-exported into
+        # ``goga.commands`` (shadowing the submodule), so access the package
+        # module directly to assert its own ``__all__``.
+        facade = importlib.import_module("goga.commands.upgrade")
         assert facade.__all__ == ["upgrade"]
 
     def test_upgrade_is_click_command(self) -> None:
