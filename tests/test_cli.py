@@ -76,6 +76,10 @@ class TestRegisteredCommands:
         command_names = set(app.commands.keys())
         assert {"lint", "build"}.issubset(command_names)
 
+    def test_upgrade_command_registered(self) -> None:
+        """The 'upgrade' command is registered on the app group."""
+        assert "upgrade" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -109,6 +113,12 @@ class TestHelpOutput:
         assert "lint" in result.output
         assert "build" in result.output
 
+    def test_help_contains_upgrade(self) -> None:
+        """The --help output lists the 'upgrade' command."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "upgrade" in result.output
+
 
 class TestBuildHelpOutput:
     def test_build_help_exit_code_zero(self) -> None:
@@ -128,6 +138,22 @@ class TestBuildHelpOutput:
         runner = CliRunner()
         result = runner.invoke(app, ["build", "--help"])
         assert "plan" in result.output.lower()
+
+
+class TestUpgradeHelpOutput:
+    def test_upgrade_help_exit_code_zero(self) -> None:
+        """The 'upgrade --help' subcommand exits with code 0."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["upgrade", "--help"])
+        assert result.exit_code == 0
+
+    def test_upgrade_help_contains_options(self) -> None:
+        """The 'upgrade --help' output shows the --sudo, --user, --tools options."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["upgrade", "--help"])
+        assert "--sudo" in result.output
+        assert "--user" in result.output
+        assert "--tools" in result.output
 
 
 class TestSchemaLintCoexist:
