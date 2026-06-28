@@ -39,6 +39,12 @@ Connect goga to your agent
 goga connect <agent>
 ```
 
+To upgrade goga later and re-sync all connected agents, use:
+
+```bash
+goga upgrade
+```
+
 ## Quick start
 
 Start a new project from scratch and build your first feature end-to-end.
@@ -154,7 +160,7 @@ Description: |
 - **Agent workflow** — Built-in cycle: `propose → brainstorm → apply → design → plan → build → change → accept`, with review checkpoints and shortcut paths for smaller changes
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
-- **CLI toolkit** — init, lint, build, schema, connect, contract extraction, and flow commands
+- **CLI toolkit** — init, lint, build, schema, connect, upgrade, contract extraction, and flow commands
 - **Docker builds** — Execute build plans via ralphex in isolated containers
 
 ## Documentation

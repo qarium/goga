@@ -16,7 +16,7 @@ After installing, connect the tool to your agent:
 goga connect <agent>
 ```
 
-`goga connect` auto-discovers all installed `goga_tool_*` packages and copies their skills into the agent's skills directory. The tool becomes available both as an agent skill and as a CLI command.
+`goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. The tool becomes available both as an agent skill and as a CLI command.
 
 ## Built-in tools
 
@@ -61,13 +61,13 @@ A valid tool must:
 
 ## Skill naming
 
-Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-<skill-name>-` is automatically added to every skill.
+Each skill directory inside `skills/` has a base name. When `goga connect` installs the tool, the prefix `goga-tool-<skill-name>-` is automatically added to every skill and the result lives centrally under `~/.goga/skills/`.
 
-| In package (`skills/`)      | After `goga connect`         |
-|-----------------------------|------------------------------|
-| `mkdocs/SKILL.md`          | `goga-tool-mkdocs`           |
-| `mkdocs-discovery/SKILL.md`| `goga-tool-mkdocs-discovery` |
-| `mkdocs-writer/SKILL.md`   | `goga-tool-mkdocs-writer`    |
+| In package (`skills/`)      | After `goga connect` (`~/.goga/skills/`) |
+|-----------------------------|------------------------------------------|
+| `mkdocs/SKILL.md`          | `goga-tool-mkdocs`                       |
+| `mkdocs-discovery/SKILL.md`| `goga-tool-mkdocs-discovery`             |
+| `mkdocs-writer/SKILL.md`   | `goga-tool-mkdocs-writer`                |
 
 The skill whose directory name matches the tool name becomes the entry point — the dispatcher invoked by `/goga:tool <name>`.
 

@@ -60,6 +60,7 @@ nav:
       - Config: cli/config.md
       - Schema: cli/schema.md
       - Connect: cli/connect.md
+      - Upgrade: cli/upgrade.md
       - Tool: cli/tool.md
   - Architecture:
       - architecture/index.md

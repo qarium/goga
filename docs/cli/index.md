@@ -31,6 +31,7 @@ python -m goga --help
 | [`goga config`](config.md) | Display configuration values |
 | [`goga schema`](schema.md) | Generate JSON schema from project cells |
 | [`goga connect`](connect.md) | Install goga skills for AI agents |
+| [`goga upgrade`](upgrade.md) | Upgrade goga and re-sync connected agents |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 
 ## Global Options
