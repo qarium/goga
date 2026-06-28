@@ -218,6 +218,7 @@ __marimo__/
 # AI
 .claude/
 .ralphex/
+.flowManager/
 docs/plans/
 docs/design/
 docs/arch/

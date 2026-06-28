@@ -1,0 +1,99 @@
+Imports:
+  - Types:
+      - connect
+    From: goga/connect
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding general development and testing principles and rules in the project
+
+  Use the `click` practice to build the upgrade command, its options (--sudo, --user, --tools),
+  and exit-code propagation.
+
+  Use `connect` from Imports (goga/connect) for the post-upgrade re-sync of each agent.
+
+  The connect.yml registry format (consumed read-only by this cell) is: a YAML map keyed by agent name,
+  where each agent maps to a dict with a force_overwrite boolean field. This format is authored by the goga/connect cell.
+
+  The standard library subprocess, sys, importlib.metadata, pwd, and pathlib modules are used for
+  pip invocation, interpreter resolution, tool-package discovery, user HOME resolution, and path handling.
+
+---
+
+"upgrade(use_sudo: bool = False, target_user: str | None = None, include_tools: bool = False) -> exit_code: int":
+  location: upgrade.py
+  annotations: |
+    Upgrade the goga package (and optionally all installed goga_tool_* packages) via pip on the
+    current Python interpreter, then re-sync all agents recorded in ~/.goga/connect.yml using their
+    per-agent force_overwrite settings.
+
+    `use_sudo`: when True, prepend the sudo command with --preserve-env=HOME flag to the pip command
+      (for system-Python installs that require root). Default False.
+    `target_user`: when set, resolve ~/.goga/ for this username via pwd.getpwnam(target_user).pw_dir
+      instead of $HOME. Used to re-sync another user's goga installation. Default None.
+    `include_tools`: when True, additionally upgrade all installed goga_tool_* packages discovered
+      via importlib.metadata. Default False. (goga itself may pull some goga_tool_* as dependencies;
+      this flag covers tool packages installed independently of goga's dependency tree.)
+    `exit_code`: 0 on success, non-zero on pip failure or re-sync failure
+
+    Algorithm:
+    1. Build the pip install command:
+       a. Base: [sys.executable, "-m", "pip", "install", "goga", "-U"]
+       b. If `include_tools` is True:
+          - Discover installed goga_tool_* packages via importlib.metadata.packages_distributions()
+          - Append each discovered distribution name to the command list
+       c. If `use_sudo` is True: prepend ["sudo", "--preserve-env=HOME"] to the command
+    2. Run pip via subprocess.run(cmd, check=False)
+    3. If pip exits non-zero: emit diagnostics to stderr and return the pip exit code
+    4. Determine the goga home directory for connect.yml lookup:
+       a. If `target_user` is set: use pwd.getpwnam(target_user).pw_dir / ".goga"
+       b. Else: use Path.home() / ".goga"
+    5. Read <goga_home>/connect.yml (registry format described in the cell's global annotation):
+       a. If the file is missing: exit with code 0 (no agents connected yet — nothing to re-sync)
+       b. Parse via yaml.safe_load; on parse error: emit diagnostics and return non-zero
+    6. For each agent entry in connect.yml:
+       a. Extract the per-agent force_overwrite value from the entry
+       b. Call `connect` from Imports with agents=[<agent_name>], force_overwrite=<per-agent value>
+       c. If `connect` returns non-zero: record the failure but continue with remaining agents
+    7. Return 0 if all agents re-synced successfully, otherwise the first non-zero exit code
+
+    Apply the `click` practice for command registration, the three options (--sudo/--user/--tools),
+    and exit-code propagation via ctx.exit(code).
+
+    Apply the `convention` practice for docstring style, intra-package imports, and structured logging
+    (INFO for upgrade start/finish, WARNING for sudo usage, ERROR for pip or re-sync failures).
+
+    Requirements:
+    - Always invoke pip via the python -m pip form (never the bare pip executable) to guarantee the
+      correct interpreter
+    - When `use_sudo` is True, MUST pass the --preserve-env=HOME flag so that the post-pip re-sync reads
+      the correct ~/.goga/ (sudo without preservation would switch HOME to /root)
+    - When both `use_sudo` and `target_user` are set, `target_user` wins for HOME resolution
+      (pwd.getpwnam lookup), but pip still runs under sudo
+    - `target_user` resolution MUST use pwd.getpwnam (Unix); Windows is documented as a constraint
+    - Re-sync MUST iterate all agents in connect.yml, applying each agent's own force_overwrite
+    - Missing connect.yml is a normal condition (exit 0), not an error
+
+    Constraints:
+    - Do not run pip as a bare subprocess without the python -m prefix
+    - Do not hardcode force_overwrite=True — always read the per-agent value from connect.yml
+    - Do not modify connect.yml from this cell (it is goga/connect's writer)
+    - Windows pwd.getpwnam is unavailable; document as a known constraint (Windows users must omit --user)
+    - This command does NOT auto-detect whether sudo is needed; the user opts in via --sudo
+
+---
+
+Author: Goga
+CreatedAt: 28/06/26
+
+Description: |
+  CLI wrapper for the goga upgrade command. Combines `pip install goga -U` (optionally with
+  goga_tool_* packages and/or sudo) with a post-upgrade re-sync driven by ~/.goga/connect.yml.

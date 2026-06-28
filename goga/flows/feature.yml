@@ -16,7 +16,7 @@ stages:
     interactive: true
     description: |
       Review the task `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-review-task
     depends_on: [propose]
@@ -27,7 +27,7 @@ stages:
     description: |
       Use the task `<git branch --show-current>.md`
       Save the architecture plan as `<git branch --show-current>.md`
-    agents: [implementation, review]
+    agents: [planning, implementation, review]
     skils:
       - goga-brainstorm
     depends_on: [propose, propose-review]
@@ -37,7 +37,7 @@ stages:
     interactive: true
     description: |
       Review the architecture plan `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-review-arch
     depends_on: [propose, propose-review, brainstorm]
@@ -66,13 +66,14 @@ stages:
     interactive: true
     description: |
       Review the design document `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-review-design
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design]
 
   - id: plan
     name: "Plan"
+    interactive: true
     description: |
       Use the design document `<git branch --show-current>.md`
       Save the plan as `<git branch --show-current>.md`
@@ -86,7 +87,7 @@ stages:
     interactive: true
     description: |
       Review the plan `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-review-plan
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan]
@@ -103,7 +104,7 @@ stages:
       - user check result, find and fix bugs with `/goga:change`
 
       If the user confirms it is ready for acceptance — complete the execution.
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan, plan-review]
 
   - id: accept

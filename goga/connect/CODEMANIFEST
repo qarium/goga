@@ -1,11 +1,36 @@
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   requests: .goga/usages/cooks/requests.md
+  beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
+  connect_yml_schema: |
+    Schema for ~/.goga/connect.yml — registry of connected agents.
+
+    Format:
+    ```yaml
+    agents:
+      <agent_name>:              # one of: claude, codex, cursor
+        force_overwrite: <bool>  # per-agent setting; persisted by connect(), read by upgrade()
+    ```
+
+    Semantics:
+    - Each call to connect(agents=[...], force_overwrite=X) updates entries for listed agents only
+    - Entries for agents not in the current call are preserved
+    - Missing file = "no agents connected yet" (read returns empty)
+    - Written atomically via tmp file + rename
 
 Annotations: |
-  Apply the `conventions` practice during development and testing.
-  Use `requests` library for HTTP requests.
-  Use shutil for file copying.
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding general development and testing principles and rules in the project
+
+  Use `requests` library for HTTP requests (DSL spec download).
+  Use `beautiful_yaml` practice for writing ~/.goga/connect.yml.
+  Use `connect_yml_schema` practice for the registry's structure and semantics.
+  Use shutil for centralized file copying into ~/.goga/.
+  Use os.symlink / pathlib.Path.symlink_to for creating agent-side symlinks into ~/.goga/.
   Route all output through sys.stderr (click is not used).
 
 ---
@@ -13,68 +38,83 @@ Annotations: |
 "connect(agents: list[str], force_overwrite: bool = False) -> exit_code:int":
   location: connect.py
   annotations: |
-    Install goga skills and commands for one or more AI agents,
-    including skills from installed tool packages,
-    and install flow files into the user-level ~/.goga/flows/ directory.
+    Install goga skills, commands, and flows centrally into ~/.goga/, create symlinks
+    from each agent directory into ~/.goga/, install flow files into ~/.goga/flows/,
+    and persist a per-agent connection record in ~/.goga/connect.yml.
 
     `agents`: list of target AI agents (required, non-empty). Supported: claude, codex, cursor
-    `force_overwrite`: allow overwriting existing skills. Defaults to False
+    `force_overwrite`: allow overwriting existing skills. Defaults to False. Persisted per-agent in connect.yml.
     `exit_code`: return code (0 success, 1 error)
 
     Algorithm:
     1. Validate that `agents` is non-empty; otherwise exit with code 1
-    2. For each agent in `agents`:
-       a. Resolve the target directory for the agent:
+    2. Resolve ~/.goga/ as the central installation root; create it if missing
+    3. Install central assets into ~/.goga/{skills,commands,flows}:
+       a. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
+       b. Copy goga/agent/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude)
+       c. Copy goga/agent/skills/* → ~/.goga/skills/
+       d. Fetch the DSL specification:
+          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
+          - HTTP GET via `requests`
+          - Write response to ~/.goga/skills/goga-cell/dsl.md
+          - On network failure, exit with code 1
+       e. Install skills from goga_tool_* packages:
+          - Discover via importlib.metadata.packages_distributions()
+          - For each goga_tool_<tool_name>: validate <package>/skills/<tool_name>/SKILL.md exists;
+            copy <package>/skills/* into ~/.goga/skills/ with goga-tool- prefix
+          - Conflict resolution: skip-with-warning when force_overwrite=False, overwrite when True
+    4. For each agent in `agents`:
+       a. Resolve the agent's target directory:
           - claude → ~/.claude/
           - codex → ~/.codex/
           - cursor → ~/.cursor/
-       b. Purge stale goga installations:
-          - Scan target_directory/skills/ for goga-* subdirectories
-          - Delete all matches
-       c. Copy assets from source to target directory (commands only for AGENTS_WITH_COMMANDS):
-          - Execute only when the agent is in AGENTS_WITH_COMMANDS (claude)
-          - For codex and cursor, skip commands entirely (commands = [])
-          - goga/agent/commands/* → <target>/commands/goga/
-          - goga/agent/skills/* → <target>/skills/
-       d. Fetch the DSL specification:
-          - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
-          - Perform HTTP GET via `requests`
-          - Write response to <target>/skills/goga-cell/dsl.md
-          - On network failure, exit with code 1
-       e. Install skills from tool packages:
-          i. Discover all installed Python packages with the goga_tool_ prefix
-             via importlib.metadata.packages_distributions()
-          ii. For each discovered package goga_tool_<tool_name>:
-              - Resolve the package path
-              - Validate entry point: verify <package>/skills/<tool_name>/SKILL.md exists
-                - If absent, log warning to stderr and skip the package
-              - Copy all skills from <package>/skills/* to <target>/skills/,
-                prepending goga-tool- to each skill directory name
-              - If the target skill already exists and force_overwrite=False,
-                skip with a warning to stderr
-              - If force_overwrite=True, overwrite the target skill
-       f. Print the list of installed skills and commands
-    3. Install flows into the user-level goga directory by calling `install_flows`
-       with target ~/.goga/flows/ and force_overwrite propagated from the caller
-       (executed once after all agents are processed, since flows are shared across agents)
-    4. Return 0 if all agents processed successfully and flows installed, otherwise 1
-       (the exit_code of `install_flows` MUST be propagated: if `install_flows` returns 1,
-       `connect` returns 1 even when all agents were processed without errors)
+       b. Pattern-matching purge of stale installations at symlink targets:
+          - Scan ~/.<agent>/skills/ for entries matching goga-* naming pattern
+            (both real directories AND stale symlinks); delete all matches
+          - For claude: also scan and delete ~/.<agent>/commands/goga if it exists
+            as a real directory or stale symlink
+       c. Create symlinks (after purge in 4b, targets are clean):
+          - For each ~/.goga/skills/goga-* entry: create symlink
+            ~/.<agent>/skills/<basename> → ~/.goga/skills/<basename>
+          - For claude: also create ~/.<agent>/commands/goga → ~/.goga/commands
+       d. On symlink creation failure (existing real dir not purged, Windows privilege error):
+          - Emit clear message to stderr, do not corrupt existing state, continue with other agents
+    5. Install flows by calling `install_flows` with target ~/.goga/flows/ and force_overwrite propagated
+       (executed once after all agents; flows are shared)
+    6. Update ~/.goga/connect.yml registry via the `beautiful_yaml` and `connect_yml_schema` practices:
+       a. Read existing connect.yml if present; otherwise start with empty dict
+       b. For each agent in `agents`: set/replace entry {<agent>: {force_overwrite: <force_overwrite value>}}
+       c. Preserve entries for agents not in the current call
+       d. Write atomically (tmp file + rename)
+    7. Return 0 if all agents processed and install_flows succeeded; otherwise 1
+       (the exit_code of `install_flows` MUST be propagated: if install_flows returns 1, connect returns 1)
 
     Requirements:
-    - Fully recreate goga directories at step 2b (delete + copy)
+    - Fully recreate central goga directories at step 3a (delete + copy)
+    - Create symlinks at step 4c (not copies); purging at 4b is mandatory
+    - Pattern-matching purge principle (preserved from copy-based model): before creating symlinks,
+      scan each ~/.<agent>/skills/ for entries matching the goga-* naming pattern (both real directories
+      AND stale symlinks) and delete all matches; for claude, also match ~/.<agent>/commands/goga.
+      This guarantees idempotent re-creation of symlinks without leftover state.
+    - Detect existing real directories at symlink targets and refuse to overwrite without purge
     - Do not modify content belonging to other extensions
-    - Do not touch CLAUDE.md, settings.json, README.md in the target directory
-    - Download dsl.md from the external repository on every installation
+    - Do not touch CLAUDE.md, settings.json, README.md in the target agent directories
+    - Download dsl.md from the external repository on every central install
     - Use importlib.metadata from the standard library
     - Abort with code 1 if dsl.md download fails
     - Derive tool skill names as goga-tool-<skill_dir_name>
     - Skip any tool package that lacks an entry-point skill entirely
-    - Recreate ~/.goga/flows/ on every run (delete + copy), mirroring the skills cleanup approach
-    - Copy only flat *.yml files from sources — do not descend into subdirectories
-    - Do not install flows into project-level .goga/flows/ (that directory is user-owned)
-    - Propagate `force_overwrite` to `install_flows` at step 3
+    - Recreate ~/.goga/flows/ on every run via install_flows (delete + copy)
+    - Propagate `force_overwrite` to `install_flows` at step 5
     - Propagate `install_flows` exit_code into the final return value
+    - Persist per-agent force_overwrite in connect.yml via the `connect_yml_schema` practice
+      (format: agents dict, each agent maps to {force_overwrite: bool})
+
+    Constraints:
+    - Do not install flows into project-level .goga/flows/ (that directory is user-owned)
+    - Do not write to ~/.goga/connect.yml from any cell other than goga/connect and goga/commands/upgrade (read-only there)
+    - Windows symlink privilege limitations are documented as a known constraint;
+      OSError from symlink_to MUST be caught and reported (do not crash)
 
 "install_flows(flows_dir: Path, force_overwrite: bool = False) -> exit_code: int":
   location: install_flows.py
@@ -88,13 +128,12 @@ Annotations: |
 
     - force_overwrite=False (default): when a flow name exists in both the internal source
       (goga/flows/) and a goga_tool_* package, the tool's flow is SKIPPED (a warning is logged
-      to stderr, the existing internal-source flow is preserved). This mirrors the skills logic
-      "if dest.exists() and not force_overwrite: warn + skip".
+      to stderr, the existing internal-source flow is preserved).
     - force_overwrite=True: when a flow name exists in both, the tool's flow OVERWRITES the
-      internal-source flow. This mirrors the skills logic "if force_overwrite: rmtree + copy".
+      internal-source flow.
 
     `flows_dir`: target directory (typically ~/.goga/flows/)
-    `force_overwrite`: when True, let goga_tool_* packages overwrite internal-source flows on name conflicts (mirrors skills behavior)
+    `force_overwrite`: when True, let goga_tool_* packages overwrite internal-source flows on name conflicts
     `exit_code`: 0 on success, 1 on error
 
     Algorithm:
@@ -116,7 +155,7 @@ Annotations: |
     Requirements:
     - Fully recreate `flows_dir` at step 1 (delete + create)
     - Scan only the top level of each source — do not descend into subdirectories
-    - Apply the `conventions` practice for filesystem and package-discovery code
+    - Apply the `convention` practice for filesystem and package-discovery code
     - Skip missing source directories silently (a package without flows/ is not an error)
     - Conflict resolution MUST mirror the existing tool-skill installer semantics
       (private helper _install_tool_skills in connect.py):
@@ -129,10 +168,10 @@ Annotations: |
 
 ---
 
-Author: Mikhail Trifonov
-CreatedAt: 15/05/26
+Author: Goga
+CreatedAt: 28/06/26
 
 Description: |
-  Manifest describing the goga skill and command connection logic,
-  including skill installation from goga_tool_* tool packages
-  and flow installation into the user-level ~/.goga/flows/ directory.
+  Manifest describing the centralized goga skill/command/flow installation logic:
+  assets are installed once into ~/.goga/, agents receive symlinks into ~/.goga/,
+  and a per-agent connection registry is maintained at ~/.goga/connect.yml.
