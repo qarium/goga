@@ -19,12 +19,12 @@ When a flow name exists in both, the project source wins.
 
 ```python
 from pathlib import Path
-from goga.afm import list_flows
+from goga.afm import FlowEntry, list_flows
 
 project_dir = Path.cwd() / ".goga" / "flows"
 user_dir = Path.home() / ".goga" / "flows"
 
-entries = list_flows(project_dir, user_dir)
+entries: list[FlowEntry] = list_flows(project_dir, user_dir)
 for entry in entries:
     print(f"{entry.name} ({entry.source.value})")
 ```
