@@ -20,7 +20,7 @@ def _make_agents(agent: str = "claude") -> list[str]:
 
 
 def _create_agent_resources(target: Path) -> Path:
-    source = target / "goga" / "agent"
+    source = target / "goga" / "assets"
     (source / "commands").mkdir(parents=True)
     (source / "commands" / "build.md").write_text("# build command")
     (source / "commands" / "install.md").write_text("# install command")
@@ -79,7 +79,7 @@ class TestFullInstallCycleWithToolPackages:
 
     def test_core_and_tool_skills_both_installed(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         mock_home = tmp_path / "home"
         mock_home.mkdir()
 
@@ -112,7 +112,7 @@ class TestFullInstallCycleWithToolPackages:
 
     def test_print_summary_includes_tool_skills_count(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         mock_home = tmp_path / "home"
         mock_home.mkdir()
 
@@ -149,7 +149,7 @@ class TestCleanupObsoleteToolSkills:
 
     def test_cleanup_removes_obsolete_but_keeps_current(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         mock_home = tmp_path / "home"
         mock_home.mkdir()
 

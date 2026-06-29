@@ -96,14 +96,16 @@ stages:
     name: "Fix changes"
     interactive: true
     description: |
-      Commit all changes except `docs/<tasks|arch|design|plans>`.
-      Ask the user whether the implementation is built and ready for acceptance.
+      Steps:
+        1. Commit all changes.
+        2. Ask the user whether the implementation is built and ready for acceptance.
 
-      What is built and ready?
-      - terminal command `goga build <plan>` was finished successfully
-      - user check result, find and fix bugs with `/goga:change`
+      Requirements:
+        - If the user confirms it is ready for acceptance — complete the execution.
 
-      If the user confirms it is ready for acceptance — complete the execution.
+      Constraints:
+        - Don't autoconfirm user answer.
+        - Except changes in `docs/<tasks|arch|design|plans>`.
     agents: [planning, implementation]
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan, plan-review]
 

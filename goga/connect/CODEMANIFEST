@@ -51,8 +51,8 @@ Annotations: |
     2. Resolve ~/.goga/ as the central installation root; create it if missing
     3. Install central assets into ~/.goga/{skills,commands,flows}:
        a. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
-       b. Copy goga/agent/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude)
-       c. Copy goga/agent/skills/* → ~/.goga/skills/
+       b. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude)
+       c. Copy goga/assets/skills/* → ~/.goga/skills/
        d. Fetch the DSL specification:
           - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
           - HTTP GET via `requests`
@@ -127,7 +127,7 @@ Annotations: |
     tool-skill installer (private helper _install_tool_skills in connect.py):
 
     - force_overwrite=False (default): when a flow name exists in both the internal source
-      (goga/flows/) and a goga_tool_* package, the tool's flow is SKIPPED (a warning is logged
+      (goga/assets/flows/) and a goga_tool_* package, the tool's flow is SKIPPED (a warning is logged
       to stderr, the existing internal-source flow is preserved).
     - force_overwrite=True: when a flow name exists in both, the tool's flow OVERWRITES the
       internal-source flow.
@@ -138,7 +138,7 @@ Annotations: |
 
     Algorithm:
     1. Delete `flows_dir` if it exists, then (re)create it
-    2. Resolve the internal source directory (goga/flows/) shipped with the package
+    2. Resolve the internal source directory (goga/assets/flows/) shipped with the package
     3. Copy flat *.yml files from the internal source to `flows_dir`
        (internal source is always installed first; it establishes the base)
     4. Discover installed Python packages with the goga_tool_ prefix

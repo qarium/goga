@@ -32,7 +32,7 @@ def _resolve_target_dir(agent: str) -> Path:
 
 
 def _get_source_dir() -> Path:
-    return Path(__file__).parent.parent / "agent"
+    return Path(__file__).parent.parent / "assets"
 
 
 def _download_dsl_spec(target: Path) -> None:

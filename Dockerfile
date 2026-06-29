@@ -5,7 +5,7 @@ ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
 COPY pyproject.toml /tmp/goga/
 COPY goga/ /tmp/goga/goga/
 
-RUN pip install --no-cache-dir /tmp/goga && \
+RUN pip install --no-cache-dir -U /tmp/goga && \
     rm -rf /tmp/goga
 
 FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-source

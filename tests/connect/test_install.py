@@ -31,8 +31,8 @@ def _make_config(agent: str = "claude") -> list[str]:
 
 
 def _create_agent_resources(target: Path) -> Path:
-    """Create a minimal goga/agent/ source tree (goga-* prefixed skills)."""
-    source = target / "goga" / "agent"
+    """Create a minimal goga/assets/ source tree (goga-* prefixed skills)."""
+    source = target / "goga" / "assets"
     (source / "commands").mkdir(parents=True)
     (source / "commands" / "build.md").write_text("# build command")
     (source / "commands" / "install.md").write_text("# install command")
@@ -83,9 +83,9 @@ class TestResolveTargetDir:
 
 
 class TestGetSourceDir:
-    def test_returns_path_to_agent_dir(self) -> None:
+    def test_returns_path_to_assets_dir(self) -> None:
         source = _get_source_dir()
-        assert source.name == "agent"
+        assert source.name == "assets"
         assert "goga" in str(source)
 
 
@@ -223,7 +223,7 @@ class TestConnectSignatureContract:
 
     def test_force_overwrite_accepts_false_and_true(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
         for value in (False, True):
@@ -236,7 +236,7 @@ class TestConnectSignatureContract:
 class TestConnectCentralInstall:
     def test_connect_creates_central_goga_home(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
@@ -251,7 +251,7 @@ class TestConnectCentralInstall:
 
     def test_connect_creates_agent_symlinks_not_copies(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
@@ -268,7 +268,7 @@ class TestConnectCentralInstall:
 
     def test_non_claude_agent_has_no_commands_symlink(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
@@ -280,7 +280,7 @@ class TestConnectCentralInstall:
 
     def test_connect_writes_registry_atomically(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
@@ -299,7 +299,7 @@ class TestConnectCentralInstall:
 class TestConnectLogicPositive:
     def test_connect_single_agent_creates_symlinks_and_registry(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
@@ -315,7 +315,7 @@ class TestConnectLogicPositive:
 
     def test_connect_preserves_other_agents_in_registry(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
         goga_home = home / ".goga"
@@ -365,7 +365,7 @@ class TestConnectLogicNegative:
 
     def test_connect_download_failure_returns_error(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
         with (
@@ -384,7 +384,7 @@ class TestConnectLogicNegative:
 class TestConnectLogicEdge:
     def test_connect_purges_stale_symlinks_and_real_dirs(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         skills = home / ".claude" / "skills"
         skills.mkdir(parents=True)
@@ -402,7 +402,7 @@ class TestConnectLogicEdge:
 
     def test_connect_propagates_install_flows_failure(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
         with (
@@ -416,7 +416,7 @@ class TestConnectLogicEdge:
 
     def test_connect_symlink_oserror_continues_other_agents(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
         real_symlink_to = Path.symlink_to
@@ -440,7 +440,7 @@ class TestConnectLogicEdge:
 
     def test_connect_idempotent_double_run(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "agent"
+        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 

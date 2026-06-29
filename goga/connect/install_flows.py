@@ -8,8 +8,8 @@ from pathlib import Path
 
 
 def _get_internal_flows_dir() -> Path:
-    """Resolve the internal ``goga/flows/`` source directory shipped with the package."""
-    return Path(__file__).parent.parent / "flows"
+    """Resolve the internal ``goga/assets/flows/`` source directory shipped with the package."""
+    return Path(__file__).parent.parent / "assets" / "flows"
 
 
 def _copy_internal_flows(flows_dir: Path) -> None:
@@ -60,7 +60,7 @@ def install_flows(flows_dir: Path, force_overwrite: bool = False) -> int:
     """Recreate ``flows_dir`` and populate it with flat ``*.yml`` flow files.
 
     The target directory is fully recreated (deleted then created). Flat
-    ``*.yml`` files are copied first from the internal ``goga/flows/`` source,
+    ``*.yml`` files are copied first from the internal ``goga/assets/flows/`` source,
     then from each installed ``goga_tool_*`` package's ``flows/`` directory.
 
     Conflict resolution mirrors the existing tool-skill installer: when a flow

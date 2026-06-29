@@ -19,8 +19,8 @@ _install_flows_mod = importlib.import_module("goga.connect.install_flows")
 
 
 def _create_agent_resources(target: Path) -> Path:
-    """Create a minimal ``goga/agent/`` source tree so the agent loop succeeds."""
-    source = target / "goga" / "agent"
+    """Create a minimal ``goga/assets/`` source tree so the agent loop succeeds."""
+    source = target / "goga" / "assets"
     (source / "commands").mkdir(parents=True)
     (source / "commands" / "build.md").write_text("# build command")
     (source / "skills" / "goga-cell").mkdir(parents=True)
@@ -45,7 +45,7 @@ class TestConnectFlowsContract:
     def test_connect_returns_int(self, tmp_path: Path, monkeypatch) -> None:
         """connect returns an int exit code."""
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(_install_flows_mod, "_get_internal_flows_dir", lambda: tmp_path / "none")
 
@@ -62,7 +62,7 @@ class TestConnectFlowsLogic:
     def test_connect_installs_flows_into_user_goga_dir(self, tmp_path: Path, monkeypatch) -> None:
         """connect recreates ~/.goga/flows/ and copies at least one flow."""
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
 
         # Redirect install_flows' internal source to a dir with a flow.
         internal_flows = tmp_path / "internal_flows"
@@ -85,7 +85,7 @@ class TestConnectFlowsLogic:
     def test_connect_propagates_force_overwrite_to_install_flows(self, tmp_path: Path, monkeypatch) -> None:
         """connect forwards force_overwrite to install_flows."""
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with (
@@ -101,7 +101,7 @@ class TestConnectFlowsLogic:
     def test_connect_returns_nonzero_when_install_flows_fails(self, tmp_path: Path, monkeypatch) -> None:
         """A failing install_flows makes connect return 1 even if agents succeeded."""
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with (
@@ -116,7 +116,7 @@ class TestConnectFlowsLogic:
     def test_connect_runs_install_flows_once_for_multiple_agents(self, tmp_path: Path, monkeypatch) -> None:
         """install_flows is invoked exactly once regardless of agent count."""
         _create_agent_resources(tmp_path)
-        mock_source = tmp_path / "goga" / "agent"
+        mock_source = tmp_path / "goga" / "assets"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         with (

@@ -15,7 +15,7 @@ from goga.connect.connect import _cleanup_goga_skills
 
 _connect_module = sys.modules["goga.connect.connect"]
 _cmd_connect_module = importlib.import_module("goga.commands.connect.connect")
-_AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "agent"
+_AGENT_SOURCE_DIR = Path(__file__).parent.parent.parent / "goga" / "assets"
 
 
 def _mock_requests_response(content: bytes = b"dsl content") -> mock.MagicMock:

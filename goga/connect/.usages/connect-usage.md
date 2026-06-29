@@ -74,7 +74,7 @@ to determine which agents to re-sync after a package upgrade, using the per-agen
 
 ## Side Effects
 
-- Recreates `~/.goga/{skills,commands}` (purge + copy from `goga/agent/`).
+- Recreates `~/.goga/{skills,commands}` (purge + copy from `goga/assets/`).
 - Downloads `dsl.md` from GitHub into `~/.goga/skills/goga-cell/dsl.md`.
 - Discovers `goga_tool_*` packages and copies their skills into `~/.goga/skills/`.
 - Purges stale `goga-*` entries under each `~/.<agent>/skills/` (and `~/.<agent>/commands/goga` for claude).
