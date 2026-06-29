@@ -28,7 +28,7 @@ stages:
       Use the task `<git branch --show-current>.md`
       Save the architecture plan as `<git branch --show-current>.md`
     agents: [planning, implementation, review]
-    skils:
+    skills:
       - goga-brainstorm
     depends_on: [propose, propose-review]
 

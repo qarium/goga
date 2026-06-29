@@ -94,4 +94,6 @@ class TestUpgradeCliIntegration:
         assert result.exit_code == 0
         cmd = mock_run.call_args[0][0]
         assert cmd[:2] == ["sudo", "--preserve-env=HOME"]
-        assert "goga_tool_x" in cmd
+        # pip resolves by distribution name (the value), not module name (the key).
+        assert "goga-tool-x" in cmd
+        assert "goga_tool_x" not in cmd

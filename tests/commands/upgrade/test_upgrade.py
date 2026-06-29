@@ -204,7 +204,9 @@ class TestUpgradeLogicEdge:
             rc = _upgrade(include_tools=True)
         assert rc == 0
         cmd = mock_run.call_args[0][0]
-        assert "goga_tool_x" in cmd
+        # pip resolves by distribution name (the value), not module name (the key).
+        assert "goga-tool-x" in cmd
+        assert "goga_tool_x" not in cmd
 
     def test_upgrade_unknown_user_returns_nonzero(self) -> None:
         with (

@@ -60,7 +60,12 @@ def _build_pip_command(include_tools: bool, use_sudo: bool) -> list[str]:
     cmd: list[str] = [sys.executable, "-m", "pip", "install", "goga", "-U"]
     if include_tools:
         pkg_map = importlib.metadata.packages_distributions()
-        cmd.extend(name for name in sorted(pkg_map) if name.startswith("goga_tool_"))
+        # Identify tool packages by their importable module name (``goga_tool_*``),
+        # but pass pip the *distribution* name (the value) — pip resolves by
+        # distribution name, not top-level module name.
+        for module_name in sorted(pkg_map):
+            if module_name.startswith("goga_tool_"):
+                cmd.extend(pkg_map[module_name])
     if use_sudo:
         cmd = ["sudo", "--preserve-env=HOME", *cmd]
     return cmd
