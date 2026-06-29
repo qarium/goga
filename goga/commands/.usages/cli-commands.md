@@ -1,13 +1,13 @@
 # CLI Commands — goga/commands facade
 
-The `goga.commands` package is a facade that re-exports 10 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
+The `goga.commands` package is a facade that re-exports 11 CLI commands. Each command is a `click.Command` registered in a click group. Each subcell is an independent Python package (`goga/commands/<name>/`) with implementation in `<name>.py` and re-export through `__init__.py`.
 
 ## Import
 
 All commands are available from the facade in a single line:
 
 ```python
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, flow
+from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, pipeline, upgrade
 ```
 
 Each command is available from its subcell (via `__init__.py` re-export):
@@ -22,7 +22,8 @@ from goga.commands.config import config
 from goga.commands.sync import sync
 from goga.commands.tool import tool
 from goga.commands.init import init
-from goga.commands.flow import flow
+from goga.commands.pipeline import pipeline
+from goga.commands.upgrade import upgrade
 ```
 
 Or directly from the subcell implementation module:
@@ -37,7 +38,8 @@ from goga.commands.config.config import config
 from goga.commands.sync.sync import sync
 from goga.commands.tool.tool import tool
 from goga.commands.init.init import init
-from goga.commands.flow.flow import flow
+from goga.commands.pipeline.pipeline import pipeline
+from goga.commands.upgrade.upgrade import upgrade
 ```
 
 ## Registration in click group
@@ -45,7 +47,7 @@ from goga.commands.flow.flow import flow
 ```python
 import click
 
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, flow
+from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, pipeline, upgrade
 
 
 @click.group()
@@ -62,7 +64,8 @@ app.add_command(config)
 app.add_command(sync)
 app.add_command(tool)
 app.add_command(init)
-app.add_command(flow)
+app.add_command(pipeline)
+app.add_command(upgrade)
 ```
 
 ## Testing with CliRunner
@@ -91,4 +94,5 @@ def test_example():
 | `sync`      | `goga/commands/sync/`     | Synchronize .usages/                 |
 | `tool`      | `goga/commands/tool/`     | Run tool commands                    |
 | `init`      | `goga/commands/init/`     | Initialize goga project              |
-| `flow`      | `goga/commands/flow/`     | List and run goga flows              |
+| `pipeline`  | `goga/commands/pipeline/` | Run a goga pipeline (or list them)   |
+| `upgrade`   | `goga/commands/upgrade/`  | Upgrade goga and re-sync agents      |

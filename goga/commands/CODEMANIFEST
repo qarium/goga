@@ -27,8 +27,8 @@ Imports:
       - init
     From: goga/commands/init
   - Types:
-      - flow
-    From: goga/commands/flow
+      - pipeline
+    From: goga/commands/pipeline
   - Types:
       - upgrade
     From: goga/commands/upgrade
@@ -55,7 +55,7 @@ Annotations: |
 ->sync: {}
 ->tool: {}
 ->init: {}
-->flow: {}
+->pipeline: {}
 ->upgrade: {}
 
 ---
