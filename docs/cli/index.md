@@ -32,7 +32,7 @@ python -m goga --help
 | [`goga schema`](schema.md) | Generate JSON schema from project cells |
 | [`goga connect`](connect.md) | Install goga skills for AI agents |
 | [`goga upgrade`](upgrade.md) | Upgrade goga and re-sync connected agents |
-| [`goga flow`](flow.md) | List and run goga flows |
+| [`goga pipeline`](pipeline.md) | Run a goga pipeline (or list them) |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 
 ## Global Options
