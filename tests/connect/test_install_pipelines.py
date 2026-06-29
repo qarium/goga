@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import shutil
 from pathlib import Path
 from unittest import mock
 
@@ -262,3 +263,68 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir)
 
         assert exit_code == 1
+
+    def test_install_pipelines_returns_nonzero_on_shutil_error(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A shutil.Error during copying is caught and surfaces as exit 1.
+
+        Guards the ``(OSError, shutil.Error)`` union: the ``shutil.Error`` arm
+        must independently map to 1, not just ``OSError``.
+        """
+        pipelines_dir = tmp_path / "pipelines_target"
+        internal_pipelines = _make_internal_pipelines(
+            tmp_path / "internal", {"deploy.yml": "deploy"}
+        )
+        _patch_discovery(monkeypatch, internal_pipelines)
+
+        def raise_shutil_error(*args, **kwargs):
+            raise shutil.Error("copy boom")
+
+        monkeypatch.setattr(_install_pipelines_mod.shutil, "copy2", raise_shutil_error)
+
+        exit_code = install_pipelines(pipelines_dir)
+
+        assert exit_code == 1
+
+    def test_install_pipelines_returns_nonzero_on_rmtree_error(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """An OSError during the initial rmtree (recreate) surfaces as exit 1.
+
+        Guards that the destructive recreate stays inside the try/except: a
+        permission error on rmtree must return 1 rather than raising.
+        """
+        pipelines_dir = tmp_path / "pipelines_target"
+        _patch_discovery(monkeypatch, tmp_path / "does_not_exist")
+
+        def raise_oserror(*args, **kwargs):
+            raise OSError("rmtree boom")
+
+        monkeypatch.setattr(_install_pipelines_mod.shutil, "rmtree", raise_oserror)
+
+        exit_code = install_pipelines(pipelines_dir)
+
+        assert exit_code == 1
+
+    def test_install_pipelines_copies_real_shipped_feature_yml(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The shipped ``goga/assets/pipelines/feature.yml`` is installed verbatim.
+
+        Unlike the other cases the internal-source resolver is NOT patched, so
+        this exercises the real packaged asset. A packaging break (feature.yml
+        deleted or the package-data glob broken) fails this test. Tool-package
+        discovery is stubbed to an empty set to keep the test hermetic.
+        """
+        pipelines_dir = tmp_path / "pipelines"
+        monkeypatch.setattr(
+            _install_pipelines_mod.importlib.metadata,
+            "packages_distributions",
+            lambda: {},
+        )
+
+        exit_code = install_pipelines(pipelines_dir)
+
+        assert exit_code == 0
+        assert (pipelines_dir / "feature.yml").is_file()

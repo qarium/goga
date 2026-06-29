@@ -52,7 +52,8 @@ class TestPipelineCliCrossEntity:
         assert called_args[0] == "flowmanager"
         assert called_args[1] == "run"
         # The absolute pipeline path (not the bare name) reaches the binary.
-        assert called_args[2] == str(project_pipelines / "deploy.yml")
+        # run_pipeline .resolve()s the path; assert against the resolved form.
+        assert called_args[2] == str((project_pipelines / "deploy.yml").resolve())
 
     def test_run_missing_pipeline_is_nonzero_without_subprocess(
         self, tmp_path: Path, monkeypatch
@@ -124,7 +125,32 @@ class TestPipelineCliCrossEntity:
         assert result.exit_code == 0
         called_args = mock_subprocess.call_args.args[0]
         # Project wins on conflict: the project path (not the user path) reaches the binary.
-        assert called_args[2] == str(project_pipelines / "shared.yml")
+        assert called_args[2] == str((project_pipelines / "shared.yml").resolve())
+
+    def test_run_with_yml_suffix_name_is_not_found(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """goga pipeline deploy.yml does NOT strip the suffix — 'deploy.yml' never matches entry 'deploy'."""
+        project_tmp = tmp_path / "project"
+        project_tmp.mkdir()
+        user_tmp = tmp_path / "user"
+        user_tmp.mkdir()
+
+        project_pipelines = project_tmp / ".goga" / "pipelines"
+        project_pipelines.mkdir(parents=True)
+        (project_pipelines / "deploy.yml").write_text("pipeline")
+
+        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
+        monkeypatch.setattr(Path, "home", lambda: user_tmp)
+
+        runner = CliRunner()
+        with mock.patch("goga.afm.run_flow.subprocess.run") as mock_subprocess:
+            result = runner.invoke(app, ["pipeline", "deploy.yml"])
+
+        # The CLI layer does not strip .yml; run_pipeline finds no 'deploy.yml' entry → exit 1.
+        assert result.exit_code == 1
+        mock_subprocess.assert_not_called()
+        assert "not found" in result.output
 
 
 class TestPipelineCliList:
@@ -206,3 +232,12 @@ class TestPipelineCliList:
     def test_pipeline_command_registered(self) -> None:
         """The new 'pipeline' command is registered on the app group."""
         assert "pipeline" in app.commands
+
+    def test_root_help_lists_pipeline_not_flow(self) -> None:
+        """goga --help lists the 'pipeline' command and does NOT list 'flow' (Task 8 contract)."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+
+        assert result.exit_code == 0
+        assert "pipeline" in result.output
+        assert "flow" not in result.output

@@ -93,6 +93,18 @@ class TestRunPipelineLogic:
         assert "nonexistent" in captured.err
         assert "not found" in captured.err
 
+    def test_run_pipeline_rejects_yml_suffixed_name(self, tmp_path: Path) -> None:
+        """A name carrying the '.yml' suffix never matches an entry (entry names are extension-less)."""
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text("pipeline")
+
+        with mock.patch("goga.pipeline.run_pipeline.run_flow") as mock_run_flow:
+            exit_code = run_pipeline("deploy.yml", project_dir, tmp_path / "user_pipelines")
+
+        assert exit_code == 1
+        mock_run_flow.assert_not_called()
+
     def test_run_pipeline_propagates_run_flow_exit_code(self, tmp_path: Path) -> None:
         """run_pipeline propagates run_flow's exit code unchanged."""
         project_dir = tmp_path / "pipelines"

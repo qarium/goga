@@ -115,3 +115,18 @@ class TestListPipelinesLogic:
         entries = list_pipelines(project_dir, user_dir)
 
         assert [entry.name for entry in entries] == ["valid"]
+
+    def test_list_pipelines_ignores_non_yml_files(self, tmp_path) -> None:
+        """Only ``*.yml`` files are discovered — ``.yaml``, ``.txt``, and extensionless files are skipped."""
+        project_dir = tmp_path / "project_pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "staging.yaml").write_text("ignored-yaml")
+        (project_dir / "notes.txt").write_text("ignored-txt")
+        (project_dir / "extensionless").write_text("ignored-noext")
+
+        user_dir = tmp_path / "user_pipelines"
+
+        entries = list_pipelines(project_dir, user_dir)
+
+        assert [entry.name for entry in entries] == ["deploy"]

@@ -71,11 +71,16 @@ class TestRunFlowLogic:
     def test_run_flow_handles_non_executable_flowmanager_binary(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """A present-but-not-executable flowmanager yields a nonzero code and a clear message, without raising."""
+        """A generic OSError (not just a FileNotFoundError) maps to 126.
+
+        Using a plain ``OSError`` (not a ``PermissionError`` subclass) also guards
+        the handler-ordering invariant: ``FileNotFoundError`` must be caught
+        before the generic ``OSError`` branch, otherwise this would return 127.
+        """
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=PermissionError("denied")):
+        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=OSError("not executable")):
             exit_code = run_flow(flow_path)
 
         assert exit_code != 0
@@ -96,21 +101,22 @@ class TestRunFlowLogic:
 
         assert exit_code == 7
 
-    def test_run_flow_does_not_resolve_names(self, tmp_path: Path) -> None:
-        """run_flow is a thin wrapper — it does not resolve bare names to paths.
+    def test_run_flow_does_not_resolve_names(self) -> None:
+        """run_flow forwards its argument verbatim — no .resolve() or name lookup inside.
 
-        Passing a relative path is forwarded verbatim; run_flow does not perform
-        any filesystem lookup of its own.
+        A relative path is forwarded unchanged: if run_flow called ``.resolve()``
+        or did any filesystem lookup, flowmanager would receive an absolute
+        (canonicalized) path instead of the relative string passed in.
         """
-        flow_path = tmp_path / "deploy.yml"
-        flow_path.write_text("flow")
+        relative_path = Path("deploy.yml")
 
         with mock.patch(
             "goga.afm.run_flow.subprocess.run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
-            exit_code = run_flow(flow_path)
+            exit_code = run_flow(relative_path)
 
         assert exit_code == 0
-        # The path is forwarded as-is, no resolution inside run_flow.
-        assert mock_subprocess.call_args.args[0][2] == str(flow_path)
+        called_args = mock_subprocess.call_args.args[0]
+        # The relative path reaches flowmanager as-is — no canonicalization inside run_flow.
+        assert called_args == ["flowmanager", "run", "deploy.yml"]
