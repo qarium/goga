@@ -68,6 +68,64 @@ class TestPipelineCliCrossEntity:
         assert result.exit_code != 0
         mock_subprocess.assert_not_called()
 
+    def test_run_propagates_nonzero_flowmanager_exit_code(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """goga pipeline <name> propagates a non-zero flowmanager exit code via ctx.exit."""
+        project_tmp = tmp_path / "project"
+        project_tmp.mkdir()
+        user_tmp = tmp_path / "user"
+        user_tmp.mkdir()
+
+        project_pipelines = project_tmp / ".goga" / "pipelines"
+        project_pipelines.mkdir(parents=True)
+        (project_pipelines / "deploy.yml").write_text("pipeline")
+
+        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
+        monkeypatch.setattr(Path, "home", lambda: user_tmp)
+
+        runner = CliRunner()
+        with mock.patch(
+            "goga.afm.run_flow.subprocess.run",
+            return_value=MagicMock(returncode=7),
+        ):
+            result = runner.invoke(app, ["pipeline", "deploy"])
+
+        # The flowmanager exit code flows run_pipeline -> ctx.exit verbatim.
+        assert result.exit_code == 7
+
+    def test_run_resolves_project_source_on_name_conflict(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """When a name exists in both sources, the project pipeline path reaches flowmanager."""
+        project_tmp = tmp_path / "project"
+        project_tmp.mkdir()
+        user_tmp = tmp_path / "user"
+        user_tmp.mkdir()
+
+        project_pipelines = project_tmp / ".goga" / "pipelines"
+        project_pipelines.mkdir(parents=True)
+        (project_pipelines / "shared.yml").write_text("project-shared")
+
+        user_pipelines = user_tmp / ".goga" / "pipelines"
+        user_pipelines.mkdir(parents=True)
+        (user_pipelines / "shared.yml").write_text("user-shared")
+
+        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
+        monkeypatch.setattr(Path, "home", lambda: user_tmp)
+
+        runner = CliRunner()
+        with mock.patch(
+            "goga.afm.run_flow.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            result = runner.invoke(app, ["pipeline", "shared"])
+
+        assert result.exit_code == 0
+        called_args = mock_subprocess.call_args.args[0]
+        # Project wins on conflict: the project path (not the user path) reaches the binary.
+        assert called_args[2] == str(project_pipelines / "shared.yml")
+
 
 class TestPipelineCliList:
     def test_discovery_mode_marks_project_pipelines_only(
@@ -98,6 +156,48 @@ class TestPipelineCliList:
         assert "deploy (project)" in result.output
         assert "build" in result.output
         assert "build (project)" not in result.output
+
+    def test_discovery_project_wins_on_name_conflict(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A name present in both sources appears once, as the project pipeline."""
+        project_tmp = tmp_path / "project"
+        project_tmp.mkdir()
+        user_tmp = tmp_path / "user"
+        user_tmp.mkdir()
+
+        project_pipelines = project_tmp / ".goga" / "pipelines"
+        project_pipelines.mkdir(parents=True)
+        (project_pipelines / "shared.yml").write_text("project-shared")
+
+        user_pipelines = user_tmp / ".goga" / "pipelines"
+        user_pipelines.mkdir(parents=True)
+        (user_pipelines / "shared.yml").write_text("user-shared")
+
+        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
+        monkeypatch.setattr(Path, "home", lambda: user_tmp)
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["pipeline"])
+
+        assert result.exit_code == 0
+        assert "Available pipelines:" in result.output
+        # The project entry wins and is annotated; the user duplicate is suppressed.
+        assert "shared (project)" in result.output
+        assert result.output.count("shared") == 1
+
+    def test_discovery_mode_prints_header_when_empty(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """The 'Available pipelines:' header is printed before an empty list."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["pipeline"])
+
+        assert result.exit_code == 0
+        assert "Available pipelines:" in result.output
 
     def test_flow_command_not_registered(self) -> None:
         """The legacy 'flow' command is NOT registered on the app group."""
