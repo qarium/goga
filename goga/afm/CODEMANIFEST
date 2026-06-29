@@ -13,10 +13,10 @@ Annotations: |
   Use the `flowmanager` practice to interact with the external flowmanager binary
   (invocation contract, absolute-path argument, FileNotFoundError handling, exit-code propagation).
 
-  This cell is a thin subprocess-only wrapper over the `flowmanager` binary —
+  This cell is a thin subprocess-only wrapper over the flowmanager binary —
   its sole responsibility is to launch flowmanager with an absolute pipeline-file
   path and to propagate the subprocess exit code. Discovery, path resolution, and
-  the pipeline-file entity live in `goga/pipeline`; `goga/afm` does not perform
+  the pipeline-file entity live in goga/pipeline; this cell does not perform
   those operations.
 
   The standard library subprocess and pathlib.Path modules are used for invoking
@@ -27,12 +27,12 @@ Annotations: |
 "run_flow(flow_path: Path) -> exit_code: int":
   location: run_flow.py
   annotations: |
-    Launch the external `flowmanager` binary to run the pipeline file at the
+    Launch the external flowmanager binary to run the pipeline file at the
     given absolute path. This is the goga-side entry point to flowmanager;
     it performs no discovery or path resolution.
 
     `flow_path`: absolute path to the pipeline file (typically resolved by the
-                 caller in `goga/pipeline` via `run_pipeline`). The path is
+                 caller in goga/pipeline via run_pipeline). The path is
                  passed verbatim to flowmanager as the positional argument.
     `exit_code`: 0 on success, non-zero on error (missing binary, flowmanager
                  failure)
@@ -42,7 +42,7 @@ Annotations: |
     2. Invoke flowmanager via the `flowmanager` practice — subprocess call with
        the absolute path as positional argument
     3. Catch FileNotFoundError (binary-not-found, per the `flowmanager` practice)
-       and return `exit_code = 127` with a clear message
+       and return `exit_code` 127 with a clear message
     4. Return flowmanager's exit code as `exit_code`
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
@@ -55,9 +55,9 @@ Annotations: |
 
     Constraints:
     - Do not resolve names to paths — path resolution is the caller's
-      responsibility (`run_pipeline` in `goga/pipeline`)
-    - Do not discover pipeline files — discovery lives in `goga/pipeline`'s
-      `list_pipelines`
+      responsibility (run_pipeline in goga/pipeline)
+    - Do not discover pipeline files — discovery lives in goga/pipeline's
+      list_pipelines
     - Do not copy pipeline files into any project-level .flowManager/flows/
       directory
     - Do not modify or parse pipeline-file contents
@@ -70,4 +70,4 @@ Description: |
   Thin subprocess-only wrapper over the external flowmanager binary. Launches
   flowmanager with an absolute pipeline-file path and propagates the subprocess
   exit code. Discovery, path resolution, and the pipeline-file entity live in
-  `goga/pipeline`.
+  goga/pipeline.

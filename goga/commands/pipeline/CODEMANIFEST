@@ -24,13 +24,14 @@ Annotations: |
   registration, optional positional argument, pass_context decorator, echo, and
   exit-code propagation.
 
-  Use `list_pipelines` and `run_pipeline` from Imports (`goga/pipeline`) for
-  the underlying pipeline discovery and run coordination. The command resolves
-  source directories from the current working directory and the user home.
+  Use `list_pipelines` and `run_pipeline` from Imports for the underlying
+  pipeline discovery and run coordination. The command resolves source
+  directories from the current working directory and the user home.
 
-  The command replaces the former two-subcommand flow surface (`goga flow ls`,
-  `goga flow run <name>`) with one command whose behavior depends on whether
-  `name` is provided — discovery mode (no name) and run mode (with name).
+  The command replaces the former two-subcommand flow surface (goga flow ls,
+  goga flow run <name>) with one command whose behavior depends on whether
+  the name argument is provided — discovery mode (no name) and run mode
+  (with name).
 
 ---
 
@@ -38,7 +39,7 @@ Annotations: |
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline [<name>]". Replaces the former
-    `goga flow ls` and `goga flow run <name>` with one command whose behavior
+    goga flow ls and goga flow run <name> with one command whose behavior
     depends on whether `name` is given.
 
     `ctx`: Click execution context, used to propagate exit codes via ctx.exit
@@ -59,11 +60,11 @@ Annotations: |
        b. Call `list_pipelines` from Imports with project_dir and user_dir
           (per the `list-pipelines` practice) to get the list of pipeline entries
        c. For each entry:
-          - If entry.source == PipelineSource.PROJECT → echo "  <name> (project)"
+          - If entry.source == `PipelineSource`.PROJECT → echo "  <name> (project)"
           - Otherwise → echo "  <name>"
        d. ctx.exit(0)
     4. If `name` is provided (run mode):
-       a. Call `run_pipeline` from Imports with name, project_dir, user_dir
+       a. Call `run_pipeline` from Imports with `name`, project_dir, user_dir
           (per the `run-pipeline` practice)
        b. Propagate the returned exit code via ctx.exit(code)
 
@@ -77,9 +78,9 @@ Annotations: |
       the header
 
     Constraints:
-    - Do NOT expose separate `ls`/`run` subcommands — this is a single command
-    - Do not invoke Click's auto `--help` on missing name — the discovery mode
-      is explicit `click.echo` output
+    - Do NOT expose separate ls/run subcommands — this is a single command
+    - Do not invoke Click's auto --help on missing name — the discovery mode
+      is explicit click.echo output
     - Do not call flowmanager directly — go through `run_pipeline` in run mode
     - Do not resolve the pipeline path in the CLI layer — `run_pipeline` handles
       resolution
@@ -89,6 +90,6 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/06/26
 Description: |
-  CLI wrapper cell for the single `goga pipeline` command. Replaces the former
-  `goga flow ls` and `goga flow run` surface with one command whose behavior
+  CLI wrapper cell for the single `pipeline` command. Replaces the former
+  goga flow ls and goga flow run surface with one command whose behavior
   depends on whether the pipeline name is provided (discovery mode vs run mode).

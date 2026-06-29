@@ -9,7 +9,7 @@ Imports:
       - sync
       - tool
       - init
-      - flow
+      - pipeline
       - upgrade
     From: goga/commands
   - Types:
@@ -43,7 +43,7 @@ app():
     - `sync`
     - `tool`
     - `init`
-    - `flow`
+    - `pipeline`
     - `upgrade`
 
 ---

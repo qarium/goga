@@ -32,7 +32,7 @@ goga connect AGENTS... [--force-overwrite]
 2. **Download DSL spec** -- Fetches the CODEMANIFEST DSL specification from GitHub and writes it to `~/.goga/skills/goga-cell/dsl.md`.
 3. **Discover tool packages** -- Scans installed Python packages with the `goga_tool_*` prefix via `importlib.metadata` and installs any that contain a valid `skills/<name>/SKILL.md` structure into `~/.goga/skills/`.
 4. **Agent symlinks** -- For each specified agent, purges stale `goga-*` real directories and broken symlinks under the agent's skills directory, then symlinks every `~/.goga/skills/goga-*` entry into `~/.<agent>/skills/`. Agents with command support (currently `claude`) also get `~/.<agent>/commands/goga` symlinked to `~/.goga/commands/`.
-5. **Install flows** -- Installs flow `*.yml` files into `~/.goga/flows/`. A failure here aborts the connect.
+5. **Install pipelines** -- Installs pipeline `*.yml` files into `~/.goga/pipelines/`. A failure here aborts the connect.
 6. **Update registry** -- Atomically updates `~/.goga/connect.yml`, recording each agent with its `force_overwrite` value. Entries for agents not in the current call are preserved.
 
 ### Central installation model
@@ -43,7 +43,7 @@ goga connect AGENTS... [--force-overwrite]
 |---|---|
 | `~/.goga/skills/` | All goga skills (`goga-cell`, ...) plus `goga-tool-*` skills |
 | `~/.goga/commands/` | goga commands (claude consumes them via symlink) |
-| `~/.goga/flows/` | Flow `*.yml` files |
+| `~/.goga/pipelines/` | Pipeline `*.yml` files |
 | `~/.goga/connect.yml` | Registry of connected agents and per-agent `force_overwrite` |
 
 ### Supported Agents
@@ -73,4 +73,4 @@ goga connect claude --force-overwrite
 | Code | Meaning |
 |---|---|
 | `0` | All agents configured successfully |
-| `1` | Error (unsupported agent, resources not found, download failure, or flow installation failure) |
+| `1` | Error (unsupported agent, resources not found, download failure, or pipeline installation failure) |
