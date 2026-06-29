@@ -37,8 +37,8 @@ exit_code = run_pipeline("deploy", project_dir, user_dir)
 
 The pipeline file is resolved via `list_pipelines` semantics — the project
 source wins on name conflicts. The absolute path is then passed to `run_flow`
-(see the `run-flow` practice from `goga/afm`), which invokes `flowmanager run`
-with the path as positional argument.
+from `goga/afm`, which invokes `flowmanager run` with the path as positional
+argument.
 
 ## Side Effects
 

@@ -29,6 +29,7 @@ exit_code = run_flow(flow_path)
 | Exit code | Condition                                                      |
 |-----------|----------------------------------------------------------------|
 | 0         | flowmanager ran the pipeline successfully                      |
+| 126       | `flowmanager` binary cannot be invoked (e.g. present but not executable) |
 | 127       | `flowmanager` binary not in PATH (clear message, no traceback) |
 | non-zero  | flowmanager itself returned a non-zero exit code               |
 
