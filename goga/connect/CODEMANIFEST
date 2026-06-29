@@ -38,8 +38,8 @@ Annotations: |
 "connect(agents: list[str], force_overwrite: bool = False) -> exit_code:int":
   location: connect.py
   annotations: |
-    Install goga skills, commands, and flows centrally into ~/.goga/, create symlinks
-    from each agent directory into ~/.goga/, install flow files into ~/.goga/flows/,
+    Install goga skills, commands, and pipelines centrally into ~/.goga/, create symlinks
+    from each agent directory into ~/.goga/, install pipeline files into ~/.goga/pipelines/,
     and persist a per-agent connection record in ~/.goga/connect.yml.
 
     `agents`: list of target AI agents (required, non-empty). Supported: claude, codex, cursor
@@ -49,7 +49,7 @@ Annotations: |
     Algorithm:
     1. Validate that `agents` is non-empty; otherwise exit with code 1
     2. Resolve ~/.goga/ as the central installation root; create it if missing
-    3. Install central assets into ~/.goga/{skills,commands,flows}:
+    3. Install central assets into ~/.goga/{skills,commands,pipelines}:
        a. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
        b. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude)
        c. Copy goga/assets/skills/* → ~/.goga/skills/
@@ -79,15 +79,15 @@ Annotations: |
           - For claude: also create ~/.<agent>/commands/goga → ~/.goga/commands
        d. On symlink creation failure (existing real dir not purged, Windows privilege error):
           - Emit clear message to stderr, do not corrupt existing state, continue with other agents
-    5. Install flows by calling `install_flows` with target ~/.goga/flows/ and force_overwrite propagated
-       (executed once after all agents; flows are shared)
+    5. Install pipelines by calling `install_pipelines` with target ~/.goga/pipelines/ and force_overwrite propagated
+       (executed once after all agents; pipelines are shared)
     6. Update ~/.goga/connect.yml registry via the `beautiful_yaml` and `connect_yml_schema` practices:
        a. Read existing connect.yml if present; otherwise start with empty dict
        b. For each agent in `agents`: set/replace entry {<agent>: {force_overwrite: <force_overwrite value>}}
        c. Preserve entries for agents not in the current call
        d. Write atomically (tmp file + rename)
-    7. Return 0 if all agents processed and install_flows succeeded; otherwise 1
-       (the exit_code of `install_flows` MUST be propagated: if install_flows returns 1, connect returns 1)
+    7. Return 0 if all agents processed and install_pipelines succeeded; otherwise 1
+       (the exit_code of `install_pipelines` MUST be propagated: if install_pipelines returns 1, connect returns 1)
 
     Requirements:
     - Fully recreate central goga directories at step 3a (delete + copy)
@@ -104,67 +104,67 @@ Annotations: |
     - Abort with code 1 if dsl.md download fails
     - Derive tool skill names as goga-tool-<skill_dir_name>
     - Skip any tool package that lacks an entry-point skill entirely
-    - Recreate ~/.goga/flows/ on every run via install_flows (delete + copy)
-    - Propagate `force_overwrite` to `install_flows` at step 5
-    - Propagate `install_flows` exit_code into the final return value
+    - Recreate ~/.goga/pipelines/ on every run via install_pipelines (delete + copy)
+    - Propagate `force_overwrite` to `install_pipelines` at step 5
+    - Propagate `install_pipelines` exit_code into the final return value
     - Persist per-agent force_overwrite in connect.yml via the `connect_yml_schema` practice
       (format: agents dict, each agent maps to {force_overwrite: bool})
 
     Constraints:
-    - Do not install flows into project-level .goga/flows/ (that directory is user-owned)
+    - Do not install pipelines into project-level .goga/pipelines/ (that directory is user-owned)
     - Do not write to ~/.goga/connect.yml from any cell other than goga/connect and goga/commands/upgrade (read-only there)
     - Windows symlink privilege limitations are documented as a known constraint;
       OSError from symlink_to MUST be caught and reported (do not crash)
 
-"install_flows(flows_dir: Path, force_overwrite: bool = False) -> exit_code: int":
-  location: install_flows.py
+"install_pipelines(pipelines_dir: Path, force_overwrite: bool = False) -> exit_code: int":
+  location: install_pipelines.py
   annotations: |
-    Recreate the user-level flows directory and populate it with flat *.yml files
+    Recreate the user-level pipelines directory and populate it with flat *.yml files
     from the goga repository and from installed goga_tool_* packages.
 
     Conflict resolution between internal source and goga_tool_* packages mirrors the
     same `force_overwrite` semantics used for skill installation in the existing
     tool-skill installer (private helper _install_tool_skills in connect.py):
 
-    - force_overwrite=False (default): when a flow name exists in both the internal source
-      (goga/assets/flows/) and a goga_tool_* package, the tool's flow is SKIPPED (a warning is logged
-      to stderr, the existing internal-source flow is preserved).
-    - force_overwrite=True: when a flow name exists in both, the tool's flow OVERWRITES the
-      internal-source flow.
+    - force_overwrite=False (default): when a pipeline name exists in both the internal source
+      (goga/assets/pipelines/) and a goga_tool_* package, the tool's pipeline is SKIPPED (a warning is logged
+      to stderr, the existing internal-source pipeline is preserved).
+    - force_overwrite=True: when a pipeline name exists in both, the tool's pipeline OVERWRITES the
+      internal-source pipeline.
 
-    `flows_dir`: target directory (typically ~/.goga/flows/)
-    `force_overwrite`: when True, let goga_tool_* packages overwrite internal-source flows on name conflicts
+    `pipelines_dir`: target directory (typically ~/.goga/pipelines/)
+    `force_overwrite`: when True, let goga_tool_* packages overwrite internal-source pipelines on name conflicts
     `exit_code`: 0 on success, 1 on error
 
     Algorithm:
-    1. Delete `flows_dir` if it exists, then (re)create it
-    2. Resolve the internal source directory (goga/assets/flows/) shipped with the package
-    3. Copy flat *.yml files from the internal source to `flows_dir`
+    1. Delete `pipelines_dir` if it exists, then (re)create it
+    2. Resolve the internal source directory (goga/assets/pipelines/) shipped with the package
+    3. Copy flat *.yml files from the internal source to `pipelines_dir`
        (internal source is always installed first; it establishes the base)
     4. Discover installed Python packages with the goga_tool_ prefix
        via importlib.metadata.packages_distributions()
     5. For each discovered package goga_tool_<tool_name>:
        - Resolve the package path
-       - If <package>/flows/ exists, for each flat *.yml file in it:
-         - If <flows_dir>/<name>.yml already exists (conflict with internal source):
+       - If <package>/pipelines/ exists, for each flat *.yml file in it:
+         - If <pipelines_dir>/<name>.yml already exists (conflict with internal source):
            - If force_overwrite=False: log warning to stderr and skip this file
-           - If force_overwrite=True: overwrite <flows_dir>/<name>.yml with the tool's file
-         - Otherwise: copy the tool's file to <flows_dir>/<name>.yml
+           - If force_overwrite=True: overwrite <pipelines_dir>/<name>.yml with the tool's file
+         - Otherwise: copy the tool's file to <pipelines_dir>/<name>.yml
     6. Return 0 on success, 1 on error (e.g., OSError/shutil.Error during copy or rmtree)
 
     Requirements:
-    - Fully recreate `flows_dir` at step 1 (delete + create)
+    - Fully recreate `pipelines_dir` at step 1 (delete + create)
     - Scan only the top level of each source — do not descend into subdirectories
     - Apply the `convention` practice for filesystem and package-discovery code
-    - Skip missing source directories silently (a package without flows/ is not an error)
+    - Skip missing source directories silently (a package without pipelines/ is not an error)
     - Conflict resolution MUST mirror the existing tool-skill installer semantics
       (private helper _install_tool_skills in connect.py):
       skip-with-warning when force_overwrite=False, overwrite when force_overwrite=True
     - Route all output (warnings) through sys.stderr (per cell global annotation)
 
     Constraints:
-    - Do not touch project-level .goga/flows/ — only the user-level ~/.goga/flows/
-    - Do not parse or validate flow-file contents
+    - Do not touch project-level .goga/pipelines/ — only the user-level ~/.goga/pipelines/
+    - Do not parse or validate pipeline-file contents
 
 ---
 
@@ -172,6 +172,6 @@ Author: Goga
 CreatedAt: 28/06/26
 
 Description: |
-  Manifest describing the centralized goga skill/command/flow installation logic:
+  Manifest describing the centralized goga skill/command/pipeline installation logic:
   assets are installed once into ~/.goga/, agents receive symlinks into ~/.goga/,
   and a per-agent connection registry is maintained at ~/.goga/connect.yml.

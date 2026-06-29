@@ -12,7 +12,7 @@ from pathlib import Path
 import requests
 import yaml
 
-from .install_flows import install_flows
+from .install_pipelines import install_pipelines
 
 AGENT_DIRS: dict[str, str] = {
     "claude": ".claude",
@@ -286,11 +286,11 @@ def _validate_agents(agents: list[str], source: Path) -> int | None:
 def connect(agents: list[str], force_overwrite: bool = False) -> int:
     """Install goga assets centrally into ``~/.goga/`` and symlink each agent in.
 
-    Assets are installed once into ``~/.goga/{skills,commands,flows}``; each agent
-    in ``agents`` receives symlinks from ``~/.<agent>/`` into the central store.
-    Flow files are installed into ``~/.goga/flows/`` via :func:`install_flows`
-    (forwarding ``force_overwrite``), and a per-agent record is persisted in
-    ``~/.goga/connect.yml``.
+    Assets are installed once into ``~/.goga/{skills,commands,pipelines}``; each
+    agent in ``agents`` receives symlinks from ``~/.<agent>/`` into the central
+    store. Pipeline files are installed into ``~/.goga/pipelines/`` via
+    :func:`install_pipelines` (forwarding ``force_overwrite``), and a per-agent
+    record is persisted in ``~/.goga/connect.yml``.
 
     Args:
         agents: List of target agent names (e.g. ['claude']). Must not be empty.
@@ -323,9 +323,9 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Step 5 — flows (propagate force_overwrite; propagate exit code).
-    flows_dir = goga_home / "flows"
-    if install_flows(flows_dir, force_overwrite=force_overwrite) != 0:
+    # Step 5 — pipelines (propagate force_overwrite; propagate exit code).
+    pipelines_dir = goga_home / "pipelines"
+    if install_pipelines(pipelines_dir, force_overwrite=force_overwrite) != 0:
         return 1
 
     # Step 6 — atomic registry update.

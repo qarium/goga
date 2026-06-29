@@ -1,4 +1,4 @@
 from .connect import connect
-from .install_flows import install_flows
+from .install_pipelines import install_pipelines
 
-__all__ = ["connect", "install_flows"]
+__all__ = ["connect", "install_pipelines"]

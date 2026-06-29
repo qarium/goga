@@ -403,7 +403,7 @@ class TestConnectLogicEdge:
         assert (skills / "goga-cell").is_symlink()
         assert (skills / "goga-cell" / "SKILL.md").is_file()
 
-    def test_connect_propagates_install_flows_failure(self, tmp_path: Path) -> None:
+    def test_connect_propagates_install_pipelines_failure(self, tmp_path: Path) -> None:
         _create_agent_resources(tmp_path)
         source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
@@ -412,7 +412,7 @@ class TestConnectLogicEdge:
             mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
             mock.patch.object(_install_mod.Path, "home", return_value=home),
             mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
-            mock.patch.object(_install_mod, "install_flows", return_value=1),
+            mock.patch.object(_install_mod, "install_pipelines", return_value=1),
         ):
             result = connect(agents=["claude"])
         assert result == 1

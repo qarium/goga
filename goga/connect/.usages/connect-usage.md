@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `goga.connect` module installs goga skills, commands, and flows **centrally** into `~/.goga/`,
+The `goga.connect` module installs goga skills, commands, and **pipelines** centrally into `~/.goga/`,
 then creates symlinks from each connected agent's directory into `~/.goga/`. A registry at
 `~/.goga/connect.yml` records which agents are connected and with which `force_overwrite` setting,
 so `goga upgrade` can re-sync them after a package upgrade.
@@ -32,7 +32,7 @@ exit_code = connect(agents=["claude"], force_overwrite=True)
 
 - `0` — success
 - `1` — error (empty agent list, unsupported agent, resources not found, download failure,
-  flow installation failure)
+  pipeline installation failure)
 
 ## Central Installation Model
 
@@ -42,7 +42,7 @@ exit_code = connect(agents=["claude"], force_overwrite=True)
 |-------------------------|----------------------------------------------------------|
 | `~/.goga/skills/`       | All goga skills (goga-cell, goga-ast, ...) + goga-tool-* |
 | `~/.goga/commands/`     | goga commands (claude-only consumers via symlink)        |
-| `~/.goga/flows/`        | Flow `*.yml` files (populated by `install_flows`)        |
+| `~/.goga/pipelines/`    | Pipeline `*.yml` files (populated by `install_pipelines`)        |
 | `~/.goga/connect.yml`   | Registry of connected agents + per-agent force_overwrite |
 
 ## Agent Symlinks
@@ -79,7 +79,7 @@ to determine which agents to re-sync after a package upgrade, using the per-agen
 - Discovers `goga_tool_*` packages and copies their skills into `~/.goga/skills/`.
 - Purges stale `goga-*` entries under each `~/.<agent>/skills/` (and `~/.<agent>/commands/goga` for claude).
 - Creates symlinks from agent directories into `~/.goga/`.
-- Calls `install_flows` to populate `~/.goga/flows/`.
+- Calls `install_pipelines` to populate `~/.goga/pipelines/`.
 - Writes `~/.goga/connect.yml`.
 
 ## Preconditions
