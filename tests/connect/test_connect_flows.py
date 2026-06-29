@@ -43,7 +43,7 @@ class TestConnectFlowsContract:
         assert signature.parameters["force_overwrite"].default is False
 
     def test_connect_returns_int(self, tmp_path: Path, monkeypatch) -> None:
-        """connect returns an int exit code."""
+        """connect returns 0 on a successful single-agent install."""
         _create_agent_resources(tmp_path)
         mock_source = tmp_path / "goga" / "assets"
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -55,7 +55,7 @@ class TestConnectFlowsContract:
         ):
             exit_code = connect(["claude"])
 
-        assert isinstance(exit_code, int)
+        assert exit_code == 0
 
 
 class TestConnectFlowsLogic:

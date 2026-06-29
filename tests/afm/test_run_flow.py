@@ -22,7 +22,7 @@ class TestRunFlowContract:
         assert parameters == ["name", "project_dir", "user_dir"]
 
     def test_run_flow_returns_int(self, tmp_path: Path) -> None:
-        """run_flow returns an int exit code in a mocked scenario."""
+        """run_flow returns 0 on a successful (exit 0) flowmanager invocation."""
         project_dir = tmp_path / "flows"
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("flow")
@@ -33,7 +33,7 @@ class TestRunFlowContract:
         ):
             exit_code = run_flow("deploy", project_dir, tmp_path / "user_flows")
 
-        assert isinstance(exit_code, int)
+        assert exit_code == 0
 
 
 class TestRunFlowLogic:
@@ -122,3 +122,17 @@ class TestRunFlowLogic:
         assert exit_code == 126
         captured = capsys.readouterr()
         assert "flowmanager" in captured.err
+
+    def test_run_flow_propagates_nonzero_flowmanager_exit_code(self, tmp_path: Path) -> None:
+        """A non-zero flowmanager exit code is propagated unchanged (not collapsed to 1)."""
+        project_dir = tmp_path / "flows"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text("flow")
+
+        with mock.patch(
+            "goga.afm.run_flow.subprocess.run",
+            return_value=MagicMock(returncode=7),
+        ):
+            exit_code = run_flow("deploy", project_dir, tmp_path / "user_flows")
+
+        assert exit_code == 7

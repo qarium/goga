@@ -77,13 +77,27 @@ class TestInstallFlowsContract:
         assert signature.parameters["force_overwrite"].default is False
 
     def test_install_flows_returns_int(self, tmp_path: Path, monkeypatch) -> None:
-        """install_flows returns an int exit code."""
+        """install_flows returns 0 on a clean no-op install."""
         flows_dir = tmp_path / "flows_target"
         _patch_discovery(monkeypatch, tmp_path / "does_not_exist")
 
         exit_code = install_flows(flows_dir)
 
-        assert isinstance(exit_code, int)
+        assert exit_code == 0
+
+
+class TestGetInternalFlowsDir:
+    def test_returns_path_to_flows_under_assets(self) -> None:
+        """_get_internal_flows_dir resolves to the relocated ``assets/flows`` dir.
+
+        Regression guard against an accidental revert to the legacy ``flows/``
+        location; mirrors ``TestGetSourceDir`` for the flows-specific resolver.
+        """
+        source = _install_flows_mod._get_internal_flows_dir()
+        assert source.name == "flows"
+        assert source.parent.name == "assets"
+        # the relocated internal source is a real directory shipped with the package
+        assert source.is_dir()
 
 
 class TestInstallFlowsLogic:

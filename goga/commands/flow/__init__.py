@@ -1,4 +1,4 @@
-"""Flow commands cell — CLI wrapper for the goga flows command group."""
+"""Flow commands cell — CLI wrapper for the goga flow command group."""
 
 from .flow import flow
 

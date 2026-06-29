@@ -35,7 +35,7 @@ Annotations: |
 "ls()":
   location: flow.py
   annotations: |
-    CLI command "goga flows ls". Lists available flow names across the project and user sources.
+    CLI command "goga flow ls". Lists available flow names across the project and user sources.
 
     Apply the `click` practice for command registration and output.
     Apply the `conventions` practice for docstring style and intra-package imports.
@@ -59,7 +59,7 @@ Annotations: |
 "run(ctx: click.Context, name: str)":
   location: flow.py
   annotations: |
-    CLI command "goga flows run <name>". Runs a flow by name via the external flowmanager.
+    CLI command "goga flow run <name>". Runs a flow by name via the external flowmanager.
 
     `ctx`: Click execution context, used to propagate the subprocess exit code (per the `click` practice)
     `name`: flow name without extension (required positional argument)
@@ -86,5 +86,5 @@ Annotations: |
 Author: Goga
 CreatedAt: 28/06/26
 Description: |
-  CLI wrapper for the flow command group. Exposes "goga flows ls" and "goga flows run <name>"
+  CLI wrapper for the flow command group. Exposes "goga flow ls" and "goga flow run <name>"
   as thin Click commands that delegate to goga/afm.

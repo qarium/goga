@@ -10,6 +10,7 @@ Imports:
       - tool
       - init
       - flow
+      - upgrade
     From: goga/commands
   - Types:
       - AST
@@ -43,6 +44,7 @@ app():
     - `tool`
     - `init`
     - `flow`
+    - `upgrade`
 
 ---
 

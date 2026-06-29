@@ -83,7 +83,9 @@ def _resolve_goga_home(target_user: str | None) -> Path | None:
         return Path.home() / ".goga"
     try:
         return Path(pwd.getpwnam(target_user).pw_dir) / ".goga"
-    except KeyError:
+    except (KeyError, OSError):
+        # KeyError: unknown user. OSError: backend lookup failure (e.g. NIS/LDAP).
+        # Either way the user cannot be resolved — surface a non-zero exit, do not crash.
         logger.error("unknown user '%s'", target_user)
         return None
 
