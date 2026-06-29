@@ -31,12 +31,12 @@ class TestPipelineEntryContract:
 
     def test_pipeline_entry_rejects_yml_extension(self) -> None:
         """name must not carry the .yml extension."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="yml"):
             PipelineEntry(name="deploy.yml", source=PipelineSource.PROJECT)
 
     def test_pipeline_entry_rejects_forward_slash(self) -> None:
         """name must not contain path separators."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="path separators"):
             PipelineEntry(name="a/b", source=PipelineSource.USER)
 
     def test_pipeline_entry_rejects_positional_args(self) -> None:
@@ -62,10 +62,10 @@ class TestPipelineEntryLogic:
 
     def test_pipeline_entry_rejects_backslash(self) -> None:
         """name must not contain backslash path separators."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="path separators"):
             PipelineEntry(name="a\\b", source=PipelineSource.PROJECT)
 
     def test_pipeline_entry_rejects_empty_name(self) -> None:
         """name must not be empty."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="must not be empty"):
             PipelineEntry(name="", source=PipelineSource.PROJECT)

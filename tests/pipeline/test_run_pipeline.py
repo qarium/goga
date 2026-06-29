@@ -3,7 +3,6 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 from goga.pipeline import run_pipeline
