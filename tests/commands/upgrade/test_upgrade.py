@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import os
 from pathlib import Path
 from unittest import mock
 
@@ -120,6 +121,37 @@ class TestUpgradeLogicPositive:
         assert rc == 0
         mock_getpwnam.assert_called_once_with("alice")
         mock_connect.assert_called_once_with(agents=["claude"], force_overwrite=False)
+
+    def test_upgrade_target_user_redirects_resync_to_target_home(self, tmp_path: Path) -> None:
+        """``--user`` must point ``$HOME`` at the target user during the re-sync.
+
+        ``connect()`` resolves its central ``~/.goga`` root and each agent's target
+        dir via ``Path.home()`` (which reads ``$HOME``). So a ``--user`` re-sync
+        only targets the other user if ``$HOME`` is redirected there while
+        ``connect()`` runs — otherwise it silently installs into the current
+        user's home. HOME must also be restored afterwards.
+        """
+        alice_home = tmp_path / "alice"
+        _write_registry(alice_home / ".goga", {"claude": {"force_overwrite": False}})
+        pw = mock.MagicMock()
+        pw.pw_dir = str(alice_home)
+
+        seen: dict[str, Path] = {}
+        original_home = os.environ.get("HOME")
+
+        def fake_connect(agents: list[str], force_overwrite: bool = False) -> int:
+            seen["home"] = Path.home()
+            return 0
+
+        with (
+            mock.patch.object(_upgrade_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_upgrade_module.pwd, "getpwnam", return_value=pw),
+            mock.patch.object(_upgrade_module, "connect", new=fake_connect),
+        ):
+            rc = _upgrade(target_user="alice")
+        assert rc == 0
+        assert seen["home"] == Path(pw.pw_dir)
+        assert os.environ.get("HOME") == original_home
 
 
 class TestUpgradeLogicNegative:

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import importlib.metadata
 import logging
+import os
 import pwd
 import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import click
@@ -13,6 +16,31 @@ import yaml
 from ...connect import connect
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.contextmanager
+def _home_override(target_home: Path | None) -> Iterator[None]:
+    """Point ``$HOME`` at ``target_home`` for the duration of the block.
+
+    ``connect()`` resolves its central ``~/.goga`` root and each agent's target
+    directory through :func:`pathlib.Path.home` (which reads ``$HOME``), so
+    re-syncing *another* user's installation (``--user``) requires ``$HOME`` to
+    point at that user while ``connect()`` runs. A ``None`` ``target_home``
+    leaves the environment untouched. ``$HOME`` is always restored on exit.
+    """
+    if target_home is None:
+        yield
+        return
+    saved = os.environ.get("HOME")
+    os.environ["HOME"] = str(target_home)
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = saved
+
 
 
 def _build_pip_command(include_tools: bool, use_sudo: bool) -> list[str]:
@@ -146,7 +174,12 @@ def _upgrade(use_sudo: bool = False, target_user: str | None = None, include_too
     if registry is None:
         return 1
 
-    first_failure = _resync_agents(registry)
+    # Re-sync against the resolved user's HOME so connect() actually targets them:
+    # with --user, goga_home.parent is that user's home dir and connect() reads it
+    # via Path.home(), so $HOME must point there while the re-sync runs.
+    target_home = goga_home.parent if target_user is not None else None
+    with _home_override(target_home):
+        first_failure = _resync_agents(registry)
     if first_failure != 0:
         logger.error("re-sync failed with exit code %s", first_failure)
     else:
