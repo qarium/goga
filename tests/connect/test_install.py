@@ -87,6 +87,9 @@ class TestGetSourceDir:
         source = _get_source_dir()
         assert source.name == "assets"
         assert "goga" in str(source)
+        # the relocated root is a real directory shipped with the package
+        # (regression guard against an accidental revert to agent/)
+        assert source.is_dir()
 
 
 class TestDownloadDslSpec:
