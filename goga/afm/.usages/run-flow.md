@@ -2,8 +2,11 @@
 
 ## Overview
 
-`run_flow` resolves a flow name to a file path across the two source directories,
-then invokes the external `flowmanager` binary to run it. Use this to launch a flow by name.
+`run_flow` is a thin subprocess-wrapper over the external `flowmanager` binary.
+It launches `flowmanager` with a given absolute pipeline-file path and
+propagates the subprocess exit code. `run_flow` performs no discovery or path
+resolution — the caller (typically `run_pipeline` in `goga/pipeline`) resolves
+the absolute path before calling.
 
 ## Usage
 
@@ -11,43 +14,38 @@ then invokes the external `flowmanager` binary to run it. Use this to launch a f
 from pathlib import Path
 from goga.afm import run_flow
 
-project_dir = Path.cwd() / ".goga" / "flows"
-user_dir = Path.home() / ".goga" / "flows"
+flow_path = Path("/Users/me/.goga/pipelines/deploy.yml")  # absolute path
 
-exit_code = run_flow("deploy", project_dir, user_dir)
+exit_code = run_flow(flow_path)
 ```
 
 ## Parameters
 
-- `name: str` — flow name without extension (the `.yml` suffix is added internally during path resolution)
-- `project_dir: Path` — project flows directory (same meaning as in `list_flows`)
-- `user_dir: Path` — user flows directory (same meaning as in `list_flows`)
+- `flow_path: Path` — absolute path to the pipeline file to run. Passed to
+  `flowmanager run` as the positional argument.
 
 ## Return Values
 
 | Exit code | Condition                                                      |
 |-----------|----------------------------------------------------------------|
-| 0         | flowmanager ran the flow successfully                          |
-| non-zero  | flow not found in either source                                |
-| non-zero  | `flowmanager` binary not in PATH (clear message, no traceback) |
+| 0         | flowmanager ran the pipeline successfully                      |
+| 127       | `flowmanager` binary not in PATH (clear message, no traceback) |
 | non-zero  | flowmanager itself returned a non-zero exit code               |
-
-## Path Resolution
-
-The flow file is resolved via `list_flows` semantics — the project source wins on name conflicts.
-The absolute path is then passed to `flowmanager run` as a positional argument.
 
 ## Side Effects
 
-`run_flow` invokes `flowmanager` as a subprocess and inherits its side effects
-(the flow may create files, run commands, etc., as defined by the flow file itself).
+`run_flow` invokes `flowmanager` as a subprocess and inherits all its side
+effects (the pipeline may create files, run commands, etc., as defined by the
+pipeline file itself).
 
 ## Preconditions
 
-- The `flowmanager` binary must be in `PATH` (invoke via subprocess; missing binary raises `FileNotFoundError`).
-- The flow name must exist in one of the two source directories (after project-priority resolution).
+- The `flowmanager` binary must be in `PATH` (invoked via subprocess; missing binary raises `FileNotFoundError`, mapped to exit code 127).
+- `flow_path` must be an absolute path resolved by the caller; `run_flow` does not validate or construct paths.
 
 ## Anti-patterns
 
-- Do not pass a bare flow name to `flowmanager` directly — `run_flow` resolves the path and adds the extension.
-- Do not copy flow files into `.flowManager/flows/` just to run them — `run_flow` passes the absolute path directly.
+- Do not pass a bare pipeline name — `run_flow` expects an absolute path. Use `goga/pipeline`'s `run_pipeline` for name resolution.
+- Do not expect `run_flow` to discover files in pipeline directories — discovery lives in `goga/pipeline`'s `list_pipelines`.
+- Do not copy pipeline files into `.flowManager/flows/` just to run them — `run_flow` passes the absolute path directly.
+- Do not parse or validate pipeline-file contents — that is outside this cell's responsibility.

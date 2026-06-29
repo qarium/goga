@@ -13,93 +13,61 @@ Annotations: |
   Use the `flowmanager` practice to interact with the external flowmanager binary
   (invocation contract, absolute-path argument, FileNotFoundError handling, exit-code propagation).
 
-  The standard library subprocess, pathlib.Path, and enum modules are used for invoking the binary,
-  resolving paths, and declaring the source origin of a flow.
+  This cell is a thin subprocess-only wrapper over the `flowmanager` binary —
+  its sole responsibility is to launch flowmanager with an absolute pipeline-file
+  path and to propagate the subprocess exit code. Discovery, path resolution, and
+  the pipeline-file entity live in `goga/pipeline`; `goga/afm` does not perform
+  those operations.
+
+  The standard library subprocess and pathlib.Path modules are used for invoking
+  the binary and receiving the absolute path argument.
 
 ---
 
-"FlowEntry(name: str, source: Enum['user', 'project'])":
-  location: flow_entry.py
-  annotations: |
-    Describe a single flow-file discovered by `list_flows`: its name and where it comes from.
-
-    `name`: flow name without extension (e.g. "deploy"); the .yml extension is implied and never stored here
-    `source`: origin of the flow — Enum with value "project" (project-level .goga/flows/) or "user" (user-level ~/.goga/flows/)
-
-    Build the data model with pydantic and the `conventions` practice (kw_only=True, empty defaults,
-    optional-with-None semantics).
-
-    Requirements:
-    - Use pydantic with kw_only=True (per `conventions`)
-    - `name` must not contain path separators or the .yml extension
-
-  properties:
-    "name -> str": |
-      Flow name without extension.
-    "source -> Enum['user', 'project']": |
-      Origin of the flow: "project" for project-level .goga/flows/, "user" for user-level ~/.goga/flows/.
-      Modeled via the standard library enum module.
-
-"list_flows(project_dir: Path, user_dir: Path) -> entries: list[FlowEntry]":
-  location: list_flows.py
-  annotations: |
-    Discover flow files across two source directories and return them as `FlowEntry`-s.
-
-    `project_dir`: project-level flows directory (typically <cwd>/.goga/flows/)
-    `user_dir`: user-level flows directory (typically ~/.goga/flows/)
-    `entries`: list of `FlowEntry`-s, one per unique flow name
-
-    Algorithm:
-    1. Scan flat *.yml files (non-recursive) in `project_dir`; for each, record a `FlowEntry` with name and source "project"
-    2. Scan flat *.yml files (non-recursive) in `user_dir`; for each name not already present from step 1,
-       record a `FlowEntry` with source "user"
-    3. Return the combined `entries` list
-
-    Apply the `conventions` practice for the filesystem scanning code (relative imports, logging, docstring style).
-
-    Requirements:
-    - Scan only the top level of each directory — do not descend into subdirectories
-    - Drop the .yml extension when forming the name
-    - A missing source directory is treated as empty (no error)
-
-    Constraints:
-    - Do not parse or validate the contents of flow files — only their names matter here
-    - When a name exists in both sources, the project source wins (no duplicate entries)
-
-"run_flow(name: str, project_dir: Path, user_dir: Path) -> exit_code: int":
+"run_flow(flow_path: Path) -> exit_code: int":
   location: run_flow.py
   annotations: |
-    Resolve a flow name to a file path, then invoke the external `flowmanager` binary to run it.
+    Launch the external `flowmanager` binary to run the pipeline file at the
+    given absolute path. This is the goga-side entry point to flowmanager;
+    it performs no discovery or path resolution.
 
-    `name`: flow name without extension
-    `project_dir`: project-level flows directory (same meaning as in `list_flows`)
-    `user_dir`: user-level flows directory (same meaning as in `list_flows`)
-    `exit_code`: 0 on success, non-zero on error (missing flow, missing binary, flowmanager failure)
+    `flow_path`: absolute path to the pipeline file (typically resolved by the
+                 caller in `goga/pipeline` via `run_pipeline`). The path is
+                 passed verbatim to flowmanager as the positional argument.
+    `exit_code`: 0 on success, non-zero on error (missing binary, flowmanager
+                 failure)
 
     Algorithm:
-    1. Call `list_flows` with `project_dir` and `user_dir`, then find the `FlowEntry` whose `name` matches
-    2. If no match — report that the flow is missing and return a non-zero `exit_code` (do not call flowmanager)
-    3. Build the absolute flow path by selecting the source directory based on the entry's source value
-       (project_dir for "project", user_dir otherwise) and appending "<name>.yml"
-    4. Invoke flowmanager via the `flowmanager` practice (subprocess with the absolute path argument)
-    5. Catch the binary-not-found error described in the `flowmanager` practice and return a non-zero `exit_code`
-       with a clear message
-    6. Return flowmanager's exit code as `exit_code`
+    1. Receive `flow_path` (absolute, as resolved by the caller)
+    2. Invoke flowmanager via the `flowmanager` practice — subprocess call with
+       the absolute path as positional argument
+    3. Catch FileNotFoundError (binary-not-found, per the `flowmanager` practice)
+       and return `exit_code = 127` with a clear message
+    4. Return flowmanager's exit code as `exit_code`
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
 
     Requirements:
-    - Always pass the absolute path to the flow file as the positional argument — never the bare name
+    - Always pass `flow_path` to flowmanager as the positional argument — never
+      a bare name
     - Apply the `flowmanager` practice's error-handling rules verbatim
+    - Accept absolute paths only; do not resolve or construct paths internally
 
     Constraints:
-    - Do not copy flow files into any project-level .flowManager/flows/ directory
-    - Do not modify or parse flow-file contents
+    - Do not resolve names to paths — path resolution is the caller's
+      responsibility (`run_pipeline` in `goga/pipeline`)
+    - Do not discover pipeline files — discovery lives in `goga/pipeline`'s
+      `list_pipelines`
+    - Do not copy pipeline files into any project-level .flowManager/flows/
+      directory
+    - Do not modify or parse pipeline-file contents
 
 ---
 
 Author: Goga
 CreatedAt: 28/06/26
 Description: |
-  Cell for discovering flow files across project and user directories
-  and running them via the external flowmanager binary.
+  Thin subprocess-only wrapper over the external flowmanager binary. Launches
+  flowmanager with an absolute pipeline-file path and propagates the subprocess
+  exit code. Discovery, path resolution, and the pipeline-file entity live in
+  `goga/pipeline`.
