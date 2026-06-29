@@ -1,6 +1,6 @@
 Usages:
   conventions: .goga/usages/conventions.md
-  flowmanager: .goga/usages/cooks/flowmanager.md
+  afm: .goga/usages/cooks/afm.md
 
 Annotations: |
   The `conventions` practice is used for:
@@ -10,7 +10,7 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  Use the `flowmanager` practice to interact with the external flowmanager binary
+  Use the `afm` practice to interact with the external flowmanager binary
   (invocation contract, absolute-path argument, FileNotFoundError handling, exit-code propagation).
 
   This cell is a thin subprocess-only wrapper over the flowmanager binary —
@@ -39,9 +39,9 @@ Annotations: |
 
     Algorithm:
     1. Receive `flow_path` (absolute, as resolved by the caller)
-    2. Invoke flowmanager via the `flowmanager` practice — subprocess call with
+    2. Invoke flowmanager via the `afm` practice — subprocess call with
        the absolute path as positional argument
-    3. Catch FileNotFoundError (binary-not-found, per the `flowmanager` practice)
+    3. Catch FileNotFoundError (binary-not-found, per the `afm` practice)
        and return `exit_code` 127 with a clear message
     4. Return flowmanager's exit code as `exit_code`
 
@@ -50,7 +50,7 @@ Annotations: |
     Requirements:
     - Always pass `flow_path` to flowmanager as the positional argument — never
       a bare name
-    - Apply the `flowmanager` practice's error-handling rules verbatim
+    - Apply the `afm` practice's error-handling rules verbatim
     - Accept absolute paths only; do not resolve or construct paths internally
 
     Constraints:
