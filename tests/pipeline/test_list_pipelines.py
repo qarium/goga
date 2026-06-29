@@ -97,11 +97,16 @@ class TestListPipelinesLogic:
         assert [entry.name for entry in entries] == ["top"]
 
     def test_list_pipelines_skips_files_with_invalid_stem(self, tmp_path) -> None:
-        """A stray top-level .yml (stem is not a valid pipeline name) is skipped, not crashed on."""
+        """Stems that fail PipelineEntry validation are skipped, not crashed on.
+
+        Covers two distinct rejection paths: an empty stem (``.yml``) and a
+        stem that ends with ``.yml`` (``weird.yml.yml`` → stem ``weird.yml``).
+        """
         project_dir = tmp_path / "project_pipelines"
         project_dir.mkdir()
-        (project_dir / ".yml").write_text("hidden")
-        (project_dir / "deploy.yml").write_text("pipeline")
+        (project_dir / "valid.yml").write_text("pipeline")
+        (project_dir / ".yml").write_text("empty-stem")
+        (project_dir / "weird.yml.yml").write_text("yml-suffix-stem")
 
         user_dir = tmp_path / "user_pipelines"
         user_dir.mkdir()
@@ -109,4 +114,4 @@ class TestListPipelinesLogic:
 
         entries = list_pipelines(project_dir, user_dir)
 
-        assert [entry.name for entry in entries] == ["deploy"]
+        assert [entry.name for entry in entries] == ["valid"]
