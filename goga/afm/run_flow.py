@@ -39,7 +39,10 @@ def run_flow(name: str, project_dir: Path, user_dir: Path) -> int:
         return 1
 
     source_dir = project_dir if match.source == Source.PROJECT else user_dir
-    flow_path = source_dir / f"{match.name}.yml"
+    # flowmanager resolves the positional arg against its own CWD, so the flow's
+    # path must be absolute (see .goga/usages/cooks/flowmanager.md). Resolving
+    # here enforces that contract regardless of what callers pass in.
+    flow_path = (source_dir / f"{match.name}.yml").resolve()
 
     try:
         result = subprocess.run(["flowmanager", "run", str(flow_path)], check=False)

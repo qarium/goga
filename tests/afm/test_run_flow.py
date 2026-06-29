@@ -136,3 +136,28 @@ class TestRunFlowLogic:
             exit_code = run_flow("deploy", project_dir, tmp_path / "user_flows")
 
         assert exit_code == 7
+
+    def test_run_flow_passes_absolute_path_even_for_relative_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """run_flow enforces its absolute-path contract regardless of caller input.
+
+        flowmanager resolves the positional arg against its own CWD, so a relative
+        path would read the wrong file. Even when the caller passes a relative
+        source directory, flowmanager must receive an absolute path.
+        """
+        project_dir = tmp_path / "flows"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text("flow")
+        monkeypatch.chdir(tmp_path)
+
+        with mock.patch(
+            "goga.afm.run_flow.subprocess.run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow("deploy", Path("flows"), Path("user_flows"))
+
+        assert exit_code == 0
+        passed_path = Path(mock_subprocess.call_args.args[0][2])
+        assert passed_path.is_absolute()
+        assert passed_path == (tmp_path / "flows" / "deploy.yml").resolve()
