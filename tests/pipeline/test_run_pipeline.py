@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from goga.pipeline import run_pipeline
+
+# goga.pipeline.run_pipeline is shadowed in the package __init__ by the
+# run_pipeline function, so a string-based mock.patch path walking through it
+# fails on Python 3.10. Resolve the real module via sys.modules and patch its
+# run_flow attribute directly.
+_run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 
 class TestRunPipelineContract:
@@ -26,8 +33,9 @@ class TestRunPipelineContract:
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("pipeline")
 
-        with mock.patch(
-            "goga.pipeline.run_pipeline.run_flow",
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_flow",
             return_value=0,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines")
@@ -43,8 +51,9 @@ class TestRunPipelineLogic:
         (project_dir / "deploy.yml").write_text("pipeline")
         user_dir = tmp_path / "user_pipelines"
 
-        with mock.patch(
-            "goga.pipeline.run_pipeline.run_flow",
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_flow",
             return_value=0,
         ) as mock_run_flow:
             exit_code = run_pipeline("deploy", project_dir, user_dir)
@@ -62,8 +71,9 @@ class TestRunPipelineLogic:
         user_dir.mkdir()
         (user_dir / "deploy.yml").write_text("pipeline")
 
-        with mock.patch(
-            "goga.pipeline.run_pipeline.run_flow",
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_flow",
             return_value=0,
         ) as mock_run_flow:
             exit_code = run_pipeline("deploy", project_dir, user_dir)
@@ -80,7 +90,7 @@ class TestRunPipelineLogic:
         project_dir = tmp_path / "pipelines"
         user_dir = tmp_path / "user_pipelines"
 
-        with mock.patch("goga.pipeline.run_pipeline.run_flow") as mock_run_flow:
+        with mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow:
             exit_code = run_pipeline("nonexistent", project_dir, user_dir)
 
         assert exit_code == 1
@@ -95,7 +105,7 @@ class TestRunPipelineLogic:
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("pipeline")
 
-        with mock.patch("goga.pipeline.run_pipeline.run_flow") as mock_run_flow:
+        with mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow:
             exit_code = run_pipeline("deploy.yml", project_dir, tmp_path / "user_pipelines")
 
         assert exit_code == 1
@@ -107,8 +117,9 @@ class TestRunPipelineLogic:
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("pipeline")
 
-        with mock.patch(
-            "goga.pipeline.run_pipeline.run_flow",
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_flow",
             return_value=7,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines")
@@ -121,8 +132,9 @@ class TestRunPipelineLogic:
         project_dir.mkdir()
         (project_dir / "deploy.yml").write_text("pipeline")
 
-        with mock.patch(
-            "goga.pipeline.run_pipeline.run_flow",
+        with mock.patch.object(
+            _run_pipeline_module,
+            "run_flow",
             return_value=127,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines")

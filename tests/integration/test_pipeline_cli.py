@@ -14,12 +14,19 @@ is registered on ``app`` under the name ``pipeline``.
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
 
 from click.testing import CliRunner
 from goga.cli import app
+
+# goga.afm.run_flow is shadowed in the package __init__ by the run_flow
+# function, so a string-based mock.patch path walking through it fails on
+# Python 3.10. Resolve the real module via sys.modules and patch its subprocess
+# attribute directly.
+_run_flow_module = sys.modules["goga.afm.run_flow"]
 
 
 class TestPipelineCliCrossEntity:
@@ -38,8 +45,9 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
         runner = CliRunner()
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
             result = runner.invoke(app, ["pipeline", "deploy"])
@@ -59,7 +67,7 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
         runner = CliRunner()
-        with mock.patch("goga.afm.run_flow.subprocess.run") as mock_subprocess:
+        with mock.patch.object(_run_flow_module.subprocess, "run") as mock_subprocess:
             result = runner.invoke(app, ["pipeline", "missing"])
 
         assert result.exit_code != 0
@@ -80,8 +88,9 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
         runner = CliRunner()
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=7),
         ):
             result = runner.invoke(app, ["pipeline", "deploy"])
@@ -108,8 +117,9 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
         runner = CliRunner()
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
             result = runner.invoke(app, ["pipeline", "shared"])
@@ -134,7 +144,7 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
         runner = CliRunner()
-        with mock.patch("goga.afm.run_flow.subprocess.run") as mock_subprocess:
+        with mock.patch.object(_run_flow_module.subprocess, "run") as mock_subprocess:
             result = runner.invoke(app, ["pipeline", "deploy.yml"])
 
         # The CLI layer does not strip .yml; run_pipeline finds no 'deploy.yml' entry → exit 1.

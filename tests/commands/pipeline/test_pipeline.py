@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -8,6 +9,11 @@ import click
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
+
+# goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
+# pipeline Click command, so a string-based mock.patch path walking through it
+# fails on Python 3.10. Resolve the real module via sys.modules.
+_pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 
 
 class TestPipelineContract:
@@ -44,7 +50,7 @@ class TestPipelineLogic:
         (pipelines_dir / "deploy.yml").write_text("pipeline")
 
         runner = CliRunner()
-        with mock.patch("goga.commands.pipeline.pipeline.run_pipeline", return_value=42):
+        with mock.patch.object(_pipeline_module, "run_pipeline", return_value=42):
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == 42

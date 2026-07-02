@@ -1,12 +1,20 @@
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
 from goga.afm import run_flow
+
+# goga.afm.run_flow is shadowed in the package __init__ by the run_flow
+# function, so `import goga.afm.run_flow as ...` returns the function, not the
+# module. Resolve the real module via sys.modules — mock.patch paths that walk
+# through the shadowed name fail on Python 3.10 (its _dot_lookup __import__s
+# the full dotted path first, which can't cross a non-package module boundary).
+_run_flow_module = sys.modules["goga.afm.run_flow"]
 
 
 class TestRunFlowContract:
@@ -26,8 +34,9 @@ class TestRunFlowContract:
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=0),
         ):
             exit_code = run_flow(flow_path)
@@ -41,8 +50,9 @@ class TestRunFlowLogic:
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
             exit_code = run_flow(flow_path)
@@ -59,7 +69,7 @@ class TestRunFlowLogic:
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=FileNotFoundError):
+        with mock.patch.object(_run_flow_module.subprocess, "run", side_effect=FileNotFoundError):
             exit_code = run_flow(flow_path)
 
         assert exit_code != 0
@@ -80,7 +90,7 @@ class TestRunFlowLogic:
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch("goga.afm.run_flow.subprocess.run", side_effect=OSError("not executable")):
+        with mock.patch.object(_run_flow_module.subprocess, "run", side_effect=OSError("not executable")):
             exit_code = run_flow(flow_path)
 
         assert exit_code != 0
@@ -93,8 +103,9 @@ class TestRunFlowLogic:
         flow_path = tmp_path / "deploy.yml"
         flow_path.write_text("flow")
 
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=7),
         ):
             exit_code = run_flow(flow_path)
@@ -110,8 +121,9 @@ class TestRunFlowLogic:
         """
         relative_path = Path("deploy.yml")
 
-        with mock.patch(
-            "goga.afm.run_flow.subprocess.run",
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
             exit_code = run_flow(relative_path)
