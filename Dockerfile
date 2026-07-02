@@ -9,6 +9,7 @@ RUN pip install --no-cache-dir -U /tmp/goga && \
     rm -rf /tmp/goga
 
 FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-source
+FROM akopichin/afm:latest AS afm-source
 
 FROM python:3.12-slim-bookworm
 
@@ -20,8 +21,9 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
+COPY --from=afm-source /usr/local/bin/afm /srv/afm
 RUN npm install -g @anthropic-ai/claude-code@2.1.160 @openai/codex@0.136.0
-RUN chmod +x /srv/ralphex
+RUN chmod +x /srv/ralphex /srv/afm
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
 COPY --from=builder /usr/local/bin/goga /opt/goga/bin/goga
