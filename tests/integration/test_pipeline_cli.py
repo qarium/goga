@@ -23,9 +23,7 @@ from goga.cli import app
 
 
 class TestPipelineCliCrossEntity:
-    def test_run_invokes_flowmanager_with_absolute_path(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_invokes_flowmanager_with_absolute_path(self, tmp_path: Path, monkeypatch) -> None:
         """goga pipeline <name> reaches run_flow and passes the absolute pipeline path."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -55,9 +53,7 @@ class TestPipelineCliCrossEntity:
         # run_pipeline .resolve()s the path; assert against the resolved form.
         assert called_args[2] == str((project_pipelines / "deploy.yml").resolve())
 
-    def test_run_missing_pipeline_is_nonzero_without_subprocess(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_missing_pipeline_is_nonzero_without_subprocess(self, tmp_path: Path, monkeypatch) -> None:
         """goga pipeline <missing> returns nonzero without invoking flowmanager."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -69,9 +65,7 @@ class TestPipelineCliCrossEntity:
         assert result.exit_code != 0
         mock_subprocess.assert_not_called()
 
-    def test_run_propagates_nonzero_flowmanager_exit_code(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_propagates_nonzero_flowmanager_exit_code(self, tmp_path: Path, monkeypatch) -> None:
         """goga pipeline <name> propagates a non-zero flowmanager exit code via ctx.exit."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -95,9 +89,7 @@ class TestPipelineCliCrossEntity:
         # The flowmanager exit code flows run_pipeline -> ctx.exit verbatim.
         assert result.exit_code == 7
 
-    def test_run_resolves_project_source_on_name_conflict(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_resolves_project_source_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
         """When a name exists in both sources, the project pipeline path reaches flowmanager."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -127,9 +119,7 @@ class TestPipelineCliCrossEntity:
         # Project wins on conflict: the project path (not the user path) reaches the binary.
         assert called_args[2] == str((project_pipelines / "shared.yml").resolve())
 
-    def test_run_with_yml_suffix_name_is_not_found(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_with_yml_suffix_name_is_not_found(self, tmp_path: Path, monkeypatch) -> None:
         """goga pipeline deploy.yml does NOT strip the suffix — 'deploy.yml' never matches entry 'deploy'."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -154,9 +144,7 @@ class TestPipelineCliCrossEntity:
 
 
 class TestPipelineCliList:
-    def test_discovery_mode_marks_project_pipelines_only(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_discovery_mode_marks_project_pipelines_only(self, tmp_path: Path, monkeypatch) -> None:
         """goga pipeline (no name) annotates project pipelines with (project) and user pipelines bare."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -183,9 +171,7 @@ class TestPipelineCliList:
         assert "build" in result.output
         assert "build (project)" not in result.output
 
-    def test_discovery_project_wins_on_name_conflict(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_discovery_project_wins_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
         """A name present in both sources appears once, as the project pipeline."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -212,9 +198,7 @@ class TestPipelineCliList:
         assert "shared (project)" in result.output
         assert result.output.count("shared") == 1
 
-    def test_discovery_mode_prints_header_when_empty(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_discovery_mode_prints_header_when_empty(self, tmp_path: Path, monkeypatch) -> None:
         """The 'Available pipelines:' header is printed before an empty list."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

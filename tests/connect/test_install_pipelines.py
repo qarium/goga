@@ -47,9 +47,7 @@ def _patch_discovery(
     specs: dict[str, mock.MagicMock] | None = None,
 ) -> None:
     """Redirect internal-source resolution and package discovery at the module."""
-    monkeypatch.setattr(
-        _install_pipelines_mod, "_get_internal_pipelines_dir", lambda: internal_pipelines_dir
-    )
+    monkeypatch.setattr(_install_pipelines_mod, "_get_internal_pipelines_dir", lambda: internal_pipelines_dir)
     monkeypatch.setattr(
         _install_pipelines_mod.importlib.metadata,
         "packages_distributions",
@@ -102,9 +100,7 @@ class TestGetInternalPipelinesDir:
 
 
 class TestInstallPipelinesLogic:
-    def test_install_pipelines_handles_missing_internal_source(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_handles_missing_internal_source(self, tmp_path: Path, monkeypatch) -> None:
         """A missing internal source and no tool packages is a clean no-op success."""
         pipelines_dir = tmp_path / "pipelines_target"
         _patch_discovery(monkeypatch, tmp_path / "does_not_exist")
@@ -114,9 +110,7 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert pipelines_dir.is_dir()
 
-    def test_install_pipelines_recreates_dirty_directory(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_recreates_dirty_directory(self, tmp_path: Path, monkeypatch) -> None:
         """A pre-existing stale pipeline is removed when the directory is recreated."""
         pipelines_dir = tmp_path / "pipelines_target"
         pipelines_dir.mkdir(parents=True)
@@ -128,14 +122,10 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert not (pipelines_dir / "stale_pipeline.yml").exists()
 
-    def test_install_pipelines_internal_wins_on_conflict_by_default(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_internal_wins_on_conflict_by_default(self, tmp_path: Path, monkeypatch) -> None:
         """By default the internal-source pipeline wins on a name conflict."""
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(
-            tmp_path / "internal", {"conflict.yml": "internal"}
-        )
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
         _patch_discovery(
             monkeypatch,
@@ -149,14 +139,10 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert (pipelines_dir / "conflict.yml").read_text() == "internal"
 
-    def test_install_pipelines_tools_overwrite_on_conflict_with_force(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_tools_overwrite_on_conflict_with_force(self, tmp_path: Path, monkeypatch) -> None:
         """With force_overwrite the tool pipeline wins on a name conflict."""
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(
-            tmp_path / "internal", {"conflict.yml": "internal"}
-        )
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
         _patch_discovery(
             monkeypatch,
@@ -170,9 +156,7 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert (pipelines_dir / "conflict.yml").read_text() == "tool"
 
-    def test_install_pipelines_copies_internal_pipelines(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_copies_internal_pipelines(self, tmp_path: Path, monkeypatch) -> None:
         """Internal-source pipelines are copied into the recreated directory."""
         pipelines_dir = tmp_path / "pipelines_target"
         internal_pipelines = _make_internal_pipelines(
@@ -187,9 +171,7 @@ class TestInstallPipelinesLogic:
         assert (pipelines_dir / "deploy.yml").read_text() == "internal deploy"
         assert (pipelines_dir / "build.yml").read_text() == "internal build"
 
-    def test_install_pipelines_copies_tool_pipelines_when_no_conflict(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_copies_tool_pipelines_when_no_conflict(self, tmp_path: Path, monkeypatch) -> None:
         """A tool pipeline with a unique name is copied without a warning."""
         pipelines_dir = tmp_path / "pipelines_target"
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"unique.yml": "tool unique"})
@@ -205,9 +187,7 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert (pipelines_dir / "unique.yml").read_text() == "tool unique"
 
-    def test_install_pipelines_skips_package_without_pipelines_dir(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_skips_package_without_pipelines_dir(self, tmp_path: Path, monkeypatch) -> None:
         """A goga_tool_* package without a pipelines/ directory is skipped silently."""
         pipelines_dir = tmp_path / "pipelines_target"
         spec = _make_tool_spec(tmp_path, "goga_tool_X", files={})
@@ -228,9 +208,7 @@ class TestInstallPipelinesLogic:
     ) -> None:
         """A skipped conflict logs a warning to stderr."""
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(
-            tmp_path / "internal", {"conflict.yml": "internal"}
-        )
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
         _patch_discovery(
             monkeypatch,
@@ -245,14 +223,10 @@ class TestInstallPipelinesLogic:
         assert "conflict.yml" in captured.err
         assert "already exists" in captured.err
 
-    def test_install_pipelines_returns_nonzero_on_copy_error(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_returns_nonzero_on_copy_error(self, tmp_path: Path, monkeypatch) -> None:
         """An OSError during copying makes install_pipelines return 1 with a message."""
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(
-            tmp_path / "internal", {"deploy.yml": "deploy"}
-        )
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"deploy.yml": "deploy"})
         _patch_discovery(monkeypatch, internal_pipelines)
 
         def raise_oserror(*args, **kwargs):
@@ -264,18 +238,14 @@ class TestInstallPipelinesLogic:
 
         assert exit_code == 1
 
-    def test_install_pipelines_returns_nonzero_on_shutil_error(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_returns_nonzero_on_shutil_error(self, tmp_path: Path, monkeypatch) -> None:
         """A shutil.Error during copying is caught and surfaces as exit 1.
 
         Guards the ``(OSError, shutil.Error)`` union: the ``shutil.Error`` arm
         must independently map to 1, not just ``OSError``.
         """
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(
-            tmp_path / "internal", {"deploy.yml": "deploy"}
-        )
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"deploy.yml": "deploy"})
         _patch_discovery(monkeypatch, internal_pipelines)
 
         def raise_shutil_error(*args, **kwargs):
@@ -287,9 +257,7 @@ class TestInstallPipelinesLogic:
 
         assert exit_code == 1
 
-    def test_install_pipelines_returns_nonzero_on_rmtree_error(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_returns_nonzero_on_rmtree_error(self, tmp_path: Path, monkeypatch) -> None:
         """An OSError during the initial rmtree (recreate) surfaces as exit 1.
 
         Guards that the destructive recreate stays inside the try/except: a
@@ -307,9 +275,7 @@ class TestInstallPipelinesLogic:
 
         assert exit_code == 1
 
-    def test_install_pipelines_copies_real_shipped_feature_yml(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_install_pipelines_copies_real_shipped_feature_yml(self, tmp_path: Path, monkeypatch) -> None:
         """The shipped ``goga/assets/pipelines/feature.yml`` is installed verbatim.
 
         Unlike the other cases the internal-source resolver is NOT patched, so

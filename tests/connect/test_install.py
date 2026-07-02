@@ -343,17 +343,13 @@ class TestConnectLogicPositive:
 
 
 class TestConnectLogicNegative:
-    def test_connect_empty_agents_returns_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_connect_empty_agents_returns_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         result = connect(agents=[])
         assert result == 1
         captured = capsys.readouterr()
         assert "at least one agent" in captured.err
 
-    def test_connect_unknown_agent_returns_error(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_connect_unknown_agent_returns_error(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
         result = connect(agents=["unknown_agent"])
         assert result == 1
         captured = capsys.readouterr()

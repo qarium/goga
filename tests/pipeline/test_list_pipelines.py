@@ -26,9 +26,7 @@ class TestListPipelinesContract:
 
 
 class TestListPipelinesLogic:
-    def test_list_pipelines_returns_entries_from_both_sources(
-        self, tmp_path
-    ) -> None:
+    def test_list_pipelines_returns_entries_from_both_sources(self, tmp_path) -> None:
         """Project source wins on name conflicts; user entries are appended."""
         project_dir = tmp_path / "project_pipelines"
         project_dir.mkdir()
@@ -51,9 +49,7 @@ class TestListPipelinesLogic:
         assert by_name["deploy"].source == PipelineSource.PROJECT
         assert by_name["test"].source == PipelineSource.USER
 
-    def test_list_pipelines_orders_project_entries_before_user_entries(
-        self, tmp_path
-    ) -> None:
+    def test_list_pipelines_orders_project_entries_before_user_entries(self, tmp_path) -> None:
         """Project entries precede user entries even when sorted after the user name."""
         project_dir = tmp_path / "project_pipelines"
         project_dir.mkdir()
@@ -69,9 +65,7 @@ class TestListPipelinesLogic:
         assert entries[0].source == PipelineSource.PROJECT
         assert entries[1].source == PipelineSource.USER
 
-    def test_list_pipelines_treats_missing_directories_as_empty(
-        self, tmp_path
-    ) -> None:
+    def test_list_pipelines_treats_missing_directories_as_empty(self, tmp_path) -> None:
         """Neither directory existing yields an empty list (no error)."""
         project_dir = tmp_path / "project_pipelines"
         user_dir = tmp_path / "user_pipelines"

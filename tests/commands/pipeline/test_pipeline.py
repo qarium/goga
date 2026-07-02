@@ -34,9 +34,7 @@ class TestPipelineContract:
 
 
 class TestPipelineLogic:
-    def test_pipeline_with_name_invokes_run_pipeline_and_propagates_exit(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_pipeline_with_name_invokes_run_pipeline_and_propagates_exit(self, tmp_path: Path, monkeypatch) -> None:
         """pipeline <name> delegates to run_pipeline and propagates its exit code."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
@@ -51,9 +49,7 @@ class TestPipelineLogic:
 
         assert result.exit_code == 42
 
-    def test_pipeline_without_name_lists_pipelines(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_pipeline_without_name_lists_pipelines(self, tmp_path: Path, monkeypatch) -> None:
         """pipeline (no name) prints 'Available pipelines:' header and the list."""
         project_tmp = tmp_path / "project"
         project_tmp.mkdir()
@@ -80,9 +76,7 @@ class TestPipelineLogic:
         assert "build" in result.output
         assert "build (project)" not in result.output
 
-    def test_pipeline_without_name_prints_header_even_when_empty(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_pipeline_without_name_prints_header_even_when_empty(self, tmp_path: Path, monkeypatch) -> None:
         """The 'Available pipelines:' header is always printed, even for an empty list."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

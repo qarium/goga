@@ -42,7 +42,6 @@ def _home_override(target_home: Path | None) -> Iterator[None]:
             os.environ["HOME"] = saved
 
 
-
 def _build_pip_command(include_tools: bool, use_sudo: bool) -> list[str]:
     """Build the pip upgrade command per Algorithm step 1.
 

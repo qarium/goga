@@ -36,9 +36,7 @@ class TestRunPipelineContract:
 
 
 class TestRunPipelineLogic:
-    def test_run_pipeline_resolves_project_source_and_invokes_run_flow(
-        self, tmp_path: Path
-    ) -> None:
+    def test_run_pipeline_resolves_project_source_and_invokes_run_flow(self, tmp_path: Path) -> None:
         """run_pipeline resolves the project pipeline path and calls run_flow with it."""
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
@@ -56,9 +54,7 @@ class TestRunPipelineLogic:
         called_path = mock_run_flow.call_args.args[0]
         assert called_path == (project_dir / "deploy.yml").resolve()
 
-    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
-        self, tmp_path: Path
-    ) -> None:
+    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(self, tmp_path: Path) -> None:
         """A pipeline present only in user_dir is resolved against the user directory."""
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
