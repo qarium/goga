@@ -32,16 +32,24 @@ Annotations: |
     - Check each occurrence for exact match: left and right of `type_name` only
       the characters :, >, (, ), [, ], comma, space, or string boundary are allowed.
       Any other character at the boundary invalidates the match.
+    - Exception: a "..." prefix (three dots) immediately before `type_name` is also
+      a valid left boundary — it marks a dynamic CODEMANIFEST parameter,
+      e.g. "...args: Type" or "...kwargs: Type".
 
     Requirements:
     - Cases that must match as positive:
       - `type_name` = "TypeName" -> (param: TypeName)
       - `type_name` = "TypeName" -> (param: TypeName, param_2: Type)
       - `type_name` = "TypeName" -> (param: Type) -> rv:TypeName
+      - `type_name` = "args" -> (...args: Type)
+      - `type_name` = "kwargs" -> (...kwargs: Type)
+      - `type_name` = "args" -> dynamic_signature(...args: Type, ...kwargs: Type) -> value:Type
     - Cases that must match as negative:
       - `type_name` = "TypeName" -> (param: TypeNameOne)
       - `type_name` = "TypeName" -> (param: TwoTypeName)
       - `type_name` = "TypeName" -> (param: Type: = "TypeName")
+      - `type_name` = "args" -> (x: foo.args)
+      - `type_name` = "args" -> (x: args.extra)
 
 # ******* #
 # Imports #

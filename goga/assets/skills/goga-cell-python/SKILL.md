@@ -148,4 +148,15 @@ dict without generics,
 list without generics
 ```
 
+## Arbitrary arguments
+
+```yaml
+"dynamic_signature(...args: str, ...kwargs: dict) -> value:str":
+  annotations: |
+    Dynamic parameters example
+
+    `args`: non-keyword, positional arguments (*args)
+    `kwargs`: keyword, named arguments (**kwargs)
+```
+
 ---

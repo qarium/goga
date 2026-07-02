@@ -88,3 +88,13 @@ result = signature_contains_type_name("(param: TypeNameOne)", "TypeName")
 ```
 
 Returns `True` if `type_name` appears as a whole word in `signature`. Allowed boundary characters: `:`, `>`, `(`, `)`, `[`, `]`, `,`, whitespace, or string edge.
+
+A three-dot prefix before `type_name` is also accepted as a left boundary, so dynamic CODEMANIFEST parameters (e.g. `...args`, `...kwargs`) match by their bare name:
+
+```python
+result = signature_contains_type_name("(...args: TypeName)", "args")
+# True
+
+result = signature_contains_type_name("(x: foo.args)", "args")
+# False — dots inside a type name are not the dynamic-parameter prefix
+```

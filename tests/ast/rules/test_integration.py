@@ -183,6 +183,21 @@ class TestCrossCellInteraction:
         errors = rule.check(doc)
         assert errors == []
 
+    def test_annotation_link_resolved_by_dynamic_param(self) -> None:
+        """A link to a dynamic CODEMANIFEST parameter (...args, ...kwargs)
+        must be resolved via signature_contains_type_name."""
+        rule = facade.AnnotationLinksExists()
+
+        entity = EntityTypeNode(
+            name="MyEntity",
+            location="my_entity.goga",
+            signature="dynamic_signature(...args: Type, ...kwargs: Type) -> value:Type",
+            annotations=AnnotationsNode(links=["args", "kwargs"]),
+        )
+        doc = _make_doc(entities=[entity])
+        errors = rule.check(doc)
+        assert errors == []
+
     def test_annotation_link_not_found(self) -> None:
         """A link not resolvable by any mechanism must produce an error."""
         rule = facade.AnnotationLinksExists()

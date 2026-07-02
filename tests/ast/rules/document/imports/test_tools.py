@@ -84,3 +84,31 @@ class TestLogical:
 
     def test_type_name_at_signature_start(self):
         assert signature_contains_type_name("TypeName()", "TypeName") is True
+
+    # --- Dynamic parameters (...args / ...kwargs) ---
+
+    def test_dynamic_vararg_param(self):
+        assert signature_contains_type_name("(...args: Type)", "args") is True
+
+    def test_dynamic_kwarg_param(self):
+        assert signature_contains_type_name("(...kwargs: Type)", "kwargs") is True
+
+    def test_dynamic_param_in_full_signature(self):
+        sig = "dynamic_signature(...args: Type, ...kwargs: Type) -> value:Type"
+        assert signature_contains_type_name(sig, "args") is True
+
+    def test_dynamic_kwarg_in_full_signature(self):
+        sig = "dynamic_signature(...args: Type, ...kwargs: Type) -> value:Type"
+        assert signature_contains_type_name(sig, "kwargs") is True
+
+    def test_dynamic_prefix_does_not_match_dotted_type(self):
+        assert signature_contains_type_name("(x: foo.args)", "args") is False
+
+    def test_dynamic_prefix_does_not_match_suffix(self):
+        assert signature_contains_type_name("(x: args.extra)", "args") is False
+
+    def test_single_dot_is_not_dynamic_prefix(self):
+        assert signature_contains_type_name(".args", "args") is False
+
+    def test_two_dots_are_not_dynamic_prefix(self):
+        assert signature_contains_type_name("..args", "args") is False
