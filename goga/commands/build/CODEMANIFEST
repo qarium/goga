@@ -60,8 +60,11 @@ Annotations: |
        - Image from `Config`.build.image
        - Arguments: -m goga.build <plan> + CLI flags
     9. On dry_run: exit 0 (without running the container)
-    10. Run Docker via subprocess.Popen, wait for exit code via .wait()
-    11. In finally:
+    10. Pull the build image (docker pull <`Config`.build.image>) to refresh an
+        already-present local image before launching the container
+        - On non-zero exit — print to logs it
+    11. Run Docker via subprocess.Popen, wait for exit code via .wait()
+    12. In finally:
         a. Delete env-file
         b. Execute docker kill container_name (suppress errors)
         c. Restore previous SIGTERM handler

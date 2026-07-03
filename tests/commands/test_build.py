@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
@@ -369,10 +370,13 @@ class TestExtraEnvOption:
 
 
 class TestDockerExecution:
+    @mock.patch.object(_build_mod, "_pull_image")
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
     @mock.patch.object(_build_mod, "_build_docker_cmd")
-    def test_subprocess_called_with_docker_cmd(self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_subprocess_called_with_docker_cmd(  # noqa: PLR0913
+        self, mock_cmd, mock_env, mock_docker, mock_pull, tmp_path, monkeypatch
+    ) -> None:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run", "goga:latest", "-m", "goga.build", "plan.md"]
         _write_goga_yml(tmp_path)
@@ -386,10 +390,13 @@ class TestDockerExecution:
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
             mock_popen.assert_called_once_with(["docker", "run", "goga:latest", "-m", "goga.build", "plan.md"])
 
+    @mock.patch.object(_build_mod, "_pull_image")
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
     @mock.patch.object(_build_mod, "_build_docker_cmd")
-    def test_exit_code_propagated(self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_exit_code_propagated(  # noqa: PLR0913
+        self, mock_cmd, mock_env, mock_docker, mock_pull, tmp_path, monkeypatch
+    ) -> None:
         mock_env.return_value = Path("/tmp/env")
         mock_cmd.return_value = ["docker", "run"]
         _write_goga_yml(tmp_path)
@@ -681,3 +688,89 @@ class TestGitConfigMergedInBuild:
 
         env_dict = mock_env.call_args[0][0]
         assert env_dict["GIT_AUTHOR_NAME"] == "override"
+
+
+# --- Image pull tests ---
+
+
+class TestPullImage:
+    @mock.patch.object(_build_mod.subprocess, "run")
+    def test_success_does_not_raise(self, mock_run) -> None:
+        from goga.commands.build.build import _pull_image
+
+        mock_run.return_value = mock.Mock(returncode=0)
+
+        _pull_image("qarium/goga:latest")
+
+    @mock.patch.object(_build_mod.subprocess, "run")
+    def test_invokes_docker_pull_with_capture(self, mock_run) -> None:
+        from goga.commands.build.build import _pull_image
+
+        mock_run.return_value = mock.Mock(returncode=0)
+        _pull_image("qarium/goga:latest")
+
+        mock_run.assert_called_once_with(
+            ["docker", "pull", "qarium/goga:latest"],
+            capture_output=True,
+            check=False,
+        )
+
+
+class TestImagePullInBuild:
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    def test_pull_called_with_config_image_before_run(
+        self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        _write_goga_yml(tmp_path, extra={"image": "custom-image:v2"})
+        mock_env.return_value = Path("/tmp/env")
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(_build_mod, "_pull_image") as mock_pull,
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        mock_pull.assert_called_once_with("custom-image:v2")
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    def test_pull_not_called_on_dry_run(self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+        _write_goga_yml(tmp_path)
+        mock_env.return_value = Path("/tmp/env")
+
+        with (
+            mock.patch.object(_build_mod, "_pull_image") as mock_pull,
+            mock.patch.object(subprocess, "Popen"),
+            mock.patch.object(subprocess, "run"),
+        ):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
+
+        mock_pull.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    def test_pull_failure_aborts_before_run(self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+        _write_goga_yml(tmp_path, extra={"image": "broken:image"})
+        mock_env.return_value = Path("/tmp/env")
+
+        with (
+            mock.patch.object(
+                _build_mod,
+                "_pull_image",
+                side_effect=click.ClickException("failed to pull image 'broken:image'"),
+            ),
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "failed to pull image" in result.output
+        mock_popen.assert_not_called()

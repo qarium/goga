@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import stat
@@ -11,6 +12,8 @@ import click
 import yaml
 
 from ...config import load_config
+
+logger = logging.getLogger(__name__)
 
 
 def _check_docker() -> bool:
@@ -29,6 +32,26 @@ def _check_docker() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, PermissionError, OSError):
         return False
+
+
+def _pull_image(image: str) -> None:
+    """Pull the build image to refresh an already-present local image before launch.
+
+    Args:
+        image: Docker image reference to pull.
+
+    Note:
+        A non-zero exit code from ``docker pull`` is not fatal: the failure is
+        logged as a warning and the build proceeds with the locally available image.
+    """
+    result = subprocess.run(
+        ["docker", "pull", image],
+        capture_output=True,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        logger.warning(f"failed to pull image '{image}'")
 
 
 def _read_git_config() -> dict[str, str]:
@@ -249,6 +272,8 @@ def build(  # noqa: PLR0913
 
         if dry_run:
             ctx.exit(0)
+
+        _pull_image(config.build.image)
 
         docker_proc = subprocess.Popen(docker_cmd)
 

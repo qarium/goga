@@ -19,7 +19,8 @@ The build pipeline performs these steps:
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
 4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude).
 5. **Defaults copy** -- Copies default prompts and agent configurations to `.ralphex/`.
-6. **Docker execution** -- Launches the ralphex command inside the configured Docker image.
+6. **Image pull** -- Refreshes the configured build image via `docker pull`. A pull failure is logged as a warning; the build then proceeds with the locally available image.
+7. **Docker execution** -- Launches the ralphex command inside the configured Docker image.
 
 ## Arguments
 
