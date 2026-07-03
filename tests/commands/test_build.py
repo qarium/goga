@@ -6,7 +6,6 @@ from pathlib import Path
 from unittest import mock
 
 import click
-import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
