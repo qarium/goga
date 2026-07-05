@@ -10,56 +10,65 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  Use the `afm` practice to interact with the external flowmanager binary
-  (invocation contract, absolute-path argument, FileNotFoundError handling, exit-code propagation).
+  This cell is a thin subprocess-only wrapper over the external `afm` binary —
+  its sole responsibility is to invoke "afm run" with an absolute pipeline-file
+  path and a port, then propagate the subprocess exit code. Discovery, path
+  resolution, port allocation, and the pipeline-file entity live in other cells:
+  this cell performs no discovery or path resolution.
 
-  This cell is a thin subprocess-only wrapper over the flowmanager binary —
-  its sole responsibility is to launch flowmanager with an absolute pipeline-file
-  path and to propagate the subprocess exit code. Discovery, path resolution, and
-  the pipeline-file entity live in goga/pipeline; this cell does not perform
-  those operations.
+  Use the `afm` practice to interact with the external afm binary
+  (CLI contract, PATH-resolved invocation, exit-code propagation).
 
   The standard library subprocess and pathlib.Path modules are used for invoking
-  the binary and receiving the absolute path argument.
+  the binary and receiving arguments.
 
 ---
 
-"run_flow(flow_path: Path) -> exit_code: int":
+"run_flow(flow_path: Path, port: int) -> exit_code: int":
   location: run_flow.py
   annotations: |
-    Launch the external flowmanager binary to run the pipeline file at the
-    given absolute path. This is the goga-side entry point to flowmanager;
-    it performs no discovery or path resolution.
+    Launch the external `afm` binary to run the pipeline file at the given
+    absolute path and bind its dashboard to the given `port`. This is the
+    goga-side entry point to afm; it performs no discovery, path resolution,
+    or port allocation.
 
     `flow_path`: absolute path to the pipeline file (typically resolved by the
                  caller in goga/pipeline via run_pipeline). The path is
-                 passed verbatim to flowmanager as the positional argument.
-    `exit_code`: 0 on success, non-zero on error (missing binary, flowmanager
-                 failure)
+                 passed verbatim to "afm run" as the positional argument.
+    `port`: TCP port forwarded to "afm run --port". The caller allocates the
+            port (goga/commands/pipeline); `run_flow` only passes it through.
+    `exit_code`: 0 on success, 127 when the afm binary is missing from PATH,
+    126 when afm is present but not executable (other OSError), otherwise
+    afm's own exit code
 
     Algorithm:
-    1. Receive `flow_path` (absolute, as resolved by the caller)
-    2. Invoke flowmanager via the `afm` practice — subprocess call with
-       the absolute path as positional argument
-    3. Catch FileNotFoundError (binary-not-found, per the `afm` practice)
-       and return `exit_code` 127 with a clear message
-    4. Return flowmanager's exit code as `exit_code`
+    1. Receive `flow_path` (absolute, as resolved by the caller) and `port`
+       (an integer allocated by the caller)
+    2. Invoke "afm run" via the `afm` practice with --port <port> and the
+       absolute `flow_path` as positional argument; resolve afm through PATH
+    3. On binary-not-found (FileNotFoundError, per the `afm` practice) —
+       return `exit_code` 127 with a clear message
+    4. On other OSError (binary present but not executable, permission
+       denied, etc.) — return `exit_code` 126 with a clear message
+    5. Return afm's exit code as `exit_code`
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
 
     Requirements:
-    - Always pass `flow_path` to flowmanager as the positional argument — never
+    - Always pass `flow_path` to "afm run" as the positional argument — never
       a bare name
+    - Always forward `port` to afm via the --port flag — never omit the flag
+    - Invoke afm through PATH — do not hard-code /srv/afm
     - Apply the `afm` practice's error-handling rules verbatim
     - Accept absolute paths only; do not resolve or construct paths internally
 
     Constraints:
     - Do not resolve names to paths — path resolution is the caller's
       responsibility (run_pipeline in goga/pipeline)
+    - Do not allocate the port — the caller allocates it and passes it in
     - Do not discover pipeline files — discovery lives in goga/pipeline's
       list_pipelines
-    - Do not copy pipeline files into any project-level .flowManager/flows/
-      directory
+    - Do not hard-code the afm binary path — rely on PATH inside the container
     - Do not modify or parse pipeline-file contents
 
 ---
@@ -67,7 +76,7 @@ Annotations: |
 Author: Goga
 CreatedAt: 28/06/26
 Description: |
-  Thin subprocess-only wrapper over the external flowmanager binary. Launches
-  flowmanager with an absolute pipeline-file path and propagates the subprocess
-  exit code. Discovery, path resolution, and the pipeline-file entity live in
-  goga/pipeline.
+  Thin subprocess-only wrapper over the external `afm` binary. Launches
+  "afm run" with an absolute pipeline-file path and a dashboard port, then
+  propagates the subprocess exit code. Discovery, path resolution, port
+  allocation, and the pipeline-file entity live in other cells.

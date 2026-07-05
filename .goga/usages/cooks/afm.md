@@ -1,92 +1,140 @@
-# Running AI-flow scenarios via flowmanager
+# Running AI-flow scenarios via afm
 
 ## Tool
 
-**flowmanager** is an external CLI tool (Go binary) that orchestrates multi-stage AI-flow scenarios.
+**afm** is an external CLI tool (Go binary) that orchestrates multi-stage AI-flow scenarios.
 
-Installation: an external binary placed on `PATH` (outside the `goga` repository). Verify availability with `which flowmanager`.
+Two artifacts matter for `goga`:
 
-**IMPORTANT** — `flowmanager` is an external tool, distinct from `goga`. It is modified and developed in a separate repository; `goga` only integrates with its CLI contract.
+- the **base image** `akopichin/afm:latest` — ships `/usr/local/bin/afm` (used as the source in `Dockerfile:12`);
+- the **goga image** — ships the `afm` binary on `PATH` (alongside `claude` and `codex` CLIs) so it can be selected as the afm client.
+
+**IMPORTANT** — `afm` is an external tool, distinct from `goga`. It is modified and developed in a separate repository; `goga` only integrates with its CLI contract.
 
 ## CLI contract (current)
 
-`flowmanager` runs as a top-level command with no global configuration options (only `--help`).
+`afm` runs as a top-level command with one global flag and a set of subcommands.
+
+### Global flag
+
+| Flag          | Env       | Default     | Purpose                                            |
+|---------------|-----------|-------------|----------------------------------------------------|
+| `--dir <path>`| `AFM_DIR` | current dir | Base directory for `.afm/` (config + flows + state)|
 
 ### Commands
 
-| Command                  | Purpose                                                            |
-|--------------------------|--------------------------------------------------------------------|
-| `flowmanager init`       | Interactively create `flow.yaml`                                   |
-| `flowmanager list`       | List flow files from `.flowManager/flows/` relative to CWD         |
-| `flowmanager run`        | Run a flow (or resume the most recent run)                         |
-| `flowmanager check`      | Display the status of the last run                                 |
-| `flowmanager approve`    | Approve a stage plan (`awaiting_approval` → `ready`)               |
-| `flowmanager retry`      | Retry a failed stage (`failed` → `pending`)                        |
-| `flowmanager revise`     | Submit feedback to revise a stage plan                             |
+| Command           | Purpose                                                            |
+|-------------------|--------------------------------------------------------------------|
+| `afm init`        | Interactively create a flow file in `.afm/flows/`                  |
+| `afm list`        | List flow files from `.afm/flows/` relative to `--dir` / CWD       |
+| `afm run`         | Run a flow (or resume the latest run)                              |
+| `afm check`       | Show status of the latest run                                      |
+| `afm approve`     | Approve a stage plan (`awaiting_approval` → `ready`)               |
+| `afm retry`       | Retry a failed stage (`failed` → `pending`)                        |
+| `afm revise`      | Submit feedback to revise a stage plan                             |
+| `afm install-skills` | Install AFM Claude skills into `~/.claude/skills/`              |
 
 ### Key command — `run`
 
 ```
-flowmanager run [flow.yaml] [flags]
+afm run [flow.yaml] [flags]
 ```
 
-- Accepts a **path to the flow file** as a positional argument.
-- If the path is omitted, it searches `.flowManager/flows/` relative to CWD and/or resumes the most recent run.
-- **Accepts an absolute path**, which allows running pipeline files from any directory (including `~/.goga/pipelines/`) without copying them into `.flowManager/flows/`.
+- Accepts a **path to the flow file** as a positional argument (absolute or relative to CWD, not to `--dir`).
+- If the path is omitted, afm resumes the most recent run.
+- Flow files typically live under `.afm/flows/`, but `run` accepts an absolute path so a flow can be launched from anywhere.
 
 Optional `run` flags:
 
 - `--idle-timeout duration` — agent idle timeout
 - `--max-parallel int` — maximum number of parallel stages (0 = no limit)
-- `--port int` — dashboard port (0 = read from config)
+- `--port int` — dashboard port (0 = use the value from `config.yaml`)
 
 ### Key command — `list`
 
 ```
-flowmanager list [flags]
+afm list
 ```
 
-- Lists flows **only from `.flowManager/flows/`** relative to the current working directory.
-- **There is no flag to override the directory.** As a result, `flowmanager list` cannot see pipelines stored in `~/.goga/pipelines/` directly.
+- Lists flows **only from `.afm/flows/`** relative to `--dir` (or CWD when `--dir` is unset).
+- There is no flag to override the directory other than the global `--dir` / `AFM_DIR`.
+
+## Configuration — `~/.afm/config.yaml`
+
+afm reads its configuration from `~/.afm/config.yaml` (the `.afm/` directory
+inside the invoking user's home). The single field `goga` cares about is
+`client.command` — it selects the agent afm will drive (`claude`, `codex`, ...).
+`goga` generates this file per invocation.
+
+`config.yaml` fields (YAML tags surfaced by the binary):
+
+| Field           | Type   | Purpose                                                          |
+|-----------------|--------|------------------------------------------------------------------|
+| `client.command`| str    | Shell command afm launches as the agent client (e.g. `claude`, `codex`) |
+| `port`          | int    | Dashboard port (used when `afm run --port` is `0` or omitted)    |
+| `idle_timeout`  | str    | Agent idle timeout (Go duration)                                 |
+| `max_parallel`  | int    | Max parallel stages                                              |
+| `prompts_dir`   | str    | Custom prompt directory                                          |
+| `proxy`         | str    | Outbound proxy settings                                          |
+| `server`        | str    | Server-side settings                                             |
+| `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start            |
+
+## Directory layout afm expects
+
+```
+~/.afm/
+├── config.yaml                # optional; afm falls back to defaults when missing
+└── flows/                     # flow *.yaml files discovered by `afm list`
+```
 
 ## Integration with goga
 
-`goga` stores pipeline files centrally in `~/.goga/pipelines/` (the user's home directory). This directory is **unlinked** from `.flowManager/flows/` (the runner's working directory within a given project) — they serve different roles:
+`goga pipeline <name>` runs afm **inside the goga Docker image**, mirroring how
+`goga build` launches ralphex. The host does:
 
-- `~/.goga/pipelines/` — the single storage location for pipeline files owned by `goga`; populated by the `goga connect` command.
-- `.flowManager/flows/` — the `flowmanager` runner's working directory within a specific project; used by `flowmanager list` / `flowmanager run` when invoked without arguments.
+1. Pick a free localhost port (bind a `socket` to `("", 0)`, read the assigned
+   port, close it, and hand the same value to both `-p <port>:<port>` and
+   `afm run --port <port>`).
+2. Generate `~/.afm/config.yaml` content as a 0600 tempfile with
+   `client.command: <config.pipeline.agent>` and mount it into the container
+   at `/home/goga/.afm/config.yaml:ro` (the `goga` user's home inside the
+   image). Unlink the tempfile in a `finally` block.
+3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
+   -w /workspace -v <afm_config_tmpfile>:/home/goga/.afm/config.yaml:ro
+   --env-file <env_file> [-v ~/.codex/auth.json:ro] <config.image>
+   afm run --port <port> <flow_path>`
+4. Forward `SIGTERM` / `SIGINT` to the container, kill it in `finally`, and
+   propagate afm's exit code as `goga pipeline`'s exit code.
 
-### Invocation pattern from `goga pipeline <name>`
+### Pipeline path resolution inside the container
 
-To run a pipeline stored in `~/.goga/pipelines/` without copying it into the project's `.flowManager/flows/`, `goga pipeline <name>` passes an **absolute path**:
+- Project pipelines live under `<project_dir>/.goga/pipelines/` and reach the
+  container through the `<project_dir>:/workspace` volume; the in-container
+  path is `/workspace/.goga/pipelines/<name>.yml`.
+- User pipelines live under `~/.goga/pipelines/` and are **not** under
+  `/workspace`; they need either an additional `-v` mount or a deliberate
+  decision to restrict the in-container launcher to project pipelines only.
+  This decision belongs to the architecture phase.
 
-```python
-import subprocess
-from pathlib import Path
+### Handling container/subprocess errors
 
-pipeline_path = Path.home() / ".goga" / "pipelines" / f"{name}.yml"
-result = subprocess.run(
-    ["flowmanager", "run", str(pipeline_path)],
-    check=False,
-)
-```
-
-- The path is passed as a positional argument to `flowmanager run`.
-- `flowmanager` reads the pipeline file at the specified absolute path, regardless of CWD.
-
-### Handling subprocess errors
-
-| Case                                                       | `subprocess.run` behavior             | Requirement for `goga pipeline <name>`              |
-|------------------------------------------------------------|---------------------------------------|------------------------------------------------------|
-| `flowmanager` binary not found on `PATH`                   | `FileNotFoundError`                   | Catch it, emit a clear message, exit ≠ 0             |
-| `flowmanager` exits with a non-zero code                   | `result.returncode != 0`              | Propagate the return code, or emit diagnostics       |
-| Pipeline file `<name>.yml` missing in `~/.goga/pipelines/` | — (validated before the subprocess)   | Emit a clear error, exit ≠ 0, skip the subprocess    |
-
-**IMPORTANT** — `FileNotFoundError` must be caught explicitly. Crashing with a raw exception when `flowmanager` is absent is an anti-pattern.
+| Case                                                  | goga-side behavior                                  |
+|-------------------------------------------------------|-----------------------------------------------------|
+| `docker` CLI not found on the host                    | Emit a clear message, exit ≠ 0                      |
+| afm exits with a non-zero code                        | Propagate the code as `goga pipeline`'s exit code   |
+| `SIGTERM` / `SIGINT` received on the host             | Stop the container, run `docker kill` in `finally`  |
+| `<name>.yml` not found by `list_pipelines`            | Emit a clear message, exit ≠ 0 (do not start afm)   |
 
 ## Anti-patterns
 
-- Do not pass a pipeline name as an identifier to `flowmanager run` (e.g., `flowmanager run my-pipeline`). `flowmanager` interprets the argument as a path, not as a name — pass the file path instead.
-- Do not copy pipelines from `~/.goga/pipelines/` into `.flowManager/flows/` solely to run them. An absolute path resolves the task without duplication.
-- Do not rely on `flowmanager list` seeing pipelines in `~/.goga/pipelines/` — it exposes no directory-override flag. `goga pipeline` (discovery mode) must read `~/.goga/pipelines/` directly, rather than via `flowmanager list`.
-- Do not modify the external `flowmanager` to accommodate the integration. It is developed independently; `goga` adapts to its CLI contract.
+- Do not place the afm config or any afm-managed state inside `/workspace`.
+  `/workspace` is the user's project directory; `~/.afm/` is afm's home. The
+  generated `config.yaml` must mount to `/home/goga/.afm/config.yaml`.
+- Do not pass a pipeline name as an identifier to `afm run` (e.g.
+  `afm run my-pipeline`). afm interprets the argument as a path — pass the
+  file path instead.
+- Do not rely on `afm list` seeing pipelines in `~/.goga/pipelines/` — it
+  reads `~/.afm/flows/` only. `goga pipeline` (discovery mode) reads the goga
+  pipeline directories directly via `list_pipelines`, not through afm.
+- Do not modify the external `afm` to accommodate the integration. It is
+  developed independently; `goga` adapts to its CLI contract.

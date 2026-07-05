@@ -36,6 +36,7 @@ RUN useradd -m -s /bin/bash goga && \
 
 ENV PATH="/opt/goga/bin:/srv:${PATH}"
 ENV RALPHEX_DOCKER=1
+ENV AFM_DIR=/tmp/afm
 
 WORKDIR /workspace
 

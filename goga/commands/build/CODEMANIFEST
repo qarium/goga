@@ -5,6 +5,11 @@ Imports:
     Usages:
       - configuration
     From: goga/config
+  - Types:
+      - build AS run_build
+    Usages:
+      - build-usage
+    From: goga/build
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -18,14 +23,25 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
+  Use `load_config` from Imports and the `configuration` practice to read .goga/config.yml.
+  Use the `build-usage` practice for the in-container build invocation contract.
   The command runs goga.build inside a Docker container.
+
+  This command is the host-side launcher for `run_build` from Imports: it
+  assembles a docker command that invokes "python -m goga.build <plan>"
+  inside the container, where `run_build` runs as the in-container entrypoint
+  (per the `build-usage` practice). The host does not call `run_build` directly.
+
+  The Docker image is sourced from Config.image — the top-level field shared
+  by build and pipeline. See the `configuration` practice for the schema.
 
 ---
 
 "build(plan: str)":
   location: build.py
   annotations: |
-    CLI wrapper for the build command. Runs python -m goga.build inside a Docker container.
+    CLI wrapper for the build command. Runs python -m goga.build inside a
+    Docker container.
 
     `plan`: path to the plan file
 
@@ -36,38 +52,35 @@ Annotations: |
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
 
     Algorithm:
-    0. (pre-check) Verify docker availability via _check_docker()
-       If docker is not found — ClickException error
-    1. Load configuration via `load_config` (practice `configuration`) → get `Config`
-    2. Collect cli_flags from click parameters
-    3. Read git config (user.name, user.email):
-       - Execute git config user.name and git config user.email
-       - On success — return dict with GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL
-       - On error or absence of git — return empty dict (do not block the build)
-    4. Write env-file:
-       - env = task_executor.env + git_env (git_env does not overwrite task_executor.env)
-       - + extra_env from CLI
-       - File with 0600 permissions in a temporary directory
-    5. Check config.build.image:
-       If None — ClickException error("image in .goga/config.yml is not set")
-    6. Generate container_name: "goga-build-{pid}"
-    7. Set SIGTERM handler: on signal — SystemExit(128 + signum)
-    8. Assemble Docker command:
-       - docker run --rm --name container_name --entrypoint python3
-       - Mount CWD as /workspace
-       - --env-file for passing variables
-       - If ~/.codex/auth.json exists — mount read-only as /home/goga/.codex/auth.json
-       - Image from `Config`.build.image
-       - Arguments: -m goga.build <plan> + CLI flags
-    9. On dry_run: exit 0 (without running the container)
-    10. Pull the build image (docker pull <`Config`.build.image>) to refresh an
-        already-present local image before launching the container
-        - On non-zero exit — print to logs it
-    11. Run Docker via subprocess.Popen, wait for exit code via .wait()
-    12. In finally:
-        a. Delete env-file
-        b. Execute docker kill container_name (suppress errors)
-        c. Restore previous SIGTERM handler
+    1. Verify docker availability; raise ClickException when missing
+    2. Load configuration via `load_config` (practice `configuration`) — get `Config`
+    3. Collect cli_flags from click parameters
+    4. Read git identity (user.name, user.email) and assemble it as git env vars;
+       tolerate absent git config and continue without error
+    5. Assemble the container env: combine task_executor env, git identity env,
+       and CLI extra env (task_executor env takes precedence over git env)
+    6. Write the assembled env to a private env-file (mode 0600) for the container
+    7. Verify Config.image is set; raise ClickException when None
+    8. Generate a unique container_name
+    9. Install a SIGTERM/SIGINT handler that exits with 128 + signum
+    10. Assemble the docker run command:
+        - --rm, --name <container_name>, --entrypoint python3
+        - Bind-mount CWD as /workspace
+        - Pass env via --env-file
+        - When ~/.codex/auth.json exists — bind-mount it read-only
+        - Image from Config.image
+        - Args: -m goga.build <plan> + cli_flags
+    11. On dry_run: print the assembled command and exit 0 without launching
+    12. Pull the image; log a warning on failure and continue with the local image
+    13. Launch the container and wait for its exit code, propagating stdout/stderr
+    14. In finally: delete the env-file, kill the container (suppress errors),
+        restore the previous signal handler
+
+    Requirements:
+    - Docker must be installed and available in PATH
+    - Image source: Config.image (top-level)
+    - Git identity flows into the container as GIT_AUTHOR_NAME/EMAIL,
+      GIT_COMMITTER_NAME/EMAIL; absent git config does not block the build
 
 ---
 

@@ -7,6 +7,9 @@ Imports:
 
 Usages:
   conventions: .goga/usages/conventions.md
+  argparse: |
+    Use the standard library argparse module for in-container CLI parsing.
+    Two subcommands: list (no args) and run NAME --port PORT.
 
 Annotations: |
   The `conventions` practice is used for:
@@ -18,18 +21,24 @@ Annotations: |
 
   This cell owns the entire pipeline workaround: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
-  entity model, and run coordination. It delegates subprocess execution to
-  `run_flow` from goga/afm (per the `run-flow` practice) — this cell does not
-  invoke flowmanager directly.
+  entity model, run coordination, and the in-container CLI entrypoint
+  pipeline_cli. It delegates subprocess execution to `run_flow` from
+  goga/afm (per the `run-flow` practice) — afm run is invoked inside the
+  container via `run_flow`, never directly from this cell.
 
   Use the standard library dataclasses module (NOT pydantic) for
   `PipelineEntry`, per project convention — pydantic is treated as tech debt.
   Use the standard library enum module for `PipelineSource` (str-backed).
+  Use the `argparse` practice for the in-container CLI entrypoint.
   Use pathlib.Path for directory and path resolution.
 
   The pipeline directories are <cwd>/.goga/pipelines/ (project-level,
   user-authored) and ~/.goga/pipelines/ (user-level, populated by
   goga connect). On a name conflict, the project source wins.
+
+  This cell runs inside the goga Docker image when invoked via
+  python -m goga.pipeline. The host-side launcher lives in
+  goga/commands/pipeline (docker runtime boundary — no Python Imports).
 
 ---
 
@@ -45,7 +54,7 @@ Annotations: |
 
     Build the data model with the standard library dataclasses module (NOT
     pydantic, per project convention; pydantic is treated as tech debt). Use
-    @dataclass(kw_only=True) and validate `name` in __post_init__
+    @dataclass(kw_only=True) and validate `name` at construction time
     (raising ValueError on invalid input).
 
     Requirements:
@@ -109,45 +118,98 @@ Annotations: |
     - When a name exists in both sources, the project source wins (no duplicate
       entries)
 
-"run_pipeline(name: str, project_dir: Path, user_dir: Path) -> exit_code: int":
+"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
-    Resolve a pipeline `name` to an absolute file path via `list_pipelines`, then
-    launch flowmanager through `run_flow` from Imports. This is the run
-    coordination routine — it performs discovery and path resolution; the
-    actual subprocess execution lives in goga/afm.run_flow.
+    Resolve a pipeline name to an absolute file path via `list_pipelines`, then
+    launch afm through `run_flow` from Imports. This is the run coordination
+    routine — it performs discovery and path resolution; the actual subprocess
+    execution lives in goga/afm.run_flow.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
     `user_dir`: user-level pipelines directory (same meaning as in `list_pipelines`)
+    `port`: TCP port forwarded to afm run --port via `run_flow`
+            (allocated by the host-side caller — goga/commands/pipeline)
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing binary,
-                 flowmanager failure)
+                 afm failure). 127 means afm is not on PATH inside the container.
 
     Algorithm:
     1. Call `list_pipelines` with `project_dir` and `user_dir`, then find the
-       `PipelineEntry` whose `name` matches
+       `PipelineEntry` whose name matches
     2. If no match — report that the pipeline is missing and return a non-zero
        `exit_code` (do not call `run_flow`)
     3. Build the absolute pipeline path by selecting the source directory based
        on the entry's source value (`project_dir` for `PipelineSource`.PROJECT,
-       `user_dir` otherwise) and appending "<name>.yml"
-    4. Call `run_flow` from Imports with the absolute path, per the `run-flow`
-       practice
-    5. Return the `exit_code` returned by `run_flow` (which propagates
-       flowmanager's exit code and the FileNotFoundError→127 mapping)
+       `user_dir` otherwise) and appending "<name>.yml"; the resulting
+       pipeline path MUST be absolute
+    4. Call `run_flow` from Imports with the absolute path and `port`,
+       per the `run-flow` practice — afm run is invoked inside the container
+       through `run_flow`, not directly here
+    5. Return the `exit_code` returned by `run_flow` (which propagates afm's
+       exit code and the FileNotFoundError→127 mapping when afm is missing
+       from PATH)
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
 
     Requirements:
-    - Always pass the absolute path to `run_flow` — never the bare `name`
+    - Always pass the absolute path to `run_flow` — never the bare name
+    - Always forward `port` to `run_flow` — never omit it
     - Apply the `run-flow` practice's error-handling rules verbatim (as
       propagated through `run_flow`)
 
     Constraints:
-    - Do not invoke flowmanager directly — go through `run_flow` from Imports
-    - Do not copy pipeline files into any project-level .flowManager/flows/
-      directory
+    - Do not invoke afm directly outside `run_flow` from Imports
+    - Do not allocate the port — the caller allocates it
+    - Do not copy pipeline files into any project-level directory
     - Do not modify or parse pipeline-file contents
+    - Do not accept relative `project_dir` or `user_dir` — both must already
+      be absolute when passed in
+
+"pipeline_cli(argv: list[str]) -> exit_code: int":
+  location: __main__.py
+  annotations: |
+    In-container CLI entrypoint for python -m goga.pipeline. Parses argv via
+    argparse and dispatches to `list_pipelines` (discovery) or `run_pipeline`
+    (run). This is the entrypoint invoked by the host-side docker launcher in
+    goga/commands/pipeline — never imported by Python from the host side
+    (runtime docker boundary, no Imports).
+
+    `argv`: argument list (typically the process argv minus the program name)
+    `exit_code`: 0 on success, 2 on argparse error, non-zero on pipeline failure
+                 (propagated from `run_pipeline` / `list_pipelines`)
+
+    Algorithm:
+    1. Build an argparse parser with two subcommands: list and run
+       - list takes no positional arguments
+       - run takes a required name positional argument
+         and a required --port PORT integer option
+    2. Parse argv; on argparse error — exit code 2 (argparse default)
+    3. Resolve the project pipelines directory (project working directory's
+       .goga/pipelines/) and the user pipelines directory (user home's
+       .goga/pipelines/)
+    4. Dispatch:
+       - list → call `list_pipelines`(project_dir, user_dir), print
+         "Available pipelines:" header followed by one entry per line
+         (project source suffixed with " (project)"), return 0
+       - run NAME --port PORT → call `run_pipeline`(NAME, project_dir,
+         user_dir, PORT) and return its exit code (delegates name resolution
+         and the .yml extension to `run_pipeline`)
+    5. Return the resulting exit code
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `argparse` practice for parser construction.
+
+    Requirements:
+    - run subcommand must accept --port PORT as an integer (required)
+    - list subcommand takes no arguments
+    - Echo the header BEFORE the list in list mode (predictable UX)
+
+    Constraints:
+    - Do not allocate a port inside this CLI — --port is required and supplied
+      by the host-side launcher
+    - Do not import this cell from the host side — invoke via docker only
+      (docker run ... python -m goga.pipeline {list,run})
 
 ---
 
@@ -156,5 +218,7 @@ CreatedAt: 29/06/26
 Description: |
   Cell that owns the entire pipeline workaround: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
-  entity model, and run coordination. Subprocess execution is delegated to
-  `run_flow` in goga/afm.
+  entity model, run coordination, and the in-container CLI entrypoint
+  pipeline_cli. Subprocess execution of afm run is delegated to
+  `run_flow` in goga/afm. Invoked inside the goga Docker image via
+  python -m goga.pipeline.

@@ -2,16 +2,23 @@
 
 ## Overview
 
-`goga pipeline [<name>]` is a single command that replaces the former
-two-subcommand surface (`goga flow ls`, `goga flow run <name>`). Its behavior
-depends on whether `name` is given:
+`goga pipeline [<name>]` is a single command. Both modes launch the goga
+Docker container — discovery and run are in-container only. The host never
+reads pipeline files directly.
 
-- **Without `name` (discovery mode):** prints the `Available pipelines:` header
-  followed by the list of available pipelines discovered across the project and
-  user pipeline directories. Read-only; does not invoke `flowmanager`.
-- **With `name` (run mode):** runs the named pipeline via the external
-  `flowmanager` binary. The `.yml` extension is added internally during path
-  resolution — pass the bare name only.
+- **Without `name` (discovery mode):** launches the container to print the
+  `Available pipelines:` header followed by the list of available pipelines
+  discovered inside the container across `/workspace/.goga/pipelines/` and
+  `/home/goga/.goga/pipelines/`. Read-only from the host's perspective.
+- **With `name` (run mode):** launches the container to run the named pipeline
+  via the external `afm` binary inside the container. A free localhost port is
+  allocated and `-p <port>:<port>` is published so the dashboard is reachable
+  at `http://localhost:<port>`.
+
+The boundary between this cell and `goga/pipeline` is **docker runtime**, not
+Python Imports. The host-side launcher (`run_pipeline_container`) assembles a
+docker command and invokes `python -m goga.pipeline {list,run}` inside the
+goga Docker image.
 
 ## Usage — discovery mode (no argument)
 
@@ -36,48 +43,71 @@ The header is always printed, even when the list is empty.
 goga pipeline deploy
 ```
 
+The command allocates a free localhost port, prints `Web UI: http://localhost:<port>`
+to stdout, and launches afm inside the container with that port forwarded.
+
 ## Argument
 
 - `name` (positional, optional) — pipeline name without extension. When absent
   → discovery mode. When provided → run mode.
 
-## Source Directory Resolution
+## What the host does
 
-| Directory     | Path                   |
-|---------------|------------------------|
-| `project_dir` | `<cwd>/.goga/pipelines/`   |
-| `user_dir`    | `~/.goga/pipelines/`       |
+### Discovery mode
 
-If the name exists in both sources, the project source wins.
+1. Loads `.goga/config.yml` via `load_config`.
+2. Verifies docker availability.
+3. Checks `config.image` is set (ClickException otherwise).
+4. Runs `docker run --rm -v <project_dir>:/workspace -w /workspace --entrypoint python3 <config.image> -m goga.pipeline list`.
+5. Propagates the container's exit code.
 
-## Exit Codes (run mode)
+### Run mode
 
-| Exit code | Condition                                                      |
-|-----------|----------------------------------------------------------------|
-| 0         | flowmanager ran the pipeline successfully                      |
-| non-zero  | pipeline not found in either source                            |
-| 127       | `flowmanager` binary not in PATH (propagated from `run_pipeline` → `run_flow`) |
-| non-zero  | flowmanager itself returned a non-zero exit code (propagated)  |
+1. Loads `.goga/config.yml` via `load_config`.
+2. Verifies docker availability; checks `config.image`.
+3. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
+4. Generates an afm-config tmpfile containing `client.command: <config.pipeline.agent>` (mode 0600).
+5. Builds an env-file with `config.pipeline.env` + git identity + extra `KEY=VALUE` pairs (mode 0600).
+6. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
+7. Prints `Web UI: http://localhost:<port>` to stdout.
+8. Runs `docker run --rm -p <port>:<port> -v <project_dir>:/workspace -w /workspace -v <afm_tmpfile>:/home/goga/.afm/config.yaml:ro --env-file <env_file> [--codex mount] --entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`.
+9. In `finally`: deletes tmpfiles and `docker kill`s the container.
 
-## Exit Codes (discovery mode)
+## Container exit code mapping
 
-| Exit code | Condition |
-|-----------|-----------|
-| 0         | always (even if list is empty) |
+| Exit code | Condition                                                                |
+|-----------|--------------------------------------------------------------------------|
+| 0         | Discovery succeeded / afm ran the pipeline successfully                  |
+| 2         | argparse error inside the container (missing NAME, missing/invalid `--port`) |
+| 127       | `afm` not in `$PATH` inside the container                                |
+| 130       | Container received SIGINT (host SIGINT → `docker kill`)                  |
+| non-zero  | Pipeline not found / afm failure (propagated from `run_pipeline`)        |
+
+## Source Directory Resolution (in-container)
+
+| Directory     | In-container path                |
+|---------------|----------------------------------|
+| `project_dir` | `/workspace/.goga/pipelines/`    |
+| `user_dir`    | `/home/goga/.goga/pipelines/`     |
+
+If the name exists in both sources, the project source wins (resolved inside the container by `list_pipelines`).
 
 ## Side Effects
 
-- Discovery mode: reads the filesystem only (no writes).
-- Run mode: inherits all side effects of the invoked pipeline.
+- Discovery mode: launches the container; container reads the filesystem only.
+- Run mode: allocates a localhost port, creates two tmpfiles (afm config, env-file), launches afm inside the container, prints `Web UI: http://localhost:<port>`. The host installs SIGTERM/SIGINT handlers for the lifetime of the run.
 
 ## Preconditions
 
-- (Run mode) The `flowmanager` binary must be in `PATH`.
-- (Run mode) The pipeline name must exist in one of the two source directories.
+- Docker must be installed and available in PATH.
+- `.goga/config.yml` must have the top-level `image` field set.
+- (Run mode) `config.pipeline.agent` is forwarded as afm `client.command` via the tmpfile mount.
 
 ## Anti-patterns
 
+- Do NOT import or call `list_pipelines` or `run_pipeline` from `goga/pipeline` on the host — they run inside the container only.
 - Do not expect `ls` or `run` subcommands — this is a single `goga pipeline` command.
-- Do not expect auto-`--help` when no name is given — the discovery mode output (`Available pipelines:` + list) is shown instead.
+- Do not expect auto-`--help` when no name is given — discovery mode runs the container and prints the list.
 - Do not pass a file path or a name with `.yml` in run mode — pass the bare pipeline name only.
-- Do not copy pipelines into `.flowManager/flows/` just to run them — run mode resolves and passes the absolute path directly.
+- Do not mount afm state under `/workspace` — afm state belongs in `/home/goga/.afm/` inside the container; `/workspace` is the project directory only.
+- Do not write the afm config into the project directory — use a tmpfile + read-only mount instead.

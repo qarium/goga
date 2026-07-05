@@ -2,7 +2,7 @@
 
 ## Purpose
 
-CLI wrapper for the build command. Parses click options, loads configuration, and runs goga.build inside a Docker container.
+CLI wrapper for the build command. Parses click options, loads configuration, and runs `goga.build` inside a Docker container.
 
 ## Syntax
 
@@ -50,7 +50,7 @@ goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-s
 ## Requirements
 
 - Docker must be installed and available in PATH
-- `.goga/config.yml` must have the `build.image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
-- Before launch, the build image is refreshed via `docker pull <build.image>`. This requires network access to the image registry; on pull failure a warning is logged (`failed to pull image '<image>'`) and the build continues with the locally available image
+- `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
+- Before launch, the build image is refreshed via `docker pull <config.image>`. On pull failure a warning is logged and the build continues with the locally available image
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
 - If `~/.codex/auth.json` exists, the file is mounted into the container as read-only (`/home/goga/.codex/auth.json`)

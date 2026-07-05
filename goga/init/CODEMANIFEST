@@ -53,14 +53,16 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Responses for generating .goga/config.yml.
 
-"GogaConfigAnswers(language: str, agent: str, image: str, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
+"GogaConfigAnswers(language: str, agent: str, image: str, pipeline_agent: str, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
   location: answers.py
   annotations: |
     Input data for .goga/config.yml and Dockerfile generation.
 
     `language`: selected project language
-    `agent`: selected AI executor
-    `image`: build Docker image
+    `agent`: selected AI executor (used as build.task_executor.agent)
+    `image`: Docker image (drives the top-level image field, NOT build.image)
+    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command
+    `pipeline_env`: environment variables for the pipeline block
     `env`: environment variables for task_executor
     `codemanifest_usages`: codemanifest practice mappings
     `codemanifest_annotations`: codemanifest annotation block
@@ -69,9 +71,13 @@ Annotations: |
     "language -> str": |
       Selected project language.
     "agent -> str": |
-      Selected AI executor.
+      Selected AI executor. Used as build.task_executor.agent.
     "image -> str": |
-      Build Docker image.
+      Docker image. Drives the top-level image field (NOT build.image).
+    "pipeline_agent -> str": |
+      AI executor used as pipeline.agent (afm client.command inside the container).
+    "pipeline_env -> dict | None": |
+      Environment variables for the pipeline block. None — omit pipeline.env.
     "env -> dict | None": |
       Environment variables for task_executor.
     "codemanifest_usages -> dict | None": |
@@ -106,11 +112,19 @@ Annotations: |
       4. codemanifest_annotations — optional; appended to pre-filled values.
       5. agent — select from (claude, codex).
       6. image — display hints from `image_defaults`, default to the last entry; accept free-form input.
+         Captures the top-level image field (NOT build.image).
       7. dockerfile — optional; prompt to create a custom Dockerfile.
          On acceptance: request path (default "Dockerfile").
       8. env — first propose env keys from `agent_env_defaults` for the selected agent.
+         Drives build.task_executor.env.
          Collect values for each proposed key.
          Then optionally collect arbitrary key-value pairs.
+      9. pipeline_agent — select from (claude, codex); default = agent from step 5.
+         Drives pipeline.agent.
+      10. pipeline_env — propose env keys from `agent_env_defaults` for pipeline_agent (from step 9).
+          Drives pipeline.env.
+          Collect values for each proposed key.
+          Then optionally collect arbitrary key-value pairs.
 
 "FileGenerator()":
   location: generator.py
@@ -123,21 +137,30 @@ Annotations: |
       If dockerfile_path is set — create a Dockerfile with FROM {image}.
       Delegate to generate_goga_config() with answers.goga_config.
     "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
-      If codemanifest_usages contains the key "conventions" — download the convention file
-      from the URL defined by `lang_conventions` (based on language) and save it to .goga/usages/conventions.md.
-      On download failure, raise RuntimeError with the URL and cause; halt execution.
-      Generate .goga/config.yml from GogaConfigAnswers.
-      Create the .goga/ directory if it does not exist.
-      Serialize YAML via yaml.dump() with default_flow_style=False, sort_keys=False to preserve field order.
-      Serialize codemanifest_annotations as a literal block scalar (|) per the `yaml` practice.
+      Algorithm:
+      1. If codemanifest_usages contains the key "conventions" — download the
+         convention file from the URL defined by `lang_conventions` (based on
+         language) and save it to .goga/usages/conventions.md.
+         On download failure — raise RuntimeError with the URL and cause.
+      2. Create the .goga/ directory if it does not exist
+      3. Serialize a YAML document per the `yaml` practice, preserving field
+         order and rendering codemanifest_annotations as a literal block scalar
 
       GogaConfigAnswers → YAML field mapping:
-      - language → language
-      - image → build.image
+      - language → language (top-level)
+      - image → image (top-level)
       - agent → build.task_executor.agent
-      - env → build.task_executor.env (omit if None or empty)
-      - codemanifest_usages → codemanifest.usages (omit if None or empty)
-      - codemanifest_annotations → codemanifest.annotations (omit if None)
+      - env → build.task_executor.env (omit when None or empty)
+      - pipeline_agent → pipeline.agent
+      - pipeline_env → pipeline.env (omit when None or empty)
+      - codemanifest_usages → codemanifest.usages (omit when None or empty)
+      - codemanifest_annotations → codemanifest.annotations (omit when None)
+
+      Requirements:
+      - Emit image as a top-level field
+      - Always emit the pipeline: block (even when pipeline_env is omitted) —
+        pipeline.agent is required by load_config
+      - Field order in the generated YAML: language, image, commands, build, pipeline, codemanifest
 
 "InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":
   location: logic.py

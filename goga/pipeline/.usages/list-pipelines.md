@@ -4,14 +4,16 @@
 
 `list_pipelines` discovers pipeline files across two source directories and
 returns them as `PipelineEntry`-s. Use this when you need to enumerate available
-pipelines (for CLI output, validation, or selection UIs).
+pipelines (for CLI output, validation, or selection UIs). Inside the goga
+Docker image, the source directories are resolved relative to the container's
+filesystem (`/workspace/.goga/pipelines/` and `/home/goga/.goga/pipelines/`).
 
 ## Source Directories
 
-| Parameter      | Typical path              | Meaning                                                  |
-|----------------|---------------------------|----------------------------------------------------------|
-| `project_dir`  | `<cwd>/.goga/pipelines/`  | Project-level pipelines, user-authored. Priority source. |
-| `user_dir`     | `~/.goga/pipelines/`      | User-level pipelines, installed by `goga connect`.       |
+| Parameter      | In-container typical path           | Meaning                                                  |
+|----------------|-------------------------------------|----------------------------------------------------------|
+| `project_dir`  | `/workspace/.goga/pipelines/`       | Project-level pipelines, user-authored. Priority source. |
+| `user_dir`     | `/home/goga/.goga/pipelines/`       | User-level pipelines, installed by `goga connect`.       |
 
 When a pipeline name exists in both, the project source wins.
 
@@ -21,8 +23,8 @@ When a pipeline name exists in both, the project source wins.
 from pathlib import Path
 from goga.pipeline import PipelineEntry, list_pipelines
 
-project_dir = Path.cwd() / ".goga" / "pipelines"
-user_dir = Path.home() / ".goga" / "pipelines"
+project_dir = Path("/workspace/.goga/pipelines")
+user_dir = Path("/home/goga/.goga/pipelines")
 
 entries: list[PipelineEntry] = list_pipelines(project_dir, user_dir)
 for entry in entries:
@@ -62,9 +64,12 @@ must not end with `.yml`, and must not be empty. Invalid names raise `ValueError
 - Pipeline files must reside at the top level of a source directory (subdirectories are not scanned).
 - Pipeline file names must use the `.yml` extension; the returned `PipelineEntry.name` omits it.
 - Stems that fail `PipelineEntry` validation are silently skipped — they are not pipelines.
+- The host-side launcher (`goga/commands/pipeline`) always runs discovery inside the container — never on the host.
 
 ## Anti-patterns
 
 - Do not scan subdirectories — only flat `*.yml` is supported.
-- Do not assume pipelines from `.flowManager/flows/` will appear — that directory is `flowmanager`'s own and unrelated.
+- Do not assume pipelines from `.flowManager/flows/` will appear — that directory is afm's own runtime directory and unrelated.
 - Do not construct `PipelineEntry` with `name="deploy.yml"` or `name="a/b"` — the validator rejects these.
+- Do not call `list_pipelines` from the host — discovery is in-container only; the host invokes `python -m goga.pipeline list` via docker.
+

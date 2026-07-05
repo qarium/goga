@@ -2,7 +2,7 @@ Imports:
   - Types:
       - Config
       - BuildConfig
-      - TaskExecutor
+      - TaskExecutorConfig
       - load_config
     From: goga/config
 
@@ -36,7 +36,7 @@ Annotations: |
        - Verify all project CODEMANIFEST files are committed to git
        - Reject with exit code 1 if any uncommitted manifests are found
     1. Remove .ralphex/ directory if present (applies to all agent types)
-    2. Dispatch agent-specific preconditions based on the agent field from `TaskExecutor`:
+    2. Dispatch agent-specific preconditions based on the agent field from `TaskExecutorConfig`:
        - If agent is not in ("claude", "codex") → fail with "Unsupported agent", exit 1
        - If agent == "claude":
          a. Create .ralphex/claude-wrapper.sh:
@@ -66,8 +66,8 @@ Annotations: |
        - Apply flags with precedence: CLI options > `Config` > omit
     5. On dry_run: print the assembled command and return 0
     6. Execute `ralphex` via subprocess.call with
-       env={**os.environ, **TaskExecutor.env} (build env delivered through the
-       process environment, not via a settings file) and propagate its exit code
+       env = {**os.environ, **`TaskExecutorConfig`.env} (build env delivered through
+       the process environment, not via a settings file) and propagate its exit code
 
     Requirements:
     - `ralphex` must be available on PATH; fail otherwise

@@ -1,16 +1,20 @@
 Imports:
   - Types:
-      - list_pipelines
-      - run_pipeline
-      - PipelineSource
+      - Config
+      - load_config
     Usages:
+      - configuration
+    From: goga/config
+  - Usages:
       - list-pipelines
       - run-pipeline
+      - pipeline-cli
     From: goga/pipeline
 
 Usages:
   conventions: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
+  afm: .goga/usages/cooks/afm.md
 
 Annotations: |
   The `conventions` practice is used for:
@@ -20,27 +24,36 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  Use the `click` practice to build the single `pipeline` command: command
+  Use the `click` practice to build the single pipeline command: command
   registration, optional positional argument, pass_context decorator, echo, and
   exit-code propagation.
 
-  Use `list_pipelines` and `run_pipeline` from Imports for the underlying
-  pipeline discovery and run coordination. The command resolves source
-  directories from the current working directory and the user home.
+  Use the `afm` practice for the in-container binary contract (CLI shape,
+  PATH-resolved invocation, exit codes).
 
-  The command replaces the former two-subcommand flow surface (goga flow ls,
-  goga flow run <name>) with one command whose behavior depends on whether
-  the name argument is provided — discovery mode (no name) and run mode
-  (with name).
+  Use the `pipeline-cli`, `list-pipelines`, and `run-pipeline` practices for
+  the in-container entrypoint contract, discovery output format, and run
+  semantics respectively. These practices describe how the container-side
+  command behaves — the host-side launcher in this cell invokes that contract
+  through docker without importing any Types from goga/pipeline.
+
+  This cell is the host-side launcher only. It assembles a docker command
+  and invokes "python -m goga.pipeline {list,run}" inside the goga Docker image.
+  It does NOT import any Type from goga/pipeline — the runtime boundary to
+  goga/pipeline is docker, not Python Imports. Both discovery and run launch
+  the container; the host never reads pipeline files directly.
+
+  The Docker image is sourced from Config.image — the top-level field shared
+  by build and pipeline. See the `configuration` practice for the schema.
 
 ---
 
 "pipeline(ctx: click.Context, name: str | None)":
   location: pipeline.py
   annotations: |
-    Single CLI command "goga pipeline [<name>]". Replaces the former
-    goga flow ls and goga flow run <name> with one command whose behavior
-    depends on whether `name` is given.
+    Single CLI command "goga pipeline [<name>]". Both modes launch the goga
+    Docker container — discovery and run are in-container only. The host never
+    reads pipeline files directly.
 
     `ctx`: Click execution context, used to propagate exit codes via ctx.exit
            (per the `click` practice)
@@ -53,43 +66,114 @@ Annotations: |
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm:
-    1. Resolve project_dir as <cwd>/.goga/pipelines/
-    2. Resolve user_dir as ~/.goga/pipelines/
-    3. If `name` is None (discovery mode):
-       a. Echo "Available pipelines:" (single header line, per the `click` practice)
-       b. Call `list_pipelines` from Imports with project_dir and user_dir
-          (per the `list-pipelines` practice) to get the list of pipeline entries
-       c. For each entry:
-          - If entry.source == `PipelineSource`.PROJECT → echo "  <name> (project)"
-          - Otherwise → echo "  <name>"
-       d. ctx.exit(0)
-    4. If `name` is provided (run mode):
-       a. Call `run_pipeline` from Imports with `name`, project_dir, user_dir
-          (per the `run-pipeline` practice)
-       b. Propagate the returned exit code via ctx.exit(code)
+    1. Load configuration via `load_config` (Imports) — fails fast on schema errors
+    2. Dispatch to `run_pipeline_container`:
+       - discovery mode (`name` is None) → call with name=None
+       - run mode (`name` provided) → call with name
+    3. Propagate the returned exit code via ctx.exit(code)
 
     Requirements:
     - Declare `name` as an optional positional Click argument (required=False)
     - Pass `ctx` via the @click.pass_context decorator (per the `click` practice)
-    - In discovery mode, echo the header BEFORE the list (so empty lists still
-      print the header — predictable UX)
-    - Propagate non-zero exit codes via ctx.exit(code) in run mode
-    - Output one entry per line in discovery mode, indented by two spaces under
-      the header
+    - Always propagate the container's exit code via ctx.exit(code) — both modes
 
     Constraints:
-    - Do NOT expose separate ls/run subcommands — this is a single command
-    - Do not invoke Click's auto --help on missing name — the discovery mode
-      is explicit click.echo output
-    - Do not call flowmanager directly — go through `run_pipeline` in run mode
-    - Do not resolve the pipeline path in the CLI layer — `run_pipeline` handles
-      resolution
+    - Do not expose separate ls/run subcommands — this is a single command
+    - Do not invoke afm directly from the host — afm runs inside the container
+    - Do not resolve pipeline paths on the host — discovery is in-container
+    - Do not import any Type named list_pipelines or run_pipeline from
+      goga/pipeline — the runtime boundary is docker only
+
+"run_pipeline_container(name: str | None, config: Config) -> exit_code: int":
+  location: run_pipeline_container.py
+  annotations: |
+    Host-side docker launcher. Launches the goga Docker container to run
+    "python -m goga.pipeline" in either discovery (name=None) or run
+    (name provided) mode. Returns the container's exit code.
+
+    `name`: pipeline name without extension. When None → discovery mode.
+            When provided → run mode.
+    `config`: loaded project configuration (provides image, pipeline.agent,
+              pipeline.env)
+    `exit_code`: container exit code (0 success; 2 argparse error in-container;
+                 127 afm missing inside the container; non-zero pipeline failure)
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm (discovery mode, name=None):
+    1. Verify docker availability; raise ClickException when missing
+    2. Verify config.image is set; raise ClickException when None
+    3. Generate a unique container_name
+    4. Install a SIGTERM/SIGINT handler that exits with 128 + signum
+    5. Assemble the docker run command:
+       - --rm, --name <container_name>
+       - Bind-mount the project directory as /workspace and set it as the
+         container working directory
+       - --entrypoint python3 <config.image>
+       - Args: -m goga.pipeline list
+    6. Pull the image; log a warning on failure and continue with the local image
+    7. Launch the container and wait for its exit code, propagating stdout/stderr
+    8. In finally: kill the container (suppress errors) and restore the previous
+       signal handler
+    9. Return the container exit code
+
+    Algorithm (run mode, name provided):
+    1. Verify docker availability; raise ClickException when missing
+    2. Verify config.image is set; raise ClickException when None
+    3. Allocate a free localhost TCP port for the dashboard (bind to ephemeral,
+       read the assigned port, release the socket — accept a small race window)
+    4. Generate a unique container_name
+    5. Create a private afm-config tmpfile (mode 0600) carrying the afm
+       client.command derived from config.pipeline.agent
+    6. Create a private env-file (mode 0600) combining config.pipeline.env,
+       git identity, and any extra KEY=VALUE pairs
+    7. Install a SIGTERM/SIGINT handler that kills the container and exits
+       with 128 + signum
+    8. Print "Web UI: http://localhost:<port>" to stdout
+    9. Assemble the docker run command:
+       - --rm, --name <container_name>
+       - Publish the allocated port on both sides (-p <port>:<port>)
+       - Bind-mount the project directory as /workspace and set it as the
+         container working directory
+       - Bind-mount the afm-config tmpfile read-only at the in-container afm
+         config path
+       - Pass env via --env-file
+       - When ~/.codex/auth.json exists — bind-mount it read-only
+       - --entrypoint python3 <config.image>
+       - Args: -m goga.pipeline run <name> --port <port>
+    10. Pull the image; log a warning on failure and continue with the local image
+    11. Launch the container and wait for its exit code, propagating stdout/stderr
+    12. In finally: delete the afm-config tmpfile, delete the env-file, kill
+        the container (suppress errors), and restore the previous signal handler
+    13. Return the container exit code
+
+    Requirements:
+    - Use the same port value in -p <port>:<port> and in --port <port>
+      (single source — the port allocated in step 3)
+    - afm-config tmpfile mode 0600, content "client.command: <config.pipeline.agent>"
+    - env-file content: config.pipeline.env + git identity + extra KEY=VALUE pairs
+    - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
+    - SIGTERM/SIGINT during run must result in exit code 128 + signum
+      (130 for SIGINT, 143 for SIGTERM)
+    - ~/.codex/auth.json mounted read-only when present
+    - Propagate afm's non-zero exit code as the container's exit code
+
+    Constraints:
+    - Do not mount anything under /workspace other than the project directory —
+      in-container afm state belongs in /home/goga/.afm/
+    - Do not write the afm config into the project directory — use a tmpfile
+      and a read-only mount
+    - Do not invoke list_pipelines or run_pipeline directly — only via
+      "docker run python -m goga.pipeline"
+    - Do not import any Type from goga/pipeline — runtime boundary only
 
 ---
 
 Author: Goga
-CreatedAt: 29/06/26
+CreatedAt: 05/07/26
 Description: |
-  CLI wrapper cell for the single `pipeline` command. Replaces the former
-  goga flow ls and goga flow run surface with one command whose behavior
-  depends on whether the pipeline name is provided (discovery mode vs run mode).
+  Host-side CLI wrapper cell for the single pipeline command. Both discovery
+  mode (no name) and run mode (name provided) launch the goga Docker container
+  and invoke "python -m goga.pipeline {list,run}" inside it. The runtime
+  boundary to goga/pipeline is docker — this cell has no Python Type Imports
+  from goga/pipeline.
