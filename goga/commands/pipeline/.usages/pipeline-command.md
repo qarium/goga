@@ -46,10 +46,28 @@ goga pipeline deploy
 The command allocates a free localhost port, prints `Web UI: http://localhost:<port>`
 to stdout, and launches afm inside the container with that port forwarded.
 
+To pass extra environment variables into the container (e.g. an agent
+authorization token), repeat `-e KEY=VALUE` (or `--env KEY=VALUE`) on the
+host-side invocation. The strings are appended to the container env-file
+verbatim, with no validation — the same semantics as `goga build -e`:
+
+```bash
+goga pipeline deploy -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
+```
+
 ## Argument
 
 - `name` (positional, optional) — pipeline name without extension. When absent
   → discovery mode. When provided → run mode.
+
+## Options
+
+- `-e` / `--env` `KEY=VALUE` (repeatable) — pass environment variables into the
+  container through `--env-file`. Effective only in **run mode**: discovery
+  mode never writes an env-file, so `-e` is accepted but ignored when no
+  `name` is given. Later duplicates override earlier ones inside the container
+  (Docker `--env-file` semantics); strings are forwarded as-is, with no
+  validation, mirroring `goga build -e`.
 
 ## What the host does
 
@@ -67,7 +85,7 @@ to stdout, and launches afm inside the container with that port forwarded.
 2. Verifies docker availability; checks `config.image`.
 3. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
 4. Generates an afm-config tmpfile containing `client.command: <config.pipeline.agent>` (mode 0600).
-5. Builds an env-file with `config.pipeline.env` + git identity + extra `KEY=VALUE` pairs (mode 0600).
+5. Builds an env-file with `config.pipeline.env` + git identity + extra `KEY=VALUE` pairs supplied via `-e/--env` (mode 0600).
 6. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
 7. Prints `Web UI: http://localhost:<port>` to stdout.
 8. Runs `docker run --rm -p <port>:<port> -v <project_dir>:/workspace -w /workspace -v <afm_tmpfile>:/home/goga/.afm/config.yaml:ro --env-file <env_file> [--codex mount] --entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`.

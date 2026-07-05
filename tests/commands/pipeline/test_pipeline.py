@@ -50,10 +50,25 @@ class TestPipelineContract:
         name_param = next(p for p in pipeline.params if isinstance(p, click.Argument) and p.name == "name")
         assert name_param.required is False
 
+    def test_pipeline_callback_takes_extra_env_option(self) -> None:
+        """The pipeline command exposes a `-e/--env` Click option (multiple)."""
+        env_option = next(
+            (p for p in pipeline.params if isinstance(p, click.Option) and p.name == "extra_env"),
+            None,
+        )
+        assert env_option is not None, "pipeline command must define an `extra_env` Click option"
+        # Both short and long forms must be registered, matching `goga build`.
+        assert "-e" in env_option.opts
+        assert "--env" in env_option.opts
+        # Click `multiple=True` always passes an empty tuple to the callback when
+        # the flag is absent (independent of `default`), which preserves the
+        # pre-option behavior of `goga pipeline`.
+        assert env_option.multiple is True
+
 
 class TestPipelineLogic:
     def test_pipeline_delegates_to_run_pipeline_container_discovery(self) -> None:
-        """pipeline (no name) delegates to run_pipeline_container with (None, config)."""
+        """pipeline (no name) delegates to run_pipeline_container with (None, config, ())."""
         config = _make_config()
         runner = CliRunner()
         with (
@@ -63,10 +78,10 @@ class TestPipelineLogic:
             result = runner.invoke(pipeline, [])
 
         assert result.exit_code == 0
-        mock_rpc.assert_called_once_with(None, config)
+        mock_rpc.assert_called_once_with(None, config, ())
 
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
-        """pipeline <name> delegates to run_pipeline_container with (name, config)."""
+        """pipeline <name> delegates to run_pipeline_container with (name, config, ())."""
         config = _make_config()
         runner = CliRunner()
         with (
@@ -76,7 +91,40 @@ class TestPipelineLogic:
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == 0
-        mock_rpc.assert_called_once_with("deploy", config)
+        mock_rpc.assert_called_once_with("deploy", config, ())
+
+    def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
+        """`-e KEY=VALUE` (repeatable) is forwarded as a tuple to run_pipeline_container."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(
+                pipeline,
+                ["deploy", "-e", "ANTHROPIC_API_TOKEN=sk-xxx", "-e", "MODEL=claude-sonnet-4-6"],
+            )
+
+        assert result.exit_code == 0
+        mock_rpc.assert_called_once_with(
+            "deploy",
+            config,
+            ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
+        )
+
+    def test_pipeline_accepts_long_env_option(self) -> None:
+        """The `--env KEY=VALUE` long form is accepted identically to `-e`."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, ["deploy", "--env", "FOO=bar"])
+
+        assert result.exit_code == 0
+        mock_rpc.assert_called_once_with("deploy", config, ("FOO=bar",))
 
     @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])
     def test_pipeline_propagates_exit_code(self, exit_code: int) -> None:

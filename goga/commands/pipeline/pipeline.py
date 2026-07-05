@@ -9,8 +9,19 @@ from .run_pipeline_container import run_pipeline_container
 
 @click.command()
 @click.argument("name", required=False)
+@click.option(
+    "-e",
+    "--env",
+    "extra_env",
+    multiple=True,
+    help="Pass env var to container (KEY=VALUE). Effective only in run mode.",
+)
 @click.pass_context
-def pipeline(ctx: click.Context, name: str | None) -> None:
+def pipeline(
+    ctx: click.Context,
+    name: str | None,
+    extra_env: tuple[str, ...],
+) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
     Both modes launch the goga Docker container and delegate to
@@ -28,6 +39,9 @@ def pipeline(ctx: click.Context, name: str | None) -> None:
         ctx: Click execution context used to propagate the exit code.
         name: pipeline name without extension (e.g. ``"deploy"``). When ``None``
             selects discovery mode.
+        extra_env: additional ``KEY=VALUE`` strings forwarded into the container
+            env-file in run mode (e.g. an agent authorization token). Ineffective
+            in discovery mode, which never writes an env-file.
 
     Raises:
         click.ClickException: When ``.goga/config.yml`` cannot be loaded.
@@ -37,5 +51,5 @@ def pipeline(ctx: click.Context, name: str | None) -> None:
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    exit_code = run_pipeline_container(name, config)
+    exit_code = run_pipeline_container(name, config, extra_env)
     ctx.exit(exit_code)

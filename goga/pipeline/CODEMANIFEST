@@ -10,6 +10,15 @@ Usages:
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
     Two subcommands: list (no args) and run NAME --port PORT.
+  cli_entrypoint: |
+    The in-container CLI is launched through the package runpy entrypoint
+    (python -m goga.pipeline). The package __main__ module MUST stay a thin
+    wrapper: it imports `pipeline_cli` from the local cli module and calls
+    it with process argv under the standard __main__ guard. The
+    `pipeline_cli` implementation itself MUST live in the cli module —
+    never in the __main__ module — so that importing the goga.pipeline
+    package does not pull __main__ into sys.modules and trigger a runpy
+    RuntimeWarning about __main__ being pre-imported.
 
 Annotations: |
   The `conventions` practice is used for:
@@ -30,13 +39,17 @@ Annotations: |
   `PipelineEntry`, per project convention — pydantic is treated as tech debt.
   Use the standard library enum module for `PipelineSource` (str-backed).
   Use the `argparse` practice for the in-container CLI entrypoint.
+  Use the `cli_entrypoint` practice to keep the __main__ module a thin
+  wrapper and to ensure `pipeline_cli` is defined in the cli module — never
+  in __main__ — so that the python -m goga.pipeline invocation does not emit
+  a runpy RuntimeWarning about __main__ being pre-imported into sys.modules.
   Use pathlib.Path for directory and path resolution.
 
   The pipeline directories are <cwd>/.goga/pipelines/ (project-level,
   user-authored) and ~/.goga/pipelines/ (user-level, populated by
   goga connect). On a name conflict, the project source wins.
 
-  This cell runs inside the goga Docker image when invoked via
+  This cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline. The host-side launcher lives in
   goga/commands/pipeline (docker runtime boundary — no Python Imports).
 
@@ -167,13 +180,14 @@ Annotations: |
       be absolute when passed in
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
-  location: __main__.py
+  location: cli.py
   annotations: |
-    In-container CLI entrypoint for python -m goga.pipeline. Parses argv via
-    argparse and dispatches to `list_pipelines` (discovery) or `run_pipeline`
-    (run). This is the entrypoint invoked by the host-side docker launcher in
-    goga/commands/pipeline — never imported by Python from the host side
-    (runtime docker boundary, no Imports).
+    In-container CLI implementation for python -m goga.pipeline. Parses argv
+    via argparse and dispatches to `list_pipelines` (discovery) or
+    `run_pipeline` (run). This routine is invoked by the host-side docker
+    launcher in goga/commands/pipeline through the runpy entrypoint in
+    __main__.py — never imported by Python from the host side (runtime
+    docker boundary, no Imports).
 
     `argv`: argument list (typically the process argv minus the program name)
     `exit_code`: 0 on success, 2 on argparse error, non-zero on pipeline failure
@@ -199,6 +213,9 @@ Annotations: |
 
     Apply the `conventions` practice for docstring style and intra-package imports.
     Apply the `argparse` practice for parser construction.
+    Apply the `cli_entrypoint` practice: this routine MUST be defined in the
+    cli module, and __main__ MUST only delegate to it — never define
+    `pipeline_cli` inside __main__.
 
     Requirements:
     - run subcommand must accept --port PORT as an integer (required)

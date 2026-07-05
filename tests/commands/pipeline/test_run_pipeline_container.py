@@ -41,12 +41,19 @@ class TestRunPipelineContainerContract:
         """run_pipeline_container is importable from goga.commands.pipeline."""
         assert run_pipeline_container is rpc
 
-    def test_signature_name_and_config(self) -> None:
-        """Signature is exactly (name, config)."""
+    def test_signature_name_config_extra_env(self) -> None:
+        """Signature is exactly (name, config, extra_env)."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
-        assert params == ["name", "config"]
+        assert params == ["name", "config", "extra_env"]
+
+    def test_extra_env_has_empty_tuple_default(self) -> None:
+        """`extra_env` defaults to an empty tuple for backward compatibility."""
+        import inspect
+
+        sig = inspect.signature(rpc).parameters["extra_env"]
+        assert sig.default == ()
 
 
 # --- Discovery mode ---
@@ -163,6 +170,56 @@ class TestPipelineRunCommand:
         assert not any(arg.endswith(":/workspace/.afm") for arg in cmd)
         assert not any(arg.endswith(":/workspace/.afm/config.yaml") for arg in cmd)
 
+    def test_pipeline_run_does_not_mount_host_user_pipelines(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode never bind-mounts the host's ~/.goga/pipelines into the container.
+
+        The image is populated at build time via `RUN goga connect ...` in the
+        Dockerfile; in-container /home/goga/.goga/pipelines reflects the image's
+        user pipelines. Bind-mounting the host directory overwrites the image's
+        pipelines with the host's, breaking in-container isolation.
+        """
+        config = _make_config()
+        fake_home = tmp_path / "home"
+        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
+        assert not any(arg.endswith(":/home/goga/.goga/pipelines") for arg in cmd)
+
+    def test_pipeline_discovery_does_not_mount_host_user_pipelines(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mode never bind-mounts the host's ~/.goga/pipelines into the container."""
+        config = _make_config()
+        fake_home = tmp_path / "home"
+        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container(None, config)
+
+        cmd = mock_popen.call_args[0][0]
+        assert not any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
+        assert not any(arg.endswith(":/home/goga/.goga/pipelines") for arg in cmd)
+
 
 # --- afm config tmpfile ---
 
@@ -196,9 +253,9 @@ class TestPipelineEnvFile:
         captured_env: dict[str, str] = {}
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str]) -> Path:
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
             captured_env.update(env)
-            return real_write(env)
+            return real_write(env, extra_env)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -229,9 +286,9 @@ class TestPipelineEnvFile:
         captured_env: dict[str, str] = {}
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str]) -> Path:
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
             captured_env.update(env)
-            return real_write(env)
+            return real_write(env, extra_env)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -244,6 +301,69 @@ class TestPipelineEnvFile:
             run_pipeline_container("deploy", config)
 
         assert captured_env["GIT_AUTHOR_NAME"] == "from-pipeline"
+
+    def test_pipeline_env_file_appends_extra_env_lines(self, tmp_path: Path, monkeypatch) -> None:
+        """`extra_env` KEY=VALUE strings are appended to the env-file verbatim.
+
+        Mirrors `goga/commands/build._write_env_file`: no validation, later
+        duplicates override earlier ones inside the container (Docker
+        `--env-file` semantics). Default empty tuple writes the same content as
+        before the option existed.
+        """
+        env_path = _rpc_mod._write_env_file({"FOO": "1"}, ("BAR=2", "BAZ=qux"))
+        try:
+            content = env_path.read_text()
+        finally:
+            env_path.unlink(missing_ok=True)
+
+        lines = content.splitlines()
+        assert "FOO=1" in lines
+        assert "BAR=2" in lines
+        assert "BAZ=qux" in lines
+        # extra_env lines come after the dict lines
+        assert lines.index("BAR=2") > lines.index("FOO=1")
+
+    def test_pipeline_env_file_default_extra_env_is_empty(self, tmp_path: Path, monkeypatch) -> None:
+        """Default `extra_env=()` writes the same content as before the option."""
+        env_path = _rpc_mod._write_env_file({"FOO": "1"})
+        try:
+            content = env_path.read_text()
+        finally:
+            env_path.unlink(missing_ok=True)
+
+        assert content == "FOO=1\n"
+
+    def test_pipeline_run_forwards_extra_env_to_write_env_file(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode forwards extra_env to _write_env_file in run mode."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            captured["env"] = dict(env)
+            captured["extra_env"] = extra_env
+            return real_write(env, extra_env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container(
+                "deploy",
+                config,
+                ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
+            )
+
+        assert captured["extra_env"] == ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6")
 
 
 # --- cleanup on setup failure ---
@@ -273,7 +393,7 @@ class TestRunModeCleanup:
 
         monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
 
-        def raising_write(env: dict[str, str]) -> Path:
+        def raising_write(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
             raise OSError("disk full")
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", raising_write)
@@ -288,82 +408,6 @@ class TestRunModeCleanup:
         # the afm tmpfile was unlinked despite the failure in _write_env_file
         assert created_afm
         assert all(not p.exists() for p in created_afm)
-
-
-# --- user-level pipelines mount ---
-
-
-class TestUserPipelinesMount:
-    def test_discovery_mounts_user_pipelines_dir_when_present(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mounts ~/.goga/pipelines read-only when the host dir exists.
-
-        User pipelines installed by `goga connect` live in ~/.goga/pipelines and
-        must be discoverable in-container at /home/goga/.goga/pipelines.
-        """
-        config = _make_config()
-        fake_home = tmp_path / "home"
-        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
-        monkeypatch.setattr(Path, "home", lambda: fake_home)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config)
-
-        cmd = mock_popen.call_args[0][0]
-        assert any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
-
-    def test_run_mounts_user_pipelines_dir_when_present(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode mounts ~/.goga/pipelines read-only when the host dir exists."""
-        config = _make_config()
-        fake_home = tmp_path / "home"
-        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
-        monkeypatch.setattr(Path, "home", lambda: fake_home)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container("deploy", config)
-
-        cmd = mock_popen.call_args[0][0]
-        assert any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
-
-    def test_user_pipelines_mount_omitted_when_absent(self, tmp_path: Path, monkeypatch) -> None:
-        """No user-pipelines mount when ~/.goga/pipelines does not exist.
-
-        Skipping the mount avoids Docker creating the directory on the host.
-        """
-        config = _make_config()
-        fake_home = tmp_path / "home"
-        fake_home.mkdir(parents=True)  # home exists, but no .goga/pipelines
-        monkeypatch.setattr(Path, "home", lambda: fake_home)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
-        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container("deploy", config)
-
-        cmd = mock_popen.call_args[0][0]
-        assert not any("/home/goga/.goga/pipelines" in arg for arg in cmd)
 
 
 # --- failure modes ---

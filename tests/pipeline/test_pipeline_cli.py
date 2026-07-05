@@ -8,12 +8,12 @@ from unittest import mock
 import pytest
 from goga.pipeline import pipeline_cli
 
-# Importing ``pipeline_cli`` from the package __init__ shadows the ``__main__``
+# Importing ``pipeline_cli`` from the package __init__ shadows the ``cli``
 # submodule name in attribute access, so a string-based ``mock.patch`` path is
 # unreliable on Python 3.10. Resolve the real module via ``sys.modules`` and
 # patch its ``run_pipeline`` attribute directly. Per
 # [[feedback_mock_patch_module_shadowing]].
-_main_module = sys.modules["goga.pipeline.__main__"]
+_cli_module = sys.modules["goga.pipeline.cli"]
 
 
 class TestPipelineCliContract:
@@ -96,7 +96,7 @@ class TestPipelineCliLogic:
         monkeypatch.setattr(Path, "home", lambda: user_root)
 
         with mock.patch.object(
-            _main_module,
+            _cli_module,
             "run_pipeline",
             return_value=0,
         ) as mock_run_pipeline:

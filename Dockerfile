@@ -42,5 +42,7 @@ WORKDIR /workspace
 
 USER goga
 
+RUN goga connect claude codex
+
 ENTRYPOINT ["goga"]
 CMD ["goga"]

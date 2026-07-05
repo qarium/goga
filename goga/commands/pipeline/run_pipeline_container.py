@@ -97,11 +97,18 @@ def _read_git_config() -> dict[str, str]:
     }
 
 
-def _write_env_file(env: dict[str, str]) -> Path:
+def _write_env_file(
+    env: dict[str, str],
+    extra_env: tuple[str, ...] = (),
+) -> Path:
     """Write environment variables to a private temporary env file (mode 0600).
 
     Args:
         env: Mapping of environment variables to write as KEY=VALUE lines.
+        extra_env: Additional raw KEY=VALUE strings to append verbatim, mirroring
+            ``goga/commands/build._write_env_file``. No validation is performed —
+            strings are written as-is, and later duplicates override earlier ones
+            inside the container (the same semantics as the build command).
 
     Returns:
         Path to the written temporary file.
@@ -111,6 +118,8 @@ def _write_env_file(env: dict[str, str]) -> Path:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
         for k, v in env.items():
             f.write(f"{k}={v}\n")
+        for pair in extra_env:
+            f.write(f"{pair}\n")
     return Path(path)
 
 
@@ -152,31 +161,14 @@ def _write_afm_config_tmpfile(agent: str) -> Path:
     return Path(path)
 
 
-def _append_user_pipelines_mount(cmd: list[str]) -> None:
-    """Append the user-level pipelines bind mount to ``cmd`` when it exists.
-
-    The in-container entrypoint resolves ``user_dir = Path.home() /
-    ".goga" / "pipelines"`` (``/home/goga/.goga/pipelines``). User pipelines
-    installed by ``goga connect`` live in the host's ``~/.goga/pipelines``; that
-    directory is mounted read-only at the matching in-container path so user
-    pipelines are discoverable and runnable. The mount is skipped when the host
-    directory is absent (avoids Docker creating it on the host).
-
-    Args:
-        cmd: The docker command list to extend in place.
-    """
-    user_pipelines = Path.home() / ".goga" / "pipelines"
-    if user_pipelines.is_dir():
-        cmd.extend(["-v", f"{user_pipelines}:/home/goga/.goga/pipelines:ro"])
-
-
 def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
     """Assemble the discovery-mode docker command (``-m goga.pipeline list``).
 
-    Mounts the project at ``/workspace`` and, when present, the user-level
-    pipelines directory (``~/.goga/pipelines``) read-only at
-    ``/home/goga/.goga/pipelines`` so user pipelines installed by ``goga connect``
-    are discoverable in-container.
+    Mounts the project at ``/workspace``. User pipelines are NOT bind-mounted
+    from the host: the image is populated at build time via
+    ``RUN goga connect ...`` in the Dockerfile, so ``/home/goga/.goga/pipelines``
+    inside the container reflects the image's user pipelines and discovery runs
+    entirely in-container.
 
     Args:
         image: Docker image to run.
@@ -197,7 +189,6 @@ def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
         "-w",
         "/workspace",
     ]
-    _append_user_pipelines_mount(cmd)
     cmd.extend(
         [
             "--entrypoint",
@@ -223,10 +214,11 @@ def _build_run_cmd(  # noqa: PLR0913
 
     Builds ``docker run ... -m goga.pipeline run <name> --port <port>`` with the
     project mounted at ``/workspace``, the afm-config tmpfile mounted read-only
-    at ``/home/goga/.afm/config.yaml``, the env-file, the published port, an
-    optional read-only ``~/.codex/auth.json`` mount, and (when present) the
-    user-level pipelines directory mounted read-only at
-    ``/home/goga/.goga/pipelines``.
+    at ``/home/goga/.afm/config.yaml``, the env-file, the published port, and an
+    optional read-only ``~/.codex/auth.json`` mount. User pipelines are NOT
+    bind-mounted from the host: the image is populated at build time via
+    ``RUN goga connect ...`` in the Dockerfile, so ``/home/goga/.goga/pipelines``
+    inside the container reflects the image's user pipelines.
 
     Args:
         image: Docker image to run.
@@ -261,8 +253,6 @@ def _build_run_cmd(  # noqa: PLR0913
     codex_auth = Path.home() / ".codex" / "auth.json"
     if codex_auth.is_file():
         cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
-
-    _append_user_pipelines_mount(cmd)
 
     cmd.extend(
         [
@@ -318,13 +308,21 @@ def _run_discovery(config: Config, container_name: str) -> int:
         signal.signal(signal.SIGINT, prev_int)
 
 
-def _run_named(name: str, config: Config, container_name: str) -> int:
+def _run_named(
+    name: str,
+    config: Config,
+    container_name: str,
+    extra_env: tuple[str, ...] = (),
+) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
     Args:
         name: Pipeline name without extension.
         config: Loaded project configuration.
         container_name: Name assigned to the container.
+        extra_env: Additional raw KEY=VALUE strings forwarded into the container
+            env-file (e.g. agent authorization tokens). Default is empty —
+            existing callers that omit it observe the previous behavior.
 
     Returns:
         The container's exit code.
@@ -343,10 +341,10 @@ def _run_named(name: str, config: Config, container_name: str) -> int:
         afm_config = _write_afm_config_tmpfile(config.pipeline.agent)
         git_env = _read_git_config()
         env = {**git_env, **config.pipeline.env}
-        env_file = _write_env_file(env)
+        env_file = _write_env_file(env, extra_env)
         click.echo(f"Web UI: http://localhost:{port}")
         cmd = _build_run_cmd(config.image, container_name, port, name, afm_config, env_file)
-        _pull_image(config.image)
+        # _pull_image(config.image)
         proc = subprocess.Popen(cmd)
         return proc.wait()
     finally:
@@ -363,25 +361,36 @@ def _run_named(name: str, config: Config, container_name: str) -> int:
         signal.signal(signal.SIGINT, prev_int)
 
 
-def run_pipeline_container(name: str | None, config: Config) -> int:
+def run_pipeline_container(
+    name: str | None,
+    config: Config,
+    extra_env: tuple[str, ...] = (),
+) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
     Discovery mode (``name is None``) runs ``-m goga.pipeline list``. Run mode
     (``name`` provided) allocates a free port, writes a private afm-config
     tmpfile (``client.command: <config.pipeline.agent>``) mounted read-only at
     ``/home/goga/.afm/config.yaml``, writes a private env-file combining
-    ``config.pipeline.env`` and git identity, prints the Web UI URL, and runs
-    ``-m goga.pipeline run <name> --port <port>``.
+    ``config.pipeline.env``, git identity, and ``extra_env`` (raw KEY=VALUE
+    strings, e.g. an agent authorization token supplied via ``-e/--env``),
+    prints the Web UI URL, and runs ``-m goga.pipeline run <name> --port <port>``.
 
-    Both modes mount the project at ``/workspace`` and, when the host directory
-    exists, the user-level pipelines directory (``~/.goga/pipelines``) read-only
-    at ``/home/goga/.goga/pipelines`` so user pipelines installed by
-    ``goga connect`` are discoverable and runnable in-container.
+    Both modes mount the project at ``/workspace``. User pipelines are NOT
+    bind-mounted from the host: the image is populated at build time via
+    ``RUN goga connect ...`` in the Dockerfile, so ``/home/goga/.goga/pipelines``
+    inside the container reflects the image's user pipelines and discovery/run
+    operate entirely in-container.
 
     Args:
         name: Pipeline name without extension. ``None`` selects discovery mode.
         config: Loaded project configuration (provides ``image``,
             ``pipeline.agent``, ``pipeline.env``).
+        extra_env: Additional raw KEY=VALUE strings forwarded into the container
+            env-file in run mode (e.g. agent authorization tokens supplied via
+            the host-side ``-e/--env`` Click option). Default is empty — callers
+            that omit it observe the previous behavior. Ignored in discovery
+            mode (``name is None``), which never writes an env-file.
 
     Returns:
         The container's exit code.
@@ -401,4 +410,4 @@ def run_pipeline_container(name: str | None, config: Config) -> int:
     if name is None:
         return _run_discovery(config, container_name)
 
-    return _run_named(name, config, container_name)
+    return _run_named(name, config, container_name, extra_env)

@@ -48,43 +48,56 @@ Annotations: |
 
 ---
 
-"pipeline(ctx: click.Context, name: str | None)":
+"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...])":
   location: pipeline.py
   annotations: |
-    Single CLI command "goga pipeline [<name>]". Both modes launch the goga
-    Docker container — discovery and run are in-container only. The host never
-    reads pipeline files directly.
+    Single CLI command "goga pipeline". Both modes launch the goga Docker
+    container — discovery and run are in-container only. The host never reads
+    pipeline files directly.
 
-    `ctx`: Click execution context, used to propagate exit codes via ctx.exit
-           (per the `click` practice)
+    `ctx`: Click execution context, used to propagate exit codes (per the
+           `click` practice)
     `name`: optional positional argument — pipeline name without extension.
             When None → discovery mode. When provided → run mode.
+    `extra_env`: raw KEY=VALUE strings collected from the repeatable short/long
+                 env option exposed by this command, forwarded into the
+                 container env-file in run mode (e.g. an agent authorization
+                 token). Ineffective in discovery mode, which never writes an
+                 env-file.
 
-    Apply the `click` practice for command registration (@click.command), the
-    optional positional argument (@click.argument("name", required=False)), and
-    the @click.pass_context decorator.
+    Apply the `click` practice for the command surface: a single command (not a
+    group), the optional positional `name` argument, the pass_context pattern,
+    and the repeatable short/long env option bound to `extra_env` for
+    environment passthrough into the container.
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm:
     1. Load configuration via `load_config` (Imports) — fails fast on schema errors
-    2. Dispatch to `run_pipeline_container`:
-       - discovery mode (`name` is None) → call with name=None
-       - run mode (`name` provided) → call with name
-    3. Propagate the returned exit code via ctx.exit(code)
+    2. Collect `extra_env` from the repeatable env option (empty when the flag
+       is absent)
+    3. Dispatch to `run_pipeline_container`:
+       - discovery mode (`name` is None) → call with name=None and `extra_env`
+         (extra_env has no effect in discovery — env-file is not written)
+       - run mode (`name` provided) → call with name and `extra_env`
+    4. Propagate the returned exit code via the click context (per the `click`
+       practice)
 
     Requirements:
-    - Declare `name` as an optional positional Click argument (required=False)
-    - Pass `ctx` via the @click.pass_context decorator (per the `click` practice)
-    - Always propagate the container's exit code via ctx.exit(code) — both modes
+    - Expose the repeatable short/long env option (-e/--env KEY=VALUE) bound
+      to `extra_env` for environment passthrough into the container
+    - Expose `name` as an optional positional argument
+    - Always propagate the container's exit code through the click context —
+      both modes
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
     - Do not invoke afm directly from the host — afm runs inside the container
     - Do not resolve pipeline paths on the host — discovery is in-container
+    - Do not validate the KEY=VALUE format — strings are forwarded as-is
     - Do not import any Type named list_pipelines or run_pipeline from
       goga/pipeline — the runtime boundary is docker only
 
-"run_pipeline_container(name: str | None, config: Config) -> exit_code: int":
+"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...]) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher. Launches the goga Docker container to run
@@ -95,6 +108,9 @@ Annotations: |
             When provided → run mode.
     `config`: loaded project configuration (provides image, pipeline.agent,
               pipeline.env)
+    `extra_env`: raw KEY=VALUE strings (default empty) forwarded into the
+                 container env-file in run mode. Default empty preserves the
+                 pre-option behavior; ignored in discovery mode.
     `exit_code`: container exit code (0 success; 2 argparse error in-container;
                  127 afm missing inside the container; non-zero pipeline failure)
 
@@ -117,6 +133,8 @@ Annotations: |
        signal handler
     9. Return the container exit code
 
+    Note: discovery mode ignores `extra_env` — no env-file is written.
+
     Algorithm (run mode, name provided):
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
@@ -126,7 +144,8 @@ Annotations: |
     5. Create a private afm-config tmpfile (mode 0600) carrying the afm
        client.command derived from config.pipeline.agent
     6. Create a private env-file (mode 0600) combining config.pipeline.env,
-       git identity, and any extra KEY=VALUE pairs
+       git identity, and the `extra_env` KEY=VALUE strings (forwarded as-is,
+       no validation)
     7. Install a SIGTERM/SIGINT handler that kills the container and exits
        with 128 + signum
     8. Print "Web UI: http://localhost:<port>" to stdout
@@ -151,7 +170,9 @@ Annotations: |
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
     - afm-config tmpfile mode 0600, content "client.command: <config.pipeline.agent>"
-    - env-file content: config.pipeline.env + git identity + extra KEY=VALUE pairs
+    - env-file content: config.pipeline.env + git identity + `extra_env`
+      KEY=VALUE strings (forwarded as-is, no validation)
+    - `extra_env` default is an empty tuple, preserving the pre-option behavior
     - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
     - SIGTERM/SIGINT during run must result in exit code 128 + signum
       (130 for SIGINT, 143 for SIGTERM)

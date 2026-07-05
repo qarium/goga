@@ -275,7 +275,7 @@ class TestHostEndToEnd:
 
         runner = CliRunner()
         with (
-            mock.patch.object(sys.modules["goga.pipeline.__main__"], "pipeline_cli", return_value=exit_code),
+            mock.patch.object(sys.modules["goga.pipeline.cli"], "pipeline_cli", return_value=exit_code),
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
@@ -309,3 +309,44 @@ class TestCommandRegistration:
         assert result.exit_code == 0
         assert "pipeline" in result.output
         assert "flow" not in result.output
+
+
+class TestPythonMEntrypoint:
+    """``python -m goga.pipeline`` runpy entrypoint regressions.
+
+    The package ``__init__`` must not import ``pipeline_cli`` from
+    ``__main__`` — otherwise ``runpy`` finds ``goga.pipeline.__main__`` in
+    ``sys.modules`` before executing it and emits a ``RuntimeWarning`` for
+    ``python -m goga.pipeline``. The CLI implementation lives in ``cli.py``;
+    ``__main__.py`` is a thin wrapper that delegates to it.
+    """
+
+    def test_python_m_pipeline_does_not_emit_runtime_warning(self) -> None:
+        """``python -m goga.pipeline list`` runs without any RuntimeWarning."""
+        project_root = Path(__file__).parent.parent.parent
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-W",
+                "error::RuntimeWarning",
+                "-m",
+                "goga.pipeline",
+                "list",
+            ],
+            cwd=project_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0, result.stderr
+        assert "RuntimeWarning" not in result.stderr
+        assert "Available pipelines:" in result.stdout
+
+    def test_main_module_is_thin_wrapper_around_cli(self) -> None:
+        """``__main__.py`` imports ``pipeline_cli`` from ``.cli`` and defines nothing else."""
+        main_path = Path(__file__).parent.parent.parent / "goga" / "pipeline" / "__main__.py"
+        source = main_path.read_text()
+
+        assert "from .cli import pipeline_cli" in source
+        assert "def pipeline_cli" not in source
