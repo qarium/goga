@@ -143,7 +143,7 @@ afm) that consume these fields.
 | `build.review_patience`     | int     | None                   | Review convergence threshold                            |
 | `build.prompts_dir`         | str     | None                   | Custom prompt directory path                            |
 | `build.agents_dir`          | str     | None                   | Custom agent directory path                             |
-| `build.codex_review`        | bool    | None                   | Enable external codex review                            |
+| `build.codex_review`        | bool    | None                   | Enable external codex review (mapped to ralphex `codex_enabled`) |
 | `codemanifest`              | mapping | None                   | CODEMANIFEST usage and annotation config                |
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |

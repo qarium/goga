@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-
 from goga.agents.wrapper.resolve import resolve_wrapper_path
 
 
@@ -35,7 +34,7 @@ class TestResolveWrapperPathContract:
 
 class TestResolveWrapperPathLogic:
     @pytest.mark.parametrize(
-        "agent,expected",
+        ("agent", "expected"),
         [
             ("claude", "/home/goga/bin/claude-as-claude.sh"),
             ("codex", "/home/goga/bin/codex-as-claude.sh"),

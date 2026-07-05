@@ -169,6 +169,32 @@ class TestWriteRalphexConfig:
         entries = {p.name for p in ralphex_dir.iterdir()}
         assert entries == {"config"}
 
+    def test_overwrites_stale_config_without_merging(self, tmp_path, monkeypatch) -> None:
+        """A pre-existing .ralphex/config is overwritten, not merged into."""
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "config").write_text("stale_key = stale_value\nclaude_command = OLD_PATH\n")
+
+        config = _make_config(agent="codex")
+        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
+
+        config_text = (ralphex_dir / "config").read_text()
+        assert "stale_key" not in config_text
+        assert "OLD_PATH" not in config_text
+        keys = {line.split(" = ", 1)[0] for line in config_text.strip().splitlines() if " = " in line}
+        assert keys == {"claude_command", "claude_args", "codex_enabled"}
+
+    def test_codex_review_none_maps_to_codex_enabled_false(self, tmp_path, monkeypatch) -> None:
+        """An explicit codex_review=None still renders codex_enabled = false."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config(codex_review=None)
+
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = false" in config_text
+
 
 class TestCopyDefaults:
     def test_prompts_copied(self, tmp_path, monkeypatch) -> None:

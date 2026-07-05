@@ -14,9 +14,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
-RALPHEX_CONFIG_DEFAULTS = {
-    "claude_args": "--dangerously-skip-permissions --output-format stream-json --verbose",
-}
+_DEFAULT_CLAUDE_ARGS = "--dangerously-skip-permissions --output-format stream-json --verbose"
 
 
 def _unquote_git_path(raw: str) -> str | None:
@@ -74,8 +72,9 @@ def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
 
     Populates the ralphex config keys covered by the agent-wrappers contract:
     `claude_command` set to the resolved absolute wrapper path, `claude_args`
-    defaults applied, and `codex_enabled` derived from `BuildConfig`. No
-    codex-specific ralphex keys are written.
+    set to its fixed default (no config field overrides it today), and
+    `codex_enabled` derived from `BuildConfig`. No codex-specific ralphex keys
+    are written.
 
     Args:
         config: Project configuration with build settings.
@@ -88,7 +87,7 @@ def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
 
     config_lines = [
         f"claude_command = {wrapper_path}",
-        f"claude_args = {RALPHEX_CONFIG_DEFAULTS['claude_args']}",
+        f"claude_args = {_DEFAULT_CLAUDE_ARGS}",
         f"codex_enabled = {codex_enabled}",
     ]
 

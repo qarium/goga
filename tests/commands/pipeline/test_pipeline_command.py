@@ -92,9 +92,7 @@ class TestPipelineCommandContract:
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["name"] is None
 
-    def test_pipeline_command_collects_extra_env(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_command_collects_extra_env(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The repeatable ``-e/--env`` option is collected and forwarded as ``extra_env``."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -110,9 +108,7 @@ class TestPipelineCommandContract:
         assert mock_run.call_args.kwargs["extra_env"] == ("FOO=bar", "BAZ=qux")
         assert mock_run.call_args.kwargs["name"] == "deploy"
 
-    def test_pipeline_raises_on_schema_error(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_raises_on_schema_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A config schema missing the ``pipeline`` block surfaces as a ClickException."""
         _write_config(tmp_path, with_pipeline=False)
         monkeypatch.chdir(tmp_path)
@@ -130,9 +126,7 @@ class TestPipelineCommandContract:
 
 
 class TestPipelineCommandLogic:
-    def test_pipeline_command_run_mode_passes_name(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_command_run_mode_passes_name(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A provided ``name`` is forwarded to ``run_pipeline_container(name=<name>)``."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -144,9 +138,7 @@ class TestPipelineCommandLogic:
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["name"] == "deploy"
 
-    def test_pipeline_command_propagates_exit_code(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_command_propagates_exit_code(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The container exit code is propagated via ``ctx.exit``."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)

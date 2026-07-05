@@ -11,6 +11,9 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline as pipeline_cmd
 from goga.commands.pipeline.run_pipeline_container import (
+    _write_afm_config_tmpfile,
+)
+from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
@@ -96,6 +99,20 @@ class TestRunPipelineContainerContract:
         )
 
         assert imported is rpc
+
+
+# --- _write_afm_config_tmpfile unit tests ---
+
+
+class TestWriteAfmConfigTmpfile:
+    def test_writes_resolved_path_with_mode_0600(self) -> None:
+        """Content is the resolved wrapper path; the temp file is private (0600)."""
+        path = _write_afm_config_tmpfile("/home/goga/bin/codex-as-claude.sh")
+        try:
+            assert path.read_text() == "client.command: /home/goga/bin/codex-as-claude.sh\n"
+            assert (path.stat().st_mode & 0o777) == 0o600
+        finally:
+            path.unlink(missing_ok=True)
 
 
 # --- Resolved wrapper path in afm-config tmpfile ---
