@@ -87,20 +87,28 @@ class FileGenerator:
         goga_dir = self._base_dir / ".goga"
         goga_dir.mkdir(parents=True, exist_ok=True)
 
+        # Field order: language, image, commands, build, pipeline, codemanifest.
+        # `commands` has no source in GogaConfigAnswers, so it is never emitted.
         data: dict = {
             "language": config.language,
-            "build": {
-                "image": config.image,
-                "task_executor": {
-                    "agent": config.agent,
-                },
-            },
+            "image": config.image,
         }
 
+        build: dict = {
+            "task_executor": {
+                "agent": config.agent,
+            },
+        }
         if config.env:
-            data["build"]["task_executor"]["env"] = config.env
+            build["task_executor"]["env"] = config.env
+        data["build"] = build
 
-        if config.codemanifest_usages is not None or config.codemanifest_annotations is not None:
+        pipeline: dict = {"agent": config.pipeline_agent}
+        if config.pipeline_env:
+            pipeline["env"] = config.pipeline_env
+        data["pipeline"] = pipeline
+
+        if config.codemanifest_usages or config.codemanifest_annotations is not None:
             codemanifest: dict = {}
             if config.codemanifest_usages:
                 codemanifest["usages"] = config.codemanifest_usages

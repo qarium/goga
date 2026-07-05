@@ -36,6 +36,7 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
             env={},
         )
 

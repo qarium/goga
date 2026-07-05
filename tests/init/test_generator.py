@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests.exceptions
 import yaml
+from goga.config import load_config
 from goga.init.answers import GogaConfigAnswers, InitAnswers
 from goga.init.generator import FileGenerator
 
@@ -41,6 +42,8 @@ class TestLogic:
         language: str = "python",
         agent: str = "claude",
         image: str = "qarium/goga-python-3.12:1.0",
+        pipeline_agent: str = "claude",
+        pipeline_env: dict | None = None,
         env: dict | None = None,
         codemanifest_usages: dict | None = None,
         codemanifest_annotations: str | None = None,
@@ -50,6 +53,8 @@ class TestLogic:
             language=language,
             agent=agent,
             image=image,
+            pipeline_agent=pipeline_agent,
+            pipeline_env=pipeline_env,
             env=env,
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
@@ -71,6 +76,8 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="codex",
+            pipeline_env={"CODEX_MODEL": "o4-mini"},
             env={"API_KEY": "secret"},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions for code rules.",
@@ -85,11 +92,35 @@ class TestLogic:
 
         # Verify structure compatible with load_config()
         assert data["language"] == "python"
+        assert data["image"] == "qarium/goga-python-3.12:1.0"
         assert data["build"]["task_executor"]["agent"] == "claude"
         assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret"}
-        assert data["build"]["image"] == "qarium/goga-python-3.12:1.0"
+        assert "image" not in data["build"]
+        assert data["pipeline"]["agent"] == "codex"
+        assert data["pipeline"]["env"] == {"CODEX_MODEL": "o4-mini"}
         assert data["codemanifest"]["usages"] == {"conventions": ".goga/usages/conventions.md"}
         assert data["codemanifest"]["annotations"] == "Use conventions for code rules.\n"
+
+    def test_generate_goga_config_round_trips_through_load_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Generated config.yml must load without error via load_config()."""
+        config = self._make_config(
+            language="python",
+            agent="claude",
+            image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
+            env={"API_KEY": "secret"},
+        )
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        monkeypatch.chdir(tmp_path)
+        loaded = load_config()
+        assert loaded.lang == "python"
+        assert loaded.image == "qarium/goga-python-3.12:1.0"
+        assert loaded.pipeline.agent == "claude"
+        assert loaded.build.task_executor.env == {"API_KEY": "secret"}
 
     def test_generate_creates_goga_directory_when_missing(self, tmp_path: Path) -> None:
         """generate_goga_config() must create .goga/ directory if absent."""
@@ -292,3 +323,101 @@ class TestLogic:
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret"}
+
+
+# --- New tests for the new schema (top-level image + pipeline block) ---
+
+
+class TestNewSchema:
+    """Tests for the new top-level image + pipeline block YAML schema."""
+
+    def _make_config(self, **kwargs) -> GogaConfigAnswers:  # type: ignore[no-untyped-def]
+        defaults = {
+            "language": "python",
+            "agent": "claude",
+            "image": "qarium/foo:1.0",
+            "pipeline_agent": "claude",
+        }
+        defaults.update(kwargs)
+        return GogaConfigAnswers(**defaults)
+
+    def _make_gen(self, tmp_path: Path) -> FileGenerator:
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        return gen
+
+    def _load_yaml(self, config_path: Path) -> dict:
+        with config_path.open() as f:
+            return yaml.safe_load(f)
+
+    def test_generate_goga_config_emits_yaml_in_correct_order(self, tmp_path: Path) -> None:
+        """Top-level keys appear in canonical order (commands omitted — no source)."""
+        config = self._make_config(
+            codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
+            codemanifest_annotations="Use conventions.",
+        )
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        canonical = ["language", "image", "commands", "build", "pipeline", "codemanifest"]
+        present = list(data.keys())
+        # present keys must be a subsequence of the canonical order
+        assert present == [k for k in canonical if k in present]
+        assert present == ["language", "image", "build", "pipeline", "codemanifest"]
+
+    def test_generate_goga_config_always_emits_pipeline_block(self, tmp_path: Path) -> None:
+        """pipeline: block is always emitted even when pipeline_env is omitted."""
+        config = self._make_config(pipeline_agent="claude", pipeline_env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        text = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
+        assert "pipeline:" in text
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["pipeline"]["agent"] == "claude"
+        assert "env" not in data["pipeline"]
+
+    def test_generate_goga_config_emits_image_at_top_level(self, tmp_path: Path) -> None:
+        """image is emitted at the top level, never under build:."""
+        config = self._make_config(image="qarium/foo:1.0")
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["image"] == "qarium/foo:1.0"
+        assert "image" not in data["build"]
+
+    def test_generate_goga_config_omits_pipeline_env_when_none(self, tmp_path: Path) -> None:
+        """When pipeline_env is None, env: is absent from the pipeline block."""
+        config = self._make_config(pipeline_env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "pipeline" in data
+        assert "env" not in data["pipeline"]
+
+    def test_generate_goga_config_emits_pipeline_env_when_provided(self, tmp_path: Path) -> None:
+        """When pipeline_env has values, env: appears under pipeline."""
+        config = self._make_config(pipeline_env={"FOO": "1"})
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["pipeline"]["env"] == {"FOO": "1"}
+
+    def test_generate_goga_config_omits_pipeline_env_when_empty(self, tmp_path: Path) -> None:
+        """Empty pipeline_env dict is omitted from config.yml."""
+        config = self._make_config(pipeline_env={})
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "env" not in data["pipeline"]

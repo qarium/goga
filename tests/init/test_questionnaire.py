@@ -38,8 +38,10 @@ class TestLogic:
     3. Usages (inner loop — another?)
     4. Annotations
     5. Dockerfile
-    6. Env suggestions
-    7. Custom env (while loop)
+    6. Env suggestions (task_executor)
+    7. Custom env (task_executor — while loop)
+    8. Env suggestions (pipeline)
+    9. Custom env (pipeline — while loop)
 
     Prompt consumption order:
     1. Language
@@ -48,8 +50,11 @@ class TestLogic:
     4. Agent
     5. Image
     6. (If dockerfile: dockerfile path)
-    7. (If env suggestions: value for each key)
-    8. (If custom env: key, value, in loop)
+    7. (If task env suggestions: value for each key)
+    8. (If custom task env: key, value, in loop)
+    9. Pipeline agent
+    10. (If pipeline env suggestions: value for each key)
+    11. (If custom pipeline env: key, value, in loop)
     """
 
     def test_questionnaire_ask_goga_config_python_with_convention(self) -> None:
@@ -58,6 +63,7 @@ class TestLogic:
                 "python",  # language
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -66,8 +72,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -80,6 +88,8 @@ class TestLogic:
         assert result.agent == "claude"
         assert result.image == "qarium/goga-python-3.12:1.0"
         assert result.env is None
+        assert result.pipeline_agent == "claude"
+        assert result.pipeline_env is None
         assert result.dockerfile_path is None
         assert result.codemanifest_usages == {"conventions": ".goga/usages/conventions.md"}
         assert result.codemanifest_annotations == "Use `conventions` for code writing rules and testing."
@@ -90,6 +100,7 @@ class TestLogic:
                 "golang",  # language
                 "claude",  # agent
                 "qarium/goga-golang-1.23:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -98,8 +109,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -123,6 +136,7 @@ class TestLogic:
                 "secret",  # env value 1
                 "MODEL",  # env key 2
                 "gpt-4",  # env value 2
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -131,10 +145,12 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                True,  # Add custom environment variable? (first)
-                True,  # Add custom environment variable? (second)
-                False,  # Add custom environment variable? (stop)
+                False,  # Set suggested task env variables?
+                True,  # Add custom task env variable? (first)
+                True,  # Add custom task env variable? (second)
+                False,  # Add custom task env variable? (stop)
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -152,6 +168,7 @@ class TestLogic:
                 ".goga/usages/custom.md",  # usage path
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -161,8 +178,10 @@ class TestLogic:
                 False,  # Add another codemanifest usage? (stop)
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -182,6 +201,7 @@ class TestLogic:
                 ".goga/usages/custom.md",  # usage path
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -191,8 +211,10 @@ class TestLogic:
                 False,  # Add another codemanifest usage? (stop)
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -209,6 +231,7 @@ class TestLogic:
                 "Custom rule for project",  # annotations text
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -217,8 +240,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 True,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -237,6 +262,7 @@ class TestLogic:
                 "golang",  # language
                 "claude",  # agent
                 "my-custom/golang:2.0",  # image (custom, not from predefined list)
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -245,8 +271,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -263,6 +291,7 @@ class TestLogic:
                 "kotlin",  # language
                 "claude",  # agent
                 "qarium/goga-kotlin-2.3.21:1.0",  # image (default from predefined list)
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -271,8 +300,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -289,6 +320,7 @@ class TestLogic:
                 "swift",  # language
                 "claude",  # agent
                 "qarium/goga-swift-6.2.4:1.0",  # image (default from predefined list)
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -297,8 +329,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -315,6 +349,7 @@ class TestLogic:
                 "javascript",  # language
                 "claude",  # agent
                 "qarium/goga-node-24:1.0",  # image (default from predefined list)
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -323,8 +358,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -350,6 +387,7 @@ class TestLogic:
                 ".goga/usages/custom.md",  # usage path
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -360,8 +398,10 @@ class TestLogic:
                 False,  # Add another codemanifest usage? (stop after custom added)
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -383,6 +423,7 @@ class TestLogic:
                 "python",  # language
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -391,8 +432,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -418,6 +461,7 @@ class TestLogic:
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
                 "Dockerfile",  # dockerfile path
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -426,8 +470,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 True,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -443,6 +489,7 @@ class TestLogic:
                 "python",  # language
                 "claude",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -451,8 +498,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -472,6 +521,7 @@ class TestLogic:
                 "glm-5-turbo",  # ANTHROPIC_DEFAULT_SONNET_MODEL
                 "glm-5.1",  # ANTHROPIC_DEFAULT_OPUS_MODEL
                 "https://api.z.ai/api/anthropic",  # ANTHROPIC_BASE_URL
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -480,8 +530,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                True,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                True,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -502,6 +554,7 @@ class TestLogic:
                 "python",  # language
                 "codex",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
+                "codex",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -510,8 +563,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -528,7 +583,8 @@ class TestLogic:
                 "python",  # language
                 "codex",  # agent
                 "qarium/goga-python-3.12:1.0",  # image
-                "o4-mini",  # CODEX_MODEL
+                "o4-mini",  # CODEX_MODEL (task env)
+                "codex",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -537,8 +593,10 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                True,  # Set suggested env variables?
-                False,  # Add custom environment variable?
+                True,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -562,6 +620,7 @@ class TestLogic:
                 "qarium/goga-python-3.12:1.0",  # image
                 "MY_KEY",  # custom env key
                 "my_value",  # custom env value
+                "claude",  # pipeline agent
             ]
         )
         confirms = iter(
@@ -570,9 +629,11 @@ class TestLogic:
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
                 False,  # Create Dockerfile?
-                False,  # Set suggested env variables?
-                True,  # Add custom environment variable?
-                False,  # Add custom environment variable? (stop)
+                False,  # Set suggested task env variables?
+                True,  # Add custom task env variable?
+                False,  # Add custom task env variable? (stop)
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
             ]
         )
 
@@ -581,3 +642,95 @@ class TestLogic:
             result = q.ask_goga_config()
 
         assert result.env == {"MY_KEY": "my_value"}
+
+    # --- New tests for steps 9 (pipeline_agent) and 10 (pipeline_env) ---
+
+    def test_questionnaire_pipeline_agent_defaults_to_agent(self) -> None:
+        """Step 9 default for pipeline_agent is the build agent from step 5."""
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent (accept default)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.pipeline_agent == result.agent == "claude"
+
+    def test_questionnaire_pipeline_agent_can_differ_from_build_agent(self) -> None:
+        """Step 9 lets the user pick a pipeline agent distinct from the build agent."""
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "codex",  # pipeline agent (override default)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.agent == "claude"
+        assert result.pipeline_agent == "codex"
+
+    def test_questionnaire_pipeline_env_collected_separately_from_task_env(self) -> None:
+        """Step 10 collects pipeline env independently (codex suggested key)."""
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "codex",  # pipeline agent
+                "gpt-5",  # CODEX_MODEL (pipeline env)
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.env is None
+        assert result.pipeline_env == {"CODEX_MODEL": "gpt-5"}

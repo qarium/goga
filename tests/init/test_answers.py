@@ -24,15 +24,18 @@ class TestContract:
         hints = get_type_hints(InitAnswers)
         assert "goga_config" in hints
 
-    def test_goga_config_answers_has_all_six_properties(self) -> None:
+    def test_goga_config_answers_has_all_declared_properties(self) -> None:
         hints = get_type_hints(GogaConfigAnswers)
         expected = {
             "language",
             "agent",
             "image",
+            "pipeline_agent",
+            "pipeline_env",
             "env",
             "codemanifest_usages",
             "codemanifest_annotations",
+            "dockerfile_path",
         }
         assert expected.issubset(hints.keys())
 
@@ -41,13 +44,30 @@ class TestContract:
         assert hints["language"] is str
         assert hints["agent"] is str
         assert hints["image"] is str
+        assert hints["pipeline_agent"] is str
+        assert hints["pipeline_env"] == dict | None
         assert hints["env"] == dict | None
+
+    def test_goga_config_answers_field_names_in_contract_order(self) -> None:
+        names = [f.name for f in dataclasses.fields(GogaConfigAnswers)]
+        assert names == [
+            "language",
+            "agent",
+            "image",
+            "pipeline_agent",
+            "pipeline_env",
+            "env",
+            "codemanifest_usages",
+            "codemanifest_annotations",
+            "dockerfile_path",
+        ]
 
     def test_constructors_accept_kwargs(self) -> None:
         cfg = GogaConfigAnswers(
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=cfg)
         assert answers.goga_config is cfg
@@ -61,6 +81,7 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
         )
         with pytest.raises(dataclasses.FrozenInstanceError):
             cfg.language = "go"  # type: ignore[misc]
@@ -70,6 +91,7 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=cfg)
         with pytest.raises(dataclasses.FrozenInstanceError):
@@ -77,25 +99,41 @@ class TestLogic:
 
     def test_goga_config_answers_kw_only(self) -> None:
         with pytest.raises(TypeError):
-            GogaConfigAnswers("python", "claude", "img")  # type: ignore[call-arg]
+            GogaConfigAnswers("python", "claude", "img", "claude")  # type: ignore[call-arg]
+
+    def test_goga_config_answers_requires_pipeline_agent(self) -> None:
+        with pytest.raises(TypeError):
+            GogaConfigAnswers(  # type: ignore[call-arg]
+                language="python",
+                agent="claude",
+                image="qarium/goga-python-3.12:0.1",
+            )
 
     def test_goga_config_answers_defaults_none(self) -> None:
         cfg = GogaConfigAnswers(
             language="go",
             agent="claude",
             image="qarium/goga-golang-1.23:0.1",
+            pipeline_agent="claude",
         )
+        assert cfg.pipeline_env is None
+        assert cfg.env is None
         assert cfg.codemanifest_usages is None
         assert cfg.codemanifest_annotations is None
+        assert cfg.dockerfile_path is None
 
     def test_goga_config_answers_with_codemanifest(self) -> None:
         cfg = GogaConfigAnswers(
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="codex",
+            pipeline_env={"CODEX_MODEL": "o4-mini"},
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions for code rules.",
         )
+        assert cfg.pipeline_agent == "codex"
+        assert cfg.pipeline_env == {"CODEX_MODEL": "o4-mini"}
         assert cfg.codemanifest_usages == {"conventions": ".goga/usages/conventions.md"}
         assert cfg.codemanifest_annotations == "Use conventions for code rules."
 
@@ -104,6 +142,7 @@ class TestLogic:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
         )
         with pytest.raises(TypeError):
             InitAnswers(cfg)  # type: ignore[call-arg]

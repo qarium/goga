@@ -50,6 +50,38 @@ _AGENT_ENV_MAP: dict[str, list[str]] = {
 }
 
 
+def _collect_agent_env(agent: str) -> dict | None:
+    """Collect environment variables for an agent.
+
+    Proposes keys from `_AGENT_ENV_MAP` for the given agent, then optionally
+    collects arbitrary KEY=VALUE pairs. Returns None when nothing is collected.
+    """
+    env: dict | None = None
+
+    suggested_keys = _AGENT_ENV_MAP.get(agent, [])
+    if suggested_keys:
+        click.echo("Suggested env keys for selected agent:")
+        for key in suggested_keys:
+            click.echo(f"  - {key}")
+        if click.confirm("Set suggested env variables?", default=False):
+            env = {}
+            for key in suggested_keys:
+                value = click.prompt(f"  {key}")
+                env[key] = value
+
+    if click.confirm("Add custom environment variable?", default=False):
+        if env is None:
+            env = {}
+        while True:
+            key = click.prompt("Env key")
+            value = click.prompt("Env value")
+            env[key] = value
+            if not click.confirm("Add another?", default=False):
+                break
+
+    return env
+
+
 class Questionnaire:
     """Interactive questionnaire for project initialization."""
 
@@ -142,36 +174,31 @@ class Questionnaire:
         if click.confirm("Create Dockerfile?", default=False):
             dockerfile_path = click.prompt("Dockerfile path", default="Dockerfile")
 
-        # 8. Environment variables
+        # 8. Environment variables (task_executor)
         click.echo("\n--- Environment Variables ---")
         click.echo("Configure environment variables for the build implementation.")
-        env: dict | None = None
+        env: dict | None = _collect_agent_env(agent)
 
-        suggested_keys = _AGENT_ENV_MAP.get(agent, [])
-        if suggested_keys:
-            click.echo("Suggested env keys for selected agent:")
-            for key in suggested_keys:
-                click.echo(f"  - {key}")
-            if click.confirm("Set suggested env variables?", default=False):
-                env = {}
-                for key in suggested_keys:
-                    value = click.prompt(f"  {key}")
-                    env[key] = value
+        # 9. Pipeline agent (defaults to the build agent from step 5)
+        click.echo("\n--- Pipeline Agent ---")
+        click.echo("Select the AI agent that will run pipelines (afm client.command).")
+        pipeline_agent: str = click.prompt(
+            "Pipeline agent",
+            type=click.Choice(["claude", "codex"]),
+            default=agent,
+        )
 
-        if click.confirm("Add custom environment variable?", default=False):
-            if env is None:
-                env = {}
-            while True:
-                key = click.prompt("Env key")
-                value = click.prompt("Env value")
-                env[key] = value
-                if not click.confirm("Add another?", default=False):
-                    break
+        # 10. Pipeline environment variables
+        click.echo("\n--- Pipeline Environment Variables ---")
+        click.echo("Configure environment variables for the pipeline implementation.")
+        pipeline_env: dict | None = _collect_agent_env(pipeline_agent)
 
         return GogaConfigAnswers(
             language=language,
             agent=agent,
             image=image,
+            pipeline_agent=pipeline_agent,
+            pipeline_env=pipeline_env,
             env=env,
             dockerfile_path=dockerfile_path,
             codemanifest_usages=codemanifest_usages,

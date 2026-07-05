@@ -10,6 +10,8 @@ class GogaConfigAnswers:
     language: str
     agent: str
     image: str
+    pipeline_agent: str
+    pipeline_env: dict | None = None
     env: dict | None = None
     codemanifest_usages: dict | None = None
     codemanifest_annotations: str | None = None

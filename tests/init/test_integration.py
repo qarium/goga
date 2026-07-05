@@ -32,6 +32,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Использовать `conventions` для правил написания кода и тестов.",
         )
@@ -57,6 +58,8 @@ class TestIntegration:
         assert config_path.exists()
         data = _load_yaml(config_path)
         assert data["language"] == "python"
+        assert data["image"] == "qarium/goga-python-3.12:1.0"
+        assert data["pipeline"]["agent"] == "claude"
         assert data["codemanifest"]["usages"] == {"conventions": ".goga/usages/conventions.md"}
 
         conventions_path = tmp_path / ".goga" / "usages" / "conventions.md"
@@ -69,6 +72,7 @@ class TestIntegration:
             language="golang",
             agent="claude",
             image="qarium/goga-golang-1.23:1.0",
+            pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -96,6 +100,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             env={"API_KEY": "secret", "MODEL": "gpt-4"},
         )
         answers = InitAnswers(goga_config=config)
@@ -118,6 +123,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             codemanifest_usages={
                 "conventions": ".goga/usages/conventions.md",
                 "custom": ".goga/usages/custom.md",
@@ -153,6 +159,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             codemanifest_usages={"custom": ".goga/usages/custom.md"},
         )
         answers = InitAnswers(goga_config=config)
@@ -179,6 +186,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -204,6 +212,7 @@ class TestIntegration:
             language="golang",
             agent="claude",
             image="qarium/goga-golang-1.23:1.0",
+            pipeline_agent="claude",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -225,6 +234,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations=("Использовать `conventions` для правил написания кода и тестов.\nCustom rule"),
         )
@@ -269,6 +279,7 @@ class TestIntegration:
             language="python",
             agent="claude",
             image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="claude",
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions.",
         )
@@ -289,3 +300,28 @@ class TestIntegration:
         assert result == 1
         assert not (tmp_path / ".goga" / "config.yml").exists()
         assert not (tmp_path / ".goga" / "usages" / "conventions.md").exists()
+
+    def test_init_emits_pipeline_block_in_generated_config(self, tmp_path: Path) -> None:
+        """Generated config.yml always contains a pipeline: block (agent required by load_config)."""
+        config = GogaConfigAnswers(
+            language="python",
+            agent="claude",
+            image="qarium/goga-python-3.12:1.0",
+            pipeline_agent="codex",
+            pipeline_env={"CODEX_MODEL": "o4-mini"},
+        )
+        answers = InitAnswers(goga_config=config)
+
+        mock_q = MagicMock(spec=Questionnaire)
+        mock_q.ask.return_value = answers
+
+        gen = _make_gen(tmp_path)
+        logic = InitLogic(mock_q, gen)
+        result = logic.run()
+
+        assert result == 0
+
+        data = _load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["pipeline"]["agent"] == "codex"
+        assert data["pipeline"]["env"] == {"CODEX_MODEL": "o4-mini"}
+        assert "image" not in data["build"]
