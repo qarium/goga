@@ -6,14 +6,26 @@ from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
+from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
+
+
+def _make_config() -> Config:
+    """Build a minimal Config satisfying the new schema (top-level image, pipeline block)."""
+    return Config(
+        lang="python",
+        image="qarium/goga:latest",
+        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        pipeline=PipelineConfig(agent="claude"),
+    )
 
 
 class TestPipelineContract:
@@ -40,55 +52,67 @@ class TestPipelineContract:
 
 
 class TestPipelineLogic:
-    def test_pipeline_with_name_invokes_run_pipeline_and_propagates_exit(self, tmp_path: Path, monkeypatch) -> None:
-        """pipeline <name> delegates to run_pipeline and propagates its exit code."""
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
-        pipelines_dir = tmp_path / ".goga" / "pipelines"
-        pipelines_dir.mkdir(parents=True)
-        (pipelines_dir / "deploy.yml").write_text("pipeline")
-
+    def test_pipeline_delegates_to_run_pipeline_container_discovery(self) -> None:
+        """pipeline (no name) delegates to run_pipeline_container with (None, config)."""
+        config = _make_config()
         runner = CliRunner()
-        with mock.patch.object(_pipeline_module, "run_pipeline", return_value=42):
+        with (
+            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, [])
+
+        assert result.exit_code == 0
+        mock_rpc.assert_called_once_with(None, config)
+
+    def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
+        """pipeline <name> delegates to run_pipeline_container with (name, config)."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
             result = runner.invoke(pipeline, ["deploy"])
 
-        assert result.exit_code == 42
-
-    def test_pipeline_without_name_lists_pipelines(self, tmp_path: Path, monkeypatch) -> None:
-        """pipeline (no name) prints 'Available pipelines:' header and the list."""
-        project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
-        project_pipelines = project_tmp / ".goga" / "pipelines"
-        project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
-
-        user_pipelines = user_tmp / ".goga" / "pipelines"
-        user_pipelines.mkdir(parents=True)
-        (user_pipelines / "build.yml").write_text("pipeline")
-
-        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
-        monkeypatch.setattr(Path, "home", lambda: user_tmp)
-
-        runner = CliRunner()
-        result = runner.invoke(pipeline, [])
-
         assert result.exit_code == 0
-        assert "Available pipelines:" in result.output
-        assert "deploy (project)" in result.output
-        assert "build" in result.output
-        assert "build (project)" not in result.output
+        mock_rpc.assert_called_once_with("deploy", config)
 
-    def test_pipeline_without_name_prints_header_even_when_empty(self, tmp_path: Path, monkeypatch) -> None:
-        """The 'Available pipelines:' header is always printed, even for an empty list."""
-        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
+    @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])
+    def test_pipeline_propagates_exit_code(self, exit_code: int) -> None:
+        """The container exit code is propagated via ctx.exit."""
+        config = _make_config()
         runner = CliRunner()
-        result = runner.invoke(pipeline, [])
+        with (
+            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=exit_code),
+        ):
+            result = runner.invoke(pipeline, ["deploy"])
 
-        assert result.exit_code == 0
-        assert "Available pipelines:" in result.output
+        assert result.exit_code == exit_code
+
+    def test_pipeline_raises_clickexception_when_config_load_fails(self) -> None:
+        """A config load failure surfaces as a non-zero exit code via ClickException."""
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_config", side_effect=FileNotFoundError("no config")),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, [])
+
+        assert result.exit_code != 0
+        assert "no config" in result.output
+        # The container was never launched — config load failed first.
+        mock_rpc.assert_not_called()
+
+
+class TestPipelineBoundary:
+    def test_pipeline_module_has_no_type_imports_from_goga_pipeline(self) -> None:
+        """pipeline.py must NOT import any Type from goga/pipeline (docker runtime boundary)."""
+        assert _pipeline_module.__file__ is not None
+        source = Path(_pipeline_module.__file__).read_text()
+        assert "from ...pipeline import" not in source
+        assert "from goga.pipeline import" not in source
+        # The only goga imports are config + intra-cell run_pipeline_container.
+        assert "from ...config import load_config" in source
+        assert "from .run_pipeline_container import run_pipeline_container" in source

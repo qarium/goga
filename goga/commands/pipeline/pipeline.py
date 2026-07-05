@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
+import yaml
 
-from ...pipeline import PipelineSource, list_pipelines, run_pipeline
+from ...config import load_config
+from .run_pipeline_container import run_pipeline_container
 
 
 @click.command()
@@ -13,30 +13,29 @@ from ...pipeline import PipelineSource, list_pipelines, run_pipeline
 def pipeline(ctx: click.Context, name: str | None) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
-    Without ``name`` (discovery mode): prints the ``Available pipelines:`` header
-    followed by one pipeline per line. Project pipelines are annotated with
-    ``(project)``; user pipelines are echoed bare. Read-only — does not invoke
-    ``flowmanager``.
+    Both modes launch the goga Docker container and delegate to
+    ``run_pipeline_container`` — discovery and run are in-container only. The host
+    never reads pipeline files directly.
 
-    With ``name`` (run mode): runs the named pipeline via the external
-    ``flowmanager`` binary through :func:`goga.pipeline.run_pipeline`. The
-    ``flowmanager`` exit code is propagated via ``ctx.exit``.
+    Without ``name`` (discovery mode): the container prints the
+    ``Available pipelines:`` header followed by one pipeline per line.
+
+    With ``name`` (run mode): the container runs the named pipeline via the
+    external ``afm`` binary. The container's exit code is propagated via
+    ``ctx.exit``.
 
     Args:
         ctx: Click execution context used to propagate the exit code.
-        name: pipeline name without extension (e.g. ``"deploy"``). The ``.yml``
-            extension is added internally during path resolution.
+        name: pipeline name without extension (e.g. ``"deploy"``). When ``None``
+            selects discovery mode.
+
+    Raises:
+        click.ClickException: When ``.goga/config.yml`` cannot be loaded.
     """
-    project_dir = Path.cwd() / ".goga" / "pipelines"
-    user_dir = Path.home() / ".goga" / "pipelines"
+    try:
+        config = load_config()
+    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
-    if name is None:
-        click.echo("Available pipelines:")
-        for entry in list_pipelines(project_dir, user_dir):
-            if entry.source == PipelineSource.PROJECT:
-                click.echo(f"  {entry.name} (project)")
-            else:
-                click.echo(f"  {entry.name}")
-        ctx.exit(0)
-
-    ctx.exit(run_pipeline(name, project_dir, user_dir))
+    exit_code = run_pipeline_container(name, config)
+    ctx.exit(exit_code)
