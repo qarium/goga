@@ -247,12 +247,16 @@ def build(  # noqa: PLR0913
         "dry_run": dry_run,
     }
 
+    # Reject the missing-image case before creating any temp files: the env file
+    # (written below) carries git identity and task_executor secrets and is only
+    # unlinked by the finally of the try block below, so creating it here and then
+    # raising would leak it on disk.
+    if config.image is None:
+        raise click.ClickException("image in .goga/config.yml is not set")
+
     git_env = _read_git_config()
     env = {**git_env, **config.build.task_executor.env}
     env_file = _write_env_file(env, extra_env)
-
-    if config.image is None:
-        raise click.ClickException("image in .goga/config.yml is not set")
 
     container_name = f"goga-build-{os.getpid()}"
 

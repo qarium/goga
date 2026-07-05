@@ -867,6 +867,25 @@ class TestTopLevelImageContract:
         assert "image" in result.output
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    def test_build_image_none_does_not_write_env_file(self, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+        """When image is None, the env file is never written — no secret leak on disk.
+
+        The env file holds git identity plus ``task_executor`` env (potential
+        secrets) and is only unlinked by the ``finally`` of the try block in
+        ``build``. The ``config.image is None`` check must therefore run before
+        ``_write_env_file`` so the raise cannot leak the file (mirrors the
+        cleanup guarantee in ``goga.commands.pipeline``).
+        """
+        _write_goga_yml(tmp_path, no_image=True)
+
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code != 0
+        assert "image" in result.output
+        mock_env.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
     @mock.patch.object(_build_mod, "_write_env_file")
     @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
