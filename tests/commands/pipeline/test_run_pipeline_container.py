@@ -246,6 +246,50 @@ class TestPipelineEnvFile:
         assert captured_env["GIT_AUTHOR_NAME"] == "from-pipeline"
 
 
+# --- cleanup on setup failure ---
+
+
+class TestRunModeCleanup:
+    def test_run_mode_unlinks_afm_tmpfile_when_env_write_fails(self, tmp_path: Path, monkeypatch) -> None:
+        """A failure after the afm tmpfile is written still unlinks it.
+
+        The temp files are created inside the try whose finally unlinks them, so
+        an exception from ``_write_env_file`` (disk error, etc.) cannot leak the
+        afm-config tmpfile — and, symmetrically, the env file with secrets.
+        """
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        created_afm: list[Path] = []
+        real_afm = _rpc_mod._write_afm_config_tmpfile
+
+        def track_afm(agent: str) -> Path:
+            path = real_afm(agent)
+            created_afm.append(path)
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
+
+        def raising_write(env: dict[str, str]) -> Path:
+            raise OSError("disk full")
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", raising_write)
+
+        with (
+            mock.patch.object(_rpc_mod.signal, "signal"),
+            mock.patch.object(subprocess, "run"),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        # the afm tmpfile was unlinked despite the failure in _write_env_file
+        assert created_afm
+        assert all(not p.exists() for p in created_afm)
+
+
 # --- user-level pipelines mount ---
 
 

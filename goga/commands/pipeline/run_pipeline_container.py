@@ -330,22 +330,30 @@ def _run_named(name: str, config: Config, container_name: str) -> int:
         The container's exit code.
     """
     port = _allocate_port()
-    afm_config = _write_afm_config_tmpfile(config.pipeline.agent)
-    git_env = _read_git_config()
-    env = {**git_env, **config.pipeline.env}
-    env_file = _write_env_file(env)
 
+    # Install the SIGTERM/SIGINT handlers before creating temp files so any
+    # exception (or signal) raised during setup propagates through the finally
+    # below, which unlinks the temp files. Creating them before this try block
+    # would leak them — the env file carries git identity and pipeline secrets.
     prev_term = signal.signal(signal.SIGTERM, _on_signal)
     prev_int = signal.signal(signal.SIGINT, _on_signal)
+    afm_config: Path | None = None
+    env_file: Path | None = None
     try:
+        afm_config = _write_afm_config_tmpfile(config.pipeline.agent)
+        git_env = _read_git_config()
+        env = {**git_env, **config.pipeline.env}
+        env_file = _write_env_file(env)
         click.echo(f"Web UI: http://localhost:{port}")
         cmd = _build_run_cmd(config.image, container_name, port, name, afm_config, env_file)
         _pull_image(config.image)
         proc = subprocess.Popen(cmd)
         return proc.wait()
     finally:
-        afm_config.unlink(missing_ok=True)
-        env_file.unlink(missing_ok=True)
+        if afm_config is not None:
+            afm_config.unlink(missing_ok=True)
+        if env_file is not None:
+            env_file.unlink(missing_ok=True)
         subprocess.run(
             ["docker", "kill", container_name],
             check=False,
