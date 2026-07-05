@@ -251,7 +251,7 @@ def build(  # noqa: PLR0913
     env = {**git_env, **config.build.task_executor.env}
     env_file = _write_env_file(env, extra_env)
 
-    if config.build.image is None:
+    if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
 
     container_name = f"goga-build-{os.getpid()}"
@@ -264,7 +264,7 @@ def build(  # noqa: PLR0913
     try:
         docker_cmd = _build_docker_cmd(
             plan=plan,
-            image=config.build.image,
+            image=config.image,
             env_file=env_file,
             cli_flags=cli_flags,
             container_name=container_name,
@@ -273,7 +273,7 @@ def build(  # noqa: PLR0913
         if dry_run:
             ctx.exit(0)
 
-        _pull_image(config.build.image)
+        _pull_image(config.image)
 
         docker_proc = subprocess.Popen(docker_cmd)
 

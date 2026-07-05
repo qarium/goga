@@ -14,15 +14,22 @@ _build_mod = sys.modules["goga.commands.build.build"]
 
 
 def _write_goga_yml(tmp_path: Path, extra: dict | None = None, *, no_image: bool = False) -> None:
-    """Write a minimal .goga/config.yml with optional extra build fields."""
+    """Write a minimal .goga/config.yml in the new schema (top-level image, pipeline block)."""
     data: dict = {
         "language": "python",
-        "build": {"task_executor": {"agent": "claude"}, "image": "qarium/goga:latest"},
+        "image": "qarium/goga:latest",
+        "build": {"task_executor": {"agent": "claude"}},
+        "pipeline": {"agent": "claude"},
     }
     if no_image:
-        del data["build"]["image"]
+        del data["image"]
     if extra:
-        data["build"].update(extra)
+        # `image` is a top-level field now; build-internal keys go under `build`.
+        for key, value in extra.items():
+            if key == "image":
+                data["image"] = value
+            else:
+                data["build"][key] = value
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
@@ -171,7 +178,8 @@ class TestDryRun:
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     def test_dry_run_exit_code_zero(self, mock_docker, tmp_path, monkeypatch) -> None:
         _write_goga_yml(tmp_path)
-        result = _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
+        with mock.patch.object(subprocess, "run"):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["--dry-run", "plan.md"])
         assert result.exit_code == 0
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
@@ -493,7 +501,8 @@ class TestBuildUsesLoadConfigFromGogaConfig:
 
 
 class TestBuildMissingGogaYmlRaisesConfigError:
-    def test_build_missing_goga_config_yml_raises_config_error(self, tmp_path, monkeypatch) -> None:
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_missing_goga_config_yml_raises_config_error(self, mock_docker, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
         assert result.exit_code == 1
         assert ".goga/config.yml" in result.output
@@ -503,7 +512,8 @@ class TestBuildMissingGogaYmlRaisesConfigError:
 
 
 class TestBuildNegativeCases:
-    def test_build_invalid_goga_config_raises_config_error(self, tmp_path, monkeypatch) -> None:
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_invalid_goga_config_raises_config_error(self, mock_docker, tmp_path, monkeypatch) -> None:
         data = {
             "build": {"task_executor": {"agent": "claude"}},
         }
@@ -773,3 +783,111 @@ class TestImagePullInBuild:
         assert result.exit_code == 1
         assert "failed to pull image" in result.output
         mock_popen.assert_not_called()
+
+
+# --- Task 6: top-level Config.image contract ---
+
+
+class TestTopLevelImageContract:
+    """Logic tests for goga/commands/build.build reading the top-level Config.image."""
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    def test_build_uses_top_level_config_image(self, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+        _write_goga_yml(tmp_path, extra={"image": "qarium/foo:1.0"})
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        cmd = mock_popen.call_args[0][0]
+        assert "qarium/foo:1.0" in cmd
+        # The removed build.image default must not leak into the command.
+        assert "qarium/goga:latest" not in cmd
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config")
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    def test_build_env_file_task_executor_overrides_git(  # noqa: PLR0913
+        self, mock_cmd, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        _write_goga_yml(
+            tmp_path,
+            extra={"task_executor": {"agent": "claude", "env": {"GIT_AUTHOR_NAME": "from-task"}}},
+        )
+        mock_git.return_value = {"GIT_AUTHOR_NAME": "from-git", "GIT_AUTHOR_EMAIL": "x@y"}
+        mock_env.return_value = Path("/tmp/env")
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        env_dict = mock_env.call_args[0][0]
+        # task_executor env takes precedence over git identity env.
+        assert env_dict["GIT_AUTHOR_NAME"] == "from-task"
+        assert env_dict["GIT_AUTHOR_EMAIL"] == "x@y"
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    def test_build_mounts_codex_auth_json_when_present(self, mock_git, mock_docker, tmp_path, monkeypatch) -> None:
+        fake_home = tmp_path / "home"
+        (fake_home / ".codex").mkdir(parents=True)
+        (fake_home / ".codex" / "auth.json").write_text("{}")
+
+        _write_goga_yml(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(Path, "home", return_value=fake_home),
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        cmd = mock_popen.call_args[0][0]
+        assert any(arg.endswith(":/home/goga/.codex/auth.json:ro") for arg in cmd)
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_raises_clickexception_when_config_image_is_none(self, mock_docker, tmp_path, monkeypatch) -> None:
+        _write_goga_yml(tmp_path, no_image=True)
+
+        result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code != 0
+        assert "image" in result.output
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
+    def test_build_works_when_git_config_absent(  # noqa: PLR0913
+        self, mock_cmd, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        _write_goga_yml(
+            tmp_path,
+            extra={"task_executor": {"agent": "claude", "env": {"FOO": "1"}}},
+        )
+        mock_env.return_value = Path("/tmp/env")
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 0
+        env_dict = mock_env.call_args[0][0]
+        # With git config absent, only the task_executor env reaches the file.
+        assert env_dict == {"FOO": "1"}
