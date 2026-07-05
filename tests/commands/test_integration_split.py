@@ -120,7 +120,9 @@ class TestSchemaDelegation:
 def _write_goga_yml(tmp_path: Path) -> None:
     (tmp_path / ".goga").mkdir(exist_ok=True)
     (tmp_path / ".goga" / "config.yml").write_text(
-        "language: python\nbuild:\n  task_executor:\n    agent: claude\n  image: qarium/goga:latest\n"
+        "language: python\nimage: qarium/goga:latest\n"
+        "build:\n  task_executor:\n    agent: claude\n"
+        "pipeline:\n  agent: claude\n"
     )
 
 
@@ -163,7 +165,10 @@ class TestBuildDelegation:
         assert result.exit_code == 42
 
     def test_build_config_error_raises_click_exception(self, tmp_path: Path) -> None:
-        with _cwd(tmp_path):
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            _cwd(tmp_path),
+        ):
             runner = CliRunner()
             result = runner.invoke(build_cli, ["--skip-manifest-check", "plan.md"])
 

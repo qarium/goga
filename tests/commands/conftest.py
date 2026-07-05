@@ -9,7 +9,9 @@ def minimal_config(tmp_path: Path) -> Path:
     goga_dir = tmp_path / ".goga"
     goga_dir.mkdir()
     config_file = goga_dir / "config.yml"
-    config_file.write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n")
+    config_file.write_text(
+        "language: python\nbuild:\n  task_executor:\n    agent: claude\npipeline:\n  agent: claude\n"
+    )
     return tmp_path
 
 
@@ -38,5 +40,9 @@ def full_config(tmp_path: Path) -> Path:
         "  prompts_dir: /custom/prompts\n"
         "  agents_dir: /custom/agents\n"
         "  codex_review: true\n"
+        "pipeline:\n"
+        "  agent: claude\n"
+        "  env:\n"
+        "    API_KEY: sk-xxx\n"
     )
     return tmp_path

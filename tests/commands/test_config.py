@@ -201,7 +201,10 @@ class TestEdgeCases:
         goga_dir = tmp_path / ".goga"
         goga_dir.mkdir()
         config_file = goga_dir / "config.yml"
-        config_file.write_text("language: python\nbuild:\n  task_executor:\n    agent: claude\n  codex_review: false\n")
+        config_file.write_text(
+            "language: python\nbuild:\n  task_executor:\n    agent: claude\n  codex_review: false\n"
+            "pipeline:\n  agent: claude\n"
+        )
         result = _run_with_config(tmp_path, ["build.codex_review"])
         assert result.exit_code == 0
         assert result.output == "# build.codex_review\nFalse\n"

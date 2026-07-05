@@ -1,14 +1,22 @@
 language: python
+image: qarium/goga:latest
+
+.claude-env: &claude-env
+  ANTHROPIC_MODEL: opus
+  ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
 
 build:
-  image: qarium/goga:latest
   task_executor:
     agent: claude
     env:
-      ANTHROPIC_DEFAULT_HAIKU_MODEL: "glm-4.7"
-      ANTHROPIC_DEFAULT_SONNET_MODEL: "glm-5-turbo"
+      <<: *claude-env
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
-      ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
+
+pipeline:
+  agent: claude
+  env:
+    <<: *claude-env
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.2"
 
 codemanifest:
   usages:
