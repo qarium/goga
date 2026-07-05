@@ -344,7 +344,7 @@ def _run_named(
         env_file = _write_env_file(env, extra_env)
         click.echo(f"Web UI: http://localhost:{port}")
         cmd = _build_run_cmd(config.image, container_name, port, name, afm_config, env_file)
-        # _pull_image(config.image)
+        _pull_image(config.image)
         proc = subprocess.Popen(cmd)
         return proc.wait()
     finally:
