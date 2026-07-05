@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import shutil
 import stat
 import subprocess
@@ -16,7 +17,7 @@ from goga.build.build import (
     _unquote_git_path,
     build,
 )
-from goga.config import BuildConfig, Config, TaskExecutor
+from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 
 TEST_ENV_VARS = {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
@@ -31,9 +32,14 @@ def _make_config(
     env: dict | None = None,
     **build_kwargs,
 ) -> Config:
-    task_executor = TaskExecutor(agent=agent, env=env or {})
-    build = BuildConfig(task_executor=task_executor, image="goga:latest", **build_kwargs)
-    return Config(lang="python", build=build)
+    task_executor = TaskExecutorConfig(agent=agent, env=env or {})
+    build = BuildConfig(task_executor=task_executor, **build_kwargs)
+    return Config(
+        lang="python",
+        image="goga:latest",
+        build=build,
+        pipeline=PipelineConfig(agent="claude"),
+    )
 
 
 def _run_build_in_tmp(
@@ -51,6 +57,26 @@ def _run_build_in_tmp(
 
 
 # --- Helper tests ---
+
+
+class TestBuildContract:
+    def test_build_signature_is_plan_config_cli_options(self) -> None:
+        sig = inspect.signature(build)
+        assert list(sig.parameters) == ["plan", "config", "cli_options"]
+
+    def test_build_returns_int_annotation(self) -> None:
+        sig = inspect.signature(build)
+        # `from __future__ import annotations` defers annotations to strings,
+        # so the return annotation is the string "int".
+        assert sig.return_annotation in ("int", int)
+
+    def test_make_config_uses_task_executor_config_not_task_executor(self) -> None:
+        config = _make_config()
+        # TaskExecutorConfig is the renamed class; the old TaskExecutor must
+        # no longer be the type carried on BuildConfig.task_executor.
+        assert isinstance(config.build.task_executor, TaskExecutorConfig)
+        assert not hasattr(config.build, "image")
+        assert config.image == "goga:latest"
 
 
 class TestUnquoteGitPath:
