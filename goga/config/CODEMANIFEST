@@ -140,7 +140,11 @@ Annotations: |
     - env is optional and defaults to an empty dict
   properties:
     "agent -> str": |
-      AI executor identifier. Accepted values: claude, codex, copilot, gemini, custom:/path/to/script.
+      AI executor identifier — agent name as declared in the goga Docker image
+      (e.g. "claude", "codex", "opencode", or any other name matching the
+      /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
+      runtime by the consumer (goga/build) into an absolute wrapper path;
+      this cell does no resolution or validation of the value.
       Required — must not be an empty string.
     "env -> dict": |
       Environment variable dictionary ({str: str}).
@@ -162,7 +166,12 @@ Annotations: |
     - env is optional and defaults to an empty dict
   properties:
     "agent -> str": |
-      AI executor identifier used as afm client.command inside the container.
+      AI executor identifier — agent name as declared in the goga Docker image
+      (e.g. "claude", "codex", "opencode", or any other name matching the
+      /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
+      runtime by the consumer (goga/commands/pipeline) into an absolute
+      wrapper path written into the afm-config tmpfile; this cell does no
+      resolution or validation of the value.
       Required — must not be an empty string.
     "env -> dict": |
       Environment variable dictionary ({str: str}).

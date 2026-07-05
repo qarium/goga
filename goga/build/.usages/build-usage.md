@@ -3,7 +3,13 @@
 ## Overview
 
 The `goga.build` module orchestrates code builds through ralphex — handling
-environment preparation, AI agent configuration, and build process execution.
+environment preparation, ralphex config generation, and build process
+execution.
+
+The AI agent is selected via `.goga/config.yml` `build.task_executor.agent`.
+The agent name is resolved at runtime to the absolute in-container path of
+its `*-as-claude.sh` wrapper, and that path is written into `.ralphex/config`
+`claude_command`.
 
 ## Usage
 
@@ -39,12 +45,24 @@ exit_code = build(
   - `session_timeout`, `idle_timeout`, `wait` (str) — timeout settings
   - `max_iterations`, `review_patience` (int) — iteration limits
 
-## Supported agents
+## Agent resolution
 
-| Agent    | Preconditions                                                                                                                                                         |
-|----------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `claude` | Creates .ralphex/claude-wrapper.sh, .ralphex/config. claude is launched with `--setting-sources user` so the build does not touch the project `.claude/settings.json` |
-| `codex`  | Creates .ralphex/codex-wrapper.sh, .ralphex/config (executor=codex)                                                                                                   |
+`.goga/config.yml` field `build.task_executor.agent` is the agent name as
+declared in the goga image (`claude`, `codex`, `opencode`, or any other name
+matching the `/home/goga/bin/<agent>-as-claude.sh` wrapper convention).
+
+`build()` resolves this name through `resolve_wrapper_path` and writes the
+resulting absolute path into `.ralphex/config` `claude_command`. ralphex
+then invokes the wrapper directly.
+
+`resolve_wrapper_path(agent: str) -> str` is a pure string-building routine —
+it concatenates the in-container wrappers directory (`/home/goga/bin/`), the
+`agent` value verbatim, and the `-as-claude.sh` suffix. It performs no
+validation and no filesystem access; absence of the wrapper file is surfaced
+by ralphex at invocation time.
+
+No agent-name validation is performed by `build()`. If the wrapper file is
+missing from the image, ralphex surfaces the error.
 
 ## Return value
 
@@ -54,9 +72,10 @@ exit_code = build(
 ## Side effects
 
 - Removes `.ralphex/` before each run (cleanup)
-- Creates `.ralphex/claude-wrapper.sh` and `.ralphex/config` (when agent=claude)
-- Delivers build env (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, etc.) through the `ralphex` subprocess environment; the project `.claude/settings.json` is intentionally not written or modified (when agent=claude)
-- Creates `.ralphex/codex-wrapper.sh` and `.ralphex/config` (when agent=codex)
+- Creates `.ralphex/config` with `claude_command` set to the resolved wrapper
+  path (wrappers live in the image, not under .ralphex/)
+- Delivers build env (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, etc.) through
+  the `ralphex` subprocess environment
 - Copies prompts and agents into `.ralphex/`
 - Spawns a subprocess (`ralphex`)
 
@@ -69,3 +88,4 @@ CLI option parsing and calls `build()` directly.
 ```bash
 python -m goga.build plan.md --worktree --skip-manifest-check
 ```
+

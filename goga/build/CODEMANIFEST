@@ -5,14 +5,22 @@ Imports:
       - TaskExecutorConfig
       - load_config
     From: goga/config
+  - Types:
+      - resolve_wrapper_path
+    Usages:
+      - resolve-wrapper-path
+    From: goga/agents
 
 Usages:
   conventions: .goga/usages/conventions.md
   ralphex: .goga/usages/cooks/ralphex.md
+  agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
 
 Annotations: |
   Use the `conventions` practice for development and testing.
   Use the `ralphex` practice for builds.
+  Use the `agent-wrappers` practice for the in-container wrapper naming
+  convention referenced in the ralphex config generation step.
   Write all output to sys.stderr (click is not used).
   Run external commands via subprocess.
 
@@ -35,44 +43,49 @@ Annotations: |
     0. (pre-check) When skip_manifest_check is not set:
        - Verify all project CODEMANIFEST files are committed to git
        - Reject with exit code 1 if any uncommitted manifests are found
-    1. Remove .ralphex/ directory if present (applies to all agent types)
-    2. Dispatch agent-specific preconditions based on the agent field from `TaskExecutorConfig`:
-       - If agent is not in ("claude", "codex") → fail with "Unsupported agent", exit 1
-       - If agent == "claude":
-         a. Create .ralphex/claude-wrapper.sh:
-            - Script body: exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" \
-              claude --setting-sources user \
-              --settings '{"attribution":{"commit":"","pr":""}}' "$@"
-            - --setting-sources user makes claude skip the bind-mounted project
-              .claude/settings.json (avoids polluting the host file with build env)
-            - inline --settings carries the attribution (commit/pr disabled)
-            - Apply chmod +x
-         b. Update .ralphex/config:
-            - Add defaults (claude_command, claude_args) if missing
-            - Overwrite codex_enabled from `BuildConfig`
-       - If agent == "codex":
-         a. Create .ralphex/codex-wrapper.sh:
-            - Script body: exec codex "$@" -m "$CODEX_MODEL"
-            - Apply chmod +x
-         b. Create .ralphex/config:
-            - executor = codex
-            - codex_command = .ralphex/codex-wrapper.sh
-            - codex_sandbox = danger-full-access
-            - codex_reasoning_effort = high
-    3. Copy default prompts and agents from the goga package to .ralphex/,
+    1. Remove .ralphex/ directory if present
+    2. Resolve the agent wrapper path by calling `resolve_wrapper_path` with
+       the agent field of `TaskExecutorConfig`, per the `resolve-wrapper-path`
+       practice. The result is the absolute in-container path
+       /home/goga/bin/<name>-as-claude.sh defined by the `agent-wrappers`
+       practice. Do not validate the agent value — absence of the wrapper
+       file is surfaced by `ralphex` itself.
+    3. Create the .ralphex/config file with defaults populated for the
+       resolved agent:
+       - set the claude_command key to the resolved wrapper path
+       - apply claude_args defaults when missing
+       - set codex_enabled from `BuildConfig`
+    4. Copy default prompts and agents from the goga package to .ralphex/,
        using the directory paths specified in `BuildConfig`
-    4. Assemble the ralphex command:
+    5. Assemble the ralphex command:
        - Base command: ["ralphex", plan, "--config-dir", ".ralphex/"]
        - Apply flags with precedence: CLI options > `Config` > omit
-    5. On dry_run: print the assembled command and return 0
-    6. Execute `ralphex` via subprocess.call with
+    6. On dry_run: print the assembled command and return 0
+    7. Execute `ralphex` via subprocess.call with
        env = {**os.environ, **`TaskExecutorConfig`.env} (build env delivered through
        the process environment, not via a settings file) and propagate its exit code
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `ralphex` practice for ralphex CLI contract and config layout.
+    Apply the `agent-wrappers` practice for the wrapper path semantics referenced
+    in step 3.
+    Apply the `resolve-wrapper-path` practice when calling
+    `resolve_wrapper_path` in step 2.
 
     Requirements:
     - `ralphex` must be available on PATH; fail otherwise
     - Minimal output: log each step to sys.stderr
     - Return code: `ralphex` exit code on success, 1 on error
+    - The claude_command key in .ralphex/config MUST be set to the resolved
+      wrapper path (absolute, /home/goga/bin/<name>-as-claude.sh)
+
+    Constraints:
+    - Wrappers live in the image at /home/goga/bin/ and are referenced by
+      absolute path — do not generate wrapper scripts under .ralphex/
+    - Agent resolution is uniform — do not branch the algorithm by agent name
+    - Wrapper-script bodies are owned by the image (scripts/claude-as-claude.sh)
+      and the upstream ralphex source (codex-as-claude.sh, opencode-as-claude.sh)
+      — do not inline wrapper bodies into this cell
 
 "main() -> exit_code:int":
   location: __main__.py

@@ -1,0 +1,33 @@
+Imports:
+  - Types:
+      - resolve_wrapper_path
+    From: goga/agents/wrapper
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the facade of the agent-wrappers area. It exposes the
+  `resolve_wrapper_path` routine as the single stable import point for
+  agent-name-to-wrapper-path resolution.
+
+  This cell has no own types — it is re-export only. The implementation
+  lives in subcells under this facade.
+
+---
+
+->resolve_wrapper_path: {}
+
+---
+
+Author: Goga
+CreatedAt: 05/07/26
+Description: |
+  Agent tooling area. Provides tools for working with AI agents.

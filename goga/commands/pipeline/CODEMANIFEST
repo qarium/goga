@@ -5,6 +5,11 @@ Imports:
     Usages:
       - configuration
     From: goga/config
+  - Types:
+      - resolve_wrapper_path
+    Usages:
+      - resolve-wrapper-path
+    From: goga/agents
   - Usages:
       - list-pipelines
       - run-pipeline
@@ -15,6 +20,7 @@ Usages:
   conventions: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
   afm: .goga/usages/cooks/afm.md
+  agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
 
 Annotations: |
   The `conventions` practice is used for:
@@ -30,6 +36,9 @@ Annotations: |
 
   Use the `afm` practice for the in-container binary contract (CLI shape,
   PATH-resolved invocation, exit codes).
+
+  Use the `agent-wrappers` practice for the in-container wrapper naming
+  convention referenced when generating the afm client.command config.
 
   Use the `pipeline-cli`, `list-pipelines`, and `run-pipeline` practices for
   the in-container entrypoint contract, discovery output format, and run
@@ -141,15 +150,20 @@ Annotations: |
     3. Allocate a free localhost TCP port for the dashboard (bind to ephemeral,
        read the assigned port, release the socket — accept a small race window)
     4. Generate a unique container_name
-    5. Create a private afm-config tmpfile (mode 0600) carrying the afm
-       client.command derived from config.pipeline.agent
-    6. Create a private env-file (mode 0600) combining config.pipeline.env,
+    5. Resolve the agent wrapper path by calling `resolve_wrapper_path` with
+       config.pipeline.agent, per the `resolve-wrapper-path` practice. The
+       result is the absolute in-container path /home/goga/bin/<name>-as-claude.sh
+       defined by the `agent-wrappers` practice. Do not validate the agent
+       value — absence of the wrapper file is surfaced by afm itself.
+    6. Create a private afm-config tmpfile (mode 0600) carrying the afm
+       client.command set to the resolved wrapper path
+    7. Create a private env-file (mode 0600) combining config.pipeline.env,
        git identity, and the `extra_env` KEY=VALUE strings (forwarded as-is,
        no validation)
-    7. Install a SIGTERM/SIGINT handler that kills the container and exits
+    8. Install a SIGTERM/SIGINT handler that kills the container and exits
        with 128 + signum
-    8. Print "Web UI: http://localhost:<port>" to stdout
-    9. Assemble the docker run command:
+    9. Print "Web UI: http://localhost:<port>" to stdout
+    10. Assemble the docker run command:
        - --rm, --name <container_name>
        - Publish the allocated port on both sides (-p <port>:<port>)
        - Bind-mount the project directory as /workspace and set it as the
@@ -160,16 +174,23 @@ Annotations: |
        - When ~/.codex/auth.json exists — bind-mount it read-only
        - --entrypoint python3 <config.image>
        - Args: -m goga.pipeline run <name> --port <port>
-    10. Pull the image; log a warning on failure and continue with the local image
-    11. Launch the container and wait for its exit code, propagating stdout/stderr
-    12. In finally: delete the afm-config tmpfile, delete the env-file, kill
+    11. Pull the image; log a warning on failure and continue with the local image
+    12. Launch the container and wait for its exit code, propagating stdout/stderr
+    13. In finally: delete the afm-config tmpfile, delete the env-file, kill
         the container (suppress errors), and restore the previous signal handler
-    13. Return the container exit code
+    14. Return the container exit code
+
+    Apply the `agent-wrappers` practice for the wrapper path semantics
+    referenced in step 5.
+    Apply the `resolve-wrapper-path` practice when calling
+    `resolve_wrapper_path` in step 5.
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile mode 0600, content "client.command: <config.pipeline.agent>"
+    - afm-config tmpfile mode 0600, content "client.command: <resolved
+      wrapper path>" — the value MUST be the absolute path returned by
+      `resolve_wrapper_path`, never a bare agent name
     - env-file content: config.pipeline.env + git identity + `extra_env`
       KEY=VALUE strings (forwarded as-is, no validation)
     - `extra_env` default is an empty tuple, preserving the pre-option behavior
@@ -187,6 +208,10 @@ Annotations: |
     - Do not invoke list_pipelines or run_pipeline directly — only via
       "docker run python -m goga.pipeline"
     - Do not import any Type from goga/pipeline — runtime boundary only
+    - Do not validate config.pipeline.agent against a hardcoded whitelist —
+      absence of the wrapper is surfaced by afm
+    - Do not write a bare agent name into client.command — always write the
+      resolved absolute wrapper path
 
 ---
 

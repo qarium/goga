@@ -63,14 +63,16 @@ afm list
 
 afm reads its configuration from `~/.afm/config.yaml` (the `.afm/` directory
 inside the invoking user's home). The single field `goga` cares about is
-`client.command` — it selects the agent afm will drive (`claude`, `codex`, ...).
-`goga` generates this file per invocation.
+`client.command` — the absolute in-container path of the `*-as-claude.sh`
+wrapper afm will drive (e.g. `/home/goga/bin/codex-as-claude.sh`). `goga`
+generates this file per invocation with the resolved wrapper path; a bare
+agent name is never written.
 
 `config.yaml` fields (YAML tags surfaced by the binary):
 
 | Field           | Type   | Purpose                                                          |
 |-----------------|--------|------------------------------------------------------------------|
-| `client.command`| str    | Shell command afm launches as the agent client (e.g. `claude`, `codex`) |
+| `client.command`| str    | Absolute in-container path of the `*-as-claude.sh` wrapper afm launches as the agent client (e.g. `/home/goga/bin/codex-as-claude.sh`) |
 | `port`          | int    | Dashboard port (used when `afm run --port` is `0` or omitted)    |
 | `idle_timeout`  | str    | Agent idle timeout (Go duration)                                 |
 | `max_parallel`  | int    | Max parallel stages                                              |
@@ -96,9 +98,11 @@ inside the invoking user's home). The single field `goga` cares about is
    port, close it, and hand the same value to both `-p <port>:<port>` and
    `afm run --port <port>`).
 2. Generate `~/.afm/config.yaml` content as a 0600 tempfile with
-   `client.command: <config.pipeline.agent>` and mount it into the container
-   at `/home/goga/.afm/config.yaml:ro` (the `goga` user's home inside the
-   image). Unlink the tempfile in a `finally` block.
+   `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute
+   in-container wrapper path matching the `*-as-claude.sh` convention) and
+   mount it into the container at `/home/goga/.afm/config.yaml:ro` (the
+   `goga` user's home inside the image). Unlink the tempfile in a `finally`
+   block.
 3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
    -w /workspace -v <afm_config_tmpfile>:/home/goga/.afm/config.yaml:ro
    --env-file <env_file> [-v ~/.codex/auth.json:ro] <config.image>

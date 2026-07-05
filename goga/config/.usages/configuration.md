@@ -114,9 +114,18 @@ codemanifest:
 | `language`                  | str     | Project programming language                                        |
 | `image`                     | str     | Top-level Docker image shared by build and pipeline                 |
 | `pipeline`                  | mapping | Pipeline configuration block                                        |
-| `pipeline.agent`            | str     | AI executor used as afm client.command inside the container         |
+| `pipeline.agent`            | str     | Agent name; resolved at runtime into the in-container `*-as-claude.sh` wrapper path and written to afm `client.command` |
 | `build.task_executor`       | mapping | AI agent configuration block                                        |
-| `build.task_executor.agent` | str     | AI executor identifier: `claude`, `codex`, `copilot`, `gemini`, `custom:/path` |
+| `build.task_executor.agent` | str     | Agent name; resolved at runtime into the in-container `*-as-claude.sh` wrapper path and written to ralphex `claude_command` |
+
+#### Agent name semantics
+
+Both `pipeline.agent` and `build.task_executor.agent` are agent names as
+declared in the goga Docker image — any value matching the
+`/home/goga/bin/<agent>-as-claude.sh` wrapper convention (e.g. `claude`,
+`codex`, `opencode`). The config layer does no validation: resolution and
+absence-of-wrapper errors are surfaced by the downstream tools (ralphex,
+afm) that consume these fields.
 
 ### Optional Fields
 

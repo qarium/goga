@@ -1,0 +1,63 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the single source of truth for resolving an agent name to its
+  in-container wrapper path. It owns the path-resolution routine consumed by
+  both ralphex-driven builds and afm-driven pipelines.
+
+  Use the `agent-wrappers` practice for the naming convention and the
+  in-container wrapper directory layout.
+
+---
+
+"resolve_wrapper_path(agent: str) -> wrapper_path: str":
+  location: resolve.py
+  annotations: |
+    Resolve an agent name into the absolute in-container path of its
+    *-as-claude.sh wrapper, per the `agent-wrappers` practice.
+
+    `agent`: agent name as declared in the consumer's configuration
+             (e.g. "claude", "codex", "opencode").
+             Forwarded as-is — no validation, no normalization.
+    `wrapper_path`: absolute path to the wrapper script under the in-container
+                    wrappers directory (e.g. "/home/goga/bin/codex-as-claude.sh").
+
+    Algorithm:
+    1. Build the wrapper filename by combining the agent name with the
+       "-as-claude.sh" suffix, per the `agent-wrappers` convention
+    2. Combine the in-container wrappers directory with the filename to
+       form an absolute path
+    3. Return the absolute path
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports. Apply the `agent-wrappers` practice for the directory and naming
+    convention.
+
+    Requirements:
+    - The wrappers directory is fixed by the `agent-wrappers` practice
+    - The function is pure: no filesystem access, no side effects
+    - The return value is always an absolute path string
+
+    Constraints:
+    - Do not validate `agent` against any whitelist — absence of the wrapper
+      file is surfaced by the consumer (ralphex, afm)
+    - Do not normalize case, strip characters, or otherwise transform `agent`
+    - Do not check whether the wrapper file exists
+    - Do not accept a wrappers_dir parameter — the directory is fixed
+
+---
+
+Author: Goga
+CreatedAt: 05/07/26
+Description: |
+  Agent tooling area — wrapper path resolution. Owns the routine that maps
+  an agent name to its wrapper script path.

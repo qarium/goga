@@ -8,7 +8,11 @@ COPY goga/ /tmp/goga/goga/
 RUN pip install --no-cache-dir -U /tmp/goga && \
     rm -rf /tmp/goga
 
-FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-source
+FROM alpine/git:latest AS ralphex-source
+ARG RALPHEX_REF=v1.4.0
+RUN git clone --depth 1 --branch ${RALPHEX_REF} https://github.com/umputun/ralphex.git /ralphex
+
+FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-binary
 FROM akopichin/afm:latest AS afm-source
 
 FROM python:3.12-slim-bookworm
@@ -20,7 +24,7 @@ RUN apt-get update && \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ralphex-source /srv/ralphex /srv/ralphex
+COPY --from=ralphex-binary /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
 RUN npm install -g @anthropic-ai/claude-code@2.1.160 @openai/codex@0.136.0
 RUN chmod +x /srv/ralphex /srv/afm
@@ -32,9 +36,15 @@ RUN useradd -m -s /bin/bash goga && \
     python3 -m venv /opt/goga && \
     sed -i "s|/usr/local|/opt/goga|" /opt/goga/bin/goga && \
     chown -R goga:goga /opt/goga && \
-    mkdir -p /home/goga/.codex && chown goga:goga /home/goga/.codex
+    mkdir -p /home/goga/bin /home/goga/.codex && \
+    chown goga:goga /home/goga/bin /home/goga/.codex
 
-ENV PATH="/opt/goga/bin:/srv:${PATH}"
+COPY --from=ralphex-source /ralphex/scripts/codex-as-claude/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
+COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
+COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
+RUN chmod +x /home/goga/bin/codex-as-claude.sh /home/goga/bin/opencode-as-claude.sh /home/goga/bin/claude-as-claude.sh
+
+ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
 ENV RALPHEX_DOCKER=1
 ENV AFM_DIR=/tmp/afm
 

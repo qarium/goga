@@ -123,7 +123,7 @@ ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (l
 
 | Option              | Description                          | Default      |
 |---------------------|--------------------------------------|--------------|
-| `claude_command`    | Claude CLI command                   | `claude`     |
+| `claude_command`    | Claude CLI command (accepts any absolute path to a `*-as-claude.sh` wrapper script under `/home/goga/bin/`, not just the bare `claude` command) | `claude`     |
 | `plans_dir`         | Directory with plans                 | `docs/plans` |
 | `codex_enabled`     | Enable codex review phase            | `true`       |
 | `task_retry_count`  | Number of retries per task           | `1`          |
