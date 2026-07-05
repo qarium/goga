@@ -4,27 +4,17 @@ import logging
 import os
 import shlex
 import shutil
-import stat
 import subprocess
 from pathlib import Path
 
+from ..agents import resolve_wrapper_path
 from ..config import Config
 
 logger = logging.getLogger(__name__)
 
-CLAUDE_WRAPPER_SCRIPT = (
-    "#!/bin/bash\n"
-    'exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude '
-    "--setting-sources user "
-    '--settings \'{"attribution":{"commit":"","pr":""}}\' '
-    '"$@"\n'
-)
-CODEX_WRAPPER_SCRIPT = '#!/bin/bash\nexec codex "$@" -m "$CODEX_MODEL"\n'
-
 DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
 
 RALPHEX_CONFIG_DEFAULTS = {
-    "claude_command": ".ralphex/claude-wrapper.sh",
     "claude_args": "--dangerously-skip-permissions --output-format stream-json --verbose",
 }
 
@@ -79,86 +69,31 @@ def _cleanup_ralphex_dir() -> None:
         logger.info("removed .ralphex directory")
 
 
-def _run_precondition(config: Config) -> int:
-    agent = config.build.task_executor.agent
-    if agent not in ("claude", "codex"):
-        logger.error("unsupported agent", extra={"agent": agent})
-        return 1
-    if agent == "claude":
-        try:
-            _precondition_claude(config)
-        except RuntimeError as exc:
-            logger.error("claude precondition failed", extra={"error": str(exc)})
-            return 1
-    if agent == "codex":
-        _precondition_codex()
-    return 0
+def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
+    """Write the .ralphex/config INI for ralphex with the resolved wrapper path.
 
+    Populates the ralphex config keys covered by the agent-wrappers contract:
+    `claude_command` set to the resolved absolute wrapper path, `claude_args`
+    defaults applied, and `codex_enabled` derived from `BuildConfig`. No
+    codex-specific ralphex keys are written.
 
-def _precondition_claude(config: Config) -> None:
-    _create_claude_wrapper(config)
-
-
-def _precondition_codex() -> None:
-    _create_codex_wrapper()
-
-
-def _create_codex_wrapper() -> None:
-    logger.info("creating .ralphex/config for codex")
-
+    Args:
+        config: Project configuration with build settings.
+        wrapper_path: Resolved absolute in-container wrapper path.
+    """
     ralphex_dir = Path(".ralphex")
     ralphex_dir.mkdir(exist_ok=True)
 
-    wrapper_path = ralphex_dir / "codex-wrapper.sh"
-    wrapper_path.write_text(CODEX_WRAPPER_SCRIPT)
-    wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    codex_enabled = str(config.build.codex_review or False).lower()
 
-    (ralphex_dir / "config").write_text(
-        "executor = codex\n"
-        "codex_command = .ralphex/codex-wrapper.sh\n"
-        "codex_sandbox = danger-full-access\n"
-        "codex_reasoning_effort = high\n"
-    )
+    config_lines = [
+        f"claude_command = {wrapper_path}",
+        f"claude_args = {RALPHEX_CONFIG_DEFAULTS['claude_args']}",
+        f"codex_enabled = {codex_enabled}",
+    ]
 
-
-def _create_claude_wrapper(config: Config) -> None:
-    logger.info("creating .ralphex/claude-wrapper.sh")
-
-    ralphex_dir = Path(".ralphex")
-    ralphex_dir.mkdir(exist_ok=True)
-
-    wrapper_path = ralphex_dir / "claude-wrapper.sh"
-    wrapper_path.write_text(CLAUDE_WRAPPER_SCRIPT)
-
-    wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-
-    config_path = ralphex_dir / "config"
-    config_lines: list[str] = []
-    if config_path.is_file():
-        config_lines = config_path.read_text().splitlines()
-
-    codex_value = str(config.build.codex_review or False).lower()
-    codex_line = f"codex_enabled = {codex_value}"
-
-    existing_keys: set[str] = set()
-    codex_found = False
-    for i, line in enumerate(config_lines):
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            existing_keys.add(key)
-            if key == "codex_enabled":
-                config_lines[i] = codex_line
-                codex_found = True
-
-    for key, value in RALPHEX_CONFIG_DEFAULTS.items():
-        if key not in existing_keys:
-            config_lines.append(f"{key} = {value}")
-
-    if not codex_found:
-        config_lines.append(codex_line)
-
-    config_path.write_text("\n".join(config_lines) + "\n")
+    (ralphex_dir / "config").write_text("\n".join(config_lines) + "\n")
+    logger.info("wrote .ralphex/config", extra={"claude_command": wrapper_path})
 
 
 def _copy_defaults(config: Config) -> int:
@@ -216,8 +151,9 @@ def _assemble_command(plan: str, config: Config, cli_options: dict) -> list[str]
 def build(plan: str, config: Config, cli_options: dict) -> int:
     """Execute the build pipeline for a given plan.
 
-    Validates uncommitted CODEMANIFEST files, runs agent-specific preconditions,
-    copies default prompts and agents, and launches the ralphex build command.
+    Validates uncommitted CODEMANIFEST files, resolves the agent wrapper path,
+    writes the ralphex config, copies default prompts and agents, and launches
+    the ralphex build command.
 
     Args:
         plan: Path to the build plan file.
@@ -238,10 +174,13 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
 
     _cleanup_ralphex_dir()
 
-    for step in (_run_precondition, _copy_defaults):
-        result = step(config)
-        if result != 0:
-            return result
+    wrapper_path = resolve_wrapper_path(config.build.task_executor.agent)
+
+    _write_ralphex_config(config, wrapper_path)
+
+    copy_result = _copy_defaults(config)
+    if copy_result != 0:
+        return copy_result
 
     cmd = _assemble_command(plan, config, cli_options)
     cmd_str = shlex.join(cmd)

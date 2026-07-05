@@ -2,19 +2,16 @@ from __future__ import annotations
 
 import inspect
 import shutil
-import stat
 import subprocess
 from pathlib import Path
 from unittest import mock
 
 from goga.build.build import (
-    CLAUDE_WRAPPER_SCRIPT,
     _assemble_command,
     _copy_defaults,
-    _create_claude_wrapper,
     _parse_porcelain_path,
-    _run_precondition,
     _unquote_git_path,
+    _write_ralphex_config,
     build,
 )
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
@@ -110,137 +107,67 @@ class TestParsePorcelainPath:
         assert _parse_porcelain_path("M  ") is None
 
 
-# --- Precondition tests ---
+# --- Ralphex config writer tests ---
 
 
-class TestRunPrecondition:
-    def test_claude_agent_succeeds(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(agent="claude")
-        assert _run_precondition(config) == 0
-
-    def test_codex_agent_succeeds(self, tmp_path, monkeypatch) -> None:
+class TestWriteRalphexConfig:
+    def test_writes_resolved_wrapper_to_claude_command(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
 
-    def test_codex_agent_no_claude_settings(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
-        assert not (tmp_path / ".claude").exists()
+        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
 
-    def test_codex_agent_creates_ralphex_config(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
-        config_path = tmp_path / ".ralphex" / "config"
-        assert config_path.is_file()
-        assert "executor = codex" in config_path.read_text()
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
 
-    def test_codex_wrapper_script_content(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
-        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
-        assert wrapper.is_file()
-        assert 'exec codex "$@" -m "$CODEX_MODEL"' in wrapper.read_text()
-
-    def test_codex_wrapper_executable_permissions(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config(agent="codex")
-        assert _run_precondition(config) == 0
-        wrapper = tmp_path / ".ralphex" / "codex-wrapper.sh"
-        mode = wrapper.stat().st_mode
-        assert mode & stat.S_IXUSR
-        assert mode & stat.S_IXGRP
-        assert mode & stat.S_IXOTH
-
-    def test_unsupported_agent_returns_1(self, tmp_path, monkeypatch) -> None:
-        config = _make_config(agent="gemini")
-        assert _run_precondition(config) == 1
-
-
-class TestCreateClaudeWrapper:
-    def test_wrapper_created(self, tmp_path, monkeypatch) -> None:
+    def test_writes_claude_args_default(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = _make_config()
-        _create_claude_wrapper(config)
 
-        wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
-        assert wrapper_path.is_file()
-        assert wrapper_path.read_text() == CLAUDE_WRAPPER_SCRIPT
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
 
-    def test_wrapper_isolates_project_settings(self, tmp_path, monkeypatch) -> None:
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose" in config_text
+
+    def test_codex_enabled_false_by_default(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = _make_config()
-        _create_claude_wrapper(config)
 
-        body = (tmp_path / ".ralphex" / "claude-wrapper.sh").read_text()
-        assert "--setting-sources user" in body
-        assert "--settings" in body
-        assert '"attribution":{"commit":"","pr":""}' in body
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
 
-    def test_wrapper_is_executable(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        _create_claude_wrapper(config)
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = false" in config_text
 
-        wrapper_path = tmp_path / ".ralphex" / "claude-wrapper.sh"
-        mode = wrapper_path.stat().st_mode
-        assert mode & stat.S_IXUSR
-        assert mode & stat.S_IXGRP
-        assert mode & stat.S_IXOTH
-
-    def test_config_defaults_added(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        _create_claude_wrapper(config)
-
-        config_content = (tmp_path / ".ralphex" / "config").read_text()
-        assert "claude_command = .ralphex/claude-wrapper.sh" in config_content
-        assert "codex_enabled = false" in config_content
-
-    def test_codex_enabled_true(self, tmp_path, monkeypatch) -> None:
+    def test_codex_review_true_maps_to_codex_enabled_true(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
         config = _make_config(codex_review=True)
-        _create_claude_wrapper(config)
 
-        config_content = (tmp_path / ".ralphex" / "config").read_text()
-        assert "codex_enabled = true" in config_content
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
 
-    def test_codex_overwrites_existing(self, tmp_path, monkeypatch) -> None:
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "codex_enabled = true" in config_text
+
+    def test_does_not_write_codex_specific_keys(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        ralphex_dir = tmp_path / ".ralphex"
-        ralphex_dir.mkdir()
-        (ralphex_dir / "config").write_text("codex_enabled = true\n")
+        config = _make_config(agent="codex")
 
-        config = _make_config(codex_review=False)
-        _create_claude_wrapper(config)
+        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
 
-        config_content = (ralphex_dir / "config").read_text()
-        assert "codex_enabled = false" in config_content
-        assert config_content.count("codex_enabled") == 1
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "executor" not in config_text
+        assert "codex_command" not in config_text
+        assert "codex_sandbox" not in config_text
+        assert "codex_reasoning_effort" not in config_text
 
-    def test_preserves_comments_and_custom_keys(self, tmp_path, monkeypatch) -> None:
+    def test_does_not_generate_wrapper_scripts(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
+        config = _make_config(agent="claude")
+
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+
         ralphex_dir = tmp_path / ".ralphex"
-        ralphex_dir.mkdir()
-        (ralphex_dir / "config").write_text(
-            "# ralphex settings\ncodex_enabled = true\n# other\ncustom_key = val\n"
-            "claude_command = .ralphex/claude-wrapper.sh\n"
-            "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose\n"
-        )
-
-        config = _make_config(codex_review=False)
-        _create_claude_wrapper(config)
-
-        config_content = (ralphex_dir / "config").read_text()
-        lines = config_content.strip().splitlines()
-        assert "# ralphex settings" in lines
-        assert "codex_enabled = false" in lines
-        assert "# other" in lines
-        assert "custom_key = val" in lines
+        entries = {p.name for p in ralphex_dir.iterdir()}
+        assert entries == {"config"}
 
 
 class TestCopyDefaults:
@@ -436,16 +363,18 @@ class TestBuildEnvDelivery:
         assert not (tmp_path / ".claude" / "settings.json").exists()
 
 
-class TestBuildUnsupportedAgent:
-    def test_unsupported_agent_returns_1(self, tmp_path, monkeypatch) -> None:
+class TestBuildArbitraryAgent:
+    def test_arbitrary_agent_resolves_and_proceeds(self, tmp_path, monkeypatch) -> None:
         config = _make_config(agent="gemini")
         result = _run_build_in_tmp(
             tmp_path,
             monkeypatch,
             config=config,
-            cli_options={"skip_manifest_check": True},
+            cli_options={"dry_run": True, "skip_manifest_check": True},
         )
-        assert result == 1
+        assert result == 0
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "claude_command = /home/goga/bin/gemini-as-claude.sh" in config_text
 
 
 class TestBuildCodexAgent:
