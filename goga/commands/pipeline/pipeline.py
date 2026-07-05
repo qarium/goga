@@ -51,5 +51,7 @@ def pipeline(
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    exit_code = run_pipeline_container(name, config, extra_env)
+    # Dispatch with explicit keyword arguments so the click surface — and its
+    # tests — can assert on each argument by name rather than by position.
+    exit_code = run_pipeline_container(name=name, config=config, extra_env=extra_env)
     ctx.exit(exit_code)

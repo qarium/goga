@@ -78,7 +78,7 @@ class TestPipelineLogic:
             result = runner.invoke(pipeline, [])
 
         assert result.exit_code == 0
-        mock_rpc.assert_called_once_with(None, config, ())
+        mock_rpc.assert_called_once_with(name=None, config=config, extra_env=())
 
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
         """pipeline <name> delegates to run_pipeline_container with (name, config, ())."""
@@ -91,7 +91,7 @@ class TestPipelineLogic:
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == 0
-        mock_rpc.assert_called_once_with("deploy", config, ())
+        mock_rpc.assert_called_once_with(name="deploy", config=config, extra_env=())
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
         """`-e KEY=VALUE` (repeatable) is forwarded as a tuple to run_pipeline_container."""
@@ -108,9 +108,9 @@ class TestPipelineLogic:
 
         assert result.exit_code == 0
         mock_rpc.assert_called_once_with(
-            "deploy",
-            config,
-            ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
+            name="deploy",
+            config=config,
+            extra_env=("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -124,7 +124,7 @@ class TestPipelineLogic:
             result = runner.invoke(pipeline, ["deploy", "--env", "FOO=bar"])
 
         assert result.exit_code == 0
-        mock_rpc.assert_called_once_with("deploy", config, ("FOO=bar",))
+        mock_rpc.assert_called_once_with(name="deploy", config=config, extra_env=("FOO=bar",))
 
     @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])
     def test_pipeline_propagates_exit_code(self, exit_code: int) -> None:
