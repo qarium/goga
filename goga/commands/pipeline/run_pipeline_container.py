@@ -23,6 +23,7 @@ from pathlib import Path
 
 import click
 
+from ...agents import resolve_wrapper_path
 from ...config import Config
 
 logger = logging.getLogger(__name__)
@@ -141,7 +142,7 @@ def _allocate_port() -> int:
         sock.close()
 
 
-def _write_afm_config_tmpfile(agent: str) -> Path:
+def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     """Write the afm ``client.command`` config to a private temp file (mode 0600).
 
     The file is created in the system temp directory — NEVER under ``/workspace``
@@ -149,7 +150,10 @@ def _write_afm_config_tmpfile(agent: str) -> Path:
     ``/home/goga/.afm/config.yaml`` inside the container.
 
     Args:
-        agent: The afm client command (``config.pipeline.agent``).
+        wrapper_path: The resolved absolute in-container wrapper script path
+            (``resolve_wrapper_path(config.pipeline.agent)``), e.g.
+            ``/home/goga/bin/codex-as-claude.sh``. Written verbatim into
+            ``client.command`` — never a bare agent name.
 
     Returns:
         Path to the written temporary file.
@@ -157,7 +161,7 @@ def _write_afm_config_tmpfile(agent: str) -> Path:
     fd, path = tempfile.mkstemp(prefix="goga-afm-config-")
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
-        f.write(f"client.command: {agent}\n")
+        f.write(f"client.command: {wrapper_path}\n")
     return Path(path)
 
 
@@ -338,7 +342,8 @@ def _run_named(
     afm_config: Path | None = None
     env_file: Path | None = None
     try:
-        afm_config = _write_afm_config_tmpfile(config.pipeline.agent)
+        wrapper_path = resolve_wrapper_path(config.pipeline.agent)
+        afm_config = _write_afm_config_tmpfile(wrapper_path)
         git_env = _read_git_config()
         env = {**git_env, **config.pipeline.env}
         env_file = _write_env_file(env, extra_env)
@@ -370,8 +375,10 @@ def run_pipeline_container(
 
     Discovery mode (``name is None``) runs ``-m goga.pipeline list``. Run mode
     (``name`` provided) allocates a free port, writes a private afm-config
-    tmpfile (``client.command: <config.pipeline.agent>``) mounted read-only at
-    ``/home/goga/.afm/config.yaml``, writes a private env-file combining
+    tmpfile (``client.command: <resolved wrapper path>`` — the absolute
+    ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare agent
+    name) mounted read-only at ``/home/goga/.afm/config.yaml``, writes a private
+    env-file combining
     ``config.pipeline.env``, git identity, and ``extra_env`` (raw KEY=VALUE
     strings, e.g. an agent authorization token supplied via ``-e/--env``),
     prints the Web UI URL, and runs ``-m goga.pipeline run <name> --port <port>``.
