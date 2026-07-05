@@ -106,12 +106,15 @@ def _write_env_file(
         Path to the written temporary file.
     """
     fd, path = tempfile.mkstemp(prefix="goga-env-")
+
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
+
         for k, v in env.items():
             f.write(f"{k}={v}\n")
         for pair in extra_env:
             f.write(f"{pair}\n")
+
     return Path(path)
 
 
@@ -168,6 +171,7 @@ def _build_docker_cmd(
         cmd.append("--skip-finalize")
     if cli_flags.get("skip_manifest_check"):
         cmd.append("--skip-manifest-check")
+
     for flag in ("session_timeout", "idle_timeout", "wait"):
         val = cli_flags.get(flag)
         if val is not None:
