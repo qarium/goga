@@ -1,4 +1,4 @@
-"""AFM cell — thin subprocess-only wrapper over the external flowmanager binary."""
+"""AFM cell — thin subprocess-only wrapper over the external afm binary."""
 
 from .run_flow import run_flow
 
