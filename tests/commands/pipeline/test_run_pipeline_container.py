@@ -246,6 +246,82 @@ class TestPipelineEnvFile:
         assert captured_env["GIT_AUTHOR_NAME"] == "from-pipeline"
 
 
+# --- user-level pipelines mount ---
+
+
+class TestUserPipelinesMount:
+    def test_discovery_mounts_user_pipelines_dir_when_present(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mounts ~/.goga/pipelines read-only when the host dir exists.
+
+        User pipelines installed by `goga connect` live in ~/.goga/pipelines and
+        must be discoverable in-container at /home/goga/.goga/pipelines.
+        """
+        config = _make_config()
+        fake_home = tmp_path / "home"
+        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container(None, config)
+
+        cmd = mock_popen.call_args[0][0]
+        assert any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
+
+    def test_run_mounts_user_pipelines_dir_when_present(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode mounts ~/.goga/pipelines read-only when the host dir exists."""
+        config = _make_config()
+        fake_home = tmp_path / "home"
+        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        cmd = mock_popen.call_args[0][0]
+        assert any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
+
+    def test_user_pipelines_mount_omitted_when_absent(self, tmp_path: Path, monkeypatch) -> None:
+        """No user-pipelines mount when ~/.goga/pipelines does not exist.
+
+        Skipping the mount avoids Docker creating the directory on the host.
+        """
+        config = _make_config()
+        fake_home = tmp_path / "home"
+        fake_home.mkdir(parents=True)  # home exists, but no .goga/pipelines
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        cmd = mock_popen.call_args[0][0]
+        assert not any("/home/goga/.goga/pipelines" in arg for arg in cmd)
+
+
 # --- failure modes ---
 
 

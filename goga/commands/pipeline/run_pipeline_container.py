@@ -152,8 +152,31 @@ def _write_afm_config_tmpfile(agent: str) -> Path:
     return Path(path)
 
 
+def _append_user_pipelines_mount(cmd: list[str]) -> None:
+    """Append the user-level pipelines bind mount to ``cmd`` when it exists.
+
+    The in-container entrypoint resolves ``user_dir = Path.home() /
+    ".goga" / "pipelines"`` (``/home/goga/.goga/pipelines``). User pipelines
+    installed by ``goga connect`` live in the host's ``~/.goga/pipelines``; that
+    directory is mounted read-only at the matching in-container path so user
+    pipelines are discoverable and runnable. The mount is skipped when the host
+    directory is absent (avoids Docker creating it on the host).
+
+    Args:
+        cmd: The docker command list to extend in place.
+    """
+    user_pipelines = Path.home() / ".goga" / "pipelines"
+    if user_pipelines.is_dir():
+        cmd.extend(["-v", f"{user_pipelines}:/home/goga/.goga/pipelines:ro"])
+
+
 def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
     """Assemble the discovery-mode docker command (``-m goga.pipeline list``).
+
+    Mounts the project at ``/workspace`` and, when present, the user-level
+    pipelines directory (``~/.goga/pipelines``) read-only at
+    ``/home/goga/.goga/pipelines`` so user pipelines installed by ``goga connect``
+    are discoverable in-container.
 
     Args:
         image: Docker image to run.
@@ -163,7 +186,7 @@ def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
         The full docker command as a list of string arguments.
     """
     project_dir = Path.cwd().resolve()
-    return [
+    cmd: list[str] = [
         "docker",
         "run",
         "--rm",
@@ -173,13 +196,19 @@ def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
         f"{project_dir}:/workspace",
         "-w",
         "/workspace",
-        "--entrypoint",
-        "python3",
-        image,
-        "-m",
-        "goga.pipeline",
-        "list",
     ]
+    _append_user_pipelines_mount(cmd)
+    cmd.extend(
+        [
+            "--entrypoint",
+            "python3",
+            image,
+            "-m",
+            "goga.pipeline",
+            "list",
+        ]
+    )
+    return cmd
 
 
 def _build_run_cmd(  # noqa: PLR0913
@@ -194,8 +223,10 @@ def _build_run_cmd(  # noqa: PLR0913
 
     Builds ``docker run ... -m goga.pipeline run <name> --port <port>`` with the
     project mounted at ``/workspace``, the afm-config tmpfile mounted read-only
-    at ``/home/goga/.afm/config.yaml``, the env-file, the published port, and an
-    optional read-only ``~/.codex/auth.json`` mount.
+    at ``/home/goga/.afm/config.yaml``, the env-file, the published port, an
+    optional read-only ``~/.codex/auth.json`` mount, and (when present) the
+    user-level pipelines directory mounted read-only at
+    ``/home/goga/.goga/pipelines``.
 
     Args:
         image: Docker image to run.
@@ -230,6 +261,8 @@ def _build_run_cmd(  # noqa: PLR0913
     codex_auth = Path.home() / ".codex" / "auth.json"
     if codex_auth.is_file():
         cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
+
+    _append_user_pipelines_mount(cmd)
 
     cmd.extend(
         [
@@ -331,6 +364,11 @@ def run_pipeline_container(name: str | None, config: Config) -> int:
     ``/home/goga/.afm/config.yaml``, writes a private env-file combining
     ``config.pipeline.env`` and git identity, prints the Web UI URL, and runs
     ``-m goga.pipeline run <name> --port <port>``.
+
+    Both modes mount the project at ``/workspace`` and, when the host directory
+    exists, the user-level pipelines directory (``~/.goga/pipelines``) read-only
+    at ``/home/goga/.goga/pipelines`` so user pipelines installed by
+    ``goga connect`` are discoverable and runnable in-container.
 
     Args:
         name: Pipeline name without extension. ``None`` selects discovery mode.
