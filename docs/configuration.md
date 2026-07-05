@@ -14,9 +14,9 @@ The config loader looks for this file relative to the current working directory.
 
 ```yaml
 language: python
-build:
-  image: qarium/goga-python-3.14:1.0
+image: qarium/goga-python-3.14:1.0
 
+build:
   task_executor:
     agent: claude
     env:
@@ -27,6 +27,11 @@ build:
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
+
+pipeline:
+  agent: claude
+  env:
+    ANTHROPIC_API_KEY: sk-ant-...
 
 codemanifest:
   usages:
@@ -43,7 +48,9 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
+| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.0`). Consumers raise an error when it is unset. |
 | `build` | mapping | Yes | Build pipeline settings |
+| `pipeline` | mapping | Yes | Pipeline (afm) execution settings |
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration |
 
@@ -52,7 +59,6 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `task_executor` | mapping | Yes | AI agent configuration |
-| `image` | `string` | No | Docker image for build execution (e.g. `qarium/goga-python-3.14:1.0`) |
 | `worktree` | `bool` | No | Use isolated git worktree for builds |
 | `skip_finalize` | `bool` | No | Skip the ralphex finalization step |
 | `session_timeout` | `string` | No | Session timeout in Go duration format (e.g. `30m`, `1h`) |
@@ -64,12 +70,21 @@ codemanifest:
 | `agents_dir` | `string` | No | Path to custom ralphex agents |
 | `codex_review` | `bool` | No | Enable external codex review |
 
+> The deprecated `build.image` field is rejected with a `ValueError`. Set the top-level `image` field instead.
+
 ### build.task_executor
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `agent` | `string` | Yes | AI executor. Supported values: `claude`, `codex`, `copilot`, `gemini`, or `custom:/path/to/script` |
 | `env` | mapping | No | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}` |
+
+### pipeline
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent` | `string` | Yes | afm client command agent for `goga pipeline` (e.g. `claude`, `codex`) |
+| `env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
 
 ### codemanifest
 
@@ -97,8 +112,8 @@ The config loader raises specific exceptions for invalid configuration:
 | Error | Cause |
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
-| `KeyError` | Missing required field (`language`, `build`, or `build.task_executor`) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected) |
+| `KeyError` | Missing required field (`language`, `build`, `build.task_executor`, or `pipeline`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present |
 
 ## Implementation details
 

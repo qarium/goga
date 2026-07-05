@@ -41,11 +41,15 @@ The wizard proceeds through the following steps in order:
 
 8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
+9. **Pipeline Agent** -- Select the AI agent for `goga pipeline` execution. Defaults to the agent chosen in step 5. Supported: `claude`, `codex`.
+
+10. **Pipeline Environment Variables** -- Configure environment variables for the pipeline container. Suggested keys are offered per agent (same shape as step 8). You can also add arbitrary `KEY=VALUE` variables. Omitted entirely when nothing is collected.
+
 ### Generated Files
 
 After the questionnaire completes, `goga init` creates:
 
-- **`.goga/config.yml`** -- Project configuration containing language, build settings, task executor, and codemanifest options.
+- **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `commands`, `build` (with `task_executor`), a required `pipeline` block (agent + optional env), and optional `codemanifest`.
 - **`.goga/usages/conventions.md`** -- (If base convention was downloaded) Language-specific code conventions.
 - **`Dockerfile`** -- (If requested) A Dockerfile derived from the selected image.
 

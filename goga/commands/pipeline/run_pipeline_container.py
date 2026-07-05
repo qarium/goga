@@ -97,12 +97,11 @@ def _read_git_config() -> dict[str, str]:
     }
 
 
-def _write_env_file(env: dict[str, str], extra_env: tuple[str, ...]) -> Path:
+def _write_env_file(env: dict[str, str]) -> Path:
     """Write environment variables to a private temporary env file (mode 0600).
 
     Args:
         env: Mapping of environment variables to write as KEY=VALUE lines.
-        extra_env: Additional raw KEY=VALUE strings to append verbatim.
 
     Returns:
         Path to the written temporary file.
@@ -112,8 +111,6 @@ def _write_env_file(env: dict[str, str], extra_env: tuple[str, ...]) -> Path:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
         for k, v in env.items():
             f.write(f"{k}={v}\n")
-        for pair in extra_env:
-            f.write(f"{pair}\n")
     return Path(path)
 
 
@@ -250,26 +247,15 @@ def _build_run_cmd(  # noqa: PLR0913
     return cmd
 
 
-def _make_container_killer(container_name: str):
-    """Build a SIGTERM/SIGINT handler that kills the container then exits.
+def _on_signal(signum: int, _frame: object) -> None:
+    """SIGTERM/SIGINT handler that unwinds to the ``finally`` cleanup.
 
-    Args:
-        container_name: Name of the container to kill on signal.
-
-    Returns:
-        A signal handler that runs ``docker kill`` and raises
-        ``SystemExit(128 + signum)``.
+    Raising ``SystemExit(128 + signum)`` propagates out of ``proc.wait()`` and
+    triggers the ``finally`` block, which runs ``docker kill`` and restores the
+    previous handlers. This mirrors ``goga/commands/build.build`` and keeps the
+    handler itself free of subprocess calls (signal handlers should stay minimal).
     """
-
-    def _on_signal(signum: int, _frame: object) -> None:
-        subprocess.run(
-            ["docker", "kill", container_name],
-            check=False,
-            capture_output=True,
-        )
-        raise SystemExit(128 + signum)
-
-    return _on_signal
+    raise SystemExit(128 + signum)
 
 
 def _run_discovery(config: Config, container_name: str) -> int:
@@ -282,9 +268,8 @@ def _run_discovery(config: Config, container_name: str) -> int:
     Returns:
         The container's exit code.
     """
-    on_signal = _make_container_killer(container_name)
-    prev_term = signal.signal(signal.SIGTERM, on_signal)
-    prev_int = signal.signal(signal.SIGINT, on_signal)
+    prev_term = signal.signal(signal.SIGTERM, _on_signal)
+    prev_int = signal.signal(signal.SIGINT, _on_signal)
     try:
         cmd = _build_discovery_cmd(config.image, container_name)
         _pull_image(config.image)
@@ -315,11 +300,10 @@ def _run_named(name: str, config: Config, container_name: str) -> int:
     afm_config = _write_afm_config_tmpfile(config.pipeline.agent)
     git_env = _read_git_config()
     env = {**git_env, **config.pipeline.env}
-    env_file = _write_env_file(env, ())
+    env_file = _write_env_file(env)
 
-    on_signal = _make_container_killer(container_name)
-    prev_term = signal.signal(signal.SIGTERM, on_signal)
-    prev_int = signal.signal(signal.SIGINT, on_signal)
+    prev_term = signal.signal(signal.SIGTERM, _on_signal)
+    prev_int = signal.signal(signal.SIGINT, _on_signal)
     try:
         click.echo(f"Web UI: http://localhost:{port}")
         cmd = _build_run_cmd(config.image, container_name, port, name, afm_config, env_file)

@@ -33,6 +33,12 @@ A full-fledged **Specification-Driven Development (SDD)** framework: describe ce
 pip install goga
 ```
 
+`goga build` and `goga pipeline` launch a Docker container, so Docker must be installed and accessible on your host:
+
+```bash
+docker info
+```
+
 Connect goga to your agent
 
 ```bash

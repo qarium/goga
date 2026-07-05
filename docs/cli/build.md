@@ -77,14 +77,16 @@ Build settings are loaded from `.goga/config.yml`. Required fields:
 
 ```yaml
 language: python
+image: qarium/goga-python-3.12:1.0
+pipeline:
+  agent: claude
 build:
-  image: qarium/goga-python-3.12:1.0
   task_executor:
     agent: claude
     env: {}
 ```
 
-The `image` field must be set; otherwise the command exits with an error.
+The top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field.
 
 ## Exit Codes
 

@@ -37,6 +37,8 @@ The wizard will prompt you for:
 6. **Docker image** -- Choose a prebuilt language image or enter a custom one
 7. **Dockerfile** -- Optionally generate a `Dockerfile` based on the selected image
 8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
+9. **Pipeline agent** -- Select the agent for `goga pipeline` execution (defaults to step 5)
+10. **Pipeline environment variables** -- Set env vars for the pipeline container (e.g., `ANTHROPIC_API_KEY`)
 
 ### What `goga init` creates
 

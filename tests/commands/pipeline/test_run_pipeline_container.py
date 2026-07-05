@@ -81,6 +81,30 @@ class TestPipelineDiscovery:
         assert "-w" in cmd
         assert "/workspace" in cmd
 
+    def test_pipeline_discovery_installs_and_restores_signal_handlers(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mode installs SIGTERM/SIGINT handlers and kills the container on cleanup."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(_rpc_mod.signal, "signal") as mock_signal,
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run") as mock_run,
+        ):
+            run_pipeline_container(None, config)
+
+        # handlers installed at start and restored at end
+        sigterm_calls = [c for c in mock_signal.call_args_list if c.args and c.args[0] == signal.SIGTERM]
+        sigint_calls = [c for c in mock_signal.call_args_list if c.args and c.args[0] == signal.SIGINT]
+        assert len(sigterm_calls) == 2
+        assert len(sigint_calls) == 2
+        # the finally cleanup ran `docker kill <container>`
+        kill_calls = [c for c in mock_run.call_args_list if c.args and c.args[0][:2] == ["docker", "kill"]]
+        assert kill_calls
+
 
 # --- Run mode docker command shape ---
 
@@ -161,8 +185,8 @@ class TestAfmConfigTmpfile:
 
 
 class TestPipelineEnvFile:
-    def test_pipeline_env_file_combines_pipeline_env_git_and_extra(self, tmp_path: Path, monkeypatch) -> None:
-        """The env file combines config.pipeline.env, git identity, and extra KEY=VALUE pairs."""
+    def test_pipeline_env_file_combines_pipeline_env_and_git(self, tmp_path: Path, monkeypatch) -> None:
+        """The env file merges config.pipeline.env and git identity (non-overlapping keys)."""
         config = _make_config(pipeline_env={"FOO": "1"})
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "u"})
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -172,9 +196,9 @@ class TestPipelineEnvFile:
         captured_env: dict[str, str] = {}
         real_write = _rpc_mod._write_env_file
 
-        def capture(env: dict[str, str], extra_env: tuple[str, ...]) -> Path:
+        def capture(env: dict[str, str]) -> Path:
             captured_env.update(env)
-            return real_write(env, extra_env)
+            return real_write(env)
 
         monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
 
@@ -190,13 +214,36 @@ class TestPipelineEnvFile:
         assert captured_env["FOO"] == "1"
         assert captured_env["GIT_AUTHOR_NAME"] == "u"
 
-        # The env-file writer also honours extra KEY=VALUE pairs.
-        extra_file = real_write({}, ("BAR=2",))
-        try:
-            content = extra_file.read_text()
-        finally:
-            extra_file.unlink(missing_ok=True)
-        assert "BAR=2" in content
+    def test_pipeline_env_overrides_git_on_conflict(self, tmp_path: Path, monkeypatch) -> None:
+        """config.pipeline.env wins over git identity when the same key is set in both.
+
+        Mirrors goga/commands/build where task_executor.env overrides git env
+        (env = {**git_env, **config.pipeline.env}).
+        """
+        config = _make_config(pipeline_env={"GIT_AUTHOR_NAME": "from-pipeline"})
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {"GIT_AUTHOR_NAME": "from-git"})
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.chdir(tmp_path)
+
+        captured_env: dict[str, str] = {}
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str]) -> Path:
+            captured_env.update(env)
+            return real_write(env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        assert captured_env["GIT_AUTHOR_NAME"] == "from-pipeline"
 
 
 # --- failure modes ---
@@ -218,6 +265,40 @@ class TestPipelineFailureModes:
 
         with pytest.raises(click.ClickException, match="image"):
             run_pipeline_container("deploy", config)
+
+
+# --- image pull ---
+
+
+class TestPipelinePullImage:
+    def test_pipeline_pull_image_failure_warns_and_continues(self, tmp_path: Path, monkeypatch, caplog) -> None:
+        """A failing `docker pull` is logged as a warning and the launch proceeds."""
+        import logging
+
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        def fake_run(cmd, *args, **kwargs):
+            # `docker pull` fails; other docker calls (kill cleanup) succeed.
+            if cmd[:2] == ["docker", "pull"]:
+                return mock.Mock(returncode=1)
+            return mock.Mock(returncode=0)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run", side_effect=fake_run),
+            caplog.at_level(logging.WARNING, logger=_rpc_mod.logger.name),
+        ):
+            result = run_pipeline_container("deploy", config)
+
+        # a warning was emitted for the failed pull, and the launch still proceeded
+        assert any("failed to pull image" in rec.message for rec in caplog.records)
+        assert result == 0
 
 
 # --- signal handling ---
