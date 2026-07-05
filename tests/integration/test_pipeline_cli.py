@@ -1,26 +1,48 @@
-"""End-to-end integration tests for the ``pipeline`` CLI command.
+"""End-to-end integration tests for the ``pipeline`` command under the
+docker-hosted architecture.
 
-These exercise the full cross-cell path through the root ``app`` group:
+These exercise the cross-cell paths introduced by the pipeline-to-docker-afm
+migration. The architecture splits the work across a host/docker boundary:
 
-    goga pipeline <name> -> pipeline.run -> goga.pipeline.run_pipeline
-                                          -> goga.afm.run_flow
-                                          -> subprocess.run(["flowmanager", ...])
-    goga pipeline         -> pipeline.discovery -> goga.pipeline.list_pipelines -> filesystem
+    host:       goga pipeline <name> -> goga.commands.pipeline.pipeline
+                                          -> goga.commands.pipeline.run_pipeline_container
+                                          -> docker run ... python -m goga.pipeline run <name> --port <port>
+    container:  python -m goga.pipeline run <name> --port <port>
+                  -> goga.pipeline.pipeline_cli
+                  -> goga.pipeline.run_pipeline
+                  -> goga.afm.run_flow
+                  -> subprocess.run(["afm", "run", "--port", <port>, <flow_path>])
 
-The ``flowmanager`` binary is mocked at the subprocess boundary (inside
-``goga.afm.run_flow``) so the real binary is never invoked. The pipeline command
-is registered on ``app`` under the name ``pipeline``.
+Because the host never imports a Type from ``goga/pipeline`` (the docker runtime
+boundary), the two halves are tested separately and then stitched together at
+the docker ``subprocess.Popen`` boundary:
+
+- The in-container half is exercised by calling ``pipeline_cli`` directly, with
+  ``afm`` mocked at the ``goga.afm.run_flow.subprocess.run`` boundary.
+- The host half is exercised via ``CliRunner`` with docker mocked at the
+  ``subprocess.Popen`` boundary; the container's exit code is simulated by the
+  ``Popen.wait()`` return value, which stands in for ``pipeline_cli``'s return
+  code from inside the container.
+
+Mocking follows ``[[feedback_mock_patch_module_shadowing]]``: the package
+``__init__`` re-exports the submodule functions under the same names, which
+shadows string-based ``mock.patch`` paths on Python 3.10, so the real modules
+are resolved via ``sys.modules`` and patched by attribute.
 """
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
 
+import pytest
 from click.testing import CliRunner
 from goga.cli import app
+from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.pipeline import pipeline_cli
 
 # goga.afm.run_flow is shadowed in the package __init__ by the run_flow
 # function, so a string-based mock.patch path walking through it fails on
@@ -28,87 +50,115 @@ from goga.cli import app
 # attribute directly.
 _run_flow_module = sys.modules["goga.afm.run_flow"]
 
+# goga.commands.pipeline.run_pipeline_container likewise shadows its submodule
+# name; resolve it for monkeypatching host-side helpers.
+_rpc_module = sys.modules["goga.commands.pipeline.run_pipeline_container"]
+# goga.commands.pipeline.pipeline shadows its submodule name too.
+_pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 
-class TestPipelineCliCrossEntity:
-    def test_run_invokes_flowmanager_with_absolute_path(self, tmp_path: Path, monkeypatch) -> None:
-        """goga pipeline <name> reaches run_flow and passes the absolute pipeline path."""
+
+def _make_config() -> Config:
+    """Build a minimal Config satisfying the new schema (top-level image, pipeline block)."""
+    return Config(
+        lang="python",
+        image="qarium/goga:latest",
+        build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
+        pipeline=PipelineConfig(agent="claude"),
+    )
+
+
+class TestInContainerRunPath:
+    """Cross-entity: ``pipeline_cli run`` -> ``run_pipeline`` -> ``run_flow`` -> afm.
+
+    These drive the in-container half of the flow directly (the path that
+    ``python -m goga.pipeline run <name> --port <port>`` takes inside the goga
+    Docker image), with the ``afm`` binary mocked at the subprocess boundary.
+    """
+
+    def test_run_invokes_afm_run_with_port_and_path(self, tmp_path: Path, monkeypatch) -> None:
+        """``pipeline_cli run`` reaches ``run_flow`` and invokes ``afm run --port``."""
         project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
         (project_pipelines / "deploy.yml").write_text("pipeline")
 
+        user_tmp = tmp_path / "user"
+
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
-        runner = CliRunner()
         with mock.patch.object(
             _run_flow_module.subprocess,
             "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
-            result = runner.invoke(app, ["pipeline", "deploy"])
+            result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
-        assert result.exit_code == 0
+        assert result == 0
         mock_subprocess.assert_called_once()
         called_args = mock_subprocess.call_args.args[0]
-        assert called_args[0] == "flowmanager"
+        # afm invocation shape: afm run --port <port> <resolved absolute flow path>.
+        assert called_args[0] == "afm"
         assert called_args[1] == "run"
-        # The absolute pipeline path (not the bare name) reaches the binary.
-        # run_pipeline .resolve()s the path; assert against the resolved form.
-        assert called_args[2] == str((project_pipelines / "deploy.yml").resolve())
+        assert called_args[2] == "--port"
+        assert called_args[3] == "50321"
+        # The resolved absolute pipeline path (not the bare name) reaches the binary.
+        assert called_args[4] == str((project_pipelines / "deploy.yml").resolve())
 
-    def test_run_missing_pipeline_is_nonzero_without_subprocess(self, tmp_path: Path, monkeypatch) -> None:
-        """goga pipeline <missing> returns nonzero without invoking flowmanager."""
+    def test_run_missing_pipeline_is_nonzero_without_afm(self, tmp_path: Path, monkeypatch) -> None:
+        """``pipeline_cli run <missing>`` returns nonzero without invoking afm."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        runner = CliRunner()
         with mock.patch.object(_run_flow_module.subprocess, "run") as mock_subprocess:
-            result = runner.invoke(app, ["pipeline", "missing"])
+            result = pipeline_cli(["run", "missing", "--port", "50321"])
 
-        assert result.exit_code != 0
+        assert result != 0
         mock_subprocess.assert_not_called()
 
-    def test_run_propagates_nonzero_flowmanager_exit_code(self, tmp_path: Path, monkeypatch) -> None:
-        """goga pipeline <name> propagates a non-zero flowmanager exit code via ctx.exit."""
+    def test_run_propagates_nonzero_afm_exit_code(self, tmp_path: Path, monkeypatch) -> None:
+        """``pipeline_cli run`` propagates a non-zero afm exit code verbatim."""
         project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
         (project_pipelines / "deploy.yml").write_text("pipeline")
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
-        monkeypatch.setattr(Path, "home", lambda: user_tmp)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
 
-        runner = CliRunner()
         with mock.patch.object(
             _run_flow_module.subprocess,
             "run",
             return_value=MagicMock(returncode=7),
         ):
-            result = runner.invoke(app, ["pipeline", "deploy"])
+            result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
-        # The flowmanager exit code flows run_pipeline -> ctx.exit verbatim.
-        assert result.exit_code == 7
+        # The afm exit code flows run_flow -> run_pipeline -> pipeline_cli verbatim.
+        assert result == 7
+
+    def test_run_propagates_127_when_afm_missing(self, tmp_path: Path, monkeypatch) -> None:
+        """afm missing inside the container propagates exit code 127."""
+        project_tmp = tmp_path / "project"
+        project_pipelines = project_tmp / ".goga" / "pipelines"
+        project_pipelines.mkdir(parents=True)
+        (project_pipelines / "deploy.yml").write_text("pipeline")
+
+        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
+
+        with mock.patch.object(_run_flow_module.subprocess, "run", side_effect=FileNotFoundError):
+            result = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert result == 127
 
     def test_run_resolves_project_source_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
-        """When a name exists in both sources, the project pipeline path reaches flowmanager."""
+        """A name in both sources resolves to the project path reaching afm."""
         project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
         (project_pipelines / "shared.yml").write_text("project-shared")
 
+        user_tmp = tmp_path / "user"
         user_pipelines = user_tmp / ".goga" / "pipelines"
         user_pipelines.mkdir(parents=True)
         (user_pipelines / "shared.yml").write_text("user-shared")
@@ -116,82 +166,54 @@ class TestPipelineCliCrossEntity:
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
-        runner = CliRunner()
         with mock.patch.object(
             _run_flow_module.subprocess,
             "run",
             return_value=MagicMock(returncode=0),
         ) as mock_subprocess:
-            result = runner.invoke(app, ["pipeline", "shared"])
+            result = pipeline_cli(["run", "shared", "--port", "50321"])
 
-        assert result.exit_code == 0
+        assert result == 0
         called_args = mock_subprocess.call_args.args[0]
-        # Project wins on conflict: the project path (not the user path) reaches the binary.
-        assert called_args[2] == str((project_pipelines / "shared.yml").resolve())
+        # Project wins on conflict: the project path reaches afm, not the user path.
+        assert called_args[4] == str((project_pipelines / "shared.yml").resolve())
 
-    def test_run_with_yml_suffix_name_is_not_found(self, tmp_path: Path, monkeypatch) -> None:
-        """goga pipeline deploy.yml does NOT strip the suffix — 'deploy.yml' never matches entry 'deploy'."""
+
+class TestInContainerListPath:
+    """Cross-entity: ``pipeline_cli list`` -> ``list_pipelines`` -> filesystem."""
+
+    def test_list_prints_header_and_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """``list`` prints the header, project pipelines with ``(project)``, user pipelines bare."""
         project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
         (project_pipelines / "deploy.yml").write_text("pipeline")
 
-        monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
-        monkeypatch.setattr(Path, "home", lambda: user_tmp)
-
-        runner = CliRunner()
-        with mock.patch.object(_run_flow_module.subprocess, "run") as mock_subprocess:
-            result = runner.invoke(app, ["pipeline", "deploy.yml"])
-
-        # The CLI layer does not strip .yml; run_pipeline finds no 'deploy.yml' entry → exit 1.
-        assert result.exit_code == 1
-        mock_subprocess.assert_not_called()
-        assert "not found" in result.output
-
-
-class TestPipelineCliList:
-    def test_discovery_mode_marks_project_pipelines_only(self, tmp_path: Path, monkeypatch) -> None:
-        """goga pipeline (no name) annotates project pipelines with (project) and user pipelines bare."""
-        project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
         user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
-        project_pipelines = project_tmp / ".goga" / "pipelines"
-        project_pipelines.mkdir(parents=True)
-        (project_pipelines / "deploy.yml").write_text("pipeline")
-
         user_pipelines = user_tmp / ".goga" / "pipelines"
         user_pipelines.mkdir(parents=True)
-        (user_pipelines / "build.yml").write_text("pipeline")
+        (user_pipelines / "rollback.yml").write_text("pipeline")
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
-        runner = CliRunner()
-        result = runner.invoke(app, ["pipeline"])
+        result = pipeline_cli(["list"])
 
-        assert result.exit_code == 0
-        assert "Available pipelines:" in result.output
-        assert "deploy (project)" in result.output
-        assert "build" in result.output
-        assert "build (project)" not in result.output
+        assert result == 0
+        out = capsys.readouterr().out
+        assert out.startswith("Available pipelines:\n")
+        assert "  deploy (project)" in out
+        assert "  rollback" in out
+        assert "rollback (project)" not in out
 
-    def test_discovery_project_wins_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
-        """A name present in both sources appears once, as the project pipeline."""
+    def test_list_project_wins_on_name_conflict(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """A name present in both sources appears once, annotated as project."""
         project_tmp = tmp_path / "project"
-        project_tmp.mkdir()
-        user_tmp = tmp_path / "user"
-        user_tmp.mkdir()
-
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
         (project_pipelines / "shared.yml").write_text("project-shared")
 
+        user_tmp = tmp_path / "user"
         user_pipelines = user_tmp / ".goga" / "pipelines"
         user_pipelines.mkdir(parents=True)
         (user_pipelines / "shared.yml").write_text("user-shared")
@@ -199,36 +221,88 @@ class TestPipelineCliList:
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
 
-        runner = CliRunner()
-        result = runner.invoke(app, ["pipeline"])
+        result = pipeline_cli(["list"])
 
-        assert result.exit_code == 0
-        assert "Available pipelines:" in result.output
-        # The project entry wins and is annotated; the user duplicate is suppressed.
-        assert "shared (project)" in result.output
-        assert result.output.count("shared") == 1
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "  shared (project)" in out
+        # The user duplicate is suppressed.
+        assert out.count("shared") == 1
 
-    def test_discovery_mode_prints_header_when_empty(self, tmp_path: Path, monkeypatch) -> None:
-        """The 'Available pipelines:' header is printed before an empty list."""
+    def test_list_prints_header_when_empty(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """The header is printed before an empty list."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        runner = CliRunner()
-        result = runner.invoke(app, ["pipeline"])
+        result = pipeline_cli(["list"])
 
-        assert result.exit_code == 0
-        assert "Available pipelines:" in result.output
+        assert result == 0
+        out = capsys.readouterr().out
+        assert out == "Available pipelines:\n"
+
+
+class TestHostEndToEnd:
+    """Host half: ``goga pipeline <name>`` -> docker -> exit-code propagation.
+
+    Docker is mocked at the ``subprocess.Popen`` boundary; ``Popen.wait()``
+    returning ``N`` simulates the in-container ``pipeline_cli`` having returned
+    ``N``. The assertion verifies that ``N`` propagates through
+    ``run_pipeline_container`` -> ``ctx.exit`` -> CliRunner.
+    """
+
+    @pytest.mark.parametrize("exit_code", [0, 1, 7, 42, 127, 130])
+    def test_pipeline_run_end_to_end_propagates_afm_exit_code(
+        self, tmp_path: Path, monkeypatch, exit_code: int
+    ) -> None:
+        """The in-container exit code propagates across the docker boundary to the host."""
+        config = _make_config()
+
+        monkeypatch.chdir(tmp_path)
+        # Host-side docker launcher helpers.
+        monkeypatch.setattr(_rpc_module, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_module, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_module, "_read_git_config", lambda: {})
+        # Config load returns the new-schema Config.
+        monkeypatch.setattr(_pipeline_module, "load_config", lambda: config)
+
+        # Simulate the in-container path: Popen.wait() returns the code that
+        # `pipeline_cli` would have produced. Patch pipeline_cli at its real
+        # module too so the in-container entry is explicitly stubbed (it is
+        # never reached because docker is mocked — the host has no Python import
+        # of pipeline_cli — but the patch documents the simulated return).
+        mock_proc = MagicMock()
+        mock_proc.wait.return_value = exit_code
+
+        runner = CliRunner()
+        with (
+            mock.patch.object(sys.modules["goga.pipeline.__main__"], "pipeline_cli", return_value=exit_code),
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = runner.invoke(app, ["pipeline", "deploy"])
+
+        assert result.exit_code == exit_code
+        # The docker command carries the in-container `run` invocation shape.
+        cmd = mock_popen.call_args[0][0]
+        assert "run" in cmd
+        assert "deploy" in cmd
+        assert "--port" in cmd
+        assert "50321" in cmd
+
+
+class TestCommandRegistration:
+    """The ``pipeline`` command is registered on ``app``; legacy ``flow`` is not."""
 
     def test_flow_command_not_registered(self) -> None:
         """The legacy 'flow' command is NOT registered on the app group."""
         assert "flow" not in app.commands
 
     def test_pipeline_command_registered(self) -> None:
-        """The new 'pipeline' command is registered on the app group."""
+        """The 'pipeline' command is registered on the app group."""
         assert "pipeline" in app.commands
 
     def test_root_help_lists_pipeline_not_flow(self) -> None:
-        """goga --help lists the 'pipeline' command and does NOT list 'flow' (Task 8 contract)."""
+        """goga --help lists 'pipeline' and does NOT list 'flow'."""
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
 
