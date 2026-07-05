@@ -3,17 +3,26 @@
 import dataclasses
 
 import pytest
-from goga.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor, load_config
+from goga.config import (
+    BuildConfig,
+    CodemanifestConfig,
+    Config,
+    PipelineConfig,
+    TaskExecutorConfig,
+    load_config,
+)
 
 FULL_YAML = """\
 language: rust
+image: rust-builder:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: gemini
     env:
       RUST_BACKTRACE: "1"
       CARGO_HOME: /opt/cargo
-  image: rust-builder:1.0
   worktree: true
   skip_finalize: false
   session_timeout: "45m"
@@ -31,6 +40,8 @@ commands:
 
 MINIMAL_YAML = """\
 language: python
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -38,6 +49,9 @@ build:
 
 AGENT_PYTHON_YAML = """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: codex
 build:
   task_executor:
     agent: codex
@@ -61,6 +75,7 @@ class TestFullConfigLoadingFlow:
         # Top-level
         assert isinstance(config, Config)
         assert config.lang == "rust"
+        assert config.image == "rust-builder:1.0"
         assert config.codemanifest is None
         assert config.commands == {
             "build": "cargo build --release",
@@ -69,7 +84,7 @@ class TestFullConfigLoadingFlow:
 
         # BuildConfig level
         assert isinstance(config.build, BuildConfig)
-        assert config.build.image == "rust-builder:1.0"
+        assert not hasattr(config.build, "image")
         assert config.build.worktree is True
         assert config.build.skip_finalize is False
         assert config.build.session_timeout == "45m"
@@ -81,13 +96,18 @@ class TestFullConfigLoadingFlow:
         assert config.build.agents_dir == "/etc/goga/agents"
         assert config.build.codex_review is False
 
-        # TaskExecutor level
-        assert isinstance(config.build.task_executor, TaskExecutor)
+        # TaskExecutorConfig level
+        assert isinstance(config.build.task_executor, TaskExecutorConfig)
         assert config.build.task_executor.agent == "gemini"
         assert config.build.task_executor.env == {
             "RUST_BACKTRACE": "1",
             "CARGO_HOME": "/opt/cargo",
         }
+
+        # PipelineConfig level
+        assert isinstance(config.pipeline, PipelineConfig)
+        assert config.pipeline.agent == "claude"
+        assert config.pipeline.env == {}
 
     def test_minimal_yaml_produces_defaults(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -97,10 +117,11 @@ class TestFullConfigLoadingFlow:
         config = load_config()
 
         assert config.lang == "python"
+        assert config.image is None
         assert config.commands == {}
         assert config.codemanifest is None
         assert config.build.worktree is None
-        assert config.build.image is None
+        assert not hasattr(config.build, "image")
         assert config.build.skip_finalize is None
         assert config.build.session_timeout is None
         assert config.build.idle_timeout is None
@@ -112,6 +133,8 @@ class TestFullConfigLoadingFlow:
         assert config.build.codex_review is None
         assert config.build.task_executor.agent == "claude"
         assert config.build.task_executor.env == {}
+        assert config.pipeline.agent == "claude"
+        assert config.pipeline.env == {}
 
     def test_partial_build_config(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -121,6 +144,7 @@ class TestFullConfigLoadingFlow:
         config = load_config()
 
         assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
         assert config.build.task_executor.agent == "codex"
         assert config.build.task_executor.env == {"PYTHONPATH": "/src"}
         assert config.codemanifest is None
@@ -128,26 +152,33 @@ class TestFullConfigLoadingFlow:
         assert config.build.max_iterations == 15
         assert config.build.skip_finalize is None
         assert config.build.session_timeout is None
+        assert config.pipeline.agent == "codex"
 
 
 class TestConfigImmutability:
-    """Config, BuildConfig, TaskExecutor are frozen dataclasses — fields cannot be reassigned."""
+    """Config, BuildConfig, TaskExecutorConfig are frozen dataclasses — fields cannot be reassigned."""
 
     def test_task_executor_is_frozen(self):
-        te = TaskExecutor(agent="claude")
+        te = TaskExecutorConfig(agent="claude")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             te.agent = "codex"
 
+    def test_pipeline_is_frozen(self):
+        pc = PipelineConfig(agent="claude")
+        with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
+            pc.agent = "codex"
+
     def test_build_config_is_frozen(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             bc.worktree = True
 
     def test_config_is_frozen(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        cfg = Config(build=bc, lang="python")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        cfg = Config(image=None, build=bc, pipeline=pc, lang="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             cfg.lang = "go"
 
@@ -158,14 +189,15 @@ class TestConfigImmutability:
 
     def test_env_dict_mutation_does_not_raise(self):
         """Frozen only prevents attribute reassignment, not inner-mutable dict mutation."""
-        te = TaskExecutor(agent="claude", env={"K": "v"})
+        te = TaskExecutorConfig(agent="claude", env={"K": "v"})
         te.env["NEW"] = "val"  # dict content is mutable
         assert te.env == {"K": "v", "NEW": "val"}
 
     def test_commands_dict_mutation_does_not_raise(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        cfg = Config(build=bc, commands={"a": "1"}, lang="python")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        cfg = Config(image=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
         cfg.commands["b"] = "2"  # dict content is mutable
         assert cfg.commands == {"a": "1", "b": "2"}
 

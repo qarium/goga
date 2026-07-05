@@ -2,8 +2,20 @@ from dataclasses import dataclass, field
 
 
 @dataclass(kw_only=True, frozen=True)
-class TaskExecutor:
+class TaskExecutorConfig:
     """Configuration for the task execution agent and its environment."""
+
+    agent: str
+    env: dict = field(default_factory=dict)
+
+
+@dataclass(kw_only=True, frozen=True)
+class PipelineConfig:
+    """Configuration for pipeline execution inside the container.
+
+    `agent` drives the afm `client.command` inside the container, semantically
+    distinct from `TaskExecutorConfig.agent`.
+    """
 
     agent: str
     env: dict = field(default_factory=dict)
@@ -21,7 +33,7 @@ class CodemanifestConfig:
 class BuildConfig:
     """Build pipeline settings including agent, worktree, and timeout options."""
 
-    task_executor: TaskExecutor
+    task_executor: TaskExecutorConfig
     worktree: bool | None = None
     skip_finalize: bool | None = None
     session_timeout: str | None = None
@@ -32,7 +44,6 @@ class BuildConfig:
     prompts_dir: str | None = None
     agents_dir: str | None = None
     codex_review: bool | None = None
-    image: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -40,6 +51,8 @@ class Config:
     """Root project configuration loaded from .goga/config.yml."""
 
     lang: str
+    image: str | None
     build: BuildConfig
+    pipeline: PipelineConfig
     commands: dict = field(default_factory=dict)
     codemanifest: CodemanifestConfig | None = None

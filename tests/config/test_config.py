@@ -5,17 +5,28 @@ import types
 
 import goga.config as goga_config_mod
 import pytest
-from goga.config import BuildConfig, CodemanifestConfig, Config, TaskExecutor
+from goga.config import (
+    BuildConfig,
+    CodemanifestConfig,
+    Config,
+    PipelineConfig,
+    TaskExecutorConfig,
+)
 
 # --- Contract tests ---
 
 
 class TestFacadeAvailability:
     def test_import_from_facade(self):
-        """Config, BuildConfig, TaskExecutor are importable from goga.config."""
+        """Config, BuildConfig, TaskExecutorConfig are importable from goga.config."""
         assert hasattr(goga_config_mod, "Config")
         assert hasattr(goga_config_mod, "BuildConfig")
-        assert hasattr(goga_config_mod, "TaskExecutor")
+        assert hasattr(goga_config_mod, "TaskExecutorConfig")
+
+    def test_pipeline_config_importable(self):
+        """PipelineConfig is importable from goga.config and in __all__."""
+        assert hasattr(goga_config_mod, "PipelineConfig")
+        assert "PipelineConfig" in goga_config_mod.__all__
 
     def test_codemanifest_config_importable(self):
         """CodemanifestConfig is importable from goga.config and in __all__."""
@@ -26,22 +37,54 @@ class TestFacadeAvailability:
         """load_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_config")
 
+    def test_old_names_not_importable(self):
+        """TaskExecutor and CodemenifestConfig are NOT importable from goga.config."""
+        assert not hasattr(goga_config_mod, "TaskExecutor")
+        assert not hasattr(goga_config_mod, "CodemenifestConfig")
+        assert "TaskExecutor" not in goga_config_mod.__all__
+        assert "CodemenifestConfig" not in goga_config_mod.__all__
 
-class TestTaskExecutorAPIShape:
+    def test_old_names_raise_import_error(self):
+        """Importing the renamed/typo classes raises ImportError."""
+        with pytest.raises(ImportError):
+            from goga.config import TaskExecutor  # noqa: F401
+
+        with pytest.raises(ImportError):
+            from goga.config import CodemenifestConfig  # noqa: F401
+
+
+class TestTaskExecutorConfigAPIShape:
     def test_has_agent_field(self):
-        assert "agent" in TaskExecutor.__dataclass_fields__
+        assert "agent" in TaskExecutorConfig.__dataclass_fields__
 
     def test_has_env_field(self):
-        assert "env" in TaskExecutor.__dataclass_fields__
+        assert "env" in TaskExecutorConfig.__dataclass_fields__
 
     def test_agent_type_is_str(self):
-        assert TaskExecutor.__dataclass_fields__["agent"].type is str
+        assert TaskExecutorConfig.__dataclass_fields__["agent"].type is str
 
     def test_env_type_is_dict(self):
-        assert TaskExecutor.__dataclass_fields__["env"].type is dict
+        assert TaskExecutorConfig.__dataclass_fields__["env"].type is dict
 
     def test_env_has_default(self):
-        assert TaskExecutor.__dataclass_fields__["env"].default_factory is not dataclasses.MISSING
+        assert TaskExecutorConfig.__dataclass_fields__["env"].default_factory is not dataclasses.MISSING
+
+
+class TestPipelineConfigAPIShape:
+    def test_has_agent_field(self):
+        assert "agent" in PipelineConfig.__dataclass_fields__
+
+    def test_has_env_field(self):
+        assert "env" in PipelineConfig.__dataclass_fields__
+
+    def test_agent_type_is_str(self):
+        assert PipelineConfig.__dataclass_fields__["agent"].type is str
+
+    def test_env_type_is_dict(self):
+        assert PipelineConfig.__dataclass_fields__["env"].type is dict
+
+    def test_env_has_default(self):
+        assert PipelineConfig.__dataclass_fields__["env"].default_factory is not dataclasses.MISSING
 
 
 class TestBuildConfigAPIShape:
@@ -78,8 +121,9 @@ class TestBuildConfigAPIShape:
     def test_has_codex_review_field(self):
         assert "codex_review" in BuildConfig.__dataclass_fields__
 
-    def test_has_image_field(self):
-        assert "image" in BuildConfig.__dataclass_fields__
+    def test_does_not_have_image_field(self):
+        """BuildConfig.image was removed in the schema break."""
+        assert "image" not in BuildConfig.__dataclass_fields__
 
 
 class TestCodemanifestConfigAPIShape:
@@ -106,8 +150,14 @@ class TestConfigAPIShape:
     def test_has_lang_field(self):
         assert "lang" in Config.__dataclass_fields__
 
+    def test_has_image_field(self):
+        assert "image" in Config.__dataclass_fields__
+
     def test_has_build_field(self):
         assert "build" in Config.__dataclass_fields__
+
+    def test_has_pipeline_field(self):
+        assert "pipeline" in Config.__dataclass_fields__
 
     def test_has_commands_field(self):
         assert "commands" in Config.__dataclass_fields__
@@ -115,17 +165,40 @@ class TestConfigAPIShape:
     def test_has_codemanifest_field(self):
         assert "codemanifest" in Config.__dataclass_fields__
 
+    def test_image_type_is_optional_str(self):
+        image_type = Config.__dataclass_fields__["image"].type
+        assert image_type == str | None or types.UnionType in type(image_type).__mro__
+
     def test_lang_is_required(self):
         """Config without lang raises TypeError (missing required argument)."""
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="lang"):
-            Config(build=bc)
+            Config(image=None, build=bc, pipeline=pc)
+
+    def test_image_is_required(self):
+        """Config without image raises TypeError (image has no default)."""
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        with pytest.raises(TypeError, match="image"):
+            Config(lang="python", build=bc, pipeline=pc)
+
+    def test_pipeline_is_required(self):
+        """Config without pipeline raises TypeError."""
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        with pytest.raises(TypeError, match="pipeline"):
+            Config(lang="python", image=None, build=bc)
 
 
 class TestKwOnlyEnforced:
     def test_task_executor_kw_only(self):
-        assert all(f.kw_only for f in dataclasses.fields(TaskExecutor))
+        assert all(f.kw_only for f in dataclasses.fields(TaskExecutorConfig))
+
+    def test_pipeline_kw_only(self):
+        assert all(f.kw_only for f in dataclasses.fields(PipelineConfig))
 
     def test_build_config_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(BuildConfig))
@@ -142,16 +215,16 @@ class TestKwOnlyEnforced:
 
     def test_task_executor_positional_args_rejected(self):
         with pytest.raises(TypeError):
-            TaskExecutor("claude")
+            TaskExecutorConfig("claude")
 
     def test_build_config_positional_args_rejected(self):
-        te = TaskExecutor(agent="claude")
+        te = TaskExecutorConfig(agent="claude")
         with pytest.raises(TypeError):
             BuildConfig(te)
 
     def test_config_positional_args_rejected(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
         with pytest.raises(TypeError):
             Config(bc)
 
@@ -159,27 +232,44 @@ class TestKwOnlyEnforced:
 # --- Logic tests ---
 
 
-class TestTaskExecutorCreation:
+class TestTaskExecutorConfigCreation:
     def test_valid_agent_and_env(self):
-        te = TaskExecutor(agent="claude", env={"KEY": "value"})
+        te = TaskExecutorConfig(agent="claude", env={"KEY": "value"})
         assert te.agent == "claude"
         assert te.env == {"KEY": "value"}
 
     def test_empty_env_dict(self):
-        te = TaskExecutor(agent="codex")
+        te = TaskExecutorConfig(agent="codex")
         assert te.env == {}
 
     def test_custom_agent_path(self):
-        te = TaskExecutor(agent="custom:/path/to/script")
+        te = TaskExecutorConfig(agent="custom:/path/to/script")
         assert te.agent == "custom:/path/to/script"
+
+
+class TestPipelineConfigCreation:
+    def test_valid_agent_and_env(self):
+        pc = PipelineConfig(agent="claude", env={"KEY": "value"})
+        assert pc.agent == "claude"
+        assert pc.env == {"KEY": "value"}
+
+    def test_empty_env_dict(self):
+        pc = PipelineConfig(agent="codex")
+        assert pc.env == {}
+
+    def test_distinct_from_task_executor(self):
+        """PipelineConfig and TaskExecutorConfig are separate types."""
+        pc = PipelineConfig(agent="claude")
+        te = TaskExecutorConfig(agent="claude")
+        assert not isinstance(pc, TaskExecutorConfig)
+        assert not isinstance(te, PipelineConfig)
 
 
 class TestBuildConfigCreation:
     def test_all_none_optional_fields(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
         assert bc.task_executor is te
-        assert bc.image == "goga:latest"
         assert bc.worktree is None
         assert bc.skip_finalize is None
         assert bc.session_timeout is None
@@ -190,17 +280,12 @@ class TestBuildConfigCreation:
         assert bc.prompts_dir is None
         assert bc.agents_dir is None
         assert bc.codex_review is None
-
-    def test_image_defaults_to_none(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te)
-        assert bc.image is None
+        assert not hasattr(bc, "image")
 
     def test_all_fields_populated(self):
-        te = TaskExecutor(agent="gemini", env={"X": "1"})
+        te = TaskExecutorConfig(agent="gemini", env={"X": "1"})
         bc = BuildConfig(
             task_executor=te,
-            image="custom:tag",
             worktree=True,
             skip_finalize=False,
             session_timeout="30m",
@@ -214,7 +299,6 @@ class TestBuildConfigCreation:
         )
         assert bc.task_executor.agent == "gemini"
         assert bc.task_executor.env == {"X": "1"}
-        assert bc.image == "custom:tag"
         assert bc.worktree is True
         assert bc.skip_finalize is False
         assert bc.session_timeout == "30m"
@@ -229,37 +313,41 @@ class TestBuildConfigCreation:
 
 class TestConfigCreation:
     def test_default_commands_dict(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        cfg = Config(lang="python", build=bc)
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
         assert cfg.lang == "python"
+        assert cfg.image is None
         assert cfg.commands == {}
 
     def test_full_config(self):
-        te = TaskExecutor(agent="claude", env={"K": "v"})
-        bc = BuildConfig(task_executor=te, image="goga:latest", worktree=True)
-        cfg = Config(lang="python", build=bc, commands={"foo": "bar"})
+        te = TaskExecutorConfig(agent="claude", env={"K": "v"})
+        bc = BuildConfig(task_executor=te, worktree=True)
+        pc = PipelineConfig(agent="codex", env={"P": "1"})
+        cfg = Config(
+            lang="python",
+            image="qarium/foo:1.0",
+            build=bc,
+            pipeline=pc,
+            commands={"foo": "bar"},
+        )
         assert cfg.lang == "python"
+        assert cfg.image == "qarium/foo:1.0"
         assert cfg.build is bc
         assert cfg.build.task_executor is te
+        assert cfg.pipeline is pc
+        assert cfg.pipeline.agent == "codex"
         assert cfg.commands == {"foo": "bar"}
 
     def test_nested_task_executor_access(self):
-        te = TaskExecutor(agent="copilot", env={"A": "1", "B": "2"})
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        cfg = Config(lang="python", build=bc)
-        assert isinstance(cfg.build.task_executor, TaskExecutor)
+        te = TaskExecutorConfig(agent="copilot", env={"A": "1", "B": "2"})
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
+        assert isinstance(cfg.build.task_executor, TaskExecutorConfig)
         assert cfg.build.task_executor.agent == "copilot"
         assert cfg.build.task_executor.env == {"A": "1", "B": "2"}
-
-
-class TestConfigRequiredLang:
-    def test_config_without_lang_raises_type_error(self):
-        """Config(build=bc) without lang raises TypeError."""
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        with pytest.raises(TypeError):
-            Config(build=bc)
 
 
 class TestCodemanifestConfigCreation:
@@ -281,16 +369,18 @@ class TestCodemanifestConfigFrozen:
             cc.usages = {"x": "y"}
 
 
-class TestConfigCodemenifestField:
+class TestConfigCodemanifestField:
     def test_codemanifest_field_defaults_none(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
-        cfg = Config(lang="python", build=bc)
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
-        te = TaskExecutor(agent="claude")
-        bc = BuildConfig(task_executor=te, image="goga:latest")
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
-        cfg = Config(lang="python", build=bc, codemanifest=cc)
+        cfg = Config(lang="python", image=None, build=bc, pipeline=pc, codemanifest=cc)
         assert cfg.codemanifest is cc

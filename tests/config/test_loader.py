@@ -6,7 +6,13 @@ import inspect
 import goga.config as goga_config_mod
 import pytest
 import yaml
-from goga.config import CodemanifestConfig, Config, load_config
+from goga.config import (
+    CodemanifestConfig,
+    Config,
+    PipelineConfig,
+    TaskExecutorConfig,
+    load_config,
+)
 from goga.config.loader import _parse_codemanifest
 
 # --- Helpers ---
@@ -29,6 +35,9 @@ def _write_goga_yml(path, content: str):
 
 MINIMAL_YAML = """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -36,9 +45,14 @@ build:
 
 FULL_YAML = """\
 language: go
+image: goga:latest
 commands:
   test: go test ./...
   build: go build ./...
+pipeline:
+  agent: codex
+  env:
+    PIPELINE_OPT: "1"
 build:
   task_executor:
     agent: gemini
@@ -59,6 +73,9 @@ build:
 
 HAPPY_YAML = """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -100,43 +117,32 @@ class TestLoadConfigFacade:
 
 class TestLoadConfigPositive:
     def test_load_config_minimal_valid_yaml(self, goga_project):
-        """Minimal .goga/config.yml with language+build.task_executor.agent."""
+        """Minimal .goga/config.yml with language+image+pipeline+build.task_executor.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
         assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
         assert config.build.task_executor.agent == "claude"
         assert config.build.task_executor.env == {}
         assert config.commands == {}
         assert config.build.worktree is None
-        assert config.build.image is None
 
-    def test_load_config_image_default(self, goga_project):
-        """image defaults to None when not specified."""
+    def test_load_config_pipeline_defaults(self, goga_project):
+        """pipeline.env defaults to empty when not specified."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
         config = load_config()
-        assert config.build.image is None
-
-    def test_load_config_image_explicit(self, goga_project):
-        """Explicit image value from config."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: python
-build:
-  task_executor:
-    agent: claude
-  image: custom:tag
-""",
-        )
-        config = load_config()
-        assert config.build.image == "custom:tag"
+        assert config.pipeline.agent == "claude"
+        assert config.pipeline.env == {}
 
     def test_load_config_full_yaml(self, goga_project):
         """.goga/config.yml with ALL fields populated."""
         _write_goga_yml(goga_project, FULL_YAML)
         config = load_config()
         assert config.lang == "go"
+        assert config.image == "goga:latest"
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
+        assert config.pipeline.agent == "codex"
+        assert config.pipeline.env == {"PIPELINE_OPT": "1"}
         assert config.build.task_executor.agent == "gemini"
         assert config.build.task_executor.env == {"FOO": "bar", "BAZ": "qux"}
         assert config.build.worktree is False
@@ -156,6 +162,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: custom:/path/to/script
@@ -172,6 +181,7 @@ build:
         _write_goga_yml(goga_project, HAPPY_YAML)
         config = load_config()
         assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
         assert config.build.task_executor.agent == "claude"
         assert config.build.task_executor.env == {"KEY": "value"}
         assert config.build.worktree is True
@@ -183,6 +193,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: codex
@@ -200,11 +213,14 @@ build:
         }
 
     def test_load_config_extra_build_fields_ignored(self, goga_project):
-        """Unknown build fields are silently ignored."""
+        """Unknown build fields are silently ignored (except image, which is rejected)."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -213,6 +229,125 @@ build:
         )
         config = load_config()
         assert config.build.task_executor.agent == "claude"
+
+
+# --- Schema-break tests ---
+
+
+class TestLoadConfigSchemaBreak:
+    def test_load_config_minimal_valid_returns_config_with_image_and_pipeline(self, goga_project):
+        """Minimal valid config exposes top-level image + pipeline + build.task_executor."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_config()
+        assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
+        assert config.pipeline.agent == "claude"
+        assert isinstance(config.pipeline, PipelineConfig)
+        assert config.build.task_executor.agent == "claude"
+        assert isinstance(config.build.task_executor, TaskExecutorConfig)
+        # BuildConfig.image was removed
+        assert not hasattr(config.build, "image")
+        # codemanifest absent -> None
+        assert config.codemanifest is None
+
+    def test_load_config_rejects_build_image(self, goga_project):
+        """The deprecated build.image field is hard-rejected."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+  image: goga:latest
+""",
+        )
+        with pytest.raises(ValueError, match=r"build\.image"):
+            load_config()
+
+    def test_load_config_raises_when_pipeline_missing(self, goga_project):
+        """YAML without the pipeline block raises KeyError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(KeyError, match="pipeline is required"):
+            load_config()
+
+    def test_load_config_image_none_is_valid(self, goga_project):
+        """YAML without the top-level image field yields config.image is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.image is None
+
+    def test_load_config_pipeline_agent_empty_raises(self, goga_project):
+        """pipeline.agent empty string raises ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: ""
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.agent"):
+            load_config()
+
+    def test_load_config_pipeline_agent_missing_raises(self, goga_project):
+        """pipeline block without agent raises ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline: {}
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.agent"):
+            load_config()
+
+    def test_load_config_image_non_string_raises(self, goga_project):
+        """image must be a string when present."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: 123
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match="image must be a string"):
+            load_config()
 
 
 # --- Negative tests ---
@@ -241,6 +376,9 @@ class TestLoadConfigNegative:
         _write_goga_yml(
             goga_project,
             """\
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -255,6 +393,9 @@ build:
             goga_project,
             """\
 language:
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -269,6 +410,9 @@ build:
             goga_project,
             """\
 language: ""
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -283,6 +427,9 @@ build:
             goga_project,
             """\
 language: true
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -297,6 +444,9 @@ build:
             goga_project,
             """\
 language: "   "
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -305,12 +455,15 @@ build:
         with pytest.raises(ValueError, match="language must be a non-empty string"):
             load_config()
 
-    def test_load_config_env_non_string_keys(self, goga_project):
-        """env: {123: value} (int key)."""
+    def test_load_config_task_executor_env_non_string_keys(self, goga_project):
+        """task_executor env: {123: value} (int key)."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -321,9 +474,36 @@ build:
         with pytest.raises(ValueError, match="env must have string"):
             load_config()
 
+    def test_load_config_pipeline_env_non_string_keys(self, goga_project):
+        """pipeline env: {123: value} (int key)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  env:
+    123: value
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match="env must have string"):
+            load_config()
+
     def test_load_config_missing_build(self, goga_project):
         """.goga/config.yml without build key."""
-        _write_goga_yml(goga_project, "language: python\n")
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+""",
+        )
         with pytest.raises(KeyError, match="build is required"):
             load_config()
 
@@ -333,6 +513,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   worktree: true
 """,
@@ -342,7 +525,16 @@ build:
 
     def test_load_config_empty_build_raises(self, goga_project):
         """build: {} (no task_executor)."""
-        _write_goga_yml(goga_project, "language: python\nbuild: {}\n")
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build: {}
+""",
+        )
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
             load_config()
 
@@ -352,6 +544,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor: {}
 """,
@@ -365,6 +560,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: ""
@@ -379,6 +577,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: "   "
@@ -387,12 +588,15 @@ build:
         with pytest.raises(ValueError, match="agent is required"):
             load_config()
 
-    def test_load_config_env_not_mapping(self, goga_project):
+    def test_load_config_task_executor_env_not_mapping(self, goga_project):
         """env: "not-a-dict"."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -402,12 +606,15 @@ build:
         with pytest.raises(ValueError, match="env must be a mapping"):
             load_config()
 
-    def test_load_config_env_non_string_values(self, goga_project):
+    def test_load_config_task_executor_env_non_string_values(self, goga_project):
         """env: {KEY: 123}."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -424,6 +631,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: true
@@ -438,6 +648,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor: claude
 """,
@@ -451,6 +664,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
 """,
@@ -464,6 +680,9 @@ build:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -475,16 +694,44 @@ commands: string
 
     def test_load_config_build_not_dict_raises(self, goga_project):
         """build: true (not mapping)."""
-        _write_goga_yml(goga_project, "language: python\nbuild: true\n")
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build: true
+""",
+        )
         with pytest.raises(ValueError, match="'build' must be a mapping"):
             load_config()
 
-    def test_load_config_env_bool_value_raises(self, goga_project):
+    def test_load_config_pipeline_not_dict_raises(self, goga_project):
+        """pipeline: true (not mapping)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline: true
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match="'pipeline' must be a mapping"):
+            load_config()
+
+    def test_load_config_task_executor_env_bool_value_raises(self, goga_project):
         """env: {DEBUG: true}."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -495,12 +742,15 @@ build:
         with pytest.raises(ValueError, match="env must have string"):
             load_config()
 
-    def test_load_config_env_null_value_raises(self, goga_project):
+    def test_load_config_task_executor_env_null_value_raises(self, goga_project):
         """env: {EMPTY: null}."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -533,7 +783,7 @@ class TestLoadConfigEdgeCases:
         """Bad YAML syntax."""
         _write_goga_yml(
             goga_project,
-            "language: python\nbuild:\n  task_executor:\n    agent: [unclosed\n",
+            "language: python\npipeline:\n  agent: claude\nbuild:\n  task_executor:\n    agent: [unclosed\n",
         )
         with pytest.raises(yaml.YAMLError):
             load_config()
@@ -702,6 +952,9 @@ class TestLoadConfigCodemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -729,6 +982,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -746,6 +1002,9 @@ codemanifest: {}
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -764,6 +1023,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -780,6 +1042,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -796,6 +1061,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -812,6 +1080,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -828,6 +1099,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -845,6 +1119,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -860,6 +1137,9 @@ codemanifest: string
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -875,6 +1155,9 @@ codemanifest: true
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -892,6 +1175,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -909,6 +1195,9 @@ codemanifest:
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
@@ -927,67 +1216,15 @@ codemanifest:
         assert config.codemanifest.usages == {"lib": ".specs/lib.md", "api": ".specs/api.md"}
         assert config.codemanifest.annotations == "Line 1\nLine 2\nLine 3\n"
 
-
-class TestLoadConfigCodemanifestIntegration:
-    def test_load_config_full_yaml_with_codemanifest(self, goga_project):
-        """FULL_YAML + codemanifest section — verify ALL Config fields."""
-        _write_goga_yml(
-            goga_project,
-            """\
-language: go
-commands:
-  test: go test ./...
-  build: go build ./...
-build:
-  task_executor:
-    agent: gemini
-    env:
-      FOO: bar
-      BAZ: qux
-  worktree: false
-  skip_finalize: true
-  session_timeout: "30m"
-  idle_timeout: "1h"
-  wait: "5m"
-  max_iterations: 10
-  review_patience: 3
-  prompts_dir: "/custom/prompts"
-  agents_dir: "/custom/agents"
-  codex_review: true
-codemanifest:
-  usages:
-    lib: .specs/lib.md
-    api: .specs/api.md
-  annotations: "Use lib for core logic"
-""",
-        )
-        config = load_config()
-        # Verify all non-codemanifest fields match FULL_YAML expectations
-        assert config.lang == "go"
-        assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
-        assert config.build.task_executor.agent == "gemini"
-        assert config.build.task_executor.env == {"FOO": "bar", "BAZ": "qux"}
-        assert config.build.worktree is False
-        assert config.build.skip_finalize is True
-        assert config.build.session_timeout == "30m"
-        assert config.build.idle_timeout == "1h"
-        assert config.build.wait == "5m"
-        assert config.build.max_iterations == 10
-        assert config.build.review_patience == 3
-        assert config.build.prompts_dir == "/custom/prompts"
-        assert config.build.agents_dir == "/custom/agents"
-        assert config.build.codex_review is True
-        # Verify codemanifest fields
-        assert config.codemanifest is not None
-        assert config.codemanifest.usages == {"lib": ".specs/lib.md", "api": ".specs/api.md"}
-        assert config.codemanifest.annotations == "Use lib for core logic"
-
     def test_load_config_codemanifest_null_returns_none(self, goga_project):
         """codemanifest: null → config.codemanifest is None."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
 build:
   task_executor:
     agent: claude
