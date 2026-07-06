@@ -1,6 +1,10 @@
+ARG RALPHEX_VERSION=1.4
+ARG PYTHON_VERSION=3.12
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
+
 FROM python:3.12-slim-bookworm AS builder
 
-ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
+ARG SETUPTOOLS_SCM_PRETEND_VERSION
 
 COPY pyproject.toml /tmp/goga/
 COPY goga/ /tmp/goga/goga/
@@ -8,14 +12,14 @@ COPY goga/ /tmp/goga/goga/
 RUN pip install --no-cache-dir -U /tmp/goga && \
     rm -rf /tmp/goga
 
-FROM alpine/git:latest AS ralphex-source
-ARG RALPHEX_REF=v1.4.0
-RUN git clone --depth 1 --branch ${RALPHEX_REF} https://github.com/umputun/ralphex.git /ralphex
+FROM ghcr.io/umputun/ralphex:${RALPHEX_VERSION} AS ralphex-source
 
-FROM ghcr.io/umputun/ralphex:1.4 AS ralphex-binary
+ARG RALPHEX_VERSION
+RUN git clone --depth 1 --branch v${RALPHEX_VERSION}.0 https://github.com/umputun/ralphex.git /ralphex
+
 FROM akopichin/afm:latest AS afm-source
 
-FROM python:3.12-slim-bookworm
+FROM python:${PYTHON_VERSION}-slim-bookworm
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -24,7 +28,7 @@ RUN apt-get update && \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ralphex-binary /srv/ralphex /srv/ralphex
+COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
 RUN npm install -g @anthropic-ai/claude-code@2.1.160 @openai/codex@0.136.0
 RUN chmod +x /srv/ralphex /srv/afm
@@ -45,8 +49,9 @@ COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
 RUN chmod +x /home/goga/bin/codex-as-claude.sh /home/goga/bin/opencode-as-claude.sh /home/goga/bin/claude-as-claude.sh
 
 ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
+ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
-ENV AFM_DIR=/tmp/afm
+ENV AFM_DIR=/tmp/pipeline
 
 WORKDIR /workspace
 
