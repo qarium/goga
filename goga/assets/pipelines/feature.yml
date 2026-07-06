@@ -5,8 +5,8 @@ stages:
   - id: propose
     name: "Propose"
     interactive: true
-    agents: [planning, implementation, review]
-    description: |
+    agents: [planning, implementation]
+    prompt: |
       Save the task file as `<git branch --show-current>.md`
     skills:
       - goga-propose
@@ -14,7 +14,7 @@ stages:
   - id: propose-review
     name: "Propose Review"
     interactive: true
-    description: |
+    prompt: |
       Review the task `<git branch --show-current>.md`
     agents: [planning, implementation]
     skills:
@@ -24,10 +24,10 @@ stages:
   - id: brainstorm
     name: "Architecture Brainstorm"
     interactive: true
-    description: |
+    prompt: |
       Use the task `<git branch --show-current>.md`
       Save the architecture plan as `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-brainstorm
     depends_on: [propose, propose-review]
@@ -35,7 +35,7 @@ stages:
   - id: brainstorm-review
     name: "Architecture Review"
     interactive: true
-    description: |
+    prompt: |
       Review the architecture plan `<git branch --show-current>.md`
     agents: [planning, implementation]
     skills:
@@ -44,9 +44,9 @@ stages:
 
   - id: apply
     name: "Apply Architecture"
-    description: |
+    prompt: |
       Apply the architecture plan `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-apply
     depends_on: [propose, propose-review, brainstorm, brainstorm-review]
@@ -54,9 +54,9 @@ stages:
   - id: design
     name: "Design Architecture To Code"
     interactive: true
-    description: |
+    prompt: |
       Save the design document as `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-design
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply]
@@ -64,7 +64,7 @@ stages:
   - id: design-review
     name: "Design Review"
     interactive: true
-    description: |
+    prompt: |
       Review the design document `<git branch --show-current>.md`
     agents: [planning, implementation]
     skills:
@@ -74,10 +74,10 @@ stages:
   - id: plan
     name: "Plan"
     interactive: true
-    description: |
+    prompt: |
       Use the design document `<git branch --show-current>.md`
       Save the plan as `<git branch --show-current>.md`
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     skills:
       - goga-plan
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review]
@@ -85,7 +85,7 @@ stages:
   - id: plan-review
     name: "Plan Review"
     interactive: true
-    description: |
+    prompt: |
       Review the plan `<git branch --show-current>.md`
     agents: [planning, implementation]
     skills:
@@ -95,7 +95,7 @@ stages:
   - id: fix-changes
     name: "Fix changes"
     interactive: true
-    description: |
+    prompt: |
       Steps:
         1. Commit all changes.
         2. Ask the user whether the implementation is built and ready for acceptance.
@@ -114,5 +114,5 @@ stages:
     interactive: true
     skills:
       - goga-accept
-    agents: [planning, implementation, review]
+    agents: [planning, implementation]
     depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan, plan-review, fix-changes]
