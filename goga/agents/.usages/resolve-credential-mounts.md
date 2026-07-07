@@ -78,6 +78,10 @@ the host filesystem and does not parse credential file contents.
   stage-specific filtering would break multi-stage pipelines.
 - **Read-only mounts.** All mounts use the `:ro` suffix; credential files are
   never written to from inside the container.
+- **Existence invariant.** Every returned tuple is an existing host file by
+  construction — the routine already performed the `Path.exists()` check. The
+  consumer MUST NOT re-check `Path.exists()` on the returned tuples; it appends
+  the mount flags directly.
 
 ## Platform caveat — macOS Keychain for claude
 
