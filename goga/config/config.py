@@ -19,6 +19,8 @@ class PipelineConfig:
 
     agent: str
     env: dict = field(default_factory=dict)
+    proxy: str | None = None
+    hosts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True, frozen=True)
@@ -44,6 +46,8 @@ class BuildConfig:
     prompts_dir: str | None = None
     agents_dir: str | None = None
     codex_review: bool | None = None
+    proxy: str | None = None
+    hosts: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True, frozen=True)

@@ -86,6 +86,25 @@ class TestPipelineConfigAPIShape:
     def test_env_has_default(self):
         assert PipelineConfig.__dataclass_fields__["env"].default_factory is not dataclasses.MISSING
 
+    def test_has_proxy_field(self):
+        assert "proxy" in PipelineConfig.__dataclass_fields__
+
+    def test_has_hosts_field(self):
+        assert "hosts" in PipelineConfig.__dataclass_fields__
+
+    def test_proxy_type_is_optional_str(self):
+        proxy_type = PipelineConfig.__dataclass_fields__["proxy"].type
+        assert proxy_type == str | None or types.UnionType in type(proxy_type).__mro__
+
+    def test_hosts_type_is_dict_str_str(self):
+        assert PipelineConfig.__dataclass_fields__["hosts"].type == dict[str, str]
+
+    def test_proxy_defaults_none(self):
+        assert PipelineConfig.__dataclass_fields__["proxy"].default is None
+
+    def test_hosts_has_default_factory(self):
+        assert PipelineConfig.__dataclass_fields__["hosts"].default_factory is not dataclasses.MISSING
+
 
 class TestBuildConfigAPIShape:
     def test_has_task_executor_field(self):
@@ -120,6 +139,25 @@ class TestBuildConfigAPIShape:
 
     def test_has_codex_review_field(self):
         assert "codex_review" in BuildConfig.__dataclass_fields__
+
+    def test_has_proxy_field(self):
+        assert "proxy" in BuildConfig.__dataclass_fields__
+
+    def test_has_hosts_field(self):
+        assert "hosts" in BuildConfig.__dataclass_fields__
+
+    def test_proxy_type_is_optional_str(self):
+        proxy_type = BuildConfig.__dataclass_fields__["proxy"].type
+        assert proxy_type == str | None or types.UnionType in type(proxy_type).__mro__
+
+    def test_hosts_type_is_dict_str_str(self):
+        assert BuildConfig.__dataclass_fields__["hosts"].type == dict[str, str]
+
+    def test_proxy_defaults_none(self):
+        assert BuildConfig.__dataclass_fields__["proxy"].default is None
+
+    def test_hosts_has_default_factory(self):
+        assert BuildConfig.__dataclass_fields__["hosts"].default_factory is not dataclasses.MISSING
 
     def test_does_not_have_image_field(self):
         """BuildConfig.image was removed in the schema break."""
@@ -264,6 +302,19 @@ class TestPipelineConfigCreation:
         assert not isinstance(pc, TaskExecutorConfig)
         assert not isinstance(te, PipelineConfig)
 
+    def test_proxy_defaults_none(self):
+        pc = PipelineConfig(agent="claude")
+        assert pc.proxy is None
+
+    def test_hosts_defaults_empty_dict(self):
+        pc = PipelineConfig(agent="claude")
+        assert pc.hosts == {}
+
+    def test_explicit_proxy_and_hosts(self):
+        pc = PipelineConfig(agent="claude", proxy="http://x:1", hosts={"a": "1"})
+        assert pc.proxy == "http://x:1"
+        assert pc.hosts == {"a": "1"}
+
 
 class TestBuildConfigCreation:
     def test_all_none_optional_fields(self):
@@ -280,6 +331,8 @@ class TestBuildConfigCreation:
         assert bc.prompts_dir is None
         assert bc.agents_dir is None
         assert bc.codex_review is None
+        assert bc.proxy is None
+        assert bc.hosts == {}
         assert not hasattr(bc, "image")
 
     def test_all_fields_populated(self):
@@ -309,6 +362,22 @@ class TestBuildConfigCreation:
         assert bc.prompts_dir == "/custom/prompts"
         assert bc.agents_dir == "/custom/agents"
         assert bc.codex_review is True
+
+    def test_proxy_defaults_none(self):
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        assert bc.proxy is None
+
+    def test_hosts_defaults_empty_dict(self):
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        assert bc.hosts == {}
+
+    def test_explicit_proxy_and_hosts(self):
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te, proxy="http://x:1", hosts={"a": "1"})
+        assert bc.proxy == "http://x:1"
+        assert bc.hosts == {"a": "1"}
 
 
 class TestConfigCreation:

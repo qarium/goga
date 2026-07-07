@@ -26,6 +26,24 @@ def _parse_task_executor(task_executor_data: dict) -> TaskExecutorConfig:
     return TaskExecutorConfig(agent=agent.strip(), env=dict(env))
 
 
+def _parse_proxy(proxy_data, section: str) -> str | None:
+    """Validate an optional proxy field; None is a valid value."""
+    if proxy_data is not None and not isinstance(proxy_data, str):
+        raise ValueError(f"{section}.proxy must be a string in .goga/config.yml")
+    return proxy_data
+
+
+def _parse_hosts(hosts_data, section: str) -> dict[str, str]:
+    """Validate an optional host→IP mapping; None/absent resolves to an empty dict."""
+    if hosts_data is None:
+        return {}
+    if not isinstance(hosts_data, dict):
+        raise ValueError(f"{section}.hosts must be a mapping in .goga/config.yml")
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in hosts_data.items()):
+        raise ValueError(f"{section}.hosts must have string keys and values in .goga/config.yml")
+    return dict(hosts_data)
+
+
 def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
     """Parse and validate the pipeline section into a PipelineConfig instance."""
     agent = pipeline_data.get("agent")
@@ -38,7 +56,10 @@ def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
         raise ValueError("pipeline.env must have string keys and values")
 
-    return PipelineConfig(agent=agent.strip(), env=dict(env))
+    proxy = _parse_proxy(pipeline_data.get("proxy"), "pipeline")
+    hosts = _parse_hosts(pipeline_data.get("hosts"), "pipeline")
+
+    return PipelineConfig(agent=agent.strip(), env=dict(env), proxy=proxy, hosts=hosts)
 
 
 def _parse_language(data: dict) -> str:
@@ -113,6 +134,9 @@ def _parse_build(build_data: dict) -> BuildConfig:
 
     task_executor = _parse_task_executor(task_executor_data)
 
+    proxy = _parse_proxy(build_data.get("proxy"), "build")
+    hosts = _parse_hosts(build_data.get("hosts"), "build")
+
     return BuildConfig(
         task_executor=task_executor,
         worktree=build_data.get("worktree"),
@@ -125,6 +149,8 @@ def _parse_build(build_data: dict) -> BuildConfig:
         prompts_dir=build_data.get("prompts_dir"),
         agents_dir=build_data.get("agents_dir"),
         codex_review=build_data.get("codex_review"),
+        proxy=proxy,
+        hosts=hosts,
     )
 
 

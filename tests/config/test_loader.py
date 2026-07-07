@@ -231,6 +231,217 @@ build:
         assert config.build.task_executor.agent == "claude"
 
 
+# --- Proxy and hosts tests ---
+
+
+class TestLoadConfigProxyHosts:
+    def test_load_config_pipeline_proxy_and_hosts_populated(self, goga_project):
+        """pipeline.proxy and pipeline.hosts are read into PipelineConfig."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  proxy: "http://corp:3128"
+  hosts:
+    foo.local: 127.0.0.1
+    bar.local: 10.0.0.2
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.pipeline.proxy == "http://corp:3128"
+        assert config.pipeline.hosts == {"foo.local": "127.0.0.1", "bar.local": "10.0.0.2"}
+
+    def test_load_config_pipeline_proxy_hosts_absent_defaults(self, goga_project):
+        """Missing pipeline.proxy/hosts default to None and empty dict."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_config()
+        assert config.pipeline.proxy is None
+        assert config.pipeline.hosts == {}
+
+    def test_load_config_build_proxy_and_hosts_populated(self, goga_project):
+        """build.proxy and build.hosts are read into BuildConfig."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+  proxy: "http://build-proxy:8080"
+  hosts:
+    svc.local: 192.168.1.1
+""",
+        )
+        config = load_config()
+        assert config.build.proxy == "http://build-proxy:8080"
+        assert config.build.hosts == {"svc.local": "192.168.1.1"}
+
+    def test_load_config_build_proxy_hosts_absent_defaults(self, goga_project):
+        """Missing build.proxy/hosts default to None and empty dict."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_config()
+        assert config.build.proxy is None
+        assert config.build.hosts == {}
+
+    def test_load_config_hosts_null_treated_as_empty(self, goga_project):
+        """pipeline.hosts: null resolves to empty dict, not None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  hosts:
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.pipeline.hosts == {}
+
+    def test_load_config_proxy_null_treated_as_none(self, goga_project):
+        """pipeline.proxy: null resolves to None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  proxy:
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.pipeline.proxy is None
+
+
+class TestLoadConfigProxyHostsNegative:
+    def test_load_config_pipeline_proxy_non_string_raises(self, goga_project):
+        """pipeline.proxy must be a string when present."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  proxy: 3128
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.proxy must be a string"):
+            load_config()
+
+    def test_load_config_build_proxy_non_string_raises(self, goga_project):
+        """build.proxy must be a string when present."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+  proxy: 3128
+""",
+        )
+        with pytest.raises(ValueError, match=r"build\.proxy must be a string"):
+            load_config()
+
+    def test_load_config_pipeline_hosts_not_mapping_raises(self, goga_project):
+        """pipeline.hosts must be a mapping when present."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  hosts: not-a-mapping
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.hosts must be a mapping"):
+            load_config()
+
+    def test_load_config_build_hosts_not_mapping_raises(self, goga_project):
+        """build.hosts must be a mapping when present."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+  hosts: not-a-mapping
+""",
+        )
+        with pytest.raises(ValueError, match=r"build\.hosts must be a mapping"):
+            load_config()
+
+    def test_load_config_pipeline_hosts_non_string_value_raises(self, goga_project):
+        """pipeline.hosts values must be strings."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+  hosts:
+    foo.local: 127.0.0.1
+    bar.local: 10
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.hosts must have string keys and values"):
+            load_config()
+
+    def test_load_config_build_hosts_non_string_key_raises(self, goga_project):
+        """build.hosts keys must be strings."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+  hosts:
+    123: 10.0.0.1
+""",
+        )
+        with pytest.raises(ValueError, match=r"build\.hosts must have string keys and values"):
+            load_config()
+
+
 # --- Schema-break tests ---
 
 
