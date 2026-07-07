@@ -76,9 +76,9 @@ class TestApiShape:
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
-    def test_build_has_ten_options(self) -> None:
+    def test_build_has_thirteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 10
+        assert len(options) == 13
 
     def test_build_has_dry_run_option(self) -> None:
         param_names = [p.name for p in build_cmd.params]
@@ -259,21 +259,27 @@ class TestBuildDockerCmd:
         cmd = _build_docker_cmd("plan.md", "custom:tag", Path("/tmp/env"), {}, "test-build")
         assert "custom:tag" in cmd
 
-    def test_codex_auth_mounted_when_exists(self, tmp_path) -> None:
+    def test_codex_auth_mounted_when_exists(self, tmp_path, monkeypatch) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
         codex_dir = tmp_path / ".codex"
         codex_dir.mkdir()
         (codex_dir / "auth.json").write_text("{}")
 
+        # resolve_credential_mounts expands ~ via $HOME (not Path.home()), so
+        # redirect detection to tmp_path where the codex file was created.
+        monkeypatch.setenv("HOME", str(tmp_path))
         with mock.patch.object(Path, "home", return_value=tmp_path):
             cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {}, "test-build")
 
         assert any("/home/goga/.codex/auth.json:ro" in arg for arg in cmd)
 
-    def test_no_codex_auth_when_file_absent(self, tmp_path) -> None:
+    def test_no_codex_auth_when_file_absent(self, tmp_path, monkeypatch) -> None:
         from goga.commands.build.build import _build_docker_cmd
 
+        # resolve_credential_mounts expands ~ via $HOME (not Path.home()), so
+        # redirect through the env var to isolate detection from the real host.
+        monkeypatch.setenv("HOME", str(tmp_path))
         with mock.patch.object(Path, "home", return_value=tmp_path):
             cmd = _build_docker_cmd("plan.md", "goga:latest", Path("/tmp/env"), {}, "test-build")
 
@@ -742,7 +748,7 @@ class TestImagePullInBuild:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
-            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+            _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
         mock_pull.assert_called_once_with("custom-image:v2")
 
@@ -778,7 +784,7 @@ class TestImagePullInBuild:
             mock.patch.object(subprocess, "Popen") as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
-            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
         assert result.exit_code == 1
         assert "failed to pull image" in result.output
@@ -844,6 +850,9 @@ class TestTopLevelImageContract:
         (fake_home / ".codex" / "auth.json").write_text("{}")
 
         _write_goga_yml(tmp_path)
+        # resolve_credential_mounts expands ~ via $HOME (not Path.home()), so
+        # redirect detection to fake_home.
+        monkeypatch.setenv("HOME", str(fake_home))
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0

@@ -11,6 +11,7 @@ from pathlib import Path
 import click
 import yaml
 
+from ...agents import resolve_credential_mounts
 from ...config import load_config
 
 logger = logging.getLogger(__name__)
@@ -118,12 +119,44 @@ def _write_env_file(
     return Path(path)
 
 
-def _build_docker_cmd(
+def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[str]:
+    """Render the build cli_flags map into trailing goga.build argument list.
+
+    Args:
+        cli_flags: Build flags forwarded to the in-container entrypoint.
+
+    Returns:
+        A flat list of CLI argument tokens (e.g. ``["--worktree", "--wait", "5m"]``).
+    """
+    args: list[str] = []
+    if cli_flags.get("dry_run"):
+        args.append("--dry-run")
+    if cli_flags.get("worktree"):
+        args.append("--worktree")
+    if cli_flags.get("skip_finalize"):
+        args.append("--skip-finalize")
+    if cli_flags.get("skip_manifest_check"):
+        args.append("--skip-manifest-check")
+
+    for flag in ("session_timeout", "idle_timeout", "wait"):
+        val = cli_flags.get(flag)
+        if val is not None:
+            args.extend([f"--{flag.replace('_', '-')}", str(val)])
+    for flag in ("max_iterations", "review_patience"):
+        val = cli_flags.get(flag)
+        if val is not None:
+            args.extend([f"--{flag.replace('_', '-')}", str(val)])
+
+    return args
+
+
+def _build_docker_cmd(  # noqa: PLR0913
     plan: str,
     image: str,
     env_file: Path,
     cli_flags: dict[str, bool | str | int | None],
     container_name: str,
+    merged_hosts: dict[str, str] | None = None,
 ) -> list[str]:
     """Assemble the docker run command that launches goga.build inside a container.
 
@@ -133,10 +166,16 @@ def _build_docker_cmd(
         env_file: Path to the env file mounted via `--env-file`.
         cli_flags: Build flags forwarded to the in-container entrypoint.
         container_name: Name assigned to the container via `--name`.
+        merged_hosts: Resolved host→IP mapping (config.build.hosts merged with
+            parsed ``--add-host`` CLI entries). Each pair becomes a
+            ``--add-host HOST:IP`` flag. ``None`` adds no host entries.
 
     Returns:
         The full docker command as a list of string arguments.
     """
+    if merged_hosts is None:
+        merged_hosts = {}
+
     project_dir = Path.cwd().resolve()
 
     cmd: list[str] = [
@@ -151,35 +190,20 @@ def _build_docker_cmd(
         f"{project_dir}:/workspace",
         "-w",
         "/workspace",
-        "--env-file",
-        str(env_file),
     ]
 
-    codex_auth = Path.home() / ".codex" / "auth.json"
-    if codex_auth.is_file():
-        cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
+    for host, ip in merged_hosts.items():
+        cmd.extend(["--add-host", f"{host}:{ip}"])
+
+    cmd.extend(["--env-file", str(env_file)])
+
+    for host_path, container_path in resolve_credential_mounts():
+        cmd.extend(["-v", f"{host_path}:{container_path}:ro"])
 
     cmd.append(image)
 
     cmd.extend(["-m", "goga.build", plan])
-
-    if cli_flags.get("dry_run"):
-        cmd.append("--dry-run")
-    if cli_flags.get("worktree"):
-        cmd.append("--worktree")
-    if cli_flags.get("skip_finalize"):
-        cmd.append("--skip-finalize")
-    if cli_flags.get("skip_manifest_check"):
-        cmd.append("--skip-manifest-check")
-
-    for flag in ("session_timeout", "idle_timeout", "wait"):
-        val = cli_flags.get(flag)
-        if val is not None:
-            cmd.extend([f"--{flag.replace('_', '-')}", str(val)])
-    for flag in ("max_iterations", "review_patience"):
-        val = cli_flags.get(flag)
-        if val is not None:
-            cmd.extend([f"--{flag.replace('_', '-')}", str(val)])
+    cmd.extend(_cli_flags_to_args(cli_flags))
 
     return cmd
 
@@ -196,6 +220,21 @@ def _build_docker_cmd(
 @click.option("--max-iterations", type=int, default=None, help="Max iterations")
 @click.option("--review-patience", type=int, default=None, help="Review patience")
 @click.option("-e", "--env", "extra_env", multiple=True, help="Pass env var to container (KEY=VALUE)")
+@click.option("--proxy", type=str, default=None, help="HTTP/HTTPS proxy URL; overrides config.build.proxy")
+@click.option(
+    "--add-host",
+    "add_host",
+    multiple=True,
+    help="Add a docker run --add-host HOST:IP entry; merges on top of config.build.hosts",
+)
+@click.option(
+    "--update",
+    "-u",
+    "update",
+    is_flag=True,
+    default=False,
+    help="Pull the image before launching the container",
+)
 @click.pass_context
 def build(  # noqa: PLR0913
     ctx: click.Context,
@@ -210,6 +249,9 @@ def build(  # noqa: PLR0913
     max_iterations: int | None,
     review_patience: int | None,
     extra_env: tuple[str, ...],
+    proxy: str | None,
+    add_host: tuple[str, ...],
+    update: bool,
 ) -> None:
     """Build code via ralphex by launching goga.build inside a Docker container.
 
@@ -226,6 +268,14 @@ def build(  # noqa: PLR0913
         max_iterations: Optional iteration cap forwarded to the build.
         review_patience: Optional review patience forwarded to the build.
         extra_env: Additional KEY=VALUE environment variables for the container.
+        proxy: Optional HTTP/HTTPS proxy URL from ``--proxy``. When None, falls
+            back to ``config.build.proxy``. The resolved value (CLI wins over
+            config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in the env-file.
+        add_host: Raw ``HOST:IP`` strings from the repeatable ``--add-host``
+            option. Merged on top of ``config.build.hosts``; CLI wins on key
+            conflict. Each entry becomes a docker run ``--add-host`` flag.
+        update: When True, pull the image before launch. When False (default),
+            skip the pull and use the locally available image.
 
     Raises:
         click.ClickException: When docker is missing, configuration cannot be
@@ -251,6 +301,18 @@ def build(  # noqa: PLR0913
         "dry_run": dry_run,
     }
 
+    # Resolve the proxy: the --proxy CLI value wins over config.build.proxy.
+    resolved_proxy = proxy if proxy is not None else config.build.proxy
+
+    # Resolve hosts: merge config.build.hosts with parsed --add-host entries.
+    # Each "HOST:IP" string is split on the first colon; CLI entries override
+    # config entries on host-key conflict. Format is not validated beyond the
+    # split — Docker reports malformed entries itself.
+    merged_hosts: dict[str, str] = {**config.build.hosts}
+    for entry in add_host:
+        host, _, ip = entry.partition(":")
+        merged_hosts[host] = ip
+
     # Reject the missing-image case before creating any temp files: the env file
     # (written below) carries git identity and task_executor secrets and is only
     # unlinked by the finally of the try block below, so creating it here and then
@@ -260,6 +322,14 @@ def build(  # noqa: PLR0913
 
     git_env = _read_git_config()
     env = {**git_env, **config.build.task_executor.env}
+
+    # When a proxy is resolved (CLI or config), populate the standard proxy env
+    # vars. NO_PROXY is fixed at localhost,127.0.0.1 — there is no --no-proxy.
+    if resolved_proxy is not None:
+        env["HTTP_PROXY"] = resolved_proxy
+        env["HTTPS_PROXY"] = resolved_proxy
+        env["NO_PROXY"] = "localhost,127.0.0.1"
+
     env_file = _write_env_file(env, extra_env)
 
     container_name = f"goga-build-{os.getpid()}"
@@ -276,12 +346,14 @@ def build(  # noqa: PLR0913
             env_file=env_file,
             cli_flags=cli_flags,
             container_name=container_name,
+            merged_hosts=merged_hosts,
         )
 
         if dry_run:
             ctx.exit(0)
 
-        _pull_image(config.image)
+        if update:
+            _pull_image(config.image)
 
         docker_proc = subprocess.Popen(docker_cmd)
 
