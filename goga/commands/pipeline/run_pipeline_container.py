@@ -366,10 +366,19 @@ def _run_named(
         signal.signal(signal.SIGINT, prev_int)
 
 
-def run_pipeline_container(
+def run_pipeline_container(  # noqa: PLR0913
     name: str | None,
     config: Config,
     extra_env: tuple[str, ...] = (),
+    # The four parameters below are part of the declared contract signature
+    # (CODEMANIFEST) and wired into the docker command by the run_pipeline_container
+    # extension task. They are accepted here with behavior-preserving defaults so
+    # the extended `pipeline` CLI dispatch (which forwards them by keyword) does
+    # not raise TypeError in the interim.
+    proxy: str | None = None,  # noqa: ARG001
+    hosts: dict[str, str] | None = None,  # noqa: ARG001
+    clean: bool = False,  # noqa: ARG001
+    update: bool = False,  # noqa: ARG001
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -398,6 +407,22 @@ def run_pipeline_container(
             the host-side ``-e/--env`` Click option). Default is empty — callers
             that omit it observe the previous behavior. Ignored in discovery
             mode (``name is None``), which never writes an env-file.
+        proxy: Resolved HTTP/HTTPS proxy URL (CLI overrides config in the
+            caller). Default None preserves the previous behavior; the full
+            HTTP_PROXY/HTTPS_PROXY/NO_PROXY env-file wiring is implemented in
+            the run_pipeline_container extension.
+        hosts: Resolved host→IP dict (CLI entries merged on top of
+            ``config.pipeline.hosts`` by the caller). Default None preserves the
+            previous behavior; the ``--add-host`` flag wiring is implemented in
+            the run_pipeline_container extension.
+        clean: When True and in run mode, wipe the persistent afm state host
+            directory before launch. Default False preserves the previous
+            behavior; the wipe wiring is implemented in the run_pipeline_container
+            extension.
+        update: When True, pull the image before launch (failure is a warning,
+            not fatal). Default False preserves the previous behavior; the
+            conditional-pull wiring is implemented in the run_pipeline_container
+            extension.
 
     Returns:
         The container's exit code.
