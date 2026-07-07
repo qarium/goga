@@ -84,12 +84,18 @@ pipeline:
   agent: claude
   env:
     ANTHROPIC_API_KEY: sk-xxx
+  proxy: http://corp:3128        # HTTP/HTTPS proxy URL
+  hosts:                         # docker run --add-host entries
+    foo.local: 127.0.0.1
 build:
   task_executor:
     agent: claude
     env:
       ANTHROPIC_API_KEY: sk-xxx
       MODEL: claude-sonnet-4-6
+  proxy: http://corp:3128        # HTTP/HTTPS proxy URL
+  hosts:                         # docker run --add-host entries
+    foo.local: 127.0.0.1
   worktree: true
   skip_finalize: false
   session_timeout: "30m"
@@ -133,7 +139,11 @@ afm) that consume these fields.
 |-----------------------------|---------|------------------------|---------------------------------------------------------|
 | `commands`                  | mapping | `{}`                   | Prompt customization hooks (reserved)                   |
 | `pipeline.env`              | mapping | `{}`                   | Environment variables for pipeline runs (`{str: str}`)  |
+| `pipeline.proxy`             | str     | None                   | HTTP/HTTPS proxy URL for the pipeline container                |
+| `pipeline.hosts`             | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (pipeline)         |
 | `build.task_executor.env`   | mapping | `{}`                   | Environment variables for builds (`{str: str}`)         |
+| `build.proxy`                | str     | None                   | HTTP/HTTPS proxy URL for the build container                   |
+| `build.hosts`                | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (build)            |
 | `build.worktree`            | bool    | None                   | Run in an isolated git worktree                         |
 | `build.skip_finalize`       | bool    | None                   | Skip the finalization step                              |
 | `build.session_timeout`     | str     | None                   | Session timeout (Go duration format)                    |
@@ -163,12 +173,16 @@ config.pipeline       # PipelineConfig
 config.commands       # dict — custom command hooks
 
 # PipelineConfig fields
-config.pipeline.agent  # str — afm client.command inside the container
-config.pipeline.env    # dict — {str: str}
+config.pipeline.agent   # str — afm client.command inside the container
+config.pipeline.env     # dict — {str: str}
+config.pipeline.proxy   # str | None — HTTP/HTTPS proxy URL for the pipeline container
+config.pipeline.hosts   # dict[str, str] — docker run --add-host entries
 
 # BuildConfig fields
 config.build.task_executor   # TaskExecutorConfig
 config.build.worktree        # bool | None
+config.build.proxy           # str | None — HTTP/HTTPS proxy URL for the build container
+config.build.hosts           # dict[str, str] — docker run --add-host entries
 
 # TaskExecutorConfig fields
 config.build.task_executor.agent  # str
@@ -197,3 +211,25 @@ from goga.config import Config
 
 new_config = replace(config, lang="go")
 ```
+
+## Proxy and hosts semantics
+
+`build.proxy` and `pipeline.proxy` are HTTP/HTTPS proxy URLs consumed by the
+host-side docker launchers (`goga/commands/build`, `goga/commands/pipeline`).
+When the resolved proxy (config or CLI `--proxy`) is non-empty, the launcher
+writes three variables into the container env-file:
+
+| Variable     | Value                                            |
+|--------------|--------------------------------------------------|
+| `HTTP_PROXY` | the resolved proxy URL                           |
+| `HTTPS_PROXY`| the resolved proxy URL                           |
+| `NO_PROXY`   | `localhost,127.0.0.1` (fixed; CLI cannot override)|
+
+`NO_PROXY` is mandatory whenever a proxy is set — without it,
+`--add-host foo.local:127.0.0.1` would route `foo.local` through the corporate
+proxy and break. CLI `--add-host` entries are NOT auto-added to `NO_PROXY`
+(non-standard topologies are a later extension).
+
+`build.hosts` and `pipeline.hosts` are host→IP mappings translated to
+`docker run --add-host HOST:IP` flags. CLI `--add-host` flags are merged on top
+of the config value; on key conflict, CLI wins.

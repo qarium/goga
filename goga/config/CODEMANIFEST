@@ -36,10 +36,12 @@ Annotations: |
        - lang from the language directive
        - image (top-level Docker image, optional — None is a valid value)
     5. Extract and validate the required pipeline block; construct a
-       `PipelineConfig` from its agent and env fields
+       `PipelineConfig` from its agent, env, proxy (optional, default None),
+       and hosts (optional, default empty dict) fields
     6. Extract and validate the required build block and its required
        task_executor sub-block; construct a `TaskExecutorConfig` from agent
-       and env, then a `BuildConfig` from task_executor plus the remaining
+       and env, then a `BuildConfig` from task_executor, proxy (optional,
+       default None), hosts (optional, default empty dict), plus the remaining
        optional build fields
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
@@ -51,8 +53,12 @@ Annotations: |
       ClickException when they need a concrete image)
     - pipeline block is required; pipeline.agent is required and non-empty
     - pipeline.env is optional, defaults to an empty mapping
+    - pipeline.proxy is optional, defaults to None
+    - pipeline.hosts is optional, defaults to an empty mapping
     - build and build.task_executor blocks are required;
       build.task_executor.agent is required and non-empty
+    - build.proxy is optional, defaults to None
+    - build.hosts is optional, defaults to an empty mapping
     - codemanifest is optional
     - Values are exposed as-is without default merge — consumers apply their own defaults
 
@@ -90,17 +96,22 @@ Annotations: |
       Instance of `CodemanifestConfig`.
       Returns None when the codemanifest section is absent.
 
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None)":
+"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Build execution configuration. Constructed by load_config from the build section of .goga/config.yml.
 
     `task_executor`: AI agent configuration. Required.
+    `proxy`: optional HTTP/HTTPS proxy URL (e.g. "http://corp:3128"). When non-None,
+            consumers write HTTP_PROXY/HTTPS_PROXY/NO_PROXY into the container env-file.
+            Defaults to None.
+    `hosts`: optional host→IP mapping for "docker run --add-host HOST:IP" flags. Empty dict
+             when the section is absent. Consumers merge CLI --add-host flags on top.
     All remaining fields are optional and default to None.
 
     Requirements:
     - task_executor is required
-    - All other fields may be None
+    - All other fields may be None; hosts defaults to an empty dict
   properties:
     "task_executor -> TaskExecutorConfig": |
       AI agent configuration. `TaskExecutorConfig` instance.
@@ -125,6 +136,14 @@ Annotations: |
       Custom ralphex agent directory path.
     "codex_review -> bool | None": |
       Enable external codex review.
+    "proxy -> str | None": |
+      Optional HTTP/HTTPS proxy URL for the build container.
+      When non-None, consumers add HTTP_PROXY, HTTPS_PROXY, and NO_PROXY to the
+      container env-file (NO_PROXY is fixed at "localhost,127.0.0.1").
+      Defaults to None.
+    "hosts -> dict[str, str]": |
+      Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
+      Defaults to an empty dict when absent in .goga/config.yml.
 
 "TaskExecutorConfig(agent: str, env: dict)":
   location: config.py
@@ -151,7 +170,7 @@ Annotations: |
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
 
-"PipelineConfig(agent: str, env: dict)":
+"PipelineConfig(agent: str, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Pipeline configuration block. Constructed by load_config from the pipeline section.
@@ -160,10 +179,16 @@ Annotations: |
 
     `agent`: AI executor identifier used as afm client.command inside the container
     `env`: environment variable dictionary
+    `proxy`: optional HTTP/HTTPS proxy URL. Same semantics as BuildConfig.proxy,
+             consumed by the pipeline container launcher. Defaults to None.
+    `hosts`: optional host→IP mapping for docker run --add-host. Defaults to an
+             empty dict.
 
     Requirements:
     - agent is required and must be a non-empty string
     - env is optional and defaults to an empty dict
+    - proxy is optional and defaults to None
+    - hosts is optional and defaults to an empty dict
   properties:
     "agent -> str": |
       AI executor identifier — agent name as declared in the goga Docker image
@@ -177,6 +202,14 @@ Annotations: |
       Environment variable dictionary ({str: str}).
       Passed to the container at pipeline run time.
       Optional — defaults to an empty dict.
+    "proxy -> str | None": |
+      Optional HTTP/HTTPS proxy URL for the pipeline container.
+      When non-None, the pipeline launcher adds HTTP_PROXY, HTTPS_PROXY, and
+      NO_PROXY (fixed at "localhost,127.0.0.1") to the container env-file.
+      Defaults to None.
+    "hosts -> dict[str, str]": |
+      Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
+      Defaults to an empty dict when absent in .goga/config.yml.
 
 "CodemanifestConfig(usages: dict, annotations: str | None)":
   location: config.py

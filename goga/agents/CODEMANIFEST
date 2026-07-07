@@ -2,6 +2,9 @@ Imports:
   - Types:
       - resolve_wrapper_path
     From: goga/agents/wrapper
+  - Types:
+      - resolve_credential_mounts
+    From: goga/agents/credentials
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -14,20 +17,27 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell is the facade of the agent-wrappers area. It exposes the
-  `resolve_wrapper_path` routine as the single stable import point for
-  agent-name-to-wrapper-path resolution.
+  This cell is the facade of the agent-tooling area. It exposes two pure
+  routines as the single stable import point for agent-related resolution:
 
-  This cell has no own types — it is re-export only. The implementation
-  lives in subcells under this facade.
+  - `resolve_wrapper_path` — agent name → in-container *-as-claude.sh wrapper path
+  - `resolve_credential_mounts` — host filesystem → list of (host_path,
+    container_path) tuples for credential files to bind-mount read-only
+
+  This cell has no own types — it is re-export only. The implementations
+  live in subcells under this facade (goga/agents/wrapper,
+  goga/agents/credentials).
 
 ---
 
 ->resolve_wrapper_path: {}
+
+->resolve_credential_mounts: {}
 
 ---
 
 Author: Goga
 CreatedAt: 05/07/26
 Description: |
-  Agent tooling area. Provides tools for working with AI agents.
+  Agent tooling area. Provides tools for working with AI agents —
+  wrapper path resolution and credential mount resolution.

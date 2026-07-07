@@ -7,8 +7,10 @@ Imports:
     From: goga/config
   - Types:
       - resolve_wrapper_path
+      - resolve_credential_mounts
     Usages:
       - resolve-wrapper-path
+      - resolve-credential-mounts
     From: goga/agents
   - Usages:
       - list-pipelines
@@ -21,6 +23,7 @@ Usages:
   click: .goga/usages/cooks/click.md
   afm: .goga/usages/cooks/afm.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
+  docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
 
 Annotations: |
   The `conventions` practice is used for:
@@ -55,9 +58,22 @@ Annotations: |
   The Docker image is sourced from Config.image — the top-level field shared
   by build and pipeline. See the `configuration` practice for the schema.
 
+  Use `resolve_credential_mounts` from Imports and the
+  `resolve-credential-mounts` practice to obtain the list of credential files
+  to bind-mount read-only into the container.
+  Use the `docker-auth-mounts` practice for the read-only credential-mount rule
+  applied when assembling the docker run command.
+
+  Persistent afm state: run mode mounts a host directory at
+  /home/goga/pipeline inside the container and sets AFM_DIR=/home/goga/pipeline
+  in the env-file, so afm state survives across runs of the same pipeline in
+  the same project on the same branch. The host directory is computed from
+  the project path, the current git branch, and the pipeline name. Use the
+  --clean flag to wipe this directory before launch.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...])":
+"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline". Both modes launch the goga Docker
@@ -73,30 +89,64 @@ Annotations: |
                  container env-file in run mode (e.g. an agent authorization
                  token). Ineffective in discovery mode, which never writes an
                  env-file.
+    `proxy`: optional HTTP/HTTPS proxy URL from the --proxy click option.
+             When None, falls back to config.pipeline.proxy. The resolved
+             value (CLI wins over config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY
+             in the container env-file.
+    `add_host`: raw "HOST:IP" strings collected from the repeatable --add-host
+                click option (empty tuple when absent). Merged on top of
+                config.pipeline.hosts; on key conflict, CLI wins. Forwarded
+                to `run_pipeline_container` as a resolved hosts dict.
+    `clean`: flag from the --clean click option. Run mode only — when True,
+             `run_pipeline_container` wipes the persistent afm state directory
+             before launch. Ignored in discovery mode.
+    `update`: flag from the --update/-u click option. When True, pull the
+              image before launching the container. Available in both modes.
 
     Apply the `click` practice for the command surface: a single command (not a
     group), the optional positional `name` argument, the pass_context pattern,
     and the repeatable short/long env option bound to `extra_env` for
     environment passthrough into the container.
     Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `resolve-credential-mounts` practice for the credential-mount
+    consumer pattern.
+    Apply the `docker-auth-mounts` practice for the read-only mount rule.
+
+    CLI options (via click):
+    - -e / --env KEY=VALUE (multiple) — pass environment variables into the container
+    - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.pipeline.proxy
+    - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.pipeline.hosts
+    - --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
+    - --update / -u (flag) — pull the image before launching the container
 
     Algorithm:
     1. Load configuration via `load_config` (Imports) — fails fast on schema errors
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
-    3. Dispatch to `run_pipeline_container`:
-       - discovery mode (`name` is None) → call with name=None and `extra_env`
-         (extra_env has no effect in discovery — env-file is not written)
-       - run mode (`name` provided) → call with name and `extra_env`
-    4. Propagate the returned exit code via the click context (per the `click`
+    3. Resolve the proxy: take `proxy` when not None, otherwise fall back to
+       config.pipeline.proxy
+    4. Resolve hosts: merge config.pipeline.hosts with parsed `add_host` entries;
+       split each "HOST:IP" string into a (host, ip) pair; CLI entries override
+       config entries on host-key conflict; assemble into a host→IP mapping
+    5. Dispatch to `run_pipeline_container`:
+       - discovery mode (`name` is None) → call with name=None, `extra_env`,
+         resolved proxy, resolved hosts, clean=False (clean is a no-op in
+         discovery), and `update`
+       - run mode (`name` provided) → call with name, `extra_env`, resolved
+         proxy, resolved hosts, `clean`, and `update`
+    6. Propagate the returned exit code via the click context (per the `click`
        practice)
 
     Requirements:
     - Expose the repeatable short/long env option (-e/--env KEY=VALUE) bound
       to `extra_env` for environment passthrough into the container
     - Expose `name` as an optional positional argument
+    - Expose --proxy URL, --add-host HOST:IP (multiple), --clean,
+      --update/-u as click options
     - Always propagate the container's exit code through the click context —
       both modes
+    - CLI --add-host entries are merged on top of config.pipeline.hosts;
+      on host-key conflict, the CLI entry wins
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
@@ -105,8 +155,10 @@ Annotations: |
     - Do not validate the KEY=VALUE format — strings are forwarded as-is
     - Do not import any Type named list_pipelines or run_pipeline from
       goga/pipeline — the runtime boundary is docker only
+    - Do not validate the "HOST:IP" format of --add-host entries beyond a
+      single-colon split — Docker itself reports malformed entries
 
-"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...]) -> exit_code: int":
+"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher. Launches the goga Docker container to run
@@ -120,6 +172,19 @@ Annotations: |
     `extra_env`: raw KEY=VALUE strings (default empty) forwarded into the
                  container env-file in run mode. Default empty preserves the
                  pre-option behavior; ignored in discovery mode.
+    `proxy`: resolved HTTP/HTTPS proxy URL (CLI overrides config in the caller).
+             When non-None, the launcher writes HTTP_PROXY, HTTPS_PROXY, and
+             NO_PROXY=localhost,127.0.0.1 into the container env-file. Ignored
+             in discovery mode.
+    `hosts`: resolved host→IP dict (CLI entries merged on top of
+             config.pipeline.hosts by the caller; CLI wins on host-key
+             conflict). Each entry becomes a docker run --add-host HOST:IP
+             flag. Effective in both modes.
+    `clean`: when True and in run mode, wipe the persistent afm state host
+             directory before launch via `clean_afm_runtime_dir`. No-op in
+             discovery mode.
+    `update`: when True, pull the image before launching the container (failure
+              is a warning, non-fatal). When False (default), skip the pull.
     `exit_code`: container exit code (0 success; 2 argparse error in-container;
                  127 afm missing inside the container; non-zero pipeline failure)
 
@@ -134,75 +199,120 @@ Annotations: |
        - --rm, --name <container_name>
        - Bind-mount the project directory as /workspace and set it as the
          container working directory
+       - For each entry in `hosts`: add a --add-host HOST:IP flag
        - --entrypoint python3 <config.image>
        - Args: -m goga.pipeline list
-    6. Pull the image; log a warning on failure and continue with the local image
+    6. When `update` is True: pull the image; on failure log a warning and
+       continue with the local image. When `update` is False: skip the pull.
     7. Launch the container and wait for its exit code, propagating stdout/stderr
     8. In finally: kill the container (suppress errors) and restore the previous
        signal handler
     9. Return the container exit code
 
-    Note: discovery mode ignores `extra_env` — no env-file is written.
+    Note: discovery mode ignores `extra_env`, `proxy`, and `clean` — no env-file
+    is written, no afm state directory is involved.
 
     Algorithm (run mode, name provided):
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
-    3. Allocate a free localhost TCP port for the dashboard (bind to ephemeral,
-       read the assigned port, release the socket — accept a small race window)
+    3. Allocate a free localhost TCP port for the dashboard
     4. Generate a unique container_name
-    5. Resolve the agent wrapper path by calling `resolve_wrapper_path` with
-       config.pipeline.agent, per the `resolve-wrapper-path` practice. The
-       result is the absolute in-container path /home/goga/bin/<name>-as-claude.sh
-       defined by the `agent-wrappers` practice. Do not validate the agent
-       value — absence of the wrapper file is surfaced by afm itself.
-    6. Create a private afm-config tmpfile (mode 0600) carrying the afm
-       client.command set to the resolved wrapper path
-    7. Create a private env-file (mode 0600) combining config.pipeline.env,
-       git identity, and the `extra_env` KEY=VALUE strings (forwarded as-is,
-       no validation)
-    8. Install a SIGTERM/SIGINT handler that kills the container and exits
-       with 128 + signum
-    9. Print "Web UI: http://localhost:<port>" to stdout
-    10. Assemble the docker run command:
-       - --rm, --name <container_name>
-       - Publish the allocated port on both sides (-p <port>:<port>)
-       - Bind-mount the project directory as /workspace and set it as the
-         container working directory
-       - Bind-mount the afm-config tmpfile read-only at the in-container afm
-         config path
-       - Pass env via --env-file
-       - When ~/.codex/auth.json exists — bind-mount it read-only
-       - --entrypoint python3 <config.image>
-       - Args: -m goga.pipeline run <name> --port <port>
-    11. Pull the image; log a warning on failure and continue with the local image
-    12. Launch the container and wait for its exit code, propagating stdout/stderr
-    13. In finally: delete the afm-config tmpfile, delete the env-file, kill
-        the container (suppress errors), and restore the previous signal handler
-    14. Return the container exit code
+    5. Resolve the agent wrapper path via `resolve_wrapper_path` (Imports +
+       `resolve-wrapper-path` practice) using config.pipeline.agent. Do not
+       validate the agent value — absence of the wrapper file is surfaced by
+       afm itself.
+    6. Create a private afm-config tmpfile carrying client.command set to the
+       resolved wrapper path — a read-only overlay over the persistent afm
+       state directory mounted in step 12
+    7. Resolve the persistent afm state host directory via
+       `resolve_afm_runtime_dir` and ensure it exists (idempotent)
+    8. When `clean` is True: wipe the resolved directory via
+       `clean_afm_runtime_dir` before launch
+    9. Create a private env-file combining config.pipeline.env, git identity,
+       the `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
+       AFM_DIR set to the in-container persistent state path, and — when
+       `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at
+       localhost,127.0.0.1)
+    10. Install a SIGTERM/SIGINT handler that kills the container and exits
+        with 128 + signum
+    11. Print "Web UI: http://localhost:<port>" to stdout
+    12. Assemble the docker run command:
+        - --rm, --name <container_name>
+        - Publish the allocated port on both sides (-p <port>:<port>)
+        - Bind-mount the project directory as /workspace and set it as the
+          container working directory
+        - Bind-mount the persistent afm state host directory (step 7) read-write
+          at the in-container persistent state path — this directory survives
+          across runs of the same pipeline in the same project on the same
+          branch
+        - Bind-mount the afm-config tmpfile (step 6) read-only at the
+          in-container afm config path as a client.command overlay; this path
+          is independent of AFM_DIR (see the `afm` practice). The persistent
+          directory mounted above supplies the rest of afm state (flows,
+          run-state)
+        - For each entry in `hosts`: add a --add-host HOST:IP flag
+        - Pass env via --env-file
+        - For each (host_path, container_path) pair returned by
+          `resolve_credential_mounts` (Imports): add a read-only bind-mount
+          of host_path at container_path
+        - --entrypoint python3 <config.image>
+        - Args: -m goga.pipeline run <name> --port <port>
+    13. When `update` is True: pull the image; on failure log a warning and
+        continue with the local image. When `update` is False: skip the pull.
+    14. Launch the container and wait for its exit code, propagating stdout/stderr
+    15. In finally: delete the afm-config tmpfile, delete the env-file, kill
+        the container (suppress errors), and restore the previous signal handler.
+        Do NOT delete the persistent afm state host directory — it survives
+        across runs.
+    16. Return the container exit code
 
     Apply the `agent-wrappers` practice for the wrapper path semantics
     referenced in step 5.
     Apply the `resolve-wrapper-path` practice when calling
     `resolve_wrapper_path` in step 5.
+    Apply the `resolve-credential-mounts` practice for the credential-mount
+    consumer pattern.
+    Apply the `docker-auth-mounts` practice for the read-only mount rule.
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile mode 0600, content "client.command: <resolved
-      wrapper path>" — the value MUST be the absolute path returned by
-      `resolve_wrapper_path`, never a bare agent name
+    - afm-config tmpfile is owner-only (private), content "client.command:
+      <resolved wrapper path>" — the value MUST be the absolute path returned
+      by `resolve_wrapper_path`, never a bare agent name
     - env-file content: config.pipeline.env + git identity + `extra_env`
-      KEY=VALUE strings (forwarded as-is, no validation)
+      KEY=VALUE strings (forwarded as-is, no validation) + AFM_DIR=/home/goga/pipeline
+      + (when proxy is non-None) HTTP_PROXY/HTTPS_PROXY/NO_PROXY
+    - Persistent afm state directory mount is read-write; the tmpfile
+      client.command overlay is read-only
+    - The client.command tmpfile mount target is FIXED at
+      /home/goga/.afm/config.yaml and does NOT depend on AFM_DIR — afm
+      always reads config.yaml from ~/.afm/config.yaml. AFM_DIR controls
+      only afm state (flows, run-state), not config.yaml discovery.
+    - Credential mounts come from resolve_credential_mounts() — every returned
+      tuple is an existing file, no re-check needed
+    - Image pull runs only when `update` is True; failure is a warning, not fatal
+    - AFM_DIR=/home/goga/pipeline is provided via the env-file
     - `extra_env` default is an empty tuple, preserving the pre-option behavior
     - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
     - SIGTERM/SIGINT during run must result in exit code 128 + signum
       (130 for SIGINT, 143 for SIGTERM)
-    - ~/.codex/auth.json mounted read-only when present
     - Propagate afm's non-zero exit code as the container's exit code
 
     Constraints:
+    - Do not pull the image by default — pull only when `update` is True
+    - Do not delete the persistent afm state host directory in finally — only
+      the tmpfile and env-file are deleted
+    - Do not perform cleanup of the persistent afm state directory in finally
+      under any exit path — --clean wipes it BEFORE launch, never after
+    - Do not filter credential mounts by config.pipeline.agent — detection is
+      agent-agnostic (see `resolve-credential-mounts` practice)
+    - Do not expose a separate --no-proxy CLI option; NO_PROXY is fixed at
+      "localhost,127.0.0.1" whenever proxy is set
+    - Do not auto-add --add-host entries to NO_PROXY
     - Do not mount anything under /workspace other than the project directory —
-      in-container afm state belongs in /home/goga/.afm/
+      in-container afm state belongs in /home/goga/.afm/ (config.yaml) and
+      /home/goga/pipeline (state)
     - Do not write the afm config into the project directory — use a tmpfile
       and a read-only mount
     - Do not invoke list_pipelines or run_pipeline directly — only via
@@ -213,6 +323,117 @@ Annotations: |
     - Do not write a bare agent name into client.command — always write the
       resolved absolute wrapper path
 
+"resolve_afm_runtime_dir(pipeline_name: str) -> runtime_dir: Path":
+  location: run_pipeline_container.py
+  annotations: |
+    Compute the host-side path of the persistent afm state directory for the
+    given pipeline in the current project on the current git branch.
+
+    `pipeline_name`: pipeline name without extension (the run-mode name argument)
+    `runtime_dir`: absolute host path under
+                   ~/.goga/runtime/pipelines/<project>/<branch>/<pipeline_name>/
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Take the current working directory as the absolute project path
+    2. Normalize the project path via `normalize_project_path`
+    3. Resolve the current git branch via `resolve_git_branch`
+    4. Compose the runtime dir under the user's goga runtime area as
+       pipelines/<normalized>/<branch>/<pipeline_name>
+    5. Return the composed path
+
+    Requirements:
+    - Return value is an absolute path
+    - Pure with respect to the filesystem — does not create the directory
+      (creation is the caller's responsibility)
+    - Git branch is resolved by `resolve_git_branch` in step 3
+
+    Constraints:
+    - Do not create the directory here — the caller handles creation
+    - Do not validate that pipeline_name corresponds to an existing pipeline file
+
+"normalize_project_path(project_path: Path) -> normalized: str":
+  location: run_pipeline_container.py
+  annotations: |
+    Normalize an absolute project path into a filesystem-safe path segment by
+    removing the leading slash and replacing every remaining slash with a hyphen.
+
+    `project_path`: absolute project path (e.g. the result of resolving the
+                    current working directory)
+    `normalized`: slash-free, hyphen-separated segment, e.g.
+                  "/Users/wb/IdeaProjects/my/project" →
+                  "Users-wb-IdeaProjects-my-project"
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Treat the project path as a string
+    2. Remove the leading slash (and any leading slashes)
+    3. Replace every remaining slash with a hyphen
+    4. Return the resulting string
+
+    Requirements:
+    - Pure string transformation — no filesystem access, no side effects
+    - Deterministic — same input always produces the same output
+
+    Constraints:
+    - Do not use a different separator — the hyphen is fixed
+    - Do not collapse consecutive hyphens or strip trailing hyphens — the
+      transformation is a literal 1:1 slash → hyphen replacement
+
+"resolve_git_branch() -> branch: str":
+  location: run_pipeline_container.py
+  annotations: |
+    Resolve the current git branch name by invoking git. Return "default" when
+    git is unavailable, the current directory is not a git repository, or HEAD
+    is detached.
+
+    `branch`: current git branch name, or the literal "default" fallback
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Ask git for the abbreviated branch name of HEAD
+    2. When git succeeds with a non-empty answer, return it stripped
+    3. Otherwise, return "default"
+
+    Requirements:
+    - Never raise — git unavailability, non-repo directories, and detached HEAD
+      all return "default"
+    - Deterministic fallback — "default" is the literal string used for all
+      failure cases
+
+    Constraints:
+    - Do not surface git errors as exceptions — they are tolerated and mapped
+      to "default"
+    - Do not cache the result — each call asks git anew (the caller may have
+      switched branches between calls)
+
+"clean_afm_runtime_dir(afm_runtime_dir: Path) -> none:None":
+  location: run_pipeline_container.py
+  annotations: |
+    Recursively wipe the persistent afm state directory and recreate it empty.
+    Called before container launch when the --clean flag is set.
+
+    `afm_runtime_dir`: host path computed by `resolve_afm_runtime_dir`
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. When the directory exists, remove it recursively
+    2. Recreate the directory (empty), including any missing parents
+
+    Requirements:
+    - Idempotent — repeated calls on an already-clean directory do not raise
+    - The caller guarantees afm_runtime_dir was computed by
+      `resolve_afm_runtime_dir`
+
+    Constraints:
+    - Do not raise when the directory does not exist — the mkdir in step 2
+      creates it
+    - Do not selectively preserve any files — the wipe is total
+
 ---
 
 Author: Goga
@@ -220,6 +441,8 @@ CreatedAt: 05/07/26
 Description: |
   Host-side CLI wrapper cell for the single pipeline command. Both discovery
   mode (no name) and run mode (name provided) launch the goga Docker container
-  and invoke "python -m goga.pipeline {list,run}" inside it. The runtime
-  boundary to goga/pipeline is docker — this cell has no Python Type Imports
-  from goga/pipeline.
+  and invoke the in-container pipeline entrypoint inside it. The runtime
+  boundary to the pipeline cell is docker — this cell has no Python Type
+  Imports from it. Run mode mounts a persistent afm state host directory so
+  afm state survives across runs of the same pipeline in the same project on
+  the same branch; the --clean flag wipes this directory before launch.

@@ -40,8 +40,8 @@ RUN useradd -m -s /bin/bash goga && \
     python3 -m venv /opt/goga && \
     sed -i "s|/usr/local|/opt/goga|" /opt/goga/bin/goga && \
     chown -R goga:goga /opt/goga && \
-    mkdir -p /home/goga/bin /home/goga/.codex && \
-    chown goga:goga /home/goga/bin /home/goga/.codex
+    mkdir -p /home/goga/bin /home/goga/.codex /home/goga/pipeline && \
+    chown goga:goga /home/goga/bin /home/goga/.codex /home/goga/pipeline
 
 COPY --from=ralphex-source /ralphex/scripts/codex-as-claude/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
 COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
@@ -51,7 +51,6 @@ RUN chmod +x /home/goga/bin/codex-as-claude.sh /home/goga/bin/opencode-as-claude
 ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
 ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
-ENV AFM_DIR=/tmp/pipeline
 
 WORKDIR /workspace
 

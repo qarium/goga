@@ -11,6 +11,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N]
                  [-e KEY=VALUE ...]
+                 [--proxy URL] [--add-host HOST:IP ...] [--update | -u]
 ```
 
 ## Arguments
@@ -33,6 +34,9 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `--max-iterations` | int | from config | Maximum iterations |
 | `--review-patience` | int | from config | Review stop threshold |
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
+| `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
+| `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
+| `--update` / `-u` | flag | false | Pull the image before launching the container. Default is no pull — the local image is used as-is |
 
 ## Exit code
 
@@ -45,12 +49,32 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 goga build docs/plans/my-plan.md
 goga build docs/plans/my-plan.md --dry-run --worktree
 goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
+
+# Pull the latest image, then build (default skips the pull)
+goga build docs/plans/my-plan.md --update
+
+# Route container traffic through a corporate proxy and add a local host entry
+goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
 ```
 
 ## Requirements
 
 - Docker must be installed and available in PATH
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
-- Before launch, the build image is refreshed via `docker pull <config.image>`. On pull failure a warning is logged and the build continues with the locally available image
+- By default the image is NOT pulled — the local image is used as-is. Use `--update`/`-u` to pull before launch. On pull failure a warning is logged and the build continues with the locally available image
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
-- If `~/.codex/auth.json` exists, the file is mounted into the container as read-only (`/home/goga/.codex/auth.json`)
+- Credential mounts are detected automatically by scanning the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`). Every file that exists is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `docker-auth-mounts` practice for details
+
+## Proxy and hosts
+
+`--proxy URL` (and `build.proxy` in config) drive three env-file entries when set:
+
+| Variable     | Value                                            |
+|--------------|--------------------------------------------------|
+| `HTTP_PROXY` | the resolved proxy URL                           |
+| `HTTPS_PROXY`| the resolved proxy URL                           |
+| `NO_PROXY`   | `localhost,127.0.0.1` (fixed; CLI cannot override)|
+
+`NO_PROXY` is mandatory whenever a proxy is set — without it, `--add-host foo.local:127.0.0.1` would route `foo.local` through the corporate proxy and break. CLI `--add-host` entries are NOT auto-added to `NO_PROXY`.
+
+`--add-host HOST:IP` (and `build.hosts` in config) translate to `docker run --add-host HOST:IP` flags. CLI entries are merged on top of config; on host-key conflict, CLI wins.

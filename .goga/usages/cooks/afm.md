@@ -19,7 +19,7 @@ Two artifacts matter for `goga`:
 
 | Flag          | Env       | Default     | Purpose                                            |
 |---------------|-----------|-------------|----------------------------------------------------|
-| `--dir <path>`| `AFM_DIR` | current dir | Base directory for `.afm/` (config + flows + state)|
+| `--dir <path>`| `AFM_DIR` | current dir | Base directory for afm state (flows + run-state). NOTE: `~/.afm/config.yaml` is always read from the user's home, independent of `--dir`. |
 
 ### Commands
 
@@ -142,3 +142,53 @@ agent name is never written.
   pipeline directories directly via `list_pipelines`, not through afm.
 - Do not modify the external `afm` to accommodate the integration. It is
   developed independently; `goga` adapts to its CLI contract.
+
+## Persistent state via AFM_DIR
+
+afm's `config.yaml` (containing `client.command`) is always read from
+`~/.afm/config.yaml` — it does NOT move when `AFM_DIR` / `--dir` is set.
+The `AFM_DIR` / `--dir` flag controls only where afm writes its **state**
+(flows, run-state, logs).
+
+Inside the goga container, the host-side launcher (`goga/commands/pipeline`)
+sets `AFM_DIR=/home/goga/pipeline` via the container env-file and bind-mounts
+a host directory at that path read-write:
+
+- Host path: `~/.goga/runtime/pipelines/<project-without-slash>/<git-branch>/<pipeline-name>/`
+- Container path: `/home/goga/pipeline` (mounted read-write)
+- Env-file: `AFM_DIR=/home/goga/pipeline`
+
+`<project-without-slash>` is the absolute project path (result of
+`Path.cwd().resolve()`) with the leading slash removed and every remaining
+slash replaced by a hyphen — e.g. `/Users/wb/IdeaProjects/my/project` →
+`Users-wb-IdeaProjects-my-project`.
+
+`<git-branch>` is the current git branch (via `git rev-parse --abbrev-ref HEAD`),
+or the literal `"default"` when git is unavailable, the directory is not a git
+repository, or HEAD is detached.
+
+State in this directory survives across runs of the same pipeline in the same
+project on the same branch. Use `goga pipeline <name> --clean` to wipe the
+directory before launch.
+
+The `AFM_DIR` variable is provided exclusively by the host-side launcher
+through the env-file. The `client.command` tmpfile is generated per invocation
+and bind-mounted read-only at `/home/goga/.afm/config.yaml` — this path is
+independent of `AFM_DIR` and supplies the `client.command` overlay; the
+persistent directory mounted at `/home/goga/pipeline` supplies the rest of
+afm state.
+
+### Constraints
+
+- Do not place afm state under `/workspace` — `/workspace` is the project
+  directory; `/home/goga/pipeline` is afm's persistent state home inside the
+  container.
+- Do not delete the persistent directory in the host launcher's `finally` block
+  — only the `client.command` tmpfile and env-file are deleted; state survives
+  across runs.
+- Do not set `AFM_DIR` via the Dockerfile — the host-side launcher owns the
+  variable through the env-file so the path is deterministic per project,
+  branch, and pipeline.
+- Do NOT derive the `client.command` tmpfile mount target from `AFM_DIR` —
+  `config.yaml` is always read from `~/.afm/config.yaml` (= `/home/goga/.afm/config.yaml`
+  in the container), regardless of where `AFM_DIR` points.
