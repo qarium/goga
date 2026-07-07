@@ -72,8 +72,10 @@ def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
 
     Populates the ralphex config keys covered by the agent-wrappers contract:
     `claude_command` set to the resolved absolute wrapper path, `claude_args`
-    set to its fixed default (no config field overrides it today), and
-    `codex_enabled` derived from `BuildConfig`. No codex-specific ralphex keys
+    set to its fixed default (no config field overrides it today),
+    `codex_enabled` derived from `BuildConfig`, and `preserve_anthropic_api_key`
+    pinned to `true` so the ralphex runner does not unset `ANTHROPIC_API_KEY`
+    before invoking the agent wrapper. No codex-specific ralphex keys
     are written.
 
     Args:
@@ -89,6 +91,7 @@ def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
         f"claude_command = {wrapper_path}",
         f"claude_args = {_DEFAULT_CLAUDE_ARGS}",
         f"codex_enabled = {codex_enabled}",
+        "preserve_anthropic_api_key = true",
     ]
 
     (ralphex_dir / "config").write_text("\n".join(config_lines) + "\n")

@@ -183,7 +183,12 @@ class TestWriteRalphexConfig:
         assert "stale_key" not in config_text
         assert "OLD_PATH" not in config_text
         keys = {line.split(" = ", 1)[0] for line in config_text.strip().splitlines() if " = " in line}
-        assert keys == {"claude_command", "claude_args", "codex_enabled"}
+        assert keys == {
+            "claude_command",
+            "claude_args",
+            "codex_enabled",
+            "preserve_anthropic_api_key",
+        }
 
     def test_codex_review_none_maps_to_codex_enabled_false(self, tmp_path, monkeypatch) -> None:
         """An explicit codex_review=None still renders codex_enabled = false."""
@@ -194,6 +199,16 @@ class TestWriteRalphexConfig:
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_text
+
+    def test_writes_preserve_anthropic_api_key_true(self, tmp_path, monkeypatch) -> None:
+        """preserve_anthropic_api_key is pinned to true so ralphex keeps ANTHROPIC_API_KEY."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+
+        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "preserve_anthropic_api_key = true" in config_text
 
 
 class TestCopyDefaults:

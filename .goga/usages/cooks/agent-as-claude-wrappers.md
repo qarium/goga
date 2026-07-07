@@ -53,15 +53,18 @@ any wrapper-resolution layer.
 
 `claude-as-claude.sh` performs **no format conversion**. It exists only to
 apply ambient settings that the consumer should not own (e.g. disabling
-attribution, picking the right API key env var) before delegating to the
-`claude` binary. The argument vector is forwarded verbatim.
+attribution) before delegating to the `claude` binary. The argument vector
+is forwarded verbatim. The wrapper does **not** remap API key environment
+variables — `ANTHROPIC_API_KEY` flows through from the launcher env
+directly because the goga-generated `.ralphex/config` sets
+`preserve_anthropic_api_key = true`, which keeps ralphex from unsetting
+the key before invoking the wrapper.
 
 Typical body:
 
 ```bash
 #!/bin/bash
-exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" \
-     claude \
+exec claude \
      --setting-sources user \
      --settings '{"attribution":{"commit":"","pr":""}}' \
      "$@"

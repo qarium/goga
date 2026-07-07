@@ -107,14 +107,14 @@ class TestPipelineLogic:
         ):
             result = runner.invoke(
                 pipeline,
-                ["deploy", "-e", "ANTHROPIC_API_TOKEN=sk-xxx", "-e", "MODEL=claude-sonnet-4-6"],
+                ["deploy", "-e", "ANTHROPIC_API_KEY=sk-xxx", "-e", "MODEL=claude-sonnet-4-6"],
             )
 
         assert result.exit_code == 0
         mock_rpc.assert_called_once_with(
             name="deploy",
             config=config,
-            extra_env=("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
+            extra_env=("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6"),
             proxy=None,
             hosts={},
             clean=False,

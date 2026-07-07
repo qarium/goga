@@ -48,7 +48,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 ```bash
 goga build docs/plans/my-plan.md
 goga build docs/plans/my-plan.md --dry-run --worktree
-goga build docs/plans/my-plan.md -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
+goga build docs/plans/my-plan.md -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-sonnet-4-6
 
 # Pull the latest image, then build (default skips the pull)
 goga build docs/plans/my-plan.md --update

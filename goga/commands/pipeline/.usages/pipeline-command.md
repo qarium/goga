@@ -56,7 +56,7 @@ host-side invocation. The strings are appended to the container env-file
 verbatim, with no validation — the same semantics as `goga build -e`:
 
 ```bash
-goga pipeline deploy -e ANTHROPIC_API_TOKEN=sk-xxx -e MODEL=claude-sonnet-4-6
+goga pipeline deploy -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-sonnet-4-6
 ```
 
 Pull the latest image before launching (default skips the pull):

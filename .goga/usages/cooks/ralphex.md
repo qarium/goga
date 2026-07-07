@@ -128,6 +128,7 @@ ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (l
 | `codex_enabled`     | Enable codex review phase            | `true`       |
 | `task_retry_count`  | Number of retries per task           | `1`          |
 | `finalize_enabled`  | Final step after review              | `false`      |
+| `preserve_anthropic_api_key` | Keep `ANTHROPIC_API_KEY` in the agent subprocess env instead of unsetting it before invoking the wrapper. goga always sets this to `true` so the agent wrapper receives the key directly from the environment | `false`      |
 
 ## Review agents
 

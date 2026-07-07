@@ -368,10 +368,10 @@ class TestPipelineEnvFile:
             run_pipeline_container(
                 "deploy",
                 config,
-                ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6"),
+                ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6"),
             )
 
-        assert captured["extra_env"] == ("ANTHROPIC_API_TOKEN=sk-xxx", "MODEL=claude-sonnet-4-6")
+        assert captured["extra_env"] == ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6")
 
 
 # --- cleanup on setup failure ---

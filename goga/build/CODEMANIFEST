@@ -55,6 +55,9 @@ Annotations: |
        - set the claude_command key to the resolved wrapper path
        - apply claude_args defaults when missing
        - set codex_enabled from `BuildConfig`
+       - set preserve_anthropic_api_key to true so the ralphex runner keeps
+         ANTHROPIC_API_KEY in the agent subprocess env (the agent wrapper
+         no longer remaps ANTHROPIC_API_TOKEN)
     4. Copy default prompts and agents from the goga package to .ralphex/,
        using the directory paths specified in `BuildConfig`
     5. Assemble the ralphex command:
@@ -78,6 +81,9 @@ Annotations: |
     - Return code: `ralphex` exit code on success, 1 on error
     - The claude_command key in .ralphex/config MUST be set to the resolved
       wrapper path (absolute, /home/goga/bin/<name>-as-claude.sh)
+    - The preserve_anthropic_api_key key in .ralphex/config MUST be set to
+      true so the agent wrapper receives ANTHROPIC_API_KEY from the
+      ralphex subprocess env without remapping
 
     Constraints:
     - Wrappers live in the image at /home/goga/bin/ and are referenced by

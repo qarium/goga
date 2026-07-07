@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-exec env ANTHROPIC_API_KEY="$ANTHROPIC_API_TOKEN" claude --setting-sources user --settings '{"attribution":{"commit":"","pr":""}}' "$@"
+exec claude --setting-sources user --settings '{"attribution":{"commit":"","pr":""}}' "$@"
