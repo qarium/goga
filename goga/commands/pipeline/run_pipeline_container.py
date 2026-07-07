@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import signal
 import socket
 import stat
@@ -283,6 +284,97 @@ def _on_signal(signum: int, _frame: object) -> None:
     handler itself free of subprocess calls (signal handlers should stay minimal).
     """
     raise SystemExit(128 + signum)
+
+
+def normalize_project_path(project_path: Path) -> str:
+    """Normalize an absolute project path into a filesystem-safe path segment.
+
+    Removes the leading slash and replaces every remaining slash with a hyphen
+    (a literal 1:1 replacement — no collapsing or trimming). Example:
+    ``"/Users/wb/IdeaProjects/my/project"`` →
+    ``"Users-wb-IdeaProjects-my-project"``.
+
+    Args:
+        project_path: Absolute project path (e.g. ``Path.cwd().resolve()``).
+
+    Returns:
+        A slash-free, hyphen-separated path segment. Pure string transform —
+        no filesystem access, no side effects.
+    """
+    s = str(project_path)
+    s = s.lstrip("/")
+    s = s.replace("/", "-")
+    return s
+
+
+def resolve_git_branch() -> str:
+    """Resolve the current git branch name, falling back to ``"default"``.
+
+    Asks git for the abbreviated branch name of HEAD. Returns ``"default"`` when
+    git is unavailable, the current directory is not a git repository, or git
+    reports a failed/empty result. Never raises.
+
+    Returns:
+        The current git branch name, or the literal ``"default"`` fallback.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (FileNotFoundError, PermissionError, OSError):
+        return "default"
+
+    if result.returncode == 0 and result.stdout.strip() != "":
+        return result.stdout.strip()
+    return "default"
+
+
+def resolve_afm_runtime_dir(pipeline_name: str) -> Path:
+    """Compute the persistent afm state host directory for a pipeline.
+
+    The directory is keyed by the current project path, the current git branch,
+    and ``pipeline_name`` so that afm state survives across runs of the same
+    pipeline in the same project on the same branch. Pure with respect to the
+    filesystem — the directory is NOT created here (creation is the caller's
+    responsibility).
+
+    Args:
+        pipeline_name: Pipeline name without extension (the run-mode name arg).
+
+    Returns:
+        Absolute host path
+        ``~/.goga/runtime/pipelines/<normalized>/<branch>/<pipeline_name>``.
+    """
+    project_path = Path.cwd().resolve()
+    normalized = normalize_project_path(project_path)
+    branch = resolve_git_branch()
+    return (
+        Path.home()
+        / ".goga"
+        / "runtime"
+        / "pipelines"
+        / normalized
+        / branch
+        / pipeline_name
+    )
+
+
+def clean_afm_runtime_dir(afm_runtime_dir: Path) -> None:
+    """Recursively wipe and recreate the persistent afm state directory.
+
+    Called before container launch when ``--clean`` is set. Idempotent: when the
+    directory does not exist it is simply created; repeated calls on an
+    already-clean directory do not raise.
+
+    Args:
+        afm_runtime_dir: Host path computed by :func:`resolve_afm_runtime_dir`.
+    """
+    if afm_runtime_dir.exists():
+        shutil.rmtree(afm_runtime_dir, ignore_errors=False)
+    afm_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _run_discovery(config: Config, container_name: str) -> int:
