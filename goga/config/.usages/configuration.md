@@ -139,11 +139,11 @@ afm) that consume these fields.
 |-----------------------------|---------|------------------------|---------------------------------------------------------|
 | `commands`                  | mapping | `{}`                   | Prompt customization hooks (reserved)                   |
 | `pipeline.env`              | mapping | `{}`                   | Environment variables for pipeline runs (`{str: str}`)  |
-| `pipeline.proxy`             | str     | None                   | HTTP/HTTPS proxy URL for the pipeline container                |
-| `pipeline.hosts`             | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (pipeline)         |
+| `pipeline.proxy`            | str     | None                   | HTTP/HTTPS proxy URL for the pipeline container         |
+| `pipeline.hosts`            | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (pipeline)  |
 | `build.task_executor.env`   | mapping | `{}`                   | Environment variables for builds (`{str: str}`)         |
-| `build.proxy`                | str     | None                   | HTTP/HTTPS proxy URL for the build container                   |
-| `build.hosts`                | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (build)            |
+| `build.proxy`               | str     | None                   | HTTP/HTTPS proxy URL for the build container            |
+| `build.hosts`               | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (build)     |
 | `build.worktree`            | bool    | None                   | Run in an isolated git worktree                         |
 | `build.skip_finalize`       | bool    | None                   | Skip the finalization step                              |
 | `build.session_timeout`     | str     | None                   | Session timeout (Go duration format)                    |
