@@ -19,8 +19,8 @@ The build pipeline performs these steps:
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
 4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude).
 5. **Defaults copy** -- Copies default prompts and agent configurations to `.ralphex/`.
-6. **Image pull** -- Refreshes the configured build image via `docker pull`. A pull failure is logged as a warning; the build then proceeds with the locally available image.
-7. **Docker execution** -- Launches the ralphex command inside the configured Docker image.
+6. **Image pull (optional)** -- When `--update`/`-u` is set, refreshes the configured build image via `docker pull`. A pull failure is logged as a warning; the build then proceeds with the locally available image. By default no pull happens and the local image is used as-is.
+7. **Docker execution** -- Launches the ralphex command inside the configured Docker image. Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag).
 
 ## Arguments
 
@@ -42,8 +42,27 @@ The build pipeline performs these steps:
 | `--max-iterations` | int | config | Maximum number of build iterations |
 | `--review-patience` | int | config | Review patience count |
 | `-e`, `--env` | string | -- | Additional environment variable (`KEY=VALUE`, repeatable) |
+| `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
+| `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
+| `--update`, `-u` | flag | off | Pull the image before launching the container (default skips the pull) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
+
+### Proxy and hosts
+
+`--proxy URL` (and `build.proxy` in `.goga/config.yml`) route the container's traffic through a corporate proxy. When a proxy is resolved, three variables are written to the container env-file:
+
+| Variable | Value |
+|---|---|
+| `HTTP_PROXY` | the resolved proxy URL |
+| `HTTPS_PROXY` | the resolved proxy URL |
+| `NO_PROXY` | `localhost,127.0.0.1` (fixed; cannot be overridden) |
+
+`--add-host HOST:IP` (and `build.hosts` in `.goga/config.yml`) translate to `docker run --add-host HOST:IP` flags. CLI entries are merged on top of config; on host-key conflict, the CLI entry wins. Format is split on the first colon only — Docker reports malformed entries itself.
+
+### Credential mounts
+
+Credential files for the supported AI agents are detected on the host and bind-mounted read-only into the container automatically (no flag): claude (`~/.claude/.credentials.json`), codex (`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`). Detection is agent-agnostic — it is not filtered by the configured `task_executor.agent` — and only files that exist are mounted. When none exist, no credential mount is added.
 
 ## Examples
 
@@ -71,6 +90,18 @@ Skip the uncommitted CODEMANIFEST check:
 goga build plan.md --skip-manifest-check
 ```
 
+Pull the latest image, then build (default skips the pull):
+
+```bash
+goga build plan.md --update
+```
+
+Route container traffic through a corporate proxy and add a local host entry:
+
+```bash
+goga build plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
+```
+
 ## Configuration
 
 Build settings are loaded from `.goga/config.yml`. Required fields:
@@ -84,9 +115,12 @@ build:
   task_executor:
     agent: claude
     env: {}
+  proxy: http://corp:3128      # optional HTTP/HTTPS proxy URL for the build container
+  hosts:                        # optional docker run --add-host entries
+    foo.local: 127.0.0.1
 ```
 
-The top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field.
+The top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field. The optional `build.proxy` and `build.hosts` fields are overridden/augmented by the `--proxy` and `--add-host` CLI options respectively.
 
 ## Exit Codes
 

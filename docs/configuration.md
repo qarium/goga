@@ -27,11 +27,17 @@ build:
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
+  # proxy: http://corp:3128        # optional HTTP/HTTPS proxy URL for the build container
+  # hosts:                         # optional docker run --add-host entries
+  #   foo.local: 127.0.0.1
 
 pipeline:
   agent: claude
   env:
     ANTHROPIC_API_KEY: sk-ant-...
+  # proxy: http://corp:3128        # optional HTTP/HTTPS proxy URL for the pipeline container
+  # hosts:                         # optional docker run --add-host entries
+  #   foo.local: 127.0.0.1
 
 codemanifest:
   usages:
@@ -69,6 +75,8 @@ codemanifest:
 | `prompts_dir` | `string` | No | Path to custom ralphex prompts |
 | `agents_dir` | `string` | No | Path to custom ralphex agents |
 | `codex_review` | `bool` | No | Enable external codex review |
+| `proxy` | `string` | No | HTTP/HTTPS proxy URL for the build container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
+| `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
 
 > The deprecated `build.image` field is rejected with a `ValueError`. Set the top-level `image` field instead.
 
@@ -85,6 +93,8 @@ codemanifest:
 |-------|------|----------|-------------|
 | `agent` | `string` | Yes | afm client command agent for `goga pipeline` (e.g. `claude`, `codex`) |
 | `env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
+| `proxy` | `string` | No | HTTP/HTTPS proxy URL for the pipeline container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
+| `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
 
 ### codemanifest
 

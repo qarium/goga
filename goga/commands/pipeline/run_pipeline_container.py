@@ -404,13 +404,16 @@ def clean_afm_runtime_dir(afm_runtime_dir: Path) -> None:
 
     Called before container launch when ``--clean`` is set. Idempotent: when the
     directory does not exist it is simply created; repeated calls on an
-    already-clean directory do not raise.
+    already-clean directory do not raise. The recursive removal is best-effort
+    (``ignore_errors=True``) so a directory that vanishes between the existence
+    check and the ``rmtree`` — e.g. a concurrent ``goga pipeline --clean`` on the
+    same project/branch/name — does not raise.
 
     Args:
         afm_runtime_dir: Host path computed by :func:`resolve_afm_runtime_dir`.
     """
     if afm_runtime_dir.exists():
-        shutil.rmtree(afm_runtime_dir, ignore_errors=False)
+        shutil.rmtree(afm_runtime_dir, ignore_errors=True)
     afm_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 

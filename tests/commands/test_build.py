@@ -769,26 +769,45 @@ class TestImagePullInBuild:
         mock_pull.assert_not_called()
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
     @mock.patch.object(_build_mod, "_write_env_file")
     @mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"])
-    def test_pull_failure_aborts_before_run(self, mock_cmd, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+    def test_pull_failure_warns_and_continues(  # noqa: PLR0913
+        self, mock_cmd, mock_env, mock_git, mock_docker, tmp_path, monkeypatch, caplog
+    ) -> None:
+        """A failing `docker pull` is logged as a warning and the build proceeds.
+
+        `_pull_image` uses `check=False` and never raises — a non-zero pull exit
+        is logged as a warning and the launch continues with the local image.
+        This drives a real failing pull through `subprocess.run` (returncode=1)
+        rather than faking `_pull_image` itself, so the warn-and-continue contract
+        is exercised end-to-end (mirrors the pipeline suite).
+        """
+        import logging
+
         _write_goga_yml(tmp_path, extra={"image": "broken:image"})
         mock_env.return_value = Path("/tmp/env")
 
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+
+        def fake_run(cmd, *args, **kwargs):
+            # `docker pull` fails; other docker calls (kill cleanup) succeed.
+            if cmd[:2] == ["docker", "pull"]:
+                return mock.Mock(returncode=1)
+            return mock.Mock(returncode=0)
+
         with (
-            mock.patch.object(
-                _build_mod,
-                "_pull_image",
-                side_effect=click.ClickException("failed to pull image 'broken:image'"),
-            ),
-            mock.patch.object(subprocess, "Popen") as mock_popen,
-            mock.patch.object(subprocess, "run"),
+            mock.patch.object(subprocess, "run", side_effect=fake_run),
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            caplog.at_level(logging.WARNING, logger=_build_mod.logger.name),
         ):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
-        assert result.exit_code == 1
-        assert "failed to pull image" in result.output
-        mock_popen.assert_not_called()
+        # a warning was emitted for the failed pull, and the launch still proceeded
+        assert any("failed to pull image" in rec.message for rec in caplog.records)
+        mock_popen.assert_called_once()
+        assert result.exit_code == 0
 
 
 # --- Task 6: top-level Config.image contract ---

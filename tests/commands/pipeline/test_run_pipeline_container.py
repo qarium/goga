@@ -226,15 +226,23 @@ class TestPipelineRunCommand:
 
 class TestAfmConfigTmpfile:
     def test_pipeline_run_writes_afm_config_tmpfile_with_client_command(self) -> None:
-        """The afm-config tmpfile carries `client.command: <agent>` and mode 0600."""
-        afm_path = _rpc_mod._write_afm_config_tmpfile("claude")
+        """The afm-config tmpfile carries `client.command: <resolved wrapper path>` and mode 0600.
+
+        The value MUST be the absolute wrapper path returned by
+        ``resolve_wrapper_path`` (the real call site in ``_run_named``), never a
+        bare agent name — see the CODEMANIFEST Requirement/Constraint for
+        ``run_pipeline_container``. The writer is value-agnostic, so a realistic
+        resolved path is passed here to pin the documented contract.
+        """
+        wrapper_path = "/home/goga/bin/claude-as-claude.sh"
+        afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
         try:
             content = afm_path.read_text()
             mode = afm_path.stat().st_mode & 0o777
         finally:
             afm_path.unlink(missing_ok=True)
 
-        assert content == "client.command: claude\n"
+        assert content == f"client.command: {wrapper_path}\n"
         assert mode == 0o600
 
 

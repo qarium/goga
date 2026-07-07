@@ -214,7 +214,7 @@ class TestAddHostResolution:
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
             _run_build_in_tmp(
@@ -223,18 +223,12 @@ class TestAddHostResolution:
                 ["--add-host", "b.local:127.0.0.1", "plan.md"],
             )
 
-        # The merged host map surfaces in the assembled docker command.
-        cmd = _build_docker_cmd(
-            "plan.md",
-            "qarium/goga:latest",
-            Path("/tmp/env"),
-            {},
-            "test-build",
-            {"a.local": "10.0.0.1", "b.local": "127.0.0.1"},
-        )
+        # Inspect the command the CLI actually assembled (config host + CLI host
+        # merged) rather than re-deriving it from a fresh _build_docker_cmd call.
+        cmd = mock_popen.call_args[0][0]
         assert "--add-host" in cmd
-        assert "a.local:10.0.0.1" in cmd
-        assert "b.local:127.0.0.1" in cmd
+        assert "a.local:10.0.0.1" in cmd  # from config.build.hosts
+        assert "b.local:127.0.0.1" in cmd  # from --add-host
 
     def test_build_docker_cmd_no_add_host_when_empty(self) -> None:
         cmd = _build_docker_cmd(

@@ -138,11 +138,7 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     if cli_flags.get("skip_manifest_check"):
         args.append("--skip-manifest-check")
 
-    for flag in ("session_timeout", "idle_timeout", "wait"):
-        val = cli_flags.get(flag)
-        if val is not None:
-            args.extend([f"--{flag.replace('_', '-')}", str(val)])
-    for flag in ("max_iterations", "review_patience"):
+    for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience"):
         val = cli_flags.get(flag)
         if val is not None:
             args.extend([f"--{flag.replace('_', '-')}", str(val)])
