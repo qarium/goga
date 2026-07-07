@@ -235,7 +235,12 @@ class TestCodexAuthMount:
     def test_run_pipeline_container_mounts_codex_auth_when_present(self, tmp_path: Path, monkeypatch) -> None:
         """A present ~/.codex/auth.json is bind-mounted read-only into the container."""
         config = _make_config(pipeline_agent="codex")
-        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        # Credential detection is now agent-agnostic via resolve_credential_mounts(),
+        # which resolves `~` via expanduser() (reading $HOME) rather than
+        # Path.home(). Redirect $HOME so ~/.codex/auth.json resolves to tmp_path;
+        # this also makes Path.home() (used by resolve_afm_runtime_dir) resolve
+        # there, isolating the persistent runtime dir under tmp_path.
+        monkeypatch.setenv("HOME", str(tmp_path))
         (tmp_path / ".codex").mkdir(parents=True)
         (tmp_path / ".codex" / "auth.json").write_text("{}")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)

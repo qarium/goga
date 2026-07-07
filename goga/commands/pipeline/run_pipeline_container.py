@@ -24,7 +24,7 @@ from pathlib import Path
 
 import click
 
-from ...agents import resolve_wrapper_path
+from ...agents import resolve_credential_mounts, resolve_wrapper_path
 from ...config import Config
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,11 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     return Path(path)
 
 
-def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
+def _build_discovery_cmd(
+    image: str,
+    container_name: str,
+    hosts: dict[str, str] | None = None,
+) -> list[str]:
     """Assemble the discovery-mode docker command (``-m goga.pipeline list``).
 
     Mounts the project at ``/workspace``. User pipelines are NOT bind-mounted
@@ -178,10 +182,16 @@ def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
     Args:
         image: Docker image to run.
         container_name: Name assigned to the container via ``--name``.
+        hosts: Resolved host→IP mapping (config.pipeline.hosts merged with parsed
+            ``--add-host`` CLI entries by the caller). Each pair becomes a
+            ``--add-host HOST:IP`` flag. ``None`` adds no host entries.
 
     Returns:
         The full docker command as a list of string arguments.
     """
+    if hosts is None:
+        hosts = {}
+
     project_dir = Path.cwd().resolve()
     cmd: list[str] = [
         "docker",
@@ -194,6 +204,8 @@ def _build_discovery_cmd(image: str, container_name: str) -> list[str]:
         "-w",
         "/workspace",
     ]
+    for host, ip in hosts.items():
+        cmd.extend(["--add-host", f"{host}:{ip}"])
     cmd.extend(
         [
             "--entrypoint",
@@ -214,16 +226,23 @@ def _build_run_cmd(  # noqa: PLR0913
     name: str,
     afm_config: Path,
     env_file: Path,
+    runtime_dir: Path,
+    hosts: dict[str, str] | None = None,
 ) -> list[str]:
     """Assemble the run-mode docker command.
 
     Builds ``docker run ... -m goga.pipeline run <name> --port <port>`` with the
-    project mounted at ``/workspace``, the afm-config tmpfile mounted read-only
-    at ``/home/goga/.afm/config.yaml``, the env-file, the published port, and an
-    optional read-only ``~/.codex/auth.json`` mount. User pipelines are NOT
-    bind-mounted from the host: the image is populated at build time via
-    ``RUN goga connect ...`` in the Dockerfile, so ``/home/goga/.goga/pipelines``
-    inside the container reflects the image's user pipelines.
+    project mounted at ``/workspace``, the persistent afm state host directory
+    mounted read-write at ``/home/goga/pipeline`` (so afm state survives across
+    runs of the same pipeline in the same project on the same branch), the
+    afm-config tmpfile mounted read-only at the FIXED path
+    ``/home/goga/.afm/config.yaml`` (independent of AFM_DIR — see the ``afm``
+    practice), the env-file, the published port, ``--add-host`` entries, and a
+    read-only bind-mount for every credential file returned by
+    ``resolve_credential_mounts()``. User pipelines are NOT bind-mounted from
+    the host: the image is populated at build time via ``RUN goga connect ...``
+    in the Dockerfile, so ``/home/goga/.goga/pipelines`` inside the container
+    reflects the image's user pipelines.
 
     Args:
         image: Docker image to run.
@@ -232,10 +251,19 @@ def _build_run_cmd(  # noqa: PLR0913
         name: Pipeline name forwarded as the ``run`` positional argument.
         afm_config: Host path to the afm-config tmpfile.
         env_file: Host path to the env file mounted via ``--env-file``.
+        runtime_dir: Host path to the persistent afm state directory, mounted
+            read-write at ``/home/goga/pipeline``. Created by the caller; never
+            deleted here.
+        hosts: Resolved host→IP mapping (config.pipeline.hosts merged with parsed
+            ``--add-host`` CLI entries by the caller). Each pair becomes a
+            ``--add-host HOST:IP`` flag. ``None`` adds no host entries.
 
     Returns:
         The full docker command as a list of string arguments.
     """
+    if hosts is None:
+        hosts = {}
+
     project_dir = Path.cwd().resolve()
     cmd: list[str] = [
         "docker",
@@ -249,15 +277,24 @@ def _build_run_cmd(  # noqa: PLR0913
         f"{project_dir}:/workspace",
         "-w",
         "/workspace",
+        # persistent afm state: read-write so afm can persist flows/run-state;
+        # survives across runs. NEVER deleted by the launcher.
+        "-v",
+        f"{runtime_dir}:/home/goga/pipeline",
+        # client.command overlay: read-only, FIXED target independent of AFM_DIR.
         "-v",
         f"{afm_config}:/home/goga/.afm/config.yaml:ro",
         "--env-file",
         str(env_file),
     ]
 
-    codex_auth = Path.home() / ".codex" / "auth.json"
-    if codex_auth.is_file():
-        cmd.extend(["-v", f"{codex_auth}:/home/goga/.codex/auth.json:ro"])
+    for host, ip in hosts.items():
+        cmd.extend(["--add-host", f"{host}:{ip}"])
+
+    # Credential mounts: agent-agnostic. Every tuple from
+    # resolve_credential_mounts() is an existing file — no re-check needed.
+    for host_path, container_path in resolve_credential_mounts():
+        cmd.extend(["-v", f"{host_path}:{container_path}:ro"])
 
     cmd.extend(
         [
@@ -377,12 +414,23 @@ def clean_afm_runtime_dir(afm_runtime_dir: Path) -> None:
     afm_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _run_discovery(config: Config, container_name: str) -> int:
+def _run_discovery(
+    config: Config,
+    container_name: str,
+    hosts: dict[str, str] | None,
+    update: bool,
+) -> int:
     """Launch the container in discovery mode (``-m goga.pipeline list``).
+
+    Discovery honours ``hosts`` (``--add-host`` flags) and ``update``
+    (conditional image pull), and ignores ``extra_env``, ``proxy``, and
+    ``clean`` — no env-file is written and no afm state directory is involved.
 
     Args:
         config: Loaded project configuration (provides ``image``).
         container_name: Name assigned to the container.
+        hosts: Resolved host→IP mapping forwarded as ``--add-host`` flags.
+        update: When True, pull the image before launch (warning on failure).
 
     Returns:
         The container's exit code.
@@ -390,8 +438,9 @@ def _run_discovery(config: Config, container_name: str) -> int:
     prev_term = signal.signal(signal.SIGTERM, _on_signal)
     prev_int = signal.signal(signal.SIGINT, _on_signal)
     try:
-        cmd = _build_discovery_cmd(config.image, container_name)
-        _pull_image(config.image)
+        cmd = _build_discovery_cmd(config.image, container_name, hosts)
+        if update:
+            _pull_image(config.image)
         proc = subprocess.Popen(cmd)
         return proc.wait()
     finally:
@@ -404,26 +453,52 @@ def _run_discovery(config: Config, container_name: str) -> int:
         signal.signal(signal.SIGINT, prev_int)
 
 
-def _run_named(
+def _run_named(  # noqa: PLR0913
     name: str,
     config: Config,
     container_name: str,
-    extra_env: tuple[str, ...] = (),
+    extra_env: tuple[str, ...],
+    proxy: str | None,
+    hosts: dict[str, str] | None,
+    clean: bool,
+    update: bool,
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
+
+    Run mode allocates a free port, writes a private afm-config tmpfile, ensures
+    the persistent afm state host directory exists (wiping it first when
+    ``clean`` is set), writes a private env-file combining
+    ``config.pipeline.env``, git identity, ``extra_env``, ``AFM_DIR``, and — when
+    ``proxy`` is set — the proxy env vars, prints the Web UI URL, optionally
+    pulls the image, and runs the container. The persistent directory is created
+    before launch and never deleted in ``finally`` (it survives across runs and
+    across the signal-exit path).
 
     Args:
         name: Pipeline name without extension.
         config: Loaded project configuration.
         container_name: Name assigned to the container.
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
-            env-file (e.g. agent authorization tokens). Default is empty —
-            existing callers that omit it observe the previous behavior.
+            env-file (e.g. agent authorization tokens).
+        proxy: Resolved HTTP/HTTPS proxy URL. When non-None, populates
+            ``HTTP_PROXY``/``HTTPS_PROXY``/``NO_PROXY`` in the env-file.
+        hosts: Resolved host→IP mapping forwarded as ``--add-host`` flags.
+        clean: When True, wipe the persistent afm state directory before launch.
+        update: When True, pull the image before launch (warning on failure).
 
     Returns:
         The container's exit code.
     """
     port = _allocate_port()
+
+    # Resolve the persistent afm state host directory and ensure it exists
+    # BEFORE installing signal handlers or creating temp files: it must be on
+    # disk and survive every exit path (including the signal-exit path), and the
+    # optional --clean wipe happens here — strictly before launch, never after.
+    runtime_dir = resolve_afm_runtime_dir(name)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    if clean:
+        clean_afm_runtime_dir(runtime_dir)
 
     # Install the SIGTERM/SIGINT handlers before creating temp files so any
     # exception (or signal) raised during setup propagates through the finally
@@ -438,13 +513,33 @@ def _run_named(
         afm_config = _write_afm_config_tmpfile(wrapper_path)
         git_env = _read_git_config()
         env = {**git_env, **config.pipeline.env}
+        # AFM_DIR redirects afm state (flows, run-state) to the rw-mounted
+        # persistent directory at /home/goga/pipeline; ~/.afm/config.yaml stays
+        # the config source regardless (see the `afm` practice).
+        env["AFM_DIR"] = "/home/goga/pipeline"
+        if proxy is not None:
+            env["HTTP_PROXY"] = proxy
+            env["HTTPS_PROXY"] = proxy
+            env["NO_PROXY"] = "localhost,127.0.0.1"
         env_file = _write_env_file(env, extra_env)
         click.echo(f"Web UI: http://localhost:{port}")
-        cmd = _build_run_cmd(config.image, container_name, port, name, afm_config, env_file)
-        _pull_image(config.image)
+        cmd = _build_run_cmd(
+            config.image,
+            container_name,
+            port,
+            name,
+            afm_config,
+            env_file,
+            runtime_dir,
+            hosts,
+        )
+        if update:
+            _pull_image(config.image)
         proc = subprocess.Popen(cmd)
         return proc.wait()
     finally:
+        # Only the tmpfile and env-file are deleted — the persistent afm state
+        # directory (runtime_dir) survives under EVERY exit path.
         if afm_config is not None:
             afm_config.unlink(missing_ok=True)
         if env_file is not None:
@@ -462,27 +557,31 @@ def run_pipeline_container(  # noqa: PLR0913
     name: str | None,
     config: Config,
     extra_env: tuple[str, ...] = (),
-    # The four parameters below are part of the declared contract signature
-    # (CODEMANIFEST) and wired into the docker command by the run_pipeline_container
-    # extension task. They are accepted here with behavior-preserving defaults so
-    # the extended `pipeline` CLI dispatch (which forwards them by keyword) does
-    # not raise TypeError in the interim.
-    proxy: str | None = None,  # noqa: ARG001
-    hosts: dict[str, str] | None = None,  # noqa: ARG001
-    clean: bool = False,  # noqa: ARG001
-    update: bool = False,  # noqa: ARG001
+    proxy: str | None = None,
+    hosts: dict[str, str] | None = None,
+    clean: bool = False,
+    update: bool = False,
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
-    Discovery mode (``name is None``) runs ``-m goga.pipeline list``. Run mode
-    (``name`` provided) allocates a free port, writes a private afm-config
-    tmpfile (``client.command: <resolved wrapper path>`` — the absolute
-    ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare agent
-    name) mounted read-only at ``/home/goga/.afm/config.yaml``, writes a private
-    env-file combining
-    ``config.pipeline.env``, git identity, and ``extra_env`` (raw KEY=VALUE
-    strings, e.g. an agent authorization token supplied via ``-e/--env``),
-    prints the Web UI URL, and runs ``-m goga.pipeline run <name> --port <port>``.
+    Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
+    ``extra_env``, ``proxy``, and ``clean`` — it honours only ``hosts``
+    (``--add-host`` flags) and ``update`` (conditional image pull); no env-file
+    is written and no afm state directory is involved.
+
+    Run mode (``name`` provided) allocates a free port, writes a private
+    afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
+    absolute ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare
+    agent name) mounted read-only at the FIXED path
+    ``/home/goga/.afm/config.yaml``, ensures the persistent afm state host
+    directory exists (wiping it first when ``clean`` is set), writes a private
+    env-file combining ``config.pipeline.env``, git identity, ``extra_env`` (raw
+    KEY=VALUE strings), ``AFM_DIR=/home/goga/pipeline``, and — when ``proxy`` is
+    set — the proxy env vars, mounts the persistent directory read-write at
+    ``/home/goga/pipeline`` (it survives across runs and the signal-exit path),
+    adds ``--add-host`` flags from ``hosts``, mounts every credential file from
+    ``resolve_credential_mounts()`` read-only, optionally pulls the image, prints
+    the Web UI URL, and runs ``-m goga.pipeline run <name> --port <port>``.
 
     Both modes mount the project at ``/workspace``. User pipelines are NOT
     bind-mounted from the host: the image is populated at build time via
@@ -496,25 +595,21 @@ def run_pipeline_container(  # noqa: PLR0913
             ``pipeline.agent``, ``pipeline.env``).
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
             env-file in run mode (e.g. agent authorization tokens supplied via
-            the host-side ``-e/--env`` Click option). Default is empty — callers
-            that omit it observe the previous behavior. Ignored in discovery
-            mode (``name is None``), which never writes an env-file.
+            the host-side ``-e/--env`` Click option). Default is empty. Ignored
+            in discovery mode (``name is None``), which never writes an env-file.
         proxy: Resolved HTTP/HTTPS proxy URL (CLI overrides config in the
-            caller). Default None preserves the previous behavior; the full
-            HTTP_PROXY/HTTPS_PROXY/NO_PROXY env-file wiring is implemented in
-            the run_pipeline_container extension.
+            caller). When non-None in run mode, the launcher writes
+            ``HTTP_PROXY``, ``HTTPS_PROXY``, and ``NO_PROXY=localhost,127.0.0.1``
+            into the env-file. Ignored in discovery mode.
         hosts: Resolved host→IP dict (CLI entries merged on top of
-            ``config.pipeline.hosts`` by the caller). Default None preserves the
-            previous behavior; the ``--add-host`` flag wiring is implemented in
-            the run_pipeline_container extension.
-        clean: When True and in run mode, wipe the persistent afm state host
-            directory before launch. Default False preserves the previous
-            behavior; the wipe wiring is implemented in the run_pipeline_container
-            extension.
+            ``config.pipeline.hosts`` by the caller). Each entry becomes a
+            docker ``--add-host HOST:IP`` flag. Effective in both modes.
+        clean: When True in run mode, wipe the persistent afm state host
+            directory before launch via ``clean_afm_runtime_dir``. No-op in
+            discovery mode.
         update: When True, pull the image before launch (failure is a warning,
-            not fatal). Default False preserves the previous behavior; the
-            conditional-pull wiring is implemented in the run_pipeline_container
-            extension.
+            not fatal). When False (default), skip the pull. Effective in both
+            modes.
 
     Returns:
         The container's exit code.
@@ -532,6 +627,15 @@ def run_pipeline_container(  # noqa: PLR0913
     container_name = f"goga-pipeline-{os.getpid()}"
 
     if name is None:
-        return _run_discovery(config, container_name)
+        return _run_discovery(config, container_name, hosts, update)
 
-    return _run_named(name, config, container_name, extra_env)
+    return _run_named(
+        name,
+        config,
+        container_name,
+        extra_env,
+        proxy,
+        hosts,
+        clean,
+        update,
+    )

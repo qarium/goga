@@ -443,6 +443,13 @@ class TestPipelinePullImage:
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        # The new persistent-dir flow resolves the afm runtime dir (which calls
+        # git); isolate it from the broadly-mocked subprocess.run below, and
+        # redirect HOME so both the runtime dir and credential detection stay
+        # under tmp_path.
+        monkeypatch.setattr(_rpc_mod, "resolve_git_branch", lambda: "default")
+        monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
+        monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
 
         def fake_run(cmd, *args, **kwargs):
@@ -458,7 +465,9 @@ class TestPipelinePullImage:
             mock.patch.object(subprocess, "run", side_effect=fake_run),
             caplog.at_level(logging.WARNING, logger=_rpc_mod.logger.name),
         ):
-            result = run_pipeline_container("deploy", config)
+            # update=True gates the image pull (no pull by default under the
+            # extended contract); the failing pull must warn and continue.
+            result = run_pipeline_container("deploy", config, (), None, {}, False, True)
 
         # a warning was emitted for the failed pull, and the launch still proceeded
         assert any("failed to pull image" in rec.message for rec in caplog.records)
