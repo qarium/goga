@@ -51,6 +51,7 @@ RUN chmod +x /home/goga/bin/codex-as-claude.sh /home/goga/bin/opencode-as-claude
 ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
 ENV GOGA_DOCKER=1
 ENV RALPHEX_DOCKER=1
+ENV AFM_IN_DOCKER=1
 
 WORKDIR /workspace
 
