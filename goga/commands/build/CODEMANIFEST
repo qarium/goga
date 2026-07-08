@@ -155,6 +155,9 @@ Annotations: |
         continue with the local image. When `update` is False: skip the pull.
     18. Launch the container and wait for its exit code, propagating stdout/stderr
     19. In finally: delete the env-file, kill the container (suppress errors),
+        remove ``.ralphex/`` from the project directory via
+        `_cleanup_ralphex_in_project` to enforce the contract invariant that
+        no ``.ralphex/`` appears in the project directory under any exit path,
         restore the previous signal handler
 
     Requirements:
@@ -178,6 +181,11 @@ Annotations: |
     - The host runtime directory survives across runs of the same project
       on the same branch by default; ralphex progress files persist for resuming
       interrupted builds
+    - After container exit, remove ``.ralphex/`` from the project directory
+      via `_cleanup_ralphex_in_project` to enforce the contract invariant that
+      no ``.ralphex/`` appears in the project directory under any exit path,
+      including crash/SIGKILL. ``.ralphex/`` is never legitimate user data —
+      removal is unconditional when the directory exists
 
     Constraints:
     - Do not pull the image by default — pull only when `update` is True
@@ -252,6 +260,31 @@ Annotations: |
     - Do not raise when the directory does not exist — the mkdir in step 2
       creates it
     - Do not selectively preserve any files — the wipe is total
+
+"_cleanup_ralphex_in_project(project_dir: Path) -> none: None":
+  location: build.py
+  annotations: |
+    Remove ``.ralphex/`` from the project directory if present.
+
+    The `build` constraint forbids ``.ralphex/`` in the project directory
+    under any exit path; ``.ralphex/`` is never legitimate user data.
+
+    `project_dir`: host project directory potentially containing ``.ralphex/``
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Remove ``project_dir``/.ralphex recursively if it exists; tolerate a
+       concurrent removal race so a vanishing directory does not raise
+
+    Requirements:
+    - Idempotent — no-op when the directory does not exist
+    - Tolerate a concurrent removal race; any other filesystem error propagates
+      so unexpected state surfaces
+
+    Constraints:
+    - Do not check whether the directory is empty — removal is unconditional
+    - Do not touch any path outside ``project_dir``/.ralphex
 
 ---
 

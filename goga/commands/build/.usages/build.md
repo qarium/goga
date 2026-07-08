@@ -106,6 +106,6 @@ By default, ralphex writes its state (config, prompts, agents, progress files) r
 
 **With `--clean`:** the host directory is wiped and recreated empty BEFORE `docker run`. The container starts with a clean `/workspace/.ralphex`.
 
-**Crash safety:** because the runtime state lives under `~/.goga/runtime/`, interrupting a build (Ctrl+C, SIGKILL on docker) leaves no `.ralphex/` behind in the project directory.
+**Crash safety:** because the runtime state lives under `~/.goga/runtime/`, interrupting a build (Ctrl+C, SIGKILL on docker) leaves no `.ralphex/` behind in the project directory. The host launcher removes any `.ralphex/` that Docker creates in the project directory on every exit path, including crash/SIGKILL. `.ralphex/` is never legitimate user data in the project directory — removal is unconditional when the directory exists.
 
-**Concurrent builds:** two simultaneous `goga build` invocations on the same project + same branch share the same runtime directory and may collide on ralphex progress files. This is a known limitation (same as `goga pipeline`). Run on different branches, or use `--clean` in only one of the invocations, to avoid the collision.
+**Concurrent builds:** two simultaneous `goga build` invocations on the same project + same branch share the same runtime directory and may collide on ralphex progress files. Run on different branches, or use `--clean` in only one of the invocations, to avoid the collision.

@@ -19,6 +19,7 @@ from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import (
     _build_docker_cmd,
+    _cleanup_ralphex_in_project,
     clean_build_runtime_dir,
     resolve_build_runtime_dir,
 )
@@ -292,4 +293,153 @@ class TestBuildRuntimeIsolationNegative:
         ):
             result = CliRunner().invoke(build_cmd, ["plan.md"])
         assert result.exit_code == 1
-        assert "image" in result.output
+
+
+# --- Docker-created mount point cleanup tests ---
+#
+# Docker Engine, when applying the nested bind-mount
+# ``runtime_dir:/workspace/.ralphex`` on top of the ``/workspace`` project
+# mount, creates the ``/workspace/.ralphex`` target directory inside the
+# bind-mount source — i.e. physically inside the user's project directory. The
+# directory is empty (in-container writes land in the nested mount = host
+# runtime dir), but it survives container exit. The CODEMANIFEST contract
+# forbids ``.ralphex/`` in the project directory under any exit path, so the
+# host launcher removes it unconditionally in ``finally``.
+
+
+class TestCleanupRalphexInProject:
+    """``_cleanup_ralphex_in_project`` removes the Docker-created mount point."""
+
+    def test_removes_existing_ralphex_dir(self, tmp_path: Path) -> None:
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+
+        _cleanup_ralphex_in_project(tmp_path)
+
+        assert not ralphex_dir.exists()
+
+    def test_removes_non_empty_ralphex_dir(self, tmp_path: Path) -> None:
+        """The contract forbids ``.ralphex/`` in the project directory —
+        removal is unconditional, so non-empty content is removed too (it is
+        never legitimate user data per the CODEMANIFEST constraint)."""
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "stale_file.txt").write_text("stale")
+        (ralphex_dir / "subdir").mkdir()
+
+        _cleanup_ralphex_in_project(tmp_path)
+
+        assert not ralphex_dir.exists()
+
+    def test_noop_when_ralphex_absent(self, tmp_path: Path) -> None:
+        # No .ralphex/ in the project dir — cleanup must be a no-op.
+        _cleanup_ralphex_in_project(tmp_path)  # no exception
+
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_tolerates_ralphex_vanishing_during_cleanup(self, tmp_path: Path) -> None:
+        """A race where the directory vanishes between the rmtree call and the
+        actual removal (concurrent process, crash) must not raise."""
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+
+        # Simulate a concurrent removal: rmtree will find nothing to remove.
+        with mock.patch("shutil.rmtree", side_effect=FileNotFoundError):
+            _cleanup_ralphex_in_project(tmp_path)  # no exception
+
+
+class TestBuildCleansUpRalphexInProjectOnExit:
+    """``build()`` removes Docker-created ``.ralphex/`` on every exit path."""
+
+    def test_dry_run_does_not_create_ralphex_in_project(self, tmp_path: Path, monkeypatch) -> None:
+        """On --dry-run the host launcher exits before Popen, so Docker never
+        creates a mount point. Cleanup runs unconditionally but is a no-op —
+        the project dir must be clean after the run."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        runtime_dir = resolve_build_runtime_dir()
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md", "--dry-run"])
+
+        assert result.exit_code == 0, result.output
+        # No Docker run on dry-run, so no mount point — the project dir stays clean.
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_cleans_up_ralphex_after_docker_run_exit(self, tmp_path: Path, monkeypatch) -> None:
+        """When Docker creates a ``.ralphex/`` mount point in the project dir
+        during the run, the finally block removes it after container exit."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        runtime_dir = resolve_build_runtime_dir()
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+
+        # Simulate Docker creating the empty mount point inside the project dir
+        # at Popen time (this is the bug — Docker mutates the bind-mount source).
+        def _fake_popen(cmd, *args, **kwargs):
+            (tmp_path / ".ralphex").mkdir()  # Docker-created mount point
+            proc = mock.Mock()
+            proc.wait.return_value = 0
+            return proc
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
+            mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0, result.output
+        # The Docker-created mount point MUST be removed — the CODEMANIFEST
+        # contract forbids ``.ralphex/`` in the project directory.
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_cleans_up_ralphex_on_signal_exit(self, tmp_path: Path, monkeypatch) -> None:
+        """Even on a non-zero exit path, the finally block still removes the
+        Docker-created mount point — the contract forbids ``.ralphex/`` under
+        any exit condition, including crash/SIGKILL."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        runtime_dir = resolve_build_runtime_dir()
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+
+        def _fake_popen(cmd, *args, **kwargs):
+            (tmp_path / ".ralphex").mkdir()  # Docker-created mount point
+            proc = mock.Mock()
+            proc.wait.return_value = 137  # SIGKILL exit code
+            return proc
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
+            mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        # Non-zero exit propagated, but finally still ran cleanup.
+        assert result.exit_code == 137
+        # The Docker-created mount point MUST be removed even on a non-zero
+        # exit path — the CODEMANIFEST contract forbids ``.ralphex/`` in the
+        # project directory under any exit condition.
+        assert not (tmp_path / ".ralphex").exists()

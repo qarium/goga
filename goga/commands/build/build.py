@@ -261,6 +261,33 @@ def clean_build_runtime_dir(host_dir: Path) -> None:
     host_dir.mkdir(parents=True, exist_ok=True)
 
 
+def _cleanup_ralphex_in_project(project_dir: Path) -> None:
+    """Remove the Docker-created ``.ralphex/`` mount point from the project dir.
+
+    When ``docker run`` applies the nested bind-mount
+    ``runtime_dir:/workspace/.ralphex`` on top of the ``/workspace`` project
+    mount, Docker Engine creates the ``/workspace/.ralphex`` target directory
+    inside the bind-mount source — i.e. physically inside the user's project
+    directory. The directory is empty (in-container writes land in the nested
+    mount = host runtime dir, never in the project dir), but it survives
+    container exit and ``--rm`` because bind-mount mutations are persistent.
+
+    The CODEMANIFEST contract forbids ``.ralphex/`` in the project directory
+    under any exit path, so the host launcher removes it unconditionally in
+    ``finally``. Removal is a no-op when the directory does not exist.
+
+    Args:
+        project_dir: Host project directory (the ``/workspace`` bind-mount
+            source) potentially containing a Docker-created ``.ralphex/``.
+    """
+    # The directory may vanish between the check and rmtree (concurrent process
+    # or a crash cleanup race); tolerate that. Any other failure propagates so
+    # an unexpected filesystem state surfaces rather than silently leaving
+    # ``.ralphex/`` behind and violating the contract.
+    with contextlib.suppress(FileNotFoundError):
+        shutil.rmtree(project_dir / ".ralphex")
+
+
 @click.command()
 @click.argument("plan")
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
@@ -464,4 +491,17 @@ def build(  # noqa: PLR0913, C901
                 check=False,
                 capture_output=True,
             )
+        # Remove the Docker-created empty ``.ralphex/`` mount point from the
+        # project directory: applying the nested bind-mount
+        # ``runtime_dir:/workspace/.ralphex`` on top of the ``/workspace``
+        # project mount makes Docker Engine create ``/workspace/.ralphex``
+        # inside the bind-mount source — i.e. physically in the user's project
+        # directory. The directory is empty (in-container writes land in the
+        # nested mount = host runtime dir) but survives container exit because
+        # bind-mount mutations are persistent. The CODEMANIFEST contract
+        # forbids ``.ralphex/`` in the project directory under any exit path,
+        # so it is removed unconditionally here. No-op on dry_run (docker never
+        # runs, no mount point is created) and on any path where the directory
+        # does not exist.
+        _cleanup_ralphex_in_project(Path.cwd())
         signal.signal(signal.SIGTERM, _prev_sigterm)
