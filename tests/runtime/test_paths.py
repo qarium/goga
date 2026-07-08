@@ -180,6 +180,19 @@ class TestResolveGitBranchNegative:
         with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError):
             assert resolve_git_branch() == "default"
 
+    def test_resolve_git_branch_propagates_unexpected_errors(self) -> None:
+        """Only FileNotFoundError is caught — other errors propagate, not 'default'.
+
+        The contract catches ``FileNotFoundError`` specifically (git binary
+        missing) so genuinely unexpected failures surface during development
+        instead of being silently swallowed into the ``"default"`` fallback.
+        """
+        with (
+            mock.patch.object(subprocess, "run", side_effect=PermissionError("denied")),
+            pytest.raises(PermissionError),
+        ):
+            resolve_git_branch()
+
 
 # --- Logic tests (edge) ---
 

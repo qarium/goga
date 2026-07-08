@@ -161,6 +161,31 @@ class TestBuildRuntimeIsolationEndToEnd:
         cmd = captured["cmd"]
         assert f"{runtime_dir}:/workspace/.ralphex" in cmd
 
+    def test_runtime_setup_failure_does_not_write_secret_env_file(self, tmp_path: Path, monkeypatch) -> None:
+        """A runtime-dir setup failure must not leave the secret env file on disk.
+
+        The env file carries git identity and ``task_executor`` secrets and is
+        only unlinked by the finally block, so it must not be created before the
+        runtime-dir setup — which can raise on a read-only home or a permission
+        error. Regression guard for the prepare-runtime-before-env-file ordering.
+        """
+        _pin_runtime_under(tmp_path, monkeypatch)
+
+        with ExitStack() as stack:
+            stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
+            stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
+            stack.enter_context(mock.patch.object(_build_mod, "load_config", return_value=_valid_config()))
+            write_env = stack.enter_context(mock.patch.object(_build_mod, "_write_env_file"))
+            stack.enter_context(
+                mock.patch.object(_build_mod, "resolve_build_runtime_dir", side_effect=OSError("read-only home"))
+            )
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code != 0
+        # The secret-bearing env file was never written because the runtime-dir
+        # setup (which runs first) raised before _write_env_file was reached.
+        write_env.assert_not_called()
+
 
 class TestBuildHostPathIsolation:
     """The host runtime path never reaches the container; only /workspace/.ralphex does."""

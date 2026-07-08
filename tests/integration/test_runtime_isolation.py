@@ -167,8 +167,10 @@ class TestBuildRuntimeDirFlow:
 
         _pin_project(tmp_path, monkeypatch)
         runtime_dir = resolve_build_runtime_dir()
-        # The dir does not exist before launch — build() must mkdir it.
-        assert not runtime_dir.exists()
+        # Pre-populate stale state so the wipe is actually exercised — a no-op
+        # clean would leave old-state.json behind and fail the assertions below.
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        (runtime_dir / "old-state.json").write_text('{"stale": true}')
 
         captured: dict = {}
 
@@ -184,8 +186,10 @@ class TestBuildRuntimeDirFlow:
 
         assert result.exit_code == 0, result.output
 
-        # mkdir happened (the dir now exists) and was wiped empty by --clean.
+        # mkdir happened (the dir still exists) and --clean wiped it empty —
+        # the stale sentinel is gone, so the wipe genuinely ran.
         assert runtime_dir.exists()
+        assert not (runtime_dir / "old-state.json").exists()
         assert not any(runtime_dir.iterdir())
         # the resolved path is the nested bind-mount source.
         assert f"{runtime_dir}:/workspace/.ralphex" in captured["cmd"]

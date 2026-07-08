@@ -284,7 +284,7 @@ def clean_build_runtime_dir(host_dir: Path) -> None:
     help="Pull the image before launching the container",
 )
 @click.pass_context
-def build(  # noqa: PLR0913
+def build(  # noqa: PLR0913, C901
     ctx: click.Context,
     plan: str,
     dry_run: bool,
@@ -383,10 +383,12 @@ def build(  # noqa: PLR0913
         env["HTTPS_PROXY"] = resolved_proxy
         env["NO_PROXY"] = "localhost,127.0.0.1"
 
-    env_file = _write_env_file(env, extra_env)
-
-    # Resolve the host ralphex runtime directory and ensure it exists before
-    # docker run — Docker may refuse to bind-mount a non-existent host path.
+    # Resolve and prepare the host ralphex runtime directory BEFORE writing the
+    # secret-bearing env file: mkdir/clean can raise (read-only home, permission
+    # denied), and the env file is only unlinked by the finally below — so
+    # writing it first would leak git identity and task_executor secrets on disk
+    # if the runtime-dir setup raised. Docker may also refuse to bind-mount a
+    # non-existent host path, so the directory must exist before docker run.
     # When --clean is set, wipe and recreate it so ralphex starts from a fresh
     # state; the default preserves progress files across runs of the same
     # project+branch.
@@ -395,6 +397,8 @@ def build(  # noqa: PLR0913
     if clean:
         clean_build_runtime_dir(runtime_dir)
 
+    env_file = _write_env_file(env, extra_env)
+
     container_name = f"goga-build-{os.getpid()}"
 
     def _on_sigterm(signum: int, _frame: object) -> None:
@@ -402,6 +406,7 @@ def build(  # noqa: PLR0913
 
     _prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
 
+    launched = False
     try:
         docker_cmd = _build_docker_cmd(
             plan=plan,
@@ -420,13 +425,19 @@ def build(  # noqa: PLR0913
             _pull_image(config.image)
 
         docker_proc = subprocess.Popen(docker_cmd)
+        launched = True
 
         ctx.exit(docker_proc.wait())
     finally:
         env_file.unlink(missing_ok=True)
-        subprocess.run(
-            ["docker", "kill", container_name],
-            check=False,
-            capture_output=True,
-        )
+        # Only kill a container we actually started: dry_run exits before
+        # Popen, and a pre-Popen failure leaves nothing running. Issuing
+        # `docker kill` unconditionally would target a never-started container
+        # (or an unrelated one on a goga-build-<pid> name collision).
+        if launched:
+            subprocess.run(
+                ["docker", "kill", container_name],
+                check=False,
+                capture_output=True,
+            )
         signal.signal(signal.SIGTERM, _prev_sigterm)
