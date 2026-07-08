@@ -15,10 +15,15 @@ Imports:
     Usages:
       - resolve-credential-mounts
     From: goga/agents
+  - Types:
+      - resolve_runtime_dir
+    Usages:
+      - runtime-paths
+    From: goga/runtime
 
 Usages:
-  click: .goga/usages/cooks/click.md
   conventions: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
   docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
 
 Annotations: |
@@ -29,16 +34,20 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
-  Use `load_config` from Imports and the `configuration` practice to read .goga/config.yml.
+  Use `load_config` and the `configuration` practice to read .goga/config.yml.
   Use the `build-usage` practice for the in-container build invocation contract.
-  Use `resolve_credential_mounts` from Imports and the `resolve-credential-mounts`
+  Use `resolve_credential_mounts` and the `resolve-credential-mounts`
   practice to obtain the list of credential files to bind-mount read-only into
   the container.
   Use the `docker-auth-mounts` practice for the read-only credential-mount rule
   applied when assembling the docker run command.
+  Use `resolve_runtime_dir` and the `runtime-paths` practice to
+  compute the host-side runtime directory path for the current project and git
+  branch.
+
   The command runs goga.build inside a Docker container.
 
-  This command is the host-side launcher for `run_build` from Imports: it
+  This command is the host-side launcher for `run_build`: it
   assembles a docker command that invokes "python -m goga.build <plan>"
   inside the container, where `run_build` runs as the in-container entrypoint
   (per the `build-usage` practice). The host does not call `run_build` directly.
@@ -46,9 +55,19 @@ Annotations: |
   The Docker image is sourced from Config.image — the top-level field shared
   by build and pipeline. See the `configuration` practice for the schema.
 
+  Ralphex runtime isolation: the host bind-mounts a centralized runtime
+  directory at /workspace/.ralphex inside the container (a nested bind-mount
+  layered on top of the project directory mount at /workspace). The physical
+  bytes live under ~/.goga/runtime/builds/<normalized_project>/<branch>/ on the
+  host, never in the user's project directory. ralphex's own .ralphex/
+  auto-detection in cwd finds this mount without changes. The directory survives
+  across runs of the same project on the same branch by default; pass --clean to
+  wipe it before launch. Use `resolve_runtime_dir` to compute the
+  host directory; the in-container `run_build` is unaware of the host path.
+
 ---
 
-"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool)":
+"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool)":
   location: build.py
   annotations: |
     CLI wrapper for the build command. Runs python -m goga.build inside a
@@ -66,6 +85,11 @@ Annotations: |
     `update`: flag from the --update/-u click option. When True, pull the
               image before launching the container. When False (default), skip
               the pull entirely and use the local image.
+    `clean`: flag from the --clean click option. When True, wipe and recreate
+             the persistent ralphex runtime host directory via
+             `clean_build_runtime_dir` BEFORE docker run. When False (default),
+             keep the existing directory as-is so ralphex progress files
+             survive across runs of the same project on the same branch.
 
     CLI options (via click):
     - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
@@ -74,6 +98,7 @@ Annotations: |
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
     - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.build.proxy
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.build.hosts
+    - --clean (flag) — wipe the persistent ralphex runtime host directory before launch
     - --update / -u (flag) — pull the image before launching the container
 
     Apply the `click` practice for the command surface and option declarations.
@@ -98,25 +123,38 @@ Annotations: |
        and CLI extra env (task_executor env takes precedence over git env)
     8. When the resolved proxy is non-None: add HTTP_PROXY, HTTPS_PROXY, and
        NO_PROXY (fixed at localhost,127.0.0.1) to the container env
-    9. Write the assembled env to a private env-file for the container
-    10. Verify Config.image is set; raise ClickException when None
-    11. Generate a unique container_name
-    12. Install a SIGTERM/SIGINT handler that exits with 128 + signum
-    13. Assemble the docker run command:
+    9. Verify Config.image is set; raise ClickException when None
+    10. Write the assembled env to a private env-file for the container
+    11. Resolve the host runtime directory via `resolve_build_runtime_dir`:
+        - call `resolve_runtime_dir`("builds") (the routine composes
+          ~/.goga/runtime/builds/<normalized_project>/<branch>/ from cwd + git
+          branch)
+        - ensure the directory exists (idempotent mkdir with parents)
+    12. When `clean` is True: wipe and recreate the host runtime directory via
+        `clean_build_runtime_dir` BEFORE docker run. When `clean` is False: keep
+        the existing directory as-is (ralphex progress files survive across runs)
+    13. Generate a unique container_name
+    14. Install a SIGTERM/SIGINT handler that exits with 128 + signum
+    15. Assemble the docker run command:
         - --rm, --name <container_name>, --entrypoint python3
         - Bind-mount CWD as /workspace
+        - Bind-mount the resolved host runtime directory (step 11) read-write
+          at /workspace/.ralphex — a nested bind-mount layered on top of the
+          /workspace mount. ralphex auto-detects .ralphex/ in cwd and writes its
+          state there; the bytes physically land in the host runtime directory,
+          never in the user's project directory
         - For each resolved host entry: add a --add-host HOST:IP flag
         - Pass env via --env-file
         - For each (host_path, container_path) pair returned by
-          `resolve_credential_mounts` (Imports): add a read-only bind-mount
+          `resolve_credential_mounts`: add a read-only bind-mount
           of host_path at container_path
         - Image from Config.image
         - Args: -m goga.build <plan> + cli_flags
-    14. On dry_run: print the assembled command and exit 0 without launching
-    15. When `update` is True: pull the image; on failure log a warning and
+    16. On dry_run: print the assembled command and exit 0 without launching
+    17. When `update` is True: pull the image; on failure log a warning and
         continue with the local image. When `update` is False: skip the pull.
-    16. Launch the container and wait for its exit code, propagating stdout/stderr
-    17. In finally: delete the env-file, kill the container (suppress errors),
+    18. Launch the container and wait for its exit code, propagating stdout/stderr
+    19. In finally: delete the env-file, kill the container (suppress errors),
         restore the previous signal handler
 
     Requirements:
@@ -128,9 +166,18 @@ Annotations: |
       are written to the env-file; NO_PROXY is fixed at "localhost,127.0.0.1"
     - CLI --add-host entries are merged on top of config.build.hosts;
       on host-key conflict, the CLI entry wins
-    - Credential mounts come from resolve_credential_mounts() — every returned
+    - Credential mounts come from `resolve_credential_mounts` — every returned
       tuple is an existing file, no re-check needed
     - Image pull runs only when `update` is True; failure is a warning, not fatal
+    - The host runtime directory under
+      ~/.goga/runtime/builds/<normalized_project>/<branch>/ MUST exist before
+      docker run — Docker may refuse to bind-mount a non-existent host path
+    - The directory at /workspace/.ralphex inside the container is the
+      nested bind-mount target; ralphex writes there via its cwd-relative
+      .ralphex/ literal and auto-detection, no config change required
+    - The host runtime directory survives across runs of the same project
+      on the same branch by default; ralphex progress files persist for resuming
+      interrupted builds
 
     Constraints:
     - Do not pull the image by default — pull only when `update` is True
@@ -142,7 +189,69 @@ Annotations: |
     - Do not auto-add --add-host entries to NO_PROXY
     - Do not filter credential mounts by the configured task_executor agent —
       detection is agent-agnostic (see `resolve-credential-mounts` practice)
-    - Do not mount anything under /workspace other than the project directory
+    - Do not mount anything under /workspace other than:
+      (a) the project directory at /workspace, and
+      (b) the resolved host runtime directory at /workspace/.ralphex
+    - Wipe the host runtime directory only when `clean` is True — the default
+      preserves ralphex state across runs
+    - --clean wipes the host runtime directory BEFORE launch; the directory
+      survives across runs (no wipe in finally under any exit path)
+    - Do not pass the host runtime path into the container via env-file
+      or CLI args — the container sees only /workspace/.ralphex and must not
+      know about ~/.goga/runtime/builds/...
+    - The in-container `run_build` keeps using cwd-relative .ralphex/; the
+      nested mount resolves that into the host runtime directory transparently
+
+"resolve_build_runtime_dir() -> runtime_dir: Path":
+  location: build.py
+  annotations: |
+    Compute the host-side path of the persistent ralphex runtime directory for
+    the current project on the current git branch. This directory is bind-mounted
+    into the build container at /workspace/.ralphex so ralphex state never
+    touches the user's project directory.
+
+    `runtime_dir`: absolute host path under
+                   ~/.goga/runtime/builds/<normalized_project>/<branch>/
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Delegate to `resolve_runtime_dir`("builds") — no suffix
+       parts (build has no further namespace under <branch>/)
+    2. Return the resulting path
+
+    Requirements:
+    - Return value is an absolute path
+    - Pure with respect to the filesystem — does not create the directory
+      (creation is the caller's responsibility in `build` Algorithm step 11)
+
+    Constraints:
+    - Do not create the directory here — the caller handles creation
+    - Do not add a suffix — build has no further namespace under <branch>/
+
+"clean_build_runtime_dir(host_dir: Path) -> none: None":
+  location: build.py
+  annotations: |
+    Recursively wipe the persistent ralphex runtime directory and recreate it
+    empty. Called before container launch when the --clean flag is set.
+
+    `host_dir`: host path computed by `resolve_build_runtime_dir`
+
+    Apply the `conventions` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. When the directory exists, remove it recursively
+    2. Recreate the directory (empty), including any missing parents
+
+    Requirements:
+    - Idempotent — repeated calls on an already-clean directory do not raise
+    - The caller guarantees `host_dir` was computed by
+      `resolve_build_runtime_dir`
+
+    Constraints:
+    - Do not raise when the directory does not exist — the mkdir in step 2
+      creates it
+    - Do not selectively preserve any files — the wipe is total
 
 ---
 
@@ -150,4 +259,7 @@ Author: Goga
 CreatedAt: 20/05/26
 
 Description: |
-  CLI wrapper for the goga build command
+  CLI wrapper for the goga build command. Host-side launcher that runs
+  python -m goga.build inside a Docker container. Bind-mounts a centralized
+  ralphex runtime host directory at /workspace/.ralphex so ralphex state never
+  touches the user's project directory.

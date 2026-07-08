@@ -71,13 +71,28 @@ missing from the image, ralphex surfaces the error.
 
 ## Side effects
 
-- Removes `.ralphex/` before each run (cleanup)
 - Creates `.ralphex/config` with `claude_command` set to the resolved wrapper
   path (wrappers live in the image, not under .ralphex/)
 - Delivers build env (`ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL`, etc.) through
   the `ralphex` subprocess environment
 - Copies prompts and agents into `.ralphex/`
 - Spawns a subprocess (`ralphex`)
+
+## .ralphex/ lifecycle
+
+The `.ralphex/` directory lifecycle is owned by the host launcher:
+
+- The host launcher prepares the `.ralphex/` mount before container launch and
+  wipes it only when the `--clean` flag is passed on `goga build`.
+- The in-container `build()` reuses whatever state the mounted `.ralphex/`
+  provides, so ralphex progress files survive across runs of the same project
+  on the same branch — useful for resuming interrupted builds.
+- When invoked directly via `python -m goga.build` (e.g. for development), the
+  cwd's `.ralphex/` is reused across runs; the operator wipes it manually when a
+  fresh start is needed.
+
+This means ralphex progress files survive across runs of the same project on
+the same branch by default, which is useful for resuming interrupted builds.
 
 ## Docker entry point
 

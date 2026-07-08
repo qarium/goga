@@ -43,14 +43,13 @@ Annotations: |
     0. (pre-check) When skip_manifest_check is not set:
        - Verify all project CODEMANIFEST files are committed to git
        - Reject with exit code 1 if any uncommitted manifests are found
-    1. Remove .ralphex/ directory if present
-    2. Resolve the agent wrapper path by calling `resolve_wrapper_path` with
+    1. Resolve the agent wrapper path by calling `resolve_wrapper_path` with
        the agent field of `TaskExecutorConfig`, per the `resolve-wrapper-path`
        practice. The result is the absolute in-container path
        /home/goga/bin/<name>-as-claude.sh defined by the `agent-wrappers`
        practice. Do not validate the agent value — absence of the wrapper
        file is surfaced by `ralphex` itself.
-    3. Create the .ralphex/config file with defaults populated for the
+    2. Create the .ralphex/config file with defaults populated for the
        resolved agent:
        - set the claude_command key to the resolved wrapper path
        - apply claude_args defaults when missing
@@ -58,13 +57,13 @@ Annotations: |
        - set preserve_anthropic_api_key to true so the ralphex runner keeps
          ANTHROPIC_API_KEY in the agent subprocess env (the agent wrapper
          no longer remaps ANTHROPIC_API_TOKEN)
-    4. Copy default prompts and agents from the goga package to .ralphex/,
+    3. Copy default prompts and agents from the goga package to .ralphex/,
        using the directory paths specified in `BuildConfig`
-    5. Assemble the ralphex command:
+    4. Assemble the ralphex command:
        - Base command: ["ralphex", plan, "--config-dir", ".ralphex/"]
        - Apply flags with precedence: CLI options > `Config` > omit
-    6. On dry_run: print the assembled command and return 0
-    7. Execute `ralphex` via subprocess.call with
+    5. On dry_run: print the assembled command and return 0
+    6. Execute `ralphex` via subprocess.call with
        env = {**os.environ, **`TaskExecutorConfig`.env} (build env delivered through
        the process environment, not via a settings file) and propagate its exit code
 
@@ -92,6 +91,10 @@ Annotations: |
     - Wrapper-script bodies are owned by the image (scripts/claude-as-claude.sh)
       and the upstream ralphex source (codex-as-claude.sh, opencode-as-claude.sh)
       — do not inline wrapper bodies into this cell
+    - The .ralphex/ directory lifecycle is owned by the host launcher
+      (goga/commands/build): the in-container build() receives .ralphex/ as a
+      prepared mount and reuses any ralphex state present in it. The host wipes
+      the directory only when goga build --clean is passed before launch
 
 "main() -> exit_code:int":
   location: __main__.py

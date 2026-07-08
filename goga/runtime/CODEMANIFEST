@@ -1,0 +1,149 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is a pure leaf utilities module for runtime-directory path composition.
+  It owns the single shared formula
+  ~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>
+  and exposes the two atomic helpers (normalize_project_path, resolve_git_branch)
+  needed to compute the variable segments. Consumers call resolve_runtime_dir
+  with their purpose and optional suffix; they do not import the atomic helpers
+  directly unless a facade composes them.
+
+  All routines are pure with respect to the filesystem: they return paths and
+  strings, they do not create directories or write files. The single exception is
+  no exception — `resolve_git_branch` reads git state in a read-only manner.
+
+---
+
+"normalize_project_path(project_path: Path) -> normalized: str":
+  location: paths.py
+  annotations: |
+    Normalize an absolute project path into a filesystem-safe path segment by
+    removing the leading slash and replacing every remaining slash with a hyphen.
+
+    `project_path`: absolute project path (e.g. the resolved current working
+                    directory)
+    `normalized`: slash-free, hyphen-separated segment, e.g.
+                  "/Users/wb/IdeaProjects/my/project" →
+                  "Users-wb-IdeaProjects-my-project"
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Treat the project path as a string
+    2. Remove the leading slash (and any leading slashes)
+    3. Replace every remaining slash with a hyphen
+    4. Return the resulting string
+
+    Requirements:
+    - Pure string transformation — no filesystem access, no side effects
+    - Deterministic — same input always produces the same output
+
+    Constraints:
+    - Do not use a different separator — the hyphen is fixed
+    - Do not collapse consecutive hyphens or strip trailing hyphens — the
+      transformation is a literal 1:1 slash → hyphen replacement
+    - Do not handle backslashes — only forward slashes are replaced; backslashes
+      are preserved as-is in the output
+
+"resolve_git_branch() -> branch: str":
+  location: paths.py
+  annotations: |
+    Resolve the current git branch name by invoking git and slugifying it for
+    filesystem safety. Return "default" when git is unavailable, the current
+    directory is not a git repository, or HEAD is detached.
+
+    `branch`: slugified current git branch name (forward slashes replaced with
+              hyphens), or the literal "default" fallback
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Ask git for the current branch name via "git branch --show-current"
+    2. When git succeeds with a non-empty answer, return it stripped and with
+       every forward slash replaced by a hyphen (e.g. "feature/x" → "feature-x")
+    3. Otherwise, return "default"
+
+    Requirements:
+    - Never raise for the documented failure modes — git unavailability,
+      non-repo directories, and detached HEAD all return "default"
+    - Deterministic fallback — "default" is the literal string used for all
+      failure cases
+    - Forward slashes in the branch name are replaced with hyphens so the
+      branch segment is a single filesystem-safe path component (no nested
+      directories are created by the branch segment)
+
+    Constraints:
+    - Do not surface git errors as exceptions for the documented failure modes
+      — they are tolerated and mapped to "default". FileNotFoundError (git
+      binary missing) is caught explicitly; other OS-level errors
+      (PermissionError, OSError) are not expected under normal operation
+      and may propagate — the "never raise" guarantee covers the documented
+      failure modes (git missing, non-repo, detached HEAD), not catastrophic
+      OS-level failures
+    - Do not use a bare except — catch FileNotFoundError specifically so
+      unexpected exceptions (programming errors) still propagate during
+      development
+    - Do not cache the result — each call asks git anew (the caller may have
+      switched branches between calls)
+    - Do not replace characters other than forward slashes — backslashes,
+      spaces, and other special characters are preserved as-is
+
+"resolve_runtime_dir(purpose: str, ...suffix_parts: str) -> runtime_dir: Path":
+  location: paths.py
+  annotations: |
+    Compose the host-side runtime directory path for a given purpose, the current
+    project, the current git branch, and zero or more trailing suffix segments.
+
+    `purpose`: runtime namespace segment — e.g. "builds" or "pipelines". Becomes
+               the directory immediately under ~/.goga/runtime/.
+    `suffix_parts`: zero or more trailing path segments appended after the branch
+                    directory. Empty (the default) yields the branch-level
+                    directory itself. A single suffix is used by pipeline
+                    (pipeline_name); multiple suffixes are reserved for future
+                    consumers with deeper namespace requirements.
+    `runtime_dir`: absolute host path
+                   ~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Take the current working directory as the absolute project path
+    2. Normalize the project path via `normalize_project_path`
+    3. Resolve the current git branch via `resolve_git_branch`
+    4. Compose the runtime dir under the user's goga runtime area as
+       <purpose>/<normalized>/<branch>/<joined suffix_parts>
+    5. Return the composed absolute path
+
+    Requirements:
+    - Return value is an absolute path
+    - Pure with respect to the filesystem — does not create the directory
+      (creation is the caller's responsibility)
+    - Empty `suffix_parts` yields the branch-level directory
+    - Multiple `suffix_parts` are joined in order with the OS separator
+
+    Constraints:
+    - Do not create the directory here — the caller handles creation
+    - Do not validate `purpose` against a whitelist — any non-empty string is
+      accepted; the caller owns the namespace
+    - Do not validate suffix values semantically — they are path segments only
+
+---
+
+Author: Goga
+CreatedAt: 07/07/26
+Description: |
+  Pure leaf utilities module for runtime-directory path composition. Owns the
+  single shared formula
+  ~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>
+  and exposes two atomic helpers plus one composite routine. Consumers call
+  resolve_runtime_dir with their purpose and optional suffix; atomic helpers
+  are consumed inside resolve_runtime_dir.

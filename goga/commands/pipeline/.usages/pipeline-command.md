@@ -153,9 +153,9 @@ env-file is written, no afm state directory is involved.
    and writes a tmpfile containing
    `client.command: <resolved wrapper path>` (mode 0600).
 5. Resolves the persistent afm state host directory via
-   `resolve_afm_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<project-without-slash>/<git-branch>/<name>/`)
+   `resolve_pipeline_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<name>/`)
    and ensures it exists (`mkdir -p`, idempotent).
-6. When `--clean` is set: wipes the directory via `clean_afm_runtime_dir`
+6. When `--clean` is set: wipes the directory via `clean_pipeline_runtime_dir`
    (recursive rmtree + recreate) **before** launch.
 7. Builds an env-file with `config.pipeline.env` + git identity + extra
    `KEY=VALUE` pairs supplied via `-e/--env` + `AFM_DIR=/home/goga/pipeline` +
@@ -166,7 +166,7 @@ env-file is written, no afm state directory is involved.
 10. Assembles the docker run command:
     - `--rm -p <port>:<port>`
     - `-v <project_dir>:/workspace -w /workspace`
-    - `-v <afm_runtime_dir>:/home/goga/pipeline` (read-write — persistent state)
+    - `-v <pipeline_runtime_dir>:/home/goga/pipeline` (read-write — persistent state)
     - `-v <afm_tmpfile>:/home/goga/.afm/config.yaml:ro` (read-only — `client.command` overlay; this path is independent of `AFM_DIR`)
     - one `--add-host HOST:IP` flag per resolved hosts entry
     - one `-v <host_path>:<container_path>:ro` flag per credential file detected by `resolve_credential_mounts()` (claude/codex/opencode when present on the host)
@@ -203,7 +203,7 @@ If the name exists in both sources, the project source wins (resolved inside the
 - Discovery mode: launches the container; container reads the filesystem only.
 - Run mode: allocates a localhost port, creates two tmpfiles (afm config, env-file), launches afm inside the container, prints `Web UI: http://localhost:<port>`. The host installs SIGTERM/SIGINT handlers for the lifetime of the run.
 - Run mode: writes a persistent host directory at
-  `~/.goga/runtime/pipelines/<project-without-slash>/<git-branch>/<pipeline-name>/`
+  `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<pipeline-name>/`
   (created with `mkdir -p`, mounted read-write at `/home/goga/pipeline`). This
   directory survives across runs and is NOT removed in the launcher's `finally`
   block. Use `--clean` to wipe it before launch.

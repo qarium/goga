@@ -11,7 +11,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N]
                  [-e KEY=VALUE ...]
-                 [--proxy URL] [--add-host HOST:IP ...] [--update | -u]
+                 [--proxy URL] [--add-host HOST:IP ...] [--clean] [--update | -u]
 ```
 
 ## Arguments
@@ -36,6 +36,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
+| `--clean` | flag | false | Wipe the persistent ralphex runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralphex state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
 | `--update` / `-u` | flag | false | Pull the image before launching the container. Default is no pull — the local image is used as-is |
 
 ## Exit code
@@ -55,6 +56,13 @@ goga build docs/plans/my-plan.md --update
 
 # Route container traffic through a corporate proxy and add a local host entry
 goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
+
+# Wipe ralphex state before launch (start fresh)
+goga build docs/plans/my-plan.md --clean
+
+# Without --clean, ralphex state persists across runs of the same project+branch
+goga build docs/plans/my-plan.md
+goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 ```
 
 ## Requirements
@@ -64,6 +72,7 @@ goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:1
 - By default the image is NOT pulled — the local image is used as-is. Use `--update`/`-u` to pull before launch. On pull failure a warning is logged and the build continues with the locally available image
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
 - Credential mounts are detected automatically via `resolve_credential_mounts()` — there is no `--credential`/`--mount` flag. The routine scans the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`), is agent-agnostic (it is not filtered by the configured `task_executor.agent`), and returns only files that exist. Every returned file is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `resolve-credential-mounts` and `docker-auth-mounts` practices for details
+- Ralphex state (`.ralphex/`) is isolated from the project directory: the host directory `~/.goga/runtime/builds/<normalized_project>/<branch>/` is bind-mounted into the container at `/workspace/.ralphex`. No `.ralphex/` appears in the project directory, even on crash/SIGKILL. By default the directory persists across runs; pass `--clean` to wipe it before launch
 
 ## Proxy and hosts
 
@@ -78,3 +87,25 @@ goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:1
 `NO_PROXY` is mandatory whenever a proxy is set — without it, `--add-host foo.local:127.0.0.1` would route `foo.local` through the corporate proxy and break. CLI `--add-host` entries are NOT auto-added to `NO_PROXY`.
 
 `--add-host HOST:IP` (and `build.hosts` in config) translate to `docker run --add-host HOST:IP` flags. CLI entries are merged on top of config; on host-key conflict, CLI wins.
+
+## Ralphex runtime isolation
+
+By default, ralphex writes its state (config, prompts, agents, progress files) relative to its current working directory inside the container. The `goga build` command bind-mounts a centralized host directory at `/workspace/.ralphex` so this state never lands in the user's project directory.
+
+**Host path:**
+```
+~/.goga/runtime/builds/<normalized_project>/<branch>/
+```
+
+- `<normalized_project>` — the current working directory's absolute path with leading slashes stripped and remaining slashes replaced by hyphens (e.g. `/Users/wb/IdeaProjects/goga` → `Users-wb-IdeaProjects-goga`)
+- `<branch>` — the current git branch name with forward slashes replaced by hyphens (e.g. `feature/x` → `feature-x`); `"default"` when git is unavailable, the current directory is not a git repository, or HEAD is detached
+
+**Container path:** `/workspace/.ralphex` (nested bind-mount on top of the `/workspace` project directory mount). ralphex auto-detects `.ralphex/` in its cwd and writes there transparently.
+
+**Default behavior (no `--clean`):** the host directory persists across runs of the same project on the same branch. ralphex progress files survive — useful for resuming interrupted builds (ralphex detects the first incomplete task and continues from there).
+
+**With `--clean`:** the host directory is wiped and recreated empty BEFORE `docker run`. The container starts with a clean `/workspace/.ralphex`.
+
+**Crash safety:** because the runtime state lives under `~/.goga/runtime/`, interrupting a build (Ctrl+C, SIGKILL on docker) leaves no `.ralphex/` behind in the project directory.
+
+**Concurrent builds:** two simultaneous `goga build` invocations on the same project + same branch share the same runtime directory and may collide on ralphex progress files. This is a known limitation (same as `goga pipeline`). Run on different branches, or use `--clean` in only one of the invocations, to avoid the collision.

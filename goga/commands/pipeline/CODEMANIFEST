@@ -12,6 +12,11 @@ Imports:
       - resolve-wrapper-path
       - resolve-credential-mounts
     From: goga/agents
+  - Types:
+      - resolve_runtime_dir
+    Usages:
+      - runtime-paths
+    From: goga/runtime
   - Usages:
       - list-pipelines
       - run-pipeline
@@ -58,18 +63,25 @@ Annotations: |
   The Docker image is sourced from Config.image — the top-level field shared
   by build and pipeline. See the `configuration` practice for the schema.
 
-  Use `resolve_credential_mounts` from Imports and the
+  Use `resolve_credential_mounts` and the
   `resolve-credential-mounts` practice to obtain the list of credential files
   to bind-mount read-only into the container.
   Use the `docker-auth-mounts` practice for the read-only credential-mount rule
   applied when assembling the docker run command.
+  Use `resolve_runtime_dir` and the `runtime-paths` practice to
+  compute the host-side runtime directory path for the current project, git
+  branch, and pipeline name.
 
   Persistent afm state: run mode mounts a host directory at
   /home/goga/pipeline inside the container and sets AFM_DIR=/home/goga/pipeline
   in the env-file, so afm state survives across runs of the same pipeline in
-  the same project on the same branch. The host directory is computed from
+  the same project on the same branch. The host directory is computed by
+  `resolve_pipeline_runtime_dir` (a thin facade over `resolve_runtime_dir` from
+  goga/runtime Imports), which composes
+  ~/.goga/runtime/pipelines/<normalized_project>/<branch>/<pipeline_name>/ from
   the project path, the current git branch, and the pipeline name. Use the
-  --clean flag to wipe this directory before launch.
+  --clean flag to wipe this directory before launch via
+  `clean_pipeline_runtime_dir`.
 
 ---
 
@@ -120,7 +132,7 @@ Annotations: |
     - --update / -u (flag) — pull the image before launching the container
 
     Algorithm:
-    1. Load configuration via `load_config` (Imports) — fails fast on schema errors
+    1. Load configuration via `load_config` — fails fast on schema errors
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
     3. Resolve the proxy: take `proxy` when not None, otherwise fall back to
@@ -181,7 +193,7 @@ Annotations: |
              conflict). Each entry becomes a docker run --add-host HOST:IP
              flag. Effective in both modes.
     `clean`: when True and in run mode, wipe the persistent afm state host
-             directory before launch via `clean_afm_runtime_dir`. No-op in
+             directory before launch via `clean_pipeline_runtime_dir`. No-op in
              discovery mode.
     `update`: when True, pull the image before launching the container (failure
               is a warning, non-fatal). When False (default), skip the pull.
@@ -225,9 +237,9 @@ Annotations: |
        resolved wrapper path — a read-only overlay over the persistent afm
        state directory mounted in step 12
     7. Resolve the persistent afm state host directory via
-       `resolve_afm_runtime_dir` and ensure it exists (idempotent)
+       `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
     8. When `clean` is True: wipe the resolved directory via
-       `clean_afm_runtime_dir` before launch
+       `clean_pipeline_runtime_dir` before launch
     9. Create a private env-file combining config.pipeline.env, git identity,
        the `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
        AFM_DIR set to the in-container persistent state path, and — when
@@ -253,7 +265,7 @@ Annotations: |
         - For each entry in `hosts`: add a --add-host HOST:IP flag
         - Pass env via --env-file
         - For each (host_path, container_path) pair returned by
-          `resolve_credential_mounts` (Imports): add a read-only bind-mount
+          `resolve_credential_mounts`: add a read-only bind-mount
           of host_path at container_path
         - --entrypoint python3 <config.image>
         - Args: -m goga.pipeline run <name> --port <port>
@@ -289,7 +301,7 @@ Annotations: |
       /home/goga/.afm/config.yaml and does NOT depend on AFM_DIR — afm
       always reads config.yaml from ~/.afm/config.yaml. AFM_DIR controls
       only afm state (flows, run-state), not config.yaml discovery.
-    - Credential mounts come from resolve_credential_mounts() — every returned
+    - Credential mounts come from `resolve_credential_mounts` — every returned
       tuple is an existing file, no re-check needed
     - Image pull runs only when `update` is True; failure is a warning, not fatal
     - AFM_DIR=/home/goga/pipeline is provided via the env-file
@@ -300,13 +312,13 @@ Annotations: |
     - Propagate afm's non-zero exit code as the container's exit code
 
     Constraints:
-    - Do not pull the image by default — pull only when `update` is True
-    - Do not delete the persistent afm state host directory in finally — only
-      the tmpfile and env-file are deleted
-    - Do not perform cleanup of the persistent afm state directory in finally
-      under any exit path — --clean wipes it BEFORE launch, never after
+    - Pull the image only when `update` is True — the default is no pull
+    - Delete only the tmpfile and env-file in finally — the persistent afm
+      state host directory survives across runs
+    - --clean wipes the persistent afm state host directory BEFORE launch; the
+      directory survives across runs (no wipe in finally under any exit path)
     - Do not filter credential mounts by config.pipeline.agent — detection is
-      agent-agnostic (see `resolve-credential-mounts` practice)
+      agent-agnostic (see the `resolve-credential-mounts` practice)
     - Do not expose a separate --no-proxy CLI option; NO_PROXY is fixed at
       "localhost,127.0.0.1" whenever proxy is set
     - Do not auto-add --add-host entries to NO_PROXY
@@ -323,7 +335,7 @@ Annotations: |
     - Do not write a bare agent name into client.command — always write the
       resolved absolute wrapper path
 
-"resolve_afm_runtime_dir(pipeline_name: str) -> runtime_dir: Path":
+"resolve_pipeline_runtime_dir(pipeline_name: str) -> runtime_dir: Path":
   location: run_pipeline_container.py
   annotations: |
     Compute the host-side path of the persistent afm state directory for the
@@ -336,87 +348,27 @@ Annotations: |
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm:
-    1. Take the current working directory as the absolute project path
-    2. Normalize the project path via `normalize_project_path`
-    3. Resolve the current git branch via `resolve_git_branch`
-    4. Compose the runtime dir under the user's goga runtime area as
-       pipelines/<normalized>/<branch>/<pipeline_name>
-    5. Return the composed path
+    1. Delegate to `resolve_runtime_dir`("pipelines", pipeline_name) from
+       Imports — the routine composes the full path from cwd, git branch, and
+       the supplied pipeline_name suffix
+    2. Return the resulting path
 
     Requirements:
     - Return value is an absolute path
     - Pure with respect to the filesystem — does not create the directory
       (creation is the caller's responsibility)
-    - Git branch is resolved by `resolve_git_branch` in step 3
 
     Constraints:
     - Do not create the directory here — the caller handles creation
     - Do not validate that pipeline_name corresponds to an existing pipeline file
 
-"normalize_project_path(project_path: Path) -> normalized: str":
-  location: run_pipeline_container.py
-  annotations: |
-    Normalize an absolute project path into a filesystem-safe path segment by
-    removing the leading slash and replacing every remaining slash with a hyphen.
-
-    `project_path`: absolute project path (e.g. the result of resolving the
-                    current working directory)
-    `normalized`: slash-free, hyphen-separated segment, e.g.
-                  "/Users/wb/IdeaProjects/my/project" →
-                  "Users-wb-IdeaProjects-my-project"
-
-    Apply the `conventions` practice for docstring style and intra-package imports.
-
-    Algorithm:
-    1. Treat the project path as a string
-    2. Remove the leading slash (and any leading slashes)
-    3. Replace every remaining slash with a hyphen
-    4. Return the resulting string
-
-    Requirements:
-    - Pure string transformation — no filesystem access, no side effects
-    - Deterministic — same input always produces the same output
-
-    Constraints:
-    - Do not use a different separator — the hyphen is fixed
-    - Do not collapse consecutive hyphens or strip trailing hyphens — the
-      transformation is a literal 1:1 slash → hyphen replacement
-
-"resolve_git_branch() -> branch: str":
-  location: run_pipeline_container.py
-  annotations: |
-    Resolve the current git branch name by invoking git. Return "default" when
-    git is unavailable, the current directory is not a git repository, or HEAD
-    is detached.
-
-    `branch`: current git branch name, or the literal "default" fallback
-
-    Apply the `conventions` practice for docstring style and intra-package imports.
-
-    Algorithm:
-    1. Ask git for the abbreviated branch name of HEAD
-    2. When git succeeds with a non-empty answer, return it stripped
-    3. Otherwise, return "default"
-
-    Requirements:
-    - Never raise — git unavailability, non-repo directories, and detached HEAD
-      all return "default"
-    - Deterministic fallback — "default" is the literal string used for all
-      failure cases
-
-    Constraints:
-    - Do not surface git errors as exceptions — they are tolerated and mapped
-      to "default"
-    - Do not cache the result — each call asks git anew (the caller may have
-      switched branches between calls)
-
-"clean_afm_runtime_dir(afm_runtime_dir: Path) -> none:None":
+"clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> none: None":
   location: run_pipeline_container.py
   annotations: |
     Recursively wipe the persistent afm state directory and recreate it empty.
     Called before container launch when the --clean flag is set.
 
-    `afm_runtime_dir`: host path computed by `resolve_afm_runtime_dir`
+    `pipeline_runtime_dir`: host path computed by `resolve_pipeline_runtime_dir`
 
     Apply the `conventions` practice for docstring style and intra-package imports.
 
@@ -426,8 +378,8 @@ Annotations: |
 
     Requirements:
     - Idempotent — repeated calls on an already-clean directory do not raise
-    - The caller guarantees afm_runtime_dir was computed by
-      `resolve_afm_runtime_dir`
+    - The caller guarantees `pipeline_runtime_dir` was computed by
+      `resolve_pipeline_runtime_dir`
 
     Constraints:
     - Do not raise when the directory does not exist — the mkdir in step 2
