@@ -14,6 +14,7 @@ import typing
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import (
@@ -123,6 +124,28 @@ class TestCleanBuildRuntimeDir:
         host_dir = tmp_path / "rt"
         assert not host_dir.exists()
         clean_build_runtime_dir(host_dir)
+        assert host_dir.exists()
+
+    def test_propagates_partial_removal_failure(self, tmp_path: Path) -> None:
+        # The wipe is total per the CODEMANIFEST constraint: a partial-removal
+        # failure (e.g. a file written under a different UID by a prior container
+        # run) must surface, not be silently swallowed into a stale mount.
+        host_dir = tmp_path / "rt"
+        host_dir.mkdir()
+        (host_dir / "locked.txt").write_text("stale")
+        with (
+            mock.patch.object(_build_mod.shutil, "rmtree", side_effect=PermissionError("denied")),
+            pytest.raises(PermissionError),
+        ):
+            clean_build_runtime_dir(host_dir)
+
+    def test_tolerates_concurrent_removal(self, tmp_path: Path) -> None:
+        # A directory that vanishes between the existence check and rmtree
+        # (a concurrent --clean) is tolerated; the dir is recreated.
+        host_dir = tmp_path / "rt"
+        host_dir.mkdir()
+        with mock.patch.object(_build_mod.shutil, "rmtree", side_effect=FileNotFoundError):
+            clean_build_runtime_dir(host_dir)  # does not raise
         assert host_dir.exists()
 
 

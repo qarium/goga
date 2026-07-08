@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from goga.commands.pipeline.run_pipeline_container import (
     clean_pipeline_runtime_dir,
     resolve_pipeline_runtime_dir,
@@ -131,3 +132,22 @@ class TestCleanPipelineRuntimeDirLogic:
 
         assert runtime_dir.exists()
         assert not any(runtime_dir.iterdir())
+
+    def test_propagates_partial_removal_failure(self, tmp_path: Path) -> None:
+        """The wipe is total: a partial-removal failure surfaces, not swallowed."""
+        runtime_dir = tmp_path / "rt"
+        runtime_dir.mkdir()
+        (runtime_dir / "locked.json").write_text("stale")
+        with (
+            mock.patch.object(_rpc_mod.shutil, "rmtree", side_effect=PermissionError("denied")),
+            pytest.raises(PermissionError),
+        ):
+            clean_pipeline_runtime_dir(runtime_dir)
+
+    def test_tolerates_concurrent_removal(self, tmp_path: Path) -> None:
+        """A vanished dir between check and rmtree (concurrent --clean) is tolerated."""
+        runtime_dir = tmp_path / "rt"
+        runtime_dir.mkdir()
+        with mock.patch.object(_rpc_mod.shutil, "rmtree", side_effect=FileNotFoundError):
+            clean_pipeline_runtime_dir(runtime_dir)  # does not raise
+        assert runtime_dir.exists()

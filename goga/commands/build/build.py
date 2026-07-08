@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
@@ -241,11 +242,22 @@ def clean_build_runtime_dir(host_dir: Path) -> None:
     from a fresh runtime state. Idempotent: repeated calls on an already-clean
     directory do not raise.
 
+    A ``FileNotFoundError`` from the removal is tolerated so a directory that
+    vanishes between the existence check and ``rmtree`` — e.g. a concurrent
+    ``goga build --clean`` on the same project/branch — does not raise. Any
+    other failure (e.g. a permission error on a file written under a different
+    UID by a prior container run) propagates: per the CODEMANIFEST constraint
+    the wipe must be total, so a partial removal surfaces as an error rather
+    than silently leaving stale state mounted into the next run.
+
     Args:
         host_dir: Host path computed by :func:`resolve_build_runtime_dir`.
     """
     if host_dir.exists():
-        shutil.rmtree(host_dir, ignore_errors=True)
+        # Tolerate a directory that vanishes between the check and rmtree (a
+        # concurrent --clean); any other failure propagates — the wipe is total.
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree(host_dir)
     host_dir.mkdir(parents=True, exist_ok=True)
 
 

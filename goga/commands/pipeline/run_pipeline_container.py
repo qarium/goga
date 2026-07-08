@@ -12,6 +12,7 @@ Type from ``goga/pipeline``.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
@@ -348,17 +349,24 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
 
     Called before container launch when ``--clean`` is set. Idempotent: when the
     directory does not exist it is simply created; repeated calls on an
-    already-clean directory do not raise. The recursive removal is best-effort
-    (``ignore_errors=True``) so a directory that vanishes between the existence
+    already-clean directory do not raise. A ``FileNotFoundError`` from the
+    removal is tolerated so a directory that vanishes between the existence
     check and the ``rmtree`` — e.g. a concurrent ``goga pipeline --clean`` on the
-    same project/branch/name — does not raise.
+    same project/branch/name — does not raise. Any other failure (e.g. a
+    permission error on a file written under a different UID by a prior
+    container run) propagates: per the CODEMANIFEST constraint the wipe must be
+    total, so a partial removal surfaces as an error rather than silently
+    leaving stale state mounted into the next run.
 
     Args:
         pipeline_runtime_dir: Host path computed by
             :func:`resolve_pipeline_runtime_dir`.
     """
     if pipeline_runtime_dir.exists():
-        shutil.rmtree(pipeline_runtime_dir, ignore_errors=True)
+        # Tolerate a directory that vanishes between the check and rmtree (a
+        # concurrent --clean); any other failure propagates — the wipe is total.
+        with contextlib.suppress(FileNotFoundError):
+            shutil.rmtree(pipeline_runtime_dir)
     pipeline_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
