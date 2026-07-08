@@ -25,6 +25,7 @@ from goga.schema.schema import (
     _filter_tree,
     _find_usages_files,
     _has_dependency,
+    _prune_by_dependency,
     _prune_depth,
     schema,
 )
@@ -239,6 +240,82 @@ class TestFilterByDependsOn:
         assert len(result) == 1
         assert result[0]["cell"] == "a"
 
+    def test_prunes_non_matching_children_of_matching_root(self) -> None:
+        cells = [
+            {
+                "cell": "root",
+                "dependencies": {"goga/lib": {"types": [], "usages": []}},
+                "children": [
+                    {"cell": "depends", "dependencies": {"goga/lib": {"types": [], "usages": []}}, "children": []},
+                    {"cell": "no_dep", "dependencies": {}, "children": []},
+                ],
+            },
+        ]
+        result = _filter_by_depends_on(cells, ["goga/lib"])
+        assert len(result) == 1
+        kept_children = [c["cell"] for c in result[0]["children"]]
+        assert kept_children == ["depends"]
+
+    def test_keeps_skeleton_path_to_dependent_descendant(self) -> None:
+        cells = [
+            {
+                "cell": "root",
+                "dependencies": {},
+                "children": [
+                    {
+                        "cell": "mid",
+                        "dependencies": {},
+                        "children": [
+                            {"cell": "leaf", "dependencies": {"goga/lib": {"types": [], "usages": []}}, "children": []},
+                            {"cell": "leaf_no_dep", "dependencies": {}, "children": []},
+                        ],
+                    },
+                    {"cell": "sibling_no_dep", "dependencies": {}, "children": []},
+                ],
+            },
+        ]
+        result = _filter_by_depends_on(cells, ["goga/lib"])
+        assert len(result) == 1
+        assert result[0]["cell"] == "root"
+        assert len(result[0]["children"]) == 1
+        mid = result[0]["children"][0]
+        assert mid["cell"] == "mid"
+        kept_leaves = [c["cell"] for c in mid["children"]]
+        assert kept_leaves == ["leaf"]
+
+    def test_no_match_returns_empty(self) -> None:
+        cells = [{"cell": "root", "dependencies": {}, "children": []}]
+        result = _filter_by_depends_on(cells, ["goga/absent"])
+        assert result == []
+
+
+class TestPruneByDependency:
+    def test_keeps_dependent_child_and_prunes_other(self) -> None:
+        cell = {
+            "cell": "root",
+            "dependencies": {},
+            "children": [
+                {"cell": "dep", "dependencies": {"goga/lib": {"types": [], "usages": []}}, "children": []},
+                {"cell": "no_dep", "dependencies": {}, "children": []},
+            ],
+        }
+        result = _prune_by_dependency(cell, frozenset({"goga/lib"}))
+        kept = [c["cell"] for c in result["children"]]
+        assert kept == ["dep"]
+
+    def test_preserves_other_node_fields(self) -> None:
+        cell = {
+            "cell": "root",
+            "description": "desc",
+            "types": ["E1"],
+            "dependencies": {"goga/lib": {"types": ["T"], "usages": []}},
+            "children": [],
+        }
+        result = _prune_by_dependency(cell, frozenset({"goga/lib"}))
+        assert result["description"] == "desc"
+        assert result["types"] == ["E1"]
+        assert result["dependencies"] == {"goga/lib": {"types": ["T"], "usages": []}}
+
 
 class TestSchemaFunction:
     def test_empty_tree_returns_empty_json(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -335,8 +412,9 @@ class TestSchemaFunction:
             result = schema([], 1, ["goga/dep"])
         data = json.loads(result)
         assert len(data) == 1
-        assert len(data[0]["children"]) == 1
-        assert data[0]["children"][0]["children"] == []
+        assert data[0]["cell"] == os.path.normpath("goga/cell")
+        # child has no dependency on goga/dep and no dependent descendants → pruned
+        assert data[0]["children"] == []
 
     def test_json_is_pretty_formatted(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         doc = _make_doc("goga/cell")

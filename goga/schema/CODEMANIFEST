@@ -34,7 +34,7 @@ Annotations: |
     Algorithm:
     1. Load the project document tree using the `documents` practice
     2. Recursively build a JSON tree with nested children nodes
-    3. Apply filters: `cells`, `max_depth`, `depends_on`
+    3. Apply filters in order: `cells`, `depends_on`, `max_depth`
     4. Return the JSON string using the `beautiful_json` practice
 
     Node format:
@@ -50,6 +50,7 @@ Annotations: |
     Requirements:
     - If `max_depth` is None: return the full tree without depth limits
     - If `depends_on` is an empty list: return the full tree without dependency filtering
+    - If `depends_on` is non-empty: keep a cell only if its own dependencies or any descendant's dependencies contain at least one of the specified paths; cells without such a dependency are removed, while ancestor cells on the path to a kept descendant are preserved so the parent-child skeleton stays intact
     - If the tree is empty: return "[]"
     - If AST.errors is non-empty after loading: raise ValueError with the error count
 

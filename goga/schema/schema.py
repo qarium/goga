@@ -97,11 +97,24 @@ def _has_dependency(cell_dict: dict, dep_paths: frozenset[str]) -> bool:
     return any(_has_dependency(child, dep_paths) for child in cell_dict.get("children", []))
 
 
+def _prune_by_dependency(cell_dict: dict, dep_paths: frozenset[str]) -> dict:
+    kept_children = [
+        _prune_by_dependency(child, dep_paths)
+        for child in cell_dict.get("children", [])
+        if _has_dependency(child, dep_paths)
+    ]
+    return {**cell_dict, "children": kept_children}
+
+
 def _filter_by_depends_on(result: list[dict], depends_on: list[str]) -> list[dict]:
     if not depends_on:
         return result
     dep_paths = frozenset(os.path.normpath(p) for p in depends_on)
-    return [cell for cell in result if _has_dependency(cell, dep_paths)]
+    return [
+        _prune_by_dependency(cell, dep_paths)
+        for cell in result
+        if _has_dependency(cell, dep_paths)
+    ]
 
 
 def schema(cells: list[str], max_depth: int | None, depends_on: list[str]) -> str:

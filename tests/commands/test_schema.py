@@ -1109,3 +1109,99 @@ Description: Lib
     assert len(data[0]["children"]) == 1
     assert data[0]["children"][0]["cell"] == "mid"
     assert data[0]["children"][0]["children"] == []
+
+
+def test_schema_depends_on_prunes_non_dependent_siblings(tmp_path) -> None:
+    """--depends-on must prune siblings whose subtree contains no matching dependency."""
+    # root has two children: "depends" depends on lib; "free" has no such dependency.
+    root_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"RootEntity()":
+  location: root.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Root
+"""
+    depends_manifest = """\
+Imports:
+  - Types:
+      - LibType
+    From: lib
+
+Usages: {}
+
+Annotations: |
+  Uses `LibType` here
+
+---
+
+"DependsEntity()":
+  location: depends.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell depending on lib
+"""
+    free_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"FreeEntity()":
+  location: free.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Cell with no deps
+"""
+    lib_manifest = """\
+Usages: {}
+
+Annotations: ""
+
+---
+
+"LibType()":
+  location: lib.py
+  annotations: ""
+
+---
+Author: Test
+CreatedAt: 01/01/01
+Description: Lib
+"""
+
+    _write_codemanifest(tmp_path, root_manifest)
+    depends = tmp_path / "depends"
+    depends.mkdir()
+    _write_codemanifest(depends, depends_manifest)
+    free = tmp_path / "free"
+    free.mkdir()
+    _write_codemanifest(free, free_manifest)
+    lib = tmp_path / "lib"
+    lib.mkdir()
+    _write_codemanifest(lib, lib_manifest)
+
+    with _cwd(tmp_path):
+        result = _run_schema("--depends-on", "lib")
+
+    assert result.exit_code == 0
+    data = json.loads(result.output)
+    assert len(data) == 1
+    assert data[0]["cell"] == "."
+    kept_children = [c["cell"] for c in data[0]["children"]]
+    assert kept_children == ["depends"]
