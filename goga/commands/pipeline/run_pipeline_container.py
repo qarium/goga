@@ -393,18 +393,25 @@ def _run_discovery(
     """
     prev_term = signal.signal(signal.SIGTERM, _on_signal)
     prev_int = signal.signal(signal.SIGINT, _on_signal)
+    launched = False
     try:
         cmd = _build_discovery_cmd(config.image, container_name, hosts)
         if update:
             _pull_image(config.image)
         proc = subprocess.Popen(cmd)
+        launched = True
         return proc.wait()
     finally:
-        subprocess.run(
-            ["docker", "kill", container_name],
-            check=False,
-            capture_output=True,
-        )
+        # Only kill a container we actually started: a pre-Popen failure (e.g.
+        # _build_discovery_cmd or a pull error) leaves nothing running, and an
+        # unconditional `docker kill` could target an unrelated container on a
+        # goga-pipeline-<pid> name collision. Mirrors goga/commands/build.
+        if launched:
+            subprocess.run(
+                ["docker", "kill", container_name],
+                check=False,
+                capture_output=True,
+            )
         signal.signal(signal.SIGTERM, prev_term)
         signal.signal(signal.SIGINT, prev_int)
 
@@ -464,6 +471,7 @@ def _run_named(  # noqa: PLR0913
     prev_int = signal.signal(signal.SIGINT, _on_signal)
     afm_config: Path | None = None
     env_file: Path | None = None
+    launched = False
     try:
         wrapper_path = resolve_wrapper_path(config.pipeline.agent)
         afm_config = _write_afm_config_tmpfile(wrapper_path)
@@ -492,6 +500,7 @@ def _run_named(  # noqa: PLR0913
         if update:
             _pull_image(config.image)
         proc = subprocess.Popen(cmd)
+        launched = True
         return proc.wait()
     finally:
         # Only the tmpfile and env-file are deleted — the persistent afm state
@@ -500,11 +509,17 @@ def _run_named(  # noqa: PLR0913
             afm_config.unlink(missing_ok=True)
         if env_file is not None:
             env_file.unlink(missing_ok=True)
-        subprocess.run(
-            ["docker", "kill", container_name],
-            check=False,
-            capture_output=True,
-        )
+        # Only kill a container we actually started: a pre-Popen failure (e.g.
+        # resolve_wrapper_path, tmpfile/env-file write, or a pull error) leaves
+        # nothing running; an unconditional `docker kill` could hit an unrelated
+        # container on a goga-pipeline-<pid> name collision. Mirrors
+        # goga/commands/build.
+        if launched:
+            subprocess.run(
+                ["docker", "kill", container_name],
+                check=False,
+                capture_output=True,
+            )
         signal.signal(signal.SIGTERM, prev_term)
         signal.signal(signal.SIGINT, prev_int)
 

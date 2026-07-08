@@ -409,17 +409,25 @@ def build(  # noqa: PLR0913, C901
     if clean:
         clean_build_runtime_dir(runtime_dir)
 
-    env_file = _write_env_file(env, extra_env)
-
     container_name = f"goga-build-{os.getpid()}"
 
     def _on_sigterm(signum: int, _frame: object) -> None:
         raise SystemExit(128 + signum)
 
+    # Install the SIGTERM handler BEFORE creating the secret-bearing env file,
+    # and create that env file inside the try below — so a signal (or any
+    # exception) raised after the env file is written propagates through the
+    # finally, which unlinks it. Writing the env file before the handler is
+    # installed (or outside this try) would leak git identity and task_executor
+    # secrets on disk if a signal arrived in that window. Mirrors the
+    # goga/commands/pipeline launcher shape.
     _prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
 
     launched = False
+    env_file: Path | None = None
     try:
+        env_file = _write_env_file(env, extra_env)
+
         docker_cmd = _build_docker_cmd(
             plan=plan,
             image=config.image,
@@ -441,7 +449,11 @@ def build(  # noqa: PLR0913, C901
 
         ctx.exit(docker_proc.wait())
     finally:
-        env_file.unlink(missing_ok=True)
+        # Unlink the env file only if it was created: a pre-write failure or a
+        # dry_run ctx.exit before the write leaves env_file None. The env file
+        # carries git identity and task_executor secrets.
+        if env_file is not None:
+            env_file.unlink(missing_ok=True)
         # Only kill a container we actually started: dry_run exits before
         # Popen, and a pre-Popen failure leaves nothing running. Issuing
         # `docker kill` unconditionally would target a never-started container
