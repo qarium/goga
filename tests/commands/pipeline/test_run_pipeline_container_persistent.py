@@ -283,9 +283,7 @@ class TestHostsFlags:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container(
-                "deploy", config, (), None, {"foo.local": "127.0.0.1"}, False, False
-            )
+            run_pipeline_container("deploy", config, (), None, {"foo.local": "127.0.0.1"}, False, False)
 
         cmd = mock_popen.call_args[0][0]
         assert "--add-host" in cmd
@@ -303,9 +301,7 @@ class TestHostsFlags:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container(
-                None, config, (), None, {"foo.local": "127.0.0.1"}, False, False
-            )
+            run_pipeline_container(None, config, (), None, {"foo.local": "127.0.0.1"}, False, False)
 
         cmd = mock_popen.call_args[0][0]
         assert "--add-host" in cmd
@@ -416,9 +412,7 @@ class TestProxyEnv:
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
-            run_pipeline_container(
-                "deploy", config, (), "http://corp:3128", {}, False, False
-            )
+            run_pipeline_container("deploy", config, (), "http://corp:3128", {}, False, False)
 
         assert captured_env["HTTP_PROXY"] == "http://corp:3128"
         assert captured_env["HTTPS_PROXY"] == "http://corp:3128"
@@ -485,6 +479,179 @@ class TestCredentialMountLoop:
         assert "-v" in cmd
         assert "/host/claude/.credentials.json:/home/goga/.claude/.credentials.json:ro" in cmd
         # the hardcoded codex-only mount is gone — detection is agent-agnostic
-        assert not any(
-            arg.endswith(":/home/goga/.codex/auth.json:ro") and "auth.json" in arg for arg in cmd
+        assert not any(arg.endswith(":/home/goga/.codex/auth.json:ro") and "auth.json" in arg for arg in cmd)
+
+
+# --- Task 6: goga.runtime delegation end-to-end through the run-mode path ---
+
+
+class TestGogaRuntimeDelegation:
+    """End-to-end verification that the renamed facades delegate to ``goga.runtime``.
+
+    Unlike ``test_run_helpers.py`` (which exercises the facades in isolation via
+    ``mock.patch`` of ``resolve_runtime_dir``), these tests drive the full
+    ``run_pipeline_container`` run-mode path with ``Path.home()``/``Path.cwd()``/
+    ``resolve_git_branch`` redirected, so the real ``resolve_runtime_dir`` →
+    ``normalize_project_path`` → ``resolve_git_branch`` composition produces the
+    documented host path layout end-to-end.
+    """
+
+    def test_resolve_pipeline_runtime_dir_composes_documented_path(self, tmp_path: Path, monkeypatch) -> None:
+        """resolve_pipeline_runtime_dir('deploy') → ~/.goga/runtime/pipelines/<normalized>/<branch>/deploy."""
+        from goga.runtime.paths import normalize_project_path
+
+        # Redirect home/cwd so resolve_runtime_dir is deterministic; drive the
+        # REAL resolve_git_branch (feature/x → feature-x slugification) end-to-end
+        # by mocking subprocess.run instead of stubbing resolve_git_branch itself.
+        home = tmp_path / "home"
+        proj = home / "proj"
+        proj.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setattr(Path, "home", lambda: home)
+        monkeypatch.setattr(Path, "cwd", lambda: proj)
+        completed = subprocess.CompletedProcess(
+            args=["git", "branch", "--show-current"],
+            returncode=0,
+            stdout="feature/x\n",
+            stderr="",
         )
+
+        with mock.patch("goga.runtime.paths.subprocess.run", return_value=completed):
+            actual = resolve_pipeline_runtime_dir("deploy")
+
+        expected = (
+            home
+            / ".goga"
+            / "runtime"
+            / "pipelines"
+            / normalize_project_path(proj)
+            / "feature-x"  # slugified by resolve_git_branch: forward slash → hyphen
+            / "deploy"
+        )
+
+        assert actual == expected
+        assert actual.is_absolute()
+        # the facade is pure — it must not create the directory tree
+        assert not actual.parent.exists()
+
+    def test_runtime_dir_created_before_launch_mounted_rw_survives_finally(self, tmp_path: Path, monkeypatch) -> None:
+        """The runtime dir is mkdir'd before launch, mounted rw at /home/goga/pipeline, and survives finally."""
+        config = _make_config()
+        _stub_runtime(monkeypatch, tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
+        assert not runtime_dir.exists()  # nothing created yet
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        # created before launch (mkdir -p, idempotent) and survives the finally cleanup
+        assert runtime_dir.exists()
+        cmd = mock_popen.call_args[0][0]
+        assert f"{runtime_dir}:/home/goga/pipeline" in cmd
+        # read-write: the persistent-state mount carries no :ro suffix
+        assert not any(arg == f"{runtime_dir}:/home/goga/pipeline:ro" for arg in cmd)
+
+    def test_clean_wipes_runtime_dir_but_mount_remains(self, tmp_path: Path, monkeypatch) -> None:
+        """--clean wipes old-state.json before launch; the mount flag is still present."""
+        config = _make_config()
+        _stub_runtime(monkeypatch, tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        stale = runtime_dir / "old-state.json"
+        stale.write_text("{}")
+        assert stale.exists()
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, (), None, {}, True, False)
+
+        # wiped before launch, recreated empty
+        assert runtime_dir.exists()
+        assert not stale.exists()
+        assert not any(runtime_dir.iterdir())
+        # the mount is still wired even after the wipe
+        cmd = mock_popen.call_args[0][0]
+        assert f"{runtime_dir}:/home/goga/pipeline" in cmd
+
+    def test_default_perserve_preserves_progress_json(self, tmp_path: Path, monkeypatch) -> None:
+        """clean=False preserves pre-existing progress.json across the run."""
+        config = _make_config()
+        _stub_runtime(monkeypatch, tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        progress = runtime_dir / "progress.json"
+        progress.write_text('{"step": 3}')
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, (), None, {}, False, False)
+
+        # default-persist: the pre-existing state file is untouched
+        assert progress.exists()
+        assert progress.read_text() == '{"step": 3}'
+
+    def test_host_path_isolation_no_host_path_leaks_into_env_or_target(self, tmp_path: Path, monkeypatch) -> None:
+        """The container-side target is /home/goga/pipeline; the host path never leaks into the env-file."""
+        config = _make_config()
+        _stub_runtime(monkeypatch, tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
+        host_marker = ".goga/runtime/pipelines"
+
+        env_contents: list[str] = []
+        real_write = _rpc_mod._write_env_file
+
+        def capture(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            path = real_write(env, extra_env)
+            env_contents.append(path.read_text())
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", capture)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config, (), None, {}, False, False)
+
+        cmd = mock_popen.call_args[0][0]
+        # the only container-side target is /home/goga/pipeline, sourced from the host runtime dir
+        assert f"{runtime_dir}:/home/goga/pipeline" in cmd
+        # the env-file carries AFM_DIR as the container-side path, never the host path
+        env_text = "\n".join(env_contents)
+        assert "AFM_DIR=/home/goga/pipeline\n" in env_text
+        assert host_marker not in env_text
+        # any docker arg mentioning the host runtime path is the bind-mount SOURCE
+        # (host:/home/goga/pipeline), never a standalone leaked value
+        for arg in cmd:
+            if host_marker in arg:
+                assert arg == f"{runtime_dir}:/home/goga/pipeline"
