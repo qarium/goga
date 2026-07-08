@@ -1,30 +1,27 @@
-"""Contract and logic tests for the four intra-cell routines declared in
+"""Contract and logic tests for the two runtime-dir facades declared in
 ``goga/commands/pipeline/CODEMANIFEST`` and colocated with
 ``run_pipeline_container`` in ``run_pipeline_container.py``:
 
-- ``normalize_project_path(project_path) -> str``
-- ``resolve_git_branch() -> str``
-- ``resolve_afm_runtime_dir(pipeline_name) -> Path``
-- ``clean_afm_runtime_dir(afm_runtime_dir) -> None``
+- ``resolve_pipeline_runtime_dir(pipeline_name) -> Path``
+- ``clean_pipeline_runtime_dir(pipeline_runtime_dir) -> None``
 
-These are pure host-side helpers used by run mode to compute and manage the
-persistent afm state directory. They have no docker dependency, so the tests
-exercise them directly with monkeypatched git/cwd/home.
+These are thin host-side facades over ``resolve_runtime_dir`` from
+``goga.runtime``. The atomic helpers ``normalize_project_path`` and
+``resolve_git_branch`` that used to live here were relocated to
+``goga.runtime.paths`` (tested in ``tests/runtime/test_paths.py``) and are no
+longer defined in this module. These tests verify the renamed facades delegate
+correctly and clean idempotently; they have no docker dependency.
 """
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from pathlib import Path
 from unittest import mock
 
-import pytest
 from goga.commands.pipeline.run_pipeline_container import (
-    clean_afm_runtime_dir,
-    normalize_project_path,
-    resolve_afm_runtime_dir,
-    resolve_git_branch,
+    clean_pipeline_runtime_dir,
+    resolve_pipeline_runtime_dir,
 )
 
 # Resolve the real submodule via sys.modules (the package __init__ binds the
@@ -37,130 +34,100 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 
 class TestRunHelpersContract:
-    def test_all_four_importable_from_run_pipeline_container(self) -> None:
-        """The four routines are importable from the declared location."""
-        assert callable(normalize_project_path)
-        assert callable(resolve_git_branch)
-        assert callable(resolve_afm_runtime_dir)
-        assert callable(clean_afm_runtime_dir)
+    def test_both_facades_importable_from_run_pipeline_container(self) -> None:
+        """The two renamed facades are importable from the declared location."""
+        from goga.commands.pipeline.run_pipeline_container import (
+            clean_pipeline_runtime_dir,
+            resolve_pipeline_runtime_dir,
+        )
 
-    def test_normalize_project_path_returns_str_no_slashes(self) -> None:
-        """normalize_project_path returns a str with no forward slashes."""
-        result = normalize_project_path(Path("/Users/wb/myproj"))
-        assert isinstance(result, str)
-        assert "/" not in result
+        assert callable(resolve_pipeline_runtime_dir)
+        assert callable(clean_pipeline_runtime_dir)
 
-    def test_resolve_git_branch_returns_str(self) -> None:
-        """resolve_git_branch returns a str (never raises)."""
-        assert isinstance(resolve_git_branch(), str)
+    def test_old_names_not_defined_in_module(self) -> None:
+        """The relocated helpers and old facade names are gone from the module."""
+        assert not hasattr(_rpc_mod, "normalize_project_path")
+        assert not hasattr(_rpc_mod, "resolve_git_branch")
+        assert not hasattr(_rpc_mod, "resolve_afm_runtime_dir")
+        assert not hasattr(_rpc_mod, "clean_afm_runtime_dir")
 
-    def test_resolve_afm_runtime_dir_returns_absolute_path(self) -> None:
-        """resolve_afm_runtime_dir returns an absolute Path."""
-        result = resolve_afm_runtime_dir("deploy")
+    def test_resolve_pipeline_runtime_dir_returns_absolute_path(self) -> None:
+        """resolve_pipeline_runtime_dir returns an absolute Path."""
+        result = resolve_pipeline_runtime_dir("deploy")
         assert isinstance(result, Path)
         assert result.is_absolute()
 
-    def test_clean_afm_runtime_dir_returns_none(self, tmp_path: Path) -> None:
-        """clean_afm_runtime_dir returns None (and creates the directory)."""
-        assert clean_afm_runtime_dir(tmp_path / "rt") is None
+    def test_resolve_pipeline_runtime_dir_delegates_to_runtime_dir(self) -> None:
+        """resolve_pipeline_runtime_dir delegates to resolve_runtime_dir("pipelines", name)."""
+        with mock.patch.object(_rpc_mod, "resolve_runtime_dir") as mock_rrd:
+            mock_rrd.return_value = Path("/fake/pipelines/path")
+            result = resolve_pipeline_runtime_dir("deploy")
+        assert result == Path("/fake/pipelines/path")
+        assert mock_rrd.call_args == mock.call("pipelines", "deploy")
+
+    def test_clean_pipeline_runtime_dir_returns_none(self, tmp_path: Path) -> None:
+        """clean_pipeline_runtime_dir returns None (and creates the directory)."""
+        assert clean_pipeline_runtime_dir(tmp_path / "rt") is None
         assert (tmp_path / "rt").exists()
 
 
-# --- Logic tests (positive) ---
+# --- Logic tests (positive): resolve_pipeline_runtime_dir delegation ---
 
 
-class TestNormalizeProjectPathLogic:
-    def test_normalize_project_path_typical(self) -> None:
-        """Leading slash removed; every other slash → hyphen (1:1, no collapsing)."""
-        result = normalize_project_path(Path("/Users/wb/IdeaProjects/my/project"))
-        assert result == "Users-wb-IdeaProjects-my-project"
-        assert "/" not in result
+class TestResolvePipelineRuntimeDirLogic:
+    def test_delegates_with_pipeline_name_suffix(self) -> None:
+        """Delegation forwards the pipeline name as the sole suffix part."""
+        for name in ("deploy", "canary", "my-pipe"):
+            with mock.patch.object(_rpc_mod, "resolve_runtime_dir") as mock_rrd:
+                mock_rrd.return_value = Path("/fake/path")
+                resolve_pipeline_runtime_dir(name)
+            assert mock_rrd.call_args == mock.call("pipelines", name)
 
-
-class TestResolveGitBranchLogic:
-    def test_resolve_git_branch_ok(self) -> None:
-        """When git succeeds with a non-empty answer, return it stripped."""
-        completed = subprocess.CompletedProcess(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            0,
-            stdout="docker-runtime-finishing\n",
-            stderr="",
-        )
-        with mock.patch.object(subprocess, "run", return_value=completed):
-            assert resolve_git_branch() == "docker-runtime-finishing"
-
-
-class TestResolveAfmRuntimeDirLogic:
-    def test_resolve_afm_runtime_dir_composition(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """runtime_dir = ~/.goga/runtime/pipelines/<normalized>/<branch>/<name>."""
-        monkeypatch.setattr(Path, "cwd", lambda: Path("/Users/wb/myproj"))
-        monkeypatch.setattr(Path, "home", lambda: Path("/Users/wb"))
-        monkeypatch.setattr(_rpc_mod, "resolve_git_branch", lambda: "feature-x")
-
-        result = resolve_afm_runtime_dir("deploy")
-
-        assert result == Path(
-            "/Users/wb/.goga/runtime/pipelines/Users-wb-myproj/feature-x/deploy"
-        )
-        # Pure: does not create the directory.
+    def test_does_not_create_the_directory(self, tmp_path: Path, monkeypatch) -> None:
+        """The facade is pure — it does not mkdir the resolved directory."""
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path / "proj")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "main")
+        result = resolve_pipeline_runtime_dir("deploy")
+        assert isinstance(result, Path)
         assert not result.exists()
 
 
-class TestCleanAfmRuntimeDirLogic:
-    def test_clean_afm_runtime_dir_idempotent(self, tmp_path: Path) -> None:
+# --- Logic tests (positive): clean_pipeline_runtime_dir ---
+
+
+class TestCleanPipelineRuntimeDirLogic:
+    def test_wipes_and_recreates(self, tmp_path: Path) -> None:
+        """A populated directory is emptied without raising."""
+        runtime_dir = tmp_path / "rt"
+        nested = runtime_dir / "deep" / "nested"
+        nested.mkdir(parents=True)
+        (nested / "state.txt").write_text("stale")
+
+        clean_pipeline_runtime_dir(runtime_dir)
+
+        assert runtime_dir.exists()
+        assert not any(runtime_dir.iterdir())
+
+    def test_clean_idempotent(self, tmp_path: Path) -> None:
         """Wiping a populated dir twice leaves it empty without raising."""
         runtime_dir = tmp_path / "rt"
         nested = runtime_dir / "deep" / "nested"
         nested.mkdir(parents=True)
         (nested / "state.txt").write_text("stale")
 
-        clean_afm_runtime_dir(runtime_dir)
-        clean_afm_runtime_dir(runtime_dir)  # second call must not raise
+        clean_pipeline_runtime_dir(runtime_dir)
+        clean_pipeline_runtime_dir(runtime_dir)  # second call must not raise
 
         assert runtime_dir.exists()
         assert not any(runtime_dir.iterdir())
 
+    def test_creates_when_absent(self, tmp_path: Path) -> None:
+        """A missing directory is created by the mkdir in the algorithm."""
+        runtime_dir = tmp_path / "rt"
+        assert not runtime_dir.exists()
 
-# --- Logic tests (negative) ---
+        clean_pipeline_runtime_dir(runtime_dir)
 
-
-class TestResolveGitBranchNegative:
-    def test_resolve_git_branch_git_missing(self) -> None:
-        """FileNotFoundError (git not on PATH) maps to the 'default' fallback."""
-        with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError):
-            assert resolve_git_branch() == "default"
-
-    def test_resolve_git_branch_permission_error_falls_back(self) -> None:
-        """PermissionError maps to the 'default' fallback."""
-        with mock.patch.object(subprocess, "run", side_effect=PermissionError):
-            assert resolve_git_branch() == "default"
-
-
-# --- Logic tests (edge) ---
-
-
-class TestNormalizeProjectPathEdge:
-    def test_normalize_project_path_root_only(self) -> None:
-        """A bare root path normalizes to the empty string."""
-        assert normalize_project_path(Path("/")) == ""
-
-    def test_normalize_project_path_posix_only_no_backslash_handling(self) -> None:
-        """Backslashes are not touched — only forward slashes become hyphens."""
-        # Posix-only: a backslash is a literal path character and is left as-is.
-        result = normalize_project_path(Path("/Users/wb/my\\proj"))
-        assert result == "Users-wb-my\\proj"
-        assert "\\" in result
-        assert "/" not in result
-
-
-class TestResolveGitBranchEdge:
-    def test_resolve_git_branch_detached_head(self) -> None:
-        """A detached HEAD (git prints 'HEAD') is returned as-is, non-empty."""
-        completed = subprocess.CompletedProcess(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            0,
-            stdout="HEAD\n",
-            stderr="",
-        )
-        with mock.patch.object(subprocess, "run", return_value=completed):
-            assert resolve_git_branch() == "HEAD"
+        assert runtime_dir.exists()
+        assert not any(runtime_dir.iterdir())

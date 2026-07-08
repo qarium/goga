@@ -56,7 +56,7 @@ class TestPipelineCredentialMountIntegration:
         proj.mkdir(parents=True, exist_ok=True)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
         monkeypatch.setattr(Path, "cwd", lambda: proj)
-        monkeypatch.setattr(_rpc_mod, "resolve_git_branch", lambda: "feature-x")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "feature-x")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})

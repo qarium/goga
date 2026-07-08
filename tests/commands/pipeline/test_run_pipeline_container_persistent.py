@@ -31,7 +31,7 @@ from unittest import mock
 import click
 import pytest
 from goga.commands.pipeline.run_pipeline_container import (
-    resolve_afm_runtime_dir,
+    resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
@@ -58,7 +58,7 @@ def _make_config(
 
 
 def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
-    """Redirect home/cwd/git-branch so resolve_afm_runtime_dir is deterministic.
+    """Redirect home/cwd/git-branch so resolve_pipeline_runtime_dir is deterministic.
 
     Returns the home tmp dir; the project lives at ``<home>/proj``.
     """
@@ -67,7 +67,7 @@ def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
     proj.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.setattr(Path, "cwd", lambda: proj)
-    monkeypatch.setattr(_rpc_mod, "resolve_git_branch", lambda: branch)
+    monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: branch)
     # Credential-mount resolution reads $HOME via expanduser(), not Path.home(),
     # so monkeypatching Path.home does not isolate it from the host's real
     # credential files. Patch it at the module level for deterministic isolation
@@ -148,7 +148,7 @@ class TestPersistentDir:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        runtime_dir = resolve_afm_runtime_dir("deploy")
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
         assert not runtime_dir.exists()
 
         mock_proc = mock.Mock()
@@ -175,7 +175,7 @@ class TestPersistentDir:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        runtime_dir = resolve_afm_runtime_dir("deploy")
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
 
         mock_proc = mock.Mock()
         mock_proc.wait.side_effect = SystemExit(130)
@@ -245,7 +245,7 @@ class TestPersistentEdge:
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
-        runtime_dir = resolve_afm_runtime_dir("deploy")
+        runtime_dir = resolve_pipeline_runtime_dir("deploy")
         runtime_dir.mkdir(parents=True, exist_ok=True)
         stale = runtime_dir / "stale-run-state.json"
         stale.write_text("{}")

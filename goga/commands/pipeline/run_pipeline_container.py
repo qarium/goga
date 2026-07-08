@@ -26,6 +26,7 @@ import click
 
 from ...agents import resolve_credential_mounts, resolve_wrapper_path
 from ...config import Config
+from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
 
@@ -323,60 +324,14 @@ def _on_signal(signum: int, _frame: object) -> None:
     raise SystemExit(128 + signum)
 
 
-def normalize_project_path(project_path: Path) -> str:
-    """Normalize an absolute project path into a filesystem-safe path segment.
-
-    Removes the leading slash and replaces every remaining slash with a hyphen
-    (a literal 1:1 replacement — no collapsing or trimming). Example:
-    ``"/Users/wb/IdeaProjects/my/project"`` →
-    ``"Users-wb-IdeaProjects-my-project"``.
-
-    Args:
-        project_path: Absolute project path (e.g. ``Path.cwd().resolve()``).
-
-    Returns:
-        A slash-free, hyphen-separated path segment. Pure string transform —
-        no filesystem access, no side effects.
-    """
-    s = str(project_path)
-    s = s.lstrip("/")
-    s = s.replace("/", "-")
-    return s
-
-
-def resolve_git_branch() -> str:
-    """Resolve the current git branch name, falling back to ``"default"``.
-
-    Asks git for the abbreviated branch name of HEAD. Returns ``"default"`` when
-    git is unavailable, the current directory is not a git repository, or git
-    reports a failed/empty result. Never raises.
-
-    Returns:
-        The current git branch name, or the literal ``"default"`` fallback.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except (FileNotFoundError, PermissionError, OSError):
-        return "default"
-
-    if result.returncode == 0 and result.stdout.strip() != "":
-        return result.stdout.strip()
-    return "default"
-
-
-def resolve_afm_runtime_dir(pipeline_name: str) -> Path:
+def resolve_pipeline_runtime_dir(pipeline_name: str) -> Path:
     """Compute the persistent afm state host directory for a pipeline.
 
-    The directory is keyed by the current project path, the current git branch,
-    and ``pipeline_name`` so that afm state survives across runs of the same
-    pipeline in the same project on the same branch. Pure with respect to the
-    filesystem — the directory is NOT created here (creation is the caller's
-    responsibility).
+    Thin facade over :func:`resolve_runtime_dir`: delegates the path composition
+    (current project path, current git branch, and ``pipeline_name``) so that
+    afm state survives across runs of the same pipeline in the same project on
+    the same branch. Pure with respect to the filesystem — the directory is NOT
+    created here (creation is the caller's responsibility).
 
     Args:
         pipeline_name: Pipeline name without extension (the run-mode name arg).
@@ -385,21 +340,10 @@ def resolve_afm_runtime_dir(pipeline_name: str) -> Path:
         Absolute host path
         ``~/.goga/runtime/pipelines/<normalized>/<branch>/<pipeline_name>``.
     """
-    project_path = Path.cwd().resolve()
-    normalized = normalize_project_path(project_path)
-    branch = resolve_git_branch()
-    return (
-        Path.home()
-        / ".goga"
-        / "runtime"
-        / "pipelines"
-        / normalized
-        / branch
-        / pipeline_name
-    )
+    return resolve_runtime_dir("pipelines", pipeline_name)
 
 
-def clean_afm_runtime_dir(afm_runtime_dir: Path) -> None:
+def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
     """Recursively wipe and recreate the persistent afm state directory.
 
     Called before container launch when ``--clean`` is set. Idempotent: when the
@@ -410,11 +354,12 @@ def clean_afm_runtime_dir(afm_runtime_dir: Path) -> None:
     same project/branch/name — does not raise.
 
     Args:
-        afm_runtime_dir: Host path computed by :func:`resolve_afm_runtime_dir`.
+        pipeline_runtime_dir: Host path computed by
+            :func:`resolve_pipeline_runtime_dir`.
     """
-    if afm_runtime_dir.exists():
-        shutil.rmtree(afm_runtime_dir, ignore_errors=True)
-    afm_runtime_dir.mkdir(parents=True, exist_ok=True)
+    if pipeline_runtime_dir.exists():
+        shutil.rmtree(pipeline_runtime_dir, ignore_errors=True)
+    pipeline_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _run_discovery(
@@ -498,10 +443,10 @@ def _run_named(  # noqa: PLR0913
     # BEFORE installing signal handlers or creating temp files: it must be on
     # disk and survive every exit path (including the signal-exit path), and the
     # optional --clean wipe happens here — strictly before launch, never after.
-    runtime_dir = resolve_afm_runtime_dir(name)
+    runtime_dir = resolve_pipeline_runtime_dir(name)
     runtime_dir.mkdir(parents=True, exist_ok=True)
     if clean:
-        clean_afm_runtime_dir(runtime_dir)
+        clean_pipeline_runtime_dir(runtime_dir)
 
     # Install the SIGTERM/SIGINT handlers before creating temp files so any
     # exception (or signal) raised during setup propagates through the finally
@@ -608,7 +553,7 @@ def run_pipeline_container(  # noqa: PLR0913
             ``config.pipeline.hosts`` by the caller). Each entry becomes a
             docker ``--add-host HOST:IP`` flag. Effective in both modes.
         clean: When True in run mode, wipe the persistent afm state host
-            directory before launch via ``clean_afm_runtime_dir``. No-op in
+            directory before launch via ``clean_pipeline_runtime_dir``. No-op in
             discovery mode.
         update: When True, pull the image before launch (failure is a warning,
             not fatal). When False (default), skip the pull. Effective in both

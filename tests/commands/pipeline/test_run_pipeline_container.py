@@ -455,7 +455,7 @@ class TestPipelinePullImage:
         # git); isolate it from the broadly-mocked subprocess.run below, and
         # redirect HOME so both the runtime dir and credential detection stay
         # under tmp_path.
-        monkeypatch.setattr(_rpc_mod, "resolve_git_branch", lambda: "default")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "default")
         monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.chdir(tmp_path)
