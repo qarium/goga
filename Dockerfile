@@ -1,3 +1,4 @@
+ARG AFM_VERSION=0.1.0
 ARG RALPHEX_VERSION=1.4
 ARG PYTHON_VERSION=3.12
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
@@ -17,7 +18,7 @@ FROM ghcr.io/umputun/ralphex:${RALPHEX_VERSION} AS ralphex-source
 ARG RALPHEX_VERSION
 RUN git clone --depth 1 --branch v${RALPHEX_VERSION}.0 https://github.com/umputun/ralphex.git /ralphex
 
-FROM akopichin/afm:latest AS afm-source
+FROM akopichin/afm:v${AFM_VERSION} AS afm-source
 
 FROM python:${PYTHON_VERSION}-slim-bookworm
 
