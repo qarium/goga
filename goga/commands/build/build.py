@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shutil
 import signal
 import stat
 import subprocess
@@ -13,6 +14,7 @@ import yaml
 
 from ...agents import resolve_credential_mounts
 from ...config import load_config
+from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +155,7 @@ def _build_docker_cmd(  # noqa: PLR0913
     cli_flags: dict[str, bool | str | int | None],
     container_name: str,
     merged_hosts: dict[str, str] | None = None,
+    runtime_dir: Path | None = None,
 ) -> list[str]:
     """Assemble the docker run command that launches goga.build inside a container.
 
@@ -165,6 +168,10 @@ def _build_docker_cmd(  # noqa: PLR0913
         merged_hosts: Resolved host→IP mapping (config.build.hosts merged with
             parsed ``--add-host`` CLI entries). Each pair becomes a
             ``--add-host HOST:IP`` flag. ``None`` adds no host entries.
+        runtime_dir: Host ralphex runtime directory bind-mounted read-write at
+            ``/workspace/.ralphex`` — a nested mount layered on top of the
+            ``/workspace`` project mount. ``None`` omits the nested mount; the
+            ``build`` command always supplies it.
 
     Returns:
         The full docker command as a list of string arguments.
@@ -188,6 +195,12 @@ def _build_docker_cmd(  # noqa: PLR0913
         "/workspace",
     ]
 
+    # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/ which
+    # this mount resolves into the host runtime directory — so ralphex bytes
+    # never land in the user's project directory. Read-write (ralphex writes).
+    if runtime_dir is not None:
+        cmd.extend(["-v", f"{runtime_dir}:/workspace/.ralphex"])
+
     for host, ip in merged_hosts.items():
         cmd.extend(["--add-host", f"{host}:{ip}"])
 
@@ -202,6 +215,38 @@ def _build_docker_cmd(  # noqa: PLR0913
     cmd.extend(_cli_flags_to_args(cli_flags))
 
     return cmd
+
+
+def resolve_build_runtime_dir() -> Path:
+    """Compute the host-side ralphex runtime directory for this build.
+
+    Thin facade over :func:`resolve_runtime_dir`: returns the absolute host path
+    ``~/.goga/runtime/builds/<normalized_project>/<branch>/`` that the build
+    command bind-mounts into the container at ``/workspace/.ralphex`` so ralphex
+    state never touches the user's project directory. Build has no further
+    namespace under ``<branch>/``, so no suffix parts are passed.
+
+    Returns:
+        The absolute host runtime directory path. Pure with respect to the
+        filesystem — the directory is NOT created here (creation is the
+        caller's responsibility in ``build`` Algorithm step 11).
+    """
+    return resolve_runtime_dir("builds")
+
+
+def clean_build_runtime_dir(host_dir: Path) -> None:
+    """Recursively wipe the ralphex runtime directory and recreate it empty.
+
+    Called before container launch when ``--clean`` is set, so ralphex starts
+    from a fresh runtime state. Idempotent: repeated calls on an already-clean
+    directory do not raise.
+
+    Args:
+        host_dir: Host path computed by :func:`resolve_build_runtime_dir`.
+    """
+    if host_dir.exists():
+        shutil.rmtree(host_dir, ignore_errors=True)
+    host_dir.mkdir(parents=True, exist_ok=True)
 
 
 @click.command()
@@ -222,6 +267,13 @@ def _build_docker_cmd(  # noqa: PLR0913
     "add_host",
     multiple=True,
     help="Add a docker run --add-host HOST:IP entry; merges on top of config.build.hosts",
+)
+@click.option(
+    "--clean",
+    "clean",
+    is_flag=True,
+    default=False,
+    help="Wipe the persistent ralphex runtime host directory before launch",
 )
 @click.option(
     "--update",
@@ -248,6 +300,7 @@ def build(  # noqa: PLR0913
     proxy: str | None,
     add_host: tuple[str, ...],
     update: bool,
+    clean: bool,
 ) -> None:
     """Build code via ralphex by launching goga.build inside a Docker container.
 
@@ -272,6 +325,10 @@ def build(  # noqa: PLR0913
             conflict. Each entry becomes a docker run ``--add-host`` flag.
         update: When True, pull the image before launch. When False (default),
             skip the pull and use the locally available image.
+        clean: When True, wipe and recreate the persistent ralphex runtime host
+            directory via ``clean_build_runtime_dir`` before ``docker run``.
+            When False (default), keep the existing directory as-is so ralphex
+            progress files survive across runs of the same project+branch.
 
     Raises:
         click.ClickException: When docker is missing, configuration cannot be
@@ -328,6 +385,16 @@ def build(  # noqa: PLR0913
 
     env_file = _write_env_file(env, extra_env)
 
+    # Resolve the host ralphex runtime directory and ensure it exists before
+    # docker run — Docker may refuse to bind-mount a non-existent host path.
+    # When --clean is set, wipe and recreate it so ralphex starts from a fresh
+    # state; the default preserves progress files across runs of the same
+    # project+branch.
+    runtime_dir = resolve_build_runtime_dir()
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    if clean:
+        clean_build_runtime_dir(runtime_dir)
+
     container_name = f"goga-build-{os.getpid()}"
 
     def _on_sigterm(signum: int, _frame: object) -> None:
@@ -343,6 +410,7 @@ def build(  # noqa: PLR0913
             cli_flags=cli_flags,
             container_name=container_name,
             merged_hosts=merged_hosts,
+            runtime_dir=runtime_dir,
         )
 
         if dry_run:

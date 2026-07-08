@@ -76,9 +76,9 @@ class TestApiShape:
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
-    def test_build_has_thirteen_options(self) -> None:
+    def test_build_has_fourteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 13
+        assert len(options) == 14
 
     def test_build_has_dry_run_option(self) -> None:
         param_names = [p.name for p in build_cmd.params]
@@ -795,6 +795,11 @@ class TestImagePullInBuild:
             # `docker pull` fails; other docker calls (kill cleanup) succeed.
             if cmd[:2] == ["docker", "pull"]:
                 return mock.Mock(returncode=1)
+            # resolve_build_runtime_dir shells out to `git branch --show-current`
+            # (via resolve_git_branch); answer with empty stdout so it falls
+            # back to the "default" branch rather than a Mock object.
+            if cmd[:2] == ["git", "branch"]:
+                return mock.Mock(returncode=128, stdout="", stderr="")
             return mock.Mock(returncode=0)
 
         with (
