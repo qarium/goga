@@ -60,13 +60,6 @@ def _find_uncommitted_manifests() -> list[str]:
     return uncommitted
 
 
-def _cleanup_ralphex_dir() -> None:
-    ralphex_dir = Path(".ralphex")
-    if ralphex_dir.is_dir():
-        shutil.rmtree(ralphex_dir)
-        logger.info("removed .ralphex directory")
-
-
 def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
     """Write the .ralphex/config INI for ralphex with the resolved wrapper path.
 
@@ -173,8 +166,6 @@ def build(plan: str, config: Config, cli_options: dict) -> int:
         if uncommitted:
             logger.error("uncommitted codemanifest files found", extra={"paths": uncommitted})
             return 1
-
-    _cleanup_ralphex_dir()
 
     wrapper_path = resolve_wrapper_path(config.build.task_executor.agent)
 

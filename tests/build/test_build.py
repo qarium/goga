@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from unittest import mock
 
@@ -474,6 +475,101 @@ class TestBuildRepeatedBuild:
 
         _run_build_in_tmp(tmp_path, monkeypatch, cli_options=cli_options)
         assert modified_file.read_text() != "USER MODIFICATION"
+
+
+# --- Ralphex lifecycle reuse tests ---
+#
+# The in-container build() must NOT wipe .ralphex/. The directory now arrives as
+# a prepared bind-mount owned by the host launcher (goga/commands/build); build()
+# reuses whatever state the mounted .ralphex/ provides. The host wipes it only
+# when `goga build --clean` is passed before launch.
+
+
+class TestRalphexLifecycleReuse:
+    """build() reuses the mounted .ralphex/ instead of wiping it."""
+
+    def test_build_reuses_existing_ralphex_dir(self, tmp_path, monkeypatch) -> None:
+        """A pre-existing .ralphex/config is overwritten with the new claude_command,
+        but unrelated state under .ralphex/prompts/ is preserved (not wiped)."""
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        prompts_dir = ralphex_dir / "prompts"
+        prompts_dir.mkdir(parents=True)
+        (ralphex_dir / "config").write_text("claude_command = OLD_PATH\n")
+        (prompts_dir / "custom.txt").write_text("user prompt")
+
+        result = _run_build_in_tmp(
+            tmp_path,
+            monkeypatch,
+            cli_options={"dry_run": True, "skip_manifest_check": True},
+        )
+        assert result == 0
+
+        config_text = (ralphex_dir / "config").read_text()
+        assert "claude_command = /home/goga/bin/claude-as-claude.sh" in config_text
+        assert "OLD_PATH" not in config_text
+        # The cleanup step that previously wiped .ralphex/ is gone, so the user's
+        # custom prompt survives alongside the copied defaults.
+        assert (prompts_dir / "custom.txt").read_text() == "user prompt"
+
+    def test_build_does_not_wipe_ralphex_on_manifest_check_failure(self, tmp_path, monkeypatch) -> None:
+        """When the manifest check fails (not a git repo), build returns 1 without
+        touching the pre-existing .ralphex/ directory."""
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "keep.txt").write_text("survivor")
+
+        # tmp_path is not a git repo, so the manifest check fails before any
+        # .ralphex/ interaction occurs.
+        result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={})
+        assert result == 1
+        assert (ralphex_dir / "keep.txt").read_text() == "survivor"
+
+    @mock.patch.object(subprocess, "call", return_value=0)
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    def test_build_writes_ralphex_config_when_dir_exists(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+        """Full execution writes .ralphex/config with the resolved wrapper path even
+        when .ralphex/ already exists (_write_ralphex_config uses idempotent mkdir)."""
+        monkeypatch.chdir(tmp_path)
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+        (ralphex_dir / "config").write_text("claude_command = STALE\n")
+
+        result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
+        assert result == 0
+
+        config_text = (ralphex_dir / "config").read_text()
+        assert "claude_command = /home/goga/bin/claude-as-claude.sh" in config_text
+        assert "STALE" not in config_text
+
+
+class TestRalphexCleanupRemovedContract:
+    """Contract: build() no longer owns the .ralphex/ lifecycle, so the cleanup
+    helper must be gone and ralphex paths must never be wiped during build()."""
+
+    def test_cleanup_ralphex_dir_not_defined_in_module(self) -> None:
+        # Use sys.modules because goga/build/__init__.py shadows the `build`
+        # attribute with the function of the same name.
+        build_module = sys.modules["goga.build.build"]
+        assert not hasattr(build_module, "_cleanup_ralphex_dir")
+
+    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
+    @mock.patch.object(subprocess, "call", return_value=0)
+    def test_build_never_calls_rmtree_on_ralphex_path(self, mock_call, mock_which, tmp_path, monkeypatch) -> None:
+        """During a full build execution, shutil.rmtree is never called with a
+        .ralphex path — even when .ralphex/ already exists (which would have
+        triggered the old cleanup's rmtree)."""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".ralphex").mkdir()
+        (tmp_path / ".ralphex" / "keep.txt").write_text("survivor")
+        with mock.patch("shutil.rmtree") as mock_rmtree:
+            _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
+
+        ralphex_wipe_calls = [
+            call for call in mock_rmtree.call_args_list if call.args and ".ralphex" in str(call.args[0])
+        ]
+        assert ralphex_wipe_calls == []
 
 
 def _init_git_repo(path: Path) -> None:
