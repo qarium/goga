@@ -19,7 +19,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-review-task
-    depends_on: [propose]
+    depends_on:
+      - propose
 
   - id: brainstorm
     name: "Architecture Brainstorm"
@@ -30,7 +31,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-brainstorm
-    depends_on: [propose, propose-review]
+    depends_on:
+      - propose-review
 
   - id: brainstorm-review
     name: "Architecture Review"
@@ -40,7 +42,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-review-arch
-    depends_on: [propose, propose-review, brainstorm]
+    depends_on:
+      - brainstorm
 
   - id: apply
     name: "Apply Architecture"
@@ -49,7 +52,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-apply
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review]
+    depends_on:
+      - brainstorm-review
 
   - id: design
     name: "Design Architecture To Code"
@@ -59,7 +63,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-design
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply]
+    depends_on:
+      - apply
 
   - id: design-review
     name: "Design Review"
@@ -69,7 +74,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-review-design
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design]
+    depends_on:
+      - design
 
   - id: plan
     name: "Plan"
@@ -80,7 +86,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-plan
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review]
+    depends_on:
+      - design-review
 
   - id: plan-review
     name: "Plan Review"
@@ -90,7 +97,8 @@ stages:
     agents: [planning, implementation]
     skills:
       - goga-review-plan
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan]
+    depends_on:
+      - plan
 
   - id: fix-changes
     name: "Fix changes"
@@ -107,7 +115,8 @@ stages:
         - Don't autoconfirm user answer.
         - Except changes in `docs/<tasks|arch|design|plans>`.
     agents: [planning, implementation]
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan, plan-review]
+    depends_on:
+      - plan-review
 
   - id: accept
     name: "Accept Result"
@@ -115,4 +124,5 @@ stages:
     skills:
       - goga-accept
     agents: [planning, implementation]
-    depends_on: [propose, propose-review, brainstorm, brainstorm-review, apply, design, design-review, plan, plan-review, fix-changes]
+    depends_on:
+      - fix-changes
