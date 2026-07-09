@@ -10,6 +10,11 @@ Imports:
     Usages:
       - resolve-wrapper-path
     From: goga/agents
+  - Types:
+      - ensure_in_docker
+    Usages:
+      - ensure-in-docker
+    From: goga/docker
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -104,11 +109,22 @@ Annotations: |
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Algorithm:
+    0. Call `ensure_in_docker` as the very first statement — refuse to proceed
+       when the process is not running inside the goga Docker image (per the
+       `ensure-in-docker` practice)
     1. Parse CLI arguments via argparse (plan + options)
     2. Load project configuration via `load_config`
     3. Build cli_options from the parsed argparse results
     4. Invoke `build`(plan, `Config`, cli_options)
     5. Return the resulting `exit_code`
+
+    Requirements:
+    - The guard at step 0 MUST be covered by tests for both branches:
+      success path with GOGA_DOCKER=1 proceeds to argparse; refusal path
+      without the marker writes to stderr and exits with code 1 before any
+      filesystem or process work
+
+    Apply the `ensure-in-docker` practice at step 0.
 
 ---
 

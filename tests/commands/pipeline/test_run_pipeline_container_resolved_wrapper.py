@@ -109,8 +109,26 @@ class TestWriteAfmConfigTmpfile:
         """Content is the resolved wrapper path; the temp file is private (0600)."""
         path = _write_afm_config_tmpfile("/home/goga/bin/codex-as-claude.sh")
         try:
-            assert path.read_text() == "client.command: /home/goga/bin/codex-as-claude.sh\n"
+            assert path.read_text() == (
+                "client.command: /home/goga/bin/codex-as-claude.sh\n"
+                "theme: goga\n"
+                "open_browser: false\n"
+                "proxy:\n"
+                "  enabled: false\n"
+            )
             assert (path.stat().st_mode & 0o777) == 0o600
+        finally:
+            path.unlink(missing_ok=True)
+
+    def test_includes_static_launcher_side_constants(self) -> None:
+        """The tmpfile carries `theme`, `open_browser`, and `proxy.enabled` as static launcher-side constants."""
+        path = _write_afm_config_tmpfile("/home/goga/bin/codex-as-claude.sh")
+        try:
+            lines = path.read_text().splitlines()
+            assert "theme: goga" in lines
+            assert "open_browser: false" in lines
+            assert "proxy:" in lines
+            assert "  enabled: false" in lines
         finally:
             path.unlink(missing_ok=True)
 
@@ -137,7 +155,13 @@ class TestResolvedWrapperAfmConfig:
             result = rpc("deploy", config, ())
 
         assert result == 0
-        assert captured["afm_content"] == "client.command: /home/goga/bin/codex-as-claude.sh\n"
+        assert captured["afm_content"] == (
+            "client.command: /home/goga/bin/codex-as-claude.sh\n"
+            "theme: goga\n"
+            "open_browser: false\n"
+            "proxy:\n"
+            "  enabled: false\n"
+        )
         # the resolved wrapper path tmpfile is bind-mounted read-only, and the
         # mount arg + "-v" flag are present in the assembled docker command.
         cmd = captured["popen_cmds"][0]
@@ -167,7 +191,13 @@ class TestResolvedWrapperAfmConfig:
         ):
             rpc("deploy", config, ())
 
-        assert captured["afm_content"] == f"client.command: /home/goga/bin/{agent}-as-claude.sh\n"
+        assert captured["afm_content"] == (
+            f"client.command: /home/goga/bin/{agent}-as-claude.sh\n"
+            "theme: goga\n"
+            "open_browser: false\n"
+            "proxy:\n"
+            "  enabled: false\n"
+        )
 
 
 # --- Failure modes (click surface) ---

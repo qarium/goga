@@ -4,6 +4,11 @@ Imports:
     Usages:
       - run-flow
     From: goga/afm
+  - Types:
+      - ensure_in_docker
+    Usages:
+      - ensure-in-docker
+    From: goga/docker
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -18,7 +23,19 @@ Usages:
     `pipeline_cli` implementation itself MUST live in the cli module —
     never in the __main__ module — so that importing the goga.pipeline
     package does not pull __main__ into sys.modules and trigger a runpy
-    RuntimeWarning about __main__ being pre-imported.
+    RuntimeWarning about __main__ being pre-imported. The single piece of
+    logic permitted in __main__.py besides the runpy delegation is the
+    in-container docker guard (`ensure_in_docker`, per the
+    `ensure-in-docker` practice): it is invoked as the very first
+    statement of the __main__ guard block, before `pipeline_cli` is called,
+    so host-side invocations of python -m goga.pipeline fail loudly before
+    any pipeline work. The guard does NOT move into `pipeline_cli` itself
+    — `pipeline_cli` stays a pure parse-and-dispatch routine whose
+    contract is unchanged by the guard. The guard invocation MUST be
+    covered by tests for both branches: the success path (GOGA_DOCKER=1)
+    proceeds to `pipeline_cli`, and the refusal path (marker unset or not
+    "1") writes to stderr and exits with code 1 before `pipeline_cli` is
+    reached.
 
 Annotations: |
   The `conventions` practice is used for:

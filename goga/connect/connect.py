@@ -18,9 +18,10 @@ AGENT_DIRS: dict[str, str] = {
     "claude": ".claude",
     "codex": ".codex",
     "cursor": ".cursor",
+    "opencode": ".config/opencode",
 }
 
-AGENTS_WITH_COMMANDS: frozenset[str] = frozenset({"claude"})
+AGENTS_WITH_COMMANDS: frozenset[str] = frozenset({"claude", "opencode"})
 
 DSL_SPEC_URL = "https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md"
 

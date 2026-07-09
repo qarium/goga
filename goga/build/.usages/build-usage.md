@@ -97,10 +97,18 @@ the same branch by default, which is useful for resuming interrupted builds.
 ## Docker entry point
 
 The module supports invocation via `python -m goga.build` for use inside Docker
-containers through the `goga build` CLI command. In this mode, argparse handles
-CLI option parsing and calls `build()` directly.
+containers through the `goga build` CLI command. In this mode, `main()` first
+calls `ensure_in_docker()` as its very first statement to verify the process
+is running inside the goga Docker image — host-side invocations fail with a
+clear stderr message and exit code 1 before any work begins. After the guard
+passes, argparse handles CLI option parsing and calls `build()` directly.
 
 ```bash
+# Inside the goga Docker image (GOGA_DOCKER=1 is set):
 python -m goga.build plan.md --worktree --skip-manifest-check
+
+# From the host (fails — use `goga build` instead):
+python -m goga.build plan.md
+# → stderr message, exit code 1
 ```
 

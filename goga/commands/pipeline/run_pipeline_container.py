@@ -146,11 +146,24 @@ def _allocate_port() -> int:
 
 
 def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
-    """Write the afm ``client.command`` config to a private temp file (mode 0600).
+    """Write the afm config overlay to a private temp file (mode 0600).
 
     The file is created in the system temp directory — NEVER under ``/workspace``
     (per ``[[feedback_workspace_is_project_only]]``). It is mounted read-only at
     ``/home/goga/.afm/config.yaml`` inside the container.
+
+    The overlay carries four static launcher-side fields:
+
+    - ``client.command: <wrapper_path>`` — the resolved absolute in-container
+      wrapper path afm will drive as the agent client.
+    - ``theme: goga`` — the dashboard theme applied by afm.
+    - ``open_browser: false`` — the dashboard is reached via the
+      host-printed ``http://localhost:<port>`` URL; afm must not attempt to
+      open a browser inside the container.
+    - ``proxy.enabled: false`` — disables afm's own internal outbound proxy
+      provider. goga manages the outbound proxy through the container
+      env-file (``HTTP_PROXY``/``HTTPS_PROXY``/``NO_PROXY``); afm's
+      config-level proxy must stay off so the two layers never collide.
 
     Args:
         wrapper_path: The resolved absolute in-container wrapper script path
@@ -165,6 +178,10 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
         f.write(f"client.command: {wrapper_path}\n")
+        f.write("theme: goga\n")
+        f.write("open_browser: false\n")
+        f.write("proxy:\n")
+        f.write("  enabled: false\n")
     return Path(path)
 
 

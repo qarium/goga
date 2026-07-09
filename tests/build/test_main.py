@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from unittest import mock
 
+import pytest
 import yaml
 from goga.build.__main__ import main
 
@@ -23,7 +25,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
             assert main() == 0
 
     @mock.patch("goga.build.__main__.load_config")
@@ -32,7 +37,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
             assert main() == 1
 
     @mock.patch("goga.build.__main__.load_config")
@@ -41,7 +49,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree", "--skip-manifest-check"]),
+        ):
             main()
 
         call_args = mock_build.call_args
@@ -56,7 +67,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--dry-run", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--dry-run", "--skip-manifest-check"]),
+        ):
             main()
 
         cli_options = mock_build.call_args[0][2]
@@ -68,7 +82,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--session-timeout", "30m", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--session-timeout", "30m", "--skip-manifest-check"]),
+        ):
             main()
 
         cli_options = mock_build.call_args[0][2]
@@ -80,7 +97,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--max-iterations", "10", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--max-iterations", "10", "--skip-manifest-check"]),
+        ):
             main()
 
         cli_options = mock_build.call_args[0][2]
@@ -92,7 +112,10 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--review-patience", "5", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--review-patience", "5", "--skip-manifest-check"]),
+        ):
             main()
 
         cli_options = mock_build.call_args[0][2]
@@ -104,8 +127,75 @@ class TestMainEntry:
         monkeypatch.chdir(tmp_path)
         _write_goga_yml(tmp_path)
 
-        with mock.patch("sys.argv", ["goga.build", "plan.md", "--idle-timeout", "1h", "--skip-manifest-check"]):
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--idle-timeout", "1h", "--skip-manifest-check"]),
+        ):
             main()
 
         cli_options = mock_build.call_args[0][2]
         assert cli_options["idle_timeout"] == "1h"
+
+    def test_build_main_proceeds_after_guard_in_container(self, monkeypatch) -> None:
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=42) as mock_build,
+            mock.patch("goga.build.__main__.load_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree"]),
+        ):
+            assert main() == 42
+
+        call_args = mock_build.call_args
+        assert call_args[0][0] == "plan.md"
+        cli_options = call_args[0][2]
+        assert cli_options["worktree"] is True
+
+    def test_build_main_refuses_on_host(self, monkeypatch, capsys) -> None:
+        monkeypatch.delenv("GOGA_DOCKER", raising=False)
+
+        def _fail_if_called(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("build must not be called on the host")
+
+        def _fail_config(*_args: object, **_kwargs: object) -> None:
+            raise AssertionError("load_config must not be called on the host")
+
+        with (
+            mock.patch("goga.build.__main__.build", side_effect=_fail_if_called) as mock_build,
+            mock.patch("goga.build.__main__.load_config", side_effect=_fail_config) as mock_config,
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 1
+        assert mock_build.call_count == 0
+        assert mock_config.call_count == 0
+        assert "goga Docker image" in capsys.readouterr().err
+
+
+class TestContract:
+    """Contract-surface lock: the in-container guard is wired as step 0 of main()."""
+
+    def test_main_calls_ensure_in_docker_first(self, monkeypatch) -> None:
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        call_order: list[str] = []
+
+        def _record_ensure(*_args: object, **_kwargs: object) -> None:
+            call_order.append("ensure_in_docker")
+
+        def _record_build(*_args: object, **_kwargs: object) -> int:
+            call_order.append("build")
+            return 0
+
+        with (
+            mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure) as mock_ensure,
+            mock.patch("goga.build.__main__.build", side_effect=_record_build),
+            mock.patch("goga.build.__main__.load_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        assert mock_ensure.call_count == 1
+        assert call_order == ["ensure_in_docker", "build"]

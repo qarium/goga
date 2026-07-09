@@ -226,13 +226,18 @@ class TestPipelineRunCommand:
 
 class TestAfmConfigTmpfile:
     def test_pipeline_run_writes_afm_config_tmpfile_with_client_command(self) -> None:
-        """The afm-config tmpfile carries `client.command: <resolved wrapper path>` and mode 0600.
+        """The afm-config tmpfile carries the resolved wrapper path and static constants.
 
-        The value MUST be the absolute wrapper path returned by
-        ``resolve_wrapper_path`` (the real call site in ``_run_named``), never a
-        bare agent name — see the CODEMANIFEST Requirement/Constraint for
-        ``run_pipeline_container``. The writer is value-agnostic, so a realistic
-        resolved path is passed here to pin the documented contract.
+        The overlay carries four static launcher-side fields: ``client.command``
+        (the absolute wrapper path returned by ``resolve_wrapper_path`` — never
+        a bare agent name), ``theme: goga`` (dashboard theme),
+        ``open_browser: false`` (the dashboard is reached via the host-printed
+        http://localhost:<port> URL; afm must not attempt to open a browser
+        inside the container), and ``proxy.enabled: false`` (afm's own internal
+        outbound proxy provider is disabled — goga manages the outbound proxy
+        via the container env-file). See the CODEMANIFEST Requirement/Constraint
+        for ``run_pipeline_container``. The writer is value-agnostic, so a
+        realistic resolved path is passed here to pin the documented contract.
         """
         wrapper_path = "/home/goga/bin/claude-as-claude.sh"
         afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
@@ -242,7 +247,13 @@ class TestAfmConfigTmpfile:
         finally:
             afm_path.unlink(missing_ok=True)
 
-        assert content == f"client.command: {wrapper_path}\n"
+        assert content == (
+            f"client.command: {wrapper_path}\n"
+            "theme: goga\n"
+            "open_browser: false\n"
+            "proxy:\n"
+            "  enabled: false\n"
+        )
         assert mode == 0o600
 
 

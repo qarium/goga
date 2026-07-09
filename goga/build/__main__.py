@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 
 from ..config import load_config
+from ..docker import ensure_in_docker
 from .build import build
 
 
@@ -14,6 +15,7 @@ def main() -> int:
     Returns:
         0 on success, 1 on failure.
     """
+    ensure_in_docker()
     parser = argparse.ArgumentParser(prog="goga.build", description="Run goga build inside Docker")
     parser.add_argument("plan", help="Path to the build plan file")
     parser.add_argument("--dry-run", action="store_true")

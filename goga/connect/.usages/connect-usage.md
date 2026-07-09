@@ -18,13 +18,19 @@ exit_code = connect(agents=["claude"])
 # Install for multiple agents
 exit_code = connect(agents=["claude", "codex"])
 
+# Install for opencode
+exit_code = connect(agents=["opencode"])
+
+# Install for all four supported agents
+exit_code = connect(agents=["claude", "codex", "cursor", "opencode"])
+
 # Install with tool skill overwrite
 exit_code = connect(agents=["claude"], force_overwrite=True)
 ```
 
 ## Parameters
 
-- `agents` — list of target AI agents (required, non-empty). Supported: "claude", "codex", "cursor"
+- `agents` — list of target AI agents (required, non-empty). Supported: "claude", "codex", "cursor", "opencode"
 - `force_overwrite` — allow overwriting existing skills from tool packages. Defaults to False.
   Persisted per-agent in `~/.goga/connect.yml`.
 
@@ -55,6 +61,7 @@ stale symlinks matching the `goga-*` pattern are purged before symlink creation)
 | claude | `~/.claude/skills/goga-*` → `~/.goga/skills/goga-*`   | `~/.claude/commands/goga` → `~/.goga/commands` |
 | codex  | `~/.codex/skills/goga-*` → `~/.goga/skills/goga-*`    | (no commands)                           |
 | cursor | `~/.cursor/skills/goga-*` → `~/.goga/skills/goga-*`   | (no commands)                           |
+| opencode | `~/.config/opencode/skills/goga-*` → `~/.goga/skills/goga-*` | `~/.config/opencode/commands/goga` → `~/.goga/commands` |
 
 ## Registry Format
 
@@ -66,6 +73,8 @@ agents:
     force_overwrite: false
   codex:
     force_overwrite: true
+  opencode:
+    force_overwrite: false
 ```
 
 Each call to `connect(agents=[...], force_overwrite=...)` updates the entries for the listed

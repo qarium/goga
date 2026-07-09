@@ -233,9 +233,15 @@ Annotations: |
        `resolve-wrapper-path` practice) using config.pipeline.agent. Do not
        validate the agent value — absence of the wrapper file is surfaced by
        afm itself.
-    6. Create a private afm-config tmpfile carrying client.command set to the
-       resolved wrapper path — a read-only overlay over the persistent afm
-       state directory mounted in step 12
+    6. Create a private afm-config tmpfile carrying four static launcher-side
+       fields: client.command set to the resolved wrapper path, theme: goga
+       (dashboard theme), open_browser: false (the dashboard is reached
+       via the host-printed http://localhost:<port> URL; afm must not attempt
+       to open a browser inside the container), and proxy.enabled: false
+       (afm's own internal outbound proxy provider is disabled; goga manages
+       the outbound proxy through the container env-file via HTTP_PROXY /
+       HTTPS_PROXY / NO_PROXY). The tmpfile is a read-only overlay over the
+       persistent afm state directory mounted in step 12
     7. Resolve the persistent afm state host directory via
        `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
     8. When `clean` is True: wipe the resolved directory via
@@ -289,9 +295,18 @@ Annotations: |
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile is owner-only (private), content "client.command:
-      <resolved wrapper path>" — the value MUST be the absolute path returned
-      by `resolve_wrapper_path`, never a bare agent name
+    - afm-config tmpfile is owner-only (private). It carries four static
+      launcher-side fields: client.command: <resolved wrapper path> (the
+      value MUST be the absolute path returned by `resolve_wrapper_path`,
+      never a bare agent name), theme: goga (dashboard theme),
+      open_browser: false (the dashboard is reached via the host-printed
+      http://localhost:<port> URL; afm must not attempt to open a browser
+      inside the container), and proxy.enabled: false (afm's own internal
+      outbound proxy provider is disabled — goga manages the outbound proxy
+      via the container env-file HTTP_PROXY/HTTPS_PROXY/NO_PROXY, the two
+      layers must never collide). theme, open_browser, and proxy.enabled are
+      static launcher-side constants — they are NOT configurable via the
+      goga Config or CLI
     - env-file content: config.pipeline.env + git identity + `extra_env`
       KEY=VALUE strings (forwarded as-is, no validation) + AFM_DIR=/home/goga/pipeline
       + (when proxy is non-None) HTTP_PROXY/HTTPS_PROXY/NO_PROXY
