@@ -32,6 +32,7 @@ are resolved via ``sys.modules`` and patched by attribute.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -334,6 +335,7 @@ class TestPythonMEntrypoint:
                 "list",
             ],
             cwd=project_root,
+            env={**os.environ, "GOGA_DOCKER": "1"},
             capture_output=True,
             text=True,
             check=False,

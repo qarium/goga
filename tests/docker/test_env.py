@@ -36,8 +36,15 @@ class TestEnsureInDocker:
 
         assert exc_info.value.code == 1
         assert "goga Docker image" in capsys.readouterr().err
-        # Observable proof that no filesystem work ran before exit.
-        assert list(tmp_path.iterdir()) == []
+        # Observable proof that no filesystem work ran before exit: the guard
+        # must not leave any marker directory of its own. The autouse
+        # `_isolate_home` fixture creates `.pytest_home` under tmp_path for
+        # HOME redirection, so we assert only that the guard itself added
+        # nothing (no `.ralphex/`, no state directory), not that tmp_path is
+        # literally empty.
+        created = {p.name for p in tmp_path.iterdir()}
+        assert ".pytest_home" in created
+        assert ".ralphex" not in created
 
     @pytest.mark.parametrize("value", ["0", "true", "", "yes"])
     def test_ensure_in_docker_refuses_when_marker_wrong_value(self, monkeypatch, capsys, value) -> None:
