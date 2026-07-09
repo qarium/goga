@@ -74,12 +74,16 @@ Returns afm's exit code (propagated through `run_pipeline` → `run_flow`).
 |-----------|----------------------------------------------------|
 | 0         | discovery succeeded / afm ran the pipeline         |
 | 2         | argparse error (missing NAME, missing/invalid --port) |
+| 1         | host-side invocation refused by `ensure_in_docker` in `__main__.py` (no GOGA_DOCKER=1) |
 | non-zero  | pipeline not found / afm failure (propagated)      |
 | 127       | `afm` not in `$PATH` inside the container          |
 
 ## Preconditions
 
 - The CLI must be invoked inside the goga Docker image — discovery and run are in-container only.
+  The package __main__ module enforces this by calling `ensure_in_docker()` as the first statement
+  of its __main__ guard block, before `pipeline_cli` is invoked: host-side invocations exit with a
+  stderr message and code 1 before any pipeline work.
 - `/workspace` must be mounted from the host project directory by the launcher.
 - The host-side launcher (`goga/commands/pipeline`) must allocate `--port` and pass it through.
 
@@ -89,3 +93,5 @@ Returns afm's exit code (propagated through `run_pipeline` → `run_flow`).
 - Do not omit `--port` in `run` mode — argparse will reject the invocation with exit code 2.
 - Do not allocate a port inside the CLI — `--port` is required and supplied by the host-side launcher.
 - Do not print extra output to stdout in `list` mode beyond the header and the entries — the host may parse the lines.
+- Do not try to bypass the `ensure_in_docker` guard in `__main__.py` by catching `SystemExit` —
+  the entrypoint is in-container-only by design.

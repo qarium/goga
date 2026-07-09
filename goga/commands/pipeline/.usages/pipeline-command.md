@@ -151,7 +151,12 @@ env-file is written, no afm state directory is involved.
 3. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
 4. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
    and writes a tmpfile containing
-   `client.command: <resolved wrapper path>` (mode 0600).
+   `client.command: <resolved wrapper path>`, `theme: goga`,
+   `open_browser: false`, and `proxy.enabled: false` (mode 0600). `theme`,
+   `open_browser`, and `proxy.enabled` are static launcher-side constants —
+   `proxy.enabled: false` disables afm's own internal outbound proxy
+   provider (goga manages the outbound proxy through the container env-file
+   `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`; the two layers must never collide).
 5. Resolves the persistent afm state host directory via
    `resolve_pipeline_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<name>/`)
    and ensures it exists (`mkdir -p`, idempotent).

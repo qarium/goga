@@ -33,6 +33,8 @@ goga connect <agent> [<agent> ...] [--force-overwrite]
 goga connect claude
 goga connect codex
 goga connect cursor
+goga connect opencode
 goga connect claude codex cursor
+goga connect claude codex cursor opencode
 goga connect claude --force-overwrite
 ```

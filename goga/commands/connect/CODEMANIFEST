@@ -24,7 +24,7 @@ Annotations: |
   annotations: |
     CLI wrapper for the connect command. Delegates business logic to `connect_logic`.
 
-    `agents`: target AI agents (one or more, required positional argument). Supported: claude, codex, cursor
+    `agents`: target AI agents (one or more, required positional argument). Supported: claude, codex, cursor, opencode
     `force_overwrite`: allow overwriting existing skills
 
     CLI arguments:

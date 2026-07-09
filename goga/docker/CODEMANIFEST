@@ -1,0 +1,66 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is a seed-cell with a declared responsibility zone — everything related
+  to Docker in the project: in-container environment assertions, container launching,
+  image building. The current body holds the guard routine `ensure_in_docker`. Future
+  extensions are added as separate tasks within the same zone.
+
+  Route all output (guard error output, diagnostic messages) through sys.stderr
+  (click is not used).
+
+---
+
+"ensure_in_docker()":
+  location: env.py
+  annotations: |
+    In-container environment assertion: guard routine for in-container entrypoints.
+    Reads the "GOGA_DOCKER" marker and aborts the process when the marker is absent
+    or not equal to "1", so host-side invocations of in-container entrypoints fail
+    loudly instead of silently producing broken behavior (missing in-container
+    binaries, wrong paths, missing runtime directories).
+
+    Algorithm:
+    1. Read the "GOGA_DOCKER" environment variable
+    2. If the value is not "1": print a clear message to sys.stderr explaining that
+       this entrypoint must run inside the goga Docker image; terminate the process
+       with exit code 1
+    3. Otherwise: return normally
+
+    Requirements:
+    - The "GOGA_DOCKER" marker is set only in the Dockerfile; its absence or any
+      value other than "1" means host environment
+    - Emit output only to sys.stderr (click is not used)
+    - Terminate the process with exit code 1 before any filesystem or process work
+    - Both branches MUST be covered by tests: the success path
+      (marker equals "1" — returns normally) and the refusal path
+      (marker unset or any value other than "1" — writes to stderr and exits
+      with code 1)
+
+    Constraints:
+    - Do NOT perform filesystem or process work — the guard must terminate the
+      process before any such work runs
+    - Do NOT validate other environment variables — the responsibility is solely
+      the "GOGA_DOCKER" marker
+    - Do NOT return an error value — the routine returns only in the in-container
+      case; the host case terminates the process
+
+---
+
+Author: Goga
+CreatedAt: 09/07/26
+
+Description: |
+  Seed-cell with a declared responsibility zone — everything related to Docker in
+  the project: in-container environment assertions, container launching, image
+  building. The current body holds the guard routine `ensure_in_docker`, which
+  in-container entrypoints invoke to refuse host-side execution. Future extensions
+  cover container launching and image-build logic within the same zone.
