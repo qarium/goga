@@ -30,6 +30,7 @@ so the real modules are resolved via :data:`sys.modules` and patched by attribut
 
 from __future__ import annotations
 
+import contextlib
 import importlib
 import runpy
 import sys
@@ -49,6 +50,30 @@ _config_mod = importlib.import_module("goga.config")
 _cli_mod = importlib.import_module("goga.pipeline.cli")
 
 
+@contextlib.contextmanager
+def _run_main_fresh(modname: str):
+    """Re-execute ``<pkg>.__main__`` via runpy, then restore the original module.
+
+    ``runpy.run_module`` re-executes the package's ``__main__`` submodule in a
+    fresh namespace. After it returns, ``sys.modules`` no longer holds the
+    original ``<pkg>.__main__`` module object. That is a problem for OTHER test
+    modules that imported from it at collection time (e.g.
+    ``from goga.build.__main__ import main`` in ``tests/build/test_main.py``):
+    their function references keep ``__globals__`` bound to the *original*
+    module dict, so a later ``mock.patch("<pkg>.__main__.<attr>")`` re-imports a
+    fresh module and patches THAT, while the stale function still calls the real
+    attribute. Popping up front (to force the fresh runpy execution) and
+    restoring the original module object afterward keeps the cache coherent, so
+    collection/execution order never changes test outcomes.
+    """
+    original = sys.modules.pop(modname, None)
+    try:
+        yield
+    finally:
+        if original is not None:
+            sys.modules[modname] = original
+
+
 class TestInContainerEntrypointFlow:
     """End-to-end cross-cell composition for the two in-container entrypoints."""
 
@@ -62,10 +87,8 @@ class TestInContainerEntrypointFlow:
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.build", "plan.md"])
 
-        # Run the entrypoint fresh so the ``__main__`` body executes via runpy.
-        sys.modules.pop("goga.build.__main__", None)
-
         with (
+            _run_main_fresh("goga.build.__main__"),
             mock.patch.object(_build_mod, "build", return_value=0) as mock_build,
             mock.patch.object(_config_mod, "load_config") as mock_config,
             pytest.raises(SystemExit) as exc_info,
@@ -92,9 +115,8 @@ class TestInContainerEntrypointFlow:
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.pipeline", "list"])
 
-        sys.modules.pop("goga.pipeline.__main__", None)
-
         with (
+            _run_main_fresh("goga.pipeline.__main__"),
             mock.patch.object(_cli_mod, "pipeline_cli", return_value=0) as mock_cli,
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -123,9 +145,9 @@ class TestInContainerEntrypointFlow:
 
         # --- build entrypoint refuses ---
         monkeypatch.setattr(sys, "argv", ["goga.build", "plan.md"])
-        sys.modules.pop("goga.build.__main__", None)
 
         with (
+            _run_main_fresh("goga.build.__main__"),
             mock.patch.object(_build_mod, "build", side_effect=_fail_if_called) as mock_build,
             mock.patch.object(_config_mod, "load_config", side_effect=_fail_if_called) as mock_config,
             pytest.raises(SystemExit) as build_exc,
@@ -140,9 +162,9 @@ class TestInContainerEntrypointFlow:
 
         # --- pipeline entrypoint refuses ---
         monkeypatch.setattr(sys, "argv", ["goga.pipeline", "list"])
-        sys.modules.pop("goga.pipeline.__main__", None)
 
         with (
+            _run_main_fresh("goga.pipeline.__main__"),
             mock.patch.object(_cli_mod, "pipeline_cli", side_effect=_fail_if_called) as mock_cli,
             pytest.raises(SystemExit) as pipeline_exc,
         ):
@@ -170,9 +192,8 @@ class TestRunpyThinWrapperInvariant:
         monkeypatch.setenv("GOGA_DOCKER", "1")
         monkeypatch.setattr(sys, "argv", ["goga.pipeline", "list"])
 
-        sys.modules.pop("goga.pipeline.__main__", None)
-
         with (
+            _run_main_fresh("goga.pipeline.__main__"),
             mock.patch.object(_cli_mod, "pipeline_cli", return_value=0),
             warnings.catch_warnings(record=True) as caught,
         ):

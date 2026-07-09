@@ -58,7 +58,7 @@ WORKDIR /workspace
 
 USER goga
 
-RUN goga connect claude codex
+RUN goga connect claude codex opencode
 
 ENTRYPOINT ["goga"]
 CMD ["goga"]

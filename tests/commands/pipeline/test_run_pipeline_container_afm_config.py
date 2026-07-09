@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import importlib
 import signal
 import subprocess
-import sys
 from pathlib import Path
 from unittest import mock
 
@@ -16,10 +16,12 @@ from goga.commands.pipeline.run_pipeline_container import (
 )
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 
-# Resolve the real submodule via sys.modules (the package __init__ binds the
-# function name `run_pipeline_container`, which would shadow string-based
-# mock.patch paths walking through the package on Python 3.10).
-_rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
+# Resolve the real submodule directly: the package __init__ re-exports the
+# `run_pipeline_container` function, which shadows the submodule name in
+# attribute access on Python 3.10. importlib.import_module returns the real
+# module object (robust to the import statement above being reordered/removed),
+# and patching it by attribute affects the code under test.
+_rpc_mod = importlib.import_module("goga.commands.pipeline.run_pipeline_container")
 
 # The afm-config tmpfile is mounted read-only at this fixed in-container path.
 _AFM_MOUNT_SUFFIX = ":/home/goga/.afm/config.yaml:ro"

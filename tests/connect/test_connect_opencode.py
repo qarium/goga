@@ -76,6 +76,11 @@ class TestConnectOpencodeLogic:
         assert skill_link.is_symlink()
         assert skill_link.resolve() == (home / ".goga" / "skills" / "goga-cell")
 
+        # Every goga-* skill is symlinked (the multi-entry loop, not just the first).
+        review_link = home / ".config" / "opencode" / "skills" / "goga-review"
+        assert review_link.is_symlink()
+        assert review_link.resolve() == (home / ".goga" / "skills" / "goga-review")
+
         # opencode is in AGENTS_WITH_COMMANDS, so it also receives the commands symlink.
         cmd_link = home / ".config" / "opencode" / "commands" / "goga"
         assert cmd_link.is_symlink()
@@ -113,4 +118,5 @@ class TestConnectOpencodeLogic:
         captured = capsys.readouterr()
         assert "unsupported agent 'foo'" in captured.err
         # validation fails before any central install, so no ~/.goga/ is created
+        assert not (home / ".goga").exists()
         assert not (home / ".goga" / "skills").exists()

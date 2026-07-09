@@ -40,13 +40,16 @@ class TestEnsureInDocker:
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize("value", ["0", "true", "", "yes"])
-    def test_ensure_in_docker_refuses_when_marker_wrong_value(self, monkeypatch, value) -> None:
+    def test_ensure_in_docker_refuses_when_marker_wrong_value(self, monkeypatch, capsys, value) -> None:
         monkeypatch.setenv("GOGA_DOCKER", value)
 
         with pytest.raises(SystemExit) as exc_info:
             ensure_in_docker()
 
         assert exc_info.value.code == 1
+        # The refusal message is written on every non-"1" path, not only when
+        # the marker is missing.
+        assert "goga Docker image" in capsys.readouterr().err
 
     def test_ensure_in_docker_marker_empty_string(self, monkeypatch) -> None:
         # Boundary value: present but falsy — locks exact-string semantics, not a truthy check.
