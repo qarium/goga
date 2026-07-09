@@ -158,7 +158,13 @@ class TestPipelineResolvedPathFlow:
         assert "afm_content" in captured, "afm-config tmpfile was not captured"
 
         expected = resolve_wrapper_path(agent)
-        assert captured["afm_content"] == f"client.command: {expected}\n"
+        assert captured["afm_content"] == (
+            f"client.command: {expected}\n"
+            "theme: goga\n"
+            "open_browser: false\n"
+            "proxy:\n"
+            "  enabled: false\n"
+        )
 
 
 # --- cross-consumer consistency ---
@@ -208,10 +214,11 @@ class TestResolvedPathConsistency:
         assert pipeline_result == 0
         assert "afm_content" in captured, "afm-config tmpfile was not captured"
 
-        # afm content is "client.command: <path>\n"
-        afm_line = captured["afm_content"].strip()
-        assert afm_line.startswith("client.command: ")
-        pipeline_path = afm_line[len("client.command: ") :]
+        # afm content is "client.command: <path>\ntheme: goga\nopen_browser: false\nproxy:\n  enabled: false\n";
+        # extract the first line to compare the wrapper path against the build side.
+        afm_first_line = captured["afm_content"].splitlines()[0]
+        assert afm_first_line.startswith("client.command: ")
+        pipeline_path = afm_first_line[len("client.command: ") :]
 
         # Both consumers, driven by the same facade import, agree on the path and
         # match the canonical absolute convention.
