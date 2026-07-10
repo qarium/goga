@@ -35,6 +35,8 @@ Annotations: |
        missing fields and ValueError on invalid values:
        - lang from the language directive
        - image (top-level Docker image, optional — None is a valid value)
+       - dockerfile (top-level path to a project Dockerfile, optional — None is a
+         valid value; a non-string value raises ValueError), parsed like image
     5. Extract and validate the required pipeline block; construct a
        `PipelineConfig` from its agent, env, proxy (optional, default None),
        and hosts (optional, default empty dict) fields
@@ -46,7 +48,7 @@ Annotations: |
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     8. Extract the optional commands mapping (defaults to empty)
-    9. Construct and return a `Config` from all assembled parts
+    9. Construct and return a `Config` from all assembled parts, including dockerfile
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -65,13 +67,14 @@ Annotations: |
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
 
-"Config(lang: str, image: str | None, build: BuildConfig, pipeline: PipelineConfig, commands: dict, codemanifest: CodemanifestConfig | None)":
+"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig, pipeline: PipelineConfig, commands: dict, codemanifest: CodemanifestConfig | None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_config.
 
     `lang`: project language directive
     `image`: top-level Docker image shared by build and pipeline; None is a valid value
+    `dockerfile`: top-level path to a project Dockerfile; None is a valid value
     `build`: build configuration as a `BuildConfig` instance
     `pipeline`: pipeline configuration as a `PipelineConfig` instance
     `commands`: command hooks — reserved for future prompt customization
@@ -83,6 +86,10 @@ Annotations: |
       Top-level Docker image shared by build and pipeline execution.
       Sourced from the top-level image field in .goga/config.yml.
       None is a valid value — consumers must handle the None case (e.g. raise ClickException).
+    "dockerfile -> str | None": |
+      Path to a project Dockerfile, relative to the project root. Shared by build
+      and pipeline. None is a valid value — when set, --update builds locally
+      (docker_update → DockerBuilder); when None, --update pulls (docker_pull).
     "build -> BuildConfig": |
       Build configuration from .goga/config.yml. Instance of `BuildConfig`.
     "pipeline -> PipelineConfig": |

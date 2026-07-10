@@ -149,6 +149,7 @@ Annotations: |
       GogaConfigAnswers → YAML field mapping:
       - language → language (top-level)
       - image → image (top-level)
+      - dockerfile_path → dockerfile (top-level, omit when None)
       - agent → build.task_executor.agent
       - env → build.task_executor.env (omit when None or empty)
       - pipeline_agent → pipeline.agent
@@ -160,7 +161,7 @@ Annotations: |
       - Emit image as a top-level field
       - Always emit the pipeline: block (even when pipeline_env is omitted) —
         pipeline.agent is required by load_config
-      - Field order in the generated YAML: language, image, commands, build, pipeline, codemanifest
+      - Field order in the generated YAML: language, image, dockerfile, build, pipeline, codemanifest
 
 "InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":
   location: logic.py

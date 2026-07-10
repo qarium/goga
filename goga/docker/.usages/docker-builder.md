@@ -1,0 +1,124 @@
+# Image acquisition — goga/docker
+
+## Domain
+
+Building and pulling the Docker image the goga commands run in, and the
+`--update` decision that picks between them. This practice covers the
+image-acquisition entry points on the goga/docker facade:
+`docker_update`, `DockerBuilder`, and `docker_pull`.
+
+Target audience: host-side command launchers (`goga build`, `goga pipeline`)
+that implement the `--update`/`-u` flag and need to refresh the container image
+before launch.
+
+## Public API
+
+    from goga.docker import docker_update, DockerBuilder, docker_pull
+
+- `docker_update(image: str, dockerfile: str | None) -> None` — the `--update`
+  entry point. When `dockerfile` is set, build the image locally from that
+  Dockerfile (fatal on failure); when `dockerfile` is None, pull `image` from the
+  registry (warning on failure, non-fatal).
+- `DockerBuilder(image, dockerfile='Dockerfile', context='.')` — stateful builder.
+  `.build(**params)` runs docker build, tagging the result as `image` so the
+  locally built image shadows the registry tag consumed by docker run.
+- `docker_pull(image: str) -> bool` — standalone registry pull. Returns False and
+  logs a WARNING on failure (never raises).
+
+## Typical usage
+
+### The --update flag (the common path)
+
+A command launcher resolves the validated `config.image` and `config.dockerfile`
+and forwards them as primitives. `docker_update` owns the build-vs-pull branch and
+the error semantics, so all three call sites (build, pipeline discovery, pipeline
+run) share one decision:
+
+    from goga.docker import docker_update
+
+    if update:
+        docker_update(config.image, config.dockerfile)
+
+Behavior, by `dockerfile`:
+
+- `dockerfile` set → `docker build -f <dockerfile> -t <image> .`. Build failure is
+  fatal: it raises, the caller maps it to exit 1, and the container never launches.
+- `dockerfile` None → `docker pull <image>`. Pull failure is recoverable: a WARNING
+  is logged and the caller continues on the local image (the launch may still fail
+  later if the image is genuinely absent, but that surfaces from docker run itself).
+
+### Direct build with extra CLI options
+
+Callers that need custom build flags (extra hosts, --pull, build args, platform,
+etc.) construct `DockerBuilder` themselves and pass the options as `params`. This
+is the escape hatch outside `docker_update`'s default-params build:
+
+    from goga.docker import DockerBuilder
+
+    DockerBuilder(
+        image=config.image,
+        dockerfile=config.dockerfile,
+        context=".",
+    ).build(add_host="127.0.0.1:localhost", pull=True)
+    # → docker build --add-host 127.0.0.1:localhost --pull \
+    #     -f <dockerfile> -t <image> .
+
+### Direct pull
+
+Callers that want to pull unconditionally (independent of `--update`) call the
+routine directly and branch on the boolean:
+
+    from goga.docker import docker_pull
+
+    ok = docker_pull(config.image)
+    if not ok:
+        # network / auth / not-found — log and continue on the local image
+
+## Param → flag mapping (build)
+
+`DockerBuilder.build(**params)` maps `params` to docker-build CLI flags by a rule
+shared with the runner:
+
+- 1-character key → short flag
+- multi-char snake_case key → long flag
+- str value → `flag value`
+- `True` → boolean flag
+- `False` → flag omitted
+- list value → flag repeated once per element
+
+These params are raw docker options. They are orthogonal to goga's `--update`
+flag, which only decides whether `docker_update` runs at all.
+
+## Preconditions
+
+- `image` MUST be non-None. Callers validate `config.image` before calling
+  `docker_update` / constructing `DockerBuilder` / calling `docker_pull`. The
+  `image: str` signature makes this an explicit precondition, not a runtime check
+  inside the cell.
+- The build context (`context`, default "." = project root) and the Dockerfile
+  path (relative to the context) must point at real files; docker itself reports
+  a missing Dockerfile.
+
+## Side effects
+
+- `docker build` writes the locally tagged image into the local image store,
+  shadowing the registry tag of the same name.
+- `docker pull` writes the registry image into the local image store.
+- Both stream the docker CLI's own stdout/stderr to the host.
+
+## Failure modes
+
+- Build failure → fatal: the exception propagates so the caller exits non-zero.
+  This is intentional — a half-built image must not silently launch.
+- Pull failure → non-fatal: `docker_pull` returns False and logs a WARNING. The
+  caller decides whether to continue (typical) or abort.
+
+## Anti-patterns
+
+- Do NOT catch the exception from `DockerBuilder.build` to "continue anyway" — a
+  failed build means the image is wrong; continuing hides the failure.
+- Do NOT call `docker_pull` and then raise on a False return — pull failure is
+  recoverable by design; the local image may already be present.
+- Do NOT pass a `Config` object to `docker_update`. It takes primitives
+  (`image`, `dockerfile`) so the docker cell stays a leaf with no dependency on
+  goga/config.

@@ -52,7 +52,7 @@ Run an interactive user survey and generate project files.
 - `env` — environment variables for `build.task_executor.env`
 - `codemanifest_usages` — codemanifest practice mappings
 - `codemanifest_annotations` — codemanifest annotation block
-- `dockerfile_path` — path to custom Dockerfile (None → skip Dockerfile creation)
+- `dockerfile_path` — path to custom Dockerfile (None → skip Dockerfile creation AND omit the top-level `dockerfile` config field)
 
 ## Survey flow
 
@@ -94,7 +94,7 @@ Run an interactive user survey and generate project files.
 ```yaml
 language: python
 image: qarium/goga-python-3.12:latest
-commands: {}              # only when non-default
+dockerfile: Dockerfile    # only when dockerfile_path is set (omit when None)
 build:
   task_executor:
     agent: claude
@@ -109,7 +109,7 @@ codemanifest:             # omitted when both inner fields are empty
     ...
 ```
 
-**Field order:** `language`, `image`, `commands`, `build`, `pipeline`, `codemanifest`.
+**Field order:** `language`, `image`, `dockerfile`, `build`, `pipeline`, `codemanifest`.
 
 ## Anti-patterns
 

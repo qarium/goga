@@ -22,6 +22,13 @@ Imports:
       - run-pipeline
       - pipeline-cli
     From: goga/pipeline
+  - Types:
+      - docker_update
+      - DockerRunner
+    Usages:
+      - docker-builder
+      - docker-runner
+    From: goga/docker
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -71,6 +78,15 @@ Annotations: |
   Use `resolve_runtime_dir` and the `runtime-paths` practice to
   compute the host-side runtime directory path for the current project, git
   branch, and pipeline name.
+  Use `docker_update` and the `docker-builder` practice to refresh the image when
+  --update is set: build when a project Dockerfile is declared (config.dockerfile
+  set, fatal on failure), else pull (warning, non-fatal).
+  Use `DockerRunner` and the `docker-runner` practice to assemble the docker run
+  command and manage the container lifecycle (SIGTERM/SIGINT handler, guaranteed
+  docker kill, signal-handler restore). The runner is a thin executor — this cell
+  resolves the per-command inputs (mounts, hosts, env-file, runtime-dir, tmpfile)
+  and passes them as params; host-side cleanup (tmpfile, env-file) stays in the
+  caller's own finally.
 
   Persistent afm state: run mode mounts a host directory at
   /home/goga/pipeline inside the container and sets AFM_DIR=/home/goga/pipeline
@@ -112,8 +128,10 @@ Annotations: |
     `clean`: flag from the --clean click option. Run mode only — when True,
              `run_pipeline_container` wipes the persistent afm state directory
              before launch. Ignored in discovery mode.
-    `update`: flag from the --update/-u click option. When True, pull the
-              image before launching the container. Available in both modes.
+    `update`: flag from the --update/-u click option. When True, refresh the
+              image via `docker_update` before launching the container — build
+              when a project Dockerfile is declared (config.dockerfile set), else
+              pull. Available in both modes.
 
     Apply the `click` practice for the command surface: a single command (not a
     group), the optional positional `name` argument, the pass_context pattern,
@@ -195,8 +213,10 @@ Annotations: |
     `clean`: when True and in run mode, wipe the persistent afm state host
              directory before launch via `clean_pipeline_runtime_dir`. No-op in
              discovery mode.
-    `update`: when True, pull the image before launching the container (failure
-              is a warning, non-fatal). When False (default), skip the pull.
+    `update`: when True, refresh the image via `docker_update` before launching
+              the container — build when a project Dockerfile is declared
+              (config.dockerfile set, fatal on failure), else pull (warning,
+              non-fatal). When False (default), skip the refresh.
     `exit_code`: container exit code (0 success; 2 argparse error in-container;
                  127 afm missing inside the container; non-zero pipeline failure)
 
@@ -206,20 +226,25 @@ Annotations: |
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
     3. Generate a unique container_name
-    4. Install a SIGTERM/SIGINT handler that exits with 128 + signum
-    5. Assemble the docker run command:
-       - --rm, --name <container_name>
-       - Bind-mount the project directory as /workspace and set it as the
-         container working directory
-       - For each entry in `hosts`: add a --add-host HOST:IP flag
-       - --entrypoint python3 <config.image>
-       - Args: -m goga.pipeline list
-    6. When `update` is True: pull the image; on failure log a warning and
-       continue with the local image. When `update` is False: skip the pull.
-    7. Launch the container and wait for its exit code, propagating stdout/stderr
-    8. In finally: kill the container (suppress errors) and restore the previous
-       signal handler
-    9. Return the container exit code
+    4. Assemble the docker-run inputs to hand to `DockerRunner`:
+       - args: -m goga.pipeline list
+       - params: name=<container_name>, rm=True, entrypoint=python3,
+         workdir=/workspace, v=[project:/workspace], add_host=<each resolved
+         HOST:IP>. No env_file, no port publish
+       - The assembled form preserves the pre-refactor discovery launcher: --rm,
+         --name, the project bind-mount as /workspace (set as the container
+         working directory), --add-host per host, --entrypoint python3, image,
+         args
+    5. When `update` is True: call `docker_update` with config.image and
+       config.dockerfile — build when a project Dockerfile is declared (fatal),
+       else pull (warning, non-fatal). When `update` is False: skip the refresh.
+    6. Launch the container via `DockerRunner`(config.image).run(args, params):
+       the runner installs the SIGTERM/SIGINT handler (exit 128 + signum), runs
+       docker run, streams stdout/stderr, and returns the exit code. The runner
+       finally performs the guaranteed docker kill and restores the previous
+       handler. Discovery writes no tmpfile/env-file, so there is no host-side
+       caller cleanup
+    7. Return the container exit code
 
     Note: discovery mode ignores `extra_env`, `proxy`, and `clean` — no env-file
     is written, no afm state directory is involved.
@@ -233,15 +258,20 @@ Annotations: |
        `resolve-wrapper-path` practice) using config.pipeline.agent. Do not
        validate the agent value — absence of the wrapper file is surfaced by
        afm itself.
-    6. Create a private afm-config tmpfile carrying four static launcher-side
-       fields: client.command set to the resolved wrapper path, theme: goga
+    6. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
+       BEFORE creating any temp file — the leak-prevention invariant (a signal
+       during tmpfile/env-file setup or the `docker_update` build must unwind to
+       the finally block and unlink the secret files). The runner's handler later
+       nests under this one. Then create a private afm-config tmpfile carrying
+       four static launcher-side fields: client.command set to the resolved
+       wrapper path, theme: goga
        (dashboard theme), open_browser: false (the dashboard is reached
        via the host-printed http://localhost:<port> URL; afm must not attempt
        to open a browser inside the container), and proxy.enabled: false
        (afm's own internal outbound proxy provider is disabled; goga manages
        the outbound proxy through the container env-file via HTTP_PROXY /
        HTTPS_PROXY / NO_PROXY). The tmpfile is a read-only overlay over the
-       persistent afm state directory mounted in step 12
+       persistent afm state directory mounted in step 11
     7. Resolve the persistent afm state host directory via
        `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
     8. When `clean` is True: wipe the resolved directory via
@@ -251,38 +281,43 @@ Annotations: |
        AFM_DIR set to the in-container persistent state path, and — when
        `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at
        localhost,127.0.0.1)
-    10. Install a SIGTERM/SIGINT handler that kills the container and exits
-        with 128 + signum
-    11. Print "Web UI: http://localhost:<port>" to stdout
-    12. Assemble the docker run command:
-        - --rm, --name <container_name>
-        - Publish the allocated port on both sides (-p <port>:<port>)
-        - Bind-mount the project directory as /workspace and set it as the
-          container working directory
-        - Bind-mount the persistent afm state host directory (step 7) read-write
-          at the in-container persistent state path — this directory survives
-          across runs of the same pipeline in the same project on the same
-          branch
-        - Bind-mount the afm-config tmpfile (step 6) read-only at the
-          in-container afm config path as a client.command overlay; this path
-          is independent of AFM_DIR (see the `afm` practice). The persistent
-          directory mounted above supplies the rest of afm state (flows,
-          run-state)
-        - For each entry in `hosts`: add a --add-host HOST:IP flag
-        - Pass env via --env-file
-        - For each (host_path, container_path) pair returned by
-          `resolve_credential_mounts`: add a read-only bind-mount
-          of host_path at container_path
-        - --entrypoint python3 <config.image>
-        - Args: -m goga.pipeline run <name> --port <port>
-    13. When `update` is True: pull the image; on failure log a warning and
-        continue with the local image. When `update` is False: skip the pull.
-    14. Launch the container and wait for its exit code, propagating stdout/stderr
-    15. In finally: delete the afm-config tmpfile, delete the env-file, kill
-        the container (suppress errors), and restore the previous signal handler.
-        Do NOT delete the persistent afm state host directory — it survives
-        across runs.
-    16. Return the container exit code
+    10. Print "Web UI: http://localhost:<port>" to stdout
+    11. Assemble the docker-run inputs to hand to `DockerRunner`:
+        - args: -m goga.pipeline run <name> --port <port>
+        - params: name=<container_name>, rm=True, entrypoint=python3,
+          workdir=/workspace, p=<port>:<port>, v=[project:/workspace (set as
+          container working dir), the persistent afm state host dir (step 7)
+          read-write at the
+          in-container persistent state path, the afm-config tmpfile (step 6)
+          read-only at the in-container afm config path as a client.command
+          overlay, and each credential mount read-only], add_host=<each resolved
+          HOST:IP>, env_file=<env-file path>
+        - The assembled form preserves the pre-refactor run launcher (same
+          options, same effect): --rm, --name, -p <port>:<port>, the project
+          bind-mount as /workspace (container working directory), the persistent
+          afm state host dir read-write at the in-container persistent state path
+          (survives across runs), the afm-config tmpfile read-only at the
+          in-container afm config path (independent of AFM_DIR; see the `afm`
+          practice — the persistent dir supplies the rest of afm state), --add-host
+          per host, --env-file, each credential mount from
+          `resolve_credential_mounts` read-only, --entrypoint python3, image, args
+    12. When `update` is True: call `docker_update` with config.image and
+        config.dockerfile — build when a project Dockerfile is declared (fatal),
+        else pull (warning, non-fatal). When `update` is False: skip the refresh.
+    13. Launch the container via `DockerRunner`(config.image).run(args, params):
+        the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
+        which nests under the caller handler installed in step 6 (saves and
+        restores it), runs docker run, streams stdout/stderr, and returns the
+        exit code. The runner finally performs the guaranteed docker kill and
+        restores to the caller handler
+    14. In finally: delete the afm-config tmpfile and delete the env-file, and
+        restore the caller-installed SIGTERM/SIGINT handler to the original. Do
+        NOT delete the persistent afm state host directory — it survives across
+        runs. The docker kill and the runner's signal-handler restore happen
+        inside the runner finally (which runs before this finally); the runner's
+        restore returns to the caller handler, then this finally restores the
+        original
+    15. Return the container exit code
 
     Apply the `agent-wrappers` practice for the wrapper path semantics
     referenced in step 5.
@@ -291,6 +326,8 @@ Annotations: |
     Apply the `resolve-credential-mounts` practice for the credential-mount
     consumer pattern.
     Apply the `docker-auth-mounts` practice for the read-only mount rule.
+    Apply the `docker-builder` practice for the --update build-vs-pull refresh.
+    Apply the `docker-runner` practice for the docker run launch and lifecycle.
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
@@ -318,16 +355,24 @@ Annotations: |
       only afm state (flows, run-state), not config.yaml discovery.
     - Credential mounts come from `resolve_credential_mounts` — every returned
       tuple is an existing file, no re-check needed
-    - Image pull runs only when `update` is True; failure is a warning, not fatal
+    - Image refresh runs only when `update` is True via `docker_update`: build
+      when config.dockerfile is set (fatal on failure), else pull (warning,
+      non-fatal)
     - AFM_DIR=/home/goga/pipeline is provided via the env-file
     - `extra_env` default is an empty tuple, preserving the pre-option behavior
     - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
     - SIGTERM/SIGINT during run must result in exit code 128 + signum
       (130 for SIGINT, 143 for SIGTERM)
+    - The caller (run mode) installs its SIGTERM/SIGINT handler BEFORE writing the
+      secret tmpfile/env-file; the runner's handler nests under it (leak
+      prevention — a signal in the setup window, including the `docker_update`
+      build, must unwind to the finally block and unlink the secret files).
+      Discovery mode writes no secret files, so it installs no caller-side handler
     - Propagate afm's non-zero exit code as the container's exit code
 
     Constraints:
-    - Pull the image only when `update` is True — the default is no pull
+    - Refresh the image only when `update` is True via `docker_update` — the
+      default is no refresh
     - Delete only the tmpfile and env-file in finally — the persistent afm
       state host directory survives across runs
     - --clean wipes the persistent afm state host directory BEFORE launch; the
