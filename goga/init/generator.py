@@ -87,12 +87,16 @@ class FileGenerator:
         goga_dir = self._base_dir / ".goga"
         goga_dir.mkdir(parents=True, exist_ok=True)
 
-        # Field order: language, image, commands, build, pipeline, codemanifest.
+        # Field order: language, image, dockerfile, build, pipeline, codemanifest.
+        # `dockerfile` is emitted only when dockerfile_path is set.
         # `commands` has no source in GogaConfigAnswers, so it is never emitted.
         data: dict = {
             "language": config.language,
             "image": config.image,
         }
+
+        if config.dockerfile_path is not None:
+            data["dockerfile"] = config.dockerfile_path
 
         build: dict = {
             "task_executor": {

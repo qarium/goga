@@ -273,13 +273,35 @@ class TestLogic:
         assert not (tmp_path / "Dockerfile").exists()
 
     def test_generator_config_yml_no_dockerfile_field(self, tmp_path: Path) -> None:
-        """Dockerfile path is not written to config.yml."""
+        """dockerfile is emitted at the top level (not under build) when dockerfile_path is set."""
         config = self._make_config(dockerfile_path="Dockerfile")
         gen = self._make_gen(tmp_path)
         gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["dockerfile"] == "Dockerfile"
         assert "dockerfile" not in data["build"]
+
+    def test_generator_emits_dockerfile_after_image(self, tmp_path: Path) -> None:
+        """dockerfile is emitted immediately after image (top level) when set."""
+        config = self._make_config(dockerfile_path="Dockerfile")
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        text = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
+        assert text.index("language:") < text.index("image:")
+        assert text.index("image:") < text.index("dockerfile:")
+        assert text.index("dockerfile:") < text.index("build:")
+        assert "dockerfile: Dockerfile" in text
+
+    def test_generator_omits_dockerfile_when_none(self, tmp_path: Path) -> None:
+        """dockerfile is omitted entirely when dockerfile_path is None."""
+        config = self._make_config(dockerfile_path=None)
+        gen = self._make_gen(tmp_path)
+        gen.generate_goga_config(config)
+
+        text = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
+        assert "dockerfile" not in text
 
     def test_generator_dockerfile_custom_path(self, tmp_path: Path) -> None:
         """Dockerfile can be created at a custom path."""
