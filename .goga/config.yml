@@ -1,5 +1,7 @@
 language: python
+
 image: qarium/goga:latest
+dockerfile: Dockerfile
 
 .claude-env: &claude-env
   ANTHROPIC_MODEL: opus
