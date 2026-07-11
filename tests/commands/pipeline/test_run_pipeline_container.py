@@ -28,6 +28,7 @@ def _make_config(
     return Config(
         lang="python",
         image=image,
+        dockerfile=None,
         build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
         pipeline=PipelineConfig(agent=pipeline_agent, env=pipeline_env or {}),
     )

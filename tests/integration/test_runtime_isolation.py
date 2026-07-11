@@ -60,6 +60,7 @@ def _valid_config(*, image: str | None = "qarium/goga:latest") -> Config:
     return Config(
         lang="python",
         image=image,
+        dockerfile=None,
         build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
         pipeline=PipelineConfig(agent="claude"),
     )

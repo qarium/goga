@@ -83,6 +83,17 @@ def _parse_image(data: dict) -> str | None:
     return image
 
 
+def _parse_dockerfile(data: dict) -> str | None:
+    """Extract the optional top-level dockerfile field; None is a valid value.
+
+    Mirrors `_parse_image`: a non-string value raises ValueError.
+    """
+    dockerfile = data.get("dockerfile")
+    if dockerfile is not None and not isinstance(dockerfile, str):
+        raise ValueError("dockerfile must be a string in .goga/config.yml")
+    return dockerfile
+
+
 def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
     """Parse optional codemanifest section from YAML data."""
     codemanifest_data = data.get("codemanifest")
@@ -185,6 +196,7 @@ def load_config() -> Config:
 
     lang = _parse_language(data)
     image = _parse_image(data)
+    dockerfile = _parse_dockerfile(data)
     pipeline = _parse_pipeline(_require_mapping(data, "pipeline"))
     build = _parse_build(_require_mapping(data, "build"))
 
@@ -196,6 +208,7 @@ def load_config() -> Config:
     return Config(
         lang=lang,
         image=image,
+        dockerfile=dockerfile,
         build=build,
         pipeline=pipeline,
         commands=commands,

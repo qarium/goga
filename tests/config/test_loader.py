@@ -13,7 +13,7 @@ from goga.config import (
     TaskExecutorConfig,
     load_config,
 )
-from goga.config.loader import _parse_codemanifest
+from goga.config.loader import _parse_codemanifest, _parse_dockerfile
 
 # --- Helpers ---
 
@@ -1444,3 +1444,168 @@ codemanifest: null
         )
         config = load_config()
         assert config.codemanifest is None
+
+
+# --- Contract tests for Config.dockerfile + _parse_dockerfile ---
+
+
+class TestConfigDockerfileContract:
+    def test_config_has_dockerfile_field(self):
+        """Config declares a `dockerfile` field."""
+        field_names = {f.name for f in dataclasses.fields(Config)}
+        assert "dockerfile" in field_names
+
+    def test_config_dockerfile_field_positioned_after_image(self):
+        """dockerfile is declared immediately after image (field order)."""
+        field_names = [f.name for f in dataclasses.fields(Config)]
+        assert field_names.index("dockerfile") == field_names.index("image") + 1
+
+    def test_config_dockerfile_annotation_optional_str(self):
+        """dockerfile field type is str | None."""
+        dockerfile_field = {f.name: f for f in dataclasses.fields(Config)}["dockerfile"]
+        assert dockerfile_field.type == str | None
+
+    def test_load_config_still_callable(self):
+        """load_config remains callable from goga.config."""
+        assert callable(load_config)
+
+    def test_parse_dockerfile_exists(self):
+        """_parse_dockerfile is importable from goga.config.loader."""
+        assert callable(_parse_dockerfile)
+
+    def test_parse_dockerfile_signature(self):
+        """_parse_dockerfile accepts a single dict parameter (parity with _parse_image)."""
+        sig = inspect.signature(_parse_dockerfile)
+        assert list(sig.parameters.keys()) == ["data"]
+
+    def test_parse_dockerfile_return_annotation(self):
+        """_parse_dockerfile returns str | None (parity with _parse_image)."""
+        ret = inspect.signature(_parse_dockerfile).return_annotation
+        assert ret == str | None
+
+
+# --- Logic tests for _parse_dockerfile ---
+
+
+class TestParseDockerfilePositive:
+    def test_parse_dockerfile_with_string_value(self):
+        """A string dockerfile value is returned as-is."""
+        assert _parse_dockerfile({"dockerfile": "Dockerfile"}) == "Dockerfile"
+
+    def test_parse_dockerfile_absent_returns_none(self):
+        """No dockerfile key → None."""
+        assert _parse_dockerfile({}) is None
+
+    def test_parse_dockerfile_null_returns_none(self):
+        """dockerfile: null → None."""
+        assert _parse_dockerfile({"dockerfile": None}) is None
+
+    def test_parse_dockerfile_empty_string_valid(self):
+        """dockerfile: '' → empty string is a valid str."""
+        assert _parse_dockerfile({"dockerfile": ""}) == ""
+
+
+class TestParseDockerfileNegative:
+    def test_parse_dockerfile_rejects_non_string(self):
+        """A non-string dockerfile value raises ValueError."""
+        with pytest.raises(ValueError, match="dockerfile must be a string"):
+            _parse_dockerfile({"dockerfile": ["a", "b"]})
+
+    def test_parse_dockerfile_rejects_int(self):
+        """dockerfile: 123 → ValueError."""
+        with pytest.raises(ValueError, match="dockerfile must be a string"):
+            _parse_dockerfile({"dockerfile": 123})
+
+    def test_parse_dockerfile_rejects_bool(self):
+        """dockerfile: true → ValueError."""
+        with pytest.raises(ValueError, match="dockerfile must be a string"):
+            _parse_dockerfile({"dockerfile": True})
+
+    def test_parse_dockerfile_rejects_dict(self):
+        """dockerfile: mapping → ValueError."""
+        with pytest.raises(ValueError, match="dockerfile must be a string"):
+            _parse_dockerfile({"dockerfile": {"path": "Dockerfile"}})
+
+
+# --- Integration tests: load_config with dockerfile ---
+
+
+class TestLoadConfigDockerfile:
+    def test_load_config_parses_dockerfile_field(self, goga_project):
+        """.goga/config.yml with image + dockerfile → both parsed."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: img:tag
+dockerfile: Dockerfile
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.image == "img:tag"
+        assert config.dockerfile == "Dockerfile"
+
+    def test_load_config_dockerfile_defaults_none_when_absent(self, goga_project):
+        """No dockerfile key → config.dockerfile is None."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_config()
+        assert config.dockerfile is None
+
+    def test_load_config_dockerfile_empty_string_valid(self, goga_project):
+        """dockerfile: '' → config.dockerfile == '' (valid str)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: img:tag
+dockerfile: ''
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.dockerfile == ""
+
+    def test_load_config_dockerfile_non_string_raises(self, goga_project):
+        """dockerfile: 123 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: img:tag
+dockerfile: 123
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match="dockerfile must be a string"):
+            load_config()
+
+    def test_load_config_dockerfile_without_image(self, goga_project):
+        """dockerfile set with image absent → both None-able independently."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+dockerfile: Dockerfile
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.image is None
+        assert config.dockerfile == "Dockerfile"

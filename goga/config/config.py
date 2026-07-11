@@ -56,6 +56,7 @@ class Config:
 
     lang: str
     image: str | None
+    dockerfile: str | None
     build: BuildConfig
     pipeline: PipelineConfig
     commands: dict = field(default_factory=dict)

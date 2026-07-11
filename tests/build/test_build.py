@@ -35,6 +35,7 @@ def _make_config(
     return Config(
         lang="python",
         image="goga:latest",
+        dockerfile=None,
         build=build,
         pipeline=PipelineConfig(agent="claude"),
     )

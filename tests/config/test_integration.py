@@ -178,7 +178,7 @@ class TestConfigImmutability:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(image=None, build=bc, pipeline=pc, lang="python")
+        cfg = Config(image=None, dockerfile=None, build=bc, pipeline=pc, lang="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             cfg.lang = "go"
 
@@ -197,7 +197,7 @@ class TestConfigImmutability:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(image=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
+        cfg = Config(image=None, dockerfile=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
         cfg.commands["b"] = "2"  # dict content is mutable
         assert cfg.commands == {"a": "1", "b": "2"}
 

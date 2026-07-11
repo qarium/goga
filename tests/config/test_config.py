@@ -385,9 +385,10 @@ class TestConfigCreation:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
+        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.lang == "python"
         assert cfg.image is None
+        assert cfg.dockerfile is None
         assert cfg.commands == {}
 
     def test_full_config(self):
@@ -397,12 +398,14 @@ class TestConfigCreation:
         cfg = Config(
             lang="python",
             image="qarium/foo:1.0",
+            dockerfile="Dockerfile",
             build=bc,
             pipeline=pc,
             commands={"foo": "bar"},
         )
         assert cfg.lang == "python"
         assert cfg.image == "qarium/foo:1.0"
+        assert cfg.dockerfile == "Dockerfile"
         assert cfg.build is bc
         assert cfg.build.task_executor is te
         assert cfg.pipeline is pc
@@ -413,7 +416,7 @@ class TestConfigCreation:
         te = TaskExecutorConfig(agent="copilot", env={"A": "1", "B": "2"})
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
+        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert isinstance(cfg.build.task_executor, TaskExecutorConfig)
         assert cfg.build.task_executor.agent == "copilot"
         assert cfg.build.task_executor.env == {"A": "1", "B": "2"}
@@ -443,7 +446,7 @@ class TestConfigCodemanifestField:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, build=bc, pipeline=pc)
+        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
@@ -451,5 +454,12 @@ class TestConfigCodemanifestField:
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
-        cfg = Config(lang="python", image=None, build=bc, pipeline=pc, codemanifest=cc)
+        cfg = Config(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=bc,
+            pipeline=pc,
+            codemanifest=cc,
+        )
         assert cfg.codemanifest is cc

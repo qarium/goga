@@ -26,6 +26,7 @@ def _make_config() -> Config:
     return Config(
         lang="python",
         image="qarium/goga:latest",
+        dockerfile=None,
         build=BuildConfig(task_executor=TaskExecutorConfig(agent="claude")),
         pipeline=PipelineConfig(agent="claude", env={}),
     )
