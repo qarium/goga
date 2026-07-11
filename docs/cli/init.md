@@ -49,9 +49,9 @@ The wizard proceeds through the following steps in order:
 
 After the questionnaire completes, `goga init` creates:
 
-- **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `commands`, `build` (with `task_executor`), a required `pipeline` block (agent + optional env), and optional `codemanifest`.
+- **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `dockerfile` (when a custom Dockerfile is requested), `build` (with `task_executor`), a required `pipeline` block (agent + optional env), and optional `codemanifest`.
 - **`.goga/usages/conventions.md`** -- (If base convention was downloaded) Language-specific code conventions.
-- **`Dockerfile`** -- (If requested) A Dockerfile derived from the selected image.
+- **`Dockerfile`** -- (If requested) A Dockerfile derived from the selected image. When created, a top-level `dockerfile:` entry is also written to `.goga/config.yml`, so `goga build --update` / `goga pipeline --update` build the image locally instead of pulling it.
 
 ## Examples
 

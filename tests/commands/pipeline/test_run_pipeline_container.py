@@ -540,7 +540,6 @@ class TestPipelineSignals:
         def fake_wait() -> int:
             # invoke the installed SIGINT handler inline, as a real signal would
             handler = captured[signal.SIGINT]
-            assert callable(handler)
             handler(signal.SIGINT, None)
             return 0
 

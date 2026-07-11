@@ -389,6 +389,22 @@ class TestNewSchema:
         assert present == [k for k in canonical if k in present]
         assert present == ["language", "image", "build", "pipeline", "codemanifest"]
 
+    def test_generate_goga_config_emits_dockerfile_in_full_canonical_order(self, tmp_path: Path) -> None:
+        """With dockerfile set, the full canonical order is
+        language, image, dockerfile, build, pipeline, codemanifest — dockerfile
+        sits between image and build (not after build)."""
+        config = self._make_config(
+            dockerfile_path="Dockerfile",
+            codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
+            codemanifest_annotations="Use conventions.",
+        )
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert list(data.keys()) == ["language", "image", "dockerfile", "build", "pipeline", "codemanifest"]
+
     def test_generate_goga_config_always_emits_pipeline_block(self, tmp_path: Path) -> None:
         """pipeline: block is always emitted even when pipeline_env is omitted."""
         config = self._make_config(pipeline_agent="claude", pipeline_env=None)

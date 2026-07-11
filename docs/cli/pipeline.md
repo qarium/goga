@@ -79,7 +79,7 @@ If the name exists in both sources, the project source wins. The container exit 
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run mode only |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Effective in both modes |
 | `--clean` | flag | off | Wipe the persistent afm state directory before launch. Run mode only (no-op in discovery) |
-| `--update`, `-u` | flag | off | Pull the image before launching the container (default skips the pull). Effective in both modes |
+| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in both modes |
 
 ### Persistent afm state
 
@@ -101,7 +101,7 @@ Credential files for claude (`~/.claude/.credentials.json`), codex (`~/.codex/au
 
 ### Examples
 
-Pull the latest image, then run (default skips the pull):
+Refresh the image, then run (default skips the refresh):
 
 ```bash
 goga pipeline deploy --update

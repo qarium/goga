@@ -15,6 +15,7 @@ The config loader looks for this file relative to the current working directory.
 ```yaml
 language: python
 image: qarium/goga-python-3.14:1.0
+# dockerfile: Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
 build:
   task_executor:
@@ -55,6 +56,7 @@ codemanifest:
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
 | `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.0`). Consumers raise an error when it is unset. |
+| `dockerfile` | `string` | No | Path to a project Dockerfile. When set, `goga build --update` and `goga pipeline --update` build the image locally from this Dockerfile (fatal on build failure). When unset (default), `--update` pulls `image` from the registry instead (non-fatal warning on pull failure) |
 | `build` | mapping | Yes | Build pipeline settings |
 | `pipeline` | mapping | Yes | Pipeline (afm) execution settings |
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |

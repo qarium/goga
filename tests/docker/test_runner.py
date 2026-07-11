@@ -108,7 +108,11 @@ class TestDockerRunnerRun:
     def test_docker_runner_run_assembles_argv_and_returns_exit_code(self, monkeypatch) -> None:
         fake_popen = _FakePopen(_FakeProc(returncode=7))
         monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
-        fake_signal = _RecordingSignal()
+        # Seed distinct sentinel prior handlers so the restore can be verified by
+        # VALUE (the D7 nesting property), not merely by install count.
+        sentinel_term = object()
+        sentinel_int = object()
+        fake_signal = _RecordingSignal(priors={signal.SIGTERM: sentinel_term, signal.SIGINT: sentinel_int})
         monkeypatch.setattr("goga.docker.runner.signal.signal", fake_signal)
         fake_kill = _RecordingRun()
         monkeypatch.setattr("goga.docker.runner.subprocess.run", fake_kill)
@@ -148,12 +152,16 @@ class TestDockerRunnerRun:
         installed_signums = [signum for signum, _h in fake_signal.installs]
         assert signal.SIGTERM in installed_signums
         assert signal.SIGINT in installed_signums
-        # the runner restores by re-installing the prior handler — net effect is
-        # two installs (set) + two restores (reset to prior) per signum.
-        term_installs = [s for s in installed_signums if s == signal.SIGTERM]
-        int_installs = [s for s in installed_signums if s == signal.SIGINT]
-        assert len(term_installs) == 2
-        assert len(int_installs) == 2
+        # D7 nesting: the runner saves the prior handler and restores it in
+        # `finally`. Assert the restore (2nd install per signum) hands back the
+        # SAME sentinel that was the prior handler — not SIG_DFL or another
+        # handler — so the runner nests correctly under a caller's handler.
+        term_handlers = [h for sig, h in fake_signal.installs if sig == signal.SIGTERM]
+        int_handlers = [h for sig, h in fake_signal.installs if sig == signal.SIGINT]
+        assert len(term_handlers) == 2
+        assert len(int_handlers) == 2
+        assert term_handlers[1] is sentinel_term
+        assert int_handlers[1] is sentinel_int
 
     def test_docker_runner_run_requires_name(self, monkeypatch) -> None:
         # `name` is the required kill target; its absence must raise BEFORE Popen.

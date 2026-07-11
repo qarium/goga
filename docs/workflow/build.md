@@ -23,7 +23,7 @@ Implemented code in the project tree, produced by ralphex executing each plan ta
 | 3. Uncommitted manifest check | Scan `git status` for uncommitted CODEMANIFEST files. Reject if any are found (skip with `--skip-manifest-check`). |
 | 4. Agent preconditions | Set up agent-specific files. For `claude`: merge `.claude/settings.json` (inject env, set attribution), create `.ralphex/claude-wrapper.sh` with `chmod +x`, update `.ralphex/config`. |
 | 5. Defaults copy | Copy default prompts and agent configurations to `.ralphex/`. |
-| 6. Image pull | Refresh the build image via `docker pull <build.image>`. On failure, log a warning and continue with the locally available image. |
+| 6. Image refresh (optional, `--update`) | When a top-level `dockerfile` is declared, run `docker build` against it (fatal on failure); otherwise `docker pull <image>` (log a warning on failure and continue with the locally available image). Off by default. |
 | 7. Docker execution | Launch ralphex inside the configured Docker image with `python -m goga.build` as the entry point. |
 
 Inside the container, ralphex executes the plan: one task per iteration, following the ralphex execution protocol (declaration → contract tests → implementation → interface verification → logic tests → debugging → contract re-verification → lint → completion → review → approval → next task).

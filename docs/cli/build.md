@@ -19,7 +19,7 @@ The build pipeline performs these steps:
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
 4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude).
 5. **Defaults copy** -- Copies default prompts and agent configurations to `.ralphex/`.
-6. **Image pull (optional)** -- When `--update`/`-u` is set, refreshes the configured build image via `docker pull`. A pull failure is logged as a warning; the build then proceeds with the locally available image. By default no pull happens and the local image is used as-is.
+6. **Image refresh (optional)** -- When `--update`/`-u` is set, the image is refreshed: if a top-level `dockerfile` is declared in `.goga/config.yml`, `docker build` runs against it (build failure is fatal — exit 1); otherwise `docker pull` runs (a pull failure is logged as a warning and the build proceeds with the locally available image). By default no refresh happens and the local image is used as-is.
 7. **Docker execution** -- Launches the ralphex command inside the configured Docker image. Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag).
 
 ## Arguments
@@ -44,7 +44,7 @@ The build pipeline performs these steps:
 | `-e`, `--env` | string | -- | Additional environment variable (`KEY=VALUE`, repeatable) |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
-| `--update`, `-u` | flag | off | Pull the image before launching the container (default skips the pull) |
+| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
 | `--clean` | flag | off | Wipe the persistent ralphex runtime host directory before launch (default preserves state across runs) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
@@ -130,6 +130,7 @@ Build settings are loaded from `.goga/config.yml`. Required fields:
 ```yaml
 language: python
 image: qarium/goga-python-3.12:1.0
+# dockerfile: Dockerfile       # optional — when set, `--update` builds the image from this Dockerfile instead of pulling
 pipeline:
   agent: claude
 build:
@@ -141,11 +142,11 @@ build:
     foo.local: 127.0.0.1
 ```
 
-The top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field. The optional `build.proxy` and `build.hosts` fields are overridden/augmented by the `--proxy` and `--add-host` CLI options respectively.
+The top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field. The optional top-level `dockerfile` field (when set) makes `--update` build the image locally from that Dockerfile instead of pulling it. The optional `build.proxy` and `build.hosts` fields are overridden/augmented by the `--proxy` and `--add-host` CLI options respectively.
 
 ## Exit Codes
 
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, precondition failure, or ralphex error) |
+| `1` | Build failed (Docker not found, config error, precondition failure, ralphex error, or a fatal `docker build` under `--update`) |

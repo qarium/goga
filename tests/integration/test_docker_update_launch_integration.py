@@ -43,6 +43,7 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -231,6 +232,12 @@ class TestBuildUpdateLaunchIntegration:
         created_env, track_write = _track_env_file_writes()
         monkeypatch.setattr(_build_mod, "_write_env_file", track_write)
 
+        # Pre-create the Docker-created .ralphex/ mount point in the project dir;
+        # the CODEMANIFEST forbids it under any exit path, so the caller finally
+        # removes it even on the signal-exit path.
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+
         # Record signal calls so the restore can be verified (install + restore for
         # both SIGTERM and SIGINT).
         sig_calls: list[tuple[int, object]] = []
@@ -260,6 +267,8 @@ class TestBuildUpdateLaunchIntegration:
         sigint = [s for s, _ in sig_calls if s == signal.SIGINT]
         assert len(sigterm) == 2
         assert len(sigint) == 2
+        # .ralphex/ removed from the project dir even on the signal-exit path
+        assert not ralphex_dir.exists()
 
 
 # ===========================================================================
@@ -426,3 +435,72 @@ class TestPipelineUpdateLaunchIntegration:
         sigint = [s for s, _ in sig_calls if s == signal.SIGINT]
         assert len(sigterm) == 2
         assert len(sigint) == 2
+
+    def test_pipeline_discovery_fatal_build_surfaces_clickexception_and_skips_launch(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """D5 (discovery): a fatal build surfaces as click.ClickException (not a raw
+        traceback) and DockerRunner.run is never reached."""
+        config = _make_config(dockerfile="Dockerfile")
+        runtime_dir = tmp_path / "afm-state-discovery-fatal"
+        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_rpc_mod, "docker_update", side_effect=RuntimeError("pipeline build failed")),
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run", side_effect=patches),
+            pytest.raises(click.ClickException) as exc,
+        ):
+            rpc(None, config, update=True)
+
+        assert "pipeline build failed" in exc.value.message
+        # launch skipped on build failure
+        mock_popen.assert_not_called()
+
+    def test_pipeline_run_fatal_build_surfaces_clickexception_and_skips_launch(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """D5 (run): a fatal build surfaces as click.ClickException (not a raw
+        traceback), DockerRunner.run is never reached, and the secret tmpfile +
+        env-file are unlinked by the caller finally."""
+        config = _make_config(dockerfile="Dockerfile")
+        runtime_dir = tmp_path / "afm-state-run-fatal"
+        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.chdir(tmp_path)
+
+        created_tmp: list[Path] = []
+        created_env: list[Path] = []
+        real_afm = _rpc_mod._write_afm_config_tmpfile
+        real_env = _rpc_mod._write_env_file
+
+        def track_afm(wrapper_path: str) -> Path:
+            path = real_afm(wrapper_path)
+            created_tmp.append(path)
+            return path
+
+        def track_env(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            path = real_env(env, extra_env)
+            created_env.append(path)
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", track_env)
+
+        with (
+            mock.patch.object(_rpc_mod, "docker_update", side_effect=RuntimeError("pipeline build failed")),
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run", side_effect=patches),
+            pytest.raises(click.ClickException) as exc,
+        ):
+            rpc("deploy", config, update=True)
+
+        assert "pipeline build failed" in exc.value.message
+        # launch skipped on build failure
+        mock_popen.assert_not_called()
+        # the secret tmpfile + env-file were created then unlinked (no leak)
+        assert created_tmp
+        assert created_env
+        assert all(not p.exists() for p in created_tmp)
+        assert all(not p.exists() for p in created_env)

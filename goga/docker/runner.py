@@ -46,9 +46,13 @@ class DockerRunner:
         ``docker kill`` target in ``finally`` (the one exception to the uniform
         rule). Returns the container exit code.
         """
-        # `name` is the kill target — validate BEFORE Popen so a missing name
-        # never launches a container we then cannot identify for teardown.
-        name = params["name"]
+        # `name` is the kill target — required and special (emitted as `--name`
+        # AND captured as the `docker kill` target). Validate it BEFORE installing
+        # handlers or Popen so a missing name never launches a container we then
+        # cannot identify for teardown.
+        name = params.get("name")
+        if name is None:
+            raise ValueError("DockerRunner.run requires a 'name' param (the docker kill target)")
 
         flags = translate_params(params)
         argv = ["docker", "run", *flags, self.image, *args]

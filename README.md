@@ -167,7 +167,7 @@ Description: |
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, upgrade, contract extraction, and pipeline commands
-- **Docker builds & pipelines** — Execute build plans via ralphex and run afm pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, and persistent pipeline state across runs
+- **Docker builds & pipelines** — Execute build plans via ralphex and run afm pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation
 
