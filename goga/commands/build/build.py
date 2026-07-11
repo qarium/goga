@@ -15,6 +15,7 @@ import yaml
 
 from ...agents import resolve_credential_mounts
 from ...config import load_config
+from ...docker import DockerRunner, docker_update
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -36,26 +37,6 @@ def _check_docker() -> bool:
         return result.returncode == 0
     except (FileNotFoundError, PermissionError, OSError):
         return False
-
-
-def _pull_image(image: str) -> None:
-    """Pull the build image to refresh an already-present local image before launch.
-
-    Args:
-        image: Docker image reference to pull.
-
-    Note:
-        A non-zero exit code from ``docker pull`` is not fatal: the failure is
-        logged as a warning and the build proceeds with the locally available image.
-    """
-    result = subprocess.run(
-        ["docker", "pull", image],
-        capture_output=True,
-        check=False,
-    )
-
-    if result.returncode != 0:
-        logger.warning(f"failed to pull image '{image}'")
 
 
 def _read_git_config() -> dict[str, str]:
@@ -147,75 +128,6 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
             args.extend([f"--{flag.replace('_', '-')}", str(val)])
 
     return args
-
-
-def _build_docker_cmd(  # noqa: PLR0913
-    plan: str,
-    image: str,
-    env_file: Path,
-    cli_flags: dict[str, bool | str | int | None],
-    container_name: str,
-    merged_hosts: dict[str, str] | None = None,
-    runtime_dir: Path | None = None,
-) -> list[str]:
-    """Assemble the docker run command that launches goga.build inside a container.
-
-    Args:
-        plan: Plan identifier passed to `goga.build` as the positional argument.
-        image: Docker image to run.
-        env_file: Path to the env file mounted via `--env-file`.
-        cli_flags: Build flags forwarded to the in-container entrypoint.
-        container_name: Name assigned to the container via `--name`.
-        merged_hosts: Resolved host→IP mapping (config.build.hosts merged with
-            parsed ``--add-host`` CLI entries). Each pair becomes a
-            ``--add-host HOST:IP`` flag. ``None`` adds no host entries.
-        runtime_dir: Host ralphex runtime directory bind-mounted read-write at
-            ``/workspace/.ralphex`` — a nested mount layered on top of the
-            ``/workspace`` project mount. ``None`` omits the nested mount; the
-            ``build`` command always supplies it.
-
-    Returns:
-        The full docker command as a list of string arguments.
-    """
-    if merged_hosts is None:
-        merged_hosts = {}
-
-    project_dir = Path.cwd().resolve()
-
-    cmd: list[str] = [
-        "docker",
-        "run",
-        "--rm",
-        "--name",
-        container_name,
-        "--entrypoint",
-        "python3",
-        "-v",
-        f"{project_dir}:/workspace",
-        "-w",
-        "/workspace",
-    ]
-
-    # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/ which
-    # this mount resolves into the host runtime directory — so ralphex bytes
-    # never land in the user's project directory. Read-write (ralphex writes).
-    if runtime_dir is not None:
-        cmd.extend(["-v", f"{runtime_dir}:/workspace/.ralphex"])
-
-    for host, ip in merged_hosts.items():
-        cmd.extend(["--add-host", f"{host}:{ip}"])
-
-    cmd.extend(["--env-file", str(env_file)])
-
-    for host_path, container_path in resolve_credential_mounts():
-        cmd.extend(["-v", f"{host_path}:{container_path}:ro"])
-
-    cmd.append(image)
-
-    cmd.extend(["-m", "goga.build", plan])
-    cmd.extend(_cli_flags_to_args(cli_flags))
-
-    return cmd
 
 
 def resolve_build_runtime_dir() -> Path:
@@ -320,10 +232,10 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     "update",
     is_flag=True,
     default=False,
-    help="Pull the image before launching the container",
+    help="Refresh the image before launch (build if a project Dockerfile is declared, else pull)",
 )
 @click.pass_context
-def build(  # noqa: PLR0913, C901
+def build(  # noqa: PLR0913, C901, PLR0915
     ctx: click.Context,
     plan: str,
     dry_run: bool,
@@ -362,8 +274,9 @@ def build(  # noqa: PLR0913, C901
         add_host: Raw ``HOST:IP`` strings from the repeatable ``--add-host``
             option. Merged on top of ``config.build.hosts``; CLI wins on key
             conflict. Each entry becomes a docker run ``--add-host`` flag.
-        update: When True, pull the image before launch. When False (default),
-            skip the pull and use the locally available image.
+        update: When True, refresh the image before launch via ``docker_update``
+            (build when a project Dockerfile is declared, else pull). When False
+            (default), skip the refresh and use the locally available image.
         clean: When True, wipe and recreate the persistent ralphex runtime host
             directory via ``clean_build_runtime_dir`` before ``docker run``.
             When False (default), keep the existing directory as-is so ralphex
@@ -438,59 +351,69 @@ def build(  # noqa: PLR0913, C901
 
     container_name = f"goga-build-{os.getpid()}"
 
-    def _on_sigterm(signum: int, _frame: object) -> None:
+    def _on_signal(signum: int, _frame: object) -> None:
         raise SystemExit(128 + signum)
 
-    # Install the SIGTERM handler BEFORE creating the secret-bearing env file,
-    # and create that env file inside the try below — so a signal (or any
-    # exception) raised after the env file is written propagates through the
-    # finally, which unlinks it. Writing the env file before the handler is
-    # installed (or outside this try) would leak git identity and task_executor
-    # secrets on disk if a signal arrived in that window. Mirrors the
-    # goga/commands/pipeline launcher shape.
-    _prev_sigterm = signal.signal(signal.SIGTERM, _on_sigterm)
+    # D7 leak-prevention invariant: install BOTH the SIGTERM and SIGINT handlers
+    # BEFORE writing the secret-bearing env file, and write that file inside the
+    # try below — so a signal (or any exception) raised in the window that spans
+    # the env-file write, the docker_update build, and the DockerRunner launch
+    # propagates through the finally, which unlinks the env file. Writing the env
+    # file before the handlers are installed would leak git identity and
+    # task_executor secrets on disk if a signal arrived in that window. The
+    # runner later installs its own handler that NESTS under these (saving and
+    # restoring them), so the restores below return to the originals.
+    _prev_term = signal.signal(signal.SIGTERM, _on_signal)
+    _prev_int = signal.signal(signal.SIGINT, _on_signal)
 
-    launched = False
     env_file: Path | None = None
     try:
         env_file = _write_env_file(env, extra_env)
 
-        docker_cmd = _build_docker_cmd(
-            plan=plan,
-            image=config.image,
-            env_file=env_file,
-            cli_flags=cli_flags,
-            container_name=container_name,
-            merged_hosts=merged_hosts,
-            runtime_dir=runtime_dir,
-        )
+        project_dir = Path.cwd().resolve()
+        # Nested bind-mount: ralphex writes state to its cwd-relative .ralphex/
+        # which this mount resolves into the host runtime directory — so ralphex
+        # bytes never land in the user's project directory. Read-write (ralphex
+        # writes). Then each credential mount, read-only.
+        mounts = [f"{project_dir}:/workspace", f"{runtime_dir}:/workspace/.ralphex"]
+        for host_path, container_path in resolve_credential_mounts():
+            mounts.append(f"{host_path}:{container_path}:ro")
+
+        # args = the post-image command (the in-container goga.build invocation +
+        # its flags); params = the docker-run options the runner translates to
+        # flags via the shared param→flag rule.
+        args = ["-m", "goga.build", plan, *_cli_flags_to_args(cli_flags)]
+        params = {
+            "name": container_name,
+            "rm": True,
+            "entrypoint": "python3",
+            "workdir": "/workspace",
+            "v": mounts,
+            "add_host": [f"{host}:{ip}" for host, ip in merged_hosts.items()],
+            "env_file": str(env_file),
+        }
 
         if dry_run:
             ctx.exit(0)
 
         if update:
-            _pull_image(config.image)
+            # docker_update owns the build-vs-pull branch (build when a project
+            # Dockerfile is declared — fatal; else pull — WARNING, non-fatal).
+            # D5: a fatal build surfaces as a clean message + exit 1 rather than
+            # a traceback; pull-branch failures stay a WARNING inside docker_pull.
+            try:
+                docker_update(config.image, config.dockerfile)
+            except Exception as exc:
+                raise click.ClickException(str(exc)) from exc
 
-        docker_proc = subprocess.Popen(docker_cmd)
-        launched = True
-
-        ctx.exit(docker_proc.wait())
+        exit_code = DockerRunner(config.image).run(args, **params)
+        ctx.exit(exit_code)
     finally:
         # Unlink the env file only if it was created: a pre-write failure or a
         # dry_run ctx.exit before the write leaves env_file None. The env file
         # carries git identity and task_executor secrets.
         if env_file is not None:
             env_file.unlink(missing_ok=True)
-        # Only kill a container we actually started: dry_run exits before
-        # Popen, and a pre-Popen failure leaves nothing running. Issuing
-        # `docker kill` unconditionally would target a never-started container
-        # (or an unrelated one on a goga-build-<pid> name collision).
-        if launched:
-            subprocess.run(
-                ["docker", "kill", container_name],
-                check=False,
-                capture_output=True,
-            )
         # Remove the Docker-created empty ``.ralphex/`` mount point from the
         # project directory: applying the nested bind-mount
         # ``runtime_dir:/workspace/.ralphex`` on top of the ``/workspace``
@@ -502,6 +425,8 @@ def build(  # noqa: PLR0913, C901
         # forbids ``.ralphex/`` in the project directory under any exit path,
         # so it is removed unconditionally here. No-op on dry_run (docker never
         # runs, no mount point is created) and on any path where the directory
-        # does not exist.
+        # does not exist. The runner's own ``docker kill`` + handler restore
+        # already ran in its inner finally (before this one).
         _cleanup_ralphex_in_project(Path.cwd())
-        signal.signal(signal.SIGTERM, _prev_sigterm)
+        signal.signal(signal.SIGTERM, _prev_term)
+        signal.signal(signal.SIGINT, _prev_int)

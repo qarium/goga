@@ -1,7 +1,7 @@
 """Integration test: the ``build`` CLI mounts detected credentials read-only.
 
 Cross-cell integration for ``goga/commands/build``: the real
-``resolve_credential_mounts()`` (called inside ``_build_docker_cmd``) detects a
+``resolve_credential_mounts()`` (called inside ``build``) detects a
 codex credential file on disk and the assembled docker command carries the
 read-only bind-mount ``-v <host>:/home/goga/.codex/auth.json:ro``.
 """
@@ -51,7 +51,7 @@ class TestBuildCredentialMountIntegration:
         mock_env.return_value = Path("/tmp/env")
 
         # Place a codex credential under the redirected home so the real
-        # resolve_credential_mounts() — called inside _build_docker_cmd — detects
+        # resolve_credential_mounts() — called inside build — detects
         # exactly one credential file. Detection uses Path.expanduser(), which
         # reads $HOME directly on CPython 3.12+, so $HOME is redirected (a real
         # ~/.codex/auth.json exists on the host and would otherwise leak in).

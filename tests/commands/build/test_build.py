@@ -18,7 +18,6 @@ import pytest
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import (
-    _build_docker_cmd,
     _cleanup_ralphex_in_project,
     clean_build_runtime_dir,
     resolve_build_runtime_dir,
@@ -216,30 +215,28 @@ class TestBuildRuntimeIsolationFlow:
         assert result.exit_code == 0, result.output
         assert (runtime_dir / "progress.json").exists()
 
-    def test_build_nested_bind_mount_present_in_docker_cmd(self) -> None:
-        cmd = _build_docker_cmd(
-            "plan.md",
-            "goga:latest",
-            Path("/tmp/env"),
-            {},
-            "test-build",
-            {},
-            Path("/host/rt"),
-        )
-        assert "-v" in cmd
-        assert "/host/rt:/workspace/.ralphex" in cmd
+    def test_build_nested_bind_mount_present_in_runner_params(self, tmp_path: Path, monkeypatch) -> None:
+        """The resolved runtime dir reaches params['v'] as the /workspace/.ralphex mount."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
 
-    def test_build_nested_bind_mount_omitted_when_runtime_dir_none(self) -> None:
-        cmd = _build_docker_cmd(
-            "plan.md",
-            "goga:latest",
-            Path("/tmp/env"),
-            {},
-            "test-build",
-            {},
-            None,
-        )
-        assert not any(arg.endswith(":/workspace/.ralphex") for arg in cmd)
+        runtime_dir = resolve_build_runtime_dir()
+
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(build_cmd, ["plan.md"])
+
+        assert result.exit_code == 0, result.output
+        mounts = mock_runner.return_value.run.call_args.kwargs["v"]
+        assert f"{runtime_dir}:/workspace/.ralphex" in mounts
 
     def test_build_host_path_does_not_leak_into_container_env(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)

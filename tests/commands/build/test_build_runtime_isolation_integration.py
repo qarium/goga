@@ -255,7 +255,7 @@ class TestBuildSignalExitCleanup:
         env_path.write_text("SECRET=sk-xxx\n")
         assert env_path.exists()
 
-        # Simulate the SIGTERM handler firing mid-wait: _on_sigterm raises
+        # Simulate the SIGTERM handler firing mid-wait: the handler raises
         # SystemExit(128 + SIGTERM), which propagates into the finally block.
         mock_proc = mock.Mock()
         mock_proc.wait.side_effect = SystemExit(128 + signal.SIGTERM)

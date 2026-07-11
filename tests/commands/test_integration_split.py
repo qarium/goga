@@ -133,10 +133,10 @@ class TestBuildDelegation:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
-            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
-            mock.patch("subprocess.run"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
+            mock_runner.return_value.run.return_value = 0
             runner = CliRunner()
             result = runner.invoke(
                 build_cli,
@@ -148,17 +148,13 @@ class TestBuildDelegation:
     def test_build_docker_exit_code(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)
 
-        mock_proc = mock.MagicMock()
-        mock_proc.wait.return_value = 42
         with (
-            mock.patch.object(_build_mod, "_pull_image"),
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
-            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
-            mock.patch("subprocess.Popen", return_value=mock_proc),
-            mock.patch("subprocess.run"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
+            mock_runner.return_value.run.return_value = 42
             runner = CliRunner()
             result = runner.invoke(build_cli, ["--skip-manifest-check", "plan.md"])
 
@@ -184,17 +180,13 @@ class TestBuildDelegation:
     def test_build_passes_all_cli_options(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)
 
-        mock_proc = mock.MagicMock()
-        mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(_build_mod, "_pull_image"),
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
-            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]) as mock_cmd,
-            mock.patch("subprocess.Popen", return_value=mock_proc),
-            mock.patch("subprocess.run"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
+            mock_runner.return_value.run.return_value = 0
             runner = CliRunner()
             result = runner.invoke(
                 build_cli,
@@ -217,14 +209,19 @@ class TestBuildDelegation:
             )
 
         assert result.exit_code == 0
-        cli_flags = mock_cmd.call_args[1]["cli_flags"]
-        assert cli_flags["worktree"] is True
-        assert cli_flags["skip_finalize"] is True
-        assert cli_flags["session_timeout"] == "30m"
-        assert cli_flags["idle_timeout"] == "5m"
-        assert cli_flags["wait"] == "10s"
-        assert cli_flags["max_iterations"] == 5
-        assert cli_flags["review_patience"] == 3
+        args = mock_runner.return_value.run.call_args.args[0]
+        assert "--worktree" in args
+        assert "--skip-finalize" in args
+        assert "--session-timeout" in args
+        assert "30m" in args
+        assert "--idle-timeout" in args
+        assert "5m" in args
+        assert "--wait" in args
+        assert "10s" in args
+        assert "--max-iterations" in args
+        assert "5" in args
+        assert "--review-patience" in args
+        assert "3" in args
 
 
 # --- install delegation ---
@@ -315,17 +312,13 @@ class TestAllCommandsDelegationViaApp:
     def test_build_via_app_delegates(self, tmp_path: Path) -> None:
         _write_goga_yml(tmp_path)
 
-        mock_proc = mock.MagicMock()
-        mock_proc.wait.return_value = 0
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")),
-            mock.patch.object(_build_mod, "_build_docker_cmd", return_value=["docker", "run"]),
-            mock.patch("subprocess.Popen", return_value=mock_proc),
-            mock.patch("subprocess.run"),
-            mock.patch.object(_build_mod, "_pull_image"),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
             _cwd(tmp_path),
         ):
+            mock_runner.return_value.run.return_value = 0
             runner = CliRunner()
             result = runner.invoke(app, ["build", "--skip-manifest-check", "plan.md"])
 
