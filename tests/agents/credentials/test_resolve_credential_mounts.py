@@ -52,9 +52,7 @@ class TestResolveCredentialMountsContract:
 
         assert isinstance(result, list)
 
-    def test_return_type_is_list_of_str_str_tuples(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_return_type_is_list_of_str_str_tuples(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Every returned item is a tuple[str, str] pair."""
         _write_credential(tmp_path, CODEX_HOST_REL)
         monkeypatch.setenv("HOME", str(tmp_path))
@@ -67,9 +65,7 @@ class TestResolveCredentialMountsContract:
         assert isinstance(host_path, str)
         assert isinstance(container_path, str)
 
-    def test_order_when_all_present(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_order_when_all_present(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Container paths follow the fixed table order: claude → codex → opencode."""
         _write_credential(tmp_path, CLAUDE_HOST_REL)
         _write_credential(tmp_path, CODEX_HOST_REL)
@@ -83,9 +79,7 @@ class TestResolveCredentialMountsContract:
 
 
 class TestResolveCredentialMountsLogic:
-    def test_resolve_credential_mounts_all_present(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_resolve_credential_mounts_all_present(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """All three credential files present → three tuples, correct container paths."""
         _write_credential(tmp_path, CLAUDE_HOST_REL)
         _write_credential(tmp_path, CODEX_HOST_REL)
@@ -104,9 +98,7 @@ class TestResolveCredentialMountsLogic:
         assert result[2][1] == OPENCODE_CONTAINER
         assert all(isinstance(host, str) and isinstance(container, str) for host, container in result)
 
-    def test_resolve_credential_mounts_none_present(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_resolve_credential_mounts_none_present(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """An empty home yields an empty list (no error surfaced)."""
         monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -114,9 +106,7 @@ class TestResolveCredentialMountsLogic:
 
         assert result == []
 
-    def test_resolve_credential_mounts_partial_presence(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
+    def test_resolve_credential_mounts_partial_presence(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
         """Only codex present → exactly one tuple with the codex container path."""
         _write_credential(tmp_path, CODEX_HOST_REL)
         monkeypatch.setenv("HOME", str(tmp_path))

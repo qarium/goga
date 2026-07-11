@@ -119,8 +119,10 @@ class TestPipelineDispatchLogic:
                 pipeline,
                 [
                     "deploy",
-                    "--proxy", "http://corp:3128",
-                    "--add-host", "foo.local:127.0.0.1",
+                    "--proxy",
+                    "http://corp:3128",
+                    "--add-host",
+                    "foo.local:127.0.0.1",
                     "--clean",
                 ],
             )
@@ -208,8 +210,10 @@ class TestPipelineDispatchEdge:
                 pipeline,
                 [
                     "deploy",
-                    "--add-host", "a.local:192.168.1.1",
-                    "--add-host", "b.local:127.0.0.1",
+                    "--add-host",
+                    "a.local:192.168.1.1",
+                    "--add-host",
+                    "b.local:127.0.0.1",
                 ],
             )
 

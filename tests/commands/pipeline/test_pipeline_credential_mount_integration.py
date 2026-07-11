@@ -34,9 +34,7 @@ def _make_config() -> Config:
 
 
 class TestPipelineCredentialMountIntegration:
-    def test_run_mode_mounts_codex_credential_read_only(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_mode_mounts_codex_credential_read_only(self, tmp_path: Path, monkeypatch) -> None:
         """Run mode assembles a read-only bind-mount for the detected codex credential."""
         config = _make_config()
 

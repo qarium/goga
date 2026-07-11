@@ -31,9 +31,7 @@ class TestAgentsFacadeCredentialsIntegration:
         """Sanity: the re-exported wrapper routine still resolves agent→wrapper path."""
         assert resolve_wrapper_path("codex") == "/home/goga/bin/codex-as-claude.sh"
 
-    def test_end_to_end_codex_credential_detected(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_end_to_end_codex_credential_detected(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A codex credential under the redirected home yields exactly one tuple.
 
         The flow is exercised end-to-end: a credential file on disk is detected

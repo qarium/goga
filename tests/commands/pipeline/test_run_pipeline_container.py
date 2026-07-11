@@ -249,11 +249,7 @@ class TestAfmConfigTmpfile:
             afm_path.unlink(missing_ok=True)
 
         assert content == (
-            f"client.command: {wrapper_path}\n"
-            "theme: goga\n"
-            "open_browser: false\n"
-            "proxy:\n"
-            "  enabled: false\n"
+            f"client.command: {wrapper_path}\ntheme: goga\nopen_browser: false\nproxy:\n  enabled: false\n"
         )
         assert mode == 0o600
 
