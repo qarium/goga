@@ -51,7 +51,7 @@ goga build docs/plans/my-plan.md
 goga build docs/plans/my-plan.md --dry-run --worktree
 goga build docs/plans/my-plan.md -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-sonnet-4-6
 
-# Pull the latest image, then build (default skips the pull)
+# Refresh the image before launch (build when dockerfile is declared, else pull)
 goga build docs/plans/my-plan.md --update
 
 # First run with a project Dockerfile declared in .goga/config.yml: the image
@@ -74,7 +74,7 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 
 - Docker must be installed and available in PATH
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
-- By default the image is NOT pulled — the local image is used as-is. Use `--update`/`-u` to pull before launch. On pull failure a warning is logged and the build continues with the locally available image
+- By default the image is NOT refreshed — the local image is used as-is. Use `--update`/`-u` to refresh it before launch: build when a project Dockerfile is declared (fatal on failure), else pull (warning on failure, non-fatal — the build continues with the locally available image)
 - First-run safety net: when `dockerfile` is declared in `.goga/config.yml` and the image is absent locally, the command builds it ONCE before launch even WITHOUT `--update` (so the first run after declaring a project Dockerfile does not need `--update`). `--update` forces a RE-build of an already-present image; the safety net is a no-op once the image exists
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
 - Credential mounts are detected automatically via `resolve_credential_mounts()` — there is no `--credential`/`--mount` flag. The routine scans the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`), is agent-agnostic (it is not filtered by the configured `task_executor.agent`), and returns only files that exist. Every returned file is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `resolve-credential-mounts` and `docker-auth-mounts` practices for details

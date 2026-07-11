@@ -47,8 +47,11 @@ run) share one decision:
 
 Behavior, by `dockerfile`:
 
-- `dockerfile` set → `docker build -f <dockerfile> -t <image> .`. Build failure is
-  fatal: it raises, the caller maps it to exit 1, and the container never launches.
+- `dockerfile` set → `docker build --pull -f <dockerfile> -t <image> .`. The
+  `--pull` flag refreshes base images declared via `FROM` from the registry
+  instead of the local cache, so an `--update` always reflects the current
+  upstream base images. Build failure is fatal: it raises, the caller maps it
+  to exit 1, and the container never launches.
 - `dockerfile` None → `docker pull <image>`. Pull failure is recoverable: a WARNING
   is logged and the caller continues on the local image (the launch may still fail
   later if the image is genuinely absent, but that surfaces from docker run itself).
@@ -77,7 +80,7 @@ Behavior matrix of `docker_build_if_not_exist`:
 | image state | `dockerfile` | action |
 |-------------|--------------|--------|
 | present locally | set OR None | no-op (do not refresh — that is `docker_update`'s job under `--update`) |
-| absent | set | `docker build -f <dockerfile> -t <image> .` (fatal on failure) |
+| absent | set | `docker build --pull -f <dockerfile> -t <image> .` (fatal on failure). The `--pull` flag refreshes base images declared via `FROM` so a first-run build always picks up the current upstream base images. |
 | absent | None | no-op (NEVER pulls — a registry image is pulled by `docker run` itself or by `--update`) |
 
 The safety net probes the local image store via a silent `docker image inspect`
@@ -86,9 +89,10 @@ verified docker availability via its own `_check_docker`).
 
 ### Direct build with extra CLI options
 
-Callers that need custom build flags (extra hosts, --pull, build args, platform,
-etc.) construct `DockerBuilder` themselves and pass the options as `params`. This
-is the escape hatch outside `docker_update`'s default-params build:
+Callers that need custom build flags beyond `--pull` (extra hosts, build args,
+platform, etc.) construct `DockerBuilder` themselves and pass the options as
+`params`. `docker_update` and `docker_build_if_not_exist` already emit `--pull`
+for every build; this escape hatch is for the other flags they do not cover:
 
     from goga.docker import DockerBuilder
 

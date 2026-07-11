@@ -102,13 +102,16 @@ def docker_update(image: str, dockerfile: str | None) -> None:
     non-fatal pull (WARNING, bool discarded). ``image`` non-None is a
     caller-validated precondition.
 
+    The build branch passes ``pull=True`` so ``docker build`` refreshes base
+    images (``FROM ...``) from the registry instead of using the local cache.
+
     Args:
         image: image:tag — non-None (caller-validated); used as the build tag
             and the pull target.
         dockerfile: path to a project Dockerfile. None → pull branch.
     """
     if dockerfile is not None:
-        DockerBuilder(image, dockerfile, context=".").build()
+        DockerBuilder(image, dockerfile, context=".").build(pull=True)
     else:
         docker_pull(image)
 
@@ -155,6 +158,9 @@ def docker_build_if_not_exist(image: str, dockerfile: str | None) -> None:
     cell stays a pure leaf with no dependency on goga/config. ``image`` non-None
     is a caller-validated precondition.
 
+    The build branch passes ``pull=True`` so ``docker build`` refreshes base
+    images (``FROM ...``) from the registry instead of using the local cache.
+
     Args:
         image: image:tag — non-None (caller-validated); used as the local-image
             probe target and the build tag.
@@ -166,4 +172,4 @@ def docker_build_if_not_exist(image: str, dockerfile: str | None) -> None:
         return
 
     if dockerfile is not None:
-        DockerBuilder(image, dockerfile, context=".").build()
+        DockerBuilder(image, dockerfile, context=".").build(pull=True)

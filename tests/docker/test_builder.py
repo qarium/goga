@@ -198,8 +198,8 @@ class TestDockerUpdate:
         assert len(instances) == 1
         inst = instances[0]
         assert (inst.image, inst.dockerfile, inst.context) == ("img:tag", "Dockerfile", ".")
-        # build() ran with default params (no extras).
-        assert inst.built_with == [{}]
+        # build() ran with pull=True so base images (FROM ...) refresh from the registry.
+        assert inst.built_with == [{"pull": True}]
         assert pulls == []
 
     def test_docker_update_pulls_when_dockerfile_none(self, monkeypatch) -> None:
@@ -243,8 +243,24 @@ class TestDockerUpdate:
         assert len(instances) == 1
         inst = instances[0]
         assert inst.dockerfile == ""
-        assert inst.built_with == [{}]
+        assert inst.built_with == [{"pull": True}]
         assert pulls == []
+
+    def test_docker_update_build_branch_invokes_docker_build_with_pull_flag(self, monkeypatch) -> None:
+        # End-to-end through the real DockerBuilder + translate_params + subprocess.run:
+        # the build branch of docker_update must emit --pull so base images (FROM ...)
+        # refresh from the registry rather than being served from the local cache.
+        fake = RecordingRun(returncode=0)
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake)
+
+        docker_update("img:tag", "Dockerfile")
+
+        assert len(fake.calls) == 1
+        argv = fake.calls[0]
+        assert argv[0:2] == ["docker", "build"]
+        assert "--pull" in argv
+        # -f <dockerfile> -t <image> <context> tail is preserved.
+        assert argv[-5:] == ["-f", "Dockerfile", "-t", "img:tag", "."]
 
 
 class TestDockerBuildIfNotExist:
@@ -279,8 +295,9 @@ class TestDockerBuildIfNotExist:
         assert len(instances) == 1
         inst = instances[0]
         assert (inst.image, inst.dockerfile, inst.context) == ("img:tag", "Dockerfile", ".")
-        # build() ran with default params (no extras) — mirrors docker_update build branch.
-        assert inst.built_with == [{}]
+        # build() ran with pull=True so base images (FROM ...) refresh from the registry
+        # — mirrors docker_update build branch.
+        assert inst.built_with == [{"pull": True}]
 
     def test_noop_when_image_absent_and_dockerfile_none(self, monkeypatch) -> None:
         # dockerfile None + image absent -> no-op (NEVER pulls; a registry image
@@ -315,7 +332,24 @@ class TestDockerBuildIfNotExist:
         assert len(instances) == 1
         inst = instances[0]
         assert inst.dockerfile == ""
-        assert inst.built_with == [{}]
+        assert inst.built_with == [{"pull": True}]
+
+    def test_build_branch_invokes_docker_build_with_pull_flag(self, monkeypatch) -> None:
+        # End-to-end through the real DockerBuilder + translate_params + subprocess.run:
+        # the build branch of docker_build_if_not_exist must emit --pull so base images
+        # (FROM ...) refresh from the registry. Mirrors docker_update build branch.
+        fake = RecordingRun(returncode=0)
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake)
+
+        docker_build_if_not_exist("img:tag", "Dockerfile")
+
+        assert len(fake.calls) == 1
+        argv = fake.calls[0]
+        assert argv[0:2] == ["docker", "build"]
+        assert "--pull" in argv
+        # -f <dockerfile> -t <image> <context> tail is preserved.
+        assert argv[-5:] == ["-f", "Dockerfile", "-t", "img:tag", "."]
 
 
 class TestImageExistsHelper:

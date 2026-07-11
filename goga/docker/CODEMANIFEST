@@ -153,22 +153,25 @@ Annotations: |
 
     Algorithm:
     1. When `dockerfile` is not None: construct `DockerBuilder` with this
-       `image` and `dockerfile`, context ".", and call its build method with no
-       extra params — build failure is fatal (propagates)
+       `image` and `dockerfile`, context ".", and call its build method with
+       pull=True (translated to the --pull flag) so base images declared via
+       FROM refresh from the registry instead of being served from the local
+       cache — build failure is fatal (propagates)
     2. When `dockerfile` is None: call `docker_pull` with `image` — pull failure
        is a WARNING, non-fatal
 
     Requirements:
     - `image` MUST be non-None (caller-validated precondition); it is forwarded
       verbatim into `DockerBuilder` / `docker_pull`
-    - dockerfile set  → build (fatal on failure)
+    - dockerfile set  → build with --pull (fatal on failure)
     - dockerfile None → pull (WARNING on failure)
 
     Constraints:
     - Exactly one of build / pull runs — no third branch
     - The caller gates this with the --update flag; do nothing otherwise
-    - Build uses default params here — callers needing custom build CLI options
-      construct `DockerBuilder` directly (and would then import it themselves)
+    - The build branch always emits --pull; callers needing other custom build
+      CLI options construct `DockerBuilder` directly (and would then import it
+      themselves)
 
 "docker_build_if_not_exist(image: str, dockerfile: str | None) -> none: None":
   location: builder.py
@@ -200,8 +203,10 @@ Annotations: |
        refreshing is `docker_update`'s responsibility under --update)
     3. When the image is absent and `dockerfile` is not None: construct
        `DockerBuilder` with this `image` and `dockerfile`, context ".", and
-       call its build method with no extra params — build failure is fatal
-       (propagates, same error semantics as the build branch of `docker_update`)
+       call its build method with pull=True (translated to the --pull flag) so
+       base images declared via FROM refresh from the registry instead of being
+       served from the local cache — build failure is fatal (propagates, same
+       error semantics as the build branch of `docker_update`)
     4. When the image is absent and `dockerfile` is None: return (no-op — never
        pulls)
 
@@ -210,16 +215,17 @@ Annotations: |
       verbatim into the docker image inspect probe and `DockerBuilder`
     - image present → no-op (no refresh — this routine is a safety net, not a
       refresh mechanism)
-    - image absent + dockerfile set → build (fatal on failure, same as
-      `docker_update` build branch)
+    - image absent + dockerfile set → build with --pull (fatal on failure,
+      same as `docker_update` build branch)
     - image absent + dockerfile None → no-op (NEVER pulls)
 
     Constraints:
     - Never pull — pulling is `docker_update`'s responsibility under --update
       or docker run's implicit registry fetch; this routine only BUILDS
     - Do not refresh existing images — that is `docker_update` under --update
-    - Build uses default params here — callers needing custom build CLI options
-      construct `DockerBuilder` directly (and would then import it themselves)
+    - The build branch always emits --pull; callers needing other custom build
+      CLI options construct `DockerBuilder` directly (and would then import it
+      themselves)
     - The caller runs this UNCONDITIONALLY at launch entry — no --update gate
       (the gate belongs to `docker_update`)
 

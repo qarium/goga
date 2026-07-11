@@ -59,7 +59,7 @@ verbatim, with no validation — the same semantics as `goga build -e`:
 goga pipeline deploy -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-sonnet-4-6
 ```
 
-Pull the latest image before launching (default skips the pull):
+Refresh the image before launch (build when dockerfile is declared, else pull). Default skips the refresh:
 
 ```bash
 goga pipeline deploy --update
@@ -142,8 +142,7 @@ file is missing from the image, afm surfaces the error.
    and the image is absent locally, builds it ONCE before launch (no-op when
    the image is present or no Dockerfile is set; fatal build surfaces as
    ClickException, launch skipped).
-6. When `--update` is set: pulls the image (warning on failure, non-fatal).
-   Default is no pull.
+6. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
 7. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
 8. Propagates the container's exit code.
 
@@ -187,8 +186,7 @@ env-file is written, no afm state directory is involved.
     and the image is absent locally, builds it ONCE before launch (no-op when
     the image is present or no Dockerfile is set; fatal build surfaces as
     ClickException, launch skipped; secret tmpfile/env-file are unlinked).
-12. When `--update` is set: pulls the image (warning on failure, non-fatal).
-    Default is no pull.
+12. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
 13. Launches the container and waits for its exit code.
 14. In `finally`: deletes the `client.command` tmpfile and the env-file,
     `docker kill`s the container. **The persistent afm state host directory
@@ -244,8 +242,9 @@ If the name exists in both sources, the project source wins (resolved inside the
   `finally` block — only the `client.command` tmpfile and env-file are deleted.
   The persistent directory survives across runs; `--clean` wipes it BEFORE
   launch, never after.
-- Do NOT call `docker pull` unconditionally — the default behavior is no pull.
-  Use `--update`/`-u` to pull before launch.
+- Do NOT refresh the image by default — the default behavior is no refresh.
+  Use `--update`/`-u` to refresh before launch (build when a project Dockerfile
+  is declared, else pull).
 - Do NOT derive the `client.command` tmpfile mount target from `AFM_DIR` —
   `config.yaml` is always read from `~/.afm/config.yaml` regardless of where
   `AFM_DIR` points. The persistent directory mounted at `/home/goga/pipeline`
