@@ -1,9 +1,10 @@
 """Integration test: ``run_pipeline_container`` mounts detected credentials read-only.
 
 Cross-cell integration for ``goga/commands/pipeline``: in run mode the real
-``resolve_credential_mounts()`` (called inside ``_build_run_cmd``) detects a
-codex credential file on disk and the assembled docker command carries the
-read-only bind-mount ``-v <host>:/home/goga/.codex/auth.json:ro``.
+``resolve_credential_mounts()`` (called by ``run_pipeline_container`` when
+assembling the mounts handed to ``DockerRunner``) detects a codex credential
+file on disk and the assembled docker command carries the read-only bind-mount
+``-v <host>:/home/goga/.codex/auth.json:ro``.
 """
 
 from __future__ import annotations
@@ -40,7 +41,7 @@ class TestPipelineCredentialMountIntegration:
         config = _make_config()
 
         # Place a codex credential under the redirected home so the real
-        # resolve_credential_mounts() — called inside _build_run_cmd — detects
+        # resolve_credential_mounts() — called inside run_pipeline_container — detects
         # exactly one credential file. Detection uses Path.expanduser(), which
         # reads $HOME directly on CPython 3.12+, so $HOME is redirected (a real
         # ~/.codex/auth.json exists on the host and would otherwise leak in).

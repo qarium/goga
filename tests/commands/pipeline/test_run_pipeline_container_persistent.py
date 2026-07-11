@@ -309,12 +309,20 @@ class TestHostsFlags:
         assert "foo.local:127.0.0.1" in cmd
 
 
-# --- Logic tests: update / conditional pull ---
+# --- Logic tests: update / conditional image refresh (build vs pull) ---
 
 
-class TestConditionalPull:
-    def test_update_false_skips_pull_run_mode(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode with update=False does not pull the image."""
+class TestConditionalUpdate:
+    """--update delegates to docker_update(image, dockerfile) in both modes.
+
+    With ``config.dockerfile`` None (the default here) docker_update takes the
+    PULL branch; a set Dockerfile takes the BUILD branch. These tests assert the
+    delegation call shape, not the pull/build internals (those live in the
+    ``goga/docker`` cell tests).
+    """
+
+    def test_update_false_skips_docker_update_run_mode(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode with update=False does not refresh the image."""
         config = _make_config()
         _stub_runtime(monkeypatch, tmp_path)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -324,16 +332,16 @@ class TestConditionalPull:
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(_rpc_mod, "_pull_image") as mock_pull,
+            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container("deploy", config, (), None, {}, False, False)
 
-        mock_pull.assert_not_called()
+        mock_update.assert_not_called()
 
-    def test_update_true_pulls_run_mode(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode with update=True pulls the image before launch."""
+    def test_update_true_delegates_docker_update_run_mode(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode with update=True delegates to docker_update before launch."""
         config = _make_config()
         _stub_runtime(monkeypatch, tmp_path)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
@@ -343,16 +351,17 @@ class TestConditionalPull:
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(_rpc_mod, "_pull_image") as mock_pull,
+            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container("deploy", config, (), None, {}, False, True)
 
-        mock_pull.assert_called_once_with(config.image)
+        # dockerfile is None → docker_update(image, None) takes the pull branch.
+        mock_update.assert_called_once_with(config.image, config.dockerfile)
 
-    def test_update_false_skips_pull_discovery(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode with update=False does not pull the image."""
+    def test_update_false_skips_docker_update_discovery(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mode with update=False does not refresh the image."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.chdir(tmp_path)
@@ -360,16 +369,16 @@ class TestConditionalPull:
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(_rpc_mod, "_pull_image") as mock_pull,
+            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container(None, config, (), None, {}, False, False)
 
-        mock_pull.assert_not_called()
+        mock_update.assert_not_called()
 
-    def test_update_true_pulls_discovery(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode with update=True pulls the image before launch."""
+    def test_update_true_delegates_docker_update_discovery(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mode with update=True delegates to docker_update before launch."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.chdir(tmp_path)
@@ -377,13 +386,13 @@ class TestConditionalPull:
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
         with (
-            mock.patch.object(_rpc_mod, "_pull_image") as mock_pull,
+            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container(None, config, (), None, {}, False, True)
 
-        mock_pull.assert_called_once_with(config.image)
+        mock_update.assert_called_once_with(config.image, config.dockerfile)
 
 
 # --- Logic tests: proxy env vars (run mode) ---

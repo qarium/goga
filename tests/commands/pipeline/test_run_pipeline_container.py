@@ -85,8 +85,8 @@ class TestPipelineDiscovery:
         assert "-p" not in cmd
         assert "--port" not in cmd
         assert "--env-file" not in cmd
-        # project mounted as /workspace working directory
-        assert "-w" in cmd
+        # project mounted as /workspace working directory (workdir param → --workdir)
+        assert "--workdir" in cmd
         assert "/workspace" in cmd
 
     def test_pipeline_discovery_installs_and_restores_signal_handlers(self, tmp_path: Path, monkeypatch) -> None:
@@ -499,7 +499,15 @@ class TestPipelinePullImage:
 
 class TestPipelineSignals:
     def test_pipeline_run_installs_and_restores_sigterm_handler(self, tmp_path: Path, monkeypatch) -> None:
-        """SIGTERM handler is installed at start and restored at end."""
+        """SIGTERM handler is installed at start and restored at end (caller + runner).
+
+        Run mode installs a CALLER-side SIGTERM handler (D7, before the secret
+        files are written) and ``DockerRunner`` installs its OWN handler that
+        nests under it. Both the pipeline module and the runner bind the same
+        stdlib ``signal`` module, so patching ``_rpc_mod.signal.signal`` captures
+        both layers: caller install/restore (2) + runner install/restore (2) =
+        4 SIGTERM calls.
+        """
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -516,8 +524,8 @@ class TestPipelineSignals:
             run_pipeline_container("deploy", config)
 
         sigterm_calls = [c for c in mock_signal.call_args_list if c.args and c.args[0] == signal.SIGTERM]
-        # one install at start, one restore at end
-        assert len(sigterm_calls) == 2
+        # caller install + runner install + runner restore + caller restore
+        assert len(sigterm_calls) == 4
 
     def test_pipeline_run_returns_130_on_sigint(self, tmp_path: Path, monkeypatch) -> None:
         """SIGINT during run results in exit code 130 and a docker kill."""
@@ -573,3 +581,60 @@ class TestPipelineSignals:
             result = run_pipeline_container("deploy", config)
 
         assert result == 127
+
+
+# --- D7 leak-prevention invariant ---
+
+
+class TestRunModeCallerHandlerD7:
+    def test_caller_handler_installed_before_secret_files(self, tmp_path: Path, monkeypatch) -> None:
+        """D7: the caller SIGTERM/SIGINT handler is installed BEFORE the afm-config
+        tmpfile and env-file are written.
+
+        Run mode installs a caller-side handler before writing the secret files so
+        a signal during the setup window — including the docker_update build —
+        unwinds to the caller finally and unlinks the secret files. The runner's
+        own handler is installed later (inside DockerRunner.run, after both files
+        are written), so at each write the caller has already installed BOTH
+        handlers (2 signal calls).
+        """
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        install_count = {"n": 0}
+
+        def fake_signal(_sig: int, _handler: object) -> object:
+            install_count["n"] += 1
+            return mock.DEFAULT
+
+        monkeypatch.setattr(_rpc_mod.signal, "signal", mock.MagicMock(side_effect=fake_signal))
+
+        writes: list[tuple[str, int]] = []
+        real_afm = _rpc_mod._write_afm_config_tmpfile
+        real_env = _rpc_mod._write_env_file
+
+        def afm_wrap(wrapper_path: str) -> Path:
+            writes.append(("afm", install_count["n"]))
+            return real_afm(wrapper_path)
+
+        def env_wrap(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            writes.append(("env", install_count["n"]))
+            return real_env(env, extra_env)
+
+        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", afm_wrap)
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", env_wrap)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            run_pipeline_container("deploy", config)
+
+        # both secret files were written; the caller handler (2 installs) ran first
+        assert [name for name, _ in writes] == ["afm", "env"]
+        assert all(n >= 2 for _name, n in writes)

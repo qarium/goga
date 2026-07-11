@@ -142,7 +142,7 @@ class TestResolvedWrapperAfmConfig:
         """The afm-config tmpfile carries the resolved absolute wrapper path."""
         config = _make_config(pipeline_agent="codex")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
         monkeypatch.chdir(tmp_path)
@@ -179,7 +179,7 @@ class TestResolvedWrapperAfmConfig:
         """
         config = _make_config(pipeline_agent=agent)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
         monkeypatch.chdir(tmp_path)
@@ -243,7 +243,7 @@ class TestPipelineDiscoveryExtraEnv:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
@@ -275,7 +275,7 @@ class TestCodexAuthMount:
         (tmp_path / ".codex").mkdir(parents=True)
         (tmp_path / ".codex" / "auth.json").write_text("{}")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
         monkeypatch.chdir(tmp_path)

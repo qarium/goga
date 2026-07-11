@@ -142,7 +142,7 @@ class TestPipelineResolvedPathFlow:
         _write_config(tmp_path, agent=agent)
         config = _load_config(tmp_path, monkeypatch)
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
@@ -200,7 +200,7 @@ class TestResolvedPathConsistency:
 
         # --- pipeline side: capture afm-config client.command ---
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "_pull_image", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
 
