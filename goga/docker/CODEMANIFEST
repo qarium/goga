@@ -12,8 +12,16 @@ Annotations: |
   This cell is a seed-cell with a declared responsibility zone — everything related
   to Docker in the project: in-container environment assertions, container launching,
   image building. The body holds the guard routine `ensure_in_docker`; the stateful
-  `DockerBuilder` (image building) and its supporting routines `docker_pull` and
-  `docker_update`; and the stateful `DockerRunner` (container launching).
+  `DockerBuilder` (image building) and its supporting routines `docker_pull`,
+  `docker_update`, and `docker_build_if_not_exist`; and the stateful `DockerRunner`
+  (container launching).
+
+  `docker_update` is the single --update decision point (force refresh — build
+  when a Dockerfile is declared, else pull). `docker_build_if_not_exist` is its
+  complement: a first-run safety net that builds the local image only when it is
+  absent AND a Dockerfile is declared — it never pulls, and it is a no-op when
+  the image already exists or when no Dockerfile is set. Both take PRIMITIVES
+  (image, dockerfile) so the cell stays a pure leaf with no Imports.
 
   The `DockerBuilder` build and `DockerRunner` run methods translate a uniform
   params dict into docker CLI flags by a shared rule: a 1-character key becomes a
@@ -162,6 +170,59 @@ Annotations: |
     - Build uses default params here — callers needing custom build CLI options
       construct `DockerBuilder` directly (and would then import it themselves)
 
+"docker_build_if_not_exist(image: str, dockerfile: str | None) -> none: None":
+  location: builder.py
+  annotations: |
+    First-run safety net: build the local image when it is ABSENT and a project
+    Dockerfile is declared. Complementary to `docker_update` — `docker_update`
+    is gated by the --update flag (force refresh); this routine runs
+    UNCONDITIONALLY at launch entry so the launcher never hands a non-existent
+    locally-built image to docker run. Its purpose is to guarantee the image
+    exists, not to refresh it.
+
+    Takes PRIMITIVES (`image`, `dockerfile`), not a Config object, so the
+    goga/docker cell stays a pure leaf with no Imports — same convention as
+    `docker_update`. The `image: str` signature makes the non-None precondition
+    explicit at the call site — callers pass the already-validated config.image.
+
+    `image`: image:tag — non-None (caller-validated precondition); used as the
+             local-image probe target and the build tag
+    `dockerfile`: path to a project Dockerfile. None → no-op when the image is
+                  absent (this routine never pulls — a registry image is pulled
+                  by docker run itself or by an explicit --update).
+
+    Algorithm:
+    1. Probe the local image store for `image` via docker image inspect (a
+       silent capture-stdout/stderr subprocess; returncode 0 means present).
+       A missing docker binary is tolerated and treated as "image not present"
+       (the caller has already verified docker availability via _check_docker).
+    2. When the image is present: return immediately (no-op — do not refresh;
+       refreshing is `docker_update`'s responsibility under --update)
+    3. When the image is absent and `dockerfile` is not None: construct
+       `DockerBuilder` with this `image` and `dockerfile`, context ".", and
+       call its build method with no extra params — build failure is fatal
+       (propagates, same error semantics as the build branch of `docker_update`)
+    4. When the image is absent and `dockerfile` is None: return (no-op — never
+       pulls)
+
+    Requirements:
+    - `image` MUST be non-None (caller-validated precondition); it is forwarded
+      verbatim into the docker image inspect probe and `DockerBuilder`
+    - image present → no-op (no refresh — this routine is a safety net, not a
+      refresh mechanism)
+    - image absent + dockerfile set → build (fatal on failure, same as
+      `docker_update` build branch)
+    - image absent + dockerfile None → no-op (NEVER pulls)
+
+    Constraints:
+    - Never pull — pulling is `docker_update`'s responsibility under --update
+      or docker run's implicit registry fetch; this routine only BUILDS
+    - Do not refresh existing images — that is `docker_update` under --update
+    - Build uses default params here — callers needing custom build CLI options
+      construct `DockerBuilder` directly (and would then import it themselves)
+    - The caller runs this UNCONDITIONALLY at launch entry — no --update gate
+      (the gate belongs to `docker_update`)
+
 "DockerRunner(image: str)":
   location: runner.py
   annotations: |
@@ -230,7 +291,10 @@ Description: |
   Seed-cell with a declared responsibility zone — everything related to Docker in
   the project: in-container environment assertions, container launching, image
   building. The body holds the guard routine `ensure_in_docker`; the stateful
-  `DockerBuilder` plus the `docker_pull` and `docker_update` routines (image
-  acquisition — build when a project Dockerfile is declared, else pull); and the
-  stateful `DockerRunner` (container launching + lifecycle). docker_update takes
-  primitives so the cell stays a pure leaf with no Imports.
+  `DockerBuilder` plus the `docker_pull`, `docker_update`, and
+  `docker_build_if_not_exist` routines (image acquisition — `docker_update`
+  refreshes under `--update`: build when a project Dockerfile is declared, else
+  pull; `docker_build_if_not_exist` is the first-run safety net that builds the
+  local image when it is absent and a Dockerfile is declared); and the stateful
+  `DockerRunner` (container launching + lifecycle). Both image-acquisition
+  routines take primitives so the cell stays a pure leaf with no Imports.

@@ -22,6 +22,7 @@ Imports:
     From: goga/runtime
   - Types:
       - docker_update
+      - docker_build_if_not_exist
       - DockerRunner
     Usages:
       - docker-builder
@@ -54,6 +55,12 @@ Annotations: |
   Use `docker_update` and the `docker-builder` practice to refresh the image when
   --update is set: build when a project Dockerfile is declared (config.dockerfile
   set, fatal on failure), else pull (warning, non-fatal).
+  Use `docker_build_if_not_exist` and the `docker-builder` practice for the
+  first-run safety net — runs unconditionally before launch: builds the local
+  image when it is absent AND config.dockerfile is declared (fatal on failure),
+  no-op otherwise. This closes the corner case where dockerfile is set but the
+  image was never built and --update is not passed (a bare docker run would
+  fail with "No such image").
   Use `DockerRunner` and the `docker-runner` practice to assemble the docker run
   command and manage the container lifecycle (SIGTERM/SIGINT handler, guaranteed
   docker kill, signal-handler restore). The runner is a thin executor — this
@@ -102,7 +109,8 @@ Annotations: |
               image via `docker_update` before launching the container — build
               when a project Dockerfile is declared (config.dockerfile set),
               else pull. When False (default), skip the refresh entirely and use
-              the local image.
+              the local image. Independent of `docker_build_if_not_exist` (the
+              first-run safety net runs unconditionally before this branch).
     `clean`: flag from the --clean click option. When True, wipe and recreate
              the persistent ralphex runtime host directory via
              `clean_build_runtime_dir` BEFORE docker run. When False (default),
@@ -176,16 +184,24 @@ Annotations: |
           the project dir; each credential mount from `resolve_credential_mounts`
           read-only), --add-host, --env-file, image, args
     15. On dry_run: print the assembled command and exit 0 without launching
-    16. When `update` is True: call `docker_update` with config.image and
+    16. Call `docker_build_if_not_exist` with config.image and config.dockerfile
+        — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
+        when the image already exists or when no Dockerfile is set. When the
+        image is absent and a Dockerfile is declared: build it (fatal on failure
+        — surfaces as a ClickException via the D5 mapper, exit 1, launch
+        skipped). Runs inside the try so the D7 leak-prevention invariant covers
+        this window: the secret env-file is already written (step 10), and a
+        fatal build unwinds to the finally which unlinks it
+    17. When `update` is True: call `docker_update` with config.image and
         config.dockerfile — build when a project Dockerfile is declared (fatal on
         failure), else pull (warning, non-fatal). When `update` is False: skip the
         refresh.
-    17. Launch the container via `DockerRunner`(config.image).run(args, params):
+    18. Launch the container via `DockerRunner`(config.image).run(args, params):
         the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
         which nests under the caller handler installed in step 10 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code
-    18. In finally: delete the env-file and remove ``.ralphex/`` from the project
+    19. In finally: delete the env-file and remove ``.ralphex/`` from the project
         directory via `_cleanup_ralphex_in_project` to enforce the contract
         invariant that no ``.ralphex/`` appears in the project directory under any
         exit path, and restore the caller-installed SIGTERM/SIGINT handler to the
@@ -208,6 +224,13 @@ Annotations: |
     - Image refresh runs only when `update` is True via `docker_update`: build
       when config.dockerfile is set (fatal on failure), else pull (warning,
       non-fatal)
+    - First-run safety net runs UNCONDITIONALLY at launch entry via
+      `docker_build_if_not_exist`: when config.image is absent locally AND
+      config.dockerfile is declared, build it (fatal on failure — surfaces as
+      ClickException, exit 1, launch skipped); no-op when the image is present
+      or no Dockerfile is declared. This closes the corner case where dockerfile
+      is set but the image was never built and --update is not passed — without
+      this net a bare docker run would fail with "No such image"
     - The host runtime directory under
       ~/.goga/runtime/builds/<normalized_project>/<branch>/ MUST exist before
       docker run — Docker may refuse to bind-mount a non-existent host path
@@ -228,7 +251,10 @@ Annotations: |
       the finally block and unlink the env-file)
 
     Constraints:
-    - Do not refresh the image by default — refresh only when `update` is True
+    - Do not refresh an EXISTING image by default — refresh only when `update`
+      is True. The unconditional `docker_build_if_not_exist` at launch entry is
+      NOT a refresh: it builds only when the image is absent AND a Dockerfile is
+      declared (first-run build, not a rebuild of an existing image)
     - Do not write --add-host for hosts absent in both config and CLI
     - Do not validate the "HOST:IP" format of --add-host entries beyond a
       single-colon split — Docker itself reports malformed entries

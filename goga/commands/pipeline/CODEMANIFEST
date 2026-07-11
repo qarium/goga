@@ -24,6 +24,7 @@ Imports:
     From: goga/pipeline
   - Types:
       - docker_update
+      - docker_build_if_not_exist
       - DockerRunner
     Usages:
       - docker-builder
@@ -81,6 +82,12 @@ Annotations: |
   Use `docker_update` and the `docker-builder` practice to refresh the image when
   --update is set: build when a project Dockerfile is declared (config.dockerfile
   set, fatal on failure), else pull (warning, non-fatal).
+  Use `docker_build_if_not_exist` and the `docker-builder` practice for the
+  first-run safety net — runs unconditionally before launch in both modes:
+  builds the local image when it is absent AND config.dockerfile is declared
+  (fatal on failure), no-op otherwise. This closes the corner case where
+  dockerfile is set but the image was never built and --update is not passed
+  (a bare docker run would fail with "No such image").
   Use `DockerRunner` and the `docker-runner` practice to assemble the docker run
   command and manage the container lifecycle (SIGTERM/SIGINT handler, guaranteed
   docker kill, signal-handler restore). The runner is a thin executor — this cell
@@ -131,7 +138,9 @@ Annotations: |
     `update`: flag from the --update/-u click option. When True, refresh the
               image via `docker_update` before launching the container — build
               when a project Dockerfile is declared (config.dockerfile set), else
-              pull. Available in both modes.
+              pull. Available in both modes. Independent of
+              `docker_build_if_not_exist` (the first-run safety net runs
+              unconditionally before this branch in both modes).
 
     Apply the `click` practice for the command surface: a single command (not a
     group), the optional positional `name` argument, the pass_context pattern,
@@ -235,16 +244,22 @@ Annotations: |
          --name, the project bind-mount as /workspace (set as the container
          working directory), --add-host per host, --entrypoint python3, image,
          args
-    5. When `update` is True: call `docker_update` with config.image and
+    5. Call `docker_build_if_not_exist` with config.image and config.dockerfile
+       — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
+       when the image already exists or when no Dockerfile is set. When the
+       image is absent and a Dockerfile is declared: build it (fatal on failure
+       — surfaces as ClickException via the D5 mapper, exit 1, launch skipped).
+       Discovery writes no secret files, so no D7 caller-side handler applies.
+    6. When `update` is True: call `docker_update` with config.image and
        config.dockerfile — build when a project Dockerfile is declared (fatal),
        else pull (warning, non-fatal). When `update` is False: skip the refresh.
-    6. Launch the container via `DockerRunner`(config.image).run(args, params):
+    7. Launch the container via `DockerRunner`(config.image).run(args, params):
        the runner installs the SIGTERM/SIGINT handler (exit 128 + signum), runs
        docker run, streams stdout/stderr, and returns the exit code. The runner
        finally performs the guaranteed docker kill and restores the previous
        handler. Discovery writes no tmpfile/env-file, so there is no host-side
        caller cleanup
-    7. Return the container exit code
+    8. Return the container exit code
 
     Note: discovery mode ignores `extra_env`, `proxy`, and `clean` — no env-file
     is written, no afm state directory is involved.
@@ -301,23 +316,31 @@ Annotations: |
           practice — the persistent dir supplies the rest of afm state), --add-host
           per host, --env-file, each credential mount from
           `resolve_credential_mounts` read-only, --entrypoint python3, image, args
-    12. When `update` is True: call `docker_update` with config.image and
+    12. Call `docker_build_if_not_exist` with config.image and config.dockerfile
+        — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
+        when the image already exists or when no Dockerfile is set. When the
+        image is absent and a Dockerfile is declared: build it (fatal on failure
+        — surfaces as ClickException via the D5 mapper, exit 1, launch skipped).
+        Runs inside the try so the D7 leak-prevention invariant covers this
+        window: the secret tmpfile/env-file are already written (steps 6, 9),
+        and a fatal build unwinds to the finally which unlinks them.
+    13. When `update` is True: call `docker_update` with config.image and
         config.dockerfile — build when a project Dockerfile is declared (fatal),
         else pull (warning, non-fatal). When `update` is False: skip the refresh.
-    13. Launch the container via `DockerRunner`(config.image).run(args, params):
+    14. Launch the container via `DockerRunner`(config.image).run(args, params):
         the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
         which nests under the caller handler installed in step 6 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code. The runner finally performs the guaranteed docker kill and
         restores to the caller handler
-    14. In finally: delete the afm-config tmpfile and delete the env-file, and
+    15. In finally: delete the afm-config tmpfile and delete the env-file, and
         restore the caller-installed SIGTERM/SIGINT handler to the original. Do
         NOT delete the persistent afm state host directory — it survives across
         runs. The docker kill and the runner's signal-handler restore happen
         inside the runner finally (which runs before this finally); the runner's
         restore returns to the caller handler, then this finally restores the
         original
-    15. Return the container exit code
+    16. Return the container exit code
 
     Apply the `agent-wrappers` practice for the wrapper path semantics
     referenced in step 5.
@@ -358,6 +381,14 @@ Annotations: |
     - Image refresh runs only when `update` is True via `docker_update`: build
       when config.dockerfile is set (fatal on failure), else pull (warning,
       non-fatal)
+    - First-run safety net runs UNCONDITIONALLY at launch entry via
+      `docker_build_if_not_exist` in BOTH modes: when config.image is absent
+      locally AND config.dockerfile is declared, build it (fatal on failure —
+      surfaces as ClickException, exit 1, launch skipped); no-op when the image
+      is present or no Dockerfile is declared. This closes the corner case where
+      dockerfile is set but the image was never built and --update is not
+      passed — without this net a bare docker run would fail with
+      "No such image"
     - AFM_DIR=/home/goga/pipeline is provided via the env-file
     - `extra_env` default is an empty tuple, preserving the pre-option behavior
     - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
@@ -371,8 +402,11 @@ Annotations: |
     - Propagate afm's non-zero exit code as the container's exit code
 
     Constraints:
-    - Refresh the image only when `update` is True via `docker_update` — the
-      default is no refresh
+    - Refresh an EXISTING image only when `update` is True via `docker_update` —
+      the default is no refresh. The unconditional `docker_build_if_not_exist`
+      at launch entry is NOT a refresh: it builds only when the image is absent
+      AND a Dockerfile is declared (first-run build, not a rebuild of an
+      existing image)
     - Delete only the tmpfile and env-file in finally — the persistent afm
       state host directory survives across runs
     - --clean wipes the persistent afm state host directory BEFORE launch; the

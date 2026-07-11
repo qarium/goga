@@ -37,7 +37,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
 | `--clean` | flag | false | Wipe the persistent ralphex runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralphex state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
-| `--update` / `-u` | flag | false | Pull the image before launching the container. Default is no pull — the local image is used as-is |
+| `--update` / `-u` | flag | false | Force-refresh the image before launch (build when `dockerfile` is declared in `.goga/config.yml`, else pull). Default is no refresh. Note: the first time a `dockerfile`-declared image is built, the command auto-builds it even WITHOUT `--update` (first-run safety net) — `--update` is only needed to force a RE-build of an already-present image |
 
 ## Exit code
 
@@ -53,6 +53,11 @@ goga build docs/plans/my-plan.md -e ANTHROPIC_API_KEY=sk-xxx -e MODEL=claude-son
 
 # Pull the latest image, then build (default skips the pull)
 goga build docs/plans/my-plan.md --update
+
+# First run with a project Dockerfile declared in .goga/config.yml: the image
+# is auto-built the first time even WITHOUT --update (first-run safety net).
+# Use --update only to force a RE-build of an already-present image.
+goga build docs/plans/my-plan.md
 
 # Route container traffic through a corporate proxy and add a local host entry
 goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
@@ -70,6 +75,7 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 - Docker must be installed and available in PATH
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
 - By default the image is NOT pulled — the local image is used as-is. Use `--update`/`-u` to pull before launch. On pull failure a warning is logged and the build continues with the locally available image
+- First-run safety net: when `dockerfile` is declared in `.goga/config.yml` and the image is absent locally, the command builds it ONCE before launch even WITHOUT `--update` (so the first run after declaring a project Dockerfile does not need `--update`). `--update` forces a RE-build of an already-present image; the safety net is a no-op once the image exists
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
 - Credential mounts are detected automatically via `resolve_credential_mounts()` — there is no `--credential`/`--mount` flag. The routine scans the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`), is agent-agnostic (it is not filtered by the configured `task_executor.agent`), and returns only files that exist. Every returned file is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `resolve-credential-mounts` and `docker-auth-mounts` practices for details
 - Ralphex state (`.ralphex/`) is isolated from the project directory: the host directory `~/.goga/runtime/builds/<normalized_project>/<branch>/` is bind-mounted into the container at `/workspace/.ralphex`. No `.ralphex/` appears in the project directory, even on crash/SIGKILL. By default the directory persists across runs; pass `--clean` to wipe it before launch

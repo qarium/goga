@@ -5,20 +5,26 @@
 Building and pulling the Docker image the goga commands run in, and the
 `--update` decision that picks between them. This practice covers the
 image-acquisition entry points on the goga/docker facade:
-`docker_update`, `DockerBuilder`, and `docker_pull`.
+`docker_update`, `docker_build_if_not_exist`, `DockerBuilder`, and `docker_pull`.
 
 Target audience: host-side command launchers (`goga build`, `goga pipeline`)
-that implement the `--update`/`-u` flag and need to refresh the container image
-before launch.
+that implement the `--update`/`-u` flag and need to refresh or first-build the
+container image before launch.
 
 ## Public API
 
-    from goga.docker import docker_update, DockerBuilder, docker_pull
+    from goga.docker import docker_update, docker_build_if_not_exist, DockerBuilder, docker_pull
 
 - `docker_update(image: str, dockerfile: str | None) -> None` — the `--update`
   entry point. When `dockerfile` is set, build the image locally from that
   Dockerfile (fatal on failure); when `dockerfile` is None, pull `image` from the
   registry (warning on failure, non-fatal).
+- `docker_build_if_not_exist(image: str, dockerfile: str | None) -> None` — the
+  first-run safety net. When `image` is absent locally AND `dockerfile` is set,
+  build it (fatal on failure, same semantics as the `docker_update` build branch);
+  otherwise no-op. Never pulls — a registry image is left to `docker run` /
+  `--update`. Runs UNCONDITIONALLY at launch entry, complementing `docker_update`
+  (which is gated by `--update`).
 - `DockerBuilder(image, dockerfile='Dockerfile', context='.')` — stateful builder.
   `.build(**params)` runs docker build, tagging the result as `image` so the
   locally built image shadows the registry tag consumed by docker run.
@@ -27,7 +33,7 @@ before launch.
 
 ## Typical usage
 
-### The --update flag (the common path)
+### The --update flag (force refresh — the common path)
 
 A command launcher resolves the validated `config.image` and `config.dockerfile`
 and forwards them as primitives. `docker_update` owns the build-vs-pull branch and
@@ -46,6 +52,37 @@ Behavior, by `dockerfile`:
 - `dockerfile` None → `docker pull <image>`. Pull failure is recoverable: a WARNING
   is logged and the caller continues on the local image (the launch may still fail
   later if the image is genuinely absent, but that surfaces from docker run itself).
+
+### First-run auto-build (the safety net — unconditional)
+
+`docker_update` is gated by `--update` (force refresh). But when a project
+declares a `dockerfile` and the local image has never been built, a bare
+`docker run` would fail with "No such image" — even without `--update`. The
+`docker_build_if_not_exist` routine closes that corner case: the launcher calls
+it UNCONDITIONALLY before `docker_update`, and it builds only when the image is
+absent AND `dockerfile` is declared:
+
+    from goga.docker import docker_build_if_not_exist, docker_update
+
+    # First-run safety net: builds only if the image is absent + a Dockerfile
+    # is declared. No-op otherwise (image present, or no Dockerfile set). Never
+    # pulls — that stays `docker_update`'s job under `--update`.
+    docker_build_if_not_exist(config.image, config.dockerfile)
+
+    if update:
+        docker_update(config.image, config.dockerfile)
+
+Behavior matrix of `docker_build_if_not_exist`:
+
+| image state | `dockerfile` | action |
+|-------------|--------------|--------|
+| present locally | set OR None | no-op (do not refresh — that is `docker_update`'s job under `--update`) |
+| absent | set | `docker build -f <dockerfile> -t <image> .` (fatal on failure) |
+| absent | None | no-op (NEVER pulls — a registry image is pulled by `docker run` itself or by `--update`) |
+
+The safety net probes the local image store via a silent `docker image inspect`
+and tolerates a missing docker binary (returns "absent" — the caller has already
+verified docker availability via its own `_check_docker`).
 
 ### Direct build with extra CLI options
 

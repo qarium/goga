@@ -15,7 +15,7 @@ import yaml
 
 from ...agents import resolve_credential_mounts
 from ...config import load_config
-from ...docker import DockerRunner, docker_update
+from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     help="Refresh the image before launch (build if a project Dockerfile is declared, else pull)",
 )
 @click.pass_context
-def build(  # noqa: PLR0913, C901, PLR0915
+def build(  # noqa: PLR0913, C901, PLR0915, PLR0912
     ctx: click.Context,
     plan: str,
     dry_run: bool,
@@ -395,6 +395,18 @@ def build(  # noqa: PLR0913, C901, PLR0915
 
         if dry_run:
             ctx.exit(0)
+
+        # First-run safety net: build the local image if it is absent and a
+        # project Dockerfile is declared. No-op when the image already exists
+        # or when no Dockerfile is set. Fatal build propagates as ClickException
+        # (D5 — clean message + exit 1, no traceback). Runs inside the try so
+        # the D7 leak-prevention invariant covers this window too: the secret
+        # env-file is already written above, and a fatal build unwinds to the
+        # finally below which unlinks it.
+        try:
+            docker_build_if_not_exist(config.image, config.dockerfile)
+        except Exception as exc:
+            raise click.ClickException(str(exc)) from exc
 
         if update:
             # docker_update owns the build-vs-pull branch (build when a project

@@ -32,7 +32,7 @@ import click
 
 from ...agents import resolve_credential_mounts, resolve_wrapper_path
 from ...config import Config
-from ...docker import DockerRunner, docker_update
+from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
@@ -262,6 +262,15 @@ def _run_discovery(
         "add_host": [f"{host}:{ip}" for host, ip in (hosts or {}).items()],
     }
 
+    # First-run safety net: build the local image if it is absent and a project
+    # Dockerfile is declared. No-op when the image exists or no Dockerfile is
+    # set. Fatal build surfaces as ClickException (D5 — clean message + exit 1).
+    # Discovery writes no secret files, so no D7 caller-side handler applies.
+    try:
+        docker_build_if_not_exist(config.image, config.dockerfile)
+    except Exception as exc:
+        raise click.ClickException(str(exc)) from exc
+
     if update:
         # docker_update owns the build-vs-pull branch (build when a project
         # Dockerfile is declared — fatal; else pull — WARNING, non-fatal). D5: a
@@ -390,6 +399,17 @@ def _run_named(  # noqa: PLR0913
             "add_host": [f"{host}:{ip}" for host, ip in (hosts or {}).items()],
             "env_file": str(env_file),
         }
+
+        # First-run safety net: build the local image if it is absent and a
+        # project Dockerfile is declared. No-op when the image exists or no
+        # Dockerfile is set. Fatal build surfaces as ClickException (D5). Runs
+        # inside the try so the D7 leak-prevention invariant covers this window:
+        # the secret tmpfile/env-file are already written above, and a fatal
+        # build unwinds to the finally below which unlinks them.
+        try:
+            docker_build_if_not_exist(config.image, config.dockerfile)
+        except Exception as exc:
+            raise click.ClickException(str(exc)) from exc
 
         if update:
             # docker_update owns the build-vs-pull branch (build when a project

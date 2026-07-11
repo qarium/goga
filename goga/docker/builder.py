@@ -47,6 +47,15 @@ class DockerBuilder:
         Extra CLI options arrive as ``params`` and are translated to flags by the
         shared param→flag rule. Docker output is streamed (inherited stdio). On a
         non-zero docker exit, raise ``DockerBuildError`` (fatal — do NOT swallow).
+
+        Args:
+            **params: Additional docker build CLI options, translated to flags by
+                the shared param→flag rule (e.g. ``add_host`` → ``--add-host``,
+                ``pull=True`` → ``--pull``).
+
+        Raises:
+            DockerBuildError: When ``docker build`` exits non-zero. Fatal by
+                contract — the caller surfaces it as exit 1.
         """
         flags = translate_params(params)
         argv = [
@@ -69,6 +78,13 @@ def docker_pull(image: str) -> bool:
 
     NON-fatal: returns True on success; on failure logs a WARNING and returns
     False. Never raises.
+
+    Args:
+        image: image:tag to pull (non-None; the caller passes the validated
+            ``config.image``).
+
+    Returns:
+        True on success, False on pull failure (network / auth / not-found).
     """
     result = subprocess.run(["docker", "pull", image], check=False)  # streamed
     if result.returncode == 0:
@@ -85,8 +101,69 @@ def docker_update(image: str, dockerfile: str | None) -> None:
     build/pull runs: ``dockerfile`` non-None → fatal build (propagates); None →
     non-fatal pull (WARNING, bool discarded). ``image`` non-None is a
     caller-validated precondition.
+
+    Args:
+        image: image:tag — non-None (caller-validated); used as the build tag
+            and the pull target.
+        dockerfile: path to a project Dockerfile. None → pull branch.
     """
     if dockerfile is not None:
         DockerBuilder(image, dockerfile, context=".").build()
     else:
         docker_pull(image)
+
+
+def _image_exists(image: str) -> bool:
+    """Check whether ``image`` is present in the local docker image store.
+
+    Runs ``docker image inspect <image>`` capturing stdout/stderr (silent probe).
+    ``returncode == 0`` means present. Tolerates a missing docker binary
+    (``FileNotFoundError`` / ``PermissionError`` / ``OSError`` → ``False``): the
+    caller has already verified docker availability via ``_check_docker`` at the
+    command entry, so a missing binary here is treated as "image not present"
+    rather than crashing the probe.
+
+    Internal to the cell — not declared in CODEMANIFEST and not re-exported.
+
+    Args:
+        image: image:tag to probe in the local image store.
+
+    Returns:
+        True when the image is present locally, False when absent or when the
+        docker binary is unavailable.
+    """
+    try:
+        result = subprocess.run(
+            ["docker", "image", "inspect", image],
+            capture_output=True,
+            check=False,
+        )
+    except (FileNotFoundError, PermissionError, OSError):
+        return False
+
+    return result.returncode == 0
+
+
+def docker_build_if_not_exist(image: str, dockerfile: str | None) -> None:
+    """First-run safety net: build the local image if it is absent and a Dockerfile is declared.
+
+    Complementary to ``docker_update``: ``docker_update`` is gated by the
+    ``--update`` flag (force refresh); this routine runs UNCONDITIONALLY at launch
+    entry — its purpose is to guarantee the image exists, not to refresh it.
+
+    Takes PRIMITIVES (``image``, ``dockerfile``), never a ``Config`` — so this
+    cell stays a pure leaf with no dependency on goga/config. ``image`` non-None
+    is a caller-validated precondition.
+
+    Args:
+        image: image:tag — non-None (caller-validated); used as the local-image
+            probe target and the build tag.
+        dockerfile: path to a project Dockerfile. None → no-op when the image is
+            absent (this routine never pulls — a registry image is pulled by
+            ``docker run`` itself or by an explicit ``--update``).
+    """
+    if _image_exists(image):
+        return
+
+    if dockerfile is not None:
+        DockerBuilder(image, dockerfile, context=".").build()

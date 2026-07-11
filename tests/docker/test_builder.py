@@ -5,7 +5,7 @@ import logging
 
 import goga.docker
 import pytest
-from goga.docker import DockerBuilder, docker_pull, docker_update
+from goga.docker import DockerBuilder, docker_build_if_not_exist, docker_pull, docker_update
 from goga.docker.builder import DockerBuildError
 
 
@@ -42,6 +42,18 @@ class TestContract:
     def test_docker_update_is_callable_and_in_facade_all(self) -> None:
         assert callable(docker_update)
         assert "docker_update" in goga.docker.__all__
+
+    def test_docker_build_if_not_exist_is_callable_and_in_facade_all(self) -> None:
+        assert callable(docker_build_if_not_exist)
+        assert "docker_build_if_not_exist" in goga.docker.__all__
+
+    def test_docker_build_if_not_exist_signature_takes_primitives(self) -> None:
+        # Takes PRIMITIVES (image, dockerfile) — never a Config — so the docker
+        # cell stays a pure leaf with no Imports, mirroring docker_update.
+        sig = inspect.signature(docker_build_if_not_exist)
+        assert list(sig.parameters) == ["image", "dockerfile"]
+        for param in sig.parameters.values():
+            assert param.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
 
     def test_docker_builder_constructor_shape_and_defaults(self) -> None:
         builder = DockerBuilder("img:tag", dockerfile="Dockerfile", context=".")
@@ -233,3 +245,119 @@ class TestDockerUpdate:
         assert inst.dockerfile == ""
         assert inst.built_with == [{}]
         assert pulls == []
+
+
+class TestDockerBuildIfNotExist:
+    """Behavior coverage for docker_build_if_not_exist — the first-run safety net.
+
+    Complementary to TestDockerUpdate: docker_update is gated by --update (force
+    refresh); docker_build_if_not_exist runs unconditionally at launch entry and
+    builds only when the image is absent AND a Dockerfile is declared. Never
+    pulls — a registry image is left to docker run / --update.
+    """
+
+    def test_noop_when_image_already_present(self, monkeypatch) -> None:
+        # image present -> short-circuit before any DockerBuilder construction.
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: True)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        result = docker_build_if_not_exist("img:tag", "Dockerfile")
+
+        assert result is None
+        assert instances == []  # no build attempted
+
+    def test_builds_when_image_absent_and_dockerfile_set(self, monkeypatch) -> None:
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        result = docker_build_if_not_exist("img:tag", "Dockerfile")
+
+        assert result is None
+        # one DockerBuilder constructed with the forwarded primitives + default context.
+        assert len(instances) == 1
+        inst = instances[0]
+        assert (inst.image, inst.dockerfile, inst.context) == ("img:tag", "Dockerfile", ".")
+        # build() ran with default params (no extras) — mirrors docker_update build branch.
+        assert inst.built_with == [{}]
+
+    def test_noop_when_image_absent_and_dockerfile_none(self, monkeypatch) -> None:
+        # dockerfile None + image absent -> no-op (NEVER pulls; a registry image
+        # is pulled by docker run itself or by an explicit --update).
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        result = docker_build_if_not_exist("img:tag", None)
+
+        assert result is None
+        assert instances == []  # no build attempted
+
+    def test_propagates_build_failure(self, monkeypatch) -> None:
+        # Fatal build propagates — same contract as docker_update build branch.
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", _BoomBuilder)
+
+        with pytest.raises(DockerBuildError):
+            docker_build_if_not_exist("img:tag", "Dockerfile")
+
+    def test_noop_on_empty_string_dockerfile_is_still_treated_as_set(self, monkeypatch) -> None:
+        # dockerfile="" is non-None (the branch is `is not None`, not a truthiness
+        # check) — same convention as docker_update. Empty string still triggers
+        # the build branch when the image is absent.
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        docker_build_if_not_exist("img:tag", "")
+
+        assert len(instances) == 1
+        inst = instances[0]
+        assert inst.dockerfile == ""
+        assert inst.built_with == [{}]
+
+
+class TestImageExistsHelper:
+    """Behavior coverage for _image_exists — silent local-image probe."""
+
+    def test_returns_true_on_zero_exit(self, monkeypatch) -> None:
+        # _image_exists calls subprocess.run with capture_output=True (silent
+        # probe), so a plain RecordingRun is not suitable — use a Mock that
+        # accepts arbitrary kwargs and returns a CompletedProcess-like object.
+        run_calls: list[list[str]] = []
+
+        def fake_run(argv, **_kwargs):
+            run_calls.append(list(argv))
+            return _Result(0)
+
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake_run)
+
+        from goga.docker.builder import _image_exists
+
+        assert _image_exists("img:tag") is True
+        assert run_calls == [["docker", "image", "inspect", "img:tag"]]
+
+    def test_returns_false_on_nonzero_exit(self, monkeypatch) -> None:
+        # docker image inspect exits non-zero when the image is absent.
+        def fake_run(_argv, **_kwargs):
+            return _Result(1)
+
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake_run)
+
+        from goga.docker.builder import _image_exists
+
+        assert _image_exists("img:tag") is False
+
+    def test_returns_false_when_docker_binary_missing(self, monkeypatch) -> None:
+        # FileNotFoundError / PermissionError / OSError -> False (not a crash).
+        # The caller has already verified docker availability via _check_docker,
+        # so a missing binary here is treated as "image not present".
+        def raise_filenotfound(*_args, **_kwargs):
+            raise FileNotFoundError("docker")
+
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", raise_filenotfound)
+
+        from goga.docker.builder import _image_exists
+
+        assert _image_exists("img:tag") is False

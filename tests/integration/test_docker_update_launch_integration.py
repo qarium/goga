@@ -143,6 +143,7 @@ class TestBuildUpdateLaunchIntegration:
             return 0
 
         with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
             mock.patch.object(_build_mod, "docker_update", side_effect=fake_update),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
@@ -168,6 +169,7 @@ class TestBuildUpdateLaunchIntegration:
         monkeypatch.setattr(_build_mod, "_write_env_file", track_write)
 
         with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
             mock.patch.object(_build_mod, "docker_update", side_effect=RuntimeError("build failed")),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
@@ -201,6 +203,7 @@ class TestBuildUpdateLaunchIntegration:
         ralphex_dir.mkdir()
 
         with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
             mock.patch.object(_build_mod, "docker_update") as mock_update,
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
@@ -249,6 +252,7 @@ class TestBuildUpdateLaunchIntegration:
         monkeypatch.setattr(_build_mod.signal, "signal", mock.MagicMock(side_effect=fake_signal))
 
         with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
             mock.patch.object(_build_mod, "docker_update", side_effect=SystemExit(143)),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
@@ -282,11 +286,16 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
     Redirects the persistent afm-state dir to ``runtime_dir`` so its survival can
     be observed independently of the project dir. Returns the ``subprocess.run``
     side effect (the runner's guaranteed ``docker kill`` cleanup routes through it).
+
+    Also stubs ``docker_build_if_not_exist`` to a no-op so the existing
+    ``--update`` tests are not affected by the first-run safety net (the safety
+    net has its own dedicated tests in TestPipelineFirstRunAutoBuildIntegration).
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
     monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
+    monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", lambda *_a: None)
 
     def run_side_effect(*args, **kwargs) -> mock.Mock:
         return mock.Mock(returncode=0)
@@ -500,6 +509,245 @@ class TestPipelineUpdateLaunchIntegration:
         # launch skipped on build failure
         mock_popen.assert_not_called()
         # the secret tmpfile + env-file were created then unlinked (no leak)
+        assert created_tmp
+        assert created_env
+        assert all(not p.exists() for p in created_tmp)
+        assert all(not p.exists() for p in created_env)
+
+
+# ===========================================================================
+# build: first-run auto-build via docker_build_if_not_exist (no --update)
+# ===========================================================================
+
+
+class TestBuildFirstRunAutoBuildIntegration:
+    """``goga build`` (no --update) auto-builds a missing local image via
+    ``docker_build_if_not_exist`` when ``dockerfile`` is declared — the
+    first-run safety net that closes the corner case where ``docker run`` would
+    otherwise fail with "No such image"."""
+
+    def test_build_without_update_calls_safety_net_with_config_primitives(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No --update + dockerfile set -> docker_build_if_not_exist is called
+        unconditionally at launch entry; docker_update is NOT called (still gated
+        by --update); launch proceeds normally."""
+        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_ensure,
+            mock.patch.object(_build_mod, "docker_update") as mock_update,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build(tmp_path, monkeypatch, ["plan.md"])  # NO --update
+
+        assert result.exit_code == 0
+        # safety net called unconditionally — it decides internally whether to build
+        mock_ensure.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        # docker_update stays gated by --update (not called here)
+        mock_update.assert_not_called()
+        # launch proceeded
+        mock_runner.return_value.run.assert_called_once()
+
+    def test_build_without_update_calls_safety_net_even_when_dockerfile_none(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """No --update + dockerfile None -> safety net still called (it is a no-op
+        inside the docker cell when dockerfile is None); docker_update NOT called;
+        launch proceeds."""
+        _write_goga_yml(tmp_path, dockerfile=None)
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist") as mock_ensure,
+            mock.patch.object(_build_mod, "docker_update") as mock_update,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build(tmp_path, monkeypatch, ["plan.md"])  # NO --update
+
+        assert result.exit_code == 0
+        mock_ensure.assert_called_once_with("qarium/goga:latest", None)
+        mock_update.assert_not_called()
+        mock_runner.return_value.run.assert_called_once()
+
+    def test_build_with_update_calls_ensure_before_update_before_launch(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """--update + dockerfile set -> docker_build_if_not_exist runs FIRST (may
+        no-op if the image is present, or build if absent), then docker_update
+        (force refresh), then launch. Order: ensure -> update -> launch."""
+        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        order: list[str] = []
+
+        def ensure_se(*_a):
+            order.append("ensure")
+
+        def update_se(*_a):
+            order.append("update")
+
+        with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist", side_effect=ensure_se),
+            mock.patch.object(_build_mod, "docker_update", side_effect=update_se),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.side_effect = lambda *_a, **_k: order.append("launch") or 0
+            result = _run_build(tmp_path, monkeypatch, ["--update", "plan.md"])
+
+        assert result.exit_code == 0
+        assert order == ["ensure", "update", "launch"]
+
+    def test_build_safety_net_fatal_surfaces_clickexception_skips_update_and_launch(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A fatal build inside docker_build_if_not_exist surfaces as ClickException
+        (exit 1); docker_update is NOT called; DockerRunner.run is NOT called; the
+        secret env-file is unlinked (D7 invariant covers the safety-net window —
+        it runs inside the try after the env-file write)."""
+        _write_goga_yml(tmp_path, dockerfile="Dockerfile")
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+
+        created_env, track_write = _track_env_file_writes()
+        monkeypatch.setattr(_build_mod, "_write_env_file", track_write)
+
+        ensure_se = RuntimeError("first-run build failed")
+
+        with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist", side_effect=ensure_se),
+            mock.patch.object(_build_mod, "docker_update") as mock_update,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build(tmp_path, monkeypatch, ["plan.md"])  # NO --update
+
+        # D5: fatal build surfaces as a clean message + exit 1 (no traceback)
+        assert result.exit_code == 1
+        assert "first-run build failed" in result.output
+        # update skipped (ensure raised before reaching the if update: block)
+        mock_update.assert_not_called()
+        # launch skipped
+        mock_runner.return_value.run.assert_not_called()
+        # the secret env-file was created then unlinked (D7 leak prevention)
+        assert created_env
+        assert all(not p.exists() for p in created_env)
+
+
+# ===========================================================================
+# pipeline: first-run auto-build via docker_build_if_not_exist (no --update)
+# ===========================================================================
+
+
+class TestPipelineFirstRunAutoBuildIntegration:
+    """``goga pipeline`` (no --update) auto-builds a missing local image via
+    ``docker_build_if_not_exist`` in BOTH modes — discovery and run."""
+
+    def test_pipeline_discovery_without_update_calls_safety_net_with_primitives(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Discovery + no --update + dockerfile set -> safety net called; docker_update
+        NOT called; launch proceeds with the list command."""
+        config = _make_config(dockerfile="Dockerfile")
+        runtime_dir = tmp_path / "afm-state-discovery-ensure"
+        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
+        # Reset docker_build_if_not_exist to a tracking mock — _patch_pipeline_common
+        # stubs it to a plain no-op lambda; here we need call assertions.
+        monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", mock.Mock())
+        monkeypatch.setattr(_rpc_mod, "docker_update", mock.Mock())
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run", side_effect=patches),
+        ):
+            mock_popen.return_value.wait.return_value = 0
+            result = rpc(None, config, update=False)  # NO --update
+
+        assert result == 0
+        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        _rpc_mod.docker_update.assert_not_called()
+        # launch happened
+        mock_popen.assert_called_once()
+
+    def test_pipeline_run_without_update_calls_safety_net_with_primitives(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Run + no --update + dockerfile set -> safety net called; docker_update
+        NOT called; launch proceeds with the run command + port."""
+        config = _make_config(dockerfile="Dockerfile")
+        runtime_dir = tmp_path / "afm-state-run-ensure"
+        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", mock.Mock())
+        monkeypatch.setattr(_rpc_mod, "docker_update", mock.Mock())
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run", side_effect=patches),
+        ):
+            mock_popen.return_value.wait.return_value = 0
+            result = rpc("deploy", config, update=False)  # NO --update
+
+        assert result == 0
+        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        _rpc_mod.docker_update.assert_not_called()
+        mock_popen.assert_called_once()
+
+    def test_pipeline_run_safety_net_fatal_surfaces_clickexception_skips_update_and_launch(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """D5 (run): a fatal build inside docker_build_if_not_exist surfaces as
+        click.ClickException (not a raw traceback), docker_update is NOT called,
+        DockerRunner.run is NOT reached, and the secret tmpfile + env-file are
+        unlinked by the caller finally (D7 covers the safety-net window)."""
+        config = _make_config(dockerfile="Dockerfile")
+        runtime_dir = tmp_path / "afm-state-run-ensure-fatal"
+        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "docker_update", mock.Mock())
+        monkeypatch.chdir(tmp_path)
+
+        created_tmp: list[Path] = []
+        created_env: list[Path] = []
+        real_afm = _rpc_mod._write_afm_config_tmpfile
+        real_env = _rpc_mod._write_env_file
+
+        def track_afm(wrapper_path: str) -> Path:
+            path = real_afm(wrapper_path)
+            created_tmp.append(path)
+            return path
+
+        def track_env(env: dict[str, str], extra_env: tuple[str, ...] = ()) -> Path:
+            path = real_env(env, extra_env)
+            created_env.append(path)
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", track_afm)
+        monkeypatch.setattr(_rpc_mod, "_write_env_file", track_env)
+
+        ensure_se = RuntimeError("first-run build failed")
+
+        with (
+            mock.patch.object(_rpc_mod, "docker_build_if_not_exist", side_effect=ensure_se),
+            mock.patch.object(subprocess, "Popen") as mock_popen,
+            mock.patch.object(subprocess, "run", side_effect=patches),
+            pytest.raises(click.ClickException) as exc,
+        ):
+            rpc("deploy", config, update=False)  # NO --update
+
+        assert "first-run build failed" in exc.value.message
+        # update skipped (ensure raised before reaching the if update: block)
+        _rpc_mod.docker_update.assert_not_called()
+        # launch skipped
+        mock_popen.assert_not_called()
+        # the secret tmpfile + env-file were created then unlinked (D7 leak prevention)
         assert created_tmp
         assert created_env
         assert all(not p.exists() for p in created_tmp)

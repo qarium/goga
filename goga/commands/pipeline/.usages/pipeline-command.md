@@ -102,10 +102,12 @@ goga pipeline deploy --clean
   launch. Run mode only; a no-op in discovery mode. The directory is recreated
   empty before the container starts; `client.command` is still supplied via
   the afm-config tmpfile overlay (independent of `AFM_DIR`).
-- `--update` / `-u` (flag) — pull the image before launching the container.
-  Default is no pull — the local image is used as-is. On pull failure a
-  warning is logged and the run continues with the local image. Effective in
-  both modes.
+- `--update` / `-u` (flag) — force-refresh the image before launch (build when
+  `dockerfile` is declared in `.goga/config.yml`, else pull). Default is no
+  refresh. Effective in both modes. Note: the first time a `dockerfile`-declared
+  image is built, the command auto-builds it even WITHOUT `--update` (first-run
+  safety net, runs in both modes) — `--update` is only needed to force a RE-build
+  of an already-present image.
 
 ## Agent resolution
 
@@ -136,10 +138,14 @@ file is missing from the image, afm surfaces the error.
 4. Assembles a docker run command including one `--add-host HOST:IP` flag per
    resolved hosts entry (CLI `--add-host` merged on top of `pipeline.hosts`
    from config; CLI wins on conflict).
-5. When `--update` is set: pulls the image (warning on failure, non-fatal).
+5. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
+   and the image is absent locally, builds it ONCE before launch (no-op when
+   the image is present or no Dockerfile is set; fatal build surfaces as
+   ClickException, launch skipped).
+6. When `--update` is set: pulls the image (warning on failure, non-fatal).
    Default is no pull.
-6. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
-7. Propagates the container's exit code.
+7. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
+8. Propagates the container's exit code.
 
 `extra_env`, `proxy`, and `--clean` have no effect in discovery mode — no
 env-file is written, no afm state directory is involved.
@@ -177,10 +183,14 @@ env-file is written, no afm state directory is involved.
     - one `-v <host_path>:<container_path>:ro` flag per credential file detected by `resolve_credential_mounts()` (claude/codex/opencode when present on the host)
     - `--env-file <env_file>`
     - `--entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`
-11. When `--update` is set: pulls the image (warning on failure, non-fatal).
+11. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
+    and the image is absent locally, builds it ONCE before launch (no-op when
+    the image is present or no Dockerfile is set; fatal build surfaces as
+    ClickException, launch skipped; secret tmpfile/env-file are unlinked).
+12. When `--update` is set: pulls the image (warning on failure, non-fatal).
     Default is no pull.
-12. Launches the container and waits for its exit code.
-13. In `finally`: deletes the `client.command` tmpfile and the env-file,
+13. Launches the container and waits for its exit code.
+14. In `finally`: deletes the `client.command` tmpfile and the env-file,
     `docker kill`s the container. **The persistent afm state host directory
     is NOT deleted** — it survives across runs of the same pipeline.
 
