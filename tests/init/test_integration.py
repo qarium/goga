@@ -325,3 +325,103 @@ class TestIntegration:
         assert data["pipeline"]["agent"] == "codex"
         assert data["pipeline"]["env"] == {"CODEX_MODEL": "o4-mini"}
         assert "image" not in data["build"]
+
+    def test_init_generates_goga_dockerfile_at_new_default_path(self, tmp_path: Path) -> None:
+        """End-to-end (D5): accept Dockerfile + Enter → .goga/Dockerfile created & recorded.
+
+        Cross-entity scenario exercising the full chain
+        Questionnaire.ask_goga_config → InitLogic.run → FileGenerator.generate.
+        The user accepts the Dockerfile creation and presses Enter on the path
+        prompt, taking the new `.goga/Dockerfile` default (most common case).
+        Asserts the default propagates into both the filesystem and config.yml.
+        """
+        other_prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
+            ]
+        )
+
+        def fake_prompt(message, *args, **kwargs):
+            # On the Dockerfile path prompt, simulate pressing Enter (no input)
+            # → click.prompt returns its `default`.
+            if message == "Dockerfile path":
+                return kwargs.get("default")
+            return next(other_prompts)
+
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        logic = InitLogic(Questionnaire(), gen)
+
+        with patch("click.prompt", side_effect=fake_prompt), patch("click.confirm", side_effect=confirms):
+            result = logic.run()
+
+        assert result == 0
+
+        dockerfile = tmp_path / ".goga" / "Dockerfile"
+        assert dockerfile.exists()
+        content = dockerfile.read_text(encoding="utf-8")
+        assert content.startswith("FROM ")
+
+        config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
+        assert "dockerfile: .goga/Dockerfile" in config_yml
+
+    def test_init_custom_dockerfile_path_flows_through_chain(self, tmp_path: Path) -> None:
+        """Cross-entity: a custom Dockerfile path reaches both the FS and config.yml.
+
+        Confirms that the survey answer (dockerfile_path) is threaded unchanged
+        through Questionnaire → InitLogic → FileGenerator, not hardcoded to the
+        default. The file lands at the user-chosen location under .goga/.
+        """
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                ".goga/custom.Dockerfile",  # dockerfile path (typed, not default)
+                "claude",  # pipeline agent
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        logic = InitLogic(Questionnaire(), gen)
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            result = logic.run()
+
+        assert result == 0
+
+        dockerfile = tmp_path / ".goga" / "custom.Dockerfile"
+        assert dockerfile.exists()
+        assert dockerfile.read_text(encoding="utf-8").startswith("FROM ")
+
+        config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
+        assert "dockerfile: .goga/custom.Dockerfile" in config_yml
