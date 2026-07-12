@@ -115,13 +115,16 @@ def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
     return CodemanifestConfig(usages=dict(usages), annotations=annotations)
 
 
-def _require_mapping(data: dict, key: str) -> dict:
-    """Extract a required mapping section, raising KeyError/ValueError as appropriate."""
-    try:
-        section = data[key]
-    except KeyError as err:
-        raise KeyError(f"{key} is required in .goga/config.yml") from err
+def _optional_mapping(data: dict, key: str) -> dict | None:
+    """Extract an optional mapping section.
 
+    Returns None when the key is absent (or explicitly null); raises ValueError
+    when the key is present but not a mapping. The loader does not enforce
+    presence of optional sections — that is the consuming command's responsibility.
+    """
+    section = data.get(key)
+    if section is None:
+        return None
     if not isinstance(section, dict):
         raise ValueError(f"'{key}' must be a mapping in .goga/config.yml")
     return section
@@ -169,15 +172,15 @@ def load_config() -> Config:
     """Load project configuration from .goga/config.yml in the current working directory.
 
     Returns:
-        Config instance with parsed top-level image, BuildConfig, PipelineConfig,
-        and TaskExecutorConfig.
+        Config instance. Top-level image and dockerfile are None-able; build and
+        pipeline are None when their sections are absent in .goga/config.yml.
 
     Raises:
         FileNotFoundError: if .goga/config.yml does not exist or is empty.
         ValueError: if .goga/config.yml is not a YAML mapping or invalid field values,
             or when the deprecated build.image field is present.
-        KeyError: if required sections are missing (language, build, build.task_executor,
-            pipeline).
+        KeyError: if required sections are missing (language, or build.task_executor
+            when build is present).
         yaml.YAMLError: if YAML parsing fails.
     """
     config_path = Path("./.goga/config.yml")
@@ -197,8 +200,10 @@ def load_config() -> Config:
     lang = _parse_language(data)
     image = _parse_image(data)
     dockerfile = _parse_dockerfile(data)
-    pipeline = _parse_pipeline(_require_mapping(data, "pipeline"))
-    build = _parse_build(_require_mapping(data, "build"))
+    pipeline_data = _optional_mapping(data, "pipeline")
+    pipeline = _parse_pipeline(pipeline_data) if pipeline_data is not None else None
+    build_data = _optional_mapping(data, "build")
+    build = _parse_build(build_data) if build_data is not None else None
 
     commands = data.get("commands", {})
     if not isinstance(commands, dict):

@@ -479,8 +479,8 @@ build:
         with pytest.raises(ValueError, match=r"build\.image"):
             load_config()
 
-    def test_load_config_raises_when_pipeline_missing(self, goga_project):
-        """YAML without the pipeline block raises KeyError."""
+    def test_load_config_pipeline_absent_returns_none(self, goga_project):
+        """YAML without the pipeline block yields config.pipeline is None."""
         _write_goga_yml(
             goga_project,
             """\
@@ -491,8 +491,8 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(KeyError, match="pipeline is required"):
-            load_config()
+        config = load_config()
+        assert config.pipeline is None
 
     def test_load_config_image_none_is_valid(self, goga_project):
         """YAML without the top-level image field yields config.image is None."""
@@ -558,6 +558,90 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="image must be a string"):
+            load_config()
+
+
+# --- Optional sections tests (pipeline/build absent → None) ---
+
+
+class TestLoadConfigOptionalSections:
+    def test_load_config_minimal_only_language(self, goga_project):
+        """Config with only language → all other sections None / empty."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+""",
+        )
+        config = load_config()
+        assert config.lang == "python"
+        assert config.image is None
+        assert config.dockerfile is None
+        assert config.pipeline is None
+        assert config.build is None
+        assert config.commands == {}
+        assert config.codemanifest is None
+
+    def test_load_config_pipeline_null_treated_as_absent(self, goga_project):
+        """pipeline: null → config.pipeline is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline: null
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        config = load_config()
+        assert config.pipeline is None
+
+    def test_load_config_build_null_treated_as_absent(self, goga_project):
+        """build: null → config.build is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build: null
+""",
+        )
+        config = load_config()
+        assert config.build is None
+
+    def test_load_config_empty_pipeline_mapping_raises_inner_error(self, goga_project):
+        """pipeline: {} → inner validation preserved (ValueError on missing agent)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline: {}
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.agent"):
+            load_config()
+
+    def test_load_config_empty_build_mapping_raises_inner_error(self, goga_project):
+        """build: {} → inner validation preserved (KeyError on missing task_executor)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build: {}
+""",
+        )
+        with pytest.raises(KeyError, match=r"build\.task_executor is required"):
             load_config()
 
 
@@ -704,8 +788,8 @@ build:
         with pytest.raises(ValueError, match="env must have string"):
             load_config()
 
-    def test_load_config_missing_build(self, goga_project):
-        """.goga/config.yml without build key."""
+    def test_load_config_build_absent_returns_none(self, goga_project):
+        """YAML without the build block yields config.build is None."""
         _write_goga_yml(
             goga_project,
             """\
@@ -715,8 +799,8 @@ pipeline:
   agent: claude
 """,
         )
-        with pytest.raises(KeyError, match="build is required"):
-            load_config()
+        config = load_config()
+        assert config.build is None
 
     def test_load_config_missing_task_executor(self, goga_project):
         """build section without task_executor."""

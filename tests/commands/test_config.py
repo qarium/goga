@@ -161,12 +161,15 @@ class TestNegative:
         assert result.exit_code != 0
 
     def test_config_missing_build_section(self, tmp_path) -> None:
+        """Under the optional-sections contract, a build section is NOT required;
+        a language-only config is valid and introspection succeeds."""
         goga_dir = tmp_path / ".goga"
         goga_dir.mkdir()
         config_file = goga_dir / "config.yml"
         config_file.write_text("language: python\n")
         result = _run_with_config(tmp_path, ["language"])
-        assert result.exit_code != 0
+        assert result.exit_code == 0
+        assert result.output == "# language\npython\n"
 
     def test_config_empty_option(self, minimal_config) -> None:
         result = _run_with_config(minimal_config, [""])
