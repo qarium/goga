@@ -37,14 +37,20 @@ Annotations: |
        - image (top-level Docker image, optional — None is a valid value)
        - dockerfile (top-level path to a project Dockerfile, optional — None is a
          valid value; a non-string value raises ValueError), parsed like image
-    5. Extract and validate the required pipeline block; construct a
-       `PipelineConfig` from its agent, env, proxy (optional, default None),
-       and hosts (optional, default empty dict) fields
-    6. Extract and validate the required build block and its required
-       task_executor sub-block; construct a `TaskExecutorConfig` from agent
-       and env, then a `BuildConfig` from task_executor, proxy (optional,
-       default None), hosts (optional, default empty dict), plus the remaining
-       optional build fields
+    5. Extract the pipeline block. When the pipeline key is absent → set
+       pipeline to None (the section is optional at the loader level). When the
+       key is present → validate it is a mapping (raise ValueError otherwise)
+       and construct a `PipelineConfig` from its fields: agent (required,
+       non-empty), env (optional, default empty dict), proxy (optional, default
+       None), hosts (optional, default empty dict)
+    6. Extract the build block. When the build key is absent → set build to
+       None. When the key is present → validate it is a mapping (raise
+       ValueError otherwise), then validate the required task_executor
+       sub-block (raise KeyError when missing), construct a
+       `TaskExecutorConfig` from agent (required, non-empty) and env (optional,
+       default empty dict), and finally construct a `BuildConfig` from
+       task_executor, proxy (optional, default None), hosts (optional, default
+       empty dict), plus the remaining optional build fields
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     8. Extract the optional commands mapping (defaults to empty)
@@ -53,12 +59,15 @@ Annotations: |
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
       ClickException when they need a concrete image)
-    - pipeline block is required; pipeline.agent is required and non-empty
+    - pipeline block is OPTIONAL (None when the key is absent;
+      present-but-non-mapping → ValueError); WHEN present, pipeline.agent is
+      required and non-empty
     - pipeline.env is optional, defaults to an empty mapping
     - pipeline.proxy is optional, defaults to None
     - pipeline.hosts is optional, defaults to an empty mapping
-    - build and build.task_executor blocks are required;
-      build.task_executor.agent is required and non-empty
+    - build block is OPTIONAL (None when the key is absent;
+      present-but-non-mapping → ValueError); WHEN present, build.task_executor
+      sub-block and build.task_executor.agent are required (non-empty)
     - build.proxy is optional, defaults to None
     - build.hosts is optional, defaults to an empty mapping
     - codemanifest is optional
@@ -66,8 +75,12 @@ Annotations: |
 
     Constraints:
     - Do not default image — None is a valid value, surface it to the caller
+    - Do NOT enforce presence of pipeline/build at the loader level — that
+      validation is the consuming command's responsibility (the pipeline and
+      build commands). The loader keeps the language requirement (KeyError) and
+      the mapping/inner-field validation of any PRESENT section
 
-"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig, pipeline: PipelineConfig, commands: dict, codemanifest: CodemanifestConfig | None)":
+"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_config.
@@ -75,8 +88,10 @@ Annotations: |
     `lang`: project language directive
     `image`: top-level Docker image shared by build and pipeline; None is a valid value
     `dockerfile`: top-level path to a project Dockerfile; None is a valid value
-    `build`: build configuration as a `BuildConfig` instance
-    `pipeline`: pipeline configuration as a `PipelineConfig` instance
+    `build`: build configuration as a `BuildConfig` instance, or None when the
+             build section is absent in .goga/config.yml
+    `pipeline`: pipeline configuration as a `PipelineConfig` instance, or None
+                when the pipeline section is absent in .goga/config.yml
     `commands`: command hooks — reserved for future prompt customization
     `codemanifest`: CODEMANIFEST configuration as a `CodemanifestConfig` instance
   properties:
@@ -90,10 +105,16 @@ Annotations: |
       Path to a project Dockerfile, relative to the project root. Shared by build
       and pipeline. None is a valid value — when set, --update builds locally
       (docker_update → DockerBuilder); when None, --update pulls (docker_pull).
-    "build -> BuildConfig": |
-      Build configuration from .goga/config.yml. Instance of `BuildConfig`.
-    "pipeline -> PipelineConfig": |
-      Pipeline configuration from .goga/config.yml. Instance of `PipelineConfig`.
+    "build -> BuildConfig | None": |
+      Build configuration from .goga/config.yml. Instance of `BuildConfig`, or None
+      when the build section is absent. Consumers that need it
+      (goga/commands/build) guard the None case and raise ClickException before
+      any field access.
+    "pipeline -> PipelineConfig | None": |
+      Pipeline configuration from .goga/config.yml. Instance of `PipelineConfig`,
+      or None when the pipeline section is absent. Consumers that need it
+      (goga/commands/pipeline) guard the None case and raise ClickException
+      before any field access.
     "commands -> dict": |
       Command hooks from .goga/config.yml.
       Reserved for future prompt customization — currently unused.

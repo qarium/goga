@@ -36,7 +36,11 @@ config = load_config()
 **Behavior**:
 - `.goga/config.yml` is mandatory — raises `FileNotFoundError` if missing or empty
 - Root YAML element must be a mapping — raises `ValueError` otherwise
-- Required sections: `language`, `image` (top-level), `pipeline`, `pipeline.agent`, `build`, `build.task_executor`, `build.task_executor.agent`
+- Required top-level field: `language`. All other top-level fields (`image`, `pipeline`, `build`, `commands`, `codemanifest`, `dockerfile`) are optional
+- Optional sections `pipeline` and `build` may be absent — `config.pipeline` and `config.build` are then `None`. Consumers that need them (the `pipeline` and `build` commands) guard the `None` case and raise `ClickException` before any field access
+- When `pipeline` is present: it must be a mapping, and `pipeline.agent` is required (non-empty)
+- When `build` is present: it must be a mapping, and `build.task_executor` (with its required `agent`) is required
+- A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `pipeline:` null, `build: true`) raises `ValueError`, not `AttributeError`
 - Raises `yaml.YAMLError` on invalid YAML syntax
 
 **Error handling**:
@@ -49,7 +53,8 @@ try:
 except FileNotFoundError:
     # .goga/config.yml not found or empty
 except KeyError as e:
-    # Missing required section
+    # Missing required field — `language`, or `build.task_executor` / its
+    # `agent` when the `build` section is present
     print(e)
 except ValueError as e:
     # Invalid field value
@@ -61,13 +66,28 @@ except yaml.YAMLError as e:
 
 ## .goga/config.yml Schema
 
-Minimal valid configuration:
+Minimal valid configuration (only `language` is required at the loader level):
+
+```yaml
+language: python
+```
+
+Minimal configuration for `goga pipeline` (the pipeline command requires the
+`pipeline` section — absent section → ClickException):
 
 ```yaml
 language: python
 image: qarium/goga-python-3.12:latest
 pipeline:
   agent: claude
+```
+
+Minimal configuration for `goga build` (the build command requires the `build`
+section — absent section → ClickException):
+
+```yaml
+language: python
+image: qarium/goga-python-3.12:latest
 build:
   task_executor:
     agent: claude
@@ -118,11 +138,20 @@ codemanifest:
 | Field                       | Type    | Description                                                         |
 |-----------------------------|---------|---------------------------------------------------------------------|
 | `language`                  | str     | Project programming language                                        |
-| `image`                     | str     | Top-level Docker image shared by build and pipeline                 |
-| `pipeline`                  | mapping | Pipeline configuration block                                        |
-| `pipeline.agent`            | str     | Agent name; resolved at runtime into the in-container `*-as-claude.sh` wrapper path and written to afm `client.command` |
-| `build.task_executor`       | mapping | AI agent configuration block                                        |
-| `build.task_executor.agent` | str     | Agent name; resolved at runtime into the in-container `*-as-claude.sh` wrapper path and written to ralphex `claude_command` |
+
+### Conditionally required fields
+
+These fields are optional at the loader level but required by their consuming
+command. When the consuming command is invoked on a config that lacks the
+section, the command raises `ClickException` before any field access.
+
+| Field                       | Required by           | Notes                                                                          |
+|-----------------------------|-----------------------|--------------------------------------------------------------------------------|
+| `pipeline`                  | `goga pipeline`       | Must be a mapping when present. `pipeline.agent` is required when present.     |
+| `pipeline.agent`            | `goga pipeline`       | Agent name; resolved into the in-container `*-as-claude.sh` wrapper path.      |
+| `build`                     | `goga build`          | Must be a mapping when present. `build.task_executor` is required when present.|
+| `build.task_executor`       | `goga build`          | AI agent configuration block.                                                  |
+| `build.task_executor.agent` | `goga build`          | Agent name; resolved into the in-container `*-as-claude.sh` wrapper path.      |
 
 #### Agent name semantics
 
@@ -137,10 +166,14 @@ afm) that consume these fields.
 
 | Field                       | Type    | Default                | Description                                             |
 |-----------------------------|---------|------------------------|---------------------------------------------------------|
+| `image`                     | str     | None                   | Top-level Docker image shared by build and pipeline     |
+| `dockerfile`                | str     | None                   | Top-level path to a project Dockerfile                  |
 | `commands`                  | mapping | `{}`                   | Prompt customization hooks (reserved)                   |
+| `pipeline`                  | mapping | None                   | Pipeline configuration block (conditionally required by `goga pipeline`)  |
 | `pipeline.env`              | mapping | `{}`                   | Environment variables for pipeline runs (`{str: str}`)  |
 | `pipeline.proxy`            | str     | None                   | HTTP/HTTPS proxy URL for the pipeline container         |
 | `pipeline.hosts`            | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (pipeline)  |
+| `build`                     | mapping | None                   | Build configuration block (conditionally required by `goga build`)  |
 | `build.task_executor.env`   | mapping | `{}`                   | Environment variables for builds (`{str: str}`)         |
 | `build.proxy`               | str     | None                   | HTTP/HTTPS proxy URL for the build container            |
 | `build.hosts`               | mapping | `{}`                   | Host→IP mapping for `docker run --add-host` (build)     |
@@ -168,17 +201,31 @@ config = load_config()
 # Top-level accessors
 config.lang           # str — project language
 config.image          # str | None — top-level Docker image (shared by build and pipeline)
-config.build          # BuildConfig
-config.pipeline       # PipelineConfig
+config.build          # BuildConfig | None — None when the `build` section is absent
+config.pipeline       # PipelineConfig | None — None when the `pipeline` section is absent
 config.commands       # dict — custom command hooks
+config.dockerfile     # str | None — path to a project Dockerfile
 
-# PipelineConfig fields
+# Section accessors require a None-guard in the consuming command. The loader
+# does not enforce presence of `pipeline` or `build`; the consuming command is
+# responsible for raising a user-facing error (ClickException) before any field
+# access:
+
+if config.pipeline is None:
+    raise ClickException("pipeline section is required in .goga/config.yml ...")
+# now safe to read config.pipeline.agent / env / proxy / hosts
+
+if config.build is None:
+    raise ClickException("build section is required in .goga/config.yml ...")
+# now safe to read config.build.task_executor / proxy / hosts / ...
+
+# PipelineConfig fields (after the None-guard)
 config.pipeline.agent   # str — afm client.command inside the container
 config.pipeline.env     # dict — {str: str}
 config.pipeline.proxy   # str | None — HTTP/HTTPS proxy URL for the pipeline container
 config.pipeline.hosts   # dict[str, str] — docker run --add-host entries
 
-# BuildConfig fields
+# BuildConfig fields (after the None-guard)
 config.build.task_executor   # TaskExecutorConfig
 config.build.worktree        # bool | None
 config.build.proxy           # str | None — HTTP/HTTPS proxy URL for the build container
@@ -188,7 +235,7 @@ config.build.hosts           # dict[str, str] — docker run --add-host entries
 config.build.task_executor.agent  # str
 config.build.task_executor.env    # dict — {str: str}
 
-# CodemanifestConfig fields
+# CodemanifestConfig fields — None when the `codemanifest` section is absent
 config.codemanifest                    # CodemanifestConfig | None
 config.codemanifest.usages             # dict — {str: str}
 config.codemanifest.annotations        # str | None

@@ -74,7 +74,7 @@ Run an interactive user survey and generate project files.
    - kotlin: qarium/goga-kotlin-2.0:1.0 .. qarium/goga-kotlin-2.3:1.0
    - swift: qarium/goga-swift-6.0:1.0 .. qarium/goga-swift-6.2:1.0
 7. **dockerfile** — optional custom Dockerfile creation
-   - On acceptance, request the path (default: "Dockerfile")
+   - On acceptance, request the path (default: ".goga/Dockerfile")
    - The Dockerfile contains `FROM {image}`
 8. **env** — propose env keys based on the selected `agent` (drives `build.task_executor.env`)
    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
@@ -94,14 +94,14 @@ Run an interactive user survey and generate project files.
 ```yaml
 language: python
 image: qarium/goga-python-3.12:latest
-dockerfile: Dockerfile    # only when dockerfile_path is set (omit when None)
+dockerfile: .goga/Dockerfile    # only when dockerfile_path is set (omit when None)
 build:
   task_executor:
     agent: claude
     env: {...}
   worktree: false         # other build fields only when provided
 pipeline:
-  agent: claude           # always emitted — pipeline.agent is required by load_config
+  agent: claude           # always emitted — init-config must be self-contained so `goga pipeline` works out-of-the-box
   env: {...}              # omitted when pipeline_env is None or empty
 codemanifest:             # omitted when both inner fields are empty
   usages: {...}
@@ -114,6 +114,6 @@ codemanifest:             # omitted when both inner fields are empty
 ## Anti-patterns
 
 - Do not write `build.image` — the Docker image is the top-level `image` field, shared by build and pipeline.
-- Do not omit the `pipeline:` block — `pipeline.agent` is required by `load_config`; always emit at least `pipeline.agent`.
+- Do not omit the `pipeline:` block — the init-config must be self-contained so `goga pipeline` works out-of-the-box without manual config edits; always emit at least `pipeline.agent`.
 - Do not reuse `agent` for both build and pipeline without confirming `pipeline_agent` — the survey explicitly collects `pipeline_agent` (defaulted to `agent`) so that build and pipeline can diverge.
 - Do not silently drop `pipeline_env` into `build.task_executor.env` — they are separate blocks driven by separate survey answers.

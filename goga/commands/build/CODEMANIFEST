@@ -139,6 +139,11 @@ Annotations: |
     Algorithm:
     1. Verify docker availability; raise ClickException when missing
     2. Load configuration via `load_config` (practice `configuration`) — get `Config`
+    2b. When config.build is None → raise ClickException(
+        "build section is required in .goga/config.yml to run 'goga build'").
+        Host-side guard — runs BEFORE any config.build access and BEFORE the
+        docker command is assembled, so the in-container goga.build never
+        starts on a build-less config (no docker run).
     3. Collect cli_flags from click parameters
     4. Resolve the proxy: take `proxy` when not None, otherwise fall back to
        config.build.proxy

@@ -160,6 +160,12 @@ Annotations: |
 
     Algorithm:
     1. Load configuration via `load_config` — fails fast on schema errors
+    1b. When config.pipeline is None → raise ClickException(
+        "pipeline section is required in .goga/config.yml to run 'goga
+        pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts in
+        this command, agent/env in `run_pipeline_container`). Because
+        `run_pipeline_container` is only reached through this command, the guard
+        covers it transitively — no separate None-check is added there.
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
     3. Resolve the proxy: take `proxy` when not None, otherwise fall back to

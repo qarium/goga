@@ -114,7 +114,7 @@ Annotations: |
       6. image — display hints from `image_defaults`, default to the last entry; accept free-form input.
          Captures the top-level image field (NOT build.image).
       7. dockerfile — optional; prompt to create a custom Dockerfile.
-         On acceptance: request path (default "Dockerfile").
+         On acceptance: request path (default ".goga/Dockerfile").
       8. env — first propose env keys from `agent_env_defaults` for the selected agent.
          Drives build.task_executor.env.
          Collect values for each proposed key.
@@ -160,7 +160,8 @@ Annotations: |
       Requirements:
       - Emit image as a top-level field
       - Always emit the pipeline: block (even when pipeline_env is omitted) —
-        pipeline.agent is required by load_config
+        the init-config must be self-contained so the pipeline command works
+        out-of-the-box without manual config edits
       - Field order in the generated YAML: language, image, dockerfile, build, pipeline, codemanifest
 
 "InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":
