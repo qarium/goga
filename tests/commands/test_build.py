@@ -448,6 +448,63 @@ class TestBuildMissingGogaYmlRaisesConfigError:
         assert ".goga/config.yml" in result.output
 
 
+# --- Build section None-guard (D3, step 2b) tests ---
+
+
+class TestBuildSectionGuard:
+    """D3 — host-side None-guard: ClickException when the build section is absent.
+
+    The guard (Algorithm step 2b) runs right after ``load_config()`` and before
+    any ``config.build.*`` access or the secret env-file write, so a build-less
+    config produces a clean user-facing error + exit 1 (no AttributeError, no
+    docker run, no leaked env file).
+    """
+
+    @staticmethod
+    def _write_config_without_build(tmp_path: Path) -> None:
+        """Write a valid config that has NO build section (only language+image+pipeline)."""
+        data = {
+            "language": "python",
+            "image": "qarium/goga:latest",
+            "pipeline": {"agent": "claude"},
+        }
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_command_raises_click_exception_when_build_section_absent(
+        self, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        self._write_config_without_build(tmp_path)
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "build section is required" in result.output
+        # docker run never starts on a build-less config.
+        mock_runner.return_value.run.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    def test_build_command_no_leak_env_file_when_build_section_absent(
+        self, mock_env, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """The guard runs BEFORE the env-file write, so no secret env file leaks on disk.
+
+        Ordering invariant (step 2b before step 10): the env file carries git
+        identity and ``task_executor`` secrets and is only unlinked by the
+        ``finally`` of the try block — so the None-guard must run before
+        ``_write_env_file`` to guarantee the raise cannot leak it.
+        """
+        self._write_config_without_build(tmp_path)
+        with mock.patch.object(_build_mod, "DockerRunner"):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "build section is required" in result.output
+        mock_env.assert_not_called()
+
+
 # --- Negative cases ---
 
 

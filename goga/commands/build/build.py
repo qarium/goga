@@ -294,6 +294,18 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
+    # Step 2b — host-side None-guard: the build section is optional at the
+    # loader level (load_config returns config.build=None when absent), but
+    # `goga build` cannot run without it. Raise a clean ClickException BEFORE
+    # any config.build.* access and BEFORE the secret env-file write (step 10),
+    # so a build-less config surfaces as a clean message + exit 1 rather than an
+    # AttributeError, and the in-container goga.build never starts (no docker
+    # run, no secret env-file leak on disk).
+    if config.build is None:
+        raise click.ClickException(
+            "build section is required in .goga/config.yml to run 'goga build'"
+        )
+
     cli_flags = {
         "worktree": worktree,
         "skip_finalize": skip_finalize,
