@@ -57,7 +57,7 @@ class Config:
     lang: str
     image: str | None
     dockerfile: str | None
-    build: BuildConfig
-    pipeline: PipelineConfig
+    build: BuildConfig | None
+    pipeline: PipelineConfig | None
     commands: dict = field(default_factory=dict)
     codemanifest: CodemanifestConfig | None = None
