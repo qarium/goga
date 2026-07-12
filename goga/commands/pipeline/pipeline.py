@@ -88,12 +88,27 @@ def pipeline(  # noqa: PLR0913
             launching the container. Available in both modes.
 
     Raises:
-        click.ClickException: When ``.goga/config.yml`` cannot be loaded.
+        click.ClickException: When ``.goga/config.yml`` cannot be loaded, or when
+            the ``pipeline`` section is absent (the section is required to run a
+            pipeline).
     """
     try:
         config = load_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
+
+    # Step 1b — host-side None-guard: the pipeline section is optional at the
+    # loader level (load_config returns config.pipeline=None when absent), but
+    # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
+    # any config.pipeline.* access and BEFORE dispatch into
+    # run_pipeline_container, so a pipeline-less config surfaces as a clean
+    # message + exit 1 in both discovery and run modes rather than an
+    # AttributeError. This also covers run_pipeline_container transitively — it
+    # is only reachable through this command, so a single check here is enough.
+    if config.pipeline is None:
+        raise click.ClickException(
+            "pipeline section is required in .goga/config.yml to run 'goga pipeline'"
+        )
 
     # Resolve the proxy: the --proxy CLI value wins over config.pipeline.proxy.
     resolved_proxy = proxy if proxy is not None else config.pipeline.proxy

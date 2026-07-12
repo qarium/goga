@@ -122,6 +122,83 @@ class TestPipelineCommandContract:
         assert "pipeline" in str(result.exception).lower()
 
 
+# --- Pipeline section None-guard (D4, step 1b) tests ---
+
+
+class TestPipelineSectionGuard:
+    """D4 — host-side None-guard: ClickException when the pipeline section is absent.
+
+    The guard (Algorithm step 1b) runs right after ``load_config()`` and before
+    any ``config.pipeline.*`` access or dispatch into ``run_pipeline_container``,
+    so a pipeline-less config produces a clean user-facing error + exit 1 in BOTH
+    modes (no AttributeError, no docker run). The same guard covers the run path
+    transitively: ``run_pipeline_container`` is only reachable through this
+    command, so a single check here is sufficient.
+    """
+
+    @staticmethod
+    def _write_config_without_pipeline(tmp_path: Path) -> None:
+        """Write a valid config that has NO pipeline section (only language+image+build)."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir(parents=True, exist_ok=True)
+        lines = [
+            "language: python",
+            "image: qarium/goga:latest",
+            "build:",
+            "  task_executor:",
+            "    agent: claude",
+        ]
+        (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
+
+    def test_pipeline_command_raises_click_exception_when_pipeline_section_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Discovery mode on a pipeline-less config surfaces as a ClickException (step 1b)."""
+        self._write_config_without_pipeline(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, [])
+
+        assert result.exit_code == 1
+        assert "pipeline section is required" in result.output
+        # The container never starts on a pipeline-less config.
+        mock_run.assert_not_called()
+
+    def test_pipeline_command_run_mode_raises_when_pipeline_section_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Run mode on a pipeline-less config also surfaces as a ClickException (step 1b)."""
+        self._write_config_without_pipeline(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 1
+        assert "pipeline section is required" in result.output
+        # Step 1b runs before dispatch, so run_pipeline_container is never reached.
+        mock_run.assert_not_called()
+
+    def test_pipeline_command_no_docker_run_when_pipeline_section_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The guard runs BEFORE dispatch, so the container does not start.
+
+        Ordering invariant (step 1b before step 5 dispatch): a pipeline-less
+        config must raise before ``run_pipeline_container`` is invoked, so the
+        in-container docker run never happens.
+        """
+        self._write_config_without_pipeline(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
+
 # --- Logic tests ---
 
 
