@@ -483,6 +483,43 @@ class TestLogic:
 
         assert result.dockerfile_path == "Dockerfile"
 
+    def test_questionnaire_dockerfile_default_is_goga_dockerfile(self) -> None:
+        """Step 7 default for Dockerfile path is `.goga/Dockerfile` (Enter accepted)."""
+        other_prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
+            ]
+        )
+
+        def fake_prompt(message, *args, **kwargs):
+            # On the Dockerfile path prompt, simulate the user pressing Enter
+            # (no interactive input) → click.prompt returns its `default`.
+            if message == "Dockerfile path":
+                return kwargs.get("default")
+            return next(other_prompts)
+
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=fake_prompt), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.dockerfile_path == ".goga/Dockerfile"
+
     def test_questionnaire_ask_goga_config_without_dockerfile(self) -> None:
         prompts = iter(
             [

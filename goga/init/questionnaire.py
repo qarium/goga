@@ -172,7 +172,7 @@ class Questionnaire:
         click.echo("Create a custom Dockerfile for the build implementation?")
         dockerfile_path: str | None = None
         if click.confirm("Create Dockerfile?", default=False):
-            dockerfile_path = click.prompt("Dockerfile path", default="Dockerfile")
+            dockerfile_path = click.prompt("Dockerfile path", default=".goga/Dockerfile")
 
         # 8. Environment variables (task_executor)
         click.echo("\n--- Environment Variables ---")
