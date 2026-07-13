@@ -207,16 +207,6 @@ class TestConfigAPIShape:
         image_type = Config.__dataclass_fields__["image"].type
         assert image_type == str | None or types.UnionType in type(image_type).__mro__
 
-    def test_build_type_is_optional_buildconfig(self):
-        """Config.build is annotated BuildConfig | None (D2)."""
-        build_type = Config.__dataclass_fields__["build"].type
-        assert build_type == BuildConfig | None or types.UnionType in type(build_type).__mro__
-
-    def test_pipeline_type_is_optional_pipelineconfig(self):
-        """Config.pipeline is annotated PipelineConfig | None (D2)."""
-        pipeline_type = Config.__dataclass_fields__["pipeline"].type
-        assert pipeline_type == PipelineConfig | None or types.UnionType in type(pipeline_type).__mro__
-
     def test_config_build_annotation_allows_none(self):
         """None is a legal value for Config.build — the dataclass accepts it (D2)."""
         cfg = Config(
@@ -231,7 +221,7 @@ class TestConfigAPIShape:
         assert cfg.build is None
         assert cfg.pipeline is None
 
-    def test_config_build_annotation_rejects_incorrect_type(self):
+    def test_config_build_annotation_is_optional_buildconfig(self):
         """typing.get_type_hints reports build as Optional[BuildConfig] (D2)."""
         import typing
 
@@ -240,7 +230,7 @@ class TestConfigAPIShape:
         assert BuildConfig in build_args
         assert type(None) in build_args
 
-    def test_config_pipeline_annotation_rejects_incorrect_type(self):
+    def test_config_pipeline_annotation_is_optional_pipelineconfig(self):
         """typing.get_type_hints reports pipeline as Optional[PipelineConfig] (D2)."""
         import typing
 

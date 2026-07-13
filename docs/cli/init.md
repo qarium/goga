@@ -37,7 +37,7 @@ The wizard proceeds through the following steps in order:
    | kotlin | `qarium/goga-kotlin-2.0:1.0` ... `qarium/goga-kotlin-2.3:1.0` |
    | swift | `qarium/goga-swift-6.0:1.0` ... `qarium/goga-swift-6.2:1.0` |
 
-7. **Custom Dockerfile** -- Optionally create a custom Dockerfile based on the selected image.
+7. **Custom Dockerfile** -- Optionally create a custom Dockerfile based on the selected image. When accepted, the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path.
 
 8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
@@ -51,7 +51,7 @@ After the questionnaire completes, `goga init` creates:
 
 - **`.goga/config.yml`** -- Project configuration. Fields, in order: `language`, top-level `image`, optional `dockerfile` (when a custom Dockerfile is requested), `build` (with `task_executor`), a required `pipeline` block (agent + optional env), and optional `codemanifest`.
 - **`.goga/usages/conventions.md`** -- (If base convention was downloaded) Language-specific code conventions.
-- **`Dockerfile`** -- (If requested) A Dockerfile derived from the selected image. When created, a top-level `dockerfile:` entry is also written to `.goga/config.yml`, so `goga build --update` / `goga pipeline --update` build the image locally instead of pulling it.
+- **`.goga/Dockerfile`** -- (If requested) A Dockerfile derived from the selected image, written at the suggested path inside `.goga/`. When created, a top-level `dockerfile:` entry (defaulting to `.goga/Dockerfile`) is also written to `.goga/config.yml`, so `goga build --update` / `goga pipeline --update` build the image locally instead of pulling it.
 
 ## Examples
 

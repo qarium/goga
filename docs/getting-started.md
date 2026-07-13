@@ -47,7 +47,7 @@ The wizard will prompt you for:
   config.yml              # Project configuration
   usages/
     conventions.md        # Language conventions (if downloaded)
-Dockerfile                # Optional, if you chose to create one
+  Dockerfile              # Optional, if you chose to create one (default location)
 ```
 
 ## Develop your first feature

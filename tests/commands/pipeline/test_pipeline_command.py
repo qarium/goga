@@ -108,8 +108,10 @@ class TestPipelineCommandContract:
         assert mock_run.call_args.kwargs["extra_env"] == ("FOO=bar", "BAZ=qux")
         assert mock_run.call_args.kwargs["name"] == "deploy"
 
-    def test_pipeline_raises_on_schema_error(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A config schema missing the ``pipeline`` block surfaces as a ClickException."""
+    def test_pipeline_without_section_raises_click_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A config missing the ``pipeline`` block surfaces as the command None-guard ClickException."""
         _write_config(tmp_path, with_pipeline=False)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
@@ -119,7 +121,7 @@ class TestPipelineCommandContract:
 
         assert result.exit_code != 0
         assert isinstance(result.exception, click.ClickException)
-        assert "pipeline" in str(result.exception).lower()
+        assert "pipeline section is required" in str(result.exception)
 
 
 # --- Pipeline section None-guard (D4, step 1b) tests ---
@@ -178,24 +180,6 @@ class TestPipelineSectionGuard:
         assert result.exit_code == 1
         assert "pipeline section is required" in result.output
         # Step 1b runs before dispatch, so run_pipeline_container is never reached.
-        mock_run.assert_not_called()
-
-    def test_pipeline_command_no_docker_run_when_pipeline_section_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """The guard runs BEFORE dispatch, so the container does not start.
-
-        Ordering invariant (step 1b before step 5 dispatch): a pipeline-less
-        config must raise before ``run_pipeline_container`` is invoked, so the
-        in-container docker run never happens.
-        """
-        self._write_config_without_pipeline(tmp_path)
-        monkeypatch.chdir(tmp_path)
-        runner = CliRunner()
-        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
-            result = runner.invoke(pipeline, ["deploy"])
-
-        assert result.exit_code == 1
         mock_run.assert_not_called()
 
 
