@@ -133,18 +133,19 @@ file is missing from the image, afm surfaces the error.
 ### Discovery mode
 
 1. Loads `.goga/config.yml` via `load_config`.
-2. Verifies docker availability.
-3. Checks `config.image` is set (ClickException otherwise).
-4. Assembles a docker run command including one `--add-host HOST:IP` flag per
+2. When `config.pipeline` is `None` (the `pipeline` section is absent in `.goga/config.yml`) → raises `ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")` before any field access. The section is optional at the loader level, but `goga pipeline` cannot run without it.
+3. Verifies docker availability.
+4. Checks `config.image` is set (ClickException otherwise).
+5. Assembles a docker run command including one `--add-host HOST:IP` flag per
    resolved hosts entry (CLI `--add-host` merged on top of `pipeline.hosts`
    from config; CLI wins on conflict).
-5. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
+6. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
    and the image is absent locally, builds it ONCE before launch (no-op when
    the image is present or no Dockerfile is set; fatal build surfaces as
    ClickException, launch skipped).
-6. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
-7. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
-8. Propagates the container's exit code.
+7. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
+8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
+9. Propagates the container's exit code.
 
 `extra_env`, `proxy`, and `--clean` have no effect in discovery mode — no
 env-file is written, no afm state directory is involved.
@@ -152,9 +153,10 @@ env-file is written, no afm state directory is involved.
 ### Run mode
 
 1. Loads `.goga/config.yml` via `load_config`.
-2. Verifies docker availability; checks `config.image`.
-3. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
-4. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
+2. When `config.pipeline` is `None` (the `pipeline` section is absent in `.goga/config.yml`) → raises `ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")` before any field access. Same guard as Discovery mode step 2.
+3. Verifies docker availability; checks `config.image`.
+4. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
+5. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
    and writes a tmpfile containing
    `client.command: <resolved wrapper path>`, `theme: goga`,
    `open_browser: false`, and `proxy.enabled: false` (mode 0600). `theme`,
@@ -162,18 +164,18 @@ env-file is written, no afm state directory is involved.
    `proxy.enabled: false` disables afm's own internal outbound proxy
    provider (goga manages the outbound proxy through the container env-file
    `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`; the two layers must never collide).
-5. Resolves the persistent afm state host directory via
+6. Resolves the persistent afm state host directory via
    `resolve_pipeline_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<name>/`)
    and ensures it exists (`mkdir -p`, idempotent).
-6. When `--clean` is set: wipes the directory via `clean_pipeline_runtime_dir`
+7. When `--clean` is set: wipes the directory via `clean_pipeline_runtime_dir`
    (recursive rmtree + recreate) **before** launch.
-7. Builds an env-file with `config.pipeline.env` + git identity + extra
+8. Builds an env-file with `config.pipeline.env` + git identity + extra
    `KEY=VALUE` pairs supplied via `-e/--env` + `AFM_DIR=/home/goga/pipeline` +
    (when proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
    (mode 0600).
-8. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
-9. Prints `Web UI: http://localhost:<port>` to stdout.
-10. Assembles the docker run command:
+9. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
+10. Prints `Web UI: http://localhost:<port>` to stdout.
+11. Assembles the docker run command:
     - `--rm -p <port>:<port>`
     - `-v <project_dir>:/workspace -w /workspace`
     - `-v <pipeline_runtime_dir>:/home/goga/pipeline` (read-write — persistent state)
@@ -182,13 +184,13 @@ env-file is written, no afm state directory is involved.
     - one `-v <host_path>:<container_path>:ro` flag per credential file detected by `resolve_credential_mounts()` (claude/codex/opencode when present on the host)
     - `--env-file <env_file>`
     - `--entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`
-11. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
+12. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
     and the image is absent locally, builds it ONCE before launch (no-op when
     the image is present or no Dockerfile is set; fatal build surfaces as
     ClickException, launch skipped; secret tmpfile/env-file are unlinked).
-12. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
-13. Launches the container and waits for its exit code.
-14. In `finally`: deletes the `client.command` tmpfile and the env-file,
+13. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
+14. Launches the container and waits for its exit code.
+15. In `finally`: deletes the `client.command` tmpfile and the env-file,
     `docker kill`s the container. **The persistent afm state host directory
     is NOT deleted** — it survives across runs of the same pipeline.
 

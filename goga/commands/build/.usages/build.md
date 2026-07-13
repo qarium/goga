@@ -73,6 +73,7 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 ## Requirements
 
 - Docker must be installed and available in PATH
+- `.goga/config.yml` must contain a `build` section (with a `task_executor.agent`). The loader makes the section optional (`config.build` is `None` when absent), but `goga build` cannot run without it — the command raises `ClickException("build section is required in .goga/config.yml to run 'goga build'")` before any field access and before the container is launched
 - `.goga/config.yml` must have the top-level `image` field set — otherwise the command exits with error `image in .goga/config.yml is not set`
 - By default the image is NOT refreshed — the local image is used as-is. Use `--update`/`-u` to refresh it before launch: build when a project Dockerfile is declared (fatal on failure), else pull (warning on failure, non-fatal — the build continues with the locally available image)
 - First-run safety net: when `dockerfile` is declared in `.goga/config.yml` and the image is absent locally, the command builds it ONCE before launch even WITHOUT `--update` (so the first run after declaring a project Dockerfile does not need `--update`). `--update` forces a RE-build of an already-present image; the safety net is a no-op once the image exists
