@@ -32,6 +32,9 @@ Imports:
   - Types:
       - upgrade
     From: goga/commands/upgrade
+  - Types:
+      - install
+    From: goga/commands/install
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -57,6 +60,7 @@ Annotations: |
 ->init: {}
 ->pipeline: {}
 ->upgrade: {}
+->install: {}
 
 ---
 

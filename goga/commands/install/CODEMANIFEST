@@ -1,0 +1,68 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice to build the command, its options, and exit-code propagation.
+
+---
+
+"install(name: str, use_sudo: bool = False, version: str | None = None) -> exit_code: int":
+  location: install.py
+  annotations: |
+    Install a goga-tool package into the current runtime interpreter via pip. Target the
+    interpreter that runs goga directly, so the package lands in the correct environment
+    regardless of how goga was installed. Propagate pip's outcome as the exit code without
+    translation.
+
+    `name`: tool identifier without the goga-tool- / goga_tool_ prefix (CLI positional argument).
+    `use_sudo`: when True, run pip under sudo with HOME preserved. Unix-only; intended for
+      system-Python installs requiring root. Default False.
+    `version`: optional version specifier appended raw to the package identifier; the caller
+      owns the operator. Default None.
+    `exit_code`: pip's returncode propagated as-is (0 success, non-zero failure).
+
+    Algorithm:
+    1. Compose the package identifier in its PyPI-canonical dash form from `name`.
+    2. If `version` is set, append it verbatim to the identifier — no operator injection.
+    3. Invoke pip through the current interpreter so the package lands in the same
+       environment as goga; always request an upgrade so the command is idempotent.
+    4. If `use_sudo` is set, run the invocation under sudo with HOME preserved so downstream
+       tool discovery reads the caller's home directory.
+    5. Return the invocation's returncode without translation.
+
+    Apply `click` for command shape, the positional argument, the flag and the option.
+
+    Apply `convention` for docstring style, import discipline, and structured logging.
+
+    Requirements:
+    - The package identifier passed to pip MUST be in the dash form derived from `name`.
+    - The pip invocation MUST target the interpreter running goga.
+    - The upgrade request MUST be present in every produced invocation.
+    - When `use_sudo` is True, HOME MUST be preserved under sudo.
+    - `exit_code` MUST equal pip's returncode exactly — no translation, no wrapping.
+
+    Constraints:
+    - Do NOT validate, parse, or modify `version` — pip is the validation authority.
+    - Do NOT inject any operator into the version string; the caller owns the operator.
+    - Do NOT re-sync agents, edit connection config, or run the tool after install.
+    - Do NOT probe whether the package is already installed — the upgrade request handles it.
+    - Do NOT auto-select sudo — the caller opts in via `use_sudo`.
+    - Do NOT accept user-target, batch, pre-release, or alternate-index options.
+    - On Windows, `use_sudo` is unavailable (sudo is Unix-only).
+
+---
+
+Author: Goga
+CreatedAt: 13/07/26
+
+Description: |
+  Installs a goga-tool package into the current runtime interpreter via pip and propagates
+  pip's outcome as the exit code.
