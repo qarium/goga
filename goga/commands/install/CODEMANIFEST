@@ -1,3 +1,11 @@
+Imports:
+  - Types:
+      - Config
+      - load_config
+    Usages:
+      - configuration
+    From: goga/config
+
 Usages:
   convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
@@ -10,53 +18,180 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  Use the `click` practice to build the command, its options, and exit-code propagation.
+  Use the `click` practice to build the command, its options, the optional
+  positional argument, and exit-code propagation.
+
+  Use the `configuration` practice when the bulk path needs to read
+  .goga/config.yml — load_config is the single entrypoint for config consumption,
+  and its tools field is a raw mapping validated structurally only.
 
 ---
 
-"install(name: str, use_sudo: bool = False, version: str | None = None) -> exit_code: int":
+"resolve_version(form: str | None) -> spec: str | None":
   location: install.py
   annotations: |
-    Install a goga-tool package into the current runtime interpreter via pip. Target the
-    interpreter that runs goga directly, so the package lands in the correct environment
-    regardless of how goga was installed. Propagate pip's outcome as the exit code without
-    translation.
+    Sole owner of the four-form version grammar. Maps a version-form string to a
+    pip specifier; raises ValueError on operator-prefixed or malformed input.
+    Used by both the single path (--version CLI flag) and the bulk path
+    (config.tools expansion).
 
-    `name`: tool identifier without the goga-tool- / goga_tool_ prefix (CLI positional argument).
-    `use_sudo`: when True, run pip under sudo with HOME preserved. Unix-only; intended for
-      system-Python installs requiring root. Default False.
-    `version`: optional version specifier appended raw to the package identifier; the caller
-      owns the operator. Default None.
-    `exit_code`: pip's returncode propagated as-is (0 success, non-zero failure).
+    `form`: version-form string in one of the four grammar forms, or None when
+      the --version CLI flag is absent (single path only)
+    `spec`: resolved pip specifier to append to the package identifier, or None
+      when no specifier should be appended (latest / null marker)
 
     Algorithm:
-    1. Compose the package identifier in its PyPI-canonical dash form from `name`.
-    2. If `version` is set, append it verbatim to the identifier — no operator injection.
-    3. Invoke pip through the current interpreter so the package lands in the same
-       environment as goga; always request an upgrade so the command is idempotent.
-    4. If `use_sudo` is set, run the invocation under sudo with HOME preserved so downstream
-       tool discovery reads the caller's home directory.
-    5. Return the invocation's returncode without translation.
+    1. If `form` is None or equals the literal string "latest" → return None
+       (no specifier — pip selects the newest version under the upgrade request)
+    2. If `form` starts with a PEP 440 operator prefix (==, >=, <=, ~=, !=, <,
+       >, ===) → raise ValueError (operator-prefixed forms are rejected — this
+       routine owns the operator and emits it from the resolved grammar form)
+    3. If `form` matches the major x-range pattern "N.x" (exactly one dot, the
+       last segment is the literal "x", the first segment is a non-empty
+       numeric) → return a compatible-release specifier pinning the lower bound
+       on major version N (the form ~=N.0, PEP 440: >=N.0,<(N+1).0)
+    4. If `form` matches the minor x-range pattern "N.M.x" (exactly two dots,
+       the last segment is the literal "x", the first two segments are
+       non-empty numerics) → return a compatible-release specifier pinning the
+       lower bound on minor version N.M (the form ~=N.M.0, PEP 440:
+       >=N.M.0,<N.(M+1).0). The trailing .0 in ~=N.M.0 is required — ~=N.M
+       alone has only a major bound (<(N+1).0) and would NOT pin the minor
+       upper limit
+    5. If `form` matches the concrete-version pattern "N", "N.M", or "N.M.K"
+       (dot-separated non-empty numeric segments, no trailing "x" literal) →
+       return an exact-pin specifier (the form ==<form>)
+    6. Otherwise → raise ValueError (malformed form)
 
-    Apply `click` for command shape, the positional argument, the flag and the option.
+    Distinguish major x-range ("1.x") from minor x-range ("1.0.x") by counting
+    dots — do NOT use prefix matching. The count of dots determines the lower
+    bound: one dot pins the major version (form ~=N.0, PEP 440 upper bound
+    <(N+1).0), two dots pin the minor version (form ~=N.M.0, PEP 440 upper
+    bound <N.(M+1).0). The trailing .0 in the minor case is what actually
+    drives the tighter upper bound — do NOT emit ~=N.M (major-only bound).
 
-    Apply `convention` for docstring style, import discipline, and structured logging.
+    Apply `convention` for docstring style and the pure-function discipline
+    (no side effects, deterministic output).
 
     Requirements:
-    - The package identifier passed to pip MUST be in the dash form derived from `name`.
-    - The pip invocation MUST target the interpreter running goga.
-    - The upgrade request MUST be present in every produced invocation.
-    - When `use_sudo` is True, HOME MUST be preserved under sudo.
-    - `exit_code` MUST equal pip's returncode exactly — no translation, no wrapping.
+    - The four accepted forms are: "N.x" (major x-range), "N.M.x" (minor
+      x-range), "N(.M)?(.K)?" (concrete numeric), "latest"
+    - None input is accepted and resolves to None — this exists for the absent
+      --version CLI flag in the single path; it is NOT a valid config.tools
+      value (loader rejects YAML-null structurally)
+    - "latest" and None produce identical output (None) but "latest" is the
+      only canonical no-specifier marker inside config.tools
+    - Every operator-prefixed form (==, >=, <=, ~=, !=, <, >, ===) raises
+      ValueError — resolve_version owns the operator and emits it from the
+      resolved grammar form
+    - Pip specifier output is always prefixed with the operator (== or ~=);
+      no operator is injected when None is returned
 
     Constraints:
-    - Do NOT validate, parse, or modify `version` — pip is the validation authority.
-    - Do NOT inject any operator into the version string; the caller owns the operator.
-    - Do NOT re-sync agents, edit connection config, or run the tool after install.
-    - Do NOT probe whether the package is already installed — the upgrade request handles it.
-    - Do NOT auto-select sudo — the caller opts in via `use_sudo`.
-    - Do NOT accept user-target, batch, pre-release, or alternate-index options.
-    - On Windows, `use_sudo` is unavailable (sudo is Unix-only).
+    - Do NOT accept pre-release, post-release, or local-segment versions
+      (1.0.0a1, 1.0.0.post1, 1.0.0+local) — anything richer than the four-form
+      grammar is rejected; pip handles richer forms after resolution
+    - Do NOT validate that the numeric segments form a real PEP 440 version —
+      the routine recognises shape (dot-separated numerics), not existence
+    - Do NOT read .goga/config.yml — this routine is a pure transformer
+    - Do NOT log or perform I/O — it is a pure function
+
+"install(ctx: click.Context, name: str | None, sudo: bool, version: str | None) -> exit_code: int":
+  location: install.py
+  annotations: |
+    Install one or more goga-tool packages into the current runtime interpreter
+    via pip. Branches on `name`: the single path resolves --version via
+    resolve_version and installs one package; the bulk path reads cfg.tools
+    and installs all declared packages in a single pip invocation; the empty
+    path prints "Nothing to install" and exits 0. Propagates pip's returncode
+    as the exit code in every path without translation.
+
+    `exit_code`: pip's outcome propagated verbatim in single/bulk paths; 0 in
+      the empty path.
+
+    `ctx`: Click execution context used to control process exit codes.
+    `name`: optional tool identifier without the goga-tool- / goga_tool_ prefix
+      (CLI positional argument). When present, the single path runs and the
+      config is ignored. When absent, the bulk/empty path runs from cfg.tools.
+    `sudo`: when True, run pip under sudo with HOME preserved (Unix-only).
+    `version`: optional version-form string in the four-form grammar. Used by
+      the single path only (ignored in the bulk path). Resolved by
+      resolve_version; operator-prefixed or malformed forms raise ValueError
+      at resolution time.
+
+    Algorithm:
+    1. If `name` is not None → SINGLE PATH:
+       a. Resolve `version` via resolve_version; if it rejects the form, surface
+          the error as a user-facing CLI exception with a non-zero exit
+       b. Compose the package identifier from `name` and the resolved specifier
+          (empty when resolve_version returned None)
+       c. Issue one pip install invocation against the current interpreter with
+          the composed identifier and an upgrade request; apply sudo with HOME
+          preservation when `sudo` is set
+       d. Propagate pip's outcome as the exit code
+    2. If `name` is None → BULK / EMPTY PATH:
+       a. Load configuration via `load_config`; the result is a `Config` instance.
+          Loader exceptions (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
+          MUST be wrapped into a user-facing ClickException from `click` (non-zero
+          exit) — never let a raw loader exception surface as a traceback
+       b. Read the tools mapping from cfg.tools (treat None as empty)
+       c. If the mapping is empty → EMPTY PATH:
+          - Print "Nothing to install" to stdout
+          - Exit 0 without invoking pip
+       d. Else → BULK PATH:
+          - For each (tool_name, form) in the mapping, preserving insertion
+            order:
+            * Resolve the form via resolve_version; if it rejects the form,
+              surface the error as a user-facing CLI exception with a non-zero
+              exit
+            * Compose the identifier from the tool name and the resolved
+              specifier (empty when resolve_version returned None)
+            * Collect the identifier
+          - Issue exactly one pip install invocation against the current
+            interpreter with every collected identifier and an upgrade request;
+            apply sudo with HOME preservation when `sudo` is set
+          - Propagate pip's outcome as the exit code
+
+    Apply `click` for the command shape, the optional positional argument, the
+    flag, the option, ctx.pass_context, ctx.exit, click.echo for the
+    empty-path message, and exit-code propagation. Apply `convention` for
+    docstring style, import discipline, and structured logging. Apply
+    `configuration` for load_config() semantics and the no-validation contract
+    on cfg.tools.
+
+    Requirements:
+    - The single path MUST ignore cfg.tools entirely — name + flags fully
+      determine the call
+    - The bulk path MUST issue exactly one pip invocation whose argv contains
+      every resolved goga-tool-<name><spec> in YAML order
+    - The empty path MUST print "Nothing to install" to stdout and exit 0
+      without invoking pip
+    - The --version option is used by the single path only; the bulk path
+      MUST NOT consult it
+    - --sudo MUST apply sudo with HOME preservation to the (single) pip argv in
+      both single and bulk modes
+    - The exit code MUST equal pip's outcome in the single and bulk paths; the
+      empty path MUST exit 0
+    - pip MUST be invoked through the current interpreter so the package lands
+      in the same environment, with an upgrade request present in every
+      invocation (idempotent for the already-installed case)
+
+    Constraints:
+    - Do NOT validate, parse, or modify `version` outside resolve_version —
+      resolve_version is the sole owner of the grammar and the single point
+      where malformed forms raise ValueError
+    - Do NOT accept operator-prefixed forms (==1.0, >=1.0, ~=1.0) in either
+      --version or cfg.tools — they raise ValueError at resolution time
+    - Do NOT install packages sequentially in the bulk path — all resolved
+      packages MUST land in one pip argv so pip's resolver sees the whole set
+      together
+    - Do NOT auto-select sudo — the caller opts in via --sudo
+    - Do NOT re-sync agents, edit connection config, or run the tool after
+      install — activation is owned by a separate concern
+    - Do NOT probe whether the package is already installed — the upgrade
+      request handles it
+    - Do NOT chunk the bulk argv — even a long argv is issued as a single pip
+      invocation
+    - On Windows, --sudo is unavailable (sudo is Unix-only)
 
 ---
 
@@ -64,5 +199,10 @@ Author: Goga
 CreatedAt: 13/07/26
 
 Description: |
-  Installs a goga-tool package into the current runtime interpreter via pip and propagates
-  pip's outcome as the exit code.
+  Installs one or more goga-tool packages into the current runtime interpreter
+  via pip and propagates pip's outcome as the exit code. Supports single-path
+  install (one named tool with an optional four-form version), bulk-path
+  install (every tool declared in config.tools in a single pip invocation),
+  and empty-path no-op (Nothing to install). The four-form version grammar
+  (1.0.x, 1.x, 1.0.1, latest) is owned by resolve_version — the sole point
+  where malformed or operator-prefixed forms raise ValueError.

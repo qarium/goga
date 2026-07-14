@@ -131,6 +131,11 @@ codemanifest:
     usage_name: path/to/file.md
   annotations: |
     Use the `usage_name` practice.
+tools:
+  viewer: latest        # → no specifier (pip selects newest)
+  afm: 1.0.x            # → ~=1.0.0 (minor x-range, >=1.0.0,<1.1.0)
+  ralphex: 1.x          # → ~=1.0   (major x-range, >=1.0.0,<2.0.0)
+  go: 1.0.1             # → ==1.0.1 (concrete)
 ```
 
 ### Required Fields
@@ -190,6 +195,7 @@ afm) that consume these fields.
 | `codemanifest`              | mapping | None                   | CODEMANIFEST usage and annotation config                |
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |
+| `tools`                     | mapping | None                   | goga-tool version declarations (stored verbatim, no semantic validation) |
 
 ## Accessing Configuration Data
 
@@ -239,6 +245,53 @@ config.build.task_executor.env    # dict — {str: str}
 config.codemanifest                    # CodemanifestConfig | None
 config.codemanifest.usages             # dict — {str: str}
 config.codemanifest.annotations        # str | None
+```
+
+### `tools` accessor — no-validation contract
+
+`config.tools` exposes the raw mapping from `.goga/config.yml`. The loader
+performs only structural validation (keys and values must be strings); semantic
+validation of the four-form version grammar is owned by the consumer that
+interprets these declarations.
+
+```python
+config = load_config()
+
+# config.tools is dict[str, str] | None
+# - None when the `tools` section is absent or YAML-null
+# - {} when the section is present but empty
+# - {"viewer": "latest", "afm": "1.0.x", ...} when populated
+
+if config.tools is None:
+    # tools section absent — consumer treats as "nothing to install"
+    ...
+else:
+    for name, form in config.tools.items():
+        # `name` is the tool identifier (without goga-tool- prefix)
+        # `form` is a string in the four-form grammar: 1.0.x, 1.x, 1.0.1, latest
+        # Malformed values (operator-prefixed `==1.0`, bare `1.0`) pass through
+        # load_config verbatim — the consumer surfaces them as ValueError at
+        # its own resolution step
+        ...
+```
+
+**Do NOT validate `tools` values at the config layer.** The loader is a leaf —
+it must not own version-grammar concerns. Semantic validation belongs to the
+consumer that interprets these declarations; the loader only enforces that keys
+and values are strings.
+
+**YAML-null values are rejected by the loader as a structural type error:**
+
+```yaml
+tools:
+  viewer:              # YAML null — loader raises ValueError
+```
+
+To declare "no specifier" for a tool, write `latest` explicitly:
+
+```yaml
+tools:
+  viewer: latest       # valid — resolves to "no specifier"
 ```
 
 ## Immutability

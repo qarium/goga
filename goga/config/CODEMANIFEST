@@ -54,7 +54,19 @@ Annotations: |
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     8. Extract the optional commands mapping (defaults to empty)
-    9. Construct and return a `Config` from all assembled parts, including dockerfile
+    9. Extract the optional tools mapping via the `yaml` practice. When the key
+       is absent or YAML-null → set tools to None. When the key is present but
+       the value is not a mapping → raise ValueError. When the value is a
+       mapping → validate structurally that every key is a string and every
+       value is a string (raise ValueError on non-string keys or values —
+       YAML-null values like 'viewer:' are rejected). Perform NO semantic
+       validation of value contents: operator-prefixed forms ('==1.0',
+       '>=1.0'), malformed numerics ('1.0' without '.x' suffix), and any other
+       non-grammar strings pass through the loader verbatim. The loader is NOT
+       the validation authority for the version grammar — that responsibility
+       belongs to the consumer.
+    10. Construct and return a `Config` from all assembled parts, including
+        dockerfile and tools
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -71,6 +83,11 @@ Annotations: |
     - build.proxy is optional, defaults to None
     - build.hosts is optional, defaults to an empty mapping
     - codemanifest is optional
+    - tools is optional; values are stored verbatim with NO semantic validation
+      — invalid forms (operator-prefixed, malformed numerics) pass through
+      load_config. The loader is NOT the validation authority; the consumer
+      that owns the version grammar surfaces invalid values as ValueError at
+      resolution time
     - Values are exposed as-is without default merge — consumers apply their own defaults
 
     Constraints:
@@ -79,8 +96,14 @@ Annotations: |
       validation is the consuming command's responsibility (the pipeline and
       build commands). The loader keeps the language requirement (KeyError) and
       the mapping/inner-field validation of any PRESENT section
+    - Do NOT validate tools value semantics at the loader level — operator
+      syntax, x-range grammar, and the 'latest' keyword belong to the consumer
+      that owns the version grammar. The loader only enforces that each value
+      is a string (structural type check)
+    - Do NOT normalise YAML-null tools values — 'viewer:' (null) is a structural
+      type error and raises ValueError; it is NOT silently coerced to 'latest'
 
-"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None)":
+"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_config.
@@ -94,6 +117,11 @@ Annotations: |
                 when the pipeline section is absent in .goga/config.yml
     `commands`: command hooks — reserved for future prompt customization
     `codemanifest`: CODEMANIFEST configuration as a `CodemanifestConfig` instance
+    `tools`: optional raw mapping of goga-tool version declarations; values are
+             strings in the four-form grammar (1.0.x, 1.x, 1.0.1, latest) but
+             the loader performs NO semantic validation — invalid values pass
+             through verbatim and surface as ValueError at the consumer's
+             resolution step
   properties:
     "lang -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
@@ -123,6 +151,17 @@ Annotations: |
       CODEMANIFEST configuration from .goga/config.yml.
       Instance of `CodemanifestConfig`.
       Returns None when the codemanifest section is absent.
+    "tools -> dict[str, str] | None": |
+      Raw mapping of goga-tool version declarations from .goga/config.yml.
+      Keys are tool names (without goga-tool- / goga_tool_ prefix); values are
+      version-form strings. Defaults to None when the tools section is absent
+      or YAML-null. Returns an empty dict when the section is present but empty.
+      The loader stores values verbatim — NO semantic validation of the four-form
+      grammar (1.0.x, 1.x, 1.0.1, latest) is performed at the config layer.
+      Invalid forms (operator-prefixed '==1.0', malformed '1.0' without suffix)
+      pass through load_config and surface as ValueError at the consumer's
+      resolution step. YAML-null values (e.g. 'viewer:') are rejected by the
+      loader as a structural type error before reaching this field.
 
 "BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -267,5 +306,7 @@ CreatedAt: 05/07/26
 
 Description: |
   Manifest describing unified access to project configuration via .goga/config.yml.
-  Provides the top-level image, pipeline block, and build/task_executor
-  configuration consumed by goga build and goga pipeline.
+  Owns the language directive, top-level image, pipeline and build/task_executor
+  blocks, codemanifest block, and the tools mapping. The loader performs only
+  structural validation; semantic validation of version-grammar values is
+  deferred to the owning consumer.
