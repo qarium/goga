@@ -20,7 +20,7 @@ class TestResolveVersionFacade:
 
     def test_resolve_version_in_facade_all(self) -> None:
         facade = importlib.import_module("goga.commands.install")
-        assert "resolve_version" in facade.__all__
+        assert facade.__all__ == ["install", "resolve_version"]
 
     def test_resolve_version_signature(self) -> None:
         sig = inspect.signature(resolve_version)
@@ -93,10 +93,26 @@ class TestResolveVersionLogicPositive:
             assert out is not None
             assert out.startswith("==") or out.startswith("~=")
 
-    def test_resolve_version_pure_function(self) -> None:
-        # Deterministic, side-effect-free: identical input → identical output.
-        assert resolve_version("1.0.x") == resolve_version("1.0.x")
-        assert resolve_version("latest") == resolve_version("latest")
+    def test_resolve_version_performs_no_io(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Pure transformer — resolution must not perform any file I/O. Spy on
+        # ``open`` to assert it is never called across accepted, latest, and
+        # rejected forms. (The prior "x == x" assertion passed for any
+        # deterministic function, including one with side effects.)
+        import builtins
+
+        opened: list[tuple] = []
+        real_open = builtins.open
+
+        def spy(*args, **kwargs):
+            opened.append(args)
+            return real_open(*args, **kwargs)
+
+        monkeypatch.setattr(builtins, "open", spy)
+        assert resolve_version("1.0.x") == "~=1.0.0"
+        assert resolve_version("latest") is None
+        with pytest.raises(ValueError, match="operator"):
+            resolve_version("==1.0")
+        assert opened == []
 
 
 # ---------------------------------------------------------------------------

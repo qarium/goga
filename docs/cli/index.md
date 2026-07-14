@@ -25,6 +25,7 @@ python -m goga --help
 | Command | Description |
 |---|---|
 | [`goga init`](init.md) | Interactive project initialization |
+| [`goga install`](install.md) | Install goga-tool packages into the current interpreter |
 | [`goga lint`](lint.md) | Validate CODEMANIFEST files |
 | [`goga build`](build.md) | Execute build plan via ralphex |
 | [`goga contract`](contract.md) | Compare CODEMANIFEST with implementation |

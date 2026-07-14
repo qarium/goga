@@ -108,12 +108,21 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     """Invoke pip with ``argv`` and return its returncode verbatim.
 
     pip's returncode is propagated without translation — ``check=False`` means a
-    non-zero returncode surfaces here, never as a ``CalledProcessError``.
+    non-zero returncode surfaces here, never as a ``CalledProcessError``. A
+    missing executable (e.g. ``sudo`` on a host without it) raises
+    ``FileNotFoundError`` from the OS; this is translated to a
+    ``click.ClickException`` (exit 1) since there is no returncode to propagate.
     """
     logger.info("install start")
     if sudo:
         logger.warning("running pip under sudo")
-    result = subprocess.run(argv, check=False)
+    try:
+        result = subprocess.run(argv, check=False)
+    except FileNotFoundError as exc:
+        # The pip/sudo executable is missing (e.g. ``--sudo`` on a host without
+        # sudo, or an unreachable interpreter). There is no returncode to
+        # propagate, so surface a clean error instead of a raw traceback.
+        raise click.ClickException(f"failed to start pip: {exc.strerror or exc}") from exc
     if result.returncode == 0:
         logger.info("install complete")
     else:
@@ -170,7 +179,7 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
         try:
             pkg = _resolve_pkg(name, version)
         except ValueError as exc:
-            raise click.ClickException(str(exc)) from exc
+            raise click.ClickException(f"invalid --version value {version!r}: {exc}") from exc
         ctx.exit(_run_pip(_pip_argv([pkg], sudo), sudo))
 
     # BULK / EMPTY PATH — driven by .goga/config.yml.
@@ -189,5 +198,5 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
         try:
             pkgs.append(_resolve_pkg(tool_name, form))
         except ValueError as exc:
-            raise click.ClickException(str(exc)) from exc
+            raise click.ClickException(f"invalid version for tool {tool_name!r}: {exc}") from exc
     ctx.exit(_run_pip(_pip_argv(pkgs, sudo), sudo))

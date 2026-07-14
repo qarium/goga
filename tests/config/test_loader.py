@@ -1796,6 +1796,15 @@ class TestParseToolsNegative:
         with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
             _parse_tools({"tools": {"viewer": True}})
 
+    def test_parse_tools_non_string_value_float_raises(self):
+        """tools: {viewer: 1.0} (YAML parses 1.0 as a float) → ValueError.
+
+        The most probable user mistake — writing the version unquoted — is
+        rejected structurally by the loader and never reaches resolve_version.
+        """
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {"viewer": 1.0}})
+
     def test_parse_tools_non_string_key_raises(self):
         """tools: {123: 1.0.x} → ValueError (non-string key)."""
         with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
@@ -1934,6 +1943,29 @@ tools:
 """,
         )
         with pytest.raises(ValueError, match="tools"):
+            load_config()
+
+    def test_load_config_tools_non_string_value_float_raises(self, goga_project):
+        """tools: {viewer: 1.0} (YAML float) → ValueError.
+
+        Writing the version unquoted is the most likely user mistake; the
+        loader rejects it structurally before resolve_version ever sees it.
+        """
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  viewer: 1.0
+""",
+        )
+        with pytest.raises(ValueError, match="string"):
             load_config()
 
     def test_load_config_tools_mixed_null_and_valid_raises(self, goga_project):

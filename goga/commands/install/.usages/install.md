@@ -152,7 +152,8 @@ resolve_version("==1.0")    # raises ValueError
 | Exit code | Condition |
 |---|---|
 | 0 | pip succeeded (single / bulk mode), or empty mode no-op |
-| non-zero | pip failed (pip's returncode propagated as-is), or `resolve_version` rejected a version form |
+| non-zero (pip) | pip failed — its returncode propagated verbatim, with no translation |
+| 1 (`ClickException`) | `resolve_version` rejected a version form, or `load_config` failed in bulk/empty mode (missing/invalid `.goga/config.yml`, malformed YAML, or a non-string / YAML-null `tools` value), or the pip/sudo executable could not start |
 
 ## Side Effects
 

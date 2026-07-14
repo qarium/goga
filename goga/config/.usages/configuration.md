@@ -269,9 +269,9 @@ else:
     for name, form in config.tools.items():
         # `name` is the tool identifier (without goga-tool- prefix)
         # `form` is a string in the four-form grammar: 1.0.x, 1.x, 1.0.1, latest
-        # Malformed values (operator-prefixed `==1.0`, bare `1.0`) pass through
-        # load_config verbatim — the consumer surfaces them as ValueError at
-        # its own resolution step
+        # Malformed values (operator-prefixed `==1.0`, malformed `1.x.0`) pass
+        # through load_config verbatim — the consumer surfaces them as ValueError
+        # at its own resolution step
         ...
 ```
 

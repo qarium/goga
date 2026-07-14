@@ -4,7 +4,20 @@ Tools extend goga with specialized capabilities. Each tool is a separate Python 
 
 ## Installing a tool
 
-Tools are distributed as Python packages with the `goga-tool-` prefix:
+Tools are distributed as Python packages with the `goga-tool-` prefix. Use `goga install` so the tool lands in the exact interpreter that runs goga:
+
+```bash
+# Install one tool (latest version)
+goga install <tool-name>
+
+# Install a pinned / ranged version via the four-form grammar
+goga install <tool-name> --version 1.0.x
+
+# Install every tool declared under `tools:` in .goga/config.yml in one pip call
+goga install
+```
+
+See [`goga install`](cli/install.md) for the version grammar and single / bulk / empty modes. You can also install directly with pip:
 
 ```bash
 pip install goga-tool-<tool-name>

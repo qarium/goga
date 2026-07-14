@@ -61,7 +61,7 @@ Annotations: |
        value is a string (raise ValueError on non-string keys or values —
        YAML-null values like 'viewer:' are rejected). Perform NO semantic
        validation of value contents: operator-prefixed forms ('==1.0',
-       '>=1.0'), malformed numerics ('1.0' without '.x' suffix), and any other
+       '>=1.0'), malformed forms ('1.x.0', '1.0.0a1'), and any other
        non-grammar strings pass through the loader verbatim. The loader is NOT
        the validation authority for the version grammar — that responsibility
        belongs to the consumer.
@@ -158,9 +158,9 @@ Annotations: |
       or YAML-null. Returns an empty dict when the section is present but empty.
       The loader stores values verbatim — NO semantic validation of the four-form
       grammar (1.0.x, 1.x, 1.0.1, latest) is performed at the config layer.
-      Invalid forms (operator-prefixed '==1.0', malformed '1.0' without suffix)
-      pass through load_config and surface as ValueError at the consumer's
-      resolution step. YAML-null values (e.g. 'viewer:') are rejected by the
+      Invalid forms (operator-prefixed '==1.0', malformed '1.x.0') pass through
+      load_config and surface as ValueError at the consumer's resolution step.
+      YAML-null values (e.g. 'viewer:') are rejected by the
       loader as a structural type error before reaching this field.
 
 "BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":

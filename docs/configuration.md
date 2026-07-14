@@ -46,6 +46,13 @@ codemanifest:
 
   annotations: |
     Follow the project `conventions` for all code generation.
+
+# tools: optional — declared tools are installed together by `goga install`
+# tools:
+#   viewer: latest        # → no specifier (pip selects newest)
+#   afm: 1.0.x            # → ~=1.0.0
+#   ralphex: 1.x          # → ~=1.0
+#   go: 1.0.1             # → ==1.0.1
 ```
 
 ## Fields reference
@@ -61,6 +68,7 @@ codemanifest:
 | `pipeline` | mapping | No | Pipeline (afm) execution settings. Optional at the loader level; `goga pipeline` raises a `ClickException` when the section is absent |
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration |
+| `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
 
 ### build
 

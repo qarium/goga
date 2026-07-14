@@ -42,12 +42,12 @@ class TestInstallFacade:
         assert install is not None
 
     def test_install_facade_all(self) -> None:
-        # ``import ... as`` would resolve to the Click command re-exported into
-        # ``goga.commands`` (shadowing the submodule), so access the package
-        # module directly to assert its own ``__all__``. ``resolve_version`` is
-        # also a declared routine of this cell, so it shares the facade.
+        # Access the package module directly to assert its own ``__all__``
+        # (``import ... as`` would resolve to the Click command re-exported into
+        # ``goga.commands``, shadowing the submodule). Both declared routines of
+        # this cell share the facade — pin the exact surface.
         facade = importlib.import_module("goga.commands.install")
-        assert "install" in facade.__all__
+        assert facade.__all__ == ["install", "resolve_version"]
 
     def test_install_is_click_command(self) -> None:
         assert isinstance(install, click.Command)
@@ -55,7 +55,7 @@ class TestInstallFacade:
 
     def test_install_has_two_options(self) -> None:
         names = {p.name for p in install.params if isinstance(p, click.Option)}
-        assert {"sudo", "version"} <= names
+        assert names == {"sudo", "version"}
 
     def test_install_argument_name_present(self) -> None:
         arg = next(p for p in install.params if isinstance(p, click.Argument) and p.name == "name")
@@ -169,12 +169,17 @@ class TestInstallLogicNegative:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
             result = CliRunner().invoke(app, ["install", "foo", "--version", "==1.0"])
         assert result.exit_code == 1
+        # Wrapped in ClickException — a clean "Error:" line, not a raw traceback.
+        assert "Error:" in result.output
+        assert "operator" in result.output
         mock_run.assert_not_called()
 
     def test_install_single_path_empty_version_string_rejected(self) -> None:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
             result = CliRunner().invoke(app, ["install", "foo", "--version", ""])
         assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "malformed" in result.output
         mock_run.assert_not_called()
 
     def test_install_bulk_path_version_rejected_in_tools_entry(
@@ -191,6 +196,9 @@ class TestInstallLogicNegative:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 1
+        # The offending tool name is surfaced, not just a generic message.
+        assert "Error:" in result.output
+        assert "bad" in result.output
         mock_run.assert_not_called()
 
     def test_install_bulk_path_load_config_error_wrapped_in_click_exception(
@@ -201,6 +209,7 @@ class TestInstallLogicNegative:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 1
+        assert "Error:" in result.output
         mock_run.assert_not_called()
 
     def test_install_pip_failure_propagates_exit_code_single(self) -> None:
@@ -216,3 +225,72 @@ class TestInstallLogicNegative:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(42)):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 42
+
+    def test_install_missing_executable_surfaces_click_exception(self) -> None:
+        # sudo/pip binary absent → subprocess.run raises FileNotFoundError →
+        # a clean error, not a raw traceback.
+        with mock.patch.object(_install_module.subprocess, "run", side_effect=FileNotFoundError("No such file: sudo")):
+            result = CliRunner().invoke(app, ["install", "foo", "--sudo"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+
+    def test_install_bulk_path_malformed_yaml_wrapped_in_click_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A syntactically broken config → yaml.YAMLError → ClickException.
+        _write_config(tmp_path, "language: python\ntools: [afm\n")
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        mock_run.assert_not_called()
+
+    def test_install_bulk_path_missing_language_wrapped_in_click_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A config without the required `language` → KeyError → ClickException.
+        _write_config(tmp_path, "tools:\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        mock_run.assert_not_called()
+
+
+class TestInstallWiringInvariants:
+    """CODEMANIFEST invariants — what each path must (and must not) consult."""
+
+    def test_install_single_path_ignores_config_tools(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # SINGLE path must not read .goga/config.yml — declaring tools must not
+        # change the single-tool install argv.
+        _write_config(
+            tmp_path,
+            "language: python\n"
+            "tools:\n"
+            "  afm: 1.0.x\n"
+            "  ralphex: 1.x\n",
+        )
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "foo"])
+        assert result.exit_code == 0
+        assert mock_run.call_count == 1
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-foo"]
+
+    def test_install_bulk_path_ignores_version_flag(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # BULK path must not consult --version — each tool's own form is used.
+        _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "--version", "2.0"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        # The declared afm form resolves; the --version "2.0" never leaks in.
+        assert _pkgs_from_argv(argv) == ["goga-tool-afm~=1.0.0"]
+        assert "goga-tool-afm==2.0" not in argv
