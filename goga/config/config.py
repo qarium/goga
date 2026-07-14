@@ -61,3 +61,4 @@ class Config:
     pipeline: PipelineConfig | None
     commands: dict = field(default_factory=dict)
     codemanifest: CodemanifestConfig | None = None
+    tools: dict[str, str] | None = None

@@ -203,6 +203,36 @@ class TestConfigAPIShape:
     def test_has_codemanifest_field(self):
         assert "codemanifest" in Config.__dataclass_fields__
 
+    def test_has_tools_field(self):
+        assert "tools" in Config.__dataclass_fields__
+
+    def test_tools_defaults_to_none(self):
+        """tools is optional and defaults to None when not supplied."""
+        cfg = Config(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        assert cfg.tools is None
+
+    def test_tools_accepts_string_mapping(self):
+        cfg = Config(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=None,
+            pipeline=None,
+            tools={"afm": "1.0.x", "ralphex": "1.x"},
+        )
+        assert cfg.tools == {"afm": "1.0.x", "ralphex": "1.x"}
+
+    def test_tools_accepts_empty_dict(self):
+        cfg = Config(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=None,
+            pipeline=None,
+            tools={},
+        )
+        assert cfg.tools == {}
+
     def test_image_type_is_optional_str(self):
         image_type = Config.__dataclass_fields__["image"].type
         assert image_type == str | None or types.UnionType in type(image_type).__mro__
