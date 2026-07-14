@@ -13,7 +13,7 @@ from goga.config import (
     TaskExecutorConfig,
     load_config,
 )
-from goga.config.loader import _parse_codemanifest, _parse_dockerfile
+from goga.config.loader import _parse_codemanifest, _parse_dockerfile, _parse_tools
 
 # --- Helpers ---
 
@@ -1693,3 +1693,303 @@ build:
         config = load_config()
         assert config.image is None
         assert config.dockerfile == "Dockerfile"
+
+
+# --- Contract tests for _parse_tools ---
+
+
+class TestParseToolsContract:
+    def test_parse_tools_exists(self):
+        """_parse_tools is importable from goga.config.loader."""
+        assert callable(_parse_tools)
+
+    def test_parse_tools_signature(self):
+        """_parse_tools accepts a single dict parameter (parity with _parse_codemanifest)."""
+        sig = inspect.signature(_parse_tools)
+        params = list(sig.parameters.keys())
+        assert params == ["data"]
+
+    def test_parse_tools_return_annotation(self):
+        """_parse_tools returns dict[str, str] | None."""
+        ret = inspect.signature(_parse_tools).return_annotation
+        assert ret == dict[str, str] | None
+
+
+# --- Logic tests for _parse_tools ---
+
+
+class TestParseToolsPositive:
+    def test_parse_tools_absent_returns_none(self):
+        """No tools key → None."""
+        assert _parse_tools({}) is None
+
+    def test_parse_tools_null_returns_none(self):
+        """tools: null → None."""
+        assert _parse_tools({"tools": None}) is None
+
+    def test_parse_tools_empty_mapping_returns_empty_dict(self):
+        """tools: {} → empty dict."""
+        assert _parse_tools({"tools": {}}) == {}
+
+    def test_parse_tools_stored_verbatim_no_semantic_validation(self):
+        """Operator-prefixed, malformed numerics, and pre-release forms pass verbatim."""
+        data = {
+            "tools": {
+                "valid": "1.0.x",
+                "operator_prefixed": "==1.0",
+                "bare_two_segment_concrete_pin": "1.0",
+                "weird": "foo",
+            }
+        }
+        result = _parse_tools(data)
+        assert result == {
+            "valid": "1.0.x",
+            "operator_prefixed": "==1.0",
+            "bare_two_segment_concrete_pin": "1.0",
+            "weird": "foo",
+        }
+
+    def test_parse_tools_returns_plain_dict_copy(self):
+        """Result is a plain dict copy — not the original mapping object."""
+        original = {"afm": "1.0.x"}
+        data = {"tools": original}
+        result = _parse_tools(data)
+        assert result == original
+        assert result is not original
+        assert type(result) is dict
+
+    def test_parse_tools_preserves_insertion_order(self):
+        """Insertion order of keys is preserved."""
+        data = {"tools": {"go": "1.0.1", "afm": "1.0.x", "ralphex": "1.x"}}
+        result = _parse_tools(data)
+        assert list(result.keys()) == ["go", "afm", "ralphex"]
+
+
+class TestParseToolsNegative:
+    def test_parse_tools_non_mapping_int_raises(self):
+        """tools: 5 → ValueError (not a mapping)."""
+        with pytest.raises(ValueError, match=r"'tools' must be a mapping"):
+            _parse_tools({"tools": 5})
+
+    def test_parse_tools_non_mapping_list_raises(self):
+        """tools: [a, b] → ValueError (not a mapping)."""
+        with pytest.raises(ValueError, match=r"'tools' must be a mapping"):
+            _parse_tools({"tools": ["a", "b"]})
+
+    def test_parse_tools_non_mapping_string_raises(self):
+        """tools: 'string' → ValueError (not a mapping)."""
+        with pytest.raises(ValueError, match=r"'tools' must be a mapping"):
+            _parse_tools({"tools": "string"})
+
+    def test_parse_tools_null_value_raises(self):
+        """tools: {viewer: null} → ValueError (non-string value)."""
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {"viewer": None}})
+
+    def test_parse_tools_non_string_value_int_raises(self):
+        """tools: {viewer: 5} → ValueError (non-string value)."""
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {"viewer": 5}})
+
+    def test_parse_tools_non_string_value_bool_raises(self):
+        """tools: {viewer: true} → ValueError (non-string value)."""
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {"viewer": True}})
+
+    def test_parse_tools_non_string_key_raises(self):
+        """tools: {123: 1.0.x} → ValueError (non-string key)."""
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {123: "1.0.x"}})
+
+    def test_parse_tools_mixed_null_and_valid_raises(self):
+        """{afm: 1.0.x, viewer: null, ralphex: 1.x} → ValueError on viewer."""
+        with pytest.raises(ValueError, match=r"'tools' must have string keys and values"):
+            _parse_tools({"tools": {"afm": "1.0.x", "viewer": None, "ralphex": "1.x"}})
+
+
+# --- Integration tests: load_config with tools ---
+
+
+class TestLoadConfigTools:
+    def test_load_config_tools_stored_verbatim(self, goga_project):
+        """tools mapping with mixed valid/invalid forms — all pass verbatim (no semantic validation)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  valid: 1.0.x
+  operator_prefixed: "==1.0"
+  bare_two_segment_concrete_pin: "1.0"
+  weird: foo
+""",
+        )
+        config = load_config()
+        assert config.tools == {
+            "valid": "1.0.x",
+            "operator_prefixed": "==1.0",
+            "bare_two_segment_concrete_pin": "1.0",
+            "weird": "foo",
+        }
+
+    def test_load_config_tools_absent_returns_none(self, goga_project):
+        """YAML without tools → cfg.tools is None."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_config()
+        assert config.tools is None
+
+    def test_load_config_tools_null_returns_none(self, goga_project):
+        """tools: null → cfg.tools is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools: null
+""",
+        )
+        config = load_config()
+        assert config.tools is None
+
+    def test_load_config_tools_empty_mapping_returns_empty_dict(self, goga_project):
+        """tools: {} → cfg.tools == {}."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools: {}
+""",
+        )
+        config = load_config()
+        assert config.tools == {}
+
+    def test_load_config_tools_non_mapping_raises(self, goga_project):
+        """tools: 5 → ValueError match 'tools.*mapping'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"tools.*mapping"):
+            load_config()
+
+    def test_load_config_tools_null_value_raises(self, goga_project):
+        """tools: {viewer:} (YAML-null individual) → ValueError match 'string'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  viewer:
+""",
+        )
+        with pytest.raises(ValueError, match="string"):
+            load_config()
+
+    def test_load_config_tools_non_string_value_raises(self, goga_project):
+        """tools: {viewer: 5} → ValueError (non-string value)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  viewer: 5
+""",
+        )
+        with pytest.raises(ValueError, match="tools"):
+            load_config()
+
+    def test_load_config_tools_mixed_null_and_valid_raises(self, goga_project):
+        """{afm: 1.0.x, viewer: null, ralphex: 1.x} → ValueError match 'string'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  afm: 1.0.x
+  viewer: null
+  ralphex: 1.x
+""",
+        )
+        with pytest.raises(ValueError, match="string"):
+            load_config()
+
+    def test_load_config_backward_compatible_without_tools(self, goga_project):
+        """Existing config without tools → cfg.tools is None, other fields unchanged."""
+        _write_goga_yml(goga_project, HAPPY_YAML)
+        config = load_config()
+        assert config.tools is None
+        # Other fields unchanged
+        assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
+        assert config.pipeline.agent == "claude"
+        assert config.build.task_executor.agent == "claude"
+        assert config.build.task_executor.env == {"KEY": "value"}
+        assert config.build.worktree is True
+        assert config.commands == {"foo": "bar"}
+
+    def test_load_config_tools_alongside_codemanifest(self, goga_project):
+        """tools + codemanifest both present — both parsed independently."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+codemanifest:
+  annotations: "notes"
+tools:
+  afm: 1.0.x
+""",
+        )
+        config = load_config()
+        assert config.tools == {"afm": "1.0.x"}
+        assert config.codemanifest is not None
+        assert config.codemanifest.annotations == "notes"

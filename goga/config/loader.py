@@ -115,6 +115,30 @@ def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
     return CodemanifestConfig(usages=dict(usages), annotations=annotations)
 
 
+def _parse_tools(data: dict) -> dict[str, str] | None:
+    """Extract the optional top-level tools mapping.
+
+    Structural-only extraction — performs NO semantic validation of value
+    contents (operator-prefixed forms, malformed numerics, pre-release forms
+    all pass through verbatim). The loader is not the validation authority for
+    the version grammar; that responsibility belongs to the consumer.
+
+    Returns None when the key is absent or YAML-null; an empty dict when the
+    section is present but empty; a plain dict copy otherwise. YAML-null
+    individual values ('viewer:') are a structural type error and raise
+    ValueError — they are NOT coerced to 'latest'.
+    """
+    tools_data = data.get("tools")
+    if tools_data is None:
+        return None
+    if not isinstance(tools_data, dict):
+        raise ValueError("'tools' must be a mapping in .goga/config.yml")
+    for k, v in tools_data.items():
+        if not isinstance(k, str) or not isinstance(v, str):
+            raise ValueError("'tools' must have string keys and values in .goga/config.yml")
+    return dict(tools_data)
+
+
 def _optional_mapping(data: dict, key: str) -> dict | None:
     """Extract an optional mapping section.
 
@@ -210,6 +234,8 @@ def load_config() -> Config:
         raise ValueError("'commands' must be a mapping in .goga/config.yml")
     commands = dict(commands)
 
+    tools = _parse_tools(data)
+
     return Config(
         lang=lang,
         image=image,
@@ -218,4 +244,5 @@ def load_config() -> Config:
         pipeline=pipeline,
         commands=commands,
         codemanifest=_parse_codemanifest(data),
+        tools=tools,
     )
