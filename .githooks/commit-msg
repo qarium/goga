@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# commit-msg hook — project policy: no co-authorship trailers in git history.
+# Blocks any commit whose message contains a Co-Authored-By trailer.
+# Bypass in rare intentional cases with: git commit --no-verify
+set -euo pipefail
+
+msg_file="$1"
+
+if grep -iqE '^[[:space:]]*Co-Authored-By:' "$msg_file"; then
+  echo "" >&2
+  echo "ERROR: commit message contains a Co-Authored-By trailer." >&2
+  echo "Project policy: no co-authorship trailers in git history." >&2
+  echo "" >&2
+  echo "Offending line(s):" >&2
+  grep -inE '^[[:space:]]*Co-Authored-By:' "$msg_file" >&2
+  echo "" >&2
+  echo "To bypass in rare intentional cases: git commit --no-verify" >&2
+  exit 1
+fi
+
+exit 0

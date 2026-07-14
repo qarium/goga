@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# pre-push hook — second line of defense after .githooks/commit-msg.
+# Scans commits that would be pushed and rejects the push if any of them
+# contains a Co-Authored-By trailer.
+#
+# Range checked: only NEW commits being added to the remote in this push
+# (from <remote-sha> to <local-sha>, per ref). Existing remote history is
+# not scanned.
+#
+# Bypass in rare intentional cases with: git push --no-verify
+#
+# stdin format (one line per ref being pushed):
+#   <local ref> <local sha1> <remote ref> <remote sha1>
+set -euo pipefail
+
+ZERO="0000000000000000000000000000000000000000"
+offending_commits=()
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip branch deletions (local_sha all zeros).
+  [ "$local_sha" = "$ZERO" ] && continue
+
+  # Determine the commit range to scan.
+  if [ "$remote_sha" = "$ZERO" ]; then
+    # New branch on remote — scan everything reachable from local_sha
+    # that isn't on any other remote ref. For simplicity scan local_sha
+    # against origin/* if present, else scan the full local_sha history.
+    range=$(git rev-list "$local_sha" --not --remotes=origin 2>/dev/null) || range=$(git rev-list "$local_sha")
+  else
+    # Fast-forward or force-push: scan commits between remote_sha (exclusive)
+    # and local_sha (inclusive).
+    range=$(git rev-list "${remote_sha}..${local_sha}")
+  fi
+
+  for commit in $range; do
+    if git cat-file commit "$commit" | grep -iqE '^[[:space:]]*Co-Authored-By:'; then
+      subject=$(git log -1 --pretty=format:%s "$commit")
+      offending_commits+=("$commit|$subject")
+    fi
+  done
+done
+
+if [ ${#offending_commits[@]} -gt 0 ]; then
+  echo "" >&2
+  echo "ERROR: push rejected — commit history contains Co-Authored-By trailers." >&2
+  echo "Project policy: no co-authorship trailers in git history." >&2
+  echo "" >&2
+  echo "Offending commit(s):" >&2
+  for entry in "${offending_commits[@]}"; do
+    sha=${entry%|*}
+    subject=${entry#*|}
+    echo "  $sha  $subject" >&2
+  done
+  echo "" >&2
+  echo "Fix: rewrite the commit(s) to remove the trailer, or amend locally." >&2
+  echo "To bypass in rare intentional cases: git push --no-verify" >&2
+  exit 1
+fi
+
+exit 0

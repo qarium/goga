@@ -172,3 +172,18 @@ Description: |
 ## Documentation
 
 Full documentation is available at [qarium.github.io/goga](https://qarium.github.io/goga/).
+
+## Contributing
+
+After cloning, enable the local git hooks once:
+
+```bash
+make install-hooks
+```
+
+This installs two-layer protection against `Co-Authored-By:` trailers (project policy: no co-authorship in git history):
+
+- **commit-msg** — blocks the commit at creation time.
+- **pre-push** — blocks the push if any new commit being pushed contains the trailer (catches cases where the commit-msg hook was bypassed with `--no-verify` or not installed).
+
+Bypass in rare intentional cases with `git commit --no-verify` / `git push --no-verify`.
