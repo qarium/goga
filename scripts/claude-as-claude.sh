@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-exec claude --setting-sources user --settings '{"attribution":{"commit":"","pr":""}}' "$@"
+exec claude --include-partial-messages --setting-sources user --settings '{"attribution":{"commit":"","pr":""}}' "$@"

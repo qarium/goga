@@ -1,5 +1,5 @@
 ARG AFM_VERSION=0.1.4
-ARG RALPHEX_VERSION=1.4
+ARG RALPHEX_VERSION=1.6
 ARG PYTHON_VERSION=3.12
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0
 
@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
-RUN npm install -g @anthropic-ai/claude-code@2.1.160 @openai/codex@0.136.0 opencode-ai@1.17.13
+RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.144.4 opencode-ai@1.17.13
 RUN chmod +x /srv/ralphex /srv/afm
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
