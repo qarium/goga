@@ -201,6 +201,9 @@ def load_config() -> Config:
 
     Raises:
         FileNotFoundError: if .goga/config.yml does not exist or is empty.
+        OSError: if .goga/config.yml exists but cannot be read (e.g. it is a
+            directory, or the file is unreadable due to permissions). These are
+            raised by ``config_path.open()``.
         ValueError: if .goga/config.yml is not a YAML mapping or invalid field values,
             or when the deprecated build.image field is present.
         KeyError: if required sections are missing (language, or build.task_executor

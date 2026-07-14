@@ -130,9 +130,11 @@ Annotations: |
        d. Propagate pip's outcome as the exit code
     2. If `name` is None → BULK / EMPTY PATH:
        a. Load configuration via `load_config`; the result is a `Config` instance.
-          Loader exceptions (FileNotFoundError, KeyError, ValueError, yaml.YAMLError)
+          Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
           MUST be wrapped into a user-facing ClickException from `click` (non-zero
-          exit) — never let a raw loader exception surface as a traceback
+          exit) — never let a raw loader exception surface as a traceback.
+          OSError (not just FileNotFoundError) covers every read failure:
+          missing file, a path that is a directory, or an unreadable file
        b. Read the tools mapping from cfg.tools (treat None as empty)
        c. If the mapping is empty → EMPTY PATH:
           - Print "Nothing to install" to stdout

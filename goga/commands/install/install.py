@@ -119,10 +119,12 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     try:
         result = subprocess.run(argv, check=False)
     except FileNotFoundError as exc:
-        # The pip/sudo executable is missing (e.g. ``--sudo`` on a host without
-        # sudo, or an unreachable interpreter). There is no returncode to
-        # propagate, so surface a clean error instead of a raw traceback.
-        raise click.ClickException(f"failed to start pip: {exc.strerror or exc}") from exc
+        # The executable named at argv[0] is missing (e.g. ``--sudo`` on a host
+        # without sudo, or an unreachable interpreter). Name the actual binary so
+        # the user knows what to install — ``exc.strerror`` alone ("No such file
+        # or directory") would mislead when sudo, not pip, is what's absent.
+        target = exc.filename or argv[0]
+        raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
     if result.returncode == 0:
         logger.info("install complete")
     else:
@@ -185,7 +187,10 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
     # BULK / EMPTY PATH — driven by .goga/config.yml.
     try:
         cfg = load_config()
-    except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
+    except (OSError, KeyError, ValueError, yaml.YAMLError) as exc:
+        # OSError covers every failure to read .goga/config.yml: a missing file
+        # (FileNotFoundError), a path that is a directory (IsADirectoryError), or
+        # an unreadable file (PermissionError). All must surface as a clean error.
         raise click.ClickException(str(exc)) from exc
 
     tools = cfg.tools if cfg.tools is not None else {}

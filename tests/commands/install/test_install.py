@@ -258,6 +258,34 @@ class TestInstallLogicNegative:
         assert "Error:" in result.output
         mock_run.assert_not_called()
 
+    def test_install_bulk_path_config_is_directory_wrapped_in_click_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # .goga/config.yml exists but is a directory → load_config's
+        # config_path.open() raises IsADirectoryError (an OSError subclass that
+        # is NOT FileNotFoundError) → must surface as a clean error, never as a
+        # raw traceback. Pins the contract intent, not just the enumerated list.
+        (tmp_path / ".goga" / "config.yml").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "Traceback" not in result.output
+        assert not isinstance(result.exception, OSError)
+        mock_run.assert_not_called()
+
+    def test_install_missing_executable_names_the_binary(self) -> None:
+        # --sudo on a host without the sudo binary: the FileNotFoundError
+        # carries the missing binary's name (sudo). The error must name it
+        # rather than misblame pip, which is fine on this path.
+        err = FileNotFoundError(2, "No such file or directory", "sudo")
+        with mock.patch.object(_install_module.subprocess, "run", side_effect=err):
+            result = CliRunner().invoke(app, ["install", "foo", "--sudo"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "sudo" in result.output
+
 
 class TestInstallWiringInvariants:
     """CODEMANIFEST invariants — what each path must (and must not) consult."""
