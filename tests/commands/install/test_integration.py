@@ -46,9 +46,9 @@ class TestInstallCliIntegration:
         assert argv == [sys.executable, "-m", "pip", "install", "goga-tool-foo", "-U"]
 
     def test_install_cli_with_sudo_and_version(self) -> None:
-        """``goga install foo --sudo --version ==1.2.3`` prefixes sudo and raw-appends the version."""
+        """``goga install foo --sudo --version 1.2.3`` prefixes sudo and grammar-resolves the version."""
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            result = CliRunner().invoke(app, ["install", "foo", "--sudo", "--version", "==1.2.3"])
+            result = CliRunner().invoke(app, ["install", "foo", "--sudo", "--version", "1.2.3"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
         assert argv[:3] == ["sudo", "--preserve-env=HOME", sys.executable]
@@ -59,15 +59,3 @@ class TestInstallCliIntegration:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)):
             result = CliRunner().invoke(app, ["install", "foo"])
         assert result.exit_code == 1
-
-    def test_install_cli_requires_name_argument(self) -> None:
-        """``goga install`` with no positional arg is a click parse error (exit 2)."""
-        result = CliRunner().invoke(app, ["install"])
-        assert result.exit_code == 2
-
-    def test_install_cli_missing_name_does_not_invoke_subprocess(self) -> None:
-        """Click exits 2 before the handler runs, so pip is never invoked."""
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            result = CliRunner().invoke(app, ["install"])
-        assert result.exit_code == 2
-        mock_run.assert_not_called()

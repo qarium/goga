@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import importlib
-import inspect
 import sys
 from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
+from click.testing import CliRunner
+from goga.cli import app
 from goga.commands.install import install
-from goga.commands.install.install import _install
 
 _install_module = importlib.import_module("goga.commands.install.install")
 
@@ -17,6 +18,21 @@ def _pip_result(returncode: int = 0) -> mock.MagicMock:
     result = mock.MagicMock()
     result.returncode = returncode
     return result
+
+
+def _write_config(tmp_path: Path, body: str) -> Path:
+    """Write ``.goga/config.yml`` under ``tmp_path`` and return its path."""
+    config_dir = tmp_path / ".goga"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_file = config_dir / "config.yml"
+    config_file.write_text(body)
+    return config_file
+
+
+def _pkgs_from_argv(argv: list[str]) -> list[str]:
+    """Slice the package identifiers out of a composed pip argv (between the
+    ``install`` subcommand and the trailing ``-U``)."""
+    return argv[argv.index("install") + 1 : -1]
 
 
 class TestInstallFacade:
@@ -38,11 +54,12 @@ class TestInstallFacade:
         assert install.name == "install"
 
     def test_install_has_two_options(self) -> None:
-        names = {p.name for p in install.params}
+        names = {p.name for p in install.params if isinstance(p, click.Option)}
         assert {"sudo", "version"} <= names
 
     def test_install_argument_name_present(self) -> None:
-        assert any(isinstance(p, click.Argument) and p.name == "name" for p in install.params)
+        arg = next(p for p in install.params if isinstance(p, click.Argument) and p.name == "name")
+        assert arg.required is False
 
     def test_install_sudo_is_flag(self) -> None:
         param = next(p for p in install.params if p.name == "sudo")
@@ -55,105 +72,147 @@ class TestInstallFacade:
         assert isinstance(param, click.Option)
         assert param.default is None
 
-    def test_install_routine_signature(self) -> None:
-        sig = inspect.signature(_install)
-        params = sig.parameters
-        assert list(params) == ["name", "use_sudo", "version"]
-        assert params["use_sudo"].default is False
-        assert params["version"].default is None
-        assert sig.return_annotation is int or sig.return_annotation == "int"
-
 
 class TestInstallLogicPositive:
-    """Positive behavioral scenarios — argv composition per the Algorithm."""
+    """Positive behavioral scenarios — single / bulk / empty argv composition."""
 
-    def test_install_composes_dash_form_package_identifier(self) -> None:
+    def test_install_single_path_composes_argv(self) -> None:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo")
+            result = CliRunner().invoke(app, ["install", "foo", "--version", "1.0.x"])
+        assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
-        assert argv == [sys.executable, "-m", "pip", "install", "goga-tool-foo", "-U"]
-        assert "goga_tool_foo" not in argv
+        assert argv == [sys.executable, "-m", "pip", "install", "goga-tool-foo~=1.0.0", "-U"]
+        assert mock_run.call_args.kwargs.get("check") is False
+
+    def test_install_single_path_with_sudo_prefixes_preserve_env_home(self) -> None:
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "foo", "--sudo"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        assert argv[:3] == ["sudo", "--preserve-env=HOME", sys.executable]
         assert argv[-1] == "-U"
 
-    def test_install_appends_version_raw(self) -> None:
+    def test_install_bulk_path_one_pip_call_yaml_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(
+            tmp_path,
+            "language: python\n"
+            "tools:\n"
+            "  afm: 1.0.x\n"
+            "  ralphex: 1.x\n"
+            "  go: 1.0.1\n",
+        )
+        monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", version="==1.2.3")
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert mock_run.call_count == 1
         argv = mock_run.call_args[0][0]
-        assert "goga-tool-foo==1.2.3" in argv
-        assert argv[-1] == "-U"
+        assert _pkgs_from_argv(argv) == [
+            "goga-tool-afm~=1.0.0",
+            "goga-tool-ralphex~=1.0",
+            "goga-tool-go==1.0.1",
+        ]
 
-    def test_install_sudo_prepends_preserve_env_home(self) -> None:
+    def test_install_bulk_path_with_sudo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", use_sudo=True)
+            result = CliRunner().invoke(app, ["install", "--sudo"])
+        assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
         assert argv[:3] == ["sudo", "--preserve-env=HOME", sys.executable]
 
-    def test_install_combined_sudo_and_version(self) -> None:
+    def test_install_bulk_path_latest_marker_yields_no_specifier(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(
+            tmp_path,
+            "language: python\n"
+            "tools:\n"
+            "  viewer: latest\n"
+            "  afm: 1.0.x\n",
+        )
+        monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", use_sudo=True, version=">=1.0")
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
-        assert argv[0] == "sudo"
-        assert argv[1] == "--preserve-env=HOME"
-        assert "goga-tool-foo>=1.0" in argv
+        assert _pkgs_from_argv(argv) == ["goga-tool-viewer", "goga-tool-afm~=1.0.0"]
+
+    def test_install_empty_path_prints_message_and_exits_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(tmp_path, "language: python\n")
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "Nothing to install"
+        mock_run.assert_not_called()
+
+    def test_install_empty_path_with_empty_tools_mapping(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(tmp_path, "language: python\ntools: {}\n")
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "Nothing to install"
+        mock_run.assert_not_called()
 
 
 class TestInstallLogicNegative:
-    """Negative behavioral scenarios — pip failure propagation (check=False)."""
+    """Negative behavioral scenarios — grammar rejection and pip-failure paths."""
 
-    def test_install_pip_failure_propagates_exit_code(self) -> None:
+    def test_install_single_path_version_rejected_surfaces_click_exception(self) -> None:
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "foo", "--version", "==1.0"])
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
+    def test_install_single_path_empty_version_string_rejected(self) -> None:
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "foo", "--version", ""])
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
+    def test_install_bulk_path_version_rejected_in_tools_entry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(
+            tmp_path,
+            "language: python\n"
+            "tools:\n"
+            "  good: 1.0.x\n"
+            "  bad: '==1.0'\n",
+        )
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
+    def test_install_bulk_path_load_config_error_wrapped_in_click_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No .goga/config.yml in CWD → load_config raises FileNotFoundError → ClickException.
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 1
+        mock_run.assert_not_called()
+
+    def test_install_pip_failure_propagates_exit_code_single(self) -> None:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)):
-            rc = _install(name="foo")
-        assert rc == 1
+            result = CliRunner().invoke(app, ["install", "foo"])
+        assert result.exit_code == 1
 
-    def test_install_pip_non_zero_does_not_raise(self) -> None:
-        # check=False means a non-zero pip returncode must surface as the return
-        # value, NOT as a CalledProcessError — reaching the assertion proves no raise.
+    def test_install_pip_failure_propagates_exit_code_bulk(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(42)):
-            rc = _install(name="foo")
-        assert rc == 42
-
-
-class TestInstallLogicEdge:
-    """Edge-case behavioral scenarios — version/no-re-sync invariants."""
-
-    def test_install_check_false_is_set_on_subprocess_run(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo")
-        assert mock_run.call_args.kwargs.get("check") is False
-
-    def test_install_no_version_keeps_pkg_id_clean(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", version=None)
-        argv = mock_run.call_args[0][0]
-        assert "goga-tool-foo" in argv
-        assert not any(a.startswith("goga-tool-foo==") for a in argv)
-        assert not any(a.startswith("goga-tool-foo>") for a in argv)
-
-    def test_install_bare_version_appended_verbatim(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", version="1.0")
-        argv = mock_run.call_args[0][0]
-        assert "goga-tool-foo1.0" in argv
-
-    def test_install_empty_version_string_is_noop(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
-            _install(name="foo", version="")
-        argv = mock_run.call_args[0][0]
-        assert "goga-tool-foo" in argv
-        assert argv[-2] == "goga-tool-foo"
-
-    def test_install_empty_name_propagates_to_pip(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)) as mock_run:
-            rc = _install(name="")
-        argv = mock_run.call_args[0][0]
-        assert "goga-tool-" in argv
-        assert rc == 1
-
-    def test_install_does_not_read_connect_yml(self, tmp_path: Path) -> None:
-        # The autouse ``_isolate_home`` fixture redirects HOME to
-        # ``tmp_path / ".pytest_home"``. install must not touch ``~/.goga`` at all
-        # (no connect re-sync — that is upgrade's concern, not install's).
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()):
-            _install(name="foo")
-        assert not (tmp_path / ".pytest_home" / ".goga" / "connect.yml").exists()
-        assert not (tmp_path / ".pytest_home" / ".goga").exists()
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 42
