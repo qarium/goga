@@ -286,6 +286,19 @@ class TestInstallLogicNegative:
         assert "Error:" in result.output
         assert "sudo" in result.output
 
+    def test_install_non_executable_binary_surfaces_click_exception(self) -> None:
+        # The executable is present but not executable → subprocess.run raises
+        # PermissionError (an OSError subclass that is NOT FileNotFoundError).
+        # "The pip/sudo executable could not start" must surface as a clean error
+        # for ANY OSError subclass, never as a raw traceback.
+        err = PermissionError(13, "Permission denied", "sudo")
+        with mock.patch.object(_install_module.subprocess, "run", side_effect=err):
+            result = CliRunner().invoke(app, ["install", "foo", "--sudo"])
+        assert result.exit_code == 1
+        assert "Error:" in result.output
+        assert "Traceback" not in result.output
+        assert not isinstance(result.exception, OSError)
+
 
 class TestInstallWiringInvariants:
     """CODEMANIFEST invariants — what each path must (and must not) consult."""

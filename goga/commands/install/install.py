@@ -108,21 +108,24 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     """Invoke pip with ``argv`` and return its returncode verbatim.
 
     pip's returncode is propagated without translation — ``check=False`` means a
-    non-zero returncode surfaces here, never as a ``CalledProcessError``. A
-    missing executable (e.g. ``sudo`` on a host without it) raises
-    ``FileNotFoundError`` from the OS; this is translated to a
-    ``click.ClickException`` (exit 1) since there is no returncode to propagate.
+    non-zero returncode surfaces here, never as a ``CalledProcessError``. Any
+    failure to start the executable (``OSError``: a missing binary such as
+    ``sudo`` on a host without it, or a present-but-non-executable one raising
+    ``PermissionError``) is translated to a ``click.ClickException`` (exit 1)
+    since there is no returncode to propagate.
     """
     logger.info("install start")
     if sudo:
         logger.warning("running pip under sudo")
     try:
         result = subprocess.run(argv, check=False)
-    except FileNotFoundError as exc:
-        # The executable named at argv[0] is missing (e.g. ``--sudo`` on a host
-        # without sudo, or an unreachable interpreter). Name the actual binary so
-        # the user knows what to install — ``exc.strerror`` alone ("No such file
-        # or directory") would mislead when sudo, not pip, is what's absent.
+    except OSError as exc:
+        # The executable named at argv[0] could not be started (``FileNotFoundError``
+        # when it's missing — e.g. ``--sudo`` on a host without sudo, or an
+        # unreachable interpreter; ``PermissionError`` when present but not
+        # executable). Name the actual binary so the user knows what to install —
+        # ``exc.strerror`` alone ("No such file or directory") would mislead when
+        # sudo, not pip, is what's absent.
         target = exc.filename or argv[0]
         raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
     if result.returncode == 0:
