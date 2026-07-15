@@ -1,5 +1,12 @@
 Imports:
   - Types:
+      - compile_flow
+    Usages:
+      - compile-flow
+      - parse-dsl
+      - serialize-flow
+    From: goga/pipeline/compiler
+  - Types:
       - run_flow
     Usages:
       - run-flow
@@ -45,7 +52,7 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell owns the entire pipeline workaround: discovery of *.yml pipeline
+  This cell owns the entire pipeline workflow: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
   entity model, run coordination, and the in-container CLI entrypoint
   pipeline_cli. It delegates subprocess execution to `run_flow` from
@@ -69,6 +76,14 @@ Annotations: |
   This cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline. The host-side launcher lives in
   goga/commands/pipeline (docker runtime boundary — no Python Imports).
+
+  Compilation step: `run_pipeline` invokes `compile_flow` (per the
+  `compile-flow` practice) to transform the discovered pipeline-file from
+  goga DSL into an afm flow-file at runtime, inside the container. The
+  output path is the flow.yml file inside the directory pointed to by the
+  AFM_DIR environment variable. Use the `parse-dsl` and `serialize-flow`
+  practices to understand the intermediate stages of the compilation
+  pipeline when a lower-level view is required.
 
 ---
 
@@ -151,50 +166,69 @@ Annotations: |
 "run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
-    Resolve a pipeline name to an absolute file path via `list_pipelines`, then
-    launch afm through `run_flow` from Imports. This is the run coordination
-    routine — it performs discovery and path resolution; the actual subprocess
-    execution lives in goga/afm.run_flow.
+    Resolve a pipeline name to an absolute file path via `list_pipelines`,
+    compile the pipeline-file from goga DSL into an afm flow-file at runtime
+    via `compile_flow`, then launch afm through `run_flow`. This is the run
+    coordination routine — it performs discovery, path resolution, and
+    compilation; the actual subprocess execution lives in `run_flow`.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
     `user_dir`: user-level pipelines directory (same meaning as in `list_pipelines`)
     `port`: TCP port forwarded to afm run --port via `run_flow`
-            (allocated by the host-side caller — goga/commands/pipeline)
-    `exit_code`: 0 on success, non-zero on error (missing pipeline, missing binary,
-                 afm failure). 127 means afm is not on PATH inside the container.
+            (allocated by the host-side caller)
+    `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
+                 binary, afm failure, structural DSL error). 127 means afm is
+                 not on PATH inside the container.
 
     Algorithm:
-    1. Call `list_pipelines` with `project_dir` and `user_dir`, then find the
-       `PipelineEntry` whose name matches
-    2. If no match — report that the pipeline is missing and return a non-zero
-       `exit_code` (do not call `run_flow`)
-    3. Build the absolute pipeline path by selecting the source directory based
-       on the entry's source value (`project_dir` for `PipelineSource`.PROJECT,
-       `user_dir` otherwise) and appending "<name>.yml"; the resulting
-       pipeline path MUST be absolute
-    4. Call `run_flow` from Imports with the absolute path and `port`,
-       per the `run-flow` practice — afm run is invoked inside the container
-       through `run_flow`, not directly here
-    5. Return the `exit_code` returned by `run_flow` (which propagates afm's
-       exit code and the FileNotFoundError→127 mapping when afm is missing
-       from PATH)
+    1. Discover pipelines via `list_pipelines` and find the `PipelineEntry`
+       whose name matches
+    2. If no match — report that the pipeline is missing and return a
+       non-zero exit code
+    3. Build the absolute pipeline path from the matching entry's source
+       directory and the pipeline name
+    4. Resolve the in-container runtime directory from the AFM_DIR
+       environment variable. If AFM_DIR is not set — raise an error with
+       the readable message "AFM_DIR not set". Resolve the value to an
+       absolute path (via pathlib.Path.resolve) to guarantee the directory
+       is absolute regardless of whether the env value is relative
+    5. Compose the output flow path inside that directory
+    6. Compile the pipeline-file via `compile_flow` (per the `compile-flow`
+       practice). Structural DSL errors propagate unchanged
+    7. Launch afm via `run_flow` (per the `run-flow` practice) with the
+       compiled flow-file path and `port`
+    8. Return the exit code returned by `run_flow`
 
-    Apply the `conventions` practice for error-handling style and docstring formatting.
+    Apply `conventions` for error-handling style and docstring formatting.
+    Apply `compile-flow` for the compilation step contract.
+    Apply `run-flow` for the subprocess launch contract.
 
     Requirements:
-    - Always pass the absolute path to `run_flow` — never the bare name
+    - Always pass the absolute pipeline path to `compile_flow` — never the
+      bare name
+    - Always pass the absolute compiled flow path to `run_flow` — never the
+      bare name or the DSL path
     - Always forward `port` to `run_flow` — never omit it
+    - Read AFM_DIR directly from the process environment
+    - Resolve AFM_DIR to an absolute path (via pathlib.Path.resolve) before
+      composing flow_path (so a relative env value still yields an absolute
+      flow_path that satisfies `compile_flow`'s absolute-paths precondition)
     - Apply the `run-flow` practice's error-handling rules verbatim (as
       propagated through `run_flow`)
+    - Apply the `compile-flow` practice's contract verbatim
 
     Constraints:
-    - Do not invoke afm directly outside `run_flow` from Imports
+    - Do not invoke afm directly outside `run_flow`
+    - Do not invoke the compiler outside `compile_flow`
     - Do not allocate the port — the caller allocates it
     - Do not copy pipeline files into any project-level directory
-    - Do not modify or parse pipeline-file contents
+    - Do not modify or parse pipeline-file contents directly — that is
+      `compile_flow`'s job
     - Do not accept relative `project_dir` or `user_dir` — both must already
       be absolute when passed in
+    - Do not mask or wrap exceptions from `compile_flow` — structural DSL
+      errors propagate with their readable messages
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py
@@ -224,8 +258,8 @@ Annotations: |
          "Available pipelines:" header followed by one entry per line
          (project source suffixed with " (project)"), return 0
        - run NAME --port PORT → call `run_pipeline`(NAME, project_dir,
-         user_dir, PORT) and return its exit code (delegates name resolution
-         and the .yml extension to `run_pipeline`)
+         user_dir, PORT) and return its exit code (delegates name resolution,
+         compilation, and the .yml extension to `run_pipeline`)
     5. Return the resulting exit code
 
     Apply the `conventions` practice for docstring style and intra-package imports.
@@ -250,9 +284,7 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/06/26
 Description: |
-  Cell that owns the entire pipeline workaround: discovery of *.yml pipeline
+  Cell that owns the entire pipeline workflow: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
   entity model, run coordination, and the in-container CLI entrypoint
-  pipeline_cli. Subprocess execution of afm run is delegated to
-  `run_flow` in goga/afm. Invoked inside the goga Docker image via
-  python -m goga.pipeline.
+  pipeline_cli.

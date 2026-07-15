@@ -1,0 +1,150 @@
+name: Goga feature
+description: "Feature implementation"
+---
+
+propose:
+  description: "Propose"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Save the task file as `<git branch --show-current>.md`
+  skills:
+    - goga-propose
+
+propose-review:
+  description: "Propose Review"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Review the task `<git branch --show-current>.md`
+  skills:
+    - goga-review-task
+  depends_on:
+    - propose
+
+brainstorm:
+  description: "Architecture Brainstorm"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Use the task `<git branch --show-current>.md`
+    Save the architecture plan as `<git branch --show-current>.md`
+  skills:
+    - goga-brainstorm
+  depends_on:
+    - propose-review
+
+brainstorm-review:
+  description: "Architecture Review"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Review the architecture plan `<git branch --show-current>.md`
+  skills:
+    - goga-review-arch
+  depends_on:
+    - brainstorm
+
+apply:
+  description: "Apply Architecture"
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Apply the architecture plan `<git branch --show-current>.md`
+  skills:
+    - goga-apply
+  depends_on:
+    - brainstorm-review
+
+design:
+  description: "Design Architecture To Code"
+  interactive: true
+  prompt: |
+    Save the design document as `<git branch --show-current>.md`
+  agents:
+    - planning
+    - implementation
+  skills:
+    - goga-design
+  depends_on:
+    - apply
+
+design-review:
+  description: "Design Review"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Review the design document `<git branch --show-current>.md`
+  skills:
+    - goga-review-design
+  depends_on:
+    - design
+
+plan:
+  description: "Plan"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Use the design document `<git branch --show-current>.md`
+    Save the plan as `<git branch --show-current>.md`
+  skills:
+    - goga-plan
+  depends_on:
+    - design-review
+
+plan-review:
+  description: "Plan Review"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Review the plan `<git branch --show-current>.md`
+  skills:
+    - goga-review-plan
+  depends_on:
+    - plan
+
+fix-changes:
+  description: "Fix changes"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Steps:
+      1. Commit all changes.
+      2. Ask the user whether the implementation is built and ready for acceptance.
+
+    Requirements:
+      - If the user confirms it is ready for acceptance — complete the execution.
+
+    Constraints:
+      - Don't autoconfirm user answer.
+      - Except changes in `docs/<tasks|arch|design|plans>`.
+  depends_on:
+    - plan-review
+
+accept:
+  description: "Accept Result"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  skills:
+    - goga-accept
+  depends_on:
+    - fix-changes

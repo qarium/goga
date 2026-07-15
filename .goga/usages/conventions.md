@@ -47,8 +47,8 @@ All subsequent import patterns MUST follow relative imports for intra-package re
 
 RULES:
 
-1. Use pydantic for all data models and request/response schemas
-2. All data model classes MUST use `kw_only=True` (Python 3.10+ syntax)
+1. Use the standard library `dataclasses` module for all new data models and request/response schemas.
+2. All dataclass-based model classes MUST use `kw_only=True` (Python 3.10+ syntax)
 3. Set empty defaults (empty string, zero, etc.) for all fields — use `None` only for fields that represent the explicit
    absence of a value
 
