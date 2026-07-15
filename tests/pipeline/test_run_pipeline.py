@@ -8,12 +8,34 @@ from unittest.mock import call
 
 import pytest
 from goga.pipeline import run_pipeline
+from goga.pipeline.compiler import StructuralError
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules and patch its
-# run_flow attribute directly. Per [[feedback_mock_patch_module_shadowing]].
+# run_flow / compile_flow attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
+
+
+@pytest.fixture
+def afm_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point AFM_DIR at a tmp dir and return the resolved path.
+
+    flow_path inside run_pipeline is ``afm_dir / "flow.yml"``. Returning the
+    resolved value lets assertions compare against exactly what run_pipeline
+    builds (it resolves AFM_DIR internally). The directory itself is not
+    created here — compile_flow is mocked in every test, so its
+    parent-must-exist precondition never fires.
+    """
+    directory = (tmp_path / ".afm").resolve()
+    monkeypatch.setenv("AFM_DIR", str(directory))
+    return directory
+
+
+def _write_pipeline(directory: Path, name: str = "deploy") -> None:
+    """Create an empty pipeline file so name resolution matches it."""
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{name}.yml").write_text("pipeline")
 
 
 class TestRunPipelineContract:
@@ -28,16 +50,14 @@ class TestRunPipelineContract:
 
         assert parameters == ["name", "project_dir", "user_dir", "port"]
 
-    def test_run_pipeline_returns_int(self, tmp_path: Path) -> None:
-        """run_pipeline returns 0 on a successful (exit 0) afm invocation."""
+    def test_run_pipeline_returns_zero_on_success(self, tmp_path: Path, afm_dir: Path) -> None:
+        """run_pipeline returns 0 on a successful compile + afm invocation."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=0,
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
@@ -45,111 +65,196 @@ class TestRunPipelineContract:
 
 
 class TestRunPipelineLogic:
-    def test_run_pipeline_passes_absolute_project_path_and_port_to_run_flow(self, tmp_path: Path) -> None:
-        """Project source wins; the absolute path and integer port reach run_flow."""
+    def test_run_pipeline_passes_compiled_flow_path_and_port_to_run_flow(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """run_flow receives the compiled flow.yml path (not the DSL path) and the port."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
-        user_dir = tmp_path / "user_pipelines"
-        user_dir.mkdir()
-        (user_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=0,
-        ) as mock_run_flow:
-            exit_code = run_pipeline("deploy", project_dir, user_dir, 50321)
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
-        assert exit_code == 0
-        mock_run_flow.assert_called_once_with(project_dir / "deploy.yml", 50321)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
-    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(self, tmp_path: Path) -> None:
-        """A pipeline present only in user_dir is resolved against the user directory, port forwarded."""
+    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """A pipeline only in user_dir still compiles + runs against its source path."""
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
         user_dir = tmp_path / "user_pipelines"
-        user_dir.mkdir()
-        (user_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(user_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=0,
-        ) as mock_run_flow:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
             exit_code = run_pipeline("deploy", project_dir, user_dir, 50321)
 
         assert exit_code == 0
-        mock_run_flow.assert_called_once_with(user_dir / "deploy.yml", 50321)
+        # compile_flow receives the user-dir pipeline path (resolved) and the flow path.
+        mock_compile.assert_called_once_with((user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml")
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """A missing pipeline name returns nonzero with a clear message, without invoking run_flow."""
+        """A missing pipeline name returns nonzero without invoking compile_flow or run_flow."""
         project_dir = tmp_path / "pipelines"
         user_dir = tmp_path / "user_pipelines"
 
-        with mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
             exit_code = run_pipeline("nonexistent", project_dir, user_dir, 50321)
 
         assert exit_code != 0
+        mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
         captured = capsys.readouterr()
         assert "missing" in captured.err
 
-    def test_run_pipeline_rejects_yml_suffixed_name(self, tmp_path: Path) -> None:
-        """A name carrying the '.yml' suffix never matches an entry (entry names are extension-less)."""
+    def test_run_pipeline_rejects_yml_suffixed_name(self, tmp_path: Path, afm_dir: Path) -> None:
+        """A name carrying the '.yml' suffix never matches (entry names are extension-less)."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+        ):
             exit_code = run_pipeline("deploy.yml", project_dir, tmp_path / "user_pipelines", 50321)
 
         assert exit_code != 0
+        mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
-    def test_run_pipeline_propagates_run_flow_exit_code(self, tmp_path: Path) -> None:
+    def test_run_pipeline_propagates_run_flow_exit_code(self, tmp_path: Path, afm_dir: Path) -> None:
         """run_pipeline propagates run_flow's exit code unchanged."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=7,
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=7),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
         assert exit_code == 7
 
-    def test_run_pipeline_propagates_missing_binary_exit_code(self, tmp_path: Path) -> None:
+    def test_run_pipeline_propagates_missing_binary_exit_code(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
         """run_pipeline propagates run_flow's 127 (missing afm binary) exit code."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=127,
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=127),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
         assert exit_code == 127
 
-    def test_run_pipeline_forwards_distinct_port_values(self, tmp_path: Path) -> None:
+    def test_run_pipeline_forwards_distinct_port_values(self, tmp_path: Path, afm_dir: Path) -> None:
         """The port integer is forwarded verbatim to run_flow — single source of truth."""
         project_dir = tmp_path / "pipelines"
-        project_dir.mkdir()
-        (project_dir / "deploy.yml").write_text("pipeline")
+        _write_pipeline(project_dir)
 
-        with mock.patch.object(
-            _run_pipeline_module,
-            "run_flow",
-            return_value=0,
-        ) as mock_run_flow:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 8080)
 
-        assert mock_run_flow.call_args == call(project_dir / "deploy.yml", 8080)
+        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080)
+
+    def test_run_pipeline_afm_dir_not_set_raises_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing AFM_DIR raises RuntimeError before compile_flow or run_flow run."""
+        monkeypatch.delenv("AFM_DIR", raising=False)
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+            pytest.raises(RuntimeError, match="AFM_DIR not set"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        mock_compile.assert_not_called()
+        mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_propagates_structural_error_from_compile_flow(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """A structural DSL error from compile_flow propagates unchanged; run_flow is not called."""
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(
+                _run_pipeline_module,
+                "compile_flow",
+                side_effect=StructuralError("unsupported body format"),
+            ),
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+            pytest.raises(StructuralError, match="unsupported body format"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_calls_compile_then_run_flow_in_order(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """compile_flow runs before run_flow."""
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        order: list[str] = []
+
+        def _compile(*args: object, **kwargs: object) -> None:
+            order.append("compile")
+
+        def _run(*args: object, **kwargs: object) -> int:
+            order.append("run")
+            return 0
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_compile),
+            mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+        assert order == ["compile", "run"]
+
+    def test_run_pipeline_resolves_relative_afm_dir_to_absolute(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A relative AFM_DIR is resolved to an absolute flow_path before reaching compile_flow."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", ".afm")
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        captured: dict[str, Path] = {}
+
+        def _capture(pipeline_path: Path, flow_path: Path) -> None:
+            captured["flow_path"] = flow_path
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_capture),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert captured["flow_path"].is_absolute()
+        assert captured["flow_path"] == (tmp_path / ".afm").resolve() / "flow.yml"

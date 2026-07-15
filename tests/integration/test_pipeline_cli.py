@@ -56,6 +56,9 @@ _run_flow_module = sys.modules["goga.afm.run_flow"]
 _rpc_module = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 # goga.commands.pipeline.pipeline shadows its submodule name too.
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
+# goga.pipeline.run_pipeline is shadowed in the package __init__ by the
+# run_pipeline function; resolve it so compile_flow can be patched there.
+_run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 
 def _make_config() -> Config:
@@ -78,7 +81,7 @@ class TestInContainerRunPath:
     """
 
     def test_run_invokes_afm_run_with_port_and_path(self, tmp_path: Path, monkeypatch) -> None:
-        """``pipeline_cli run`` reaches ``run_flow`` and invokes ``afm run --port``."""
+        """``pipeline_cli run`` compiles then reaches ``run_flow`` → ``afm run --port <flow path>``."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
@@ -88,12 +91,17 @@ class TestInContainerRunPath:
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
+        afm_dir = (tmp_path / ".afm").resolve()
+        monkeypatch.setenv("AFM_DIR", str(afm_dir))
 
-        with mock.patch.object(
-            _run_flow_module.subprocess,
-            "run",
-            return_value=MagicMock(returncode=0),
-        ) as mock_subprocess:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(
+                _run_flow_module.subprocess,
+                "run",
+                return_value=MagicMock(returncode=0),
+            ) as mock_subprocess,
+        ):
             result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
         assert result == 0
@@ -104,8 +112,8 @@ class TestInContainerRunPath:
         assert called_args[1] == "run"
         assert called_args[2] == "--port"
         assert called_args[3] == "50321"
-        # The resolved absolute pipeline path (not the bare name) reaches the binary.
-        assert called_args[4] == str((project_pipelines / "deploy.yml").resolve())
+        # The compiled flow-file path (not the bare name or the DSL path) reaches the binary.
+        assert called_args[4] == str(afm_dir / "flow.yml")
 
     def test_run_missing_pipeline_is_nonzero_without_afm(self, tmp_path: Path, monkeypatch) -> None:
         """``pipeline_cli run <missing>`` returns nonzero without invoking afm."""
@@ -127,11 +135,15 @@ class TestInContainerRunPath:
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
-        with mock.patch.object(
-            _run_flow_module.subprocess,
-            "run",
-            return_value=MagicMock(returncode=7),
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(
+                _run_flow_module.subprocess,
+                "run",
+                return_value=MagicMock(returncode=7),
+            ),
         ):
             result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
@@ -147,14 +159,18 @@ class TestInContainerRunPath:
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: tmp_path / "user")
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
-        with mock.patch.object(_run_flow_module.subprocess, "run", side_effect=FileNotFoundError):
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_flow_module.subprocess, "run", side_effect=FileNotFoundError),
+        ):
             result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
         assert result == 127
 
     def test_run_resolves_project_source_on_name_conflict(self, tmp_path: Path, monkeypatch) -> None:
-        """A name in both sources resolves to the project path reaching afm."""
+        """A name in both sources compiles from the project path, not the user path."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
@@ -167,18 +183,22 @@ class TestInContainerRunPath:
 
         monkeypatch.setattr(Path, "cwd", lambda: project_tmp)
         monkeypatch.setattr(Path, "home", lambda: user_tmp)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
-        with mock.patch.object(
-            _run_flow_module.subprocess,
-            "run",
-            return_value=MagicMock(returncode=0),
-        ) as mock_subprocess:
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None) as mock_compile,
+            mock.patch.object(
+                _run_flow_module.subprocess,
+                "run",
+                return_value=MagicMock(returncode=0),
+            ),
+        ):
             result = pipeline_cli(["run", "shared", "--port", "50321"])
 
         assert result == 0
-        called_args = mock_subprocess.call_args.args[0]
-        # Project wins on conflict: the project path reaches afm, not the user path.
-        assert called_args[4] == str((project_pipelines / "shared.yml").resolve())
+        # Project wins on conflict: compile_flow receives the project path, not the user path.
+        compiled_pipeline_path = mock_compile.call_args.args[0]
+        assert compiled_pipeline_path == (project_pipelines / "shared.yml").resolve()
 
 
 class TestInContainerListPath:
