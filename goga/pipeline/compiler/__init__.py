@@ -11,6 +11,7 @@ from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
 from .pipeline_header import PipelineHeader
+from .serialize_flow import serialize_flow
 from .stage_step import StageStep
 from .stages_body import StagesBody
 
@@ -25,4 +26,5 @@ __all__: list[str] = [
     "StagesBody",
     "StructuralError",
     "parse_dsl",
+    "serialize_flow",
 ]
