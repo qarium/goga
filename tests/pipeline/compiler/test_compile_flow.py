@@ -235,3 +235,43 @@ class TestCompileFlowLogic:
 
         with pytest.raises(FileNotFoundError):
             compile_flow(pipeline_path, flow_path)
+
+    def test_compile_flow_strips_authored_depends_on_in_first_phase(self, tmp_path: Path) -> None:
+        """An authored ``depends_on`` on the first phase step never leaks into the output.
+
+        Phases derive depends_on from position (first step gets none). Without stripping the
+        authored value, the first step's None position-derived depends_on lets the authored
+        value leak through as a dangling dependency. The second step's position-derived value
+        must still chain to the first step's id.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  depends_on: [zzz]\n"
+            "- name: b\n"
+            "  description: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+
+        # First step: authored depends_on stripped, no key emitted (position 0).
+        assert "depends_on" not in stages[0]
+        # Second step: position-derived, chains to predecessor — authored value irrelevant.
+        assert stages[1]["depends_on"] == ["a"]
+
+    def test_compile_flow_rejects_non_string_stage_key(self, tmp_path: Path) -> None:
+        """A non-string stage map key raises StructuralError through compile_flow."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n1:\n  description: A\n")
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(StructuralError, match="stage name must be a string"):
+            compile_flow(pipeline_path, flow_path)

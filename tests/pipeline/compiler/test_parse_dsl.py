@@ -275,3 +275,40 @@ class TestParseDslLogic:
         assert "depends_on" not in step_body
         assert step_body["agents"] == ["planning"]
         assert body.steps[0].depends_on == []
+
+    def test_parse_dsl_stages_non_string_key_rejected(self) -> None:
+        """A non-string stage map key (int/bool/float) is rejected — ids must be strings.
+
+        YAML parses unquoted numeric/boolean keys as int/bool/float; these would otherwise
+        flow through ``StageStep.name`` -> ``FlowStage.id`` and produce a malformed flow-file
+        with a non-string id (afm expects string ids for depends_on references).
+        """
+        for key in ("1", "true", "3.14"):
+            text = f"name: X\ndescription: Y\n---\n\n{key}:\n  description: A\n"
+
+            with pytest.raises(StructuralError, match="stage name must be a string"):
+                parse_dsl(text)
+
+    def test_parse_dsl_phases_strips_authored_depends_on(self) -> None:
+        """An authored ``depends_on`` in a phase item is dropped — phases derive it from position.
+
+        Without this, the authored value leaks into ``PhaseStep.body`` and (for the first step,
+        whose position-derived depends_on is None) survives into the output as a dangling
+        dependency. Stripping it makes phases consistent with the position-derived contract.
+        """
+        text = (
+            "name: X\n"
+            "description: Y\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  depends_on: [zzz]\n"
+            "  prompt: Do A\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.PHASES
+        assert "depends_on" not in body.steps[0].body
+        assert body.steps[0].body["prompt"] == "Do A"

@@ -34,7 +34,9 @@ logger = logging.getLogger(__name__)
 _EXPECTED_SEGMENT_COUNT = 2
 
 # Phase-step keys carried as separate fields, not inside the verbatim body.
-_PHASE_STEP_KEYS = {"name", "description"}
+# ``depends_on`` is reserved — phases derive it from list position (compile_flow),
+# so any authored value is dropped rather than leaked into the output.
+_PHASE_STEP_KEYS = {"name", "description", "depends_on"}
 
 # Stage-step keys carried as separate fields, not inside the verbatim body.
 _STAGE_STEP_KEYS = {"description", "depends_on"}
@@ -146,7 +148,7 @@ def _extract_depends_on(depends_on: Any) -> list[str] | None:
     return depends_on
 
 
-def _extract_stage_step(name: str, value: Any) -> StageStep:
+def _extract_stage_step(name: Any, value: Any) -> StageStep:
     """Build a ``StageStep`` from one entry of a mapping body, deep-copying its fields.
 
     Args:
@@ -157,9 +159,12 @@ def _extract_stage_step(name: str, value: Any) -> StageStep:
         The ``StageStep`` with description/depends_on split out and a deep-copied body.
 
     Raises:
-        StructuralError: If the value is not a mapping, lacks a string description,
-            or has a malformed ``depends_on``.
+        StructuralError: If the key is not a string, the value is not a mapping,
+            lacks a string description, or has a malformed ``depends_on``.
     """
+    if not isinstance(name, str):
+        raise StructuralError("stage name must be a string")
+
     if not isinstance(value, dict):
         raise StructuralError("stage value must be a mapping")
 
