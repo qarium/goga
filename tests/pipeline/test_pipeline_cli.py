@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 from goga.pipeline import pipeline_cli
+from goga.pipeline.compiler import StructuralError
 
 # Importing ``pipeline_cli`` from the package __init__ shadows the ``cli``
 # submodule name in attribute access, so a string-based ``mock.patch`` path is
@@ -148,3 +149,47 @@ class TestPipelineCliLogic:
             pipeline_cli(["run", "deploy", "--port", "abc"])
 
         assert exc_info.value.code == 2
+
+    def test_pipeline_cli_run_malformed_pipeline_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A StructuralError from run_pipeline is reported as a clean stderr message, exit 1."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=StructuralError("unsupported body format"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "malformed" in captured.err
+        assert "deploy" in captured.err
+        assert "unsupported body format" in captured.err
+
+    def test_pipeline_cli_run_runtime_error_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A RuntimeError from run_pipeline (e.g. AFM_DIR unset) is reported cleanly, exit 1."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=RuntimeError("AFM_DIR not set"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "AFM_DIR not set" in captured.err

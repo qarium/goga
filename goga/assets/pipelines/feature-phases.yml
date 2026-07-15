@@ -10,6 +10,8 @@ description: "Feature implementation"
     - implementation
   prompt: |
     Save the task file as `<git branch --show-current>.md`
+  skills:
+    - goga-propose
 
 - name: propose-review
   description: "Propose Review"

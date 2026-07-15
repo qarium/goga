@@ -17,8 +17,10 @@ cell's ``CODEMANIFEST``.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
+from .compiler import StructuralError
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
 from .run_pipeline import run_pipeline
@@ -36,8 +38,12 @@ def pipeline_cli(argv: list[str]) -> int:
 
     Returns:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
-        missing ``NAME``, missing/invalid ``--port``); otherwise the
-        ``exit_code`` propagated from :func:`run_pipeline`.
+        missing ``NAME``, missing/invalid ``--port``); ``1`` when
+        :func:`run_pipeline` raises :class:`StructuralError` (a malformed
+        pipeline DSL) or :class:`RuntimeError` (e.g. ``AFM_DIR`` unset) — these
+        are caught here and reported as a clean stderr message rather than
+        propagated as a traceback; otherwise the ``exit_code`` propagated from
+        :func:`run_pipeline`.
     """
     parser = argparse.ArgumentParser(
         prog="goga.pipeline",
@@ -69,4 +75,11 @@ def pipeline_cli(argv: list[str]) -> int:
             print(f"  {entry.name}{suffix}")
         return 0
 
-    return run_pipeline(args.name, project_dir, user_dir, args.port)
+    try:
+        return run_pipeline(args.name, project_dir, user_dir, args.port)
+    except StructuralError as exc:
+        print(f"Error: pipeline '{args.name}' is malformed: {exc}", file=sys.stderr)
+        return 1
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
