@@ -7,6 +7,7 @@ entry. Once all entity tasks land, all 12 contract names are re-exported here.
 from .body_format import BodyFormat
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
+from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
 from .pipeline_header import PipelineHeader
@@ -22,4 +23,6 @@ __all__: list[str] = [
     "PipelineHeader",
     "StageStep",
     "StagesBody",
+    "StructuralError",
+    "parse_dsl",
 ]
