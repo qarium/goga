@@ -236,6 +236,60 @@ class TestCompileFlowLogic:
         with pytest.raises(FileNotFoundError):
             compile_flow(pipeline_path, flow_path)
 
+    def test_compile_flow_phases_authored_id_does_not_clobber(self, tmp_path: Path) -> None:
+        """An authored ``id`` in a phase item does not override the position-derived id chain.
+
+        Without parser-level exclusion, the authored value would leak into
+        ``FlowStage.fields`` and clobber the serializer's seeded ``id``, leaving the
+        next stage's position-derived ``depends_on`` pointing at a non-existent id.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  id: collision-a\n"
+            "- name: b\n"
+            "  description: B\n"
+            "  id: collision-b\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+
+        # ids derive from the step names; the authored collision values are dropped.
+        assert [stage["id"] for stage in stages] == ["a", "b"]
+        # b depends on its predecessor's id (a), not on any clobbered value.
+        assert stages[1]["depends_on"] == ["a"]
+
+    def test_compile_flow_stages_authored_name_does_not_clobber(self, tmp_path: Path) -> None:
+        """An authored ``name`` in a stage value does not override the description-derived label."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  description: Real Label\n"
+            "  name: Collision Name\n"
+            "  agents:\n"
+            "    - planning\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+
+        assert stages[0]["id"] == "a"
+        assert stages[0]["name"] == "Real Label"
+
     def test_compile_flow_strips_authored_depends_on_in_first_phase(self, tmp_path: Path) -> None:
         """An authored ``depends_on`` on the first phase step never leaks into the output.
 

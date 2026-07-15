@@ -41,6 +41,11 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
             (message ``"AFM_DIR not set"``).
         StructuralError: On a structural defect in the pipeline DSL, propagated
             unchanged from :func:`compile_flow`.
+        FileNotFoundError / PermissionError: Propagated unchanged from
+            :func:`compile_flow` when ``pipeline_path`` is unreadable or the
+            ``flow_path`` parent directory does not exist.
+        yaml.YAMLError: Propagated unchanged from :func:`parse_dsl` when the
+            pipeline-file is not valid YAML.
     """
     entries = list_pipelines(project_dir, user_dir)
     match = next((entry for entry in entries if entry.name == name), None)

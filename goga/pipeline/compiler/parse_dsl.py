@@ -35,11 +35,17 @@ _EXPECTED_SEGMENT_COUNT = 2
 
 # Phase-step keys carried as separate fields, not inside the verbatim body.
 # ``depends_on`` is reserved — phases derive it from list position (compile_flow),
-# so any authored value is dropped rather than leaked into the output.
-_PHASE_STEP_KEYS = {"name", "description", "depends_on"}
+# so any authored value is dropped rather than leaked into the output. ``id`` is a
+# reserved output key (the stage id derives from ``name``); an authored value would
+# otherwise clobber the serializer's seeded ``id`` and break the position-derived
+# depends_on chain, so it is dropped too.
+_PHASE_STEP_KEYS = {"name", "description", "depends_on", "id"}
 
-# Stage-step keys carried as separate fields, not inside the verbatim body.
-_STAGE_STEP_KEYS = {"description", "depends_on"}
+# Stage-step keys carried as separate fields, not inside the verbatim body. ``name``
+# and ``id`` are reserved output keys (the display label derives from ``description``,
+# the id from the map key); authored values would otherwise clobber the serializer's
+# seeded ``name``/``id``, so they are dropped.
+_STAGE_STEP_KEYS = {"description", "depends_on", "name", "id"}
 
 
 class StructuralError(ValueError):
@@ -65,7 +71,10 @@ def _split_segments(text: str) -> tuple[str, str]:
     Raises:
         StructuralError: If no ``---`` separator line is present.
     """
-    parts = re.split(r"^---$", text, maxsplit=1, flags=re.MULTILINE)
+    # Match exactly three dashes; the optional ``\r`` keeps CRLF (Windows) line
+    # endings working — under ``re.MULTILINE`` ``$`` sits before ``\n``, so a
+    # ``---\r\n`` line otherwise reads as ``---\r`` and fails to match.
+    parts = re.split(r"^---\r?$", text, maxsplit=1, flags=re.MULTILINE)
 
     if len(parts) < _EXPECTED_SEGMENT_COUNT:
         raise StructuralError("missing body separator")

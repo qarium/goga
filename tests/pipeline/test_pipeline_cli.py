@@ -193,3 +193,48 @@ class TestPipelineCliLogic:
         assert exit_code == 1
         captured = capsys.readouterr()
         assert "AFM_DIR not set" in captured.err
+
+    def test_pipeline_cli_run_yaml_error_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """Invalid YAML in the pipeline file is reported as a clean stderr message, exit 1."""
+        import yaml
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=yaml.YAMLError("bad indentation"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "invalid YAML" in captured.err
+        assert "deploy" in captured.err
+
+    def test_pipeline_cli_run_oserror_reports_error_and_returns_1(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """An OSError (unreadable pipeline / missing flow dir) is reported cleanly, exit 1."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            side_effect=FileNotFoundError("[Errno 2] No such file or directory: '/x/flow.yml'"),
+        ):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert "could not be read or written" in captured.err

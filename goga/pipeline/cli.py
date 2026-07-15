@@ -20,6 +20,8 @@ import argparse
 import sys
 from pathlib import Path
 
+import yaml
+
 from .compiler import StructuralError
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
@@ -40,10 +42,12 @@ def pipeline_cli(argv: list[str]) -> int:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
         missing ``NAME``, missing/invalid ``--port``); ``1`` when
         :func:`run_pipeline` raises :class:`StructuralError` (a malformed
-        pipeline DSL) or :class:`RuntimeError` (e.g. ``AFM_DIR`` unset) — these
-        are caught here and reported as a clean stderr message rather than
-        propagated as a traceback; otherwise the ``exit_code`` propagated from
-        :func:`run_pipeline`.
+        pipeline DSL), :class:`RuntimeError` (e.g. ``AFM_DIR`` unset),
+        :class:`yaml.YAMLError` (invalid YAML in the pipeline file), or
+        :class:`OSError` (the pipeline file is unreadable or the flow-file's
+        parent directory is missing) — these are caught here and reported as a
+        clean stderr message rather than propagated as a traceback; otherwise
+        the ``exit_code`` propagated from :func:`run_pipeline`.
     """
     parser = argparse.ArgumentParser(
         prog="goga.pipeline",
@@ -82,4 +86,10 @@ def pipeline_cli(argv: list[str]) -> int:
         return 1
     except RuntimeError as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except yaml.YAMLError as exc:
+        print(f"Error: pipeline '{args.name}' has invalid YAML: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error: pipeline '{args.name}' could not be read or written: {exc}", file=sys.stderr)
         return 1

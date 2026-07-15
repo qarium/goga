@@ -312,3 +312,70 @@ class TestParseDslLogic:
         assert fmt is BodyFormat.PHASES
         assert "depends_on" not in body.steps[0].body
         assert body.steps[0].body["prompt"] == "Do A"
+
+    def test_parse_dsl_phases_strips_authored_id(self) -> None:
+        """An authored ``id`` in a phase item is dropped — the output id derives from ``name``.
+
+        Without this, the authored value leaks into ``PhaseStep.body`` and clobbers the
+        serializer's seeded stage id, breaking the position-derived depends_on chain.
+        """
+        text = (
+            "name: X\n"
+            "description: Y\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  id: collision-a\n"
+            "  prompt: Do A\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.PHASES
+        assert "id" not in body.steps[0].body
+        assert body.steps[0].body["prompt"] == "Do A"
+
+    def test_parse_dsl_stages_strips_authored_name_and_id(self) -> None:
+        """Authored ``name``/``id`` in a stage value are dropped — reserved output keys.
+
+        The display label derives from ``description`` and the id from the map key; an
+        authored value would otherwise leak into ``StageStep.body`` and clobber the
+        serializer's seeded ``name``/``id``.
+        """
+        text = (
+            "name: X\n"
+            "description: Y\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  description: A\n"
+            "  name: Collision Name\n"
+            "  id: collision\n"
+            "  agents:\n"
+            "    - planning\n"
+        )
+
+        _header, fmt, body = parse_dsl(text)
+
+        assert fmt is BodyFormat.STAGES
+        assert "name" not in body.steps[0].body
+        assert "id" not in body.steps[0].body
+        assert body.steps[0].body["agents"] == ["planning"]
+
+    def test_parse_dsl_accepts_crlf_line_endings(self) -> None:
+        """A pipeline file with CRLF (Windows) line endings still splits on ``---``."""
+        text = "name: X\r\ndescription: Y\r\n---\r\n\r\n- name: a\r\n  description: A\r\n"
+
+        header, fmt, body = parse_dsl(text)
+
+        assert header.name == "X"
+        assert fmt is BodyFormat.PHASES
+        assert body.steps[0].name == "a"
+
+    def test_parse_dsl_rejects_four_dash_separator(self) -> None:
+        """A ``----`` line is not the separator — it must be exactly three dashes."""
+        text = "name: X\ndescription: Y\n----\n\n- name: a\n  description: A\n"
+
+        with pytest.raises(StructuralError, match="missing body separator"):
+            parse_dsl(text)
