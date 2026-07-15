@@ -5,6 +5,7 @@ entry. Once all entity tasks land, all 12 contract names are re-exported here.
 """
 
 from .body_format import BodyFormat
+from .compile_flow import compile_flow
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
 from .parse_dsl import StructuralError, parse_dsl
@@ -25,6 +26,7 @@ __all__: list[str] = [
     "StageStep",
     "StagesBody",
     "StructuralError",
+    "compile_flow",
     "parse_dsl",
     "serialize_flow",
 ]
