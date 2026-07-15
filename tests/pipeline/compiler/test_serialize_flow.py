@@ -158,3 +158,20 @@ class TestSerializeFlowLogic:
         # No depends_on key for stage A (None).
         assert "depends_on" not in loaded["stages"][0]
         assert loaded["stages"][1]["depends_on"] == ["step-a"]
+
+    def test_serialize_flow_empty_stages(self) -> None:
+        """A document with zero stages serializes to a well-formed empty stages list.
+
+        ``compile_flow`` rejects empty bodies before reaching ``serialize_flow``,
+        but ``serialize_flow`` is a public API that direct callers can hand any
+        ``FlowDocument`` to — including one with no stages.
+        """
+        doc = FlowDocument(name="T", description="D", stages=[])
+
+        text = serialize_flow(doc)
+
+        assert text.startswith("name: T\n")
+        assert "stages: []" in text
+        # Exactly one trailing newline even with an empty stages list.
+        assert text.endswith("\n")
+        assert not text.endswith("\n\n")

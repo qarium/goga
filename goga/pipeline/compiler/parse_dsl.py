@@ -33,9 +33,6 @@ logger = logging.getLogger(__name__)
 # and exactly two (header, body) when it is present.
 _EXPECTED_SEGMENT_COUNT = 2
 
-# Header keys are structural, not passthrough content.
-_HEADER_KEYS = {"name", "description"}
-
 # Phase-step keys carried as separate fields, not inside the verbatim body.
 _PHASE_STEP_KEYS = {"name", "description"}
 

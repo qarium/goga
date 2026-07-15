@@ -258,3 +258,72 @@ class TestRunPipelineLogic:
 
         assert captured["flow_path"].is_absolute()
         assert captured["flow_path"] == (tmp_path / ".afm").resolve() / "flow.yml"
+
+    def test_run_pipeline_empty_afm_dir_raises_runtime_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An empty-string AFM_DIR is treated as unset and raises RuntimeError.
+
+        A bare ``is None`` check would let ``""`` through, ``Path("").resolve()`` to
+        the cwd, and silently write ``flow.yml`` there — this guards that misconfiguration.
+        """
+        monkeypatch.setenv("AFM_DIR", "")
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow") as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow") as mock_run_flow,
+            pytest.raises(RuntimeError, match="AFM_DIR not set"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        mock_compile.assert_not_called()
+        mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_writes_compiled_flow_file_for_real_compile(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """A real (un-mocked) compile step writes a valid flow-file at AFM_DIR/flow.yml.
+
+        Unlike the wiring tests, ``compile_flow`` is NOT mocked — this drives the real
+        DSL → flow-file write through ``run_pipeline`` and confirms ``run_flow`` receives
+        the compiled path. Locks in the end-to-end compile → run contract that the
+        mocked tests cannot verify.
+        """
+        import yaml
+
+        # compile_flow requires flow_path.parent to already exist.
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\n"
+            "description: Deploy pipeline\n"
+            "---\n"
+            "\n"
+            "- name: build\n"
+            "  description: Build\n"
+            "  prompt: Build it\n"
+            "- name: ship\n"
+            "  description: Ship\n"
+            "  prompt: Ship it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow:
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        assert exit_code == 0
+
+        # The compiled flow-file exists at AFM_DIR/flow.yml and parses as valid YAML.
+        flow_path = afm_dir / "flow.yml"
+        assert flow_path.is_file()
+        loaded = yaml.safe_load(flow_path.read_text())
+        assert loaded["name"] == "Deploy"
+        assert [stage["id"] for stage in loaded["stages"]] == ["build", "ship"]
+        # Position-derived depends_on: first stage none, second depends on its predecessor.
+        assert "depends_on" not in loaded["stages"][0]
+        assert loaded["stages"][1]["depends_on"] == ["build"]
+
+        # run_flow received the compiled flow path (not the DSL path) and the port.
+        mock_run_flow.assert_called_once_with(flow_path, 50321)

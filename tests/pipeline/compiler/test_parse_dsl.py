@@ -186,35 +186,55 @@ class TestParseDslLogic:
         with pytest.raises(StructuralError, match="stage value must be a mapping"):
             parse_dsl(text)
 
+    def test_parse_dsl_header_not_a_mapping_raises(self) -> None:
+        """A header segment that YAML-parses to a non-mapping (e.g. a scalar) is rejected."""
+        text = "42\n---\n\n- name: a\n  description: A\n"
+
+        with pytest.raises(StructuralError, match="header missing name/description"):
+            parse_dsl(text)
+
+    def test_parse_dsl_phase_item_not_a_mapping_raises(self) -> None:
+        """A phases list element that is not a mapping (e.g. a scalar) is rejected."""
+        text = "name: X\ndescription: Y\n---\n\n- just a scalar\n"
+
+        with pytest.raises(StructuralError, match="phase item must be a mapping"):
+            parse_dsl(text)
+
+    def test_parse_dsl_stage_value_missing_description_raises(self) -> None:
+        """A stages value mapping without a string description is rejected."""
+        text = "name: X\ndescription: Y\n---\n\na:\n  agents: [planning]\n"
+
+        with pytest.raises(StructuralError, match="stage value missing description"):
+            parse_dsl(text)
+
     def test_parse_dsl_deep_copies_body_dicts(self) -> None:
-        """Step bodies are deep copies — mutating a parsed body does not touch the source list."""
-        text = (
-            "name: X\n"
-            "description: Y\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  description: A\n"
-            "  agents:\n"
-            "    - planning\n"
-            "  nested:\n"
-            "    key: value\n"
-        )
+        """``_deep_copy_without`` drops excluded keys and deep-copies the rest.
 
-        _header, _fmt, body = parse_dsl(text)
+        The parser deep-copies each step body so a caller mutating the returned
+        objects cannot alias the source mapping. Verified directly on the helper
+        because the source mapping is local to ``parse_dsl`` and discarded before
+        it returns, so the isolation is not observable through the public return
+        value alone.
+        """
+        from goga.pipeline.compiler.parse_dsl import _deep_copy_without
 
-        step_body = body.steps[0].body
+        source = {"name": "a", "description": "A", "agents": ["planning"], "nested": {"k": 1}}
 
-        # Mutating the returned body (including nested structures) must not reach back into
-        # any parsed structure the parser still holds.
-        step_body["agents"].append("hacked")
-        step_body["nested"]["extra"] = True
+        copied = _deep_copy_without(source, excluded={"name", "description"})
 
-        # A second parse of the same text must be unaffected by the first's mutation.
-        _header2, _fmt2, body2 = parse_dsl(text)
+        # Excluded keys (carried as separate fields) are dropped from the body.
+        assert "name" not in copied
+        assert "description" not in copied
+        assert copied["agents"] == ["planning"]
+        assert copied["nested"] == {"k": 1}
 
-        assert body2.steps[0].body["agents"] == ["planning"]
-        assert body2.steps[0].body["nested"] == {"key": "value"}
+        # Mutating the returned body — including nested structures — must not reach
+        # back into the source mapping (genuine deep-copy isolation).
+        copied["agents"].append("hacked")
+        copied["nested"]["extra"] = True
+
+        assert source["agents"] == ["planning"]
+        assert source["nested"] == {"k": 1}
 
     def test_parse_dsl_empty_body_segment_passes_through(self) -> None:
         """An empty body segment (None after parse) is not a structural error here."""

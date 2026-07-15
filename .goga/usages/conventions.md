@@ -35,7 +35,7 @@ from ..utils import helper
 
 # Valid: stdlib and third-party
 import logging
-from pydantic import BaseModel
+import yaml
 
 # Forbidden: absolute import within the same package
 from myapp.models import User

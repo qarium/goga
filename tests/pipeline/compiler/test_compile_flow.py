@@ -204,27 +204,34 @@ class TestCompileFlowLogic:
         assert stages[1]["depends_on"] == ["propose"]
 
     def test_compile_flow_deep_copies_fields(self, tmp_path: Path) -> None:
-        """Field values are deep-copied — a later body mutation cannot reach the written file."""
+        """``_canonical_fields`` deep-copies values — mutating the source body cannot reach the fields.
+
+        Verified directly on the helper because ``compile_flow`` reads from disk and
+        discards its parsed body before returning, so the isolation is not observable
+        through the public ``compile_flow`` return value.
+        """
+        from goga.pipeline.compiler.compile_flow import _canonical_fields
+
+        source_body = {"agents": ["planning"], "nested": {"k": 1}}
+        fields = _canonical_fields(source_body)
+
+        # Canonical order is established (``agents`` is a known key) and values match.
+        assert list(fields.keys()) == ["agents", "nested"]
+        assert fields["agents"] == ["planning"]
+
+        # Mutating the ordered fields must not reach back into the source body
+        # (genuine deep-copy isolation, not an alias to the source values).
+        fields["agents"].append("hacked")
+        fields["nested"]["extra"] = True
+
+        assert source_body["agents"] == ["planning"]
+        assert source_body["nested"] == {"k": 1}
+
+    def test_compile_flow_missing_flow_path_parent_raises(self, tmp_path: Path) -> None:
+        """A flow_path whose parent directory does not exist raises FileNotFoundError."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "a:\n"
-            "  description: A\n"
-            "  agents:\n"
-            "    - planning\n",
-        )
-        flow_path = tmp_path / "flow.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: a\n  description: A\n")
+        flow_path = tmp_path / "nonexistent_dir" / "flow.yml"
 
-        compile_flow(pipeline_path, flow_path)
-        loaded_before = yaml.safe_load(flow_path.read_text())
-        agents = loaded_before["stages"][0]["agents"]
-
-        # Mutating the parsed structure must not retroactively change the output.
-        agents.append("hacked")
-        compile_flow(pipeline_path, flow_path)
-        loaded_after = yaml.safe_load(flow_path.read_text())
-
-        assert loaded_after["stages"][0]["agents"] == ["planning"]
+        with pytest.raises(FileNotFoundError):
+            compile_flow(pipeline_path, flow_path)

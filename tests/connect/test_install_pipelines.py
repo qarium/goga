@@ -275,13 +275,15 @@ class TestInstallPipelinesLogic:
 
         assert exit_code == 1
 
-    def test_install_pipelines_copies_real_shipped_feature_yml(self, tmp_path: Path, monkeypatch) -> None:
-        """The shipped ``goga/assets/pipelines/feature.yml`` is installed verbatim.
+    def test_install_pipelines_copies_real_shipped_example_pipelines(self, tmp_path: Path, monkeypatch) -> None:
+        """The shipped ``goga/assets/pipelines/*.yml`` examples are installed verbatim.
 
         Unlike the other cases the internal-source resolver is NOT patched, so
-        this exercises the real packaged asset. A packaging break (feature.yml
-        deleted or the package-data glob broken) fails this test. Tool-package
-        discovery is stubbed to an empty set to keep the test hermetic.
+        this exercises the real packaged assets. A packaging break (an example
+        fixture deleted or the package-data glob broken) fails this test. The
+        shipped examples are the goga DSL fixtures ``feature-phases.yml`` and
+        ``feature-stages.yml``. Tool-package discovery is stubbed to an empty set
+        to keep the test hermetic.
         """
         pipelines_dir = tmp_path / "pipelines"
         monkeypatch.setattr(
@@ -293,4 +295,8 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir)
 
         assert exit_code == 0
-        assert (pipelines_dir / "feature.yml").is_file()
+        assert (pipelines_dir / "feature-phases.yml").is_file()
+        assert (pipelines_dir / "feature-stages.yml").is_file()
+        # The installed content is byte-identical to the shipped asset (verbatim copy).
+        internal_dir = _install_pipelines_mod._get_internal_pipelines_dir()
+        assert (pipelines_dir / "feature-phases.yml").read_bytes() == (internal_dir / "feature-phases.yml").read_bytes()

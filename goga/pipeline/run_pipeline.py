@@ -37,7 +37,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
         binary cannot be invoked; otherwise the ``afm`` exit code.
 
     Raises:
-        RuntimeError: When the ``AFM_DIR`` environment variable is not set
+        RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty
             (message ``"AFM_DIR not set"``).
         StructuralError: On a structural defect in the pipeline DSL, propagated
             unchanged from :func:`compile_flow`.
@@ -53,7 +53,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     pipeline_path = (source_dir / f"{match.name}.yml").resolve()
 
     afm_env = os.environ.get("AFM_DIR")
-    if afm_env is None:
+    if not afm_env:
         raise RuntimeError("AFM_DIR not set")
     afm_dir = Path(afm_env).resolve()
     flow_path = afm_dir / "flow.yml"
