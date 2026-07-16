@@ -143,7 +143,7 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     (per ``[[feedback_workspace_is_project_only]]``). It is mounted read-only at
     ``/home/goga/.afm/config.yaml`` inside the container.
 
-    The overlay carries four static launcher-side fields:
+    The overlay carries five static launcher-side fields:
 
     - ``client.command: <wrapper_path>`` — the resolved absolute in-container
       wrapper path afm will drive as the agent client.
@@ -155,6 +155,14 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
       provider. goga manages the outbound proxy through the container
       env-file (``HTTP_PROXY``/``HTTPS_PROXY``/``NO_PROXY``); afm's
       config-level proxy must stay off so the two layers never collide.
+      ``proxy`` is a nested YAML map (``proxy:`` + ``  enabled: false``), NOT
+      a flat dotted-key, because afm reads it as a YAML map.
+    - ``prompts_dir: /home/goga/pipeline/prompts`` — where afm reads the four
+      agent prompt files (``planning``/``implementation``/``review``/
+      ``summary``) that ``run_pipeline`` materializes in-container. Fixed to
+      the value derived from the ``AFM_DIR=/home/goga/pipeline`` constant —
+      NOT derived from CLI or config (goga does not duplicate afm-owned
+      settings in its own Config).
 
     Args:
         wrapper_path: The resolved absolute in-container wrapper script path
@@ -173,6 +181,7 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
         f.write("open_browser: false\n")
         f.write("proxy:\n")
         f.write("  enabled: false\n")
+        f.write("prompts_dir: /home/goga/pipeline/prompts\n")
     return Path(path)
 
 

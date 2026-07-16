@@ -97,18 +97,19 @@ class TestAfmConfigContract:
         assert callable(_write_afm_config_tmpfile)
 
 
-# --- four-field afm-config content ---
+# --- five-field afm-config content ---
 
 
-class TestAfmConfigFourFieldContent:
-    def test_run_pipeline_container_writes_four_field_afm_config(self, tmp_path: Path, monkeypatch) -> None:
-        """Run mode writes a four-field afm-config tmpfile at mode 0600.
+class TestAfmConfigFiveFieldContent:
+    def test_run_pipeline_container_writes_five_field_afm_config(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode writes a five-field afm-config tmpfile at mode 0600.
 
-        The overlay carries exactly four static launcher-side fields: the resolved
+        The overlay carries exactly five static launcher-side fields: the resolved
         absolute wrapper path as ``client.command`` (never a bare agent name),
-        ``theme: goga``, ``open_browser: false``, and ``proxy.enabled: false``.
-        The tmpfile is private (mode 0600) and mounted read-only at the fixed
-        in-container path /home/goga/.afm/config.yaml.
+        ``theme: goga``, ``open_browser: false``, ``proxy.enabled: false``, and
+        ``prompts_dir: /home/goga/pipeline/prompts``. The tmpfile is private
+        (mode 0600) and mounted read-only at the fixed in-container path
+        /home/goga/.afm/config.yaml.
         """
         config = _make_config(image="goga:test", pipeline_agent="claude", pipeline_env={})
         _apply_run_mode_common_mocks(tmp_path, monkeypatch)
@@ -147,8 +148,9 @@ class TestAfmConfigFourFieldContent:
         assert parsed["theme"] == "goga"
         assert parsed["open_browser"] is False
         assert parsed["proxy"]["enabled"] is False
-        # exactly four top-level keys (proxy is nested under its own key)
-        assert len(parsed) == 4
+        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+        # exactly five top-level keys (proxy is nested under its own key)
+        assert len(parsed) == 5
         # the original tmpfile was private; the captured copy preserves only bytes,
         # so the mode is captured from the real tmpfile before the finally unlink.
         assert captured_mode["mode"] == 0o600

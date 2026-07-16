@@ -159,7 +159,8 @@ class TestPipelineResolvedPathFlow:
 
         expected = resolve_wrapper_path(agent)
         assert captured["afm_content"] == (
-            f"client.command: {expected}\ntheme: goga\nopen_browser: false\nproxy:\n  enabled: false\n"
+            f"client.command: {expected}\ntheme: goga\nopen_browser: false\n"
+            "proxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
         )
 
 

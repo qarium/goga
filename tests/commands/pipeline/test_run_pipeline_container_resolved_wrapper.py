@@ -116,13 +116,14 @@ class TestWriteAfmConfigTmpfile:
                 "open_browser: false\n"
                 "proxy:\n"
                 "  enabled: false\n"
+                "prompts_dir: /home/goga/pipeline/prompts\n"
             )
             assert (path.stat().st_mode & 0o777) == 0o600
         finally:
             path.unlink(missing_ok=True)
 
     def test_includes_static_launcher_side_constants(self) -> None:
-        """The tmpfile carries `theme`, `open_browser`, and `proxy.enabled` as static launcher-side constants."""
+        """The tmpfile carries the static launcher-side constants: theme, open_browser, proxy.enabled, prompts_dir."""
         path = _write_afm_config_tmpfile("/home/goga/bin/codex-as-claude.sh")
         try:
             lines = path.read_text().splitlines()
@@ -130,6 +131,7 @@ class TestWriteAfmConfigTmpfile:
             assert "open_browser: false" in lines
             assert "proxy:" in lines
             assert "  enabled: false" in lines
+            assert "prompts_dir: /home/goga/pipeline/prompts" in lines
         finally:
             path.unlink(missing_ok=True)
 
@@ -162,6 +164,7 @@ class TestResolvedWrapperAfmConfig:
             "open_browser: false\n"
             "proxy:\n"
             "  enabled: false\n"
+            "prompts_dir: /home/goga/pipeline/prompts\n"
         )
         # the resolved wrapper path tmpfile is bind-mounted read-only, and the
         # mount arg + "-v" flag are present in the assembled docker command.
@@ -198,6 +201,7 @@ class TestResolvedWrapperAfmConfig:
             "open_browser: false\n"
             "proxy:\n"
             "  enabled: false\n"
+            "prompts_dir: /home/goga/pipeline/prompts\n"
         )
 
 

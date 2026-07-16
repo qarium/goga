@@ -229,16 +229,19 @@ class TestAfmConfigTmpfile:
     def test_pipeline_run_writes_afm_config_tmpfile_with_client_command(self) -> None:
         """The afm-config tmpfile carries the resolved wrapper path and static constants.
 
-        The overlay carries four static launcher-side fields: ``client.command``
+        The overlay carries five static launcher-side fields: ``client.command``
         (the absolute wrapper path returned by ``resolve_wrapper_path`` — never
         a bare agent name), ``theme: goga`` (dashboard theme),
         ``open_browser: false`` (the dashboard is reached via the host-printed
         http://localhost:<port> URL; afm must not attempt to open a browser
-        inside the container), and ``proxy.enabled: false`` (afm's own internal
+        inside the container), ``proxy.enabled: false`` (afm's own internal
         outbound proxy provider is disabled — goga manages the outbound proxy
-        via the container env-file). See the CODEMANIFEST Requirement/Constraint
-        for ``run_pipeline_container``. The writer is value-agnostic, so a
-        realistic resolved path is passed here to pin the documented contract.
+        via the container env-file; ``proxy`` is a nested YAML map), and
+        ``prompts_dir`` (the fixed ``/home/goga/pipeline/prompts`` path afm
+        reads the four agent prompt files from). See the CODEMANIFEST
+        Requirement/Constraint for ``run_pipeline_container``. The writer is
+        value-agnostic, so a realistic resolved path is passed here to pin the
+        documented contract.
         """
         wrapper_path = "/home/goga/bin/claude-as-claude.sh"
         afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
@@ -249,9 +252,94 @@ class TestAfmConfigTmpfile:
             afm_path.unlink(missing_ok=True)
 
         assert content == (
-            f"client.command: {wrapper_path}\ntheme: goga\nopen_browser: false\nproxy:\n  enabled: false\n"
+            f"client.command: {wrapper_path}\ntheme: goga\nopen_browser: false\n"
+            "proxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
         )
         assert mode == 0o600
+
+    def test_write_afm_config_tmpfile_includes_prompts_dir(self) -> None:
+        """The afm-config tmpfile carries the fifth static field ``prompts_dir``.
+
+        Structural YAML validation (not substring search): the overlay parses to
+        a dict where ``prompts_dir`` is the fixed in-container path
+        ``/home/goga/pipeline/prompts`` (the ``AFM_DIR`` constant + ``prompts``,
+        where ``run_pipeline`` materializes the four agent prompt files), and
+        ``proxy`` remains a nested map (``{"enabled": False}``) rather than a
+        flat dotted-key. The tmpfile is private (mode 0600).
+        """
+        import yaml
+
+        wrapper_path = "/home/goga/bin/codex-as-claude.sh"
+        afm_path = _rpc_mod._write_afm_config_tmpfile(wrapper_path)
+        try:
+            content = afm_path.read_text()
+            mode = afm_path.stat().st_mode & 0o777
+        finally:
+            afm_path.unlink(missing_ok=True)
+
+        parsed = yaml.safe_load(content)
+        assert parsed["client.command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert parsed["theme"] == "goga"
+        assert parsed["open_browser"] is False
+        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+        # proxy is a nested map, not a flat dotted-key
+        assert parsed["proxy"] == {"enabled": False}
+        # anti-regression: a flat dotted-key must not appear as a top-level key
+        assert "proxy.enabled" not in parsed
+        assert mode == 0o600
+
+    def test_run_pipeline_container_run_mode_propagates_prompts_dir_via_config_tmpfile(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Run mode mounts a tmpfile whose YAML carries ``prompts_dir`` to the container.
+
+        The launcher-side afm-config tmpfile (mounted read-only at the fixed
+        in-container path ``/home/goga/.afm/config.yaml``) must carry
+        ``prompts_dir: /home/goga/pipeline/prompts`` as a valid YAML key, and
+        ``proxy`` must remain a nested map — this is what afm actually reads to
+        locate the four agent prompt files materialized in-container.
+        """
+        import yaml
+
+        config = _make_config(pipeline_agent="claude")
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        # The launcher's finally block unlinks the afm-config tmpfile, so the
+        # writer is wrapped to copy the bytes to a path under tmp_path before
+        # the return — the captured copy survives the unlink.
+        captured_afm = tmp_path / "captured-afm-config.yaml"
+        real_afm = _rpc_mod._write_afm_config_tmpfile
+
+        def capture_afm(wrapper_path: str) -> Path:
+            path = real_afm(wrapper_path)
+            captured_afm.write_bytes(path.read_bytes())
+            return path
+
+        monkeypatch.setattr(_rpc_mod, "_write_afm_config_tmpfile", capture_afm)
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = run_pipeline_container("deploy", config)
+
+        assert result == 0
+        docker_argv = mock_popen.call_args[0][0]
+        # the tmpfile is mounted read-only at the fixed in-container path; this
+        # raises StopIteration if the mount is absent (the contract under test).
+        config_mount = next(a for a in docker_argv if "/home/goga/.afm/config.yaml:ro" in a)
+        # the mounted tmpfile is unlinked by the launcher's finally block; the
+        # captured copy holds the same bytes, so validate it as YAML.
+        assert config_mount.split(":")[0]  # the tmpfile path was non-empty
+        content = captured_afm.read_text()
+        parsed = yaml.safe_load(content)
+        assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
+        assert parsed["proxy"] == {"enabled": False}
 
 
 # --- env file combination ---
