@@ -16,7 +16,12 @@ from pathlib import Path
 
 import pytest
 import yaml
-from goga.pipeline.compiler import StructuralError, compile_flow
+from goga.pipeline.compiler import (
+    FlowDocument,
+    PipelineDocument,
+    StructuralError,
+    compile_flow,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _FEATURE_PHASES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-phases.yml"
@@ -36,15 +41,95 @@ class TestCompileFlowContract:
 
         assert parameters == ["pipeline_path", "flow_path"]
 
-    def test_compile_flow_returns_none_on_minimal_valid_input(self, tmp_path: Path) -> None:
-        """A minimal valid phases input compiles and the return value is ``None``."""
+    def test_compile_flow_returns_documents_tuple_on_minimal_valid_input(self, tmp_path: Path) -> None:
+        """A minimal valid phases input compiles and returns the documents tuple."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
         flow_path = tmp_path / "flow.yml"
 
         result = compile_flow(pipeline_path, flow_path)
 
-        assert result is None
+        # The contract is a 2-tuple of (PipelineDocument, FlowDocument).
+        assert isinstance(result, tuple)
+        assert len(result) == 2
+        pipeline_doc, flow_doc = result
+        assert isinstance(pipeline_doc, PipelineDocument)
+        assert isinstance(flow_doc, FlowDocument)
+        # FlowDocument never carries agents (goga-side artifact).
+        assert not hasattr(flow_doc, "agents")
+        # No agents block → header.agents is None.
+        assert pipeline_doc.header.agents is None
+        assert flow_path.exists()
+
+    def test_compile_flow_returns_documents_tuple_with_agents(self, tmp_path: Path) -> None:
+        """A pipeline-file with an ``agents.planning`` override surfaces it on the returned PipelineDocument."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "agents:\n"
+            "  planning: |\n"
+            "    Custom planning prompt.\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        documents = compile_flow(pipeline_path, flow_path)
+
+        assert isinstance(documents, tuple)
+        assert len(documents) == 2
+        pipeline_doc, flow_doc = documents
+        assert isinstance(pipeline_doc, PipelineDocument)
+        assert isinstance(flow_doc, FlowDocument)
+        assert pipeline_doc.header.agents is not None
+        assert pipeline_doc.header.agents.planning == "Custom planning prompt.\n"
+        # FlowDocument does not carry agents (goga-side artifact).
+        assert not hasattr(flow_doc, "agents")
+        # The flow-file is still written as a side effect.
+        assert flow_path.exists()
+
+    def test_compile_flow_returns_pipeline_document_with_none_agents_when_absent(self, tmp_path: Path) -> None:
+        """A pipeline-file without an ``agents`` block yields a PipelineDocument whose agents is None."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
+
+        assert pipeline_doc.header.agents is None
+
+    def test_pipeline_doc_agents_does_not_leak_into_flow_file_text(self, tmp_path: Path) -> None:
+        """Inline agent prompts ride on PipelineDocument but never reach the compiled flow-file."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "agents:\n"
+            "  planning: Custom\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
+
+        # The override is visible on the returned PipelineDocument ...
+        assert pipeline_doc.header.agents is not None
+        assert pipeline_doc.header.agents.planning == "Custom"
+        # ... but never serialized into the afm flow-file.
+        assert "Custom" not in flow_path.read_text()
 
     def test_private_helpers_not_on_facade(self) -> None:
         """``_canonical_fields`` and ``_CANONICAL_KEY_ORDER`` are module-internal, not facade names."""

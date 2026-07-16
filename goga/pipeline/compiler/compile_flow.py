@@ -25,6 +25,7 @@ from .body_format import BodyFormat
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
 from .parse_dsl import StructuralError, parse_dsl
+from .pipeline_document import PipelineDocument
 from .serialize_flow import serialize_flow
 
 logger = logging.getLogger(__name__)
@@ -58,8 +59,8 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     return ordered
 
 
-def compile_flow(pipeline_path: Path, flow_path: Path) -> None:
-    """Compile a goga DSL pipeline-file into an afm flow-file.
+def compile_flow(pipeline_path: Path, flow_path: Path) -> tuple[PipelineDocument, FlowDocument]:
+    """Compile a goga DSL pipeline-file into an afm flow-file and return both documents.
 
     Reads ``pipeline_path``, parses it with ``parse_dsl``, rejects an empty body
     with ``StructuralError("empty body")``, then builds a ``FlowDocument`` whose
@@ -67,14 +68,26 @@ def compile_flow(pipeline_path: Path, flow_path: Path) -> None:
     (position-derived for PHASES — the first step gets none, each subsequent step
     depends on its predecessor; pass-through for STAGES). The document is
     serialized via ``serialize_flow`` and written to ``flow_path`` (overwriting if
-    it exists). I/O errors and structural errors from ``parse_dsl`` propagate
-    unchanged; ``compile_flow`` does not read ``AFM_DIR``.
+    it exists) as a side effect. I/O errors and structural errors from ``parse_dsl``
+    propagate unchanged; ``compile_flow`` does not read ``AFM_DIR``.
+
+    In addition to the flow-file, it builds a ``PipelineDocument`` aggregating the
+    parsed ``header`` (including any inline ``agents`` overrides), ``format``, and
+    ``body`` so consumers can obtain the parsed representation without re-invoking
+    ``parse_dsl``. ``FlowDocument`` never carries ``agents`` — it is a goga-side
+    artifact of the compiler, not part of the compiled afm flow-file.
 
     Args:
         pipeline_path: Absolute path to the input goga DSL pipeline-file. The file
             must be readable and contain a ``---`` separator line.
         flow_path: Absolute path to the output afm flow-file. The parent directory
             must already exist; it is not created here.
+
+    Returns:
+        A ``(PipelineDocument, FlowDocument)`` documents tuple. The
+        ``PipelineDocument`` carries the parsed header (with ``header.agents``),
+        format, and body as-is; the ``FlowDocument`` carries the name, description,
+        and compiled stages (without ``agents``).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
@@ -117,5 +130,7 @@ def compile_flow(pipeline_path: Path, flow_path: Path) -> None:
             )
 
     doc = FlowDocument(name=header.name, description=header.description, stages=stages)
+    pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)
     text_out = serialize_flow(doc)
     flow_path.write_text(text_out)
+    return (pipeline_doc, doc)
