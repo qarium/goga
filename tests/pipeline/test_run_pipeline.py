@@ -8,13 +8,24 @@ from unittest.mock import call
 
 import pytest
 from goga.pipeline import run_pipeline
-from goga.pipeline.compiler import StructuralError
+from goga.pipeline.compiler import (
+    BodyFormat,
+    FlowDocument,
+    PhasesBody,
+    PipelineAgents,
+    PipelineDocument,
+    PipelineHeader,
+    StructuralError,
+)
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
 # run_pipeline function, so a string-based mock.patch path walking through it
 # fails on Python 3.10. Resolve the real module via sys.modules and patch its
 # run_flow / compile_flow attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
+
+# The four fixed agent-prompt keys; mirrors run_pipeline._AGENT_KEYS.
+_AGENT_KEYS = ("planning", "implementation", "review", "summary")
 
 
 @pytest.fixture
@@ -38,6 +49,32 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
     (directory / f"{name}.yml").write_text("pipeline")
 
 
+def _fake_documents(
+    agents: PipelineAgents | None = None,
+) -> tuple[PipelineDocument, FlowDocument]:
+    """Build the documents tuple ``compile_flow`` now returns, for mock wiring.
+
+    Shared by the materialization tests and the existing wiring tests so they
+    exercise the same unpack shape. ``agents`` defaults to None (no header block).
+    """
+    pipeline_doc = PipelineDocument(
+        header=PipelineHeader(name="deploy", description="d", agents=agents),
+        format=BodyFormat.PHASES,
+        body=PhasesBody(steps=[]),
+    )
+    flow_doc = FlowDocument(name="deploy", description="d", stages=[])
+    return (pipeline_doc, flow_doc)
+
+
+def _write_defaults(
+    defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS
+) -> None:
+    """Write ``default <key>\\n`` prompt files for the given keys into defaults_dir."""
+    defaults_dir.mkdir(parents=True, exist_ok=True)
+    for key in keys:
+        (defaults_dir / f"{key}.md").write_text(f"default {key}\n")
+
+
 class TestRunPipelineContract:
     def test_run_pipeline_importable_from_facade(self) -> None:
         """run_pipeline is importable from the goga.pipeline facade."""
@@ -56,7 +93,7 @@ class TestRunPipelineContract:
         _write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
@@ -73,7 +110,7 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
@@ -90,7 +127,7 @@ class TestRunPipelineLogic:
         _write_pipeline(user_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
             exit_code = run_pipeline("deploy", project_dir, user_dir, 50321)
@@ -140,7 +177,7 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=7),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
@@ -155,7 +192,7 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=127),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
@@ -168,7 +205,7 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 8080)
@@ -221,8 +258,9 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
         order: list[str] = []
 
-        def _compile(*args: object, **kwargs: object) -> None:
+        def _compile(*args: object, **kwargs: object) -> tuple[PipelineDocument, FlowDocument]:
             order.append("compile")
+            return _fake_documents()
 
         def _run(*args: object, **kwargs: object) -> int:
             order.append("run")
@@ -247,8 +285,9 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
         captured: dict[str, Path] = {}
 
-        def _capture(pipeline_path: Path, flow_path: Path) -> None:
+        def _capture(pipeline_path: Path, flow_path: Path) -> tuple[PipelineDocument, FlowDocument]:
             captured["flow_path"] = flow_path
+            return _fake_documents()
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_capture),
@@ -327,3 +366,183 @@ class TestRunPipelineLogic:
 
         # run_flow received the compiled flow path (not the DSL path) and the port.
         mock_run_flow.assert_called_once_with(flow_path, 50321)
+
+
+class TestRunPipelineMaterialization:
+    """Step 6.5 — materialize the four agent prompt files into <AFM_DIR>/prompts/.
+
+    Each test mocks ``compile_flow`` to return a documents tuple (per the
+    unpack contract) and patches ``_resolve_defaults_dir`` at a tmp directory so
+    the default-prompt source is deterministic. ``_isolate_home`` (autouse) is
+    left intact per the plan's debugging notes.
+    """
+
+    def _patch_defaults(
+        self, monkeypatch: pytest.MonkeyPatch, defaults_dir: Path
+    ) -> None:
+        monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
+
+    def test_run_pipeline_materializes_four_default_prompts_without_agents(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No ``agents`` block → all four files copied from package defaults."""
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir)
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        assert prompts_dir.exists()
+        files = sorted(p.name for p in prompts_dir.iterdir())
+        assert files == ["implementation.md", "planning.md", "review.md", "summary.md"]
+        for key in _AGENT_KEYS:
+            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+
+    def test_run_pipeline_applies_partial_override(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An inline override on one key replaces only that file; others use defaults."""
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir)
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        agents = PipelineAgents(planning="OVERRIDE\n")
+
+        with (
+            mock.patch.object(
+                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
+            ),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        assert (prompts_dir / "planning.md").read_text() == "OVERRIDE\n"
+        for key in ("implementation", "review", "summary"):
+            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+
+    def test_run_pipeline_writes_prompts_idempotently_on_repeat(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Wipe+rmtree before write guarantees idempotency regardless of prior state."""
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir)
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        prompts_dir = afm_dir / "prompts"
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+            # Inject a leftover file from a hypothetical prior state.
+            (prompts_dir / "leftover.md").write_text("leftover\n")
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        files = sorted(p.name for p in prompts_dir.iterdir())
+        assert files == ["implementation.md", "planning.md", "review.md", "summary.md"]
+        assert not (prompts_dir / "leftover.md").exists()
+
+    def test_run_pipeline_raises_when_default_missing_and_no_override(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Missing default + no override raises before wipe (validate-first atomicity)."""
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir, keys=("planning", "review", "summary"))  # no implementation
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        # Atomicity sentinel: pre-existing prompts dir from a past run. The
+        # validate-first algorithm must leave it untouched when it raises.
+        prompts_dir = afm_dir / "prompts"
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        (prompts_dir / "sentinel.md").write_text("PRE-EXISTING\n")
+        (prompts_dir / "planning.md").write_text("STALE\n")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(RuntimeError, match="implementation: default prompt missing"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_run_flow.assert_not_called()
+        # Wipe never ran: sentinel and stale file survive.
+        assert (prompts_dir / "sentinel.md").read_text() == "PRE-EXISTING\n"
+        assert (prompts_dir / "planning.md").read_text() == "STALE\n"
+        # No fresh default file was written before the raise.
+        assert not (prompts_dir / "implementation.md").exists()
+        assert not (prompts_dir / "review.md").exists()
+        assert not (prompts_dir / "summary.md").exists()
+
+    def test_run_pipeline_succeeds_when_default_missing_but_override_supplied(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing default is fine when an inline override supplies that key."""
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir, keys=("planning", "review", "summary"))  # no implementation
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        agents = PipelineAgents(implementation="OVERRIDE\n")
+
+        with (
+            mock.patch.object(
+                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
+            ),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        assert (prompts_dir / "implementation.md").read_text() == "OVERRIDE\n"
+        for key in ("planning", "review", "summary"):
+            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+
+    def test_run_pipeline_full_override_writes_all_four_files(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All four overrides → no package default read; files written in fixed order."""
+        defaults_dir = tmp_path / "defaults"
+        defaults_dir.mkdir()  # intentionally empty — overrides cover every key
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        agents = PipelineAgents(
+            planning="P\n", implementation="I\n", review="R\n", summary="S\n"
+        )
+
+        with (
+            mock.patch.object(
+                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
+            ),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        assert (prompts_dir / "planning.md").read_text() == "P\n"
+        assert (prompts_dir / "implementation.md").read_text() == "I\n"
+        assert (prompts_dir / "review.md").read_text() == "R\n"
+        assert (prompts_dir / "summary.md").read_text() == "S\n"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -9,6 +10,20 @@ from .compiler import compile_flow
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
 
+# The four fixed agent-prompt keys. Each file stem equals its key, so the inline
+# ``agents`` header overrides and the package defaults share the same names.
+_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+
+
+def _resolve_defaults_dir() -> Path:
+    """Resolve the in-package directory holding the four default agent prompts.
+
+    The prompts ship as package data under ``goga/assets/afm/prompts/`` (one
+    ``<key>.md`` file per agent key). Resolved relative to this module so it
+    resolves correctly in an installed image regardless of ``CWD``/``AFM_DIR``.
+    """
+    return Path(__file__).resolve().parent.parent / "assets" / "afm" / "prompts"
+
 
 def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
@@ -16,11 +31,22 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the
     pipeline file path from the matching entry's source directory, compiles the
     goga DSL pipeline-file into an afm flow-file via :func:`compile_flow` at the
-    path ``<AFM_DIR>/flow.yml``, then launches ``afm`` via
+    path ``<AFM_DIR>/flow.yml``, materializes the four agent prompt files into
+    ``<AFM_DIR>/prompts/`` (step 6.5), then launches ``afm`` via
     :func:`goga.afm.run_flow` with the compiled flow-file path (not the DSL
     path) and the caller-allocated ``port``. The ``afm`` binary's exit code is
     propagated; a missing pipeline returns a non-zero code without invoking the
     compiler or the binary.
+
+    Step 6.5 materializes one prompt file per agent key
+    (``planning``, ``implementation``, ``review``, ``summary``) into
+    ``<AFM_DIR>/prompts/``. For each key, an inline override from the
+    pipeline-file ``agents`` header replaces the file wholesale; otherwise the
+    package default is copied. The step is validate-first: every key is checked
+    (override present or package default exists) BEFORE the prompts directory is
+    wiped, so a missing default with no override raises before any file is
+    written and the directory is left untouched (atomicity). The wipe + recreate
+    makes re-runs idempotent regardless of prior directory state.
 
     Args:
         name: pipeline name without extension (e.g. ``"deploy"``).
@@ -38,7 +64,10 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
 
     Raises:
         RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty
-            (message ``"AFM_DIR not set"``).
+            (message ``"AFM_DIR not set"``), or when step 6.5 finds a missing
+            package default for an agent key with no inline override (message
+            ``"<key>: default prompt missing from package and no inline override
+            supplied"``), raised before the prompts directory is wiped.
         StructuralError: On a structural defect in the pipeline DSL, propagated
             unchanged from :func:`compile_flow`.
         FileNotFoundError / PermissionError: Propagated unchanged from
@@ -63,5 +92,38 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     afm_dir = Path(afm_env).resolve()
     flow_path = afm_dir / "flow.yml"
 
-    compile_flow(pipeline_path, flow_path)
+    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
+
+    # Step 6.5: materialize the four agent prompt files into <AFM_DIR>/prompts/.
+    defaults_dir = _resolve_defaults_dir()
+    agents = pipeline_doc.header.agents
+
+    # 6.5b — validate-all before wipe (atomicity): every key needs an inline
+    # override or an existing package default. A missing default with no override
+    # raises BEFORE any file is written, so a failed run leaves prompts/ as-is.
+    for key in _AGENT_KEYS:
+        override = getattr(agents, key) if agents is not None else None
+        if override is None and not (defaults_dir / f"{key}.md").exists():
+            raise RuntimeError(
+                f"{key}: default prompt missing from package and no inline override supplied"
+            )
+
+    # 6.5c — wipe + recreate so re-runs are idempotent regardless of prior state.
+    prompts_dir = afm_dir / "prompts"
+    if prompts_dir.exists():
+        shutil.rmtree(prompts_dir)
+    prompts_dir.mkdir(parents=True, exist_ok=False)
+
+    # 6.5d — write per key: an override replaces the file; otherwise copy default.
+    for key in _AGENT_KEYS:
+        override = getattr(agents, key) if agents is not None else None
+        target = prompts_dir / f"{key}.md"
+        if override is not None:
+            target.write_text(override)
+        else:
+            shutil.copy(defaults_dir / f"{key}.md", target)
+
+    # 6.5e — exactly four prompt files materialized.
+    assert sorted(prompts_dir.iterdir()) == sorted(prompts_dir / f"{key}.md" for key in _AGENT_KEYS)
+
     return run_flow(flow_path, port)
