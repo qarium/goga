@@ -39,6 +39,25 @@ Annotations: |
   contents, no schema enforcement. References in depends_on (dangling ids,
   cycles, duplicates) are afm's responsibility, not this cell's.
 
+  The header segment additionally supports an optional agents block
+  with four fixed string keys: planning, implementation, review, summary.
+  Each value is an inline prompt text that fully replaces (not merges
+  with) the corresponding default prompt file during pipeline run
+  materialization. Unknown keys, non-str values, and empty mappings are
+  handled by `parse_dsl` per its contract; the agents data is carried
+  in PipelineHeader.agents and never enters the compiled afm flow-file
+  — it is a goga-side artifact surfaced to the consumer via
+  PipelineDocument.header.agents from `compile_flow` return value.
+
+  `compile_flow` returns a tuple of `PipelineDocument` and `FlowDocument`: the
+  input representation (PipelineDocument, aggregating header+format+body,
+  including agents when present) and the output representation
+  (FlowDocument, the afm flow-file model). The text flow-file is still
+  written to flow_path as a side effect — the return value is part of
+  the signature, not an additional side effect. Consumers access inline
+  prompts through PipelineDocument.header.agents, never through
+  `FlowDocument`.
+
 ---
 
 "BodyFormat()":
@@ -57,29 +76,133 @@ Annotations: |
       Body is a YAML dict (map keyed by step id). User-supplied depends_on
       is passed through as-is during compilation.
 
-"PipelineHeader(name: str, description: str)":
-  location: pipeline_header.py
+"PipelineAgents(planning: str | None = None, implementation: str | None = None, review: str | None = None, summary: str | None = None)":
+  location: pipeline_agents.py
   annotations: |
-    Header of an input pipeline-file — top-level name and description
-    appearing before the three-dash separator. Parsed by `parse_dsl` from
-    the header segment of the pipeline-file text. Carried 1:1 into the
-    `FlowDocument` (its name and description fields) by `compile_flow`.
+    Data model of the header-level agents directive — four optional
+    inline prompt overrides, one per fixed agent key. Constructed by
+    `parse_dsl` when the header segment contains a non-empty agents
+    block; carried verbatim inside `PipelineHeader` (its agents field)
+    and surfaced to the consumer through `PipelineDocument`.
 
-    `name`: pipeline name (e.g. "Goga feature")
-    `description`: short pipeline description (e.g. "Feature implementation")
+    `planning`: inline prompt text overriding
+                goga/assets/afm/prompts/planning.md, or None when not
+                specified
+    `implementation`: inline prompt text overriding
+                      goga/assets/afm/prompts/implementation.md, or None
+    `review`: inline prompt text overriding
+              goga/assets/afm/prompts/review.md, or None
+    `summary`: inline prompt text overriding
+               goga/assets/afm/prompts/summary.md, or None
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - Both fields are required (no defaults)
+    - All four fields default to None (backwards-compat with pipeline-files
+      that do not override every key)
+    - Field order is fixed: planning, implementation, review, summary —
+      matches the canonical order of the four prompt files in
+      goga/assets/afm/prompts/
+
+    Constraints:
+    - Do not validate the contents of prompt text — pass it through
+      verbatim to the consumer (run_pipeline writes it to the prompt file
+      unchanged)
+    - Do not merge or concatenate with default prompt text — the consumer
+      replaces the file wholesale
+
+  properties:
+    "planning -> str | None": |
+      Inline prompt text overriding
+      goga/assets/afm/prompts/planning.md, or None when not specified in
+      the header.agents block.
+    "implementation -> str | None": |
+      Inline prompt text overriding
+      goga/assets/afm/prompts/implementation.md, or None when not
+      specified.
+    "review -> str | None": |
+      Inline prompt text overriding goga/assets/afm/prompts/review.md,
+      or None when not specified.
+    "summary -> str | None": |
+      Inline prompt text overriding goga/assets/afm/prompts/summary.md,
+      or None when not specified.
+
+"PipelineDocument(header: PipelineHeader, format: BodyFormat, body: PhasesBody | StagesBody)":
+  location: pipeline_document.py
+  annotations: |
+    Aggregated pipeline-file document — the parsed representation of a
+    pipeline-file as a single value, combining the header, body format,
+    and body in one dataclass. Built by `compile_flow` from `parse_dsl`'s
+    3-tuple output and returned to consumers as the first element of the
+    documents tuple. Exists so that consumers (run_pipeline) can obtain
+    the parsed representation — including header.agents — from a single
+    return value without re-invoking parse_dsl.
+
+    `header`: parsed `PipelineHeader` (name, description, optional agents)
+    `format`: detected `BodyFormat` — PHASES or STAGES
+    `body`: parsed body — `PhasesBody` when format is PHASES,
+            `StagesBody` when format is STAGES
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - All three fields are required (no defaults) — a PipelineDocument is
+      always complete
+
+    Constraints:
+    - Do not validate the body format against the body type — the caller
+      (compile_flow) constructs PipelineDocument from parse_dsl's
+      consistent output
+
+  properties:
+    "header -> PipelineHeader": |
+      Parsed pipeline-file header (name, description, optional agents).
+    "format -> BodyFormat": |
+      Detected body format — PHASES or STAGES.
+    "body -> PhasesBody | StagesBody": |
+      Parsed body. Type matches the format property above: PhasesBody
+      when PHASES, StagesBody otherwise.
+
+"PipelineHeader(name: str, description: str, agents: PipelineAgents | None = None)":
+  location: pipeline_header.py
+  annotations: |
+    Header of an input pipeline-file — top-level name and description
+    appearing before the three-dash separator, plus an optional agents
+    field carrying inline prompt overrides. Parsed by `parse_dsl` from
+    the header segment of the pipeline-file text. Carried 1:1 into the
+    `PipelineDocument` (its header field) by `compile_flow`. The agents
+    field does not enter the compiled `FlowDocument` — it is a goga-side
+    artifact surfaced to the consumer through `PipelineDocument`.
+
+    `name`: pipeline name (e.g. "Goga feature")
+    `description`: short pipeline description (e.g. "Feature implementation")
+    `agents`: optional `PipelineAgents` instance parsed from the
+              header-level agents block, or None when the block is
+              absent or empty
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - `name` and `description` are required (no defaults)
+    - agents defaults to None (backwards-compat with pipeline-files
+      without an agents block)
 
   properties:
     "name -> str": |
       Pipeline name.
     "description -> str": |
       Short pipeline description.
+    "agents -> PipelineAgents | None": |
+      Inline prompt overrides from the header-level agents block, or
+      None when the block is absent or empty. Built by `parse_dsl`;
+      carried verbatim through `PipelineDocument` to the consumer. Never
+      enters the compiled afm flow-file.
 
 "PhaseStep(name: str, description: str, body: dict[str, Any])":
   location: phase_step.py
@@ -273,8 +396,12 @@ Annotations: |
     application.
 
     `text`: full pipeline-file text (must contain a three-dash separator line)
-    `header`: parsed `PipelineHeader` (name and description from the header
-              segment)
+    `header`: parsed `PipelineHeader` (name, description from the header
+              segment; plus an optional agents field of type
+              `PipelineAgents` or None, carrying inline prompt overrides
+              from the header-level agents block — None when the block is
+              absent or an empty mapping, a `PipelineAgents` instance
+              otherwise)
     The format output is the detected `BodyFormat` — PHASES if the body is
     a YAML list, STAGES if the body is a YAML dict.
     The body output is the parsed body — `PhasesBody` when format is PHASES,
@@ -286,7 +413,18 @@ Annotations: |
        structural error "missing body separator"
     2. Parse the header segment; extract name and description. If either
        is missing or not a str — raise a structural error
-       "header missing name/description". Build `PipelineHeader`
+       "header missing name/description". Then extract the optional
+       agents block from the header segment. If the block is absent or
+       an empty mapping — set agents to None. If the block is present but
+       its value is not a mapping (e.g. a scalar, a string, a list) —
+       raise a structural error "non-mapping agents block in header".
+       Otherwise validate every key against the fixed set {planning,
+       implementation, review, summary}: an unknown key raises a
+       structural error "unknown agent in header.agents: <key>; valid
+       keys: planning, implementation, review, summary"; a non-str value
+       raises a structural error "non-str value in header.agents.<key>".
+       Build `PipelineAgents` from the validated entries. Build
+       `PipelineHeader` with name, description, and agents
     3. Parse the body segment
     4. Detect format by the structure of the parsed body:
        - a list → `BodyFormat` PHASES; build a `PhasesBody` of `PhaseStep`
@@ -306,6 +444,14 @@ Annotations: |
       emptiness
     - `PhaseStep` and `StageStep` carry deep copies of the parsed body
       dicts, so subsequent mutation does not affect the source
+    - The fixed agent key set is exactly {planning, implementation, review,
+      summary} — no other keys accepted
+    - An absent agents block and an empty agents mapping are treated
+      identically: agents is set to None
+    - A non-str value for a known key is a structural error (not silently
+      coerced)
+    - A non-mapping value for the agents block itself (scalar, string,
+      list) is a structural error — the block must be a mapping or absent
 
     Constraints:
     - Do not apply depends_on rules — that is `compile_flow`'s job
@@ -313,6 +459,9 @@ Annotations: |
     - Do not resolve or validate depends_on references — afm's job
     - Do not handle a pipeline-file without a three-dash separator
       (already-afm format) — it is an error by design
+    - Do not validate or merge inline prompt text — `parse_dsl` passes
+      the agents values through verbatim; the consumer (run_pipeline)
+      decides how to materialize them
 
 "serialize_flow(doc: FlowDocument) -> text: str":
   location: serialize_flow.py
@@ -358,19 +507,26 @@ Annotations: |
       constructed it)
     - Do not write to disk — return the string; the caller writes it
 
-"compile_flow(pipeline_path: Path, flow_path: Path)":
+"compile_flow(pipeline_path: Path, flow_path: Path) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
   annotations: |
     Entry point of the cell: compile a pipeline-file (goga DSL) into an afm
     flow-file at the given paths. Reads `pipeline_path`, parses and detects
     format via `parse_dsl`, applies per-format depends_on rules and
     canonical key order, builds a `FlowDocument`, serializes it via
-    `serialize_flow`, and writes to `flow_path`.
+    `serialize_flow`, writes to `flow_path`, and returns the documents
+    tuple — the parsed `PipelineDocument` (input representation) and the
+    serialized `FlowDocument` (output representation).
 
     `pipeline_path`: absolute path to the input pipeline-file (DSL format)
     `flow_path`: absolute path to the output flow-file (afm format). The
                  parent directory must already exist — `compile_flow` does
                  not create it
+    `documents`: a tuple of `PipelineDocument` and `FlowDocument` — the
+                 parsed input representation (carrying header.agents when
+                 present) and the output flow-file model. The text
+                 flow-file is also written to `flow_path` as a side
+                 effect.
 
     Algorithm:
     1. Read `pipeline_path` as text
@@ -385,8 +541,11 @@ Annotations: |
     5. In both branches, assemble the fields of each `FlowStage` in
        canonical key order, deep-copying from the source step body
     6. Build `FlowDocument` from the header and the assembled stages
-    7. Call `serialize_flow` on the document
-    8. Write the resulting text to `flow_path`
+    7. Build `PipelineDocument` from (header, format, body) — the parsed
+       representation carried alongside the FlowDocument for the consumer
+    8. Call `serialize_flow` on the FlowDocument
+    9. Write the resulting text to `flow_path`
+    10. Return (PipelineDocument, FlowDocument) as the documents tuple
 
     Apply `convention` for code style and docstring formatting.
 
@@ -399,6 +558,12 @@ Annotations: |
     - Output is the canonical afm flow-file format as produced by
       `serialize_flow`; canonical correctness is verified in tests via
       in-memory assertions on the serialized text (no reference .yml file)
+    - Return value is a 2-tuple of `PipelineDocument` then `FlowDocument` —
+      input representation first, output representation second
+    - `PipelineDocument` exposes header.agents carrying inline prompt
+      overrides when present in the source pipeline-file, or None otherwise
+    - Consumers must NOT re-invoke parse_dsl to obtain the agents — they
+      read PipelineDocument.header.agents from this return value
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -410,6 +575,10 @@ Annotations: |
       name/description (already enforced by `parse_dsl`)
     - Do not bypass exceptions from `parse_dsl`, `serialize_flow`, or
       the file read/write calls
+    - Do not mutate the (header, format, body) tuple returned by parse_dsl
+      before building PipelineDocument
+    - Do not include inline prompt overrides in the FlowDocument — they
+      are goga-side artifacts, not part of the afm flow-file
 
 ---
 

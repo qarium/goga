@@ -106,6 +106,16 @@ Annotations: |
   --clean flag to wipe this directory before launch via
   `clean_pipeline_runtime_dir`.
 
+  The afm config.yaml tmpfile written by the launcher carries five static
+  launcher-side fields: client.command, theme, open_browser, proxy.enabled,
+  and prompts_dir (see `run_pipeline_container` for the per-field contract).
+  prompts_dir is fixed at /home/goga/pipeline/prompts (derived from the
+  known AFM_DIR=/home/goga/pipeline constant — NOT from an additional
+  argument or config field) and is written unconditionally; the directory
+  itself is populated by the in-container run_pipeline routine (per the
+  `run-pipeline` practice), so afm uses goga-managed prompts regardless of
+  whether the pipeline-file contains an agents block.
+
 ---
 
 "pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool)":
@@ -284,15 +294,21 @@ Annotations: |
        during tmpfile/env-file setup or the `docker_update` build must unwind to
        the finally block and unlink the secret files). The runner's handler later
        nests under this one. Then create a private afm-config tmpfile carrying
-       four static launcher-side fields: client.command set to the resolved
+       five static launcher-side fields: client.command set to the resolved
        wrapper path, theme: goga
        (dashboard theme), open_browser: false (the dashboard is reached
        via the host-printed http://localhost:<port> URL; afm must not attempt
-       to open a browser inside the container), and proxy.enabled: false
+       to open a browser inside the container), proxy.enabled: false
        (afm's own internal outbound proxy provider is disabled; goga manages
        the outbound proxy through the container env-file via HTTP_PROXY /
-       HTTPS_PROXY / NO_PROXY). The tmpfile is a read-only overlay over the
-       persistent afm state directory mounted in step 11
+       HTTPS_PROXY / NO_PROXY), and prompts_dir: /home/goga/pipeline/prompts
+       (the in-container prompts directory, derived from the known
+       AFM_DIR=/home/goga/pipeline value — NOT from an additional argument
+       or config field; the directory is populated by the in-container
+       run_pipeline routine from the four goga-packaged defaults plus any
+       inline overrides from the pipeline-file header — see the
+       `run-pipeline` and `afm` practices). The tmpfile is a read-only
+       overlay over the persistent afm state directory mounted in step 11
     7. Resolve the persistent afm state host directory via
        `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
     8. When `clean` is True: wipe the resolved directory via
@@ -357,22 +373,30 @@ Annotations: |
     Apply the `docker-auth-mounts` practice for the read-only mount rule.
     Apply the `docker-builder` practice for the --update build-vs-pull refresh.
     Apply the `docker-runner` practice for the docker run launch and lifecycle.
+    Apply the `afm` practice for the in-container afm config.yaml contract,
+    including the prompts_dir field written in step 6.
+    Apply the `run-pipeline` practice for the in-container prompt
+    materialization contract that populates the prompts_dir directory.
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile is owner-only (private). It carries four static
+    - afm-config tmpfile is owner-only (private). It carries five static
       launcher-side fields: client.command: <resolved wrapper path> (the
       value MUST be the absolute path returned by `resolve_wrapper_path`,
       never a bare agent name), theme: goga (dashboard theme),
       open_browser: false (the dashboard is reached via the host-printed
       http://localhost:<port> URL; afm must not attempt to open a browser
-      inside the container), and proxy.enabled: false (afm's own internal
+      inside the container), proxy.enabled: false (afm's own internal
       outbound proxy provider is disabled — goga manages the outbound proxy
       via the container env-file HTTP_PROXY/HTTPS_PROXY/NO_PROXY, the two
-      layers must never collide). theme, open_browser, and proxy.enabled are
-      static launcher-side constants — they are NOT configurable via the
-      goga Config or CLI
+      layers must never collide), and prompts_dir: /home/goga/pipeline/prompts
+      (the in-container prompts directory populated by the in-container
+      run_pipeline routine; goga writes this field unconditionally so afm
+      uses goga-managed prompts rather than its own built-in defaults).
+      theme, open_browser, proxy.enabled, and prompts_dir are static
+      launcher-side constants — they are NOT configurable via the goga
+      Config or CLI
     - env-file content: config.pipeline.env + git identity + `extra_env`
       KEY=VALUE strings (forwarded as-is, no validation) + AFM_DIR=/home/goga/pipeline
       + (when proxy is non-None) HTTP_PROXY/HTTPS_PROXY/NO_PROXY
@@ -434,6 +458,11 @@ Annotations: |
       absence of the wrapper is surfaced by afm
     - Do not write a bare agent name into client.command — always write the
       resolved absolute wrapper path
+    - Do not derive prompts_dir from an additional CLI option, config field,
+      or runtime argument — the value is fixed at /home/goga/pipeline/prompts
+      and follows from the known AFM_DIR=/home/goga/pipeline constant. goga
+      does not duplicate the afm-owned prompts_dir setting in its own
+      Config; the launcher-side value is the single source of truth
 
 "resolve_pipeline_runtime_dir(pipeline_name: str) -> runtime_dir: Path":
   location: run_pipeline_container.py

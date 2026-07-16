@@ -78,7 +78,7 @@ invocation with the resolved wrapper path; a bare agent name is never written.
 | `port`          | int    | Dashboard port (used when `afm run --port` is `0` or omitted)    |
 | `idle_timeout`  | str    | Agent idle timeout (Go duration)                                 |
 | `max_parallel`  | int    | Max parallel stages                                              |
-| `prompts_dir`   | str    | Custom prompt directory                                          |
+| `prompts_dir`   | str    | Custom prompt directory. When set, afm reads the four agent prompts (`planning.md`, `implementation.md`, `review.md`, `summary.md`) from this directory instead of its built-in defaults. The goga host-side launcher always writes `prompts_dir: /home/goga/pipeline/prompts` so afm uses the goga-managed prompt directory. |
 | `proxy`         | map    | Outbound proxy settings. Surfaces at least `proxy.enabled: bool` — when `false`, afm does not use its own internal outbound proxy provider. The goga host-side launcher always writes `proxy.enabled: false`: goga manages the outbound proxy through the container env-file (`HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`), so afm's own internal proxy provider must stay off to avoid the two layers colliding. |
 | `server`        | str    | Server-side settings                                             |
 | `open_browser`  | bool   | Whether afm opens the dashboard in a browser on start. The goga host-side launcher always writes `open_browser: false`: the dashboard runs inside a container and is reached via the host-printed http://localhost:<port> URL, so an in-container browser launch has no effect. |
@@ -102,16 +102,21 @@ The host does:
    `afm run --port <port>`).
 2. Generate `~/.afm/config.yaml` content as a 0600 tempfile with
    `client.command: /home/goga/bin/<agent>-as-claude.sh` (an absolute in-container
-   wrapper path matching the `*-as-claude.sh` convention), plus three static
+   wrapper path matching the `*-as-claude.sh` convention), plus four static
    launcher-side constants — `theme: goga` (dashboard theme),
    `open_browser: false` (the dashboard is reached via the host-printed
-   http://localhost:<port> URL; afm must not attempt to open a browser inside the
-   container), and `proxy.enabled: false` (afm's own internal outbound proxy
+   http://localhost:<port> URL; afm must not attempt to open a browser inside
+   the container), `proxy.enabled: false` (afm's own internal outbound proxy
    provider is disabled — goga manages the outbound proxy through the container
    env-file `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, the two layers must never
-   collide). Mount the tempfile into the container at
-   `/home/goga/.afm/config.yaml:ro` (the in-container user's home). Unlink the
-   tempfile in a `finally` block.
+   collide), and `prompts_dir: /home/goga/pipeline/prompts` (the in-container
+   prompts directory — afm reads four prompt files from this directory,
+   `planning.md`, `implementation.md`, `review.md`, `summary.md`, instead of
+   its built-in defaults; goga writes this field unconditionally so afm uses
+   the goga-managed prompt directory regardless of whether the pipeline-file
+   customizes any prompt). Mount the tempfile into the container at
+   `/home/goga/.afm/config.yaml:ro` (the in-container user's home).
+   Unlink the tempfile in a `finally` block.
 3. `docker run --rm -p <port>:<port> -v <project_dir>:/workspace
    -w /workspace -v <afm_config_tmpfile>:/home/goga/.afm/config.yaml:ro
    --env-file <env_file> [-v <host_cred_path>:<container_cred_path>:ro ...] <image>

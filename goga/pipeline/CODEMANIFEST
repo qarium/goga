@@ -43,6 +43,19 @@ Usages:
     proceeds to `pipeline_cli`, and the refusal path (marker unset or not
     "1") writes to stderr and exits with code 1 before `pipeline_cli` is
     reached.
+  default_prompts: |
+    The four default agent prompt files ship inside the installed goga
+    package at
+    goga/assets/afm/prompts/{planning,implementation,review,summary}.md.
+    The directory contains exactly four files; the file stem matches the
+    fixed agent key. Resolution from the installed package location is an
+    implementation detail — the consumer may use any standard mechanism
+    (e.g. importlib.resources or Path(__file__) composition) that yields
+    the absolute path to the package's goga/assets/afm/prompts/
+    directory at runtime. All four files are expected to exist in a
+    properly installed image — when a default is missing AND no inline
+    override is supplied for that key, materialization fails with a
+    readable error before launch.
 
 Annotations: |
   The `conventions` practice is used for:
@@ -84,6 +97,20 @@ Annotations: |
   AFM_DIR environment variable. Use the `parse-dsl` and `serialize-flow`
   practices to understand the intermediate stages of the compilation
   pipeline when a lower-level view is required.
+
+  Prompt materialization step: after `compile_flow`, `run_pipeline`
+  materializes the four default agent prompt files from the installed goga
+  package (goga/assets/afm/prompts/, per the `default_prompts` practice)
+  into the runtime directory at <AFM_DIR>/prompts/, then applies a per-key
+  override — for each non-None field of PipelineDocument.header.agents
+  (returned by `compile_flow`), the corresponding <name>.md file is
+  overwritten with the inline prompt text. The override is a full
+  replacement (no merge, no concatenation). All four files are written
+  unconditionally — when a default is missing from the package AND no
+  inline override is supplied for that key, materialization fails with a
+  readable error before `run_flow` is invoked. The compiled flow-file is
+  unaffected — inline prompts are a goga-side artifact, not part of the
+  afm flow-file contract.
 
 ---
 
@@ -168,9 +195,11 @@ Annotations: |
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
     compile the pipeline-file from goga DSL into an afm flow-file at runtime
-    via `compile_flow`, then launch afm through `run_flow`. This is the run
-    coordination routine — it performs discovery, path resolution, and
-    compilation; the actual subprocess execution lives in `run_flow`.
+    via `compile_flow`, materialize the four agent prompt files (defaults
+    plus inline overrides) into the runtime prompts directory, then launch
+    afm through `run_flow`. This is the run coordination routine — it
+    performs discovery, path resolution, compilation, and prompt
+    materialization; the actual subprocess execution lives in `run_flow`.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
@@ -178,8 +207,8 @@ Annotations: |
     `port`: TCP port forwarded to afm run --port via `run_flow`
             (allocated by the host-side caller)
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
-                 binary, afm failure, structural DSL error). 127 means afm is
-                 not on PATH inside the container.
+                 binary, afm failure, structural DSL error, materialization
+                 error). 127 means afm is not on PATH inside the container.
 
     Algorithm:
     1. Discover pipelines via `list_pipelines` and find the `PipelineEntry`
@@ -195,13 +224,44 @@ Annotations: |
        is absolute regardless of whether the env value is relative
     5. Compose the output flow path inside that directory
     6. Compile the pipeline-file via `compile_flow` (per the `compile-flow`
-       practice). Structural DSL errors propagate unchanged
+       practice) — receive a documents tuple as the return value (a
+       2-tuple of PipelineDocument and FlowDocument). Structural DSL
+       errors propagate unchanged
+    6.5. Materialize agent prompts inline (atomic: validate-all, then wipe,
+         then write):
+       a. Resolve the default prompts directory in the installed goga
+          package (per the `default_prompts` practice) —
+          goga/assets/afm/prompts/
+       b. Validate all four fixed agent keys (planning, implementation,
+          review, summary): for each key, either
+          PipelineDocument.header.agents.<key> is not None (inline override
+          present) or the corresponding default prompt file
+          (defaults_dir / "<key>.md") exists. A key with neither override
+          nor default is a fatal error raised BEFORE the directory is wiped
+          or any prompt file is written — this is the atomicity guarantee
+          (no partial state on disk)
+       c. After step 6.5b succeeds, reset <AFM_DIR>/prompts/ to a clean
+          state (rmtree + mkdir) so the directory contains exactly four
+          files after step 6.5 succeeds, regardless of any leftover files
+          from previous runs or manual edits
+       d. For each of the four fixed agent keys: write the inline prompt
+          override to <AFM_DIR>/prompts/<key>.md when PipelineDocument
+          carries one for that key; otherwise copy the corresponding
+          (already-validated) default prompt from the installed package.
+          By construction (step 6.5b) every source exists — no raise is
+          possible in this step
+       e. After step 6.5d succeeds, <AFM_DIR>/prompts/ contains exactly
+          four files (planning.md, implementation.md, review.md,
+          summary.md)
     7. Launch afm via `run_flow` (per the `run-flow` practice) with the
        compiled flow-file path and `port`
     8. Return the exit code returned by `run_flow`
 
     Apply `conventions` for error-handling style and docstring formatting.
-    Apply `compile-flow` for the compilation step contract.
+    Apply `compile-flow` for the compilation step contract (including the
+    new tuple return value).
+    Apply `default_prompts` for resolving the path to the four packaged
+    default prompt files.
     Apply `run-flow` for the subprocess launch contract.
 
     Requirements:
@@ -217,6 +277,31 @@ Annotations: |
     - Apply the `run-flow` practice's error-handling rules verbatim (as
       propagated through `run_flow`)
     - Apply the `compile-flow` practice's contract verbatim
+    - Always accept the return value of `compile_flow` (the documents
+      tuple); never re-invoke the parse-dsl routine to obtain header.agents
+    - Read inline prompt overrides exclusively from
+      PipelineDocument.header.agents (the compiled flow-file carries no
+      agents data)
+    - <AFM_DIR>/prompts/ must contain exactly four files after step 6.5
+      succeeds; partial state (fewer files) is an error condition that must
+      surface before `run_flow` is invoked. Wipe the directory clean in
+      step 6.5c (after validation in 6.5b) so leftover files from a previous
+      run or manual edits do not accumulate — idempotent end state: the
+      same four files after every run
+    - Default prompt files are read from the installed package location
+      (per `default_prompts`); the source path must NOT be derived from
+      AFM_DIR, CWD, or any environment variable
+    - The override is a full file replacement — no merge, no concatenation
+      with the default prompt text
+    - A missing default prompt (file absent in the package) for a key with
+      no inline override is a fatal error: raise with a readable message
+      naming the key in step 6.5b (validation phase), BEFORE the directory
+      is wiped or any prompt file is written. <AFM_DIR>/prompts/ remains in
+      its previous state on error — atomicity is guaranteed by validate-all
+      before wipe
+    - A missing default prompt for a key WITH an inline override is NOT an
+      error — the file is written from the override; the default's absence
+      is ignored for that key
 
     Constraints:
     - Do not invoke afm directly outside `run_flow`
@@ -229,6 +314,18 @@ Annotations: |
       be absolute when passed in
     - Do not mask or wrap exceptions from `compile_flow` — structural DSL
       errors propagate with their readable messages
+    - Do not write prompts/ inside the project directory or /workspace —
+      always write to <AFM_DIR>/prompts/ (the in-container persistent state
+      directory)
+    - Do not write inline prompt overrides into the compiled flow-file —
+      they are a goga-side artifact, not part of the afm flow-file contract
+    - Do not silently skip a missing default when no inline override is
+      supplied for that key
+    - Do not perform any prompt-related work outside step 6.5 — the host
+      launcher writes prompts_dir into the afm config.yaml tmpfile but
+      does not know whether the pipeline-file contains an agents block
+    - Do not mutate the documents tuple returned by `compile_flow` — read
+      PipelineDocument.header.agents as-is
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py

@@ -11,6 +11,8 @@ from .flow_stage import FlowStage
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
+from .pipeline_agents import PipelineAgents
+from .pipeline_document import PipelineDocument
 from .pipeline_header import PipelineHeader
 from .serialize_flow import serialize_flow
 from .stage_step import StageStep
@@ -22,6 +24,8 @@ __all__: list[str] = [
     "FlowStage",
     "PhaseStep",
     "PhasesBody",
+    "PipelineAgents",
+    "PipelineDocument",
     "PipelineHeader",
     "StageStep",
     "StagesBody",

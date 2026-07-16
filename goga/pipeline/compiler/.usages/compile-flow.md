@@ -5,7 +5,10 @@
 `compile_flow` is the entry point of the cell: it reads a pipeline-file written
 in goga DSL (phases-list or stages-map format), compiles it into an afm flow-file
 (byte-exact with the canonical `flow.yml` format), and writes the result to the
-given output path. Use this routine when you need the full pipeline → flow
+given output path. It also returns the parsed input representation alongside the
+serialized output representation as a documents tuple, so consumers can read
+header-level artifacts (such as the `agents` inline prompt overrides) without
+re-invoking `parse_dsl`. Use this routine when you need the full pipeline → flow
 transformation in one call.
 
 ## Usage
@@ -19,23 +22,35 @@ from goga.pipeline.compiler import compile_flow
 pipeline_path = Path("/workspace/.goga/pipelines/feature-phases.yml")
 flow_path = Path("/home/goga/pipeline/flow.yml")
 
-compile_flow(pipeline_path, flow_path)
-# flow_path now contains a byte-exact afm flow-file
+documents = compile_flow(pipeline_path, flow_path)
+pipeline_doc, flow_doc = documents
+# flow_path now contains a byte-exact afm flow-file.
+# pipeline_doc.header.agents carries any inline prompt overrides.
 ```
 
 ## Parameters
 
 - `pipeline_path: Path` — absolute path to the input pipeline-file. The file
-  must be a goga DSL file: a header segment (`name`, `description`) followed by
-  a `---` separator, then a body segment (YAML list for phases, YAML dict for
-  stages).
+  must be a goga DSL file: a header segment (`name`, `description`, optional
+  `agents` block) followed by a `---` separator, then a body segment (YAML list
+  for phases, YAML dict for stages).
 - `flow_path: Path` — absolute path to the output flow-file. The parent
   directory must already exist; `compile_flow` does not create it.
 
 ## Return Values
 
-`compile_flow` returns `None`. On success, `flow_path` contains the compiled
-flow-file. On failure, an exception is raised (see below).
+`compile_flow` returns a `tuple[PipelineDocument, FlowDocument]`:
+
+- `PipelineDocument` — the parsed input representation (header, body format,
+  body). Carries `header.agents: PipelineAgents | None` — inline prompt
+  overrides parsed from the header-level `agents:` block, or `None` when the
+  block is absent or empty.
+- `FlowDocument` — the serialized output representation (the afm flow-file
+  model). Does NOT carry `agents` — inline prompts are a goga-side artifact,
+  not part of the afm flow-file.
+
+The text flow-file is also written to `flow_path` as a side effect. On failure,
+an exception is raised (see below) and the documents tuple is not returned.
 
 ## Supported Input Formats
 
@@ -53,6 +68,12 @@ Two body shapes are supported:
 Any other body shape (scalar, missing `---` separator, already-afm format with
 a top-level `stages:` key but no separator) raises a structural error.
 
+The optional header-level `agents:` block accepts four fixed keys —
+`planning`, `implementation`, `review`, `summary`. Each value is an inline
+prompt text (str). Unknown keys, non-str values, and empty mappings are
+handled by `parse_dsl` per its contract; the `agents` data is carried through
+`PipelineHeader.agents` and never enters the compiled afm flow-file.
+
 ## Side Effects
 
 `compile_flow` reads from `pipeline_path` and writes to `flow_path`. No other
@@ -64,9 +85,9 @@ If `flow_path` already exists, it is overwritten.
 ## Preconditions
 
 - `pipeline_path` must be an existing file readable by the current process.
-- `flow_path.parent` must already exist and be writable. The host-side
-  launcher (`goga/commands/pipeline`) mounts the runtime directory and creates
-  it before invoking the container.
+- `flow_path.parent` must already exist and be writable. The caller is
+  responsible for creating the output directory before invoking
+  `compile_flow`.
 - The input pipeline-file must contain a `---` separator line. Files without
   the separator (e.g. a ready-made afm flow-file) are not supported and will
   raise "missing body separator".
@@ -78,6 +99,8 @@ If `flow_path` already exists, it is overwritten.
 | `pipeline_path` does not exist or is unreadable | `FileNotFoundError` / `PermissionError` (propagated) |
 | `---` separator missing                         | structural error "missing body separator" |
 | Header missing `name` or `description`          | structural error "header missing name/description" |
+| Unknown key in header `agents` block            | structural error "unknown agent in header.agents: <key>; valid keys: planning, implementation, review, summary" |
+| Non-str value in header `agents.<key>`          | structural error "non-str value in header.agents.<key>" |
 | Body shape is neither list nor dict             | structural error "unsupported body format" |
 | Body has zero steps                             | structural error "empty body"             |
 | `flow_path.parent` does not exist               | `FileNotFoundError` (propagated)          |
@@ -94,3 +117,7 @@ If `flow_path` already exists, it is overwritten.
   output path from `AFM_DIR` and passes it explicitly.
 - Do not expect the output to differ between two calls with the same input —
   the compiler is deterministic and idempotent.
+- Do not re-invoke `parse_dsl` to obtain `header.agents` — read
+  `PipelineDocument.header.agents` from this routine's return value.
+- Do not expect inline prompt overrides to appear in the `FlowDocument` — they
+  are carried only by `PipelineDocument`; the afm flow-file is unaffected.

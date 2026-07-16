@@ -4,9 +4,10 @@
 
 `run_pipeline` resolves a pipeline name to an absolute file path across two
 source directories, compiles the file from goga DSL into an afm flow-file at
-runtime, then launches afm to run the compiled flow. Use this routine to
-launch a pipeline by name. The `port` argument is forwarded to the afm
-dashboard.
+runtime, materializes the four agent prompt files (defaults plus inline
+overrides) into the runtime prompts directory, then launches afm to run the
+compiled flow. Use this routine to launch a pipeline by name. The `port`
+argument is forwarded to the afm dashboard.
 
 ## Usage
 
@@ -38,18 +39,26 @@ exit_code = run_pipeline("deploy", project_dir, user_dir, port)
 |-----------|----------------------------------------------------------------|
 | 0         | afm ran the compiled pipeline successfully                     |
 | non-zero  | pipeline not found in either source                            |
-| non-zero  | structural DSL error — an exception with a readable message propagates out of `run_pipeline` (missing `---` separator, missing header fields, body neither list nor dict, empty body) |
+| non-zero  | structural DSL error — an exception with a readable message propagates out of `run_pipeline` (missing `---` separator, missing header fields, unknown agent in header.agents, non-str agent value, body neither list nor dict, empty body) |
+| non-zero  | materialization error — a default prompt file is missing from the installed package AND no inline override is supplied for that key (readable message, no partial prompts/ directory) |
 | 127       | `afm` not in `$PATH` inside the container (propagated)         |
 | non-zero  | afm itself returned a non-zero exit code (propagated)          |
 
 ## Side Effects
 
 `run_pipeline` writes the compiled flow-file to the runtime directory (the
-directory pointed to by AFM_DIR). It launches afm as a subprocess and
-inherits all its side effects, as defined by the compiled flow-file itself.
+directory pointed to by AFM_DIR). It materializes exactly four agent prompt
+files into `<AFM_DIR>/prompts/` — one per fixed agent key. For each key, the
+file is either a copy of the corresponding default prompt from the installed
+goga package (`goga/assets/afm/prompts/<key>.md`) or, when an inline override
+is present in the pipeline-file header's `agents:` block, the inline prompt
+text (full file replacement, no merge). Finally, `run_pipeline` launches afm
+as a subprocess and inherits all its side effects, as defined by the compiled
+flow-file itself.
 
-A repeat call with the same pipeline name overwrites the previous
-flow-file. The compiler is deterministic, so the content is identical.
+A repeat call with the same pipeline name overwrites both the compiled
+flow-file and the four prompt files. Both the compiler and the prompt
+materialization are deterministic, so the content is identical across runs.
 
 ## Preconditions
 
@@ -59,9 +68,13 @@ flow-file. The compiler is deterministic, so the content is identical.
   project-priority resolution).
 - AFM_DIR must be set in the container environment.
 - The input pipeline file must be a goga DSL file: a header (`name`,
-  `description`) followed by a `---` separator, then a body (YAML list for
-  phases, YAML dict for stages). Already-afm-format files are not supported
-  and will raise a structural error.
+  `description`, optional `agents` block) followed by a `---` separator,
+  then a body (YAML list for phases, YAML dict for stages). Already-afm-format
+  files are not supported and will raise a structural error.
+- The installed goga package must contain `goga/assets/afm/prompts/` with the
+  four default files (`planning.md`, `implementation.md`, `review.md`,
+  `summary.md`). A missing default for a key without an inline override is a
+  fatal materialization error before `run_flow` is invoked.
 
 ## Anti-patterns
 
@@ -74,3 +87,10 @@ flow-file. The compiler is deterministic, so the content is identical.
 - Do not expect `run_pipeline` to handle an already-afm-format file as
   input — only goga DSL files are supported; everything else raises a
   structural error.
+- Do not re-invoke `parse_dsl` to read inline prompt overrides — read them
+  from the `PipelineDocument` returned by `compile_flow`.
+- Do not expect partial prompt materialization on failure — when a default
+  is missing and no override is supplied for a key, `run_pipeline` raises
+  before any prompt file is written for that or subsequent keys.
+- Do not expect inline prompt overrides to be merged or concatenated with
+  the default prompt — overrides are full file replacements.

@@ -157,13 +157,16 @@ env-file is written, no afm state directory is involved.
 3. Verifies docker availability; checks `config.image`.
 4. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
 5. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
-   and writes a tmpfile containing
-   `client.command: <resolved wrapper path>`, `theme: goga`,
-   `open_browser: false`, and `proxy.enabled: false` (mode 0600). `theme`,
-   `open_browser`, and `proxy.enabled` are static launcher-side constants —
-   `proxy.enabled: false` disables afm's own internal outbound proxy
-   provider (goga manages the outbound proxy through the container env-file
-   `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`; the two layers must never collide).
+   and writes a tmpfile containing `client.command: <resolved wrapper path>`,
+   `theme: goga`, `open_browser: false`, `proxy.enabled: false`, and
+   `prompts_dir: /home/goga/pipeline/prompts` (mode 0600). `theme`,
+   `open_browser`, `proxy.enabled`, and `prompts_dir` are static launcher-side
+   constants — `prompts_dir` is the in-container prompts directory populated by
+   the in-container `run_pipeline` from the four goga-packaged defaults plus
+   any inline overrides from the pipeline-file header; goga writes this field
+   unconditionally so afm uses goga-managed prompts rather than its own
+   built-in defaults, regardless of whether the pipeline-file contains an
+   `agents` block.
 6. Resolves the persistent afm state host directory via
    `resolve_pipeline_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<name>/`)
    and ensures it exists (`mkdir -p`, idempotent).
@@ -253,3 +256,8 @@ If the name exists in both sources, the project source wins (resolved inside the
   supplies the rest of afm state (flows, run-state).
 - Do not filter credential mounts by the configured `pipeline.agent` — detection
   is agent-agnostic (see the `docker-auth-mounts` practice).
+- Do NOT derive `prompts_dir` from an additional CLI option, config field, or
+  runtime argument — the value is fixed at `/home/goga/pipeline/prompts` and
+  follows from the known `AFM_DIR=/home/goga/pipeline` constant. goga does not
+  duplicate the afm-owned `prompts_dir` setting in its own Config; the
+  launcher-side value is the single source of truth.
