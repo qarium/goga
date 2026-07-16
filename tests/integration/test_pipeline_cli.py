@@ -44,6 +44,13 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 from goga.pipeline import pipeline_cli
+from goga.pipeline.compiler import (
+    BodyFormat,
+    FlowDocument,
+    PhasesBody,
+    PipelineDocument,
+    PipelineHeader,
+)
 
 # goga.afm.run_flow is shadowed in the package __init__ by the run_flow
 # function, so a string-based mock.patch path walking through it fails on
@@ -72,6 +79,22 @@ def _make_config() -> Config:
     )
 
 
+def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
+    """Build the documents tuple ``compile_flow`` now returns, for mock wiring.
+
+    ``run_pipeline`` unpacks ``(pipeline_doc, _flow_doc) = compile_flow(...)`` and
+    reads ``pipeline_doc.header.agents`` (None here → step 6.5 copies the four
+    package default prompts). Mirrors ``tests/pipeline/test_run_pipeline._fake_documents``.
+    """
+    pipeline_doc = PipelineDocument(
+        header=PipelineHeader(name="deploy", description="d", agents=None),
+        format=BodyFormat.PHASES,
+        body=PhasesBody(steps=[]),
+    )
+    flow_doc = FlowDocument(name="deploy", description="d", stages=[])
+    return (pipeline_doc, flow_doc)
+
+
 class TestInContainerRunPath:
     """Cross-entity: ``pipeline_cli run`` -> ``run_pipeline`` -> ``run_flow`` -> afm.
 
@@ -95,7 +118,7 @@ class TestInContainerRunPath:
         monkeypatch.setenv("AFM_DIR", str(afm_dir))
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(
                 _run_flow_module.subprocess,
                 "run",
@@ -138,7 +161,7 @@ class TestInContainerRunPath:
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(
                 _run_flow_module.subprocess,
                 "run",
@@ -162,7 +185,7 @@ class TestInContainerRunPath:
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
             mock.patch.object(_run_flow_module.subprocess, "run", side_effect=FileNotFoundError),
         ):
             result = pipeline_cli(["run", "deploy", "--port", "50321"])
@@ -186,7 +209,7 @@ class TestInContainerRunPath:
         monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=None) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(
                 _run_flow_module.subprocess,
                 "run",
