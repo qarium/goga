@@ -15,6 +15,7 @@ import pytest
 from goga.pipeline.compiler import (
     BodyFormat,
     PhasesBody,
+    PipelineAgents,
     PipelineHeader,
     StagesBody,
     StructuralError,
@@ -379,3 +380,142 @@ class TestParseDslLogic:
 
         with pytest.raises(StructuralError, match="missing body separator"):
             parse_dsl(text)
+
+
+class TestParseDslAgentsBlock:
+    """Contract and logic tests for the optional header-level ``agents`` block.
+
+    The ``agents`` block carries four optional inline prompt overrides
+    (planning, implementation, review, summary). ``parse_dsl`` extracts and
+    structurally validates it: unknown keys, non-str values, and non-mapping
+    blocks are structural errors; an absent or empty-mapping block yields
+    ``header.agents is None``.
+    """
+
+    def test_parse_dsl_extracts_agents_planning_only(self) -> None:
+        """A partial override (planning only) is extracted; the other three fields stay None."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents:\n"
+            "  planning: |\n"
+            "    Custom planning prompt.\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        header, fmt, _body = parse_dsl(text)
+
+        assert header.name == "Goga feature"
+        assert header.description == "Feature implementation"
+        assert header.agents is not None
+        assert header.agents.planning == "Custom planning prompt.\n"
+        assert header.agents.implementation is None
+        assert header.agents.review is None
+        assert header.agents.summary is None
+        assert fmt is BodyFormat.PHASES
+
+    def test_parse_dsl_header_agents_is_typed_pipeline_agents_or_none(self) -> None:
+        """``header.agents`` is either a ``PipelineAgents`` or ``None`` — never a raw mapping."""
+        text_without_agents = "name: X\ndescription: Y\n---\n\n- name: a\n  description: A\n"
+        text_with_agents = (
+            "name: X\n"
+            "description: Y\n"
+            "agents:\n"
+            "  planning: P\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+        )
+
+        header_none, _fmt, _body = parse_dsl(text_without_agents)
+        header_typed, _fmt, _body = parse_dsl(text_with_agents)
+
+        # Absent block → None (not an empty dict).
+        assert header_none.agents is None
+
+        # Present block → a typed PipelineAgents, never the raw YAML dict.
+        assert isinstance(header_typed.agents, PipelineAgents)
+        assert header_typed.agents.planning == "P"
+
+    def test_parse_dsl_rejects_unknown_agent_key(self) -> None:
+        """An unknown agent key (e.g. ``researcher``) is rejected with a readable error."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents:\n"
+            "  researcher: Should fail\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        with pytest.raises(StructuralError, match=r"unknown agent in header\.agents: researcher"):
+            parse_dsl(text)
+
+    def test_parse_dsl_rejects_non_str_agent_value(self) -> None:
+        """A non-str agent value (e.g. an int) is rejected — no silent type coercion."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents:\n"
+            "  planning: 42\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        with pytest.raises(StructuralError, match=r"non-str value in header\.agents\.planning"):
+            parse_dsl(text)
+
+    def test_parse_dsl_rejects_non_mapping_agents_block(self) -> None:
+        """A scalar/string ``agents`` value (not a mapping) is rejected."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            'agents: "not a mapping"\n'
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        with pytest.raises(StructuralError, match="non-mapping agents block in header"):
+            parse_dsl(text)
+
+    def test_parse_dsl_treats_empty_agents_mapping_as_none(self) -> None:
+        """An empty ``agents: {}`` mapping is treated identically to an absent block (None)."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents: {}\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.agents is None
+
+    def test_parse_dsl_agents_null_value_treated_as_none(self) -> None:
+        """A null ``agents:`` value (no body) is treated identically to an absent block (None)."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents:\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        header, _fmt, _body = parse_dsl(text)
+
+        assert header.agents is None
