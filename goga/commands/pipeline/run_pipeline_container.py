@@ -37,6 +37,13 @@ from ...runtime import resolve_runtime_dir
 
 logger = logging.getLogger(__name__)
 
+# The in-container path afm state is mounted on and ``AFM_DIR`` points at. The
+# ``prompts_dir`` written into the afm-config tmpfile is derived from this same
+# constant so the four agent prompts are written (by ``run_pipeline``) and read
+# (by afm) at the same location — keeping a single source of truth rather than
+# three independent literals that could silently diverge.
+_IN_CONTAINER_AFM_DIR = "/home/goga/pipeline"
+
 
 def _check_docker() -> bool:
     """Check whether the docker CLI is available on PATH.
@@ -181,7 +188,7 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
         f.write("open_browser: false\n")
         f.write("proxy:\n")
         f.write("  enabled: false\n")
-        f.write("prompts_dir: /home/goga/pipeline/prompts\n")
+        f.write(f"prompts_dir: {_IN_CONTAINER_AFM_DIR}/prompts\n")
     return Path(path)
 
 
@@ -372,7 +379,7 @@ def _run_named(  # noqa: PLR0913
         # AFM_DIR redirects afm state (flows, run-state) to the rw-mounted
         # persistent directory at /home/goga/pipeline; ~/.afm/config.yaml stays
         # the config source regardless (see the `afm` practice).
-        env["AFM_DIR"] = "/home/goga/pipeline"
+        env["AFM_DIR"] = _IN_CONTAINER_AFM_DIR
         if proxy is not None:
             env["HTTP_PROXY"] = proxy
             env["HTTPS_PROXY"] = proxy
@@ -388,7 +395,7 @@ def _run_named(  # noqa: PLR0913
         # credential mount, read-only.
         mounts = [
             f"{project_dir}:/workspace",
-            f"{runtime_dir}:/home/goga/pipeline",
+            f"{runtime_dir}:{_IN_CONTAINER_AFM_DIR}",
             f"{afm_config}:/home/goga/.afm/config.yaml:ro",
         ]
         for host_path, container_path in resolve_credential_mounts():

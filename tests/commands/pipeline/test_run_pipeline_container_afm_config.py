@@ -46,11 +46,15 @@ def _make_config(
 def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> None:
     """Patch the run-mode plumbing so the test stays under tmp_path and offline.
 
-    Mirrors the established convention in tests/commands/pipeline/: the plan
-    references an autouse `_isolate_home` fixture that does not exist in this
-    repo, so $HOME is redirected here instead. ``resolve_pipeline_runtime_dir``
-    is patched to a tmp path so the persistent afm-state directory never touches
-    the real ~/.goga/ and the git-branch resolution is bypassed.
+    Mirrors the established convention in tests/commands/pipeline/: the autouse
+    ``_isolate_home`` fixture (tests/conftest.py) already redirects ``$HOME``
+    away from the real ``~/.goga/``; HOME is set again here to ``tmp_path`` (and
+    the cwd changed to it) so credential detection
+    (``resolve_credential_mounts``, which expands ``~`` via ``$HOME``) finds
+    nothing under the tmp tree and ``Path.cwd()`` resolves to the project dir
+    goga bind-mounts. ``resolve_pipeline_runtime_dir`` is patched to a tmp path
+    so the persistent afm-state directory never touches the real ``~/.goga/``
+    and the git-branch resolution is bypassed.
     """
     monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
     monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)

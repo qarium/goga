@@ -123,7 +123,13 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
         else:
             shutil.copy(defaults_dir / f"{key}.md", target)
 
-    # 6.5e — exactly four prompt files materialized.
-    assert sorted(prompts_dir.iterdir()) == sorted(prompts_dir / f"{key}.md" for key in _AGENT_KEYS)
+    # 6.5e — exactly four prompt files materialized. A real guard, not an
+    # ``assert``: the count must hold in optimized runs (``python -O``) too, and
+    # a divergence here (concurrent writer, FS oddity) is a RuntimeError rather
+    # than a bare AssertionError surfacing at the CLI.
+    materialized = sorted(prompts_dir.iterdir())
+    expected = sorted(prompts_dir / f"{key}.md" for key in _AGENT_KEYS)
+    if materialized != expected:
+        raise RuntimeError(f"prompt materialization incomplete: expected {expected}, got {materialized}")
 
     return run_flow(flow_path, port)

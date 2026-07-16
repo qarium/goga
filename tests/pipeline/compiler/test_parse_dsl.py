@@ -457,28 +457,25 @@ class TestParseDslAgentsBlock:
         with pytest.raises(StructuralError, match=r"unknown agent in header\.agents: researcher"):
             parse_dsl(text)
 
-    def test_parse_dsl_rejects_non_str_agent_value(self) -> None:
-        """A non-str agent value (e.g. an int) is rejected — no silent type coercion."""
+    @pytest.mark.parametrize(
+        ("agents_value", "case"),
+        [
+            ('"not a mapping"\n', "scalar string"),
+            ("42\n", "scalar number"),
+            ("\n  - planning\n", "list"),
+        ],
+    )
+    def test_parse_dsl_rejects_non_mapping_agents_block(self, agents_value: str, case: str) -> None:
+        """A non-mapping ``agents`` value (scalar/string/list) is rejected.
+
+        The list case is the most likely real-world mistake: step-level
+        ``agents`` in this same DSL IS a list (``agents: [planning]``), so a user
+        copying that shape into the header block must be caught as non-mapping.
+        """
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            "agents:\n"
-            "  planning: 42\n"
-            "---\n"
-            "\n"
-            "- name: propose\n"
-            "  description: Propose\n"
-        )
-
-        with pytest.raises(StructuralError, match=r"non-str value in header\.agents\.planning"):
-            parse_dsl(text)
-
-    def test_parse_dsl_rejects_non_mapping_agents_block(self) -> None:
-        """A scalar/string ``agents`` value (not a mapping) is rejected."""
-        text = (
-            "name: Goga feature\n"
-            "description: Feature implementation\n"
-            'agents: "not a mapping"\n'
+            f"agents: {agents_value}"
             "---\n"
             "\n"
             "- name: propose\n"
@@ -486,6 +483,39 @@ class TestParseDslAgentsBlock:
         )
 
         with pytest.raises(StructuralError, match="non-mapping agents block in header"):
+            parse_dsl(text)
+
+    @pytest.mark.parametrize(
+        ("agent_value_line", "case"),
+        [
+            ("  planning: 42\n", "int"),
+            ("  planning: true\n", "bool"),
+            ("  planning: 3.14\n", "float"),
+            ("  planning:\n", "null value"),
+            ("  planning:\n    nested: x\n", "nested mapping"),
+        ],
+    )
+    def test_parse_dsl_rejects_non_str_agent_value(self, agent_value_line: str, case: str) -> None:
+        """A non-str value for a known agent key is rejected — no silent type coercion.
+
+        Covers the full non-str surface: scalar types (int/bool/float), a null
+        value (``planning:`` with nothing — a plausible omission), and a nested
+        mapping (``planning:\\n  nested: x`` — step-level keys mis-nested under
+        the header block). All hit the ``not isinstance(value, str)`` branch and
+        raise; none are silently coerced or treated as "no override".
+        """
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "agents:\n"
+            f"{agent_value_line}"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+        )
+
+        with pytest.raises(StructuralError, match=r"non-str value in header\.agents\.planning"):
             parse_dsl(text)
 
     def test_parse_dsl_treats_empty_agents_mapping_as_none(self) -> None:

@@ -367,6 +367,50 @@ class TestRunPipelineLogic:
         # run_flow received the compiled flow path (not the DSL path) and the port.
         mock_run_flow.assert_called_once_with(flow_path, 50321)
 
+    def test_run_pipeline_threads_real_agents_override_through_full_chain(
+        self, tmp_path: Path, afm_dir: Path
+    ) -> None:
+        """A real ``agents`` header block threads verbatim through the whole chain.
+
+        Unlike the materialization tests below (which mock ``compile_flow``), this
+        drives the real parse_dsl → compile_flow → run_pipeline path with a real
+        pipeline-file carrying an inline ``agents.planning`` override. The
+        override must land byte-for-byte at ``<AFM_DIR>/prompts/planning.md``, and
+        the non-overridden keys must fall back to the REAL package defaults (the
+        resolver is NOT patched). This is the headline feature's truest path — a
+        regression that normalized or trimmed the override text (e.g. an added
+        ``.strip()``, or a block-scalar/normalization mismatch between parse and
+        write) would break it.
+        """
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        project_dir.mkdir()
+        override = "Custom planning prompt.\nLine two.\n"
+        (project_dir / "deploy.yml").write_text(
+            "name: Deploy\n"
+            "description: Deploy pipeline\n"
+            "agents:\n"
+            "  planning: |\n"
+            "    Custom planning prompt.\n"
+            "    Line two.\n"
+            "---\n"
+            "\n"
+            "- name: build\n"
+            "  description: Build\n"
+            "  prompt: Build it\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        # The override lands verbatim — no normalization, no trimming.
+        assert (prompts_dir / "planning.md").read_text() == override
+        # Non-overridden keys fall back to the real package defaults (non-empty).
+        for key in ("implementation", "review", "summary"):
+            assert (prompts_dir / f"{key}.md").read_text() != ""
+
 
 class TestRunPipelineMaterialization:
     """Step 6.5 — materialize the four agent prompt files into <AFM_DIR>/prompts/.
@@ -546,3 +590,69 @@ class TestRunPipelineMaterialization:
         assert (prompts_dir / "implementation.md").read_text() == "I\n"
         assert (prompts_dir / "review.md").read_text() == "R\n"
         assert (prompts_dir / "summary.md").read_text() == "S\n"
+
+    def test_run_pipeline_writes_prompts_before_run_flow(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All four prompt files exist BEFORE run_flow is invoked.
+
+        afm needs the prompt files present at startup, so materialization
+        (step 6.5) must complete before run_flow (step 7). ``run_flow`` is given a
+        ``side_effect`` that inspects the prompts dir at the moment afm would be
+        starting — if materialization were reordered to after ``run_flow``, the
+        assertions inside the side_effect would fail. The mocked ``compile_flow``
+        carries a partial override so both write paths (override + default copy)
+        are exercised on the in-order check.
+        """
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir)
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        agents = PipelineAgents(planning="OVERRIDE\n")
+
+        prompts_seen: dict[str, object] = {}
+
+        def _run_flow_expects_prompts(_flow_path: object, _port: object) -> int:
+            prompts_dir = afm_dir / "prompts"
+            prompts_seen["files"] = sorted(p.name for p in prompts_dir.iterdir())
+            prompts_seen["planning"] = (prompts_dir / "planning.md").read_text()
+            return 0
+
+        with (
+            mock.patch.object(
+                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
+            ),
+            mock.patch.object(
+                _run_pipeline_module, "run_flow", side_effect=_run_flow_expects_prompts
+            ),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        # Captured from inside run_flow — proves the four files predate it.
+        assert prompts_seen["files"] == [
+            "implementation.md",
+            "planning.md",
+            "review.md",
+            "summary.md",
+        ]
+        assert prompts_seen["planning"] == "OVERRIDE\n"
+
+    def test_resolve_defaults_dir_points_at_real_package_prompts(self) -> None:
+        """The real ``_resolve_defaults_dir()`` resolves to a dir holding the four shipped prompts.
+
+        Every other materialization test monkeypatches the resolver to a tmp dir,
+        so a packaging regression (assets moved, renamed, or excluded from the
+        wheel) would leave the suite green while production hits
+        ``RuntimeError("... default prompt missing ...")`` at first run. This pins
+        the real resolver against the four shipped ``goga/assets/afm/prompts``
+        files so a packaging drift is caught here, not in production.
+        """
+        defaults_dir = _run_pipeline_module._resolve_defaults_dir()
+
+        assert defaults_dir.is_dir()
+        for key in _AGENT_KEYS:
+            assert (defaults_dir / f"{key}.md").is_file()
+            assert (defaults_dir / f"{key}.md").read_text() != ""
