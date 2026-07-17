@@ -80,7 +80,15 @@ class TestPipelineLogic:
 
         assert result.exit_code == 0
         mock_rpc.assert_called_once_with(
-            name=None, config=config, extra_env=(), proxy=None, hosts={}, clean=False, update=False
+            name=None,
+            config=config,
+            extra_env=(),
+            proxy=None,
+            hosts={},
+            clean=False,
+            update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
@@ -95,7 +103,15 @@ class TestPipelineLogic:
 
         assert result.exit_code == 0
         mock_rpc.assert_called_once_with(
-            name="deploy", config=config, extra_env=(), proxy=None, hosts={}, clean=False, update=False
+            name="deploy",
+            config=config,
+            extra_env=(),
+            proxy=None,
+            hosts={},
+            clean=False,
+            update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -120,6 +136,8 @@ class TestPipelineLogic:
             hosts={},
             clean=False,
             update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -134,7 +152,15 @@ class TestPipelineLogic:
 
         assert result.exit_code == 0
         mock_rpc.assert_called_once_with(
-            name="deploy", config=config, extra_env=("FOO=bar",), proxy=None, hosts={}, clean=False, update=False
+            name="deploy",
+            config=config,
+            extra_env=("FOO=bar",),
+            proxy=None,
+            hosts={},
+            clean=False,
+            update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])

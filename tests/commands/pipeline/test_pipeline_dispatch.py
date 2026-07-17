@@ -136,6 +136,8 @@ class TestPipelineDispatchLogic:
             hosts={"foo.local": "127.0.0.1"},
             clean=True,
             update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_proxy_none_falls_back_to_config(self) -> None:
@@ -157,6 +159,8 @@ class TestPipelineDispatchLogic:
             hosts={},
             clean=False,
             update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_update_flag_forwarded(self) -> None:
@@ -196,6 +200,8 @@ class TestPipelineDispatchEdge:
             hosts={},
             clean=False,
             update=False,
+            workflow=None,
+            no_workflow=False,
         )
 
     def test_pipeline_add_host_merges_over_config(self) -> None:

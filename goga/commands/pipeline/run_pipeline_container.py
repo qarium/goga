@@ -457,6 +457,12 @@ def run_pipeline_container(  # noqa: PLR0913
     hosts: dict[str, str] | None = None,
     clean: bool = False,
     update: bool = False,
+    # Accepted so the ``pipeline`` command can forward both CLI flags
+    # unconditionally per the CODEMANIFEST dispatch contract; the run-mode
+    # env-file/log-line wiring is layered in by a follow-up task. noqa below
+    # silences the unused-arg check until that wiring lands.
+    workflow: str | None = None,  # noqa: ARG001
+    no_workflow: bool = False,  # noqa: ARG001
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -507,6 +513,13 @@ def run_pipeline_container(  # noqa: PLR0913
         update: When True, refresh the image before launch via ``docker_update``
             (build when a project Dockerfile is declared, else pull). When False
             (default), skip the refresh. Effective in both modes.
+        workflow: optional workflow name forwarded from the ``--workflow`` CLI
+            flag. Reserved for the run-mode workflow env-file layer; the launcher
+            signature accepts it so the ``pipeline`` command can forward both
+            flags unconditionally. Ignored in discovery mode (``name is None``).
+        no_workflow: flag forwarded from the ``--no-workflow`` CLI flag. Reserved
+            for the run-mode workflow env-file layer; mutually exclusive with
+            ``workflow`` (enforced by the caller). Ignored in discovery mode.
 
     Returns:
         The container's exit code.

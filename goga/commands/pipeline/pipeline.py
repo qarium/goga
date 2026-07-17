@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 import yaml
 
@@ -43,6 +45,19 @@ from .run_pipeline_container import run_pipeline_container
     default=False,
     help="Pull the image before launching the container",
 )
+@click.option(
+    "--workflow",
+    type=str,
+    default=None,
+    help="Apply an explicit workflow at .goga/workflows/<name>.yml (file must exist)",
+)
+@click.option(
+    "--no-workflow",
+    "no_workflow",
+    is_flag=True,
+    default=False,
+    help="Disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in-container)",
+)
 @click.pass_context
 def pipeline(  # noqa: PLR0913
     ctx: click.Context,
@@ -52,6 +67,8 @@ def pipeline(  # noqa: PLR0913
     add_host: tuple[str, ...],
     clean: bool,
     update: bool,
+    workflow: str | None,
+    no_workflow: bool,
 ) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
@@ -86,11 +103,23 @@ def pipeline(  # noqa: PLR0913
             before launch. Ignored in discovery mode.
         update: flag from ``--update/-u``. When True, pull the image before
             launching the container. Available in both modes.
+        workflow: optional workflow name from ``--workflow NAME`` (without the
+            ``.yml`` extension). When provided, an explicit workflow is requested
+            — the launcher validates that ``<cwd>/.goga/workflows/<workflow>.yml``
+            exists BEFORE launching the container (clean ``ClickException``,
+            exit 1 on a missing file). Mutually exclusive with ``no_workflow``.
+        no_workflow: flag from ``--no-workflow``. When True, the launcher forces
+            the in-container pipeline to skip workflow resolution entirely (writes
+            ``GOGA_WORKFLOW_DISABLED=1`` into the env-file). Mutually exclusive
+            with ``workflow``. Performs NO host-side validation — it is a pure
+            flag forwarded into the container.
 
     Raises:
-        click.ClickException: When ``.goga/config.yml`` cannot be loaded, or when
+        click.ClickException: When ``.goga/config.yml`` cannot be loaded, when
             the ``pipeline`` section is absent (the section is required to run a
-            pipeline).
+            pipeline), when ``--workflow`` and ``--no-workflow`` are both set
+            (mutually exclusive), or when an explicit ``--workflow NAME`` names a
+            file that does not exist at ``<cwd>/.goga/workflows/<name>.yml``.
     """
     try:
         config = load_config()
@@ -122,10 +151,33 @@ def pipeline(  # noqa: PLR0913
         host, _, ip = entry.partition(":")
         merged_hosts[host] = ip
 
+    # Step 5 — workflow flag combination: --workflow and --no-workflow are
+    # mutually exclusive. Verified BEFORE the host-side existence check and
+    # BEFORE container launch so a contradictory CLI surface exits 1 with a
+    # readable message rather than reaching docker. This runs after
+    # load_config / pipeline-section / proxy / hosts resolution but always
+    # before dispatch — no docker side effects can precede it.
+    if workflow is not None and no_workflow:
+        raise click.ClickException("--workflow and --no-workflow are mutually exclusive")
+
+    # Step 6 — host-side existence validation for an explicit --workflow. The
+    # basename auto-match (no flags) and --no-workflow alone perform NO
+    # host-side validation: both are resolved in-container by the run_pipeline
+    # routine. Only an explicit --workflow <name> is validated here so a typo
+    # surfaces as a clean message + exit 1 BEFORE the container is launched.
+    # Workflow paths are project-only — resolved from Path.cwd() (which is
+    # /workspace in-container), mirroring the in-container resolution.
+    if workflow is not None:
+        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{workflow}.yml"
+        if not workflow_path.exists():
+            raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
+
     # Dispatch with explicit keyword arguments so the click surface — and its
     # tests — can assert on each argument by name rather than by position.
     # In discovery mode (name is None) clean is a no-op, so it is forced to
-    # False regardless of the CLI flag.
+    # False regardless of the CLI flag. The workflow flags are forwarded
+    # unconditionally — run_pipeline_container decides per mode (discovery is a
+    # no-op for the workflow layer; run mode writes the env-file entries).
     exit_code = run_pipeline_container(
         name=name,
         config=config,
@@ -134,5 +186,7 @@ def pipeline(  # noqa: PLR0913
         hosts=merged_hosts,
         clean=clean if name is not None else False,
         update=update,
+        workflow=workflow,
+        no_workflow=no_workflow,
     )
     ctx.exit(exit_code)

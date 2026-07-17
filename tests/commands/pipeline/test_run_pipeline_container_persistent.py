@@ -82,12 +82,22 @@ def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
 
 class TestRunPipelineContainerContract:
     def test_signature_includes_new_parameters(self) -> None:
-        """The signature exposes proxy/hosts/clean/update after extra_env."""
+        """The signature exposes proxy/hosts/clean/update/workflow/no_workflow after extra_env."""
         import inspect
 
         params = list(inspect.signature(run_pipeline_container).parameters)
         assert params[:4] == ["name", "config", "extra_env", "proxy"]
-        assert params == ["name", "config", "extra_env", "proxy", "hosts", "clean", "update"]
+        assert params == [
+            "name",
+            "config",
+            "extra_env",
+            "proxy",
+            "hosts",
+            "clean",
+            "update",
+            "workflow",
+            "no_workflow",
+        ]
 
     def test_discovery_mode_does_not_write_env_file(self, tmp_path: Path, monkeypatch) -> None:
         """Discovery mode never writes an env-file (no AFM_DIR, no afm mount)."""
