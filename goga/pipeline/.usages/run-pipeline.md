@@ -77,16 +77,21 @@ workflow resolution entirely.
    set.
 2. `GOGA_WORKFLOW_NAME` — when set (and `GOGA_WORKFLOW_DISABLED != "1"`),
    the workflow-file path resolves to
-   `project_dir.parent / ".goga" / "workflows" / "{GOGA_WORKFLOW_NAME}.yml"`.
-   The host-side launcher validates file existence BEFORE launching the
-   container when this env var is set via the `--workflow` flag; if the
-   file is missing inside the container, `run_pipeline` treats it as a
-   silent miss (workflow = None) — this is a defensive fallback, not an
-   error.
+   `Path.cwd() / ".goga" / "workflows" / "{GOGA_WORKFLOW_NAME}.yml"`
+   (= `/workspace/.goga/workflows/<wf-name>.yml` inside the container). The
+   path is CWD-based, NOT `project_dir.parent`-based: `project_dir` itself
+   is `/workspace/.goga/pipelines`, so `project_dir.parent` is
+   `/workspace/.goga` and a parent-based composition would produce a double
+   `.goga`. Workflows are project-only by design. The host-side launcher
+   validates file existence BEFORE launching the container when this env var
+   is set via the `--workflow` flag; if the file is missing inside the
+   container, `run_pipeline` treats it as a silent miss (workflow = None) —
+   this is a defensive fallback, not an error.
 3. Otherwise (neither env var set) — the workflow-file path resolves to
-   `<project_dir.parent>/.goga/workflows/<name>.yml` (basename
-   fallback — same name as the pipeline). When that file does not exist,
-   workflow = None (silent miss, NOT an error — workflow is opt-in).
+   `Path.cwd() / ".goga" / "workflows" / "<name>.yml"` (basename fallback —
+   same name as the pipeline; `Path.cwd()` = `/workspace` in-container).
+   When that file does not exist, workflow = None (silent miss, NOT an
+   error — workflow is opt-in).
 
 When a resolved workflow-file exists, `run_pipeline` calls `parse_workflow`
 to obtain a `WorkflowDocument`, which is forwarded to `compile_flow` as the

@@ -133,8 +133,12 @@ class TestRunPipelineLogic:
             exit_code = run_pipeline("deploy", project_dir, user_dir, 50321)
 
         assert exit_code == 0
-        # compile_flow receives the user-dir pipeline path (resolved) and the flow path.
-        mock_compile.assert_called_once_with((user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml")
+        # compile_flow receives the user-dir pipeline path (resolved), the flow
+        # path, and the resolved workflow (None — no workflow env, no basename
+        # file at <cwd>/.goga/workflows/deploy.yml).
+        mock_compile.assert_called_once_with(
+            (user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml", workflow=None
+        )
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
@@ -285,7 +289,7 @@ class TestRunPipelineLogic:
         _write_pipeline(project_dir)
         captured: dict[str, Path] = {}
 
-        def _capture(pipeline_path: Path, flow_path: Path) -> tuple[PipelineDocument, FlowDocument]:
+        def _capture(pipeline_path: Path, flow_path: Path, **kwargs: object) -> tuple[PipelineDocument, FlowDocument]:
             captured["flow_path"] = flow_path
             return _fake_documents()
 

@@ -9,6 +9,7 @@ from ..afm import run_flow
 from .compiler import compile_flow
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
+from .workflow import WorkflowDocument, parse_workflow
 
 # The four fixed agent-prompt keys. Each file stem equals its key, so the inline
 # ``agents`` header overrides and the package defaults share the same names.
@@ -25,14 +26,58 @@ def _resolve_defaults_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "afm" / "prompts"
 
 
+def _resolve_workflow(name: str) -> WorkflowDocument | None:
+    """Resolve an optional workflow per the workflow environment contract.
+
+    Precedence: ``GOGA_WORKFLOW_DISABLED`` (value ``"1"`` wins — workflow
+    disabled) > ``GOGA_WORKFLOW_NAME`` (explicit workflow name) > basename
+    fallback (the same name as the pipeline). The workflow-file path is
+    project-only and CWD-based — ``Path.cwd() / ".goga" / "workflows" /
+    "<name>.yml"`` — NOT derived from ``project_dir.parent``: ``project_dir``
+    is ``/workspace/.goga/pipelines``, so ``project_dir.parent`` is
+    ``/workspace/.goga`` and a parent-based composition would produce a double
+    ``.goga`` segment. ``Path.cwd()`` is ``/workspace`` in-container, i.e. the
+    project root. The host-side launcher performs explicit ``--workflow``
+    existence validation before launch; inside the container a missing file is
+    a defensive silent miss, not an error.
+
+    A structurally malformed workflow-file surfaces its
+    :class:`~goga.pipeline.workflow.WorkflowSyntaxError` from
+    :func:`parse_workflow` unchanged.
+
+    Args:
+        name: The pipeline name — used only for the basename fallback path.
+
+    Returns:
+        The parsed :class:`WorkflowDocument` when a workflow-file resolves and
+        exists, or ``None`` when workflow is disabled or no file is found.
+    """
+    if os.environ.get("GOGA_WORKFLOW_DISABLED") == "1":
+        return None
+
+    workflow_name = os.environ.get("GOGA_WORKFLOW_NAME")
+    if workflow_name:
+        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{workflow_name}.yml"
+    else:
+        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{name}.yml"
+
+    if not workflow_path.exists():
+        return None
+
+    return parse_workflow(workflow_path)
+
+
 def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the
-    pipeline file path from the matching entry's source directory, compiles the
-    goga DSL pipeline-file into an afm flow-file via :func:`compile_flow` at the
-    path ``<AFM_DIR>/flow.yml``, materializes the four agent prompt files into
-    ``<AFM_DIR>/prompts/`` (step 6.5), then launches ``afm`` via
+    pipeline file path from the matching entry's source directory, resolves an
+    optional workflow per the environment contract
+    (``GOGA_WORKFLOW_DISABLED`` > ``GOGA_WORKFLOW_NAME`` > basename fallback),
+    compiles the goga DSL pipeline-file into an afm flow-file via
+    :func:`compile_flow` at the path ``<AFM_DIR>/flow.yml`` (forwarding the
+    parsed workflow when one resolved), materializes the four agent prompt files
+    into ``<AFM_DIR>/prompts/`` (step 6.5), then launches ``afm`` via
     :func:`goga.afm.run_flow` with the compiled flow-file path (not the DSL
     path) and the caller-allocated ``port``. The ``afm`` binary's exit code is
     propagated; a missing pipeline returns a non-zero code without invoking the
@@ -68,6 +113,10 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
             package default for an agent key with no inline override (message
             ``"<key>: default prompt missing from package and no inline override
             supplied"``), raised before the prompts directory is wiped.
+        WorkflowSyntaxError: On a structural defect in a resolved workflow-file,
+            propagated unchanged from :func:`parse_workflow` (step 6) when
+            ``GOGA_WORKFLOW_DISABLED`` is not ``"1"`` and the resolved
+            workflow-file exists but is malformed.
         StructuralError: On a structural defect in the pipeline DSL, propagated
             unchanged from :func:`compile_flow`.
         FileNotFoundError / PermissionError: Propagated unchanged from
@@ -92,7 +141,13 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     afm_dir = Path(afm_env).resolve()
     flow_path = afm_dir / "flow.yml"
 
-    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
+    # Step 6: resolve an optional workflow per the workflow environment contract
+    # (GOGA_WORKFLOW_DISABLED > GOGA_WORKFLOW_NAME > basename fallback). When a
+    # workflow-file resolves and exists, the parsed WorkflowDocument is forwarded
+    # to compile_flow; structural workflow errors propagate from parse_workflow.
+    workflow = _resolve_workflow(name)
+
+    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
     # Step 6.5: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     defaults_dir = _resolve_defaults_dir()
