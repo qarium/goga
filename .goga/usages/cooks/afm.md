@@ -92,6 +92,14 @@ invocation with the resolved wrapper path; a bare agent name is never written.
 └── flows/                     # flow *.yaml files discovered by `afm list`
 ```
 
+## Per-stage command override (flow-file)
+
+afm honors a per-stage `command:` field inside each stage of a flow-file. When a stage carries `command:`, afm uses that wrapper for the stage instead of the global `client.command` from `~/.afm/config.yaml`. The value follows the same convention as `client.command` — an absolute in-container path to a `*-as-claude.sh` wrapper (e.g. `/home/goga/bin/codex-as-claude.sh`).
+
+The override is per-stage only; stages without `command:` keep using the global `client.command`. This lets a single flow route different stages to different agents (planning with claude, review with codex, etc.) without modifying the launcher-side config.yaml.
+
+The goga host-side launcher still writes the global `client.command` tmpfile — it serves as the default for every stage that does not override. Per-stage overrides are authored by the goga workflow layer (not the launcher): they appear in the serialized flow-file as a stage field.
+
 ## Integration pattern — running afm in a container
 
 A host-side launcher runs afm **inside a container image** that ships the `afm` binary.

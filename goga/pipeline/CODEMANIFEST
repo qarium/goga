@@ -16,6 +16,12 @@ Imports:
     Usages:
       - ensure-in-docker
     From: goga/docker
+  - Types:
+      - parse_workflow
+      - WorkflowDocument
+    Usages:
+      - parse-workflow
+    From: goga/pipeline/workflow
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -86,24 +92,42 @@ Annotations: |
   user-authored) and ~/.goga/pipelines/ (user-level, populated by
   goga connect). On a name conflict, the project source wins.
 
+  The workflow directory is <cwd>/.goga/workflows/ (project-level,
+  user-authored). Workflows are an OPTIONAL extension layer applied during
+  pipeline compilation. Workflow resolution is environment-driven and
+  happens INSIDE the container in `run_pipeline` (per the `parse-workflow`
+  practice): GOGA_WORKFLOW_DISABLED=1 forces no workflow;
+  GOGA_WORKFLOW_NAME=<wf-name> overrides the workflow name (file path
+  resolves to <cwd>/.goga/workflows/<wf-name>.yml); when neither env var is
+  set, `run_pipeline` falls back to the basename of the pipeline name
+  (<cwd>/.goga/workflows/<pipeline_name>.yml) — silent miss if that file
+  does not exist (no error, workflow = None). When a workflow path resolves
+  and exists, `run_pipeline` calls `parse_workflow` to obtain a
+  `WorkflowDocument`, which is passed to `compile_flow` as the optional
+  workflow argument.
+
   This cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline. The host-side launcher lives in
   goga/commands/pipeline (docker runtime boundary — no Python Imports).
 
   Compilation step: `run_pipeline` invokes `compile_flow` (per the
   `compile-flow` practice) to transform the discovered pipeline-file from
-  goga DSL into an afm flow-file at runtime, inside the container. The
-  output path is the flow.yml file inside the directory pointed to by the
-  AFM_DIR environment variable. Use the `parse-dsl` and `serialize-flow`
-  practices to understand the intermediate stages of the compilation
-  pipeline when a lower-level view is required.
+  goga DSL into an afm flow-file at runtime, inside the container. When a
+  workflow is resolved, the parsed `WorkflowDocument` is forwarded to
+  `compile_flow` so the compiler can reconstruct the body per the workflow
+  instructions before serializing the flow-file. The output path is the
+  flow.yml file inside the directory pointed to by the AFM_DIR environment
+  variable. Use the `parse-dsl` and `serialize-flow` practices to understand
+  the intermediate stages of the compilation pipeline when a lower-level
+  view is required.
 
   Prompt materialization step: after `compile_flow`, `run_pipeline`
   materializes the four default agent prompt files from the installed goga
   package (goga/assets/afm/prompts/, per the `default_prompts` practice)
   into the runtime directory at <AFM_DIR>/prompts/, then applies a per-key
-  override — for each non-None field of PipelineDocument.header.agents
-  (returned by `compile_flow`), the corresponding <name>.md file is
+  override — for each non-None agents field of the documents tuple
+  returned by `compile_flow` (per the `compile-flow` practice), the
+  corresponding <name>.md file is
   overwritten with the inline prompt text. The override is a full
   replacement (no merge, no concatenation). All four files are written
   unconditionally — when a default is missing from the package AND no
@@ -194,11 +218,14 @@ Annotations: |
   location: run_pipeline.py
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
-    compile the pipeline-file from goga DSL into an afm flow-file at runtime
-    via `compile_flow`, materialize the four agent prompt files (defaults
-    plus inline overrides) into the runtime prompts directory, then launch
-    afm through `run_flow`. This is the run coordination routine — it
-    performs discovery, path resolution, compilation, and prompt
+    resolve an optional workflow-file per the workflow environment contract
+    (see the cell-level annotation) and parse it via `parse_workflow` when
+    applicable, compile the pipeline-file (optionally extended by the
+    workflow) from goga DSL into an afm flow-file at runtime via
+    `compile_flow`, materialize the four agent prompt files (defaults plus
+    inline overrides) into the runtime prompts directory, then launch afm
+    through `run_flow`. This is the run coordination routine — it performs
+    discovery, workflow resolution, path resolution, compilation, and prompt
     materialization; the actual subprocess execution lives in `run_flow`.
 
     `name`: pipeline name without extension
@@ -207,8 +234,9 @@ Annotations: |
     `port`: TCP port forwarded to afm run --port via `run_flow`
             (allocated by the host-side caller)
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
-                 binary, afm failure, structural DSL error, materialization
-                 error). 127 means afm is not on PATH inside the container.
+                 binary, afm failure, structural DSL error, workflow parse
+                 error, materialization error). 127 means afm is not on PATH
+                 inside the container.
 
     Algorithm:
     1. Discover pipelines via `list_pipelines` and find the `PipelineEntry`
@@ -223,43 +251,73 @@ Annotations: |
        absolute path (via pathlib.Path.resolve) to guarantee the directory
        is absolute regardless of whether the env value is relative
     5. Compose the output flow path inside that directory
-    6. Compile the pipeline-file via `compile_flow` (per the `compile-flow`
-       practice) — receive a documents tuple as the return value (a
-       2-tuple of PipelineDocument and FlowDocument). Structural DSL
-       errors propagate unchanged
-    6.5. Materialize agent prompts inline (atomic: validate-all, then wipe,
-         then write):
+    6. Resolve an optional workflow per the workflow environment contract:
+       a. Read GOGA_WORKFLOW_DISABLED from the environment. When its value
+          is "1" — set workflow = None (workflow disabled by the host
+          launcher via --no-workflow)
+       b. Otherwise determine the workflow-file path:
+          - When GOGA_WORKFLOW_NAME is set in the environment — compose
+            workflow_path as Path.cwd() / ".goga" / "workflows" /
+            <GOGA_WORKFLOW_NAME>.yml (= /workspace/.goga/workflows/
+            <wf-name>.yml inside the container). The CWD-based path is
+            mandatory: project_dir itself is /workspace/.goga/pipelines,
+            so project_dir.parent is /workspace/.goga and a parent-based
+            composition would produce a double .goga. Workflows are
+            project-only by design.
+          - Otherwise (GOGA_WORKFLOW_NAME not set) — compose workflow_path
+            via the basename fallback: Path.cwd() / ".goga" /
+            "workflows" / <name>.yml (the same basename as the pipeline
+            being run)
+       c. When workflow_path exists — call `parse_workflow`
+          (per the `parse-workflow` practice) on workflow_path to obtain a
+          `WorkflowDocument`. Structural errors from `parse_workflow`
+          propagate unchanged with their readable messages
+       d. When workflow_path does not exist — set workflow = None (silent
+          miss; this is the opt-in path — the absence of a workflow-file
+          is not an error)
+    7. Compile the pipeline-file via `compile_flow` (per the `compile-flow`
+       practice) with the resolved workflow as the optional workflow
+       argument — receive the documents tuple as the return value
+       (per the `compile-flow` practice). When workflow is None, no
+       workflow is applied. Structural DSL errors propagate unchanged;
+       structural workflow errors propagate unchanged from `parse_workflow`
+    8. Materialize agent prompts inline (atomic: validate-all, then wipe,
+       then write):
        a. Resolve the default prompts directory in the installed goga
           package (per the `default_prompts` practice) —
           goga/assets/afm/prompts/
        b. Validate all four fixed agent keys (planning, implementation,
           review, summary): for each key, either
-          PipelineDocument.header.agents.<key> is not None (inline override
-          present) or the corresponding default prompt file
+          the documents tuple returned by `compile_flow` carries a non-None
+          inline override for that key (per the `compile-flow` practice), or
+          the corresponding default prompt file
           (defaults_dir / "<key>.md") exists. A key with neither override
           nor default is a fatal error raised BEFORE the directory is wiped
           or any prompt file is written — this is the atomicity guarantee
           (no partial state on disk)
-       c. After step 6.5b succeeds, reset <AFM_DIR>/prompts/ to a clean
+       c. After step 8b succeeds, reset <AFM_DIR>/prompts/ to a clean
           state (rmtree + mkdir) so the directory contains exactly four
-          files after step 6.5 succeeds, regardless of any leftover files
+          files after step 8 succeeds, regardless of any leftover files
           from previous runs or manual edits
        d. For each of the four fixed agent keys: write the inline prompt
-          override to <AFM_DIR>/prompts/<key>.md when PipelineDocument
+          override to <AFM_DIR>/prompts/<key>.md when the documents tuple
+          (returned by `compile_flow` per the `compile-flow` practice)
           carries one for that key; otherwise copy the corresponding
           (already-validated) default prompt from the installed package.
-          By construction (step 6.5b) every source exists — no raise is
+          By construction (step 8b) every source exists — no raise is
           possible in this step
-       e. After step 6.5d succeeds, <AFM_DIR>/prompts/ contains exactly
+       e. After step 8d succeeds, <AFM_DIR>/prompts/ contains exactly
           four files (planning.md, implementation.md, review.md,
           summary.md)
-    7. Launch afm via `run_flow` (per the `run-flow` practice) with the
+    9. Launch afm via `run_flow` (per the `run-flow` practice) with the
        compiled flow-file path and `port`
-    8. Return the exit code returned by `run_flow`
+    10. Return the exit code returned by `run_flow`
 
     Apply `conventions` for error-handling style and docstring formatting.
+    Apply `parse-workflow` for the contract of `parse_workflow`
+    and the resulting `WorkflowDocument`.
     Apply `compile-flow` for the compilation step contract (including the
-    new tuple return value).
+    new optional workflow parameter and the documents-tuple return value).
     Apply `default_prompts` for resolving the path to the four packaged
     default prompt files.
     Apply `run-flow` for the subprocess launch contract.
@@ -278,14 +336,15 @@ Annotations: |
       propagated through `run_flow`)
     - Apply the `compile-flow` practice's contract verbatim
     - Always accept the return value of `compile_flow` (the documents
-      tuple); never re-invoke the parse-dsl routine to obtain header.agents
+      tuple); never re-invoke the parse-dsl routine to obtain inline
+      prompt overrides
     - Read inline prompt overrides exclusively from
-      PipelineDocument.header.agents (the compiled flow-file carries no
-      agents data)
-    - <AFM_DIR>/prompts/ must contain exactly four files after step 6.5
+      the documents tuple returned by `compile_flow` (per the `compile-flow`
+      practice — the compiled flow-file carries no agents data)
+    - <AFM_DIR>/prompts/ must contain exactly four files after step 8
       succeeds; partial state (fewer files) is an error condition that must
       surface before `run_flow` is invoked. Wipe the directory clean in
-      step 6.5c (after validation in 6.5b) so leftover files from a previous
+      step 8c (after validation in 8b) so leftover files from a previous
       run or manual edits do not accumulate — idempotent end state: the
       same four files after every run
     - Default prompt files are read from the installed package location
@@ -295,13 +354,25 @@ Annotations: |
       with the default prompt text
     - A missing default prompt (file absent in the package) for a key with
       no inline override is a fatal error: raise with a readable message
-      naming the key in step 6.5b (validation phase), BEFORE the directory
+      naming the key in step 8b (validation phase), BEFORE the directory
       is wiped or any prompt file is written. <AFM_DIR>/prompts/ remains in
       its previous state on error — atomicity is guaranteed by validate-all
       before wipe
     - A missing default prompt for a key WITH an inline override is NOT an
       error — the file is written from the override; the default's absence
       is ignored for that key
+    - Read GOGA_WORKFLOW_DISABLED and GOGA_WORKFLOW_NAME directly from the
+      process environment; the host-side launcher sets them via the env-file
+    - Workflow path resolution is CWD-based:
+      Path.cwd() / ".goga" / "workflows" / "<name>.yml" — the
+      project_dir.parent IS NOT the project root; project_dir itself is
+      /workspace/.goga/pipelines, so Path.cwd() (= /workspace in-container)
+      is the project root. Workflows are project-only.
+    - A non-existent workflow-file is a silent miss (workflow = None), NOT
+      an error — the host-side launcher performs explicit --workflow
+      existence validation; the basename fallback is opt-in
+    - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME —
+      when both are set, workflow = None
 
     Constraints:
     - Do not invoke afm directly outside `run_flow`
@@ -321,11 +392,21 @@ Annotations: |
       they are a goga-side artifact, not part of the afm flow-file contract
     - Do not silently skip a missing default when no inline override is
       supplied for that key
-    - Do not perform any prompt-related work outside step 6.5 — the host
+    - Do not perform any prompt-related work outside step 8 — the host
       launcher writes prompts_dir into the afm config.yaml tmpfile but
       does not know whether the pipeline-file contains an agents block
     - Do not mutate the documents tuple returned by `compile_flow` — read
-      PipelineDocument.header.agents as-is
+      the inline prompt overrides from it as-is
+    - Do not invoke the workflow parser outside `parse_workflow`
+    - Do not modify or parse workflow-file contents directly — that is
+      `parse_workflow`'s job
+    - Do not treat a missing workflow-file as an error when neither
+      GOGA_WORKFLOW_NAME nor GOGA_WORKFLOW_DISABLED="1" is set — the
+      basename fallback is opt-in
+    - Do not validate the workflow-file path on the host — workflow
+      resolution happens inside the container only; the host-side launcher
+      performs explicit --workflow existence validation before launch
+      when the user passes --workflow
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py
@@ -383,5 +464,5 @@ CreatedAt: 29/06/26
 Description: |
   Cell that owns the entire pipeline workflow: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
-  entity model, run coordination, and the in-container CLI entrypoint
-  pipeline_cli.
+  entity model, run coordination (including optional workflow resolution),
+  and the in-container CLI entrypoint pipeline_cli.

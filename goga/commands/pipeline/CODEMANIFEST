@@ -116,9 +116,21 @@ Annotations: |
   `run-pipeline` practice), so afm uses goga-managed prompts regardless of
   whether the pipeline-file contains an agents block.
 
+  Workflow layer: when the user passes --workflow <name> or --no-workflow,
+  the launcher performs host-side handling BEFORE container launch —
+  validation of file existence for explicit --workflow, then forwards the
+  decision into the container env-file as GOGA_WORKFLOW_NAME=<name> or
+  GOGA_WORKFLOW_DISABLED=1 respectively. When neither flag is passed, the
+  launcher does not set either env var, allowing the run_pipeline routine inside the
+  container to attempt the basename auto-match fallback. The launcher prints
+  "Pipeline running with workflow NAME" to stdout ONLY when a workflow
+  will actually be applied: explicit --workflow (file validated), or
+  basename auto-match file exists on the host. This cell surfaces only the
+  workflow log line — it does not print any dashboard URL line.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool)":
+"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline". Both modes launch the goga Docker
@@ -151,11 +163,22 @@ Annotations: |
               pull. Available in both modes. Independent of
               `docker_build_if_not_exist` (the first-run safety net runs
               unconditionally before this branch in both modes).
+    `workflow`: optional workflow name from the --workflow click option
+                (without the .yml extension). When provided, an explicit
+                workflow is requested — the launcher validates that
+                <cwd>/.goga/workflows/<workflow>.yml exists BEFORE
+                launching the container (clean ClickException, exit 1 on
+                missing file). Mutually exclusive with `no_workflow`.
+    `no_workflow`: flag from the --no-workflow click option. When True, the
+                   launcher forces the in-container pipeline to skip workflow
+                   resolution entirely (sets GOGA_WORKFLOW_DISABLED=1 in the
+                   env-file). Mutually exclusive with `workflow`.
 
     Apply the `click` practice for the command surface: a single command (not a
     group), the optional positional `name` argument, the pass_context pattern,
-    and the repeatable short/long env option bound to `extra_env` for
-    environment passthrough into the container.
+    the repeatable short/long env option bound to `extra_env` for
+    environment passthrough into the container, and the new mutually-exclusive
+    --workflow / --no-workflow options.
     Apply the `conventions` practice for docstring style and intra-package imports.
     Apply the `resolve-credential-mounts` practice for the credential-mount
     consumer pattern.
@@ -167,6 +190,8 @@ Annotations: |
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.pipeline.hosts
     - --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
     - --update / -u (flag) — pull the image before launching the container
+    - --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
+    - --no-workflow (flag) — disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in the env-file)
 
     Algorithm:
     1. Load configuration via `load_config` — fails fast on schema errors
@@ -183,13 +208,25 @@ Annotations: |
     4. Resolve hosts: merge config.pipeline.hosts with parsed `add_host` entries;
        split each "HOST:IP" string into a (host, ip) pair; CLI entries override
        config entries on host-key conflict; assemble into a host→IP mapping
-    5. Dispatch to `run_pipeline_container`:
+    5. Validate workflow flag combination:
+       - When `workflow` is not None AND `no_workflow` is True → raise
+         ClickException("--workflow and --no-workflow are mutually exclusive")
+         (exit 1, BEFORE any further work)
+    6. When `workflow` is not None (explicit --workflow requested):
+       - Compose workflow_path as <cwd>/.goga/workflows/<workflow>.yml
+       - When the file does not exist → raise ClickException
+         "workflow WORKFLOW not found at WORKFLOW_PATH" (exit 1,
+         BEFORE container launch — host-side early validation)
+       (No validation needed for `no_workflow` alone — it's just a flag
+       forwarded into the env-file. No validation needed when both are
+       absent — basename auto-match is opt-in and resolved in-container.)
+    7. Dispatch to `run_pipeline_container`:
        - discovery mode (`name` is None) → call with name=None, `extra_env`,
          resolved proxy, resolved hosts, clean=False (clean is a no-op in
-         discovery), and `update`
+         discovery), `update`, `workflow`, `no_workflow`
        - run mode (`name` provided) → call with name, `extra_env`, resolved
-         proxy, resolved hosts, `clean`, and `update`
-    6. Propagate the returned exit code via the click context (per the `click`
+         proxy, resolved hosts, `clean`, `update`, `workflow`, `no_workflow`
+    8. Propagate the returned exit code via the click context (per the `click`
        practice)
 
     Requirements:
@@ -197,11 +234,22 @@ Annotations: |
       to `extra_env` for environment passthrough into the container
     - Expose `name` as an optional positional argument
     - Expose --proxy URL, --add-host HOST:IP (multiple), --clean,
-      --update/-u as click options
+      --update/-u, --workflow NAME, --no-workflow as click options
     - Always propagate the container's exit code through the click context —
       both modes
     - CLI --add-host entries are merged on top of config.pipeline.hosts;
       on host-key conflict, the CLI entry wins
+    - --workflow and --no-workflow are mutually exclusive — verified at
+      step 5 BEFORE any other work; violation raises ClickException with a
+      readable message and exit 1
+    - When --workflow <name> is provided, the path <cwd>/.goga/workflows/<name>.yml
+      must exist on the host — verified at step 6 BEFORE container launch;
+      missing file raises ClickException with a readable message and exit 1
+    - Host-side early validation covers ONLY the explicit --workflow case;
+      the basename auto-match (workflow=None AND no_workflow=False) is
+      resolved in-container by the run_pipeline routine — no host-side validation
+    - --no-workflow performs NO host-side validation; it is a pure flag
+      forwarded into the env-file as GOGA_WORKFLOW_DISABLED=1
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
@@ -212,8 +260,16 @@ Annotations: |
       goga/pipeline — the runtime boundary is docker only
     - Do not validate the "HOST:IP" format of --add-host entries beyond a
       single-colon split — Docker itself reports malformed entries
+    - Do not import parse_workflow or WorkflowDocument from
+      goga/pipeline/workflow — workflow parsing happens in-container; the
+      host only validates file existence for explicit --workflow
+    - Do not perform host-side existence validation for the basename auto-match
+      case (workflow=None AND no_workflow=False) — that resolution lives
+      in-container
+    - Do not allow --workflow X --no-workflow to pass — exit 1 with a
+      readable ClickException before any further work
 
-"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool) -> exit_code: int":
+"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher. Launches the goga Docker container to run
@@ -225,8 +281,9 @@ Annotations: |
     `config`: loaded project configuration (provides image, pipeline.agent,
               pipeline.env)
     `extra_env`: raw KEY=VALUE strings (default empty) forwarded into the
-                 container env-file in run mode. Default empty preserves the
-                 pre-option behavior; ignored in discovery mode.
+                 container env-file in run mode. When the default empty tuple
+                 is passed, no extra environment variables are forwarded;
+                 ignored in discovery mode.
     `proxy`: resolved HTTP/HTTPS proxy URL (CLI overrides config in the caller).
              When non-None, the launcher writes HTTP_PROXY, HTTPS_PROXY, and
              NO_PROXY=localhost,127.0.0.1 into the container env-file. Ignored
@@ -242,6 +299,17 @@ Annotations: |
               the container — build when a project Dockerfile is declared
               (config.dockerfile set, fatal on failure), else pull (warning,
               non-fatal). When False (default), skip the refresh.
+    `workflow`: optional workflow name forwarded into the container env-file
+                as GOGA_WORKFLOW_NAME=<workflow> (run mode only). When None
+                AND `no_workflow` is False, the env-file carries neither
+                workflow env var — the run_pipeline routine in-container will attempt
+                the basename auto-match fallback. The caller (the `pipeline`
+                click command) has already validated file existence on the
+                host when this is non-None.
+    `no_workflow`: when True, write GOGA_WORKFLOW_DISABLED=1 into the container
+                   env-file (run mode only), forcing the run_pipeline routine to skip
+                   workflow resolution entirely. Mutually exclusive with
+                   `workflow` (enforced by the caller).
     `exit_code`: container exit code (0 success; 2 argparse error in-container;
                  127 afm missing inside the container; non-zero pipeline failure)
 
@@ -256,10 +324,9 @@ Annotations: |
        - params: name=<container_name>, rm=True, entrypoint=python3,
          workdir=/workspace, v=[project:/workspace], add_host=<each resolved
          HOST:IP>. No env_file, no port publish
-       - The assembled form preserves the pre-refactor discovery launcher: --rm,
-         --name, the project bind-mount as /workspace (set as the container
-         working directory), --add-host per host, --entrypoint python3, image,
-         args
+       - The assembled form: --rm, --name, the project bind-mount as
+         /workspace (set as the container working directory), --add-host per
+         host, --entrypoint python3, image, args
     5. Call `docker_build_if_not_exist` with config.image and config.dockerfile
        — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
        when the image already exists or when no Dockerfile is set. When the
@@ -277,8 +344,8 @@ Annotations: |
        caller cleanup
     8. Return the container exit code
 
-    Note: discovery mode ignores `extra_env`, `proxy`, and `clean` — no env-file
-    is written, no afm state directory is involved.
+    Note: discovery mode ignores `extra_env`, `proxy`, `clean`, `workflow`, and
+    `no_workflow` — no env-file is written, no afm state directory is involved.
 
     Algorithm (run mode, name provided):
     1. Verify docker availability; raise ClickException when missing
@@ -295,74 +362,92 @@ Annotations: |
        the finally block and unlink the secret files). The runner's handler later
        nests under this one. Then create a private afm-config tmpfile carrying
        five static launcher-side fields: client.command set to the resolved
-       wrapper path, theme: goga
-       (dashboard theme), open_browser: false (the dashboard is reached
-       via the host-printed http://localhost:<port> URL; afm must not attempt
-       to open a browser inside the container), proxy.enabled: false
-       (afm's own internal outbound proxy provider is disabled; goga manages
-       the outbound proxy through the container env-file via HTTP_PROXY /
-       HTTPS_PROXY / NO_PROXY), and prompts_dir: /home/goga/pipeline/prompts
-       (the in-container prompts directory, derived from the known
-       AFM_DIR=/home/goga/pipeline value — NOT from an additional argument
-       or config field; the directory is populated by the in-container
+       wrapper path, theme: goga (dashboard theme), open_browser: false (the
+       dashboard is reached via the host-printed http://localhost:<port> URL;
+       afm must not attempt to open a browser inside the container),
+       proxy.enabled: false (afm's own internal outbound proxy provider is
+       disabled; goga manages the outbound proxy through the container env-file
+       via HTTP_PROXY / HTTPS_PROXY / NO_PROXY), and prompts_dir:
+       /home/goga/pipeline/prompts (the in-container prompts directory, derived
+       from the known AFM_DIR=/home/goga/pipeline value — NOT from an additional
+       argument or config field; the directory is populated by the in-container
        run_pipeline routine from the four goga-packaged defaults plus any
-       inline overrides from the pipeline-file header — see the
-       `run-pipeline` and `afm` practices). The tmpfile is a read-only
-       overlay over the persistent afm state directory mounted in step 11
+       inline overrides from the pipeline-file header — see the `run-pipeline`
+       and `afm` practices). The tmpfile is a read-only overlay over the
+       persistent afm state directory mounted in step 11
     7. Resolve the persistent afm state host directory via
        `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
     8. When `clean` is True: wipe the resolved directory via
        `clean_pipeline_runtime_dir` before launch
-    9. Create a private env-file combining config.pipeline.env, git identity,
-       the `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
-       AFM_DIR set to the in-container persistent state path, and — when
-       `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at
-       localhost,127.0.0.1)
-    10. Print "Web UI: http://localhost:<port>" to stdout
-    11. Assemble the docker-run inputs to hand to `DockerRunner`:
+    9. Compute the workflow env-file entries (host-side, BEFORE container launch):
+       - When `no_workflow` is True:
+         * workflow_env = {"GOGA_WORKFLOW_DISABLED": "1"}
+         * workflow_log_name = None (no log emitted)
+       - Else when `workflow` is not None (explicit --workflow, file already
+         validated by the caller):
+         * workflow_env = {"GOGA_WORKFLOW_NAME": workflow}
+         * workflow_log_name = workflow
+       - Else (auto-match fallback):
+         * Compose auto_match_path as <cwd>/.goga/workflows/<name>.yml
+         * When the auto-match file exists:
+           - workflow_env = {} (run_pipeline in-container resolves basename fallback)
+           - workflow_log_name = name (the candidate)
+         * Else:
+           - workflow_env = {} (run_pipeline in-container will silent-miss)
+           - workflow_log_name = None (no log — file does not exist)
+    10. When workflow_log_name is not None: print
+        "Pipeline running with workflow WORKFLOW_LOG_NAME" to stdout.
+        This cell surfaces only this workflow log line — it does NOT print
+        any dashboard URL line.
+    11. Create a private env-file combining config.pipeline.env, git identity,
+        the `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
+        AFM_DIR set to the in-container persistent state path, the
+        workflow_env entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED
+        per step 9), and — when `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY,
+        and NO_PROXY (fixed at localhost,127.0.0.1)
+    12. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: -m goga.pipeline run <name> --port <port>
         - params: name=<container_name>, rm=True, entrypoint=python3,
           workdir=/workspace, p=<port>:<port>, v=[project:/workspace (set as
           container working dir), the persistent afm state host dir (step 7)
-          read-write at the
-          in-container persistent state path, the afm-config tmpfile (step 6)
-          read-only at the in-container afm config path as a client.command
-          overlay, and each credential mount read-only], add_host=<each resolved
-          HOST:IP>, env_file=<env-file path>
-        - The assembled form preserves the pre-refactor run launcher (same
-          options, same effect): --rm, --name, -p <port>:<port>, the project
-          bind-mount as /workspace (container working directory), the persistent
-          afm state host dir read-write at the in-container persistent state path
-          (survives across runs), the afm-config tmpfile read-only at the
-          in-container afm config path (independent of AFM_DIR; see the `afm`
-          practice — the persistent dir supplies the rest of afm state), --add-host
-          per host, --env-file, each credential mount from
-          `resolve_credential_mounts` read-only, --entrypoint python3, image, args
-    12. Call `docker_build_if_not_exist` with config.image and config.dockerfile
+          read-write at the in-container persistent state path, the afm-config
+          tmpfile (step 6) read-only at the in-container afm config path as a
+          client.command overlay, and each credential mount read-only],
+          add_host=<each resolved HOST:IP>, env_file=<env-file path>
+        - The assembled form: --rm, --name, -p <port>:<port>, the project
+          bind-mount as /workspace (container working directory), the
+          persistent afm state host dir read-write at the in-container
+          persistent state path (survives across runs), the afm-config
+          tmpfile read-only at the in-container afm config path (independent
+          of AFM_DIR; see the `afm` practice — the persistent dir supplies
+          the rest of afm state), --add-host per host, --env-file, each
+          credential mount from `resolve_credential_mounts` read-only,
+          --entrypoint python3, image, args
+    13. Call `docker_build_if_not_exist` with config.image and config.dockerfile
         — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
         when the image already exists or when no Dockerfile is set. When the
         image is absent and a Dockerfile is declared: build it (fatal on failure
         — surfaces as ClickException via the D5 mapper, exit 1, launch skipped).
         Runs inside the try so the D7 leak-prevention invariant covers this
-        window: the secret tmpfile/env-file are already written (steps 6, 9),
+        window: the secret tmpfile/env-file are already written (steps 6, 11),
         and a fatal build unwinds to the finally which unlinks them.
-    13. When `update` is True: call `docker_update` with config.image and
+    14. When `update` is True: call `docker_update` with config.image and
         config.dockerfile — build when a project Dockerfile is declared (fatal),
         else pull (warning, non-fatal). When `update` is False: skip the refresh.
-    14. Launch the container via `DockerRunner`(config.image).run(args, params):
+    15. Launch the container via `DockerRunner`(config.image).run(args, params):
         the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
         which nests under the caller handler installed in step 6 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code. The runner finally performs the guaranteed docker kill and
         restores to the caller handler
-    15. In finally: delete the afm-config tmpfile and delete the env-file, and
+    16. In finally: delete the afm-config tmpfile and delete the env-file, and
         restore the caller-installed SIGTERM/SIGINT handler to the original. Do
         NOT delete the persistent afm state host directory — it survives across
         runs. The docker kill and the runner's signal-handler restore happen
         inside the runner finally (which runs before this finally); the runner's
         restore returns to the caller handler, then this finally restores the
         original
-    16. Return the container exit code
+    17. Return the container exit code
 
     Apply the `agent-wrappers` practice for the wrapper path semantics
     referenced in step 5.
@@ -376,7 +461,10 @@ Annotations: |
     Apply the `afm` practice for the in-container afm config.yaml contract,
     including the prompts_dir field written in step 6.
     Apply the `run-pipeline` practice for the in-container prompt
-    materialization contract that populates the prompts_dir directory.
+    materialization contract that populates the prompts_dir directory, and
+    for the workflow environment contract (GOGA_WORKFLOW_NAME /
+    GOGA_WORKFLOW_DISABLED) that this launcher sets via the env-file in
+    step 9-11.
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
@@ -415,12 +503,10 @@ Annotations: |
       `docker_build_if_not_exist` in BOTH modes: when config.image is absent
       locally AND config.dockerfile is declared, build it (fatal on failure —
       surfaces as ClickException, exit 1, launch skipped); no-op when the image
-      is present or no Dockerfile is declared. This closes the corner case where
-      dockerfile is set but the image was never built and --update is not
-      passed — without this net a bare docker run would fail with
-      "No such image"
+      is present or no Dockerfile is declared.
     - AFM_DIR=/home/goga/pipeline is provided via the env-file
-    - `extra_env` default is an empty tuple, preserving the pre-option behavior
+    - `extra_env` default is an empty tuple — when absent, no extra
+      environment variables are forwarded into the container env-file
     - SIGTERM/SIGINT on host triggers docker kill; cleanup in finally is mandatory
     - SIGTERM/SIGINT during run must result in exit code 128 + signum
       (130 for SIGINT, 143 for SIGTERM)
@@ -430,6 +516,18 @@ Annotations: |
       build, must unwind to the finally block and unlink the secret files).
       Discovery mode writes no secret files, so it installs no caller-side handler
     - Propagate afm's non-zero exit code as the container's exit code
+    - Workflow env-file entries follow the decision matrix in step 9:
+      --no-workflow → GOGA_WORKFLOW_DISABLED=1; explicit --workflow X →
+      GOGA_WORKFLOW_NAME=X; auto-match fallback → neither env var (container
+      resolves basename). The decision is taken host-side so the workflow log
+      is accurate
+    - The "Pipeline running with workflow NAME" log line is printed ONLY
+      when a workflow will actually be applied: explicit --workflow X (file
+      already validated by the caller) OR basename auto-match file exists on
+      the host (existence check at step 9). When --no-workflow is set OR
+      the auto-match file does not exist, NO workflow log is printed
+    - This cell does not surface any dashboard URL line — stdout carries at
+      most the workflow log line (step 10) and the docker output stream
 
     Constraints:
     - Refresh an EXISTING image only when `update` is True via `docker_update` —
@@ -463,6 +561,17 @@ Annotations: |
       and follows from the known AFM_DIR=/home/goga/pipeline constant. goga
       does not duplicate the afm-owned prompts_dir setting in its own
       Config; the launcher-side value is the single source of truth
+    - Do not import parse_workflow or WorkflowDocument from
+      goga/pipeline/workflow — workflow parsing happens in-container; the
+      host only writes the env vars and validates file existence for
+      explicit --workflow
+    - Do not surface any dashboard URL line on stdout — this cell prints only
+      the workflow log line (when applicable) and forwards the docker output
+      stream
+    - Do not print the "Pipeline running with workflow NAME" line when
+      --no-workflow is set OR when the auto-match file does not exist on
+      the host — the log is emitted ONLY when a workflow will actually be
+      applied
 
 "resolve_pipeline_runtime_dir(pipeline_name: str) -> runtime_dir: Path":
   location: run_pipeline_container.py
@@ -523,7 +632,5 @@ Description: |
   Host-side CLI wrapper cell for the single pipeline command. Both discovery
   mode (no name) and run mode (name provided) launch the goga Docker container
   and invoke the in-container pipeline entrypoint inside it. The runtime
-  boundary to the pipeline cell is docker — this cell has no Python Type
-  Imports from it. Run mode mounts a persistent afm state host directory so
-  afm state survives across runs of the same pipeline in the same project on
-  the same branch; the --clean flag wipes this directory before launch.
+  boundary to the in-container pipeline is docker — this cell has no Python
+  Type Imports from it.

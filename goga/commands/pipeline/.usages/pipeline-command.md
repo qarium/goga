@@ -47,8 +47,10 @@ The header is always printed, even when the list is empty.
 goga pipeline deploy
 ```
 
-The command allocates a free localhost port, prints `Web UI: http://localhost:<port>`
-to stdout, and launches afm inside the container with that port forwarded.
+The command allocates a free localhost port and launches afm inside the
+container with that port forwarded. The launcher does NOT print a dashboard
+URL line on stdout — the user already knows the port from the `-p` mapping
+and the container output stream is forwarded unchanged.
 
 To pass extra environment variables into the container (e.g. an agent
 authorization token), repeat `-e KEY=VALUE` (or `--env KEY=VALUE`) on the
@@ -76,6 +78,52 @@ Wipe persistent afm state for this pipeline/branch before launch:
 ```bash
 goga pipeline deploy --clean
 ```
+
+### Workflow layer
+
+Apply an explicit workflow-file (must exist on host — early validation,
+exit 1 on missing file):
+
+```bash
+goga pipeline deploy --workflow custom
+```
+
+Output on success:
+
+```
+Pipeline running with workflow "custom"
+```
+
+Disable workflow application entirely (overrides the basename auto-match
+fallback and any `--workflow`):
+
+```bash
+goga pipeline deploy --no-workflow
+```
+
+When NEITHER `--workflow` NOR `--no-workflow` is passed, the launcher
+attempts the basename auto-match fallback: it checks whether
+`<cwd>/.goga/workflows/<name>.yml` exists on the host. When present, the
+log line is printed and the container resolves the workflow via the
+basename fallback. When absent, no log is printed and the container
+silent-misses.
+
+`--workflow` and `--no-workflow` are mutually exclusive — passing both
+exits 1 with a readable ClickException before any further work.
+
+The `Pipeline running with workflow "<name>"` log line is printed to
+stdout ONLY when a workflow will actually be applied:
+
+- explicit `--workflow X` (file validated on the host at step 6 of the
+  click command), OR
+- basename auto-match file `<cwd>/.goga/workflows/<name>.yml` exists on
+  the host.
+
+When `--no-workflow` is set OR the auto-match file does not exist, NO
+workflow log is printed.
+
+The launcher does NOT print any dashboard URL line — stdout carries at
+most the workflow log line (above) and the docker output stream.
 
 ## Argument
 
@@ -108,6 +156,25 @@ goga pipeline deploy --clean
   image is built, the command auto-builds it even WITHOUT `--update` (first-run
   safety net, runs in both modes) — `--update` is only needed to force a RE-build
   of an already-present image.
+- `--workflow NAME` (str) — apply an explicit workflow-file at
+  `<cwd>/.goga/workflows/<name>.yml`. Mutually exclusive with `--no-workflow`.
+  When provided, the launcher validates that the file exists on the host
+  BEFORE launching the container (ClickException with exit 1 on missing
+  file). Run mode only — has no effect in discovery mode. The workflow name
+  is forwarded into the container env-file as `GOGA_WORKFLOW_NAME=<name>`.
+- `--no-workflow` (flag) — disable workflow application entirely. Mutually
+  exclusive with `--workflow`. Run mode only. Sets
+  `GOGA_WORKFLOW_DISABLED=1` in the container env-file, forcing the
+  in-container `run_pipeline` routine to skip workflow resolution.
+
+## Workflow flag matrix
+
+| CLI flags                                  | Host validation                          | Env-file entries                                  | Workflow log line                                  | In-container behavior                                          |
+|--------------------------------------------|------------------------------------------|---------------------------------------------------|----------------------------------------------------|----------------------------------------------------------------|
+| (none)                                     | basename auto-match file existence check | (neither env var set)                             | printed ONLY when auto-match file exists           | `run_pipeline` resolves basename fallback; silent miss if absent |
+| `--workflow X`                             | file existence for `<cwd>/.goga/workflows/X.yml` (early, exit 1 on miss) | `GOGA_WORKFLOW_NAME=X`                            | `Pipeline running with workflow "X"`               | `run_pipeline` resolves `X.yml`; defensive silent-miss on absent file |
+| `--no-workflow`                            | (none — pure flag)                       | `GOGA_WORKFLOW_DISABLED=1`                        | (no log)                                           | `run_pipeline` skips workflow resolution entirely              |
+| `--workflow X --no-workflow`               | (rejected)                               | (rejected)                                        | (rejected)                                         | ClickException "--workflow and --no-workflow are mutually exclusive", exit 1 |
 
 ## Agent resolution
 
@@ -147,16 +214,25 @@ file is missing from the image, afm surfaces the error.
 8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
 9. Propagates the container's exit code.
 
-`extra_env`, `proxy`, and `--clean` have no effect in discovery mode — no
-env-file is written, no afm state directory is involved.
+`extra_env`, `proxy`, `--clean`, `--workflow`, and `--no-workflow` have no
+effect in discovery mode — no env-file is written, no afm state directory
+is involved, no workflow layer applies.
 
 ### Run mode
 
 1. Loads `.goga/config.yml` via `load_config`.
 2. When `config.pipeline` is `None` (the `pipeline` section is absent in `.goga/config.yml`) → raises `ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")` before any field access. Same guard as Discovery mode step 2.
-3. Verifies docker availability; checks `config.image`.
-4. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
-5. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
+3. Validates the workflow flag combination:
+   - When `--workflow` AND `--no-workflow` are both set → raises
+     `ClickException("--workflow and --no-workflow are mutually exclusive")`,
+     exit 1, BEFORE any further work.
+4. When `--workflow X` is set: validates that
+   `<cwd>/.goga/workflows/X.yml` exists on the host. Missing file raises
+   `ClickException("workflow 'X' not found at <path>")`, exit 1, BEFORE
+   container launch.
+5. Verifies docker availability; checks `config.image`.
+6. Allocates a free localhost port (bind to `("", 0)`, read assigned port, close socket).
+7. Resolves the agent wrapper path via `resolve_wrapper_path(config.pipeline.agent)`
    and writes a tmpfile containing `client.command: <resolved wrapper path>`,
    `theme: goga`, `open_browser: false`, `proxy.enabled: false`, and
    `prompts_dir: /home/goga/pipeline/prompts` (mode 0600). `theme`,
@@ -167,18 +243,37 @@ env-file is written, no afm state directory is involved.
    unconditionally so afm uses goga-managed prompts rather than its own
    built-in defaults, regardless of whether the pipeline-file contains an
    `agents` block.
-6. Resolves the persistent afm state host directory via
+8. Resolves the persistent afm state host directory via
    `resolve_pipeline_runtime_dir(name)` (= `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<name>/`)
    and ensures it exists (`mkdir -p`, idempotent).
-7. When `--clean` is set: wipes the directory via `clean_pipeline_runtime_dir`
+9. When `--clean` is set: wipes the directory via `clean_pipeline_runtime_dir`
    (recursive rmtree + recreate) **before** launch.
-8. Builds an env-file with `config.pipeline.env` + git identity + extra
-   `KEY=VALUE` pairs supplied via `-e/--env` + `AFM_DIR=/home/goga/pipeline` +
-   (when proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
-   (mode 0600).
-9. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
-10. Prints `Web UI: http://localhost:<port>` to stdout.
-11. Assembles the docker run command:
+10. Computes the workflow env-file entries (host-side, BEFORE container launch):
+    - When `--no-workflow` is set:
+      - `workflow_env = {"GOGA_WORKFLOW_DISABLED": "1"}`
+      - `workflow_log_name = None` (no log emitted)
+    - Else when `--workflow X` is set (file already validated by step 4):
+      - `workflow_env = {"GOGA_WORKFLOW_NAME": "X"}`
+      - `workflow_log_name = "X"`
+    - Else (auto-match fallback):
+      - Compose `auto_match_path = <cwd>/.goga/workflows/<name>.yml`
+      - When `auto_match_path.exists()`:
+        - `workflow_env = {}` (in-container `run_pipeline` resolves basename fallback)
+        - `workflow_log_name = <name>` (the candidate)
+      - Else:
+        - `workflow_env = {}` (in-container `run_pipeline` will silent-miss)
+        - `workflow_log_name = None` (no log — file does not exist)
+11. When `workflow_log_name` is not None: prints
+    `Pipeline running with workflow "<workflow_log_name>"` to stdout. This
+    cell surfaces ONLY this workflow log line — it does NOT print any
+    dashboard URL line.
+12. Builds an env-file with `config.pipeline.env` + git identity + extra
+    `KEY=VALUE` pairs supplied via `-e/--env` + `AFM_DIR=/home/goga/pipeline` +
+    `workflow_env` entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED
+    per step 10) + (when proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
+    (mode 0600).
+13. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
+14. Assembles the docker run command:
     - `--rm -p <port>:<port>`
     - `-v <project_dir>:/workspace -w /workspace`
     - `-v <pipeline_runtime_dir>:/home/goga/pipeline` (read-write — persistent state)
@@ -187,13 +282,13 @@ env-file is written, no afm state directory is involved.
     - one `-v <host_path>:<container_path>:ro` flag per credential file detected by `resolve_credential_mounts()` (claude/codex/opencode when present on the host)
     - `--env-file <env_file>`
     - `--entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`
-12. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
+15. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
     and the image is absent locally, builds it ONCE before launch (no-op when
     the image is present or no Dockerfile is set; fatal build surfaces as
     ClickException, launch skipped; secret tmpfile/env-file are unlinked).
-13. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
-14. Launches the container and waits for its exit code.
-15. In `finally`: deletes the `client.command` tmpfile and the env-file,
+16. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
+17. Launches the container and waits for its exit code.
+18. In `finally`: deletes the `client.command` tmpfile and the env-file,
     `docker kill`s the container. **The persistent afm state host directory
     is NOT deleted** — it survives across runs of the same pipeline.
 
@@ -202,6 +297,7 @@ env-file is written, no afm state directory is involved.
 | Exit code | Condition                                                                |
 |-----------|--------------------------------------------------------------------------|
 | 0         | Discovery succeeded / afm ran the pipeline successfully                  |
+| 1         | ClickException: missing pipeline section, missing --workflow file, mutually-exclusive flag violation |
 | 2         | argparse error inside the container (missing NAME, missing/invalid `--port`) |
 | 127       | `afm` not in `$PATH` inside the container                                |
 | 130       | Container received SIGINT (host SIGINT → `docker kill`)                  |
@@ -219,7 +315,11 @@ If the name exists in both sources, the project source wins (resolved inside the
 ## Side Effects
 
 - Discovery mode: launches the container; container reads the filesystem only.
-- Run mode: allocates a localhost port, creates two tmpfiles (afm config, env-file), launches afm inside the container, prints `Web UI: http://localhost:<port>`. The host installs SIGTERM/SIGINT handlers for the lifetime of the run.
+- Run mode: allocates a localhost port, creates two tmpfiles (afm config, env-file),
+  launches afm inside the container. The host installs SIGTERM/SIGINT handlers for
+  the lifetime of the run. When a workflow will be applied, the launcher prints
+  the `Pipeline running with workflow "<name>"` log line to stdout BEFORE
+  launch; otherwise nothing is printed before the docker output stream.
 - Run mode: writes a persistent host directory at
   `~/.goga/runtime/pipelines/<normalized_project>/<git-branch>/<pipeline-name>/`
   (created with `mkdir -p`, mounted read-write at `/home/goga/pipeline`). This
@@ -232,6 +332,8 @@ If the name exists in both sources, the project source wins (resolved inside the
 - `.goga/config.yml` must have the top-level `image` field set.
 - (Run mode) `config.pipeline.agent` is resolved via `resolve_wrapper_path`
   and forwarded as afm `client.command` via the tmpfile mount.
+- (Run mode, `--workflow X`) `<cwd>/.goga/workflows/X.yml` must exist on
+  the host. The launcher validates this BEFORE container launch.
 
 ## Anti-patterns
 
@@ -261,3 +363,18 @@ If the name exists in both sources, the project source wins (resolved inside the
   follows from the known `AFM_DIR=/home/goga/pipeline` constant. goga does not
   duplicate the afm-owned `prompts_dir` setting in its own Config; the
   launcher-side value is the single source of truth.
+- Do NOT pass `--workflow X --no-workflow` together — exit 1 with a
+  readable ClickException before any further work.
+- Do NOT expect `--workflow X` to launch the container when the file is
+  missing on the host — the launcher exits 1 BEFORE container launch.
+- Do NOT expect host-side existence validation for the basename auto-match
+  case (no `--workflow` and no `--no-workflow`) — that resolution lives
+  in-container.
+- Do NOT expect a dashboard URL line on stdout — this cell prints only the
+  workflow log line (when applicable) and forwards the docker output stream.
+- Do NOT expect the `Pipeline running with workflow "<name>"` line when
+  `--no-workflow` is set OR when the auto-match file does not exist on the
+  host — the log is emitted ONLY when a workflow will actually be applied.
+- Do NOT import workflow-parsing routines or workflow-document types on
+  the host — workflow parsing happens in-container; the host only writes
+  the env vars and validates file existence for explicit `--workflow`.

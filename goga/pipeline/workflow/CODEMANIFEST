@@ -1,0 +1,214 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is a pure parser of project-level workflow-files. It reads a
+  workflow-file, validates its structure (known keys, field types, loop
+  counts), and returns a `WorkflowDocument` carrying declarative instructions
+  for the compiler. It performs no I/O beyond the path it receives, performs
+  no network or subprocess calls, and has no Imports — it depends only on
+  the Python standard library and PyYAML.
+
+  This cell is intentionally DECLARATIVE: it does NOT know about the compiler
+  or any compiler-level concept (flow documents, flow stages, the compile
+  routine). It returns instructions; the consumer (compiler) consumes them.
+  This keeps the import graph one-directional: the compiler imports
+  `WorkflowDocument` from this cell, never the reverse. The cell does not
+  resolve agent names to wrapper paths, does not apply loop-expansion, and
+  does not rewrite depends_on — all of that is the compiler's responsibility.
+
+  Use `convention` for code style, dataclass usage, and test layout.
+
+---
+
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None)":
+  location: workflow_stage.py
+  annotations: |
+    Data model of a single per-stage override instruction in a workflow-file —
+    which agent, which prompt, and how many loop iterations. Constructed by
+    `parse_workflow` from one entry of the workflow-file stages map;
+    carried verbatim inside `WorkflowDocument`.
+
+    `agent`: agent name (e.g. "codex", "claude") consumed by the compiler to
+             compose the per-stage command wrapper path
+             (/home/goga/bin/AGENT-as-claude.sh), or None when not specified
+    `prompt`: per-stage prompt text consumed by the compiler as the stage
+              description field, or None when not specified
+    `loop`: positive integer (>= 1) instructing the compiler to expand the
+            stage into N copies with ids NAME-1..N, or None when not
+            specified (equivalent to loop=1 — no expansion)
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - All three fields default to None — workflow-files may omit any field;
+      the parser produces None for missing fields
+    - Field order is fixed: agent, prompt, loop — matches the canonical
+      order of the per-stage keys in the workflow-file
+
+    Constraints:
+    - Do not validate loop >= 1 here — `parse_workflow` enforces it during
+      parsing and raises a structural error before this dataclass is built
+    - Do not resolve `agent` to a wrapper path here — the compiler performs
+      that composition when applying the instruction
+    - Do not validate `prompt` contents — pass through verbatim to the consumer
+  properties:
+    "agent -> str | None": |
+      Agent name consumed by the compiler to compose the per-stage command
+      wrapper path, or None when not specified.
+    "prompt -> str | None": |
+      Per-stage prompt text consumed by the compiler as the stage description
+      field, or None when not specified.
+    "loop -> int | None": |
+      Positive iteration count (>= 1) instructing the compiler to expand the
+      stage into N copies, or None when not specified (no expansion).
+
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None)":
+  location: workflow_document.py
+  annotations: |
+    Aggregated workflow-file document — the parsed representation of a
+    workflow-file as a single value, combining an optional top-level prompt
+    and a map of per-stage override instructions. Built by `parse_workflow`
+    and consumed by the compiler via its workflow parameter.
+
+    `prompt`: top-level prompt text that the compiler emits as the first
+              top-level key of the compiled flow-file, or None when the
+              workflow-file has no top-level prompt directive
+    `stages`: map of per-stage override instructions keyed by stage name;
+              an entry's key MUST match the name/id of a stage in the
+              target pipeline-file. Stages in `stages` that do not match any
+              pipeline stage are silently ignored with a warning by the
+              compiler (a workflow-file may cover multiple pipelines). An
+              empty map (default) means the workflow provides only a
+              top-level prompt and no per-stage overrides.
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - `prompt` defaults to None
+    - `stages` defaults to an empty dict via field(default_factory=dict)
+      in the implementation; the signature default None is a DSL
+      representation, the actual default factory is applied at construction
+    - A workflow-file with neither a top-level `prompt` nor any stage entries
+      is rejected by `parse_workflow` with a structural error before this
+      dataclass is built — at least one must be present
+
+    Constraints:
+    - Do not validate stage-name keys against any pipeline — the compiler
+      performs that match during apply (and silently ignores unknown names
+      with a warning)
+    - Do not mutate `stages` after construction — consumers treat the
+      document as read-only
+  properties:
+    "prompt -> str | None": |
+      Top-level prompt text emitted by the compiler as the first top-level key
+      of the compiled flow-file, or None when the workflow-file has no
+      top-level prompt directive.
+    "stages -> dict[str, WorkflowStage]": |
+      Map of per-stage override instructions keyed by stage name. Empty map
+      when the workflow-file has no stages section.
+
+"parse_workflow(workflow_path: Path) -> workflow: WorkflowDocument":
+  location: parse_workflow.py
+  annotations: |
+    Structurally parse a workflow-file into a `WorkflowDocument`. Read the
+    file at `workflow_path`, parse it as YAML, validate the expected keys
+    and field types, build `WorkflowStage` instances per entry, and return
+    the aggregated `WorkflowDocument`. No content validation beyond the
+    structural schema (key set, types, loop bounds); no agent-name
+    resolution, no loop expansion, no depends_on rewriting — all of those are
+    the compiler's responsibility.
+
+    `workflow_path`: absolute path to the workflow-file
+    `workflow`: the parsed `WorkflowDocument` carrying declarative
+                instructions for the compiler
+
+    Algorithm:
+    1. Read `workflow_path` as text. On OSError (file missing, permission
+       denied) — propagate the exception unchanged
+    2. Parse the text as YAML. On invalid YAML — raise a structural
+       error "invalid YAML in workflow-file"
+    3. If the loaded value is not a dict (e.g. a scalar, a string, a list)
+       — raise a structural error "workflow must be a mapping"
+    4. Extract the optional top-level keys:
+       - prompt: if present, must be a str; otherwise raise a structural
+         error "non-str value in workflow.prompt"
+       - stages: if present, must be a dict; otherwise raise a structural
+         error "non-mapping stages block in workflow"
+    5. For every other top-level key — raise a structural error
+       "unknown key in workflow: KEY; valid keys: prompt, stages"
+    6. For each entry of stages (when present), identified by stage name
+       and stage value:
+       a. If the stage value is not a dict — raise a structural error
+          "non-mapping stage NAME in workflow.stages"
+       b. Validate the key set of the stage value against agent, prompt, loop:
+          an unknown key raises "unknown key in workflow.stages.NAME: KEY;
+          valid keys: agent, prompt, loop"
+       c. agent (when present) must be a str; otherwise raise
+          "non-str value in workflow.stages.NAME.agent"
+       d. prompt (when present) must be a str; otherwise raise
+          "non-str value in workflow.stages.NAME.prompt"
+       e. loop (when present) must be an int and >= 1; otherwise raise
+          "non-int value in workflow.stages.NAME.loop" (non-int) or
+          "loop must be >= 1 in workflow.stages.NAME" (int < 1)
+       f. Build a `WorkflowStage` from the validated values
+    7. If both prompt is None AND stages is empty (no entries) — raise a
+       structural error "empty workflow — provide at least prompt or one
+       stage"
+    8. Return `WorkflowDocument` from the parsed prompt and stages
+
+    Apply `convention` for code style, exception message formatting, and
+    docstring style.
+
+    Requirements:
+    - Top-level unknown keys are a structural error — only prompt and
+      stages are accepted
+    - Per-stage unknown keys are a structural error — only agent, prompt,
+      loop are accepted
+    - loop must be an int >= 1; zero, negative values, and non-int types
+      are structural errors
+    - Stage-name keys are NOT validated against any pipeline — unknown stage
+      names pass through; the compiler decides whether to apply or ignore
+      (silently with a warning)
+    - Stage-name keys MAY repeat names across different pipeline-files — the
+      same workflow-file can apply to several pipelines
+    - A workflow-file with neither prompt nor any stage entries is rejected
+      — at least one must be present
+    - agent value is NOT validated against a known agent set; absence of
+      the wrapper file is surfaced by afm at invocation time
+    - prompt contents (top-level and per-stage) are NOT validated — passed
+      through verbatim to the consumer
+
+    Constraints:
+    - Do not resolve agent to a wrapper path here — the compiler performs
+      that composition
+    - Do not perform loop expansion here — the compiler expands based on the
+      loop count
+    - Do not rewrite depends_on here — the compiler handles external
+      references after expansion
+    - Do not validate stage names against any pipeline schema — the compiler
+      matches and silently ignores unknown names
+    - Do not skip structural validation on missing files — OSError
+      propagates unchanged (consistent with the compiler behavior)
+    - Do not accept YAML files whose root is not a mapping — that is a
+      structural error
+
+---
+
+Author: Goga
+CreatedAt: 17/07/26
+Description: |
+  Pure parser of project-level workflow-files into declarative
+  `WorkflowDocument` instructions that downstream consumers apply to
+  extend a pipeline at compilation time.

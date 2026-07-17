@@ -1,3 +1,11 @@
+Imports:
+  - Types:
+      - WorkflowDocument
+      - WorkflowStage
+    Usages:
+      - parse-workflow
+    From: goga/pipeline/workflow
+
 Usages:
   convention: .goga/usages/conventions.md
   beautiful_yaml: .goga/usages/cooks/beautiful_yaml.md
@@ -12,32 +20,54 @@ Annotations: |
 
   This cell is a pure transformer: it reads a pipeline-file written in goga
   DSL (phases-list or stages-map) and writes an equivalent afm flow-file
-  (flat YAML with top-level name, description, and a stages list). It
-  performs no I/O beyond the two paths it receives, performs no network or
-  subprocess calls, and has no Imports — it depends only on the Python
-  standard library and pyyaml.
+  (flat YAML with top-level prompt (when present), name, description, and a
+  stages list). It performs no I/O beyond the two paths it receives and the
+  optional workflow-file instruction source, performs no network or subprocess
+  calls.
+
+  The cell imports two types from goga/pipeline/workflow: `WorkflowDocument`
+  (consumed as the optional workflow argument of `compile_flow`) and
+  `WorkflowStage` (the value type of the workflow stages map, referenced in
+  the workflow reconstruction algorithm). The import is one-directional —
+  this cell consumes the declarative workflow instructions; the workflow cell
+  never imports from this cell. The cell does NOT call parse_workflow itself
+  — the consumer (the run_pipeline routine in goga/pipeline) parses the
+  workflow-file and passes the resulting `WorkflowDocument` to
+  `compile_flow` via its optional workflow parameter. When workflow is None,
+  no workflow is applied and the output carries no top-level prompt and no
+  per-stage overrides.
 
   Use `beautiful_yaml` for the YAML serialization parameters applied by
   `serialize_flow`; a custom yaml.SafeDumper subclass extends these
-  defaults to enforce the canonical key order and the flow-style for
-  agents.
+  defaults to enforce the canonical key order, the flow-style for agents,
+  the block-style for skills and depends_on, and the block-literal style for
+  the top-level prompt.
 
   Use `convention` for code style, dataclass usage, and test layout.
 
   The input pipeline-file is segmented by a literal three-dash line: the
-  segment before is the header (name, description), the segment after is the
-  body (either a YAML list for phases or a YAML dict for stages). The output
-  flow-file is NOT segmented — it is a single flat YAML document with three
-  top-level keys.
+  segment before is the header (name, description, optional agents), the
+  segment after is the body (either a YAML list for phases or a YAML dict
+  for stages). The output flow-file is NOT segmented — it is a single flat
+  YAML document with optional prompt, name, description, and stages.
 
   `BodyFormat` detection is structural: a list body yields PHASES
   (auto-generates depends_on by position), a dict body yields STAGES (passes
-  depends_on through as-is). Any other body shape is a structural error.
+  depends_on through as-is, then rewrites after workflow loop-expansion when
+  a workflow is applied). Any other body shape is a structural error.
 
-  All step content fields (agents, prompt, skills, interactive, and any
-  extra fields) are passed through verbatim — no validation of their
-  contents, no schema enforcement. References in depends_on (dangling ids,
-  cycles, duplicates) are afm's responsibility, not this cell's.
+  All step content fields (interactive, command, prompt, description, agents,
+  skills, and any extra fields) are passed through verbatim — no validation
+  of their contents, no schema enforcement. References in depends_on
+  (dangling ids, cycles, duplicates) are afm's responsibility, not this cell's.
+
+  Canonical `FlowStage` fields key order (extended): interactive, command,
+  prompt, description, agents, skills, then alphabetically-sorted unknown
+  keys. command is populated from the agent field of `WorkflowStage`
+  (composed as /home/goga/bin/AGENT-as-claude.sh); description is populated
+  from the prompt field of `WorkflowStage`. Both are independent channels
+  — pipeline-file prompt and workflow-file prompt coexist as separate fields
+  in the same stage when both are present.
 
   The header segment additionally supports an optional agents block
   with four fixed string keys: planning, implementation, review, summary.
@@ -45,18 +75,33 @@ Annotations: |
   with) the corresponding default prompt file during pipeline run
   materialization. Unknown keys, non-str values, and empty mappings are
   handled by `parse_dsl` per its contract; the agents data is carried
-  in PipelineHeader.agents and never enters the compiled afm flow-file
-  — it is a goga-side artifact surfaced to the consumer via
-  PipelineDocument.header.agents from `compile_flow` return value.
+  in `PipelineHeader` (its agents field) and never enters the compiled
+  afm flow-file — it is a goga-side artifact surfaced to the consumer via
+  `PipelineDocument` (its header field) from `compile_flow` return value.
 
   `compile_flow` returns a tuple of `PipelineDocument` and `FlowDocument`: the
-  input representation (PipelineDocument, aggregating header+format+body,
-  including agents when present) and the output representation
-  (FlowDocument, the afm flow-file model). The text flow-file is still
-  written to flow_path as a side effect — the return value is part of
-  the signature, not an additional side effect. Consumers access inline
-  prompts through PipelineDocument.header.agents, never through
+  input representation (`PipelineDocument`, aggregating header+format+body —
+  the ORIGINAL parsed body, not the workflow-reconstructed body) and the
+  output representation (`FlowDocument`, the afm flow-file model — including
+  workflow-applied overrides, loop-expansion, rewritten depends_on, and the
+  top-level prompt when a workflow supplied one). The text flow-file is
+  written to flow_path as a side effect — the return value is part of the
+  signature, not an additional side effect. Consumers access inline
+  prompt overrides through `PipelineDocument` header, never through
   `FlowDocument`.
+
+  Workflow application (when `compile_flow` is called with a non-None
+  workflow argument): the cell reconstructs the body per the workflow
+  instructions BEFORE building the `FlowDocument`. The reconstruction is:
+  (a) per-stage overrides applied in-place to the body of `PhaseStep` /
+  `StageStep`; (b) loop-expansion producing N copies with ids NAME-1..N
+  and chain-style internal depends_on; (c) external depends_on references
+  rewritten via the expanded_ids map (any reference to a base-name whose
+  loop count was >= 2 is replaced with the LAST expanded id). Unknown
+  stage names in workflow stages
+  are silently ignored with a warning (a workflow may cover multiple
+  pipelines). The agent instruction is composed into the in-container
+  wrapper path directly — the cell does NOT call any host-side resolver.
 
 ---
 
@@ -137,13 +182,16 @@ Annotations: |
     and body in one dataclass. Built by `compile_flow` from `parse_dsl`'s
     3-tuple output and returned to consumers as the first element of the
     documents tuple. Exists so that consumers (run_pipeline) can obtain
-    the parsed representation — including header.agents — from a single
+    the parsed representation — including the agents field of `header` — from a single
     return value without re-invoking parse_dsl.
 
     `header`: parsed `PipelineHeader` (name, description, optional agents)
     `format`: detected `BodyFormat` — PHASES or STAGES
     `body`: parsed body — `PhasesBody` when format is PHASES,
-            `StagesBody` when format is STAGES
+            `StagesBody` when format is STAGES. The body reflects the
+            ORIGINAL parsed body; workflow-applied reconstruction lives
+            only in `FlowStage` instances inside `FlowDocument`, never in
+            this field.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -155,7 +203,7 @@ Annotations: |
 
     Constraints:
     - Do not validate the body format against the body type — the caller
-      (compile_flow) constructs PipelineDocument from parse_dsl's
+      (`compile_flow`) constructs PipelineDocument from `parse_dsl`'s
       consistent output
 
   properties:
@@ -165,7 +213,8 @@ Annotations: |
       Detected body format — PHASES or STAGES.
     "body -> PhasesBody | StagesBody": |
       Parsed body. Type matches the format property above: PhasesBody
-      when PHASES, StagesBody otherwise.
+      when PHASES, StagesBody otherwise. The ORIGINAL parsed body —
+      workflow-reconstructed stages live only in `FlowDocument`.
 
 "PipelineHeader(name: str, description: str, agents: PipelineAgents | None = None)":
   location: pipeline_header.py
@@ -255,7 +304,8 @@ Annotations: |
             description and depends_on)
 
     Carries `depends_on` from the source; the compiler passes it through
-    unchanged when building `FlowStage`.
+    unchanged when building `FlowStage` (rewriting external references
+    to loop-expanded base-names when a workflow is applied).
 
     The body field is intentionally typed as dict[str, Any]: the cell does
     not validate or know the schema of step fields. Build the data model with
@@ -335,9 +385,24 @@ Annotations: |
     `depends_on`: predecessor step ids, or None. None produces no depends_on
                   key in output; an empty list produces depends_on [].
     `fields`: extra step fields in canonical key order (interactive,
-              prompt, agents, skills, then alphabetically-sorted
-              unknown keys). Insertion order of this dict IS the output
-              order — the serializer iterates it as-is.
+              command, prompt, description, agents, skills, then
+              alphabetically-sorted unknown keys). Insertion order of this
+              dict IS the output order — the serializer iterates it as-is.
+              command is populated from the agent field of `WorkflowStage`
+              (composed as the in-container wrapper path) when a workflow
+              supplies one; description is populated from the prompt field
+              of `WorkflowStage` when a workflow supplies one. Both are
+              independent channels — pipeline-file prompt and workflow-file
+              prompt may coexist as separate fields in the same stage.
+
+    The description slot in `fields` is a distinct channel from
+    `FlowStage` name: the name field carries the display label sourced
+    from the pipeline-file step (the description field of `PhaseStep` or
+    `StageStep`), while the description field inside `fields` carries
+    the workflow-file per-stage prompt override. Both can coexist in the same
+    `FlowStage` instance without collision — they live in different slots
+    and serialize as separate YAML keys (name vs description inside the
+    stage item).
 
     The compiler builds `fields` with the canonical key order when
     constructing the `FlowStage` instance; the serializer does not reorder.
@@ -358,19 +423,30 @@ Annotations: |
     "depends_on -> list[str] | None": |
       Predecessor step ids, or None when absent.
     "fields -> dict[str, Any]": |
-      Extra fields in canonical key order.
+      Extra fields in canonical key order (interactive, command, prompt,
+      description, agents, skills, then alphabetically-sorted unknown keys).
 
-"FlowDocument(name: str, description: str, stages: list[FlowStage])":
+"FlowDocument(prompt: str | None = None, name: str, description: str, stages: list[FlowStage])":
   location: flow_document.py
   annotations: |
-    Output afm flow-file — a single flat YAML document with three top-level
-    keys (name, description, stages). No segmentation, no header
-    sub-object: the format is flat, and this type mirrors that flatness.
+    Output afm flow-file — a single flat YAML document with up to four
+    top-level keys (prompt (when present), name, description, stages). No
+    segmentation, no header sub-object: the format is flat, and this type
+    mirrors that flatness.
 
+    `prompt`: top-level prompt value emitted as the FIRST top-level key of
+              the flow-file when not None. Populated from the prompt field
+              of `WorkflowDocument` when a workflow supplies one;
+              None otherwise (omitted from output — no top-level prompt
+              key in the flow-file).
     `name`: top-level name value (carried 1:1 from `PipelineHeader` name)
     `description`: top-level description value (carried 1:1 from
                    `PipelineHeader` description)
-    `stages`: ordered list of `FlowStage` items, output as the stages list
+    `stages`: ordered list of `FlowStage` items, output as the stages list.
+              When a workflow supplied loop-expansion or per-stage
+              overrides, the list reflects the reconstructed stages; when
+              no workflow was applied, the list reflects the original
+              parsed body.
 
     The only object `serialize_flow` accepts as input.
 
@@ -379,8 +455,13 @@ Annotations: |
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
+    - `prompt` defaults to None — the flow-file omits the top-level prompt
+      key when no workflow supplies one
 
   properties:
+    "prompt -> str | None": |
+      Top-level flow prompt, or None when no workflow supplied one. Emitted
+      as the first top-level key when not None.
     "name -> str": |
       Top-level flow name.
     "description -> str": |
@@ -460,7 +541,8 @@ Annotations: |
     - Do not handle a pipeline-file without a three-dash separator
       (already-afm format) — it is an error by design
     - Do not validate or merge inline prompt text — `parse_dsl` passes
-      the agents values through verbatim; the consumer (run_pipeline)
+      the agents values through verbatim; the consumer (the run_pipeline
+      routine in goga/pipeline)
       decides how to materialize them
 
 "serialize_flow(doc: FlowDocument) -> text: str":
@@ -471,19 +553,26 @@ Annotations: |
     rules for canonical key order and flow-style for agents.
 
     `doc`: the `FlowDocument` to serialize (fields must already be in
-           canonical key order — `compile_flow` enforces this when building)
+           canonical key order — `compile_flow` enforces this when building;
+           top-level prompt may be None or a str)
     `text`: the resulting YAML string, byte-equivalent to flow.yml for
             equivalent content
 
     Algorithm:
-    1. Build a top-level representation in fixed order: name, description,
-       then stages (per step 2)
+    1. Build a top-level representation in fixed order:
+       - when `doc` prompt is not None — emit prompt as the FIRST
+         top-level key, in block-literal scalar style (multi-line prompt
+         text). When `doc` prompt is None — omit the key entirely
+         (no top-level prompt key in the output)
+       - name, then description, then stages (per step 2)
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
-       canonical order), then depends_on when it is not None
+       canonical order — interactive, command, prompt, description, agents,
+       skills, then alphabetically-sorted unknown keys), then depends_on
+       when it is not None
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
-       flow-style applied to agents and block-style applied to skills and
-       depends_on
+       flow-style applied to agents and block-style applied to skills,
+       depends_on, and the top-level prompt
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -491,12 +580,15 @@ Annotations: |
     Apply `convention` for code style and docstring formatting.
 
     Requirements:
-    - Output is canonical afm flow-file YAML: fixed top-level key order
-      (name, description, stages), canonical per-stage key order, flow-style
-      for agents, block-style for skills and depends_on, single trailing
-      newline
-    - agents is emitted in flow-style; skills and depends_on are emitted
-      in block-style
+    - Output is canonical afm flow-file YAML: optional prompt (first,
+      when present), then fixed top-level key order (name, description,
+      stages), canonical per-stage key order (extended to include command
+      and description), flow-style for agents, block-style for skills and
+      depends_on, single trailing newline
+    - When `doc` prompt is None — the output omits the prompt key
+      entirely (no top-level prompt key in the output)
+    - agents is emitted in flow-style; skills, depends_on, and the
+      top-level prompt are emitted in block-style
     - Empty list values (e.g. an explicit empty depends_on) are written
       explicitly, not omitted
     - All other key-value pairs follow `beautiful_yaml` defaults
@@ -507,47 +599,126 @@ Annotations: |
       constructed it)
     - Do not write to disk — return the string; the caller writes it
 
-"compile_flow(pipeline_path: Path, flow_path: Path) -> documents: tuple[PipelineDocument, FlowDocument]":
+"compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
   annotations: |
     Entry point of the cell: compile a pipeline-file (goga DSL) into an afm
     flow-file at the given paths. Reads `pipeline_path`, parses and detects
-    format via `parse_dsl`, applies per-format depends_on rules and
-    canonical key order, builds a `FlowDocument`, serializes it via
-    `serialize_flow`, writes to `flow_path`, and returns the documents
-    tuple — the parsed `PipelineDocument` (input representation) and the
-    serialized `FlowDocument` (output representation).
+    format via `parse_dsl`, applies per-format depends_on rules and canonical
+    key order, builds a `FlowDocument`, serializes it via `serialize_flow`,
+    writes to `flow_path`, and returns the documents tuple. When `workflow`
+    is supplied (a `WorkflowDocument`), the cell reconstructs the parsed
+    body per the workflow instructions BEFORE building the FlowDocument;
+    when `workflow` is None, no workflow is applied and the output carries
+    no top-level prompt and no per-stage overrides.
 
     `pipeline_path`: absolute path to the input pipeline-file (DSL format)
     `flow_path`: absolute path to the output flow-file (afm format). The
                  parent directory must already exist — `compile_flow` does
                  not create it
+    `workflow`: optional `WorkflowDocument` carrying declarative
+                instructions for extending the pipeline (top-level prompt,
+                per-stage agent/prompt/loop overrides). When None — no
+                workflow is applied, the output carries no top-level prompt
+                and no per-stage overrides. Supplied by the consumer
+                (the run_pipeline routine in goga/pipeline), parsed from a
+                project workflow-file via parse_workflow (per the
+                `parse-workflow` practice).
     `documents`: a tuple of `PipelineDocument` and `FlowDocument` — the
-                 parsed input representation (carrying header.agents when
-                 present) and the output flow-file model. The text
-                 flow-file is also written to `flow_path` as a side
-                 effect.
+                 parsed input representation (carrying header agents when
+                 present; the ORIGINAL parsed body, NOT the
+                 workflow-reconstructed body) and the output flow-file model
+                 (including workflow-applied overrides, loop-expansion,
+                 rewritten depends_on, and the top-level prompt when a
+                 workflow supplied one). The text flow-file is also written
+                 to `flow_path` as a side effect.
 
     Algorithm:
     1. Read `pipeline_path` as text
     2. Call `parse_dsl` to obtain (header, format, body)
     3. If the body has zero steps — raise a structural error "empty body"
-    4. Branch on format:
+    4. When `workflow` is not None — reconstruct the body per the `workflow`
+       instructions (BEFORE building FlowStages):
+       a. Apply per-stage overrides (in-place mutation of the body's step
+          bodies):
+          - For each pair of (stage name, stage value) in `workflow` stages:
+            * Find the step in the body whose name/id equals the stage name
+            * If not found — silently skip with a warning (a workflow may
+              cover multiple pipelines; unknown stage names are not errors)
+            * If found:
+              - when the agent field of `WorkflowStage` is not None —
+                assign the wrapper path /home/goga/bin/<agent>-as-claude.sh
+                to the command slot of the step body (the wrapper path is
+                composed directly — do NOT call any host-side wrapper
+                resolver)
+              - when the prompt field of `WorkflowStage` is not None —
+                assign that prompt text to the description slot of the
+                step body
+       b. Build a new ordered list of steps with loop-expansion applied:
+          - Maintain an expanded-ids map from each base-name to the list
+            of ids produced for it
+          - For each step in the body (in source order):
+            * Determine loop_count: when the step's name is in
+              `workflow` stages AND the workflow's loop value for that
+              name is not None — use that value; otherwise 1
+            * When loop_count == 1 — append the step unchanged (id stays
+              as-is); record the base-name mapped to a single-element list
+              containing only the base-name
+            * When loop_count >= 2 — append N copies with id
+              NAME-1, NAME-2, ..., NAME-N. The FIRST copy inherits the
+              original step's external depends_on (rewritten in step 4c);
+              each subsequent copy gets an internal depends_on pointing to
+              the previous copy (chain). Record the base-name mapped to
+              the list [NAME-1, ..., NAME-N]
+          - For PHASES format (position-derived depends_on): each expanded
+            copy becomes its own PhaseStep in the list; the position in the
+            new list determines depends_on automatically during step 5
+            (the original step's position is inherited by the first copy;
+            subsequent copies depend on their predecessor copy by list
+            position; the next ORIGINAL step after the expanded one
+            naturally depends on the LAST copy via list position)
+       c. Rewrite external depends_on references (STAGES format only —
+          PHASES format is handled by position in step 5):
+          - For each StageStep in the new sequence with non-None
+            depends_on: for each ref in depends_on:
+            * When ref matches a base-name whose loop_count >= 2 — replace
+              with the LAST id from that base-name's expanded-ids list
+            * When ref matches a base-name whose loop_count == 1 — keep
+              the ref as-is; it points to the single unexpanded copy whose
+              id equals the base-name (see step 4b)
+            * Otherwise (ref does not match any base-name in the body) —
+              keep ref as-is and let afm surface a dangling-reference
+              error if applicable
+       d. Replace the body's step list with the new (expanded + rewritten)
+          sequence
+    5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
-         step depends on the previous one)
+         step depends on the previous one — including expanded copies,
+         which chain naturally via list position)
        - STAGES: for each `StageStep`, build a `FlowStage` with depends_on
-         passed through from the source step
-    5. In both branches, assemble the fields of each `FlowStage` in
-       canonical key order, deep-copying from the source step body
-    6. Build `FlowDocument` from the header and the assembled stages
-    7. Build `PipelineDocument` from (header, format, body) — the parsed
-       representation carried alongside the FlowDocument for the consumer
+         passed through from the (possibly rewritten) source step
+       - In both branches, assemble the fields of each `FlowStage` in
+         canonical key order (interactive, command, prompt, description,
+         agents, skills, then alphabetically-sorted unknown keys),
+         copying from the source step body
+    6. Build `FlowDocument`:
+       - prompt = `workflow` prompt when `workflow` is not None, else None
+       - name, description from the header
+       - stages from the assembled FlowStages
+    7. Build `PipelineDocument` from (header, format, ORIGINAL body) — the
+       parsed representation carried alongside the FlowDocument for the
+       consumer. The body field reflects the ORIGINAL parsed body, NOT the
+       workflow-reconstructed one — PipelineDocument is a faithful mirror
+       of the input pipeline-file
     8. Call `serialize_flow` on the FlowDocument
     9. Write the resulting text to `flow_path`
     10. Return (PipelineDocument, FlowDocument) as the documents tuple
 
-    Apply `convention` for code style and docstring formatting.
+    Apply `convention` for code style, docstring formatting, and warning
+    emission for unknown-stage-name warnings.
+    Apply `parse-workflow` for the contract of the
+    `WorkflowDocument` value supplied by the consumer.
 
     Requirements:
     - `pipeline_path` and `flow_path` must be absolute paths
@@ -556,14 +727,34 @@ Annotations: |
       missing, permission denied) propagates unchanged
     - Idempotent: repeated calls with the same inputs overwrite `flow_path`
     - Output is the canonical afm flow-file format as produced by
-      `serialize_flow`; canonical correctness is verified in tests via
-      in-memory assertions on the serialized text (no reference .yml file)
+      `serialize_flow`
+    - When `workflow` is None — no workflow is applied (the reconstruction
+      step is skipped entirely, no top-level prompt is emitted, no per-stage
+      overrides are injected)
     - Return value is a 2-tuple of `PipelineDocument` then `FlowDocument` —
       input representation first, output representation second
-    - `PipelineDocument` exposes header.agents carrying inline prompt
-      overrides when present in the source pipeline-file, or None otherwise
-    - Consumers must NOT re-invoke parse_dsl to obtain the agents — they
-      read PipelineDocument.header.agents from this return value
+    - `PipelineDocument` body reflects the ORIGINAL parsed body —
+      workflow-reconstructed stages live only in `FlowDocument` stages
+    - The agent instruction of a `WorkflowStage` is composed into the
+      in-container wrapper path /home/goga/bin/AGENT-as-claude.sh inline
+      — the cell does NOT call any host-side wrapper resolver
+    - `FlowStage` fields are assembled directly from the step body dict
+      at step 5 — workflow overrides (command, description) are
+      injected INTO the body at step 4a before this assembly, so a single
+      body dict is the sole source for fields. Pipeline-file fields
+      and workflow-injected fields coexist in the same dict without
+      merging or collision
+    - Unknown stage names in `workflow` stages (names that do not match any
+      step in the body) are silently ignored with a warning
+    - Loop-expansion for STAGES format rewrites external depends_on
+      references to the LAST expanded id (e.g. a stage that depended on
+      "review" gets rewritten to depend on "review-2" when review has
+      loop=2)
+    - Loop-expansion for PHASES format relies on list position to chain
+      expanded copies and to make the next original step depend on the last
+      copy — no explicit external rewrite pass is needed
+    - Consumers must NOT re-invoke `parse_dsl` to obtain the agents — they
+      read header agents from `PipelineDocument` returned by this routine
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -575,10 +766,19 @@ Annotations: |
       name/description (already enforced by `parse_dsl`)
     - Do not bypass exceptions from `parse_dsl`, `serialize_flow`, or
       the file read/write calls
-    - Do not mutate the (header, format, body) tuple returned by parse_dsl
-      before building PipelineDocument
-    - Do not include inline prompt overrides in the FlowDocument — they
+    - Do not mutate the (header, format, body) tuple returned by `parse_dsl`
+      BEFORE building `PipelineDocument` — `PipelineDocument` must reflect
+      the original parsed body. Mutations during workflow reconstruction
+      operate on a separate copy or a separately constructed sequence
+    - Do not include inline prompt overrides in the `FlowDocument` — they
       are goga-side artifacts, not part of the afm flow-file
+    - Do not call any host-side wrapper path resolver — the
+      `WorkflowStage` agent value is composed into the wrapper path directly
+    - Do not validate the `WorkflowStage` agent value against a known agent set —
+      absence of the wrapper file is surfaced by afm at invocation time
+    - Do not raise on unknown stage names in `workflow` stages — emit a
+      warning and skip; the workflow may intentionally cover multiple
+      pipelines
 
 ---
 
@@ -586,5 +786,6 @@ Author: Goga
 CreatedAt: 15/07/26
 Description: |
   Pure transformer cell that compiles goga DSL pipeline-files (phases-list
-  or stages-map) into afm flow-files (flat YAML with name, description,
-  and stages).
+  or stages-map) into afm flow-files (flat YAML with optional prompt, name,
+  description, and stages). Optionally applies declarative workflow
+  instructions to reconstruct the parsed body before serialization.

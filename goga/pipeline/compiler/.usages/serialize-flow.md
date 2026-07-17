@@ -15,6 +15,7 @@ from pathlib import Path
 from goga.pipeline.compiler import serialize_flow, FlowDocument, FlowStage
 
 doc = FlowDocument(
+    prompt="Example top-level prompt",  # optional; None omits the key
     name="My flow",
     description="Custom flow",
     stages=[
@@ -33,16 +34,19 @@ Path("/tmp/out.yml").write_text(text)
 
 ## Parameters
 
-- `doc: FlowDocument` — the document to serialize. The `fields` of each
-  `FlowStage` must already be in canonical key order (`interactive`, `prompt`,
-  `agents`, `skills`, then alphabetically-sorted extra keys) — `serialize_flow`
-  does not reorder. Use `compile_flow` to build a correctly-ordered document
-  from a pipeline-file.
+- `doc: FlowDocument` — the document to serialize. The `prompt` of each
+  `FlowDocument` may be `None` (the key is omitted from output) or a `str`
+  (emitted as the FIRST top-level key, in block-literal scalar style). The
+  `fields` of each `FlowStage` must already be in canonical key order
+  (`interactive`, `command`, `prompt`, `description`, `agents`, `skills`,
+  then alphabetically-sorted extra keys) — `serialize_flow` does not reorder.
+  Use `compile_flow` to build a correctly-ordered document from a pipeline-file.
 
 ## Return value
 
 A `str` containing the YAML representation, byte-exact with the canonical
-`flow.yml` format for equivalent content.
+`flow.yml` format for equivalent content. When `doc.prompt` is `None`, the
+output omits the `prompt` key entirely.
 
 ## Side Effects
 
@@ -52,7 +56,8 @@ a string. Pure (modulo exceptions).
 ## Preconditions
 
 - The input `FlowDocument` must be well-formed — `fields` dicts in canonical
-  order, `depends_on` is `None` or a list of strings.
+  order (extended to include `command` and `description`), `depends_on` is
+  `None` or a list of strings, `prompt` is `None` or `str`.
 
 ## Anti-patterns
 
@@ -64,3 +69,5 @@ a string. Pure (modulo exceptions).
 - For the common end-to-end case, prefer `compile_flow` — it composes
   `parse_dsl` and `serialize_flow` correctly and applies the per-format
   `depends_on` rules.
+- Do not expect `prompt=None` to emit an empty `prompt:` key — it omits the
+  key entirely (backwards-compat behavior).

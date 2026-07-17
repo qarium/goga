@@ -1,0 +1,13 @@
+# добавляется в итоговый `flow.yml` файл в глобалбную директиву `prompt`
+prompt: |
+  Example prompt
+
+# описывает настройки для расширения stages
+stages:
+  propose: # имя stage который нужно настроить
+    agent: codex # агент который необходимо использовать, берется по тому же паттерну, что и agent из goga конфигурации `/home/goga/bin/<agent>-as-claude.sh` и путь до исполняемого файла подставляется в директиву `command` в `stage.command: /home/goga/bin/<agent>-as-claude.sh`
+    prompt: | # транслируется в `stage.description` в итоговый `flow.yml`
+      Additional prompt
+  propose-review:
+    loop: 2 # множит один и тот же stage в цикле указанное кол-во раз, то есть `loop: 2` -> `propose-review [iter=1], propose-review [iter=2]`
+    agent: claude
