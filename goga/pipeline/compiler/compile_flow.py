@@ -32,16 +32,19 @@ logger = logging.getLogger(__name__)
 
 # Canonical key order for the output stage fields. ``serialize_flow`` emits
 # ``FlowStage.fields`` verbatim, so canonical order must be established here.
-_CANONICAL_KEY_ORDER = ["interactive", "prompt", "agents", "skills"]
+# ``command`` and ``description`` are populated by per-stage workflow overrides
+# (workflow branch); when absent they are simply skipped by the loop below.
+_CANONICAL_KEY_ORDER = ["interactive", "command", "prompt", "description", "agents", "skills"]
 
 
 def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
-    Known keys (``interactive``, ``prompt``, ``agents``, ``skills``) are emitted
-    first in that fixed order; any remaining keys are appended alphabetically.
-    Each value is deep-copied so the returned dict shares no structure with the
-    parsed body — isolating the compiler's output from caller mutation.
+    Known keys (``interactive``, ``command``, ``prompt``, ``description``,
+    ``agents``, ``skills``) are emitted first in that fixed order; any remaining
+    keys are appended alphabetically. Each value is deep-copied so the returned
+    dict shares no structure with the parsed body — isolating the compiler's
+    output from caller mutation.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
@@ -129,7 +132,7 @@ def compile_flow(pipeline_path: Path, flow_path: Path) -> tuple[PipelineDocument
                 ),
             )
 
-    doc = FlowDocument(name=header.name, description=header.description, stages=stages)
+    doc = FlowDocument(prompt=None, name=header.name, description=header.description, stages=stages)
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)
     text_out = serialize_flow(doc)
     flow_path.write_text(text_out)

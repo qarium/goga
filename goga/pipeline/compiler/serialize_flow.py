@@ -5,11 +5,13 @@ fully-built ``FlowDocument`` (with ``FlowStage.fields`` already in canonical key
 order — enforced by ``compile_flow``) and renders it into the canonical afm
 flow-file format. It performs no file I/O and no reordering.
 
-The one non-standard rule — flow-style for ``agents`` while ``skills`` and
-``depends_on`` stay block-style — is isolated behind the ``_FlowAgents`` marker
-list and its custom representer on ``_CanonicalDumper``. ``serialize_flow`` wraps
-any ``agents`` list value in ``_FlowAgents`` before passing the document to
-``yaml.dump``, so the rule never leaks into the rest of the pipeline.
+The non-standard rules are isolated behind marker subclasses and their custom
+representers on ``_CanonicalDumper``: flow-style for ``agents``
+(``_FlowAgents``) while ``skills`` and ``depends_on`` stay block-style, and
+block-literal scalar style for the top-level ``prompt`` (``_BlockLiteralPrompt``).
+``serialize_flow`` wraps any ``agents`` list value in ``_FlowAgents`` and any
+non-``None`` top-level prompt in ``_BlockLiteralPrompt`` before passing the
+document to ``yaml.dump``, so the rules never leak into the rest of the pipeline.
 """
 
 from __future__ import annotations
@@ -34,12 +36,23 @@ def _represent_flow_agents(dumper: yaml.Dumper, data: _FlowAgents) -> yaml.Node:
     return dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=True)
 
 
+class _BlockLiteralPrompt(str):
+    """Marker class — string that must serialize in block-literal scalar style."""
+    pass
+
+
+def _represent_block_literal_prompt(dumper: yaml.Dumper, data: _BlockLiteralPrompt) -> yaml.Node:
+    """Force block-literal scalar output for the top-level ``prompt`` value."""
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+
 class _CanonicalDumper(yaml.SafeDumper):
-    """``SafeDumper`` subclass carrying the ``_FlowAgents`` flow-style representer."""
+    """``SafeDumper`` subclass carrying the marker-class representers."""
     pass
 
 
 _CanonicalDumper.add_representer(_FlowAgents, _represent_flow_agents)
+_CanonicalDumper.add_representer(_BlockLiteralPrompt, _represent_block_literal_prompt)
 
 
 def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
@@ -72,8 +85,10 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
 def serialize_flow(doc: FlowDocument) -> str:
     """Serialize a ``FlowDocument`` into canonical afm flow-file YAML.
 
-    Top-level keys are emitted in fixed order (``name``, ``description``,
-    ``stages``); each stage is emitted as ``id``, ``name``, then the stage's
+    Top-level keys are emitted in fixed order — ``prompt`` first when not
+    ``None`` (block-literal scalar style), then ``name``, ``description``,
+    ``stages``. When ``doc.prompt is None`` the ``prompt`` key is omitted
+    entirely. Each stage is emitted as ``id``, ``name``, then the stage's
     ``fields`` verbatim (preserving their canonical order), then ``depends_on``
     only when it is not ``None``. ``agents`` lists serialize in flow-style;
     ``skills`` and ``depends_on`` serialize in block-style. The output ends with
@@ -85,16 +100,17 @@ def serialize_flow(doc: FlowDocument) -> str:
     Args:
         doc: The document to serialize. Each ``FlowStage.fields`` must already be
             in canonical key order and ``depends_on`` must be ``None`` or a list
-            of strings.
+            of strings. ``prompt`` must be ``None`` or a ``str``.
 
     Returns:
         The canonical afm flow-file content as a string.
     """
-    top: dict[str, object] = {
-        "name": doc.name,
-        "description": doc.description,
-        "stages": [_build_stage_repr(stage) for stage in doc.stages],
-    }
+    top: dict[str, object] = {}
+    if doc.prompt is not None:
+        top["prompt"] = _BlockLiteralPrompt(doc.prompt)
+    top["name"] = doc.name
+    top["description"] = doc.description
+    top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]
 
     text = yaml.dump(
         top,
