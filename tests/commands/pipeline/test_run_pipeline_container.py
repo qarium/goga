@@ -131,7 +131,7 @@ class TestPipelineRunCommand:
     def test_pipeline_run_launches_container_with_port_and_afm_config(
         self, tmp_path: Path, monkeypatch, capsys
     ) -> None:
-        """Run mode publishes the port, mounts the afm config, passes env-file, prints Web UI."""
+        """Run mode publishes the port, mounts the afm config, passes env-file, no dashboard URL."""
         config = _make_config(pipeline_agent="claude")
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
@@ -159,7 +159,10 @@ class TestPipelineRunCommand:
         assert "--env-file" in cmd
 
         out = capsys.readouterr().out
-        assert "Web UI: http://localhost:50321" in out
+        # This cell surfaces NO dashboard URL line — only the workflow log line
+        # (when applicable) and the docker output stream. With no workflow flags
+        # and no .goga/workflows/deploy.yml auto-match file, no log is emitted.
+        assert "Web UI:" not in out
 
     def test_pipeline_run_does_not_mount_afm_state_under_workspace(self, tmp_path: Path, monkeypatch) -> None:
         """afm state is never mounted under /workspace."""

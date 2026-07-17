@@ -365,6 +365,14 @@ If the name exists in both sources, the project source wins (resolved inside the
   launcher-side value is the single source of truth.
 - Do NOT pass `--workflow X --no-workflow` together — exit 1 with a
   readable ClickException before any further work.
+- Do NOT print the `Pipeline running with workflow "<name>"` log line when
+  `--no-workflow` is set OR when the auto-match file does not exist on the host.
+  The line is emitted ONLY when a workflow will actually be applied: explicit
+  `--workflow X` (file already validated) or basename auto-match file present.
+- Do NOT print any dashboard URL line on stdout — this cell surfaces at most the
+  workflow log line (above) and the docker output stream. The dashboard is
+  reached via the published `-p <port>:<port>`; the launcher no longer echoes a
+  `Web UI: http://localhost:<port>` line.
 - Do NOT expect `--workflow X` to launch the container when the file is
   missing on the host — the launcher exits 1 BEFORE container launch.
 - Do NOT expect host-side existence validation for the basename auto-match
