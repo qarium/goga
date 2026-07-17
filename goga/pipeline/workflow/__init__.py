@@ -6,14 +6,19 @@ instructions for the compiler. The cell is intentionally declarative: it does
 not know about the compiler or any compiler-level concept.
 
 Built incrementally: each entity task adds its module's import and ``__all__``
-entry. Once all entity tasks land, the contract names ``parse_workflow``,
-``WorkflowDocument``, and ``WorkflowStage`` are re-exported here.
+entry. With the parser landed, the contract names ``parse_workflow``,
+``WorkflowDocument``, and ``WorkflowStage`` are re-exported here, alongside the
+``WorkflowSyntaxError`` structural-error type (mirroring the compiler cell's
+``StructuralError`` re-export).
 """
 
+from .parse_workflow import WorkflowSyntaxError, parse_workflow
 from .workflow_document import WorkflowDocument
 from .workflow_stage import WorkflowStage
 
 __all__: list[str] = [
     "WorkflowDocument",
     "WorkflowStage",
+    "WorkflowSyntaxError",
+    "parse_workflow",
 ]
