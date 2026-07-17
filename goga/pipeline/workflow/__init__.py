@@ -10,8 +10,10 @@ entry. Once all entity tasks land, the contract names ``parse_workflow``,
 ``WorkflowDocument``, and ``WorkflowStage`` are re-exported here.
 """
 
+from .workflow_document import WorkflowDocument
 from .workflow_stage import WorkflowStage
 
 __all__: list[str] = [
+    "WorkflowDocument",
     "WorkflowStage",
 ]
