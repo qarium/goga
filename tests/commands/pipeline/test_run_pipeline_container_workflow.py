@@ -188,6 +188,67 @@ class TestRunPipelineContainerWorkflowLogLine:
         assert "Web UI:" not in result.output
 
 
+class TestResolveWorkflowEnvAutoMatchContainment:
+    """Auto-match path-traversal containment (CODEMANIFEST step 6b).
+
+    The auto-match fallback composes ``<cwd>/.goga/workflows/<name>.yml`` from the
+    pipeline ``name``. A ``name`` escaping the workflows dir via ``..`` or an
+    absolute prefix is a silent miss — ``workflow_log_name=None``, no env var —
+    even when the escaped path exists on the host, mirroring the
+    explicit-``--workflow`` (host) and in-container containment guards. This keeps
+    the host log line honest: it never claims a workflow that the in-container
+    resolver will refuse to apply.
+    """
+
+    def test_auto_match_dotdot_escape_is_silent_miss(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ``..`` in the pipeline name never resolves outside the workflows dir."""
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        # A file reachable only by escaping the workflows dir via ``..``.
+        (tmp_path / ".goga" / "outside.yml").write_text("prompt: evil\n")
+        monkeypatch.chdir(tmp_path)
+
+        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+            workflow=None, no_workflow=False, name="../outside"
+        )
+
+        assert workflow_env == {}
+        assert workflow_log_name is None
+
+    def test_auto_match_absolute_prefix_is_silent_miss(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An absolute-prefixed pipeline name never resolves outside the workflows dir."""
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.chdir(tmp_path)
+
+        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+            workflow=None, no_workflow=False, name="/etc/evil"
+        )
+
+        assert workflow_env == {}
+        assert workflow_log_name is None
+
+    def test_auto_match_plain_name_still_resolves(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A plain pipeline name with a present basename file still resolves (regression guard)."""
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        (workflows_dir / "deploy.yml").write_text("prompt: hi\n")
+        monkeypatch.chdir(tmp_path)
+
+        workflow_env, workflow_log_name = _rpc_mod._resolve_workflow_env(
+            workflow=None, no_workflow=False, name="deploy"
+        )
+
+        assert workflow_env == {}
+        assert workflow_log_name == "deploy"
+
+
 # --- Step 11 — env-file workflow entries ---
 
 

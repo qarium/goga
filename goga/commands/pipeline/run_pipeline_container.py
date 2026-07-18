@@ -344,7 +344,19 @@ def _resolve_workflow_env(
     # Auto-match fallback: the basename workflow-file is resolved in-container,
     # so the host writes NO workflow env var. It only checks existence to decide
     # whether the workflow log line is accurate (the file will actually apply).
-    auto_match_path = Path.cwd() / ".goga" / "workflows" / f"{name}.yml"
+    # Workflow paths are project-only (CODEMANIFEST step 6b) — mirroring the
+    # explicit-``--workflow`` and in-container containment guards, a ``name``
+    # carrying a ``..`` segment or an absolute prefix that escapes the workflows
+    # dir is a silent miss (``workflow_log_name=None``, no log line), never a
+    # path resolved into the wider filesystem. The in-container resolver re-applies
+    # the same containment before parsing, so this only keeps the host log line
+    # honest.
+    workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
+    auto_match_path = workflows_root / f"{name}.yml"
+    try:
+        auto_match_path.resolve().relative_to(workflows_root)
+    except ValueError:
+        return {}, None
     if auto_match_path.exists():
         return {}, name
     return {}, None
