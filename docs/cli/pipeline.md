@@ -16,7 +16,7 @@ goga pipeline <name>    # run mode: run a pipeline by name (in-container)
 The `pipeline` command is a single Click command (not a group). Its behavior depends on whether a name is given:
 
 - **Without `name` (discovery mode):** launches the goga Docker image running `python -m goga.pipeline list`, which prints the `Available pipelines:` header followed by one pipeline per line. Project pipelines are annotated with `(project)`; user pipelines are printed bare.
-- **With `name` (run mode):** allocates a free localhost port, writes a private afm-config tmpfile (`client.command: <resolved wrapper path>` — the absolute `resolve_wrapper_path(config.pipeline.agent)` value, never a bare agent name) mounted read-only at the fixed path `/home/goga/.afm/config.yaml`, ensures a persistent afm state host directory exists (wiping it first when `--clean` is set) and mounts it read-write at `/home/goga/pipeline`, writes a private env-file combining `config.pipeline.env` with git identity, `extra_env`, `AFM_DIR=/home/goga/pipeline`, and — when a proxy is set — the proxy env vars, prints the Web UI URL, and launches the goga Docker image running `python -m goga.pipeline run <name> --port <port>`. Credential files for claude/codex/opencode are detected on the host and bind-mounted read-only into the container automatically. Inside the container `goga.pipeline` resolves the pipeline to its absolute path, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `agents` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and invokes `afm run --port <port> <compiled-flow-path>`. The container's exit code is propagated via `ctx.exit`.
+- **With `name` (run mode):** allocates a free localhost port, writes a private afm-config tmpfile (`client.command: <resolved wrapper path>` — the absolute `resolve_wrapper_path(config.pipeline.agent)` value, never a bare agent name) mounted read-only at the fixed path `/home/goga/.afm/config.yaml`, ensures a persistent afm state host directory exists (wiping it first when `--clean` is set) and mounts it read-write at `/home/goga/pipeline`, writes a private env-file combining `config.pipeline.env` with git identity, `extra_env`, `AFM_DIR=/home/goga/pipeline`, the workflow env vars (see [Workflow files](#workflow-files)), and — when a proxy is set — the proxy env vars, prints a workflow log line when a workflow is applied, and launches the goga Docker image running `python -m goga.pipeline run <name> --port <port>`. Credential files for claude/codex/opencode are detected on the host and bind-mounted read-only into the container automatically. Inside the container `goga.pipeline` resolves the pipeline to its absolute path, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `agents` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and invokes `afm run --port <port> <compiled-flow-path>`. The container's exit code is propagated via `ctx.exit`.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -58,14 +58,14 @@ Project pipelines are annotated with `(project)`; user pipelines are printed bar
 
 ## Run Mode (`goga pipeline <name>`)
 
-Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/`, and runs that via `afm run`. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. The Web UI URL is printed to stdout.
+Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/`, and runs that via `afm run`. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; otherwise the launcher prints no status line.
 
 ```bash
-goga pipeline deploy
+goga pipeline deploy --workflow feature-phases
 ```
 
 ```
-Web UI: http://localhost:<port>
+Pipeline running with workflow "feature-phases"
 ```
 
 If the name exists in both sources, the project source wins. The container exit code is propagated as the command's exit code.
@@ -94,6 +94,35 @@ Only those four keys are valid; an unknown key, a non-string value, or a non-map
 
 At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mounted at `/home/goga/pipeline/prompts`) before `afm` starts, and `afm` reads them through the `prompts_dir` field in its config. That `prompts/` directory is wiped and rebuilt from the defaults plus any `agents` overrides on every run, so files manually placed there do not persist.
 
+### Workflow files
+
+A pipeline run can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, and loop-expansion on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
+
+Three invocation modes (mutually exclusive in the explicit cases):
+
+- `goga pipeline deploy` (no flags) — *auto-match*: if `<cwd>/.goga/workflows/deploy.yml` exists it is applied silently; otherwise no workflow. No host-side validation.
+- `goga pipeline deploy --workflow custom` — apply `<cwd>/.goga/workflows/custom.yml`. The host validates the file exists **before** launch (exit 1 if missing).
+- `goga pipeline deploy --no-workflow` — disable workflow application entirely (writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file).
+
+When a workflow will actually be applied (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The previously emitted `Web UI: http://localhost:<port>` dashboard line has been removed — the launcher now surfaces only the workflow log line and the `docker` output stream.
+
+The workflow name reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). Inside the container `goga.pipeline` resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
+
+Example workflow-file:
+
+```yaml
+prompt: |
+  Top-level prompt injected as the first directive of the flow-file.
+stages:
+  propose:
+    agent: codex
+    prompt: |
+      Additional per-stage instruction.
+  propose-review:
+    loop: 2
+    agent: claude
+```
+
 ## Options
 
 | Option | Type | Default | Description |
@@ -104,6 +133,8 @@ At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mo
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Effective in both modes |
 | `--clean` | flag | off | Wipe the persistent afm state directory before launch. Run mode only (no-op in discovery) |
 | `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in both modes |
+| `--workflow` | string | — | Apply an explicit workflow at `<cwd>/.goga/workflows/<name>.yml`. The file must exist on the host (exit 1 if missing). Mutually exclusive with `--no-workflow`. Run mode only |
+| `--no-workflow` | flag | off | Disable workflow application entirely (writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file). Mutually exclusive with `--workflow`. Run mode only |
 
 ### Persistent afm state
 
@@ -150,7 +181,7 @@ goga pipeline deploy --clean
 | Code | Meaning                                                                  |
 |------|--------------------------------------------------------------------------|
 | `0`  | The pipeline ran successfully                                            |
-| `1`  | The named pipeline was not found in either source directory              |
+| `1`  | A `ClickException` before launch: the `pipeline` section is missing in `.goga/config.yml`, the named pipeline was not found in either source directory, `--workflow` and `--no-workflow` were both set, or an explicit `--workflow <name>` named a file that does not exist |
 | `126`| `afm` was present but could not be invoked (e.g. not executable)         |
 | `127`| The `afm` binary is missing inside the container                         |
 | `130`| Interrupted by SIGINT (`128 + 2`)                                        |

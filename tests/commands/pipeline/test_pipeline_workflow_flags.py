@@ -108,6 +108,52 @@ class TestPipelineWorkflowFlagValidation:
         # The container is never launched when the workflow file is missing.
         mock_run.assert_not_called()
 
+    def test_pipeline_command_path_traversal_workflow_name_rejected(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A ``--workflow`` name that escapes the workflows dir exits 1.
+
+        Workflow paths are project-only by design (CODEMANIFEST step 6b): a name
+        carrying a ``..`` segment (or an absolute prefix) that would resolve
+        outside ``<cwd>/.goga/workflows/`` is rejected as a clean message +
+        exit 1 BEFORE any filesystem read or container launch — the host never
+        stats or parses a file outside the project workflows dir.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(
+            _pipeline_module, "run_pipeline_container", return_value=0
+        ) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--workflow", "../etc/evil"])
+
+        assert result.exit_code == 1
+        assert "invalid workflow name" in result.output
+        mock_run.assert_not_called()
+
+    def test_pipeline_command_discovery_mode_missing_workflow_exits_one(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Discovery mode still runs the host-side ``--workflow`` validation.
+
+        Per CODEMANIFEST, steps 5 (mutual exclusion) and 6 (existence) are
+        unconditional — they run BEFORE dispatch regardless of whether ``name``
+        is set. So ``goga pipeline --workflow missing`` (no name) exits 1 when
+        the file is absent; the workflow LAYER (env-file/log line) is the part
+        that is a no-op in discovery, not the flag validation.
+        """
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(
+            _pipeline_module, "run_pipeline_container", return_value=0
+        ) as mock_run:
+            result = runner.invoke(pipeline, ["--workflow", "missing"])
+
+        assert result.exit_code == 1
+        assert "workflow 'missing' not found" in result.output
+        mock_run.assert_not_called()
+
 
 # --- Edge cases (no host-side validation; dispatch proceeds) ---
 

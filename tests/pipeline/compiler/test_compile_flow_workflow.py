@@ -329,3 +329,211 @@ class TestCompileFlowWorkflowReferenceFixture:
         original_names = [step.name for step in pipeline_doc.body.steps]
         assert "propose-review" in original_names
         assert "propose-review-1" not in original_names
+
+
+def _stage_field_keys_in_text_order(text: str, stage_id: str) -> list[str]:
+    """Return one stage's field keys (excluding id/name/depends_on) in textual order.
+
+    Walks the serialized YAML text line by line, isolating the block for
+    ``stage_id`` (from ``- id: <stage_id>`` up to the next ``- id:`` or
+    end-of-file), and collects the field keys in the order they appear. Mirrors
+    the helper in ``test_integration.py``; used to assert canonical key ordering
+    of the workflow-injected ``command``/``description`` slots.
+    """
+    lines = text.splitlines()
+    start = next(i for i, line in enumerate(lines) if line == f"- id: {stage_id}")
+    keys: list[str] = []
+    for line in lines[start + 1 :]:
+        if line.startswith("- id: "):
+            break
+        stripped = line[2:]
+        if (
+            line.startswith("  ")
+            and not line.startswith("   ")
+            and not stripped.startswith("-")
+            and ":" in stripped
+        ):
+            key = stripped.split(":", 1)[0]
+            if key not in ("id", "name", "depends_on"):
+                keys.append(key)
+    return keys
+
+
+class TestCompileFlowWorkflowCanonicalOrder:
+    """The workflow-injected ``command``/``description`` slots land in canonical order.
+
+    ``serialize_flow`` emits ``FlowStage.fields`` verbatim, so canonical ordering
+    is entirely the compiler's responsibility at assembly time. The pre-existing
+    canonical-order test compiles WITHOUT a workflow, so ``command``/``description``
+    never appear; this class pins their positions relative to the other known keys.
+    """
+
+    def test_workflow_overrides_preserve_canonical_field_order(self, tmp_path: Path) -> None:
+        """A stage carrying all known keys + workflow command/description serializes in order.
+
+        The expected serialized field order is ``interactive, command, prompt,
+        description, agents, skills`` — ``command``/``description`` (workflow-injected)
+        sit in their canonical positions, not wherever the override happened to set them.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        # Body keys deliberately scrambled so the test catches any pass-through
+        # of authored order; only canonical order should win.
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "s:\n"
+            "  description: S\n"
+            "  skills: [goga-propose]\n"
+            "  agents: [claude]\n"
+            "  prompt: body-prompt\n"
+            "  interactive: true\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"s": WorkflowStage(agent="codex", prompt="ov")})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        text = flow_path.read_text()
+        assert _stage_field_keys_in_text_order(text, "s") == [
+            "interactive",
+            "command",
+            "prompt",
+            "description",
+            "agents",
+            "skills",
+        ]
+        # Sanity: the override values landed in the right slots.
+        stage = yaml.safe_load(text)["stages"][0]
+        assert stage["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert stage["description"] == "ov"
+
+
+class TestCompileFlowWorkflowStagesOverrideAndDeps:
+    """STAGES-format override + external ``depends_on`` rewrite edge cases."""
+
+    def test_workflow_per_stage_override_on_stages_body(self, tmp_path: Path) -> None:
+        """Per-stage agent/prompt overrides apply to a STAGES (mapping) body too.
+
+        The existing override test uses a PHASES body; this pins the same
+        injection on a ``StageStep`` body (distinct type from ``PhaseStep``).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "propose:\n"
+            "  description: Propose\n"
+            "review:\n"
+            "  description: Review\n"
+            "  depends_on: [propose]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(agent="codex", prompt="P")})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        propose = next(s for s in stages if s["id"] == "propose")
+        assert propose["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert propose["description"] == "P"
+
+    def test_workflow_unmatched_depends_on_ref_kept_as_is(self, tmp_path: Path) -> None:
+        """An external depends_on ref matching no expanded base-name is kept verbatim (5c).
+
+        STAGES rewrite replaces refs to EXPANDED base-names with the LAST id; a
+        ref that matches nothing (a dangling author ref) is left for afm to
+        surface — not dropped or rewritten.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  description: A\n"
+            "b:\n"
+            "  description: B\n"
+            "  depends_on: [a]\n"
+            "c:\n"
+            "  description: C\n"
+            "  depends_on: [b, ghost]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(loop=2)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        c = next(s for s in stages if s["id"] == "c")
+        # `b` rewritten to its LAST expanded id; `ghost` survives unchanged.
+        assert c["depends_on"] == ["b-2", "ghost"]
+
+    def test_workflow_stages_first_step_no_depends_on_expands_cleanly(self, tmp_path: Path) -> None:
+        """Expanding a STAGES step with no authored depends_on keeps copy 1 dep-free.
+
+        The first copy inherits the original (``None``) depends_on — so it must
+        serialize WITHOUT a ``depends_on`` key, not an empty/self-referential list.
+        Copy 2 chains to copy 1; downstream refs rewrite to the LAST id.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  description: A\n"
+            "b:\n"
+            "  description: B\n"
+            "  depends_on: [a]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"a": WorkflowStage(loop=2)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a-1", "a-2", "b"]
+        assert "depends_on" not in stages[0]
+        assert stages[1]["depends_on"] == ["a-1"]
+        # Downstream authored ref to `a` rewrites to the LAST expanded id.
+        assert stages[2]["depends_on"] == ["a-2"]
+
+
+class TestCompileFlowWorkflowOverrideMatrix:
+    """Per-stage override presence/absence — each field injects only its own slot."""
+
+    def test_workflow_agent_only_leaves_no_description_slot(self, tmp_path: Path) -> None:
+        """An ``agent``-only override sets ``command`` but NOT ``description``."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: propose\n  description: Propose\n"
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(agent="codex")})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = yaml.safe_load(flow_path.read_text())["stages"][0]
+        assert fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert "description" not in fields
+
+    def test_workflow_prompt_only_leaves_no_command_slot(self, tmp_path: Path) -> None:
+        """A ``prompt``-only override sets ``description`` but NOT ``command``."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: propose\n  description: Propose\n"
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(prompt="only-prompt")})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = yaml.safe_load(flow_path.read_text())["stages"][0]
+        assert fields["description"] == "only-prompt"
+        assert "command" not in fields

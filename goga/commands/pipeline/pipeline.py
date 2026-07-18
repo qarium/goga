@@ -166,9 +166,16 @@ def pipeline(  # noqa: PLR0913
     # routine. Only an explicit --workflow <name> is validated here so a typo
     # surfaces as a clean message + exit 1 BEFORE the container is launched.
     # Workflow paths are project-only — resolved from Path.cwd() (which is
-    # /workspace in-container), mirroring the in-container resolution.
+    # /workspace in-container), mirroring the in-container resolution. A name
+    # that escapes the workflows dir (``..`` segment or absolute prefix) is
+    # rejected as exit 1 — never resolved into the wider filesystem.
     if workflow is not None:
-        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{workflow}.yml"
+        workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
+        workflow_path = workflows_root / f"{workflow}.yml"
+        try:
+            workflow_path.resolve().relative_to(workflows_root)
+        except ValueError:
+            raise click.ClickException(f"invalid workflow name {workflow!r}") from None
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 

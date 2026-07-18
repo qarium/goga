@@ -209,3 +209,61 @@ class TestRunPipelineWorkflowResolution:
         # The structural workflow error surfaces before compile_flow runs.
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_workflow_name_missing_file_silent_miss(
+        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GOGA_WORKFLOW_NAME set but its file absent → workflow=None (silent miss).
+
+        A named workflow that does not exist is a defensive silent miss, not an
+        error — the named-resolution path must return ``None`` exactly like the
+        basename fallback miss, never raise.
+        """
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "custom")
+
+        # .goga/workflows/ dir exists but custom.yml does NOT.
+        (tmp_path / ".goga" / "workflows").mkdir(parents=True)
+        project_dir = tmp_path / ".goga" / "pipelines"
+        project_dir.mkdir(parents=True)
+        (project_dir / "deploy.yml").write_text("pipeline")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_compile.call_args.kwargs["workflow"] is None
+
+    def test_run_pipeline_workflow_name_path_traversal_silent_miss(
+        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A path-traversal GOGA_WORKFLOW_NAME is a silent miss, never a traversal.
+
+        Workflow paths are project-only by design (CODEMANIFEST step 6b): a name
+        that escapes ``<cwd>/.goga/workflows/`` via ``..`` or an absolute prefix
+        resolves to ``None`` inside the container, never parsing a file outside
+        the project workflows dir.
+        """
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "../../etc/evil")
+
+        project_dir = tmp_path / ".goga" / "pipelines"
+        project_dir.mkdir(parents=True)
+        (project_dir / "deploy.yml").write_text("pipeline")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+            # parse_workflow must never be invoked for a traversal name.
+            mock.patch.object(_run_pipeline_module, "parse_workflow") as mock_parse,
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_compile.call_args.kwargs["workflow"] is None
+        mock_parse.assert_not_called()

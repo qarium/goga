@@ -296,29 +296,58 @@ class TestPipelineCommandWorkflowIntegration:
         # The dashboard URL line was removed from this cell entirely.
         assert "Web UI:" not in result.output
 
-    def test_pipeline_command_feature_phases_no_real_docker_dependency(
+    def test_pipeline_command_feature_phases_forwards_env_file_to_docker(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The integration path dispatches with the workflow name forwarded by kwarg.
+        """The workflow env-file reaches the ``docker run`` argv (full handoff).
 
-        Driving the real launcher with docker mocked confirms the CLI forwards
-        ``workflow="feature-phases"`` to ``run_pipeline_container`` (the
-        cross-cell handoff from commands/pipeline into the launcher), and that
-        the launcher's workflow decision matrix selects the NAME branch — the
-        captured env-file carries the workflow name and nothing else
-        workflow-related.
+        Distinct from the log-line/env-entry sibling: this pins the FULL cross-cell
+        handoff from the CLI flag through the launcher's workflow decision matrix
+        into the actual ``docker run`` argv. The launcher writes a private env-file
+        carrying ``GOGA_WORKFLOW_NAME=feature-phases`` and forwards it to docker via
+        ``--env-file <path>``; the mocked ``subprocess.Popen`` captures that argv so
+        we can prove the workflow name rides all the way to the container boundary
+        (no real docker daemon required). The env-file is read at launch time
+        because the launcher unlinks it in its finally block once the run returns.
         """
         _write_project(tmp_path)
         monkeypatch.chdir(tmp_path)
-        _mock_docker_internals(monkeypatch)
-        captured = _capture_env(monkeypatch)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50401)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+
+        captured_argv: list[list[str]] = []
+        captured_env_contents: list[str] = []
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+
+        def capture_popen(argv: list[str], *_a: object, **_k: object) -> object:
+            captured_argv.append(list(argv))
+            # Read the env-file NOW — the launcher's finally unlinks it post-run.
+            for i, token in enumerate(argv):
+                env_path = None
+                if token == "--env-file" and i + 1 < len(argv):
+                    env_path = argv[i + 1]
+                elif token.startswith("--env-file="):
+                    env_path = token.split("=", 1)[1]
+                if env_path is not None:
+                    captured_env_contents.append(Path(env_path).read_text())
+                    break
+            return mock_proc
+
+        monkeypatch.setattr(subprocess, "Popen", capture_popen)
+        monkeypatch.setattr(subprocess, "run", lambda *_a, **_k: mock.Mock())
 
         runner = CliRunner()
         result = runner.invoke(pipeline, ["deploy", "--workflow", "feature-phases"])
 
         assert result.exit_code == 0
-        assert captured["GOGA_WORKFLOW_NAME"] == "feature-phases"
-        assert "GOGA_WORKFLOW_DISABLED" not in captured
+        # The container was launched exactly once with an env-file forwarded.
+        assert len(captured_argv) == 1
+        assert len(captured_env_contents) == 1
+        # The env-file that docker received carries the workflow name (and only it).
+        assert "GOGA_WORKFLOW_NAME=feature-phases" in captured_env_contents[0]
+        assert "GOGA_WORKFLOW_DISABLED" not in captured_env_contents[0]
 
 
 if __name__ == "__main__":

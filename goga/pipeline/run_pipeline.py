@@ -55,11 +55,19 @@ def _resolve_workflow(name: str) -> WorkflowDocument | None:
     if os.environ.get("GOGA_WORKFLOW_DISABLED") == "1":
         return None
 
+    workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
     workflow_name = os.environ.get("GOGA_WORKFLOW_NAME")
-    if workflow_name:
-        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{workflow_name}.yml"
-    else:
-        workflow_path = Path.cwd() / ".goga" / "workflows" / f"{name}.yml"
+    workflow_path = workflows_root / f"{workflow_name or name}.yml"
+
+    # Containment guard — workflow paths are project-only by design (CODEMANIFEST
+    # step 6b). A name carrying a ``..`` segment or an absolute prefix that
+    # escapes the workflows dir is a silent miss, never a traversal into the
+    # wider filesystem (``GOGA_WORKFLOW_NAME`` may originate from a less-trusted
+    # source than the host CLI).
+    try:
+        workflow_path.resolve().relative_to(workflows_root)
+    except ValueError:
+        return None
 
     if not workflow_path.exists():
         return None
@@ -77,13 +85,13 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     compiles the goga DSL pipeline-file into an afm flow-file via
     :func:`compile_flow` at the path ``<AFM_DIR>/flow.yml`` (forwarding the
     parsed workflow when one resolved), materializes the four agent prompt files
-    into ``<AFM_DIR>/prompts/`` (step 6.5), then launches ``afm`` via
+    into ``<AFM_DIR>/prompts/`` (step 8), then launches ``afm`` via
     :func:`goga.afm.run_flow` with the compiled flow-file path (not the DSL
     path) and the caller-allocated ``port``. The ``afm`` binary's exit code is
     propagated; a missing pipeline returns a non-zero code without invoking the
     compiler or the binary.
 
-    Step 6.5 materializes one prompt file per agent key
+    Step 8 materializes one prompt file per agent key
     (``planning``, ``implementation``, ``review``, ``summary``) into
     ``<AFM_DIR>/prompts/``. For each key, an inline override from the
     pipeline-file ``agents`` header replaces the file wholesale; otherwise the
@@ -109,7 +117,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
 
     Raises:
         RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty
-            (message ``"AFM_DIR not set"``), or when step 6.5 finds a missing
+            (message ``"AFM_DIR not set"``), or when step 8 finds a missing
             package default for an agent key with no inline override (message
             ``"<key>: default prompt missing from package and no inline override
             supplied"``), raised before the prompts directory is wiped.
@@ -149,11 +157,11 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
 
     pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
 
-    # Step 6.5: materialize the four agent prompt files into <AFM_DIR>/prompts/.
+    # Step 8: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     defaults_dir = _resolve_defaults_dir()
     agents = pipeline_doc.header.agents
 
-    # 6.5b — validate-all before wipe (atomicity): every key needs an inline
+    # 8b — validate-all before wipe (atomicity): every key needs an inline
     # override or an existing package default. A missing default with no override
     # raises BEFORE any file is written, so a failed run leaves prompts/ as-is.
     for key in _AGENT_KEYS:
@@ -163,13 +171,13 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
                 f"{key}: default prompt missing from package and no inline override supplied"
             )
 
-    # 6.5c — wipe + recreate so re-runs are idempotent regardless of prior state.
+    # 8c — wipe + recreate so re-runs are idempotent regardless of prior state.
     prompts_dir = afm_dir / "prompts"
     if prompts_dir.exists():
         shutil.rmtree(prompts_dir)
     prompts_dir.mkdir(parents=True, exist_ok=False)
 
-    # 6.5d — write per key: an override replaces the file; otherwise copy default.
+    # 8d — write per key: an override replaces the file; otherwise copy default.
     for key in _AGENT_KEYS:
         override = getattr(agents, key) if agents is not None else None
         target = prompts_dir / f"{key}.md"
@@ -178,7 +186,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
         else:
             shutil.copy(defaults_dir / f"{key}.md", target)
 
-    # 6.5e — exactly four prompt files materialized. A real guard, not an
+    # 8e — exactly four prompt files materialized. A real guard, not an
     # ``assert``: the count must hold in optimized runs (``python -O``) too, and
     # a divergence here (concurrent writer, FS oddity) is a RuntimeError rather
     # than a bare AssertionError surfacing at the CLI.

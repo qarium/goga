@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 # (workflow branch); when absent they are simply skipped by the loop below.
 _CANONICAL_KEY_ORDER = ["interactive", "command", "prompt", "description", "agents", "skills"]
 
-# In-container wrapper path template consumed by afm 0.4.15 as the per-stage
+# In-container wrapper path template consumed by afm >= 0.4.15 as the per-stage
 # ``command:`` override. Composed directly from the ``WorkflowStage`` agent name
 # — the cell does NOT call any host-side wrapper resolver.
 _WRAPPER_PATH_TEMPLATE = "/home/goga/bin/{agent}-as-claude.sh"
@@ -150,7 +150,11 @@ def _make_expanded_copy(
     # STAGES: first copy inherits the original external depends_on (rewritten in
     # 5c); later copies chain to the previous copy by id.
     if index == 1:
-        assert isinstance(step, StageStep)
+        # A real guard, not an ``assert``: the type must hold in optimized runs
+        # (``python -O``) too — a non-StageStep here is an internal invariant
+        # breach, not a recoverable state.
+        if not isinstance(step, StageStep):
+            raise TypeError(f"expected StageStep in STAGES expansion, got {type(step).__name__}")
         depends_on = copy.deepcopy(step.depends_on)
     else:
         depends_on = [f"{step.name}-{index - 1}"]
@@ -185,7 +189,7 @@ def _expand_loops(
         wf_stage = workflow.stages.get(step.name)
         if wf_stage is not None and wf_stage.loop is not None:
             loop_count = wf_stage.loop
-        if loop_count == 1:
+        if loop_count < _LOOP_EXPANSION_THRESHOLD:
             expanded.append(step)
             expanded_ids[step.name] = [step.name]
             continue

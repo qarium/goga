@@ -514,20 +514,6 @@ def _run_named(  # noqa: PLR0913
         for host_path, container_path in resolve_credential_mounts():
             mounts.append(f"{host_path}:{container_path}:ro")
 
-        project_dir = Path.cwd().resolve()
-        # Nested mounts: project as /workspace (container working dir); the
-        # persistent afm state host dir read-write at /home/goga/pipeline
-        # (survives across runs); the afm-config tmpfile read-only at the FIXED
-        # path /home/goga/.afm/config.yaml (independent of AFM_DIR). Then each
-        # credential mount, read-only.
-        mounts = [
-            f"{project_dir}:/workspace",
-            f"{runtime_dir}:{_IN_CONTAINER_AFM_DIR}",
-            f"{afm_config}:/home/goga/.afm/config.yaml:ro",
-        ]
-        for host_path, container_path in resolve_credential_mounts():
-            mounts.append(f"{host_path}:{container_path}:ro")
-
         # args = the post-image command (the in-container goga.pipeline run call +
         # its port); params = the docker-run options the runner translates to
         # flags via the shared param→flag rule.
