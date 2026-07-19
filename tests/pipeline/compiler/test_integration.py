@@ -18,13 +18,22 @@ import pytest
 import yaml
 from goga.pipeline.compiler import StructuralError, compile_flow
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_FEATURE_PHASES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-phases.yml"
-_FEATURE_STAGES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-stages.yml"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "integration"
+_FEATURE_PHASES = _FIXTURES / "phases.yml"
+_FEATURE_STAGES = _FIXTURES / "stages.yml"
 
 # Canonical field-key order that ``compile_flow`` must establish before serialization.
 # Known keys first in this fixed order; any extras follow alphabetically.
-_CANONICAL_KEY_ORDER = ["interactive", "prompt", "agents", "skills"]
+_CANONICAL_KEY_ORDER = [
+    "interactive",
+    "command",
+    "prompt",
+    "description",
+    "agents",
+    "supervisor",
+    "supervisor_prompt",
+    "skills",
+]
 
 
 def _split_header_body(fixture_path: Path) -> tuple[dict, object]:

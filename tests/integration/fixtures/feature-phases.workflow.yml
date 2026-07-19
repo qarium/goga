@@ -1,0 +1,11 @@
+prompt: |
+  Example prompt
+
+stages:
+  propose:
+    agent: codex
+    prompt: |
+      Additional prompt
+  propose-review:
+    loop: 2
+    agent: claude

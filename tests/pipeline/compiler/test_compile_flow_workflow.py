@@ -27,10 +27,9 @@ from goga.pipeline.compiler import (
 )
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_FEATURE_PHASES = _REPO_ROOT / ".goga" / "pipelines" / "feature-phases.yml"
-_FEATURE_STAGES = _REPO_ROOT / ".goga" / "pipelines" / "feature-stages.yml"
-_FEATURE_WORKFLOW = _REPO_ROOT / ".goga" / "workflows" / "feature-phases.yml"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "workflow"
+_FEATURE_PHASES = _FIXTURES / "phases.yml"
+_FEATURE_WORKFLOW = _FIXTURES / "workflow.yml"
 
 
 def _write_phases_three_step(tmp_path: Path) -> Path:

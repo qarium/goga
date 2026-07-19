@@ -22,9 +22,9 @@ from goga.pipeline.compiler import (
     parse_dsl,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_FEATURE_PHASES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-phases.yml"
-_FEATURE_STAGES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-stages.yml"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "parse_dsl"
+_FEATURE_PHASES = _FIXTURES / "phases.yml"
+_FEATURE_STAGES = _FIXTURES / "stages.yml"
 
 
 class TestParseDslContract:
@@ -70,7 +70,7 @@ class TestParseDslLogic:
     """Behavioral tests against the real fixtures and the documented edge cases."""
 
     def test_parse_dsl_phases_basic(self) -> None:
-        """The canonical phases fixture parses to 11 steps with bodies excluding name/description."""
+        """The canonical phases fixture parses to 3 steps with bodies excluding name/description."""
         text = _FEATURE_PHASES.read_text()
 
         header, fmt, body = parse_dsl(text)
@@ -80,7 +80,7 @@ class TestParseDslLogic:
         assert fmt is BodyFormat.PHASES
         assert isinstance(body, PhasesBody)
 
-        assert len(body.steps) == 11
+        assert len(body.steps) == 3
 
         first = body.steps[0]
         assert first.name == "propose"
@@ -94,7 +94,7 @@ class TestParseDslLogic:
         assert "prompt" in first.body
 
     def test_parse_dsl_stages_basic(self) -> None:
-        """The canonical stages fixture parses to 11 steps with pass-through depends_on."""
+        """The canonical stages fixture parses to 3 steps with pass-through depends_on."""
         text = _FEATURE_STAGES.read_text()
 
         header, fmt, body = parse_dsl(text)
@@ -103,7 +103,7 @@ class TestParseDslLogic:
         assert fmt is BodyFormat.STAGES
         assert isinstance(body, StagesBody)
 
-        assert len(body.steps) == 11
+        assert len(body.steps) == 3
 
         # First stage has no authored depends_on.
         assert body.steps[0].name == "propose"

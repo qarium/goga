@@ -23,9 +23,9 @@ from goga.pipeline.compiler import (
     compile_flow,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_FEATURE_PHASES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-phases.yml"
-_FEATURE_STAGES = _REPO_ROOT / "goga" / "assets" / "pipelines" / "feature-stages.yml"
+_FIXTURES = Path(__file__).resolve().parent / "fixtures" / "compile_flow"
+_FEATURE_PHASES = _FIXTURES / "phases.yml"
+_FEATURE_STAGES = _FIXTURES / "stages.yml"
 
 
 class TestCompileFlowContract:

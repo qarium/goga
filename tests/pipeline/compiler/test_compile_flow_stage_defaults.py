@@ -19,6 +19,7 @@ from pathlib import Path
 
 import yaml
 from goga.pipeline.compiler import compile_flow
+from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
 
 
 class TestStageDefaultsInjection:
@@ -312,3 +313,56 @@ class TestStageDefaultsHelper:
         injected["agents"].append("hacked")
 
         assert body == {"prompt": "Do A"}
+
+
+class TestStageDefaultsCoexistWithWorkflowOverride:
+    """Workflow overrides and default injection coexist in the same stage."""
+
+    def test_workflow_agent_and_prompt_coexist_with_defaults(self, tmp_path: Path) -> None:
+        """A pipeline-stage without ``agents`` + workflow-stage with agent+prompt → both channels populate ``FlowStage.fields``.
+
+        The workflow-override branch (step 4a in the algorithm) injects ``command``
+        and ``description`` into the step body. The default-injection branch (step 5
+        via ``_canonical_fields`` → ``_inject_defaults``) adds the three defaults
+        when the body has no usable ``agents``. This test pins that the two branches
+        do not interfere — both channels land in the same ``FlowStage.fields`` dict,
+        and the authored body content (``prompt``) survives both.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  description: Propose\n"
+            "  prompt: Body prompt\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"propose": WorkflowStage(agent="codex", prompt="Workflow prompt")},
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        # Workflow-override channel (step 4a).
+        assert fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert fields["description"] == "Workflow prompt"
+        # Default-injection channel (step 5 — body has no usable ``agents``).
+        assert fields["agents"] == ["planning"]
+        assert fields["supervisor"] is True
+        assert fields["supervisor_prompt"] == "Make this stage autonomous"
+        # Authored body content survives both channels.
+        assert fields["prompt"] == "Body prompt"
+        # Canonical key order: command (workflow), prompt (authored), description
+        # (workflow), then agents, supervisor, supervisor_prompt (injected);
+        # interactive and skills absent because the source body carries neither.
+        assert list(fields.keys()) == [
+            "command",
+            "prompt",
+            "description",
+            "agents",
+            "supervisor",
+            "supervisor_prompt",
+        ]

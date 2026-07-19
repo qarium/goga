@@ -1,0 +1,25 @@
+name: Goga feature
+description: "Feature implementation"
+---
+
+- name: propose
+  description: "Propose"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Save the task file as `<git branch --show-current>.md`
+  skills:
+    - goga-propose
+
+- name: propose-review
+  description: "Propose Review"
+  interactive: true
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Review the task `<git branch --show-current>.md`
+  skills:
+    - goga-review-task

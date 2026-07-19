@@ -40,11 +40,12 @@ from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 from goga.pipeline.compiler import compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
-# The reference authored fixtures live under the project .goga/ tree.
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_FEATURE_PHASES_PIPELINE = _REPO_ROOT / ".goga" / "pipelines" / "feature-phases.yml"
-_FEATURE_STAGES_PIPELINE = _REPO_ROOT / ".goga" / "pipelines" / "feature-stages.yml"
-_FEATURE_WORKFLOW = _REPO_ROOT / ".goga" / "workflows" / "feature-phases.yml"
+# The reference fixtures live under tests/integration/fixtures/ — authored
+# pipeline/workflow YAML reused across the integration scenarios below.
+_FIXTURES = Path(__file__).resolve().parent / "fixtures"
+_FEATURE_PHASES_PIPELINE = _FIXTURES / "feature-phases.yml"
+_FEATURE_STAGES_PIPELINE = _FIXTURES / "feature-stages.yml"
+_FEATURE_WORKFLOW = _FIXTURES / "feature-phases.workflow.yml"
 
 # goga.commands.pipeline.run_pipeline_container shadows its submodule name in the
 # package __init__, so resolve the real module via sys.modules for attribute
