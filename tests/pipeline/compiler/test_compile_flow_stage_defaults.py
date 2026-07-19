@@ -1,0 +1,314 @@
+"""Behavioral tests for the default stage-field injection in ``compile_flow``.
+
+Covers the user-requested extension: when a pipeline-DSL stage lacks a usable
+``agents`` value (key absent, ``null``, or empty list), the compiler injects
+three defaults into the assembled ``FlowStage.fields``:
+
+- ``agents=["planning"]``
+- ``supervisor=True``
+- ``supervisor_prompt="Make this stage autonomous"``
+
+An authored non-empty ``agents`` always wins — no injection happens. The
+injection lives in ``FlowStage`` assembly only — ``PipelineDocument.body``
+returned to consumers stays a faithful mirror of the source pipeline-file.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import yaml
+from goga.pipeline.compiler import compile_flow
+
+
+class TestStageDefaultsInjection:
+    """When ``agents`` is missing or empty, the three defaults are injected."""
+
+    def test_phases_stage_without_agents_gets_defaults(self, tmp_path: Path) -> None:
+        """A PHASES stage with no ``agents`` key gets the three default fields."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  prompt: Do A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning"]
+        assert fields["supervisor"] is True
+        assert fields["supervisor_prompt"] == "Make this stage autonomous"
+
+    def test_stages_stage_without_agents_gets_defaults(self, tmp_path: Path) -> None:
+        """A STAGES stage with no ``agents`` key gets the three default fields."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  description: A\n"
+            "  prompt: Do A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning"]
+        assert fields["supervisor"] is True
+        assert fields["supervisor_prompt"] == "Make this stage autonomous"
+
+    def test_stage_with_empty_agents_gets_defaults(self, tmp_path: Path) -> None:
+        """``agents: []`` triggers default injection — empty list is unusable."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  agents: []\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning"]
+        assert fields["supervisor"] is True
+        assert fields["supervisor_prompt"] == "Make this stage autonomous"
+
+    def test_stage_with_null_agents_gets_defaults(self, tmp_path: Path) -> None:
+        """``agents: null`` (explicit YAML null) triggers default injection."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  agents: null\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning"]
+        assert fields["supervisor"] is True
+        assert fields["supervisor_prompt"] == "Make this stage autonomous"
+
+
+class TestStageDefaultsRespectAuthored:
+    """An authored non-empty ``agents`` value disables default injection."""
+
+    def test_stage_with_single_agent_no_defaults(self, tmp_path: Path) -> None:
+        """``agents: [foo]`` is preserved verbatim; no defaults are injected."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  agents:\n"
+            "    - foo\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["foo"]
+        assert "supervisor" not in fields
+        assert "supervisor_prompt" not in fields
+
+    def test_stage_with_multiple_agents_no_defaults(self, tmp_path: Path) -> None:
+        """``agents: [planning, implementation]`` is preserved; no defaults."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  agents:\n"
+            "    - planning\n"
+            "    - implementation\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning", "implementation"]
+        assert "supervisor" not in fields
+        assert "supervisor_prompt" not in fields
+
+
+class TestStageDefaultsCanonicalOrder:
+    """The injected defaults land in the canonical key order between agents and skills."""
+
+    def test_defaults_and_skills_canonical_order(self, tmp_path: Path) -> None:
+        """When defaults are injected and the source carries skills, the order
+        is ``agents < supervisor < supervisor_prompt < skills`` in the serialized
+        flow-file."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  skills:\n"
+            "    - goga-propose\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        text = flow_path.read_text()
+        idx_agents = text.index("agents:")
+        idx_supervisor = text.index("supervisor:")
+        idx_supervisor_prompt = text.index("supervisor_prompt:")
+        idx_skills = text.index("skills:")
+        assert idx_agents < idx_supervisor < idx_supervisor_prompt < idx_skills
+
+    def test_defaults_round_trip_through_yaml(self, tmp_path: Path) -> None:
+        """The injected defaults survive a YAML round-trip with the expected types."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        loaded = yaml.safe_load(flow_path.read_text())
+        stage = loaded["stages"][0]
+        assert stage["agents"] == ["planning"]
+        assert stage["supervisor"] is True
+        assert stage["supervisor_prompt"] == "Make this stage autonomous"
+
+
+class TestStageDefaultsDoNotLeak:
+    """The injection is local to ``FlowStage.fields`` — ``PipelineDocument.body``
+    is never affected."""
+
+    def test_pipeline_document_body_has_no_agents_when_source_had_none(self, tmp_path: Path) -> None:
+        """A source stage without ``agents`` keeps the parsed body clean."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  prompt: Do A\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, _ = compile_flow(pipeline_path, flow_path)
+
+        body = pipeline_doc.body.steps[0].body
+        assert "agents" not in body
+        assert "supervisor" not in body
+        assert "supervisor_prompt" not in body
+
+    def test_pipeline_document_body_preserves_empty_agents(self, tmp_path: Path) -> None:
+        """``agents: []`` in the source stays ``[]`` in the parsed body —
+        default injection does not retroactively populate it."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "- name: a\n"
+            "  description: A\n"
+            "  agents: []\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, _ = compile_flow(pipeline_path, flow_path)
+
+        body = pipeline_doc.body.steps[0].body
+        assert body["agents"] == []
+        assert "supervisor" not in body
+        assert "supervisor_prompt" not in body
+
+
+class TestStageDefaultsHelper:
+    """Direct unit tests for the private ``_inject_defaults`` helper."""
+
+    def test_inject_when_agents_missing(self) -> None:
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        body = {"prompt": "Do A"}
+        injected = _inject_defaults(body)
+
+        assert injected["agents"] == ["planning"]
+        assert injected["supervisor"] is True
+        assert injected["supervisor_prompt"] == "Make this stage autonomous"
+        assert injected["prompt"] == "Do A"
+        # The source body is not mutated.
+        assert "agents" not in body
+
+    def test_no_inject_when_agents_non_empty(self) -> None:
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        body = {"agents": ["foo"]}
+        injected = _inject_defaults(body)
+
+        assert injected["agents"] == ["foo"]
+        assert "supervisor" not in injected
+        assert "supervisor_prompt" not in injected
+
+    def test_inject_when_agents_empty_list(self) -> None:
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        body = {"agents": []}
+        injected = _inject_defaults(body)
+
+        assert injected["agents"] == ["planning"]
+        assert injected["supervisor"] is True
+        assert injected["supervisor_prompt"] == "Make this stage autonomous"
+
+    def test_inject_when_agents_null(self) -> None:
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        body = {"agents": None}
+        injected = _inject_defaults(body)
+
+        assert injected["agents"] == ["planning"]
+        assert injected["supervisor"] is True
+        assert injected["supervisor_prompt"] == "Make this stage autonomous"
+
+    def test_returns_independent_dict(self) -> None:
+        """The returned dict is not aliased to the input — caller mutation is safe."""
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        body = {"prompt": "Do A"}
+        injected = _inject_defaults(body)
+        injected["agents"].append("hacked")
+
+        assert body == {"prompt": "Do A"}

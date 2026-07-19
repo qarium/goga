@@ -238,7 +238,13 @@ class TestCompileFlowLogic:
             compile_flow(pipeline_path, flow_path)
 
     def test_compile_flow_canonical_order_with_unknown_fields(self, tmp_path: Path) -> None:
-        """Extras sort alphabetically after the known canonical keys."""
+        """Extras sort alphabetically after the known canonical keys.
+
+        The source stage lacks ``agents`` — the compiler injects the three
+        default fields (``agents``, ``supervisor``, ``supervisor_prompt``) into
+        the assembled ``FlowStage.fields``. They land between ``interactive``
+        and the alphabetical extras (``apple``, ``zebra``).
+        """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
             "name: T\n"
@@ -257,12 +263,23 @@ class TestCompileFlowLogic:
 
         text = flow_path.read_text()
 
-        # Canonical order: interactive (known), then apple, zebra (extras sorted).
+        # Canonical order: interactive (known), then the injected defaults
+        # (agents, supervisor, supervisor_prompt — known keys in the extended
+        # canonical order), then apple, zebra (extras sorted alphabetically).
         idx_interactive = text.index("interactive: true")
+        idx_agents = text.index("agents:")
+        idx_supervisor = text.index("supervisor:")
+        idx_supervisor_prompt = text.index("supervisor_prompt:")
         idx_apple = text.index("apple: 2")
         idx_zebra = text.index("zebra: 1")
-
-        assert idx_interactive < idx_apple < idx_zebra
+        assert (
+            idx_interactive
+            < idx_agents
+            < idx_supervisor
+            < idx_supervisor_prompt
+            < idx_apple
+            < idx_zebra
+        )
 
     def test_compile_flow_phases_fixture_depends_on_chains(self, tmp_path: Path) -> None:
         """The canonical phases fixture compiles to a position-derived dependency chain."""

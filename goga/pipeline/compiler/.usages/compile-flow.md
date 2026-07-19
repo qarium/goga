@@ -141,6 +141,55 @@ the parsed body BEFORE building the FlowStages:
    reference matching a base-name with `loop_count >= 2` with
    `expanded_ids[ref][-1]` (the LAST expanded id).
 
+## Default stage-field injection
+
+When a step body has **no usable `agents` value** (the `agents:` key is absent,
+explicitly `null`, or set to an empty list `[]`), the compiler injects three
+default fields into the assembled `FlowStage.fields` of the compiled afm
+flow-file:
+
+- `agents: [planning]`
+- `supervisor: true`
+- `supervisor_prompt: "Make this stage autonomous"`
+
+These defaults are an **output-side** concern — they live only in the compiled
+`FlowDocument.stages`, never in the `PipelineDocument.body` returned to
+consumers (which stays a faithful mirror of the source pipeline-file).
+
+An **authored non-empty `agents` value** (any list with at least one entry)
+always wins and disables injection entirely — the compiler does not second-guess
+the user's choice of agents. The injection runs uniformly on both the
+non-workflow path and the workflow path (after per-stage overrides and
+loop-expansion), so workflow-applied command/description overrides coexist with
+the injected defaults in the same stage without collision.
+
+The injected fields land in the canonical per-stage key order between `agents`
+and `skills`:
+
+```
+interactive, command, prompt, description, agents, supervisor, supervisor_prompt, skills, …
+```
+
+Example — source pipeline-file stage without `agents`:
+
+```yaml
+- name: deploy
+  description: Deploy
+  prompt: Run deployment
+```
+
+Compiled flow-file stage (defaults injected):
+
+```yaml
+- id: deploy
+  name: Deploy
+  agents: [planning]
+  supervisor: true
+  supervisor_prompt: Make this stage autonomous
+  prompt: |
+    Run deployment
+```
+
 ## Side Effects
 
 `compile_flow` reads from `pipeline_path` and writes to `flow_path`. No other

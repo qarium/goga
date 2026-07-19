@@ -61,13 +61,29 @@ Annotations: |
   of their contents, no schema enforcement. References in depends_on
   (dangling ids, cycles, duplicates) are afm's responsibility, not this cell's.
 
-  Canonical `FlowStage` fields key order (extended): interactive, command,
-  prompt, description, agents, skills, then alphabetically-sorted unknown
-  keys. command is populated from the agent field of `WorkflowStage`
-  (composed as /home/goga/bin/AGENT-as-claude.sh); description is populated
-  from the prompt field of `WorkflowStage`. Both are independent channels
-  — pipeline-file prompt and workflow-file prompt coexist as separate fields
-  in the same stage when both are present.
+  Canonical `FlowStage` fields key order: interactive, command, prompt,
+  description, agents, supervisor, supervisor_prompt, skills, then
+  alphabetically-sorted unknown keys. command is populated from the agent
+  field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
+  description is populated from the prompt field of `WorkflowStage`. Both
+  are independent channels — pipeline-file prompt and workflow-file prompt
+  coexist as separate fields in the same stage when both are present.
+  supervisor and supervisor_prompt sit between agents and skills so the
+  supervisor block reads as a continuation of the agents block; both are
+  populated by the default-injection rule below when the source step body
+  carries no usable agents value.
+
+  Default stage-field injection: when a step body has no usable agents
+  value (key absent, explicit null, or an empty list), the compiler injects
+  three defaults into the assembled `FlowStage` fields —
+  "agents=[\"planning\"]", "supervisor=True",
+  "supervisor_prompt=\"Make this stage autonomous\"". An authored non-empty
+  agents value (any list with at least one entry) always wins and disables
+  injection entirely. The injection lives in `FlowStage` assembly only —
+  the `PipelineDocument` body returned to consumers is never affected (it
+  stays a faithful mirror of the source pipeline-file). The injection runs
+  uniformly on the non-workflow path and on the workflow path (after
+  per-stage overrides and loop-expansion).
 
   The header segment additionally supports an optional agents block
   with four fixed string keys: planning, implementation, review, summary.
@@ -385,15 +401,19 @@ Annotations: |
     `depends_on`: predecessor step ids, or None. None produces no depends_on
                   key in output; an empty list produces depends_on [].
     `fields`: extra step fields in canonical key order (interactive,
-              command, prompt, description, agents, skills, then
-              alphabetically-sorted unknown keys). Insertion order of this
-              dict IS the output order — the serializer iterates it as-is.
-              command is populated from the agent field of `WorkflowStage`
-              (composed as the in-container wrapper path) when a workflow
-              supplies one; description is populated from the prompt field
-              of `WorkflowStage` when a workflow supplies one. Both are
-              independent channels — pipeline-file prompt and workflow-file
-              prompt may coexist as separate fields in the same stage.
+              command, prompt, description, agents, supervisor,
+              supervisor_prompt, skills, then alphabetically-sorted unknown
+              keys). Insertion order of this dict IS the output order — the
+              serializer iterates it as-is. command is populated from the
+              agent field of `WorkflowStage` (composed as the in-container
+              wrapper path) when a workflow supplies one; description is
+              populated from the prompt field of `WorkflowStage` when a
+              workflow supplies one. Both are independent channels —
+              pipeline-file prompt and workflow-file prompt may coexist as
+              separate fields in the same stage. agents, supervisor, and
+              supervisor_prompt are populated by the default-injection rule
+              of `compile_flow` when the source step body has no usable
+              agents value (missing key, explicit null, or empty list).
 
     The description slot in `fields` is a distinct channel from
     `FlowStage` name: the name field carries the display label sourced
@@ -424,7 +444,8 @@ Annotations: |
       Predecessor step ids, or None when absent.
     "fields -> dict[str, Any]": |
       Extra fields in canonical key order (interactive, command, prompt,
-      description, agents, skills, then alphabetically-sorted unknown keys).
+      description, agents, supervisor, supervisor_prompt, skills, then
+      alphabetically-sorted unknown keys).
 
 "FlowDocument(prompt: str | None = None, name: str, description: str, stages: list[FlowStage])":
   location: flow_document.py
@@ -568,8 +589,8 @@ Annotations: |
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
        canonical order — interactive, command, prompt, description, agents,
-       skills, then alphabetically-sorted unknown keys), then depends_on
-       when it is not None
+       supervisor, supervisor_prompt, skills, then alphabetically-sorted
+       unknown keys), then depends_on when it is not None
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt
@@ -698,10 +719,19 @@ Annotations: |
          which chain naturally via list position)
        - STAGES: for each `StageStep`, build a `FlowStage` with depends_on
          passed through from the (possibly rewritten) source step
+       - In both branches, BEFORE canonical ordering, inject default stage
+         fields when the source step body has no usable agents value
+         (missing key, explicit null, or empty list): set agents to
+         ["planning"], supervisor to True, and supervisor_prompt to
+         "Make this stage autonomous". An authored non-empty agents value
+         always wins and disables injection. The ORIGINAL parsed body is
+         never mutated by this injection — defaults live in FlowStage
+         assembly only
        - In both branches, assemble the fields of each `FlowStage` in
          canonical key order (interactive, command, prompt, description,
-         agents, skills, then alphabetically-sorted unknown keys),
-         copying from the source step body
+         agents, supervisor, supervisor_prompt, skills, then
+         alphabetically-sorted unknown keys), copying from the
+         (defaults-injected) step body
     6. Build `FlowDocument`:
        - prompt = `workflow` prompt when `workflow` is not None, else None
        - name, description from the header
@@ -755,6 +785,19 @@ Annotations: |
       copy — no explicit external rewrite pass is needed
     - Consumers must NOT re-invoke `parse_dsl` to obtain the agents — they
       read header agents from `PipelineDocument` returned by this routine
+    - Default stage-field injection: a step body with no usable agents
+      value (missing key, explicit null, or empty list) yields a
+      `FlowStage` carrying three injected defaults — agents=["planning"],
+      supervisor=True, supervisor_prompt="Make this stage autonomous".
+      An authored non-empty agents value always wins and disables
+      injection. The injection runs uniformly on the non-workflow path
+      and on the workflow path (after per-stage overrides and
+      loop-expansion)
+    - Default injection is local to `FlowStage` fields assembly — the
+      `PipelineDocument` body carried alongside the `FlowDocument` is
+      never affected (it stays a faithful mirror of the source
+      pipeline-file, with whatever agents value — or absence — the
+      source authored)
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -779,6 +822,14 @@ Annotations: |
     - Do not raise on unknown stage names in `workflow` stages — emit a
       warning and skip; the workflow may intentionally cover multiple
       pipelines
+    - Do not leak injected defaults into `PipelineDocument` body — the
+      default agents/supervisor/supervisor_prompt values are an output-side
+      artifact of `FlowStage` assembly, never a property of the parsed
+      representation. The injection helper must operate on a copy of the
+      step body so the original body stays clean
+    - Do not inject defaults when the source step body carries a non-empty
+      agents value — authored agents always wins; the compiler must not
+      second-guess the user's choice of agents
 
 ---
 

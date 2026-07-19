@@ -114,9 +114,12 @@ class TestCompileFlowPerStageOverrides:
         # The ORIGINAL pipeline body has neither slot — reconstruction is isolated.
         assert "command" not in pipeline_doc.body.steps[0].body
         assert "description" not in pipeline_doc.body.steps[0].body
-        # The workflow supplied no top-level prompt.
+        # The workflow supplied no top-level prompt — the flow-file must not
+        # carry a top-level ``prompt:`` key. Use a YAML round-trip rather than a
+        # substring check because per-stage ``supervisor_prompt:`` legitimately
+        # contains the substring ``prompt:``.
         assert flow_doc.prompt is None
-        assert "prompt:" not in flow_path.read_text()
+        assert "prompt" not in yaml.safe_load(flow_path.read_text())
 
 
 class TestCompileFlowLoopExpansion:
@@ -211,7 +214,11 @@ class TestCompileFlowWorkflowEdgeCases:
     """Edge cases — no workflow, unknown stages, top-level prompt."""
 
     def test_compile_flow_workflow_none_omits_prompt(self, tmp_path: Path) -> None:
-        """``compile_flow`` without a workflow writes no top-level ``prompt:`` key."""
+        """``compile_flow`` without a workflow writes no top-level ``prompt`` key.
+
+        Per-stage ``supervisor_prompt:`` legitimately contains the substring
+        ``prompt:`` — use a YAML round-trip to assert top-level key absence.
+        """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
         flow_path = tmp_path / "flow.yml"
@@ -219,7 +226,7 @@ class TestCompileFlowWorkflowEdgeCases:
         compile_flow(pipeline_path, flow_path)
 
         text = flow_path.read_text()
-        assert "prompt:" not in text
+        assert "prompt" not in yaml.safe_load(text)
         assert "name: N" in text
         assert "description: D" in text
 

@@ -38,9 +38,10 @@ Path("/tmp/out.yml").write_text(text)
   `FlowDocument` may be `None` (the key is omitted from output) or a `str`
   (emitted as the FIRST top-level key, in block-literal scalar style). The
   `fields` of each `FlowStage` must already be in canonical key order
-  (`interactive`, `command`, `prompt`, `description`, `agents`, `skills`,
-  then alphabetically-sorted extra keys) — `serialize_flow` does not reorder.
-  Use `compile_flow` to build a correctly-ordered document from a pipeline-file.
+  (`interactive`, `command`, `prompt`, `description`, `agents`, `supervisor`,
+  `supervisor_prompt`, `skills`, then alphabetically-sorted extra keys) —
+  `serialize_flow` does not reorder. Use `compile_flow` to build a
+  correctly-ordered document from a pipeline-file.
 
 ## Return value
 

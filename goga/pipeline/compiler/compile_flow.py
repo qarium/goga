@@ -4,10 +4,19 @@
 pipeline-file (phases-list or stages-map), parses it via ``parse_dsl``, applies
 the per-format ``depends_on`` rules (PHASES: position-derived; STAGES:
 pass-through), reorders each step body into canonical key order via the internal
-``_canonical_fields`` helper, builds a ``FlowDocument``, serializes it via
+``_canonical_fields`` helper (injecting default stage fields when the source body
+lacks a usable ``agents`` value), builds a ``FlowDocument``, serializes it via
 ``serialize_flow``, and writes the result to ``flow_path``. It performs no
 environment-variable reads and no subprocess calls — the caller supplies both
 paths explicitly.
+
+When a step body has no ``agents`` key, has ``agents: null``, or has
+``agents: []``, ``_canonical_fields`` injects three defaults into the assembled
+``FlowStage.fields``: ``agents=["planning"]``, ``supervisor=True``,
+``supervisor_prompt="Make this stage autonomous"``. Authored non-empty
+``agents`` always wins — no injection happens when the source carries one. The
+injection lives in ``FlowStage`` assembly only — the ``PipelineDocument.body``
+returned to consumers stays a faithful mirror of the source pipeline-file.
 
 When the caller passes a non-``None`` ``workflow`` (a ``WorkflowDocument``), the
 parsed body is reconstructed BEFORE the ``FlowStage`` assembly: per-stage
@@ -50,7 +59,18 @@ logger = logging.getLogger(__name__)
 # ``FlowStage.fields`` verbatim, so canonical order must be established here.
 # ``command`` and ``description`` are populated by per-stage workflow overrides
 # (workflow branch); when absent they are simply skipped by the loop below.
-_CANONICAL_KEY_ORDER = ["interactive", "command", "prompt", "description", "agents", "skills"]
+# ``supervisor`` and ``supervisor_prompt`` sit between ``agents`` and ``skills``
+# so the supervisor block reads as a continuation of the agents block.
+_CANONICAL_KEY_ORDER = [
+    "interactive",
+    "command",
+    "prompt",
+    "description",
+    "agents",
+    "supervisor",
+    "supervisor_prompt",
+    "skills",
+]
 
 # In-container wrapper path template consumed by afm >= 0.4.15 as the per-stage
 # ``command:`` override. Composed directly from the ``WorkflowStage`` agent name
@@ -62,15 +82,67 @@ _WRAPPER_PATH_TEMPLATE = "/home/goga/bin/{agent}-as-claude.sh"
 # depends_on rewrite to the LAST expanded id); a count of ``1`` is a no-op.
 _LOOP_EXPANSION_THRESHOLD = 2
 
+# Default values injected into ``FlowStage.fields`` when the source step body
+# carries no usable ``agents`` value. A missing ``agents`` key OR an empty list
+# both trigger injection — authored non-empty ``agents`` always wins.
+_DEFAULT_AGENTS: tuple[str, ...] = ("planning",)
+_DEFAULT_SUPERVISOR: bool = True
+_DEFAULT_SUPERVISOR_PROMPT: str = "Make this stage autonomous"
+
+
+def _has_usable_agents(body: dict[str, Any]) -> bool:
+    """Return ``True`` when ``body`` carries a non-empty ``agents`` list.
+
+    A missing ``agents`` key, an explicit ``None``, or an empty list all return
+    ``False`` — these are the trigger conditions for default injection.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl``.
+
+    Returns:
+        ``True`` when ``agents`` is a non-empty list; ``False`` otherwise.
+    """
+    agents = body.get("agents")
+    return isinstance(agents, list) and len(agents) > 0
+
+
+def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
+    """Return a body dict with default stage fields injected when needed.
+
+    When ``body`` carries a usable ``agents`` value (non-empty list) — returns a
+    shallow copy of ``body`` unchanged. Otherwise returns a copy with three
+    defaults added: ``agents=["planning"]``, ``supervisor=True``,
+    ``supervisor_prompt="Make this stage autonomous"``. The input is never
+    mutated; the returned dict is independent so the caller can deep-copy /
+    reorder freely without touching the parsed body.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl``.
+
+    Returns:
+        A new dict carrying either the original ``agents`` or the three
+        injected defaults.
+    """
+    if _has_usable_agents(body):
+        return dict(body)
+    injected = dict(body)
+    injected["agents"] = list(_DEFAULT_AGENTS)
+    injected["supervisor"] = _DEFAULT_SUPERVISOR
+    injected["supervisor_prompt"] = _DEFAULT_SUPERVISOR_PROMPT
+    return injected
+
 
 def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
-    Known keys (``interactive``, ``command``, ``prompt``, ``description``,
-    ``agents``, ``skills``) are emitted first in that fixed order; any remaining
-    keys are appended alphabetically. Each value is deep-copied so the returned
-    dict shares no structure with the parsed body — isolating the compiler's
-    output from caller mutation.
+    Default stage fields (``agents``, ``supervisor``, ``supervisor_prompt``) are
+    injected first via ``_inject_defaults`` when the source body lacks a usable
+    ``agents`` value. Known keys (``interactive``, ``command``, ``prompt``,
+    ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+    ``skills``) are emitted in that fixed order; any remaining keys are appended
+    alphabetically. Each value is deep-copied so the returned dict shares no
+    structure with the parsed body — isolating the compiler's output from caller
+    mutation.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
@@ -78,13 +150,14 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     Returns:
         A new dict in canonical key order with deep-copied values.
     """
+    source = _inject_defaults(body)
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:
-        if key in body:
-            ordered[key] = copy.deepcopy(body[key])
-    extras = sorted(k for k in body if k not in _CANONICAL_KEY_ORDER)
+        if key in source:
+            ordered[key] = copy.deepcopy(source[key])
+    extras = sorted(k for k in source if k not in _CANONICAL_KEY_ORDER)
     for key in extras:
-        ordered[key] = copy.deepcopy(body[key])
+        ordered[key] = copy.deepcopy(source[key])
     return ordered
 
 
@@ -274,6 +347,14 @@ def compile_flow(
     serialized via ``serialize_flow`` and written to ``flow_path`` (overwriting if
     it exists) as a side effect. I/O errors and structural errors from ``parse_dsl``
     propagate unchanged; ``compile_flow`` does not read ``AFM_DIR``.
+
+    Each ``FlowStage.fields`` is assembled via ``_canonical_fields``, which
+    injects three default fields when the source step body has no usable
+    ``agents`` (missing key, ``null``, or empty list): ``agents=["planning"]``,
+    ``supervisor=True``, ``supervisor_prompt="Make this stage autonomous"``. An
+    authored non-empty ``agents`` value always wins and disables injection. The
+    injection is local to ``FlowStage.fields`` — the ``PipelineDocument.body``
+    returned to consumers is never affected.
 
     When ``workflow`` is not ``None``, the parsed body is reconstructed
     (per-stage overrides, loop-expansion, external depends_on rewrite) on a deep
