@@ -3,6 +3,28 @@ prompt: |
 
 stages:
   propose:
-    agent: claude
     prompt: |
-      When setting the task, it is necessary to develop stack technologies more carefully.
+      Task formalization process.
+
+      Requirements:
+      - When setting the task, it is necessary to develop stack technologies more carefully.
+      - Carefully examine all the link connections between cells
+
+      Constraints:
+      - Don't write code examples in the task
+      - Don't build architecture in the task
+  brainstorm:
+    prompt: |
+      Architectural design process.
+
+      Requirements:
+      - Annotations describe the high-level order of actions
+      - Every usage file is connected through Imports and referenced in annotations
+      - Usage files are self-contained
+      - Footer Description describes the responsibility zone
+
+      Constraints:
+      - Annotations must not reference previous functionality
+      - Annotations does not contains implementation details
+      - Annotations must not use "X from Imports" phrasing
+      - Footer Description does not contains details
