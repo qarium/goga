@@ -21,7 +21,7 @@ A full-fledged **Specification-Driven Development (SDD)** framework: describe ce
 <img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
 <img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">
 
-[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/) · [Configuration](https://qarium.github.io/goga/configuration/)
+[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/) · [Pipelines](https://qarium.github.io/goga/pipelines/) · [Configuration](https://qarium.github.io/goga/configuration/)
 
 </div>
 
@@ -78,6 +78,16 @@ propose → brainstorm → apply → design → plan → goga build → change �
 ```
 
 Reviews are optional at every stage. For smaller changes, use one of the shortcut paths described in the [Workflow](https://qarium.github.io/goga/workflow/) section.
+
+To run the whole cycle stage-by-stage inside the goga container, use one of the shipped [pipelines](https://qarium.github.io/goga/pipelines/):
+
+```bash
+goga pipeline feature      # end-to-end feature lifecycle
+goga pipeline bugfix       # root-cause analysis for a defect
+goga pipeline patch        # refactoring or minimal change with a plan
+```
+
+Each pipeline is a flat YAML file; layer project-specific overrides on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file.
 
 **5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture:
 
@@ -159,6 +169,26 @@ Description: |
   HTTP entry point cell.
 ```
 
+## Pipelines
+
+A **pipeline** is a named YAML file describing a sequence of stages an AI agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
+
+Three definitions ship with goga:
+
+| Pipeline  | Purpose                                              |
+|-----------|------------------------------------------------------|
+| `feature` | End-to-end feature implementation lifecycle          |
+| `bugfix`  | Root-cause analysis and resolution for a defect      |
+| `patch`   | Refactoring or minimal change with a formalized plan |
+
+```bash
+goga pipeline feature
+```
+
+A pipeline-file answers **what** the pipeline does. A [workflow](https://qarium.github.io/goga/pipelines/workflows/) file layers **how the same pipeline should behave in this project** — per-stage CLI agent, additional prompt context, and loop expansion — without forking the base file.
+
+Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
+
 ## Features
 
 - **Specification-Driven Development** — Contracts are the source of truth; the agent workflow produces architecture, code, and tests from them
@@ -167,7 +197,8 @@ Description: |
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, install, upgrade, contract extraction, and pipeline commands
-- **Docker builds & pipelines** — Execute build plans via ralphex and run afm pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `agents` overrides that customize the four agent prompts (planning/implementation/review/summary) per pipeline-file, optional declarative `--workflow NAME` workflow-files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt overrides and loop-expansion on top of a pipeline at compile time (disable with `--no-workflow`), and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
+- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships three ready-to-use definitions — `feature`, `bugfix`, `patch` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt overrides and loop-expansion on top of a pipeline at compile time (disable with `--no-workflow`)
+- **Docker builds & pipelines** — Execute build plans via ralphex and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `agents` overrides that customize the four agent prompts (planning/implementation/review/summary) per pipeline-file, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation
 
