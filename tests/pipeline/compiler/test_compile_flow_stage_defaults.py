@@ -319,7 +319,8 @@ class TestStageDefaultsCoexistWithWorkflowOverride:
     """Workflow overrides and default injection coexist in the same stage."""
 
     def test_workflow_agent_and_prompt_coexist_with_defaults(self, tmp_path: Path) -> None:
-        """A pipeline-stage without ``agents`` + workflow-stage with agent+prompt → both channels populate ``FlowStage.fields``.
+        """A pipeline-stage without ``agents`` + workflow-stage with agent+prompt → both channels populate
+        ``FlowStage.fields``.
 
         The workflow-override branch (step 4a in the algorithm) injects ``command``
         and ``description`` into the step body. The default-injection branch (step 5
