@@ -17,11 +17,7 @@ goga install <tool-name> --version 1.0.x
 goga install
 ```
 
-See [`goga install`](cli/install.md) for the version grammar and single / bulk / empty modes. You can also install directly with pip:
-
-```bash
-pip install goga-tool-<tool-name>
-```
+See [`goga install`](cli/install.md) for the version grammar and single / bulk / empty modes.
 
 After installing, connect the tool to your agent:
 

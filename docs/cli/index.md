@@ -5,7 +5,7 @@ Goga is a command-line tool built with [Click](https://click.palletsprojects.com
 ## Installation
 
 ```bash
-pip install goga
+pipx install goga
 ```
 
 After installation, the `goga` command is available:

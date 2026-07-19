@@ -31,13 +31,19 @@ The result: a project that humans and AI agents can navigate, change, and reason
 Install goga:
 
 ```bash
-pip install goga
+pipx install goga
 ```
 
 Connect goga to your agent:
 
 ```bash
 goga connect <agent>
+```
+
+Upgrade goga later and re-sync every connected agent — no need to call pip directly:
+
+```bash
+goga upgrade
 ```
 
 Initialize a project — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:

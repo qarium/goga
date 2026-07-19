@@ -3,12 +3,12 @@
 ## Prerequisites
 
 - Python 3.10 or later
-- pip package manager
+- pipx package manager
 
 ## Install goga
 
 ```bash
-pip install goga
+pipx install goga
 ```
 
 ## Connect to agent
@@ -17,6 +17,14 @@ Install skills into an agent:
 
 ```bash
 goga connect <agent>
+```
+
+## Upgrade goga
+
+Move to a new goga release and re-sync every connected agent in one step — no need to call pip directly:
+
+```bash
+goga upgrade
 ```
 
 ## Initialize a project
