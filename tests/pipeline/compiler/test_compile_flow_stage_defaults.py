@@ -34,7 +34,7 @@ class TestStageDefaultsInjection:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -55,7 +55,7 @@ class TestStageDefaultsInjection:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -76,7 +76,7 @@ class TestStageDefaultsInjection:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  agents: []\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -97,7 +97,7 @@ class TestStageDefaultsInjection:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  agents: null\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -122,7 +122,7 @@ class TestStageDefaultsRespectAuthored:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  agents:\n"
             "    - foo\n",
         )
@@ -144,7 +144,7 @@ class TestStageDefaultsRespectAuthored:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  agents:\n"
             "    - planning\n"
             "    - implementation\n",
@@ -173,7 +173,7 @@ class TestStageDefaultsCanonicalOrder:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  skills:\n"
             "    - goga-propose\n",
         )
@@ -197,7 +197,7 @@ class TestStageDefaultsCanonicalOrder:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n",
+            "  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -223,7 +223,7 @@ class TestStageDefaultsDoNotLeak:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -245,7 +245,7 @@ class TestStageDefaultsDoNotLeak:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  agents: []\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -335,7 +335,7 @@ class TestStageDefaultsCoexistWithWorkflowOverride:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
             "  prompt: Body prompt\n",
         )
         flow_path = tmp_path / "flow.yml"

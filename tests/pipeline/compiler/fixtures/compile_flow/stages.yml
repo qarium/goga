@@ -3,9 +3,9 @@ description: T
 ---
 
 propose:
-  description: "Propose"
+  title: "Propose"
 
 propose-review:
-  description: "Propose Review"
+  title: "Propose Review"
   depends_on:
     - propose

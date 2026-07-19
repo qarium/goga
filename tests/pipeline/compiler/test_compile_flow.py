@@ -50,7 +50,7 @@ class TestCompileFlowContract:
     def test_compile_flow_returns_documents_tuple_on_minimal_valid_input(self, tmp_path: Path) -> None:
         """A minimal valid phases input compiles and returns the documents tuple."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
+        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
 
         result = compile_flow(pipeline_path, flow_path)
@@ -79,7 +79,7 @@ class TestCompileFlowContract:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n",
+            "  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -106,7 +106,7 @@ class TestCompileFlowContract:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n",
+            "  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -125,7 +125,7 @@ class TestCompileFlowContract:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n",
+            "  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -157,10 +157,10 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  prompt: Do A\n"
             "- name: b\n"
-            "  description: B\n"
+            "  title: B\n"
             "  prompt: Do B\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -185,13 +185,13 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "  depends_on:\n"
             "b:\n"
-            "  description: B\n"
+            "  title: B\n"
             "  depends_on: []\n"
             "c:\n"
-            "  description: C\n"
+            "  title: C\n"
             "  depends_on: [a]\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -252,7 +252,7 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  zebra: 1\n"
             "  apple: 2\n"
             "  interactive: true\n",
@@ -338,7 +338,7 @@ class TestCompileFlowLogic:
     def test_compile_flow_missing_flow_path_parent_raises(self, tmp_path: Path) -> None:
         """A flow_path whose parent directory does not exist raises FileNotFoundError."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: a\n  description: A\n")
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "nonexistent_dir" / "flow.yml"
 
         with pytest.raises(FileNotFoundError):
@@ -358,10 +358,10 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  id: collision-a\n"
             "- name: b\n"
-            "  description: B\n"
+            "  title: B\n"
             "  id: collision-b\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -376,7 +376,7 @@ class TestCompileFlowLogic:
         assert stages[1]["depends_on"] == ["a"]
 
     def test_compile_flow_stages_authored_name_does_not_clobber(self, tmp_path: Path) -> None:
-        """An authored ``name`` in a stage value does not override the description-derived label."""
+        """An authored ``name`` in a stage value does not override the title-derived label."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
             "name: T\n"
@@ -384,7 +384,7 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "a:\n"
-            "  description: Real Label\n"
+            "  title: Real Label\n"
             "  name: Collision Name\n"
             "  agents:\n"
             "    - planning\n",
@@ -413,10 +413,10 @@ class TestCompileFlowLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  depends_on: [zzz]\n"
             "- name: b\n"
-            "  description: B\n",
+            "  title: B\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -432,7 +432,7 @@ class TestCompileFlowLogic:
     def test_compile_flow_rejects_non_string_stage_key(self, tmp_path: Path) -> None:
         """A non-string stage map key raises StructuralError through compile_flow."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: T\ndescription: T\n---\n\n1:\n  description: A\n")
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n1:\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
 
         with pytest.raises(StructuralError, match="stage name must be a string"):

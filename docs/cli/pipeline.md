@@ -86,7 +86,7 @@ agents:
 ---
 
 - name: build
-  description: Build
+  title: Build
   prompt: Build it
 ```
 

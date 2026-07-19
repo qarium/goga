@@ -3,7 +3,7 @@ description: T
 ---
 
 - name: propose
-  description: "Propose"
+  title: "Propose"
 
 - name: propose-review
-  description: "Propose Review"
+  title: "Propose Review"

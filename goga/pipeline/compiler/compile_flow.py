@@ -219,7 +219,7 @@ def _make_expanded_copy(
     """
     body = copy.deepcopy(step.body)
     if fmt is BodyFormat.PHASES:
-        return PhaseStep(name=new_id, description=step.description, body=body)
+        return PhaseStep(name=new_id, title=step.title, body=body)
     # STAGES: first copy inherits the original external depends_on (rewritten in
     # 5c); later copies chain to the previous copy by id.
     if index == 1:
@@ -231,7 +231,7 @@ def _make_expanded_copy(
         depends_on = copy.deepcopy(step.depends_on)
     else:
         depends_on = [f"{step.name}-{index - 1}"]
-    return StageStep(name=new_id, description=step.description, depends_on=depends_on, body=body)
+    return StageStep(name=new_id, title=step.title, depends_on=depends_on, body=body)
 
 
 def _expand_loops(
@@ -416,7 +416,7 @@ def compile_flow(
             stages.append(
                 FlowStage(
                     id=step.name,
-                    name=step.description,
+                    name=step.title,
                     depends_on=depends_on,
                     fields=fields,
                 ),
@@ -427,7 +427,7 @@ def compile_flow(
             stages.append(
                 FlowStage(
                     id=step.name,
-                    name=step.description,
+                    name=step.title,
                     depends_on=step.depends_on,
                     fields=fields,
                 ),

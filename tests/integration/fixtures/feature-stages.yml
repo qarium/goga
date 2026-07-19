@@ -3,7 +3,7 @@ description: "Feature implementation"
 ---
 
 propose:
-  description: "Propose"
+  title: "Propose"
   interactive: true
   agents:
     - planning
@@ -14,7 +14,7 @@ propose:
     - goga-propose
 
 propose-review:
-  description: "Propose Review"
+  title: "Propose Review"
   interactive: true
   agents:
     - planning
@@ -27,7 +27,7 @@ propose-review:
     - propose
 
 brainstorm:
-  description: "Architecture Brainstorm"
+  title: "Architecture Brainstorm"
   interactive: true
   agents:
     - planning
@@ -41,7 +41,7 @@ brainstorm:
     - propose-review
 
 brainstorm-review:
-  description: "Architecture Review"
+  title: "Architecture Review"
   interactive: true
   agents:
     - planning

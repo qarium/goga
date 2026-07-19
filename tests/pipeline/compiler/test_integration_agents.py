@@ -47,7 +47,7 @@ def _phases_body() -> str:
     return (
         "\n"
         "- name: propose\n"
-        "  description: Propose\n"
+        "  title: Propose\n"
     )
 
 

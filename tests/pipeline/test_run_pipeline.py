@@ -346,10 +346,10 @@ class TestRunPipelineLogic:
             "---\n"
             "\n"
             "- name: build\n"
-            "  description: Build\n"
+            "  title: Build\n"
             "  prompt: Build it\n"
             "- name: ship\n"
-            "  description: Ship\n"
+            "  title: Ship\n"
             "  prompt: Ship it\n",
         )
 
@@ -400,7 +400,7 @@ class TestRunPipelineLogic:
             "---\n"
             "\n"
             "- name: build\n"
-            "  description: Build\n"
+            "  title: Build\n"
             "  prompt: Build it\n",
         )
 

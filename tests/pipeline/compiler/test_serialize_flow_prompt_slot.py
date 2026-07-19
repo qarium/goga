@@ -99,7 +99,7 @@ class TestCompileFlowNoWorkflowOmitsPrompt:
         ``prompt:`` — use a YAML round-trip to assert top-level key absence.
         """
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
+        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
 
         compile_flow(pipeline_path, flow_path)

@@ -269,16 +269,16 @@ Annotations: |
       carried verbatim through `PipelineDocument` to the consumer. Never
       enters the compiled afm flow-file.
 
-"PhaseStep(name: str, description: str, body: dict[str, Any])":
+"PhaseStep(name: str, title: str, body: dict[str, Any])":
   location: phase_step.py
   annotations: |
     One element of a phases-DSL body — a single dash-prefixed name list item.
 
     `name`: step id (the value of the name field inside the list item)
-    `description`: display label (the value of description inside the item)
+    `title`: display label (the value of title inside the item)
     `body`: verbatim copy of every other field in the item (e.g. agents,
             prompt, skills, interactive, and any extra fields),
-            excluding name and description
+            excluding name and title
 
     Does not carry depends_on — the compiler generates it from list
     position when building `FlowStage`.
@@ -290,7 +290,7 @@ Annotations: |
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - The body field excludes name and description (those are separate fields)
+    - The body field excludes name and title (those are separate fields)
 
     Constraints:
     - Do not validate the contents of body — pass it through verbatim
@@ -299,25 +299,25 @@ Annotations: |
   properties:
     "name -> str": |
       Step id.
-    "description -> str": |
+    "title -> str": |
       Display label.
     "body -> dict[str, Any]": |
       Verbatim extra fields of the step.
 
-"StageStep(name: str, description: str, depends_on: list[str] | None, body: dict[str, Any])":
+"StageStep(name: str, title: str, depends_on: list[str] | None, body: dict[str, Any])":
   location: stage_step.py
   annotations: |
     One entry of a stages-DSL body — a value in the body map, keyed by step id.
 
     `name`: step id (the map key)
-    `description`: display label (the value of description inside the value)
+    `title`: display label (the value of title inside the value)
     `depends_on`: list of predecessor step ids, or None when the field is
                   absent from the source value. None means "no depends_on
                   written" — the compiler writes no depends_on key in the
                   output. An empty list means "explicit empty dependency"
                   and is written as depends_on [].
     `body`: verbatim copy of every other field in the value (excluding
-            description and depends_on)
+            title and depends_on)
 
     Carries `depends_on` from the source; the compiler passes it through
     unchanged when building `FlowStage` (rewriting external references
@@ -330,7 +330,7 @@ Annotations: |
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - The body field excludes description and depends_on (those are separate
+    - The body field excludes title and depends_on (those are separate
       fields); name is the map key, also not part of the body
     - `depends_on` distinguishes None (absent) from an empty list (explicit empty)
 
@@ -343,7 +343,7 @@ Annotations: |
   properties:
     "name -> str": |
       Step id.
-    "description -> str": |
+    "title -> str": |
       Display label.
     "depends_on -> list[str] | None": |
       Predecessor step ids, or None when absent.
@@ -417,7 +417,7 @@ Annotations: |
 
     The description slot in `fields` is a distinct channel from
     `FlowStage` name: the name field carries the display label sourced
-    from the pipeline-file step (the description field of `PhaseStep` or
+    from the pipeline-file step (the title field of `PhaseStep` or
     `StageStep`), while the description field inside `fields` carries
     the workflow-file per-stage prompt override. Both can coexist in the same
     `FlowStage` instance without collision — they live in different slots
@@ -530,9 +530,13 @@ Annotations: |
     3. Parse the body segment
     4. Detect format by the structure of the parsed body:
        - a list → `BodyFormat` PHASES; build a `PhasesBody` of `PhaseStep`
-         items (one per list entry)
+         items (one per list entry). Each list item must carry string name
+         and title fields; otherwise raise a structural error
+         "phase item missing name/title"
        - a dict → `BodyFormat` STAGES; build a `StagesBody` of `StageStep`
-         items (one per map entry)
+         items (one per map entry). Each map value must carry a string
+         title field; otherwise raise a structural error
+         "stage value missing title"
        - any other shape — raise a structural error "unsupported body format"
     5. Return (header, format, body)
 
@@ -806,7 +810,7 @@ Annotations: |
     - Do not validate depends_on references (dangling, cycles,
       duplicates) — afm's job
     - Do not validate step content beyond structural presence of
-      name/description (already enforced by `parse_dsl`)
+      name/title (already enforced by `parse_dsl`)
     - Do not bypass exceptions from `parse_dsl`, `serialize_flow`, or
       the file read/write calls
     - Do not mutate the (header, format, body) tuple returned by `parse_dsl`

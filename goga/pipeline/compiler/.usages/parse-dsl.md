@@ -24,7 +24,7 @@ print(fmt)                # BodyFormat.PHASES or BodyFormat.STAGES
 if header.agents is not None:
     print(header.agents.planning)  # inline override or None
 for step in body.steps:
-    print(step.name, step.description)
+    print(step.name, step.title)
 ```
 
 ## Parameters

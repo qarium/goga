@@ -47,7 +47,7 @@ class TestParseDslContract:
 
     def test_parse_dsl_returns_three_tuple_on_minimal_phases(self) -> None:
         """A minimal valid phases text yields (PipelineHeader, PHASES, PhasesBody)."""
-        text = "name: X\ndescription: Y\n---\n\n- name: a\n  description: A\n"
+        text = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
 
         header, fmt, body = parse_dsl(text)
 
@@ -57,7 +57,7 @@ class TestParseDslContract:
 
     def test_parse_dsl_returns_stages_on_minimal_stages(self) -> None:
         """A minimal valid stages text yields (PipelineHeader, STAGES, StagesBody)."""
-        text = "name: X\ndescription: Y\n---\n\na:\n  description: A\n"
+        text = "name: X\ndescription: Y\n---\n\na:\n  title: A\n"
 
         header, fmt, body = parse_dsl(text)
 
@@ -70,7 +70,7 @@ class TestParseDslLogic:
     """Behavioral tests against the real fixtures and the documented edge cases."""
 
     def test_parse_dsl_phases_basic(self) -> None:
-        """The canonical phases fixture parses to 3 steps with bodies excluding name/description."""
+        """The canonical phases fixture parses to 3 steps with bodies excluding name/title."""
         text = _FEATURE_PHASES.read_text()
 
         header, fmt, body = parse_dsl(text)
@@ -84,11 +84,11 @@ class TestParseDslLogic:
 
         first = body.steps[0]
         assert first.name == "propose"
-        assert first.description == "Propose"
+        assert first.title == "Propose"
 
-        # name/description are separate fields; everything else is verbatim body.
+        # name/title are separate fields; everything else is verbatim body.
         assert "name" not in first.body
-        assert "description" not in first.body
+        assert "title" not in first.body
         assert first.body["interactive"] is True
         assert first.body["agents"] == ["planning", "implementation"]
         assert "prompt" in first.body
@@ -122,7 +122,7 @@ class TestParseDslLogic:
 
     def test_parse_dsl_header_missing_name_raises(self) -> None:
         """A header lacking a string name is rejected before the body is inspected."""
-        text = "description: Y\n---\n\n- name: a\n  description: A\n"
+        text = "description: Y\n---\n\n- name: a\n  title: A\n"
 
         with pytest.raises(StructuralError, match="header missing name"):
             parse_dsl(text)
@@ -142,13 +142,13 @@ class TestParseDslLogic:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "  depends_on:\n"
             "b:\n"
-            "  description: B\n"
+            "  title: B\n"
             "  depends_on: []\n"
             "c:\n"
-            "  description: C\n"
+            "  title: C\n"
         )
 
         _header, fmt, body = parse_dsl(text)
@@ -161,23 +161,23 @@ class TestParseDslLogic:
 
     def test_parse_dsl_stages_depends_on_string_rejected(self) -> None:
         """A non-list, non-None depends_on (a bare string) is a structural type error."""
-        text = "name: T\ndescription: T\n---\n\na:\n  description: A\n  depends_on: b\n"
+        text = "name: T\ndescription: T\n---\n\na:\n  title: A\n  depends_on: b\n"
 
         with pytest.raises(StructuralError, match="depends_on must be a list"):
             parse_dsl(text)
 
     def test_parse_dsl_stages_depends_on_non_string_element_rejected(self) -> None:
         """A depends_on list with a non-string element is a structural type error."""
-        text = "name: T\ndescription: T\n---\n\na:\n  description: A\n  depends_on: [1, 2]\n"
+        text = "name: T\ndescription: T\n---\n\na:\n  title: A\n  depends_on: [1, 2]\n"
 
         with pytest.raises(StructuralError, match="depends_on must contain only strings"):
             parse_dsl(text)
 
-    def test_parse_dsl_phase_item_missing_description_raises(self) -> None:
-        """A phases list item without a string description is rejected."""
+    def test_parse_dsl_phase_item_missing_title_raises(self) -> None:
+        """A phases list item without a string title is rejected."""
         text = "name: X\ndescription: Y\n---\n\n- name: a\n  interactive: true\n"
 
-        with pytest.raises(StructuralError, match="phase item missing name/description"):
+        with pytest.raises(StructuralError, match="phase item missing name/title"):
             parse_dsl(text)
 
     def test_parse_dsl_stage_value_must_be_mapping_raises(self) -> None:
@@ -189,7 +189,7 @@ class TestParseDslLogic:
 
     def test_parse_dsl_header_not_a_mapping_raises(self) -> None:
         """A header segment that YAML-parses to a non-mapping (e.g. a scalar) is rejected."""
-        text = "42\n---\n\n- name: a\n  description: A\n"
+        text = "42\n---\n\n- name: a\n  title: A\n"
 
         with pytest.raises(StructuralError, match="header missing name/description"):
             parse_dsl(text)
@@ -201,11 +201,11 @@ class TestParseDslLogic:
         with pytest.raises(StructuralError, match="phase item must be a mapping"):
             parse_dsl(text)
 
-    def test_parse_dsl_stage_value_missing_description_raises(self) -> None:
-        """A stages value mapping without a string description is rejected."""
+    def test_parse_dsl_stage_value_missing_title_raises(self) -> None:
+        """A stages value mapping without a string title is rejected."""
         text = "name: X\ndescription: Y\n---\n\na:\n  agents: [planning]\n"
 
-        with pytest.raises(StructuralError, match="stage value missing description"):
+        with pytest.raises(StructuralError, match="stage value missing title"):
             parse_dsl(text)
 
     def test_parse_dsl_deep_copies_body_dicts(self) -> None:
@@ -219,13 +219,13 @@ class TestParseDslLogic:
         """
         from goga.pipeline.compiler.parse_dsl import _deep_copy_without
 
-        source = {"name": "a", "description": "A", "agents": ["planning"], "nested": {"k": 1}}
+        source = {"name": "a", "title": "A", "agents": ["planning"], "nested": {"k": 1}}
 
-        copied = _deep_copy_without(source, excluded={"name", "description"})
+        copied = _deep_copy_without(source, excluded={"name", "title"})
 
         # Excluded keys (carried as separate fields) are dropped from the body.
         assert "name" not in copied
-        assert "description" not in copied
+        assert "title" not in copied
         assert copied["agents"] == ["planning"]
         assert copied["nested"] == {"k": 1}
 
@@ -249,20 +249,20 @@ class TestParseDslLogic:
 
     def test_parse_dsl_header_int_name_rejected(self) -> None:
         """A non-string name (e.g. an int) is rejected as a missing name/description."""
-        text = "name: 5\ndescription: Y\n---\n\na:\n  description: A\n"
+        text = "name: 5\ndescription: Y\n---\n\na:\n  title: A\n"
 
         with pytest.raises(StructuralError, match="header missing name/description"):
             parse_dsl(text)
 
-    def test_parse_dsl_stages_body_excludes_depends_on_and_description(self) -> None:
-        """The stages step body excludes description and depends_on (separate fields)."""
+    def test_parse_dsl_stages_body_excludes_depends_on_and_title(self) -> None:
+        """The stages step body excludes title and depends_on (separate fields)."""
         text = (
             "name: X\n"
             "description: Y\n"
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "  depends_on: []\n"
             "  agents:\n"
             "    - planning\n"
@@ -272,7 +272,7 @@ class TestParseDslLogic:
 
         step_body = body.steps[0].body
 
-        assert "description" not in step_body
+        assert "title" not in step_body
         assert "depends_on" not in step_body
         assert step_body["agents"] == ["planning"]
         assert body.steps[0].depends_on == []
@@ -285,7 +285,7 @@ class TestParseDslLogic:
         with a non-string id (afm expects string ids for depends_on references).
         """
         for key in ("1", "true", "3.14"):
-            text = f"name: X\ndescription: Y\n---\n\n{key}:\n  description: A\n"
+            text = f"name: X\ndescription: Y\n---\n\n{key}:\n  title: A\n"
 
             with pytest.raises(StructuralError, match="stage name must be a string"):
                 parse_dsl(text)
@@ -303,7 +303,7 @@ class TestParseDslLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  depends_on: [zzz]\n"
             "  prompt: Do A\n"
         )
@@ -326,7 +326,7 @@ class TestParseDslLogic:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
             "  id: collision-a\n"
             "  prompt: Do A\n"
         )
@@ -340,7 +340,7 @@ class TestParseDslLogic:
     def test_parse_dsl_stages_strips_authored_name_and_id(self) -> None:
         """Authored ``name``/``id`` in a stage value are dropped — reserved output keys.
 
-        The display label derives from ``description`` and the id from the map key; an
+        The display label derives from ``title`` and the id from the map key; an
         authored value would otherwise leak into ``StageStep.body`` and clobber the
         serializer's seeded ``name``/``id``.
         """
@@ -350,7 +350,7 @@ class TestParseDslLogic:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "  name: Collision Name\n"
             "  id: collision\n"
             "  agents:\n"
@@ -366,7 +366,7 @@ class TestParseDslLogic:
 
     def test_parse_dsl_accepts_crlf_line_endings(self) -> None:
         """A pipeline file with CRLF (Windows) line endings still splits on ``---``."""
-        text = "name: X\r\ndescription: Y\r\n---\r\n\r\n- name: a\r\n  description: A\r\n"
+        text = "name: X\r\ndescription: Y\r\n---\r\n\r\n- name: a\r\n  title: A\r\n"
 
         header, fmt, body = parse_dsl(text)
 
@@ -376,7 +376,7 @@ class TestParseDslLogic:
 
     def test_parse_dsl_rejects_four_dash_separator(self) -> None:
         """A ``----`` line is not the separator — it must be exactly three dashes."""
-        text = "name: X\ndescription: Y\n----\n\n- name: a\n  description: A\n"
+        text = "name: X\ndescription: Y\n----\n\n- name: a\n  title: A\n"
 
         with pytest.raises(StructuralError, match="missing body separator"):
             parse_dsl(text)
@@ -403,7 +403,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         header, fmt, _body = parse_dsl(text)
@@ -419,7 +419,7 @@ class TestParseDslAgentsBlock:
 
     def test_parse_dsl_header_agents_is_typed_pipeline_agents_or_none(self) -> None:
         """``header.agents`` is either a ``PipelineAgents`` or ``None`` — never a raw mapping."""
-        text_without_agents = "name: X\ndescription: Y\n---\n\n- name: a\n  description: A\n"
+        text_without_agents = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
         text_with_agents = (
             "name: X\n"
             "description: Y\n"
@@ -428,7 +428,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: a\n"
-            "  description: A\n"
+            "  title: A\n"
         )
 
         header_none, _fmt, _body = parse_dsl(text_without_agents)
@@ -451,7 +451,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         with pytest.raises(StructuralError, match=r"unknown agent in header\.agents: researcher"):
@@ -479,7 +479,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         with pytest.raises(StructuralError, match="non-mapping agents block in header"):
@@ -512,7 +512,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         with pytest.raises(StructuralError, match=r"non-str value in header\.agents\.planning"):
@@ -527,7 +527,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         header, _fmt, _body = parse_dsl(text)
@@ -543,7 +543,7 @@ class TestParseDslAgentsBlock:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
         )
 
         header, _fmt, _body = parse_dsl(text)

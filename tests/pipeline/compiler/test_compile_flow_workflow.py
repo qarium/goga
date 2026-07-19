@@ -41,11 +41,11 @@ def _write_phases_three_step(tmp_path: Path) -> Path:
         "---\n"
         "\n"
         "- name: a\n"
-        "  description: A\n"
+        "  title: A\n"
         "- name: b\n"
-        "  description: B\n"
+        "  title: B\n"
         "- name: c\n"
-        "  description: C\n",
+        "  title: C\n",
     )
     return pipeline_path
 
@@ -59,12 +59,12 @@ def _write_stages_three_step(tmp_path: Path) -> Path:
         "---\n"
         "\n"
         "a:\n"
-        "  description: A\n"
+        "  title: A\n"
         "b:\n"
-        "  description: B\n"
+        "  title: B\n"
         "  depends_on: [a]\n"
         "c:\n"
-        "  description: C\n"
+        "  title: C\n"
         "  depends_on: [b]\n",
     )
     return pipeline_path
@@ -91,9 +91,9 @@ class TestCompileFlowPerStageOverrides:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
             "- name: other\n"
-            "  description: Other\n",
+            "  title: Other\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -175,12 +175,12 @@ class TestCompileFlowLoopExpansion:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "b:\n"
-            "  description: B\n"
+            "  title: B\n"
             "  depends_on: [a]\n"
             "c:\n"
-            "  description: C\n"
+            "  title: C\n"
             "  depends_on: [b]\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -219,7 +219,7 @@ class TestCompileFlowWorkflowEdgeCases:
         ``prompt:`` — use a YAML round-trip to assert top-level key absence.
         """
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
+        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
 
         compile_flow(pipeline_path, flow_path)
@@ -242,9 +242,9 @@ class TestCompileFlowWorkflowEdgeCases:
             "---\n"
             "\n"
             "- name: propose\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
             "- name: other\n"
-            "  description: Other\n",
+            "  title: Other\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -269,7 +269,7 @@ class TestCompileFlowWorkflowEdgeCases:
     def test_compile_flow_workflow_top_level_prompt_emitted(self, tmp_path: Path) -> None:
         """A workflow with a top-level prompt emits it as the first flow-file key."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  description: A\n")
+        pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(prompt="Global workflow prompt")
 
@@ -290,7 +290,7 @@ class TestCompileFlowWorkflowEdgeCases:
             "---\n"
             "\n"
             "- name: b\n"
-            "  description: B\n",
+            "  title: B\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -390,7 +390,7 @@ class TestCompileFlowWorkflowCanonicalOrder:
             "---\n"
             "\n"
             "s:\n"
-            "  description: S\n"
+            "  title: S\n"
             "  skills: [goga-propose]\n"
             "  agents: [claude]\n"
             "  prompt: body-prompt\n"
@@ -432,9 +432,9 @@ class TestCompileFlowWorkflowStagesOverrideAndDeps:
             "---\n"
             "\n"
             "propose:\n"
-            "  description: Propose\n"
+            "  title: Propose\n"
             "review:\n"
-            "  description: Review\n"
+            "  title: Review\n"
             "  depends_on: [propose]\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -461,12 +461,12 @@ class TestCompileFlowWorkflowStagesOverrideAndDeps:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "b:\n"
-            "  description: B\n"
+            "  title: B\n"
             "  depends_on: [a]\n"
             "c:\n"
-            "  description: C\n"
+            "  title: C\n"
             "  depends_on: [b, ghost]\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -493,9 +493,9 @@ class TestCompileFlowWorkflowStagesOverrideAndDeps:
             "---\n"
             "\n"
             "a:\n"
-            "  description: A\n"
+            "  title: A\n"
             "b:\n"
-            "  description: B\n"
+            "  title: B\n"
             "  depends_on: [a]\n",
         )
         flow_path = tmp_path / "flow.yml"
@@ -518,7 +518,7 @@ class TestCompileFlowWorkflowOverrideMatrix:
         """An ``agent``-only override sets ``command`` but NOT ``description``."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  description: Propose\n"
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n"
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"propose": WorkflowStage(agent="codex")})
@@ -533,7 +533,7 @@ class TestCompileFlowWorkflowOverrideMatrix:
         """A ``prompt``-only override sets ``description`` but NOT ``command``."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  description: Propose\n"
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n"
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"propose": WorkflowStage(prompt="only-prompt")})

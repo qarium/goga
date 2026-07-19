@@ -42,7 +42,7 @@ class TestPipelineDocumentContract:
     def test_pipeline_document_constructible_with_stages_body(self) -> None:
         """PipelineDocument aggregates header, STAGES format, and a StagesBody."""
         header = PipelineHeader(name="Goga feature", description="Feature implementation")
-        body = StagesBody(steps=[StageStep(name="propose", description="Propose", depends_on=None, body={})])
+        body = StagesBody(steps=[StageStep(name="propose", title="Propose", depends_on=None, body={})])
 
         doc = PipelineDocument(header=header, format=BodyFormat.STAGES, body=body)
 

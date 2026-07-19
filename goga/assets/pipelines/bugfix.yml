@@ -3,13 +3,13 @@ description: "Bug fixing"
 ---
 
 - name: hotfix
-  description: "Root-cause analysis and resolution"
+  title: "Root-cause analysis and resolution"
   interactive: true
   skills:
     - goga-change
 
 - name: commit-changes
-  description: "Commit changes"
+  title: "Commit changes"
   agents:
     - planning
     - implementation
@@ -17,7 +17,7 @@ description: "Bug fixing"
     Commit all untracked changes
 
 - name: accept
-  description: "Requirements & coverage audit"
+  title: "Requirements & coverage audit"
   interactive: true
   skills:
     - goga-accept

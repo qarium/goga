@@ -45,13 +45,13 @@ _AGENT_KEYS = ("planning", "implementation", "review", "summary")
 # reserved output key (the stage id derives from ``name``); an authored value would
 # otherwise clobber the serializer's seeded ``id`` and break the position-derived
 # depends_on chain, so it is dropped too.
-_PHASE_STEP_KEYS = {"name", "description", "depends_on", "id"}
+_PHASE_STEP_KEYS = {"name", "title", "depends_on", "id"}
 
 # Stage-step keys carried as separate fields, not inside the verbatim body. ``name``
-# and ``id`` are reserved output keys (the display label derives from ``description``,
+# and ``id`` are reserved output keys (the display label derives from ``title``,
 # the id from the map key); authored values would otherwise clobber the serializer's
 # seeded ``name``/``id``, so they are dropped.
-_STAGE_STEP_KEYS = {"description", "depends_on", "name", "id"}
+_STAGE_STEP_KEYS = {"title", "depends_on", "name", "id"}
 
 
 class StructuralError(ValueError):
@@ -164,24 +164,24 @@ def _extract_phase_step(item: Any) -> PhaseStep:
         item: One element of the parsed list body.
 
     Returns:
-        The ``PhaseStep`` with name/description split out and a deep-copied body.
+        The ``PhaseStep`` with name/title split out and a deep-copied body.
 
     Raises:
         StructuralError: If the item is not a mapping or lacks string
-            name/description.
+            name/title.
     """
     if not isinstance(item, dict):
         raise StructuralError("phase item must be a mapping")
 
     name = item.get("name")
-    description = item.get("description")
+    title = item.get("title")
 
-    if not (isinstance(name, str) and isinstance(description, str)):
-        raise StructuralError("phase item missing name/description")
+    if not (isinstance(name, str) and isinstance(title, str)):
+        raise StructuralError("phase item missing name/title")
 
     body = _deep_copy_without(item, _PHASE_STEP_KEYS)
 
-    return PhaseStep(name=name, description=description, body=body)
+    return PhaseStep(name=name, title=title, body=body)
 
 
 def _extract_depends_on(depends_on: Any) -> list[str] | None:
@@ -213,11 +213,11 @@ def _extract_stage_step(name: Any, value: Any) -> StageStep:
         value: The map value for this step.
 
     Returns:
-        The ``StageStep`` with description/depends_on split out and a deep-copied body.
+        The ``StageStep`` with title/depends_on split out and a deep-copied body.
 
     Raises:
         StructuralError: If the key is not a string, the value is not a mapping,
-            lacks a string description, or has a malformed ``depends_on``.
+            lacks a string title, or has a malformed ``depends_on``.
     """
     if not isinstance(name, str):
         raise StructuralError("stage name must be a string")
@@ -225,15 +225,15 @@ def _extract_stage_step(name: Any, value: Any) -> StageStep:
     if not isinstance(value, dict):
         raise StructuralError("stage value must be a mapping")
 
-    description = value.get("description")
+    title = value.get("title")
 
-    if not isinstance(description, str):
-        raise StructuralError("stage value missing description")
+    if not isinstance(title, str):
+        raise StructuralError("stage value missing title")
 
     depends_on = _extract_depends_on(value.get("depends_on"))
     body = _deep_copy_without(value, _STAGE_STEP_KEYS)
 
-    return StageStep(name=name, description=description, depends_on=depends_on, body=body)
+    return StageStep(name=name, title=title, depends_on=depends_on, body=body)
 
 
 def _deep_copy_without(mapping: dict[str, Any], excluded: set[str]) -> dict[str, Any]:

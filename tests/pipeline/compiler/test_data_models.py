@@ -40,19 +40,19 @@ class TestDataModelsContract:
         assert header.description == "Feature implementation"
 
     def test_phase_step_constructible_kw_only(self) -> None:
-        """PhaseStep accepts name, description and the verbatim body dict."""
-        step = PhaseStep(name="propose", description="Propose a design", body={"prompt": "draft"})
+        """PhaseStep accepts name, title and the verbatim body dict."""
+        step = PhaseStep(name="propose", title="Propose a design", body={"prompt": "draft"})
 
         assert step.name == "propose"
-        assert step.description == "Propose a design"
+        assert step.title == "Propose a design"
         assert step.body == {"prompt": "draft"}
 
     def test_stage_step_constructible_kw_only(self) -> None:
-        """StageStep accepts name, description, depends_on and the verbatim body dict."""
-        step = StageStep(name="propose", description="Propose", depends_on=None, body={"prompt": "draft"})
+        """StageStep accepts name, title, depends_on and the verbatim body dict."""
+        step = StageStep(name="propose", title="Propose", depends_on=None, body={"prompt": "draft"})
 
         assert step.name == "propose"
-        assert step.description == "Propose"
+        assert step.title == "Propose"
         assert step.depends_on is None
         assert step.body == {"prompt": "draft"}
 
@@ -108,12 +108,12 @@ class TestDataModelsContract:
         assert isinstance(header.name, str)
         assert isinstance(header.description, str)
 
-        phase = PhaseStep(name="a", description="b", body={})
+        phase = PhaseStep(name="a", title="b", body={})
         assert isinstance(phase.name, str)
-        assert isinstance(phase.description, str)
+        assert isinstance(phase.title, str)
         assert isinstance(phase.body, dict)
 
-        stage_step = StageStep(name="a", description="b", depends_on=[], body={})
+        stage_step = StageStep(name="a", title="b", depends_on=[], body={})
         assert isinstance(stage_step.depends_on, list)
 
         phases_body = PhasesBody(steps=[phase])
@@ -133,8 +133,8 @@ class TestDataModelsLogic:
 
     def test_stage_step_tristate_none_vs_empty_distinct(self) -> None:
         """depends_on None and [] are distinct explicit values, preserved on construction."""
-        none_step = StageStep(name="a", description="b", depends_on=None, body={})
-        empty_step = StageStep(name="a", description="b", depends_on=[], body={})
+        none_step = StageStep(name="a", title="b", depends_on=None, body={})
+        empty_step = StageStep(name="a", title="b", depends_on=[], body={})
 
         assert none_step.depends_on is None
         assert empty_step.depends_on == []
@@ -152,7 +152,7 @@ class TestDataModelsLogic:
     def test_phase_step_body_retains_arbitrary_keys(self) -> None:
         """The body dict carries verbatim content with no normalization."""
         payload = {"foo": [1, 2, 3], "nested": {"k": "v"}, "agents": ["planning"]}
-        step = PhaseStep(name="a", description="b", body=payload)
+        step = PhaseStep(name="a", title="b", body=payload)
 
         assert step.body == payload
         assert step.body["foo"] == [1, 2, 3]
@@ -160,9 +160,9 @@ class TestDataModelsLogic:
     def test_phases_body_preserves_insertion_order(self) -> None:
         """PhasesBody.steps keeps the order of the source list (3 elements)."""
         steps = [
-            PhaseStep(name="a", description="A", body={}),
-            PhaseStep(name="b", description="B", body={}),
-            PhaseStep(name="c", description="C", body={}),
+            PhaseStep(name="a", title="A", body={}),
+            PhaseStep(name="b", title="B", body={}),
+            PhaseStep(name="c", title="C", body={}),
         ]
         body = PhasesBody(steps=steps)
 
@@ -171,9 +171,9 @@ class TestDataModelsLogic:
     def test_stages_body_preserves_insertion_order(self) -> None:
         """StagesBody.steps keeps the order of the source list too."""
         steps = [
-            StageStep(name="a", description="A", depends_on=None, body={}),
-            StageStep(name="b", description="B", depends_on=["a"], body={}),
-            StageStep(name="c", description="C", depends_on=["b"], body={}),
+            StageStep(name="a", title="A", depends_on=None, body={}),
+            StageStep(name="b", title="B", depends_on=["a"], body={}),
+            StageStep(name="c", title="C", depends_on=["b"], body={}),
         ]
         body = StagesBody(steps=steps)
 
