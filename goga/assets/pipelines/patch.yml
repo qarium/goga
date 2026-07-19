@@ -1,0 +1,23 @@
+name: GogaPatch
+description: "Refactoring or miniman changes"
+---
+
+- name: ad-hoc
+  description: "Formalize the task, make a plan and implement it"
+  interactive: true
+  skills:
+    - goga-change
+
+- name: commit-changes
+  description: "Commit changes"
+  agents:
+    - planning
+    - implementation
+  prompt: |
+    Commit all untracked changes
+
+- name: accept
+  description: "Requirements & coverage audit"
+  interactive: true
+  skills:
+    - goga-accept

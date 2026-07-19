@@ -1,90 +1,66 @@
-name: Goga feature
+name: GogaFeature
 description: "Feature implementation"
 ---
 
 - name: propose
-  description: "Propose"
+  description: "Create the task from a user propose"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
     - goga-propose
 
-- name: propose-review
-  description: "Propose Review"
+- name: task-review
+  description: "Review of the created task"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:
     - goga-review-task
 
 - name: brainstorm
-  description: "Architecture Brainstorm"
+  description: "Task-based architecture development"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`
   skills:
     - goga-brainstorm
 
-- name: brainstorm-review
-  description: "Architecture Review"
+- name: architecture-review
+  description: "Review of the created architectural plan"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Review the architecture plan `<git branch --show-current>.md`
   skills:
     - goga-review-arch
 
 - name: apply
-  description: "Apply Architecture"
-  agents:
-    - planning
-    - implementation
+  description: "Apply the created architectural plan"
   prompt: |
     Apply the architecture plan `<git branch --show-current>.md`
   skills:
     - goga-apply
 
 - name: design
-  description: "Design Architecture To Code"
+  description: "Designing architecture into code"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Save the design document as `<git branch --show-current>.md`
   skills:
     - goga-design
 
 - name: design-review
-  description: "Design Review"
+  description: "Review of the created design plan"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Review the design document `<git branch --show-current>.md`
   skills:
     - goga-review-design
 
 - name: plan
-  description: "Plan"
+  description: "Create the coding plan"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Use the design document `<git branch --show-current>.md`
     Save the plan as `<git branch --show-current>.md`
@@ -92,25 +68,22 @@ description: "Feature implementation"
     - goga-plan
 
 - name: plan-review
-  description: "Plan Review"
+  description: "Review of the created coding plan"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Review the plan `<git branch --show-current>.md`
   skills:
     - goga-review-plan
 
-- name: fix-changes
-  description: "Fix changes"
+- name: commit-changes
+  description: "Commit changes and wait for the coding plan was built"
   interactive: true
   agents:
     - planning
     - implementation
   prompt: |
     Steps:
-      1. Commit all changes.
+      1. Commit all untracked changes.
       2. Ask the user whether the implementation is built and ready for acceptance.
 
     Requirements:
@@ -121,10 +94,7 @@ description: "Feature implementation"
       - Except changes in `docs/<tasks|arch|design|plans>`.
 
 - name: accept
-  description: "Accept Result"
+  description: "Requirements & coverage audit"
   interactive: true
-  agents:
-    - planning
-    - implementation
   skills:
     - goga-accept
