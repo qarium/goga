@@ -29,7 +29,7 @@ After installing, connect the tool to your agent:
 goga connect <agent>
 ```
 
-`goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. The tool becomes available both as an agent skill and as a CLI command.
+`goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. If the package ships any pipeline `*.yml` files under `pipelines/`, those are installed into `~/.goga/pipelines/` in the same step — see [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the conflict-resolution rules. The tool becomes available both as an agent skill and as a CLI command.
 
 ## Built-in tools
 
@@ -60,9 +60,11 @@ Each tool package follows a standard layout:
 ```
 goga_tool_<name>/
 ├── __init__.py        # main(args) entry point for CLI
-└── skills/
-    └── <skill>/
-        └── SKILL.md   # Agent skill definition
+├── skills/            # Required — at least one skill
+│   └── <skill>/
+│       └── SKILL.md   # Agent skill definition
+└── pipelines/         # Optional — flat *.yml pipeline files
+    └── <name>.yml     # Installed into ~/.goga/pipelines/ by goga connect
 ```
 
 A valid tool must:
@@ -71,6 +73,13 @@ A valid tool must:
 - Contain a `skills/` directory with at least one skill
 - Each skill directory must include a `SKILL.md` file
 - Expose a `main(args: list[str])` function for CLI execution
+
+A `pipelines/` directory is **optional**. When present, `goga connect`
+copies its flat `*.yml` files into `~/.goga/pipelines/` next to the
+shipped pipelines, with the same conflict-resolution rules used for
+tool-skill installation. See
+[Pipelines / Shipped Pipelines](pipelines/shipped.md) for the full
+installation algorithm.
 
 ## Skill naming
 

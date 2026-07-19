@@ -26,6 +26,7 @@ docs/configuration.md:
 docs/tools.md:
   - goga/connect
   - goga/commands/tool
+  - goga/pipeline
 
 docs/workflow/index.md:
   - goga/connect
@@ -91,6 +92,39 @@ docs/cli/connect.md:
 
 docs/cli/tool.md:
   - goga/commands/tool
+
+docs/cli/install.md:
+  - goga/commands/install
+
+docs/cli/upgrade.md:
+  - goga/commands/upgrade
+
+docs/cli/pipeline.md:
+  - goga/commands/pipeline
+  - goga/pipeline
+  - goga/docker
+
+docs/pipelines/index.md:
+  - goga/pipeline
+  - goga/pipeline/compiler
+  - goga/pipeline/workflow
+  - goga/commands/pipeline
+  - goga/connect
+
+docs/pipelines/pipeline-file.md:
+  - goga/pipeline
+  - goga/pipeline/compiler
+
+docs/pipelines/workflows.md:
+  - goga/pipeline/workflow
+  - goga/pipeline/compiler
+  - goga/commands/pipeline
+
+docs/pipelines/shipped.md:
+  - goga/pipeline
+  - goga/connect
+  # YAML assets directory, not a CODEMANIFEST cell — see rule exception below.
+  - goga/assets/pipelines
 
 docs/architecture/index.md:
   - goga/ast

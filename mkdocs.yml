@@ -47,6 +47,11 @@ nav:
       - Change: workflow/change.md
       - Accept: workflow/accept.md
   - Tools: tools.md
+  - Pipelines:
+      - pipelines/index.md
+      - Pipeline File: pipelines/pipeline-file.md
+      - Workflows: pipelines/workflows.md
+      - Shipped Pipelines: pipelines/shipped.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
