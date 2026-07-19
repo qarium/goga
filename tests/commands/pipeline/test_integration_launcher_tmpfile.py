@@ -118,8 +118,23 @@ class TestIntegrationLauncherTmpfile:
 
         mock_proc = mock.Mock()
         mock_proc.wait.return_value = 0
+        # `side_effect=DockerRunner.run` instead of the original `wraps=`:
+        # `autospec=True, wraps=Class.method` returns a fresh MagicMock on
+        # Python 3.10 instead of the wraps result (autospec's spec-instance
+        # machinery clobbers the return-value proxy that `wraps` relies on),
+        # so `result == 0` fails with `MagicMock == 0`. `side_effect` both
+        # invokes the real method (so the real `docker run` argv is assembled
+        # through `subprocess.Popen`) AND propagates its return value across
+        # 3.10–3.13. `autospec=True` stays — without it `patch.object` on a
+        # class-level mock would not bind `self` and the real run would raise
+        # `TypeError: missing positional argument 'args'`.
         with (
-            mock.patch.object(DockerRunner, "run", autospec=True, wraps=DockerRunner.run) as spy_run,
+            mock.patch.object(
+                DockerRunner,
+                "run",
+                autospec=True,
+                side_effect=DockerRunner.run,
+            ) as spy_run,
             mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
             mock.patch.object(subprocess, "run"),
         ):
