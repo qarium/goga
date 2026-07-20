@@ -185,7 +185,8 @@ def _apply_per_stage_overrides(
         step = steps_by_name.get(name)
         if step is None:
             logger.warning(
-                "compile_flow: workflow stage %r not found in pipeline; skipping", name,
+                "compile_flow: workflow stage %r not found in pipeline; skipping",
+                name,
             )
             continue
         if stage.agent is not None:
@@ -404,9 +405,7 @@ def compile_flow(
     # The step sequence consumed for FlowStage assembly. When a workflow is
     # applied, this is a reconstructed (deep-copied + overridden + expanded)
     # sequence; the ORIGINAL `body` is preserved for PipelineDocument below.
-    reconstructed = (
-        _reconstruct_body(fmt, body, workflow) if workflow is not None else list(body.steps)
-    )
+    reconstructed = _reconstruct_body(fmt, body, workflow) if workflow is not None else list(body.steps)
 
     stages: list[FlowStage] = []
     if fmt is BodyFormat.PHASES:

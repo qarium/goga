@@ -66,9 +66,7 @@ def _fake_documents(
     return (pipeline_doc, flow_doc)
 
 
-def _write_defaults(
-    defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS
-) -> None:
+def _write_defaults(defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS) -> None:
     """Write ``default <key>\\n`` prompt files for the given keys into defaults_dir."""
     defaults_dir.mkdir(parents=True, exist_ok=True)
     for key in keys:
@@ -102,9 +100,7 @@ class TestRunPipelineContract:
 
 
 class TestRunPipelineLogic:
-    def test_run_pipeline_passes_compiled_flow_path_and_port_to_run_flow(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_passes_compiled_flow_path_and_port_to_run_flow(self, tmp_path: Path, afm_dir: Path) -> None:
         """run_flow receives the compiled flow.yml path (not the DSL path) and the port."""
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
@@ -117,9 +113,7 @@ class TestRunPipelineLogic:
 
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
-    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(self, tmp_path: Path, afm_dir: Path) -> None:
         """A pipeline only in user_dir still compiles + runs against its source path."""
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
@@ -136,9 +130,7 @@ class TestRunPipelineLogic:
         # compile_flow receives the user-dir pipeline path (resolved), the flow
         # path, and the resolved workflow (None — no workflow env, no basename
         # file at <cwd>/.goga/workflows/deploy.yml).
-        mock_compile.assert_called_once_with(
-            (user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml", workflow=None
-        )
+        mock_compile.assert_called_once_with((user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml", workflow=None)
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
@@ -188,9 +180,7 @@ class TestRunPipelineLogic:
 
         assert exit_code == 7
 
-    def test_run_pipeline_propagates_missing_binary_exit_code(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_propagates_missing_binary_exit_code(self, tmp_path: Path, afm_dir: Path) -> None:
         """run_pipeline propagates run_flow's 127 (missing afm binary) exit code."""
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
@@ -234,9 +224,7 @@ class TestRunPipelineLogic:
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
-    def test_run_pipeline_propagates_structural_error_from_compile_flow(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_propagates_structural_error_from_compile_flow(self, tmp_path: Path, afm_dir: Path) -> None:
         """A structural DSL error from compile_flow propagates unchanged; run_flow is not called."""
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
@@ -254,9 +242,7 @@ class TestRunPipelineLogic:
 
         mock_run_flow.assert_not_called()
 
-    def test_run_pipeline_calls_compile_then_run_flow_in_order(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_calls_compile_then_run_flow_in_order(self, tmp_path: Path, afm_dir: Path) -> None:
         """compile_flow runs before run_flow."""
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
@@ -324,9 +310,7 @@ class TestRunPipelineLogic:
         mock_compile.assert_not_called()
         mock_run_flow.assert_not_called()
 
-    def test_run_pipeline_writes_compiled_flow_file_for_real_compile(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_writes_compiled_flow_file_for_real_compile(self, tmp_path: Path, afm_dir: Path) -> None:
         """A real (un-mocked) compile step writes a valid flow-file at AFM_DIR/flow.yml.
 
         Unlike the wiring tests, ``compile_flow`` is NOT mocked — this drives the real
@@ -371,9 +355,7 @@ class TestRunPipelineLogic:
         # run_flow received the compiled flow path (not the DSL path) and the port.
         mock_run_flow.assert_called_once_with(flow_path, 50321)
 
-    def test_run_pipeline_threads_real_agents_override_through_full_chain(
-        self, tmp_path: Path, afm_dir: Path
-    ) -> None:
+    def test_run_pipeline_threads_real_agents_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
         """A real ``agents`` header block threads verbatim through the whole chain.
 
         Unlike the materialization tests below (which mock ``compile_flow``), this
@@ -425,9 +407,7 @@ class TestRunPipelineMaterialization:
     left intact per the plan's debugging notes.
     """
 
-    def _patch_defaults(
-        self, monkeypatch: pytest.MonkeyPatch, defaults_dir: Path
-    ) -> None:
+    def _patch_defaults(self, monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
         monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
 
     def test_run_pipeline_materializes_four_default_prompts_without_agents(
@@ -468,9 +448,7 @@ class TestRunPipelineMaterialization:
         agents = PipelineAgents(planning="OVERRIDE\n")
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
-            ),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -553,9 +531,7 @@ class TestRunPipelineMaterialization:
         agents = PipelineAgents(implementation="OVERRIDE\n")
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
-            ),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -576,14 +552,10 @@ class TestRunPipelineMaterialization:
 
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
-        agents = PipelineAgents(
-            planning="P\n", implementation="I\n", review="R\n", summary="S\n"
-        )
+        agents = PipelineAgents(planning="P\n", implementation="I\n", review="R\n", summary="S\n")
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
-            ),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -625,12 +597,8 @@ class TestRunPipelineMaterialization:
             return 0
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)
-            ),
-            mock.patch.object(
-                _run_pipeline_module, "run_flow", side_effect=_run_flow_expects_prompts
-            ),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
+            mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run_flow_expects_prompts),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
 

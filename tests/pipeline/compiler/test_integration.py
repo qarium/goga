@@ -62,12 +62,7 @@ def _stage_field_keys_in_text_order(text: str, stage_id: str) -> list[str]:
         # Field keys sit at exactly two-space indent, are not sequence items, and
         # contain a colon (e.g. ``  interactive: true``).
         stripped = line[2:]
-        if (
-            line.startswith("  ")
-            and not line.startswith("   ")
-            and not stripped.startswith("-")
-            and ":" in stripped
-        ):
+        if line.startswith("  ") and not line.startswith("   ") and not stripped.startswith("-") and ":" in stripped:
             key = stripped.split(":", 1)[0]
             if key not in ("id", "name", "depends_on"):
                 keys.append(key)

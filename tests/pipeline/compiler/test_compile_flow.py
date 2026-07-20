@@ -101,12 +101,7 @@ class TestCompileFlowContract:
         """A pipeline-file without an ``agents`` block yields a PipelineDocument whose agents is None."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -118,14 +113,7 @@ class TestCompileFlowContract:
         """Inline agent prompts ride on PipelineDocument but never reach the compiled flow-file."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "agents:\n"
-            "  planning: Custom\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n",
+            "name: T\ndescription: T\nagents:\n  planning: Custom\n---\n\n- name: a\n  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -247,15 +235,7 @@ class TestCompileFlowLogic:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  zebra: 1\n"
-            "  apple: 2\n"
-            "  interactive: true\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  zebra: 1\n  apple: 2\n  interactive: true\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -272,14 +252,7 @@ class TestCompileFlowLogic:
         idx_supervisor_prompt = text.index("supervisor_prompt:")
         idx_apple = text.index("apple: 2")
         idx_zebra = text.index("zebra: 1")
-        assert (
-            idx_interactive
-            < idx_agents
-            < idx_supervisor
-            < idx_supervisor_prompt
-            < idx_apple
-            < idx_zebra
-        )
+        assert idx_interactive < idx_agents < idx_supervisor < idx_supervisor_prompt < idx_apple < idx_zebra
 
     def test_compile_flow_phases_fixture_depends_on_chains(self, tmp_path: Path) -> None:
         """The canonical phases fixture compiles to a position-derived dependency chain."""
@@ -408,15 +381,7 @@ class TestCompileFlowLogic:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  depends_on: [zzz]\n"
-            "- name: b\n"
-            "  title: B\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  depends_on: [zzz]\n- name: b\n  title: B\n",
         )
         flow_path = tmp_path / "flow.yml"
 

@@ -200,9 +200,7 @@ class TestResolveWorkflowEnvAutoMatchContainment:
     resolver will refuse to apply.
     """
 
-    def test_auto_match_dotdot_escape_is_silent_miss(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_auto_match_dotdot_escape_is_silent_miss(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A ``..`` in the pipeline name never resolves outside the workflows dir."""
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True, exist_ok=True)
@@ -217,9 +215,7 @@ class TestResolveWorkflowEnvAutoMatchContainment:
         assert workflow_env == {}
         assert workflow_log_name is None
 
-    def test_auto_match_absolute_prefix_is_silent_miss(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_auto_match_absolute_prefix_is_silent_miss(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """An absolute-prefixed pipeline name never resolves outside the workflows dir."""
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True, exist_ok=True)
@@ -232,9 +228,7 @@ class TestResolveWorkflowEnvAutoMatchContainment:
         assert workflow_env == {}
         assert workflow_log_name is None
 
-    def test_auto_match_plain_name_still_resolves(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_auto_match_plain_name_still_resolves(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """A plain pipeline name with a present basename file still resolves (regression guard)."""
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True, exist_ok=True)

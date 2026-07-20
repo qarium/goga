@@ -526,9 +526,7 @@ class TestBuildFirstRunAutoBuildIntegration:
     first-run safety net that closes the corner case where ``docker run`` would
     otherwise fail with "No such image"."""
 
-    def test_build_without_update_calls_safety_net_with_config_primitives(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_build_without_update_calls_safety_net_with_config_primitives(self, tmp_path: Path, monkeypatch) -> None:
         """No --update + dockerfile set -> docker_build_if_not_exist is called
         unconditionally at launch entry; docker_update is NOT called (still gated
         by --update); launch proceeds normally."""
@@ -552,9 +550,7 @@ class TestBuildFirstRunAutoBuildIntegration:
         # launch proceeded
         mock_runner.return_value.run.assert_called_once()
 
-    def test_build_without_update_calls_safety_net_even_when_dockerfile_none(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_build_without_update_calls_safety_net_even_when_dockerfile_none(self, tmp_path: Path, monkeypatch) -> None:
         """No --update + dockerfile None -> safety net still called (it is a no-op
         inside the docker cell when dockerfile is None); docker_update NOT called;
         launch proceeds."""
@@ -575,9 +571,7 @@ class TestBuildFirstRunAutoBuildIntegration:
         mock_update.assert_not_called()
         mock_runner.return_value.run.assert_called_once()
 
-    def test_build_with_update_calls_ensure_before_update_before_launch(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_build_with_update_calls_ensure_before_update_before_launch(self, tmp_path: Path, monkeypatch) -> None:
         """--update + dockerfile set -> docker_build_if_not_exist runs FIRST (may
         no-op if the image is present, or build if absent), then docker_update
         (force refresh), then launch. Order: ensure -> update -> launch."""
@@ -675,9 +669,7 @@ class TestPipelineFirstRunAutoBuildIntegration:
         # launch happened
         mock_popen.assert_called_once()
 
-    def test_pipeline_run_without_update_calls_safety_net_with_primitives(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_pipeline_run_without_update_calls_safety_net_with_primitives(self, tmp_path: Path, monkeypatch) -> None:
         """Run + no --update + dockerfile set -> safety net called; docker_update
         NOT called; launch proceeds with the run command + port."""
         config = _make_config(dockerfile="Dockerfile")

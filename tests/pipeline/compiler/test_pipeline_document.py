@@ -76,9 +76,7 @@ class TestPipelineDocumentLogic:
     def test_passive_carrier_no_default_for_any_field(self) -> None:
         """No field has a default value — the dataclass is a pure passive carrier."""
         defaults = {
-            f.name: f.default
-            for f in dataclasses.fields(PipelineDocument)
-            if f.default is not dataclasses.MISSING
+            f.name: f.default for f in dataclasses.fields(PipelineDocument) if f.default is not dataclasses.MISSING
         }
 
         assert defaults == {}

@@ -73,12 +73,8 @@ class TestPipelineWorkflowFlagValidation:
         # fire before the step 6 existence check.
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
-            result = runner.invoke(
-                pipeline, ["deploy", "--workflow", "custom", "--no-workflow"]
-            )
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--workflow", "custom", "--no-workflow"])
 
         assert result.exit_code == 1
         assert "mutually exclusive" in result.output
@@ -98,9 +94,7 @@ class TestPipelineWorkflowFlagValidation:
         # No .goga/workflows/custom.yml on the host.
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--workflow", "custom"])
 
         assert result.exit_code == 1
@@ -122,9 +116,7 @@ class TestPipelineWorkflowFlagValidation:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--workflow", "../etc/evil"])
 
         assert result.exit_code == 1
@@ -145,9 +137,7 @@ class TestPipelineWorkflowFlagValidation:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["--workflow", "missing"])
 
         assert result.exit_code == 1
@@ -159,9 +149,7 @@ class TestPipelineWorkflowFlagValidation:
 
 
 class TestPipelineWorkflowFlagEdge:
-    def test_pipeline_command_no_workflow_only_passes(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_command_no_workflow_only_passes(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``--no-workflow`` alone performs NO host-side validation.
 
         ``--no-workflow`` is a pure flag forwarded into the container env-file as
@@ -172,9 +160,7 @@ class TestPipelineWorkflowFlagEdge:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--no-workflow"])
 
         assert result.exit_code == 0
@@ -182,9 +168,7 @@ class TestPipelineWorkflowFlagEdge:
         assert mock_run.call_args.kwargs["no_workflow"] is True
         assert mock_run.call_args.kwargs["workflow"] is None
 
-    def test_pipeline_command_no_flags_no_validation(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_command_no_flags_no_validation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """No workflow flags performs NO host-side validation.
 
         With neither ``--workflow`` nor ``--no-workflow`` set, the host does not
@@ -194,9 +178,7 @@ class TestPipelineWorkflowFlagEdge:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == 0
@@ -219,9 +201,7 @@ class TestPipelineWorkflowFlagEdge:
         (workflows_dir / "custom.yml").write_text("prompt: hi\n")
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--workflow", "custom"])
 
         assert result.exit_code == 0

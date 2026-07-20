@@ -44,11 +44,7 @@ _AGENT_KEYS = ("planning", "implementation", "review", "summary")
 
 def _phases_body() -> str:
     """A minimal single-step phases body shared by every scenario's pipeline-file."""
-    return (
-        "\n"
-        "- name: propose\n"
-        "  title: Propose\n"
-    )
+    return "\n- name: propose\n  title: Propose\n"
 
 
 def _write_pipeline(tmp_path: Path, *, header_agents: str) -> Path:
@@ -65,11 +61,7 @@ def _write_pipeline(tmp_path: Path, *, header_agents: str) -> Path:
     """
     pipeline_path = tmp_path / "pipeline.yml"
     pipeline_path.write_text(
-        "name: integration\n"
-        "description: Integration scenario\n"
-        f"{header_agents}"
-        "---\n"
-        f"{_phases_body()}",
+        f"name: integration\ndescription: Integration scenario\n{header_agents}---\n{_phases_body()}",
     )
     return pipeline_path
 
@@ -115,10 +107,7 @@ class TestIntegrationAgentsScenarioB:
 
     def _override_block(self, marker_text: str) -> str:
         """Build an ``agents:`` header block with only the planning override set."""
-        return (
-            "agents:\n"
-            f"  planning: {marker_text}\n"
-        )
+        return f"agents:\n  planning: {marker_text}\n"
 
     def test_partial_override_carries_planning_not_implementation(self, tmp_path: Path) -> None:
         """An ``agents.planning`` override surfaces on the PipelineDocument, others stay None.
@@ -216,13 +205,7 @@ def test_compile_flow_always_returns_two_element_documents_tuple(
     else:  # full
         pipeline_path = _write_pipeline(
             tmp_path,
-            header_agents=(
-                "agents:\n"
-                "  planning: a\n"
-                "  implementation: b\n"
-                "  review: c\n"
-                "  summary: d\n"
-            ),
+            header_agents=("agents:\n  planning: a\n  implementation: b\n  review: c\n  summary: d\n"),
         )
     flow_path = tmp_path / "flow.yml"
 

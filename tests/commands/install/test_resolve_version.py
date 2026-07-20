@@ -26,10 +26,7 @@ class TestResolveVersionFacade:
         sig = inspect.signature(resolve_version)
         params = sig.parameters
         assert list(params) == ["form"]
-        assert (
-            params["form"].annotation is str | None
-            or params["form"].annotation == "str | None"
-        )
+        assert params["form"].annotation is str | None or params["form"].annotation == "str | None"
         assert sig.return_annotation is str | None or sig.return_annotation == "str | None"
 
 

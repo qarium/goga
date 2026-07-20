@@ -302,9 +302,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912
     # AttributeError, and the in-container goga.build never starts (no docker
     # run, no secret env-file leak on disk).
     if config.build is None:
-        raise click.ClickException(
-            "build section is required in .goga/config.yml to run 'goga build'"
-        )
+        raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
 
     cli_flags = {
         "worktree": worktree,

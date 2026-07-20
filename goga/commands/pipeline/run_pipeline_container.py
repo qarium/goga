@@ -405,9 +405,7 @@ def _build_env_file(  # noqa: PLR0913
         env["NO_PROXY"] = "localhost,127.0.0.1"
     # Step 9 — workflow env-file decision matrix (host-side, BEFORE launch). The
     # log name is set only when a workflow will actually be applied (step 10).
-    workflow_env, workflow_log_name = _resolve_workflow_env(
-        workflow, no_workflow, name
-    )
+    workflow_env, workflow_log_name = _resolve_workflow_env(workflow, no_workflow, name)
     env.update(workflow_env)
     env_file = _write_env_file(env, extra_env)
     # Step 10 — the workflow log line. Emitted ONLY when a workflow will

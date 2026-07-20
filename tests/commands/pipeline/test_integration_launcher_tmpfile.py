@@ -88,9 +88,7 @@ def _apply_run_mode_common_mocks(tmp_path: Path, monkeypatch) -> Path:
 
 
 class TestIntegrationLauncherTmpfile:
-    def test_run_mode_mounts_and_validates_five_field_tmpfile(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_run_mode_mounts_and_validates_five_field_tmpfile(self, tmp_path: Path, monkeypatch) -> None:
         """Run mode mounts a five-field afm-config tmpfile read-only at the fixed path.
 
         End-to-end through the REAL ``DockerRunner.run`` docker-runtime boundary:
@@ -125,7 +123,7 @@ class TestIntegrationLauncherTmpfile:
         # so `result == 0` fails with `MagicMock == 0`. `side_effect` both
         # invokes the real method (so the real `docker run` argv is assembled
         # through `subprocess.Popen`) AND propagates its return value across
-        # 3.10–3.13. `autospec=True` stays — without it `patch.object` on a
+        # 3.10-3.13. `autospec=True` stays — without it `patch.object` on a
         # class-level mock would not bind `self` and the real run would raise
         # `TypeError: missing positional argument 'args'`.
         with (
@@ -179,9 +177,7 @@ class TestIntegrationLauncherTmpfile:
 
 
 class TestIntegrationLauncherCleanup:
-    def test_tmpfile_unlinked_but_persistent_dir_survives_finally(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_tmpfile_unlinked_but_persistent_dir_survives_finally(self, tmp_path: Path, monkeypatch) -> None:
         """The launcher's finally unlinks the secret tmpfile/env-file but keeps the persistent dir.
 
         After ``run_pipeline_container`` returns, BOTH the afm-config tmpfile and

@@ -66,12 +66,7 @@ def resolve_version(form: str | None) -> str | None:
         raise ValueError("operator-prefixed forms are rejected")
     segments = form.split(".")
     # 3. Major x-range "N.x": exactly one dot, last segment "x", major numeric.
-    if (
-        len(segments) == _XRANGE_MAJOR_SEGMENTS
-        and segments[1] == "x"
-        and segments[0].isdigit()
-        and segments[0] != ""
-    ):
+    if len(segments) == _XRANGE_MAJOR_SEGMENTS and segments[1] == "x" and segments[0].isdigit() and segments[0] != "":
         return f"~={segments[0]}.0"
     # 4. Minor x-range "N.M.x": exactly two dots, last segment "x", both numeric.
     if (

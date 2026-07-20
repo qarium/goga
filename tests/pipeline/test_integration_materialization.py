@@ -81,9 +81,7 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
     (directory / f"{name}.yml").write_text("pipeline")
 
 
-def _write_defaults(
-    defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS
-) -> None:
+def _write_defaults(defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS) -> None:
     """Write ``default <key>\\n`` prompt files for the given keys into defaults_dir."""
     defaults_dir.mkdir(parents=True, exist_ok=True)
     for key in keys:

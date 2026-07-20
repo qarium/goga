@@ -32,12 +32,7 @@ class TestParseWorkflowContract:
     def test_parse_workflow_returns_workflow_document_for_valid_input(self, tmp_path: Path) -> None:
         """parse_workflow returns a WorkflowDocument for a valid workflow-file."""
         workflow_path = tmp_path / "workflow.yml"
-        workflow_path.write_text(
-            "prompt: top-level guidance\n"
-            "stages:\n"
-            "  propose:\n"
-            "    agent: codex\n"
-        )
+        workflow_path.write_text("prompt: top-level guidance\nstages:\n  propose:\n    agent: codex\n")
 
         document = parse_workflow(workflow_path)
 

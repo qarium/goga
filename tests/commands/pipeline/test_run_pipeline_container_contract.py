@@ -88,9 +88,7 @@ class TestRunPipelineContainerStillReturnsExitCode:
         assert exit_code == 42
         assert isinstance(exit_code, int)
 
-    def test_discovery_mode_returns_container_exit_code(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
+    def test_discovery_mode_returns_container_exit_code(self, tmp_path: Path, monkeypatch) -> None:
         """Discovery mode ignores the workflow flags and returns the exit code."""
         config = _make_config()
         monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)

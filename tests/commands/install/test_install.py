@@ -95,11 +95,7 @@ class TestInstallLogicPositive:
     def test_install_bulk_path_one_pip_call_yaml_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(
             tmp_path,
-            "language: python\n"
-            "tools:\n"
-            "  afm: 1.0.x\n"
-            "  ralphex: 1.x\n"
-            "  go: 1.0.1\n",
+            "language: python\ntools:\n  afm: 1.0.x\n  ralphex: 1.x\n  go: 1.0.1\n",
         )
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -127,10 +123,7 @@ class TestInstallLogicPositive:
     ) -> None:
         _write_config(
             tmp_path,
-            "language: python\n"
-            "tools:\n"
-            "  viewer: latest\n"
-            "  afm: 1.0.x\n",
+            "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n",
         )
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -150,9 +143,7 @@ class TestInstallLogicPositive:
         assert result.output.strip() == "Nothing to install"
         mock_run.assert_not_called()
 
-    def test_install_empty_path_with_empty_tools_mapping(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_install_empty_path_with_empty_tools_mapping(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(tmp_path, "language: python\ntools: {}\n")
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -187,10 +178,7 @@ class TestInstallLogicNegative:
     ) -> None:
         _write_config(
             tmp_path,
-            "language: python\n"
-            "tools:\n"
-            "  good: 1.0.x\n"
-            "  bad: '==1.0'\n",
+            "language: python\ntools:\n  good: 1.0.x\n  bad: '==1.0'\n",
         )
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -303,17 +291,12 @@ class TestInstallLogicNegative:
 class TestInstallWiringInvariants:
     """CODEMANIFEST invariants — what each path must (and must not) consult."""
 
-    def test_install_single_path_ignores_config_tools(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_install_single_path_ignores_config_tools(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # SINGLE path must not read .goga/config.yml — declaring tools must not
         # change the single-tool install argv.
         _write_config(
             tmp_path,
-            "language: python\n"
-            "tools:\n"
-            "  afm: 1.0.x\n"
-            "  ralphex: 1.x\n",
+            "language: python\ntools:\n  afm: 1.0.x\n  ralphex: 1.x\n",
         )
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -322,9 +305,7 @@ class TestInstallWiringInvariants:
         assert mock_run.call_count == 1
         assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-foo"]
 
-    def test_install_bulk_path_ignores_version_flag(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_install_bulk_path_ignores_version_flag(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # BULK path must not consult --version — each tool's own form is used.
         _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)

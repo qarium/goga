@@ -36,16 +36,7 @@ def _write_phases_three_step(tmp_path: Path) -> Path:
     """Write a 3-step phases pipeline (A, B, C) and return its path."""
     pipeline_path = tmp_path / "pipeline.yml"
     pipeline_path.write_text(
-        "name: T\n"
-        "description: T\n"
-        "---\n"
-        "\n"
-        "- name: a\n"
-        "  title: A\n"
-        "- name: b\n"
-        "  title: B\n"
-        "- name: c\n"
-        "  title: C\n",
+        "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n- name: c\n  title: C\n",
     )
     return pipeline_path
 
@@ -86,14 +77,7 @@ class TestCompileFlowPerStageOverrides:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: propose\n"
-            "  title: Propose\n"
-            "- name: other\n"
-            "  title: Other\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n- name: other\n  title: Other\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -237,14 +221,7 @@ class TestCompileFlowWorkflowEdgeCases:
         """An unknown workflow stage name warns and is skipped; known stages still apply."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: propose\n"
-            "  title: Propose\n"
-            "- name: other\n"
-            "  title: Other\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n- name: other\n  title: Other\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -285,12 +262,7 @@ class TestCompileFlowWorkflowEdgeCases:
         """Per-stage overrides apply to every expanded copy, not just the first."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: b\n"
-            "  title: B\n",
+            "name: T\ndescription: T\n---\n\n- name: b\n  title: B\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(
@@ -353,12 +325,7 @@ def _stage_field_keys_in_text_order(text: str, stage_id: str) -> list[str]:
         if line.startswith("- id: "):
             break
         stripped = line[2:]
-        if (
-            line.startswith("  ")
-            and not line.startswith("   ")
-            and not stripped.startswith("-")
-            and ":" in stripped
-        ):
+        if line.startswith("  ") and not line.startswith("   ") and not stripped.startswith("-") and ":" in stripped:
             key = stripped.split(":", 1)[0]
             if key not in ("id", "name", "depends_on"):
                 keys.append(key)
@@ -488,15 +455,7 @@ class TestCompileFlowWorkflowStagesOverrideAndDeps:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "a:\n"
-            "  title: A\n"
-            "b:\n"
-            "  title: B\n"
-            "  depends_on: [a]\n",
+            "name: T\ndescription: T\n---\n\na:\n  title: A\nb:\n  title: B\n  depends_on: [a]\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"a": WorkflowStage(loop=2)})
@@ -517,9 +476,7 @@ class TestCompileFlowWorkflowOverrideMatrix:
     def test_workflow_agent_only_leaves_no_description_slot(self, tmp_path: Path) -> None:
         """An ``agent``-only override sets ``command`` but NOT ``description``."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n"
-        )
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n")
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"propose": WorkflowStage(agent="codex")})
 
@@ -532,9 +489,7 @@ class TestCompileFlowWorkflowOverrideMatrix:
     def test_workflow_prompt_only_leaves_no_command_slot(self, tmp_path: Path) -> None:
         """A ``prompt``-only override sets ``description`` but NOT ``command``."""
         pipeline_path = tmp_path / "pipeline.yml"
-        pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n"
-        )
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n")
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"propose": WorkflowStage(prompt="only-prompt")})
 

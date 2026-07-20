@@ -29,13 +29,7 @@ class TestStageDefaultsInjection:
         """A PHASES stage with no ``agents`` key gets the three default fields."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  prompt: Do A\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -50,13 +44,7 @@ class TestStageDefaultsInjection:
         """A STAGES stage with no ``agents`` key gets the three default fields."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "a:\n"
-            "  title: A\n"
-            "  prompt: Do A\n",
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -71,13 +59,7 @@ class TestStageDefaultsInjection:
         """``agents: []`` triggers default injection — empty list is unusable."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  agents: []\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: []\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -92,13 +74,7 @@ class TestStageDefaultsInjection:
         """``agents: null`` (explicit YAML null) triggers default injection."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  agents: null\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: null\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -117,14 +93,7 @@ class TestStageDefaultsRespectAuthored:
         """``agents: [foo]`` is preserved verbatim; no defaults are injected."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  agents:\n"
-            "    - foo\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents:\n    - foo\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -139,15 +108,7 @@ class TestStageDefaultsRespectAuthored:
         """``agents: [planning, implementation]`` is preserved; no defaults."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  agents:\n"
-            "    - planning\n"
-            "    - implementation\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents:\n    - planning\n    - implementation\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -168,14 +129,7 @@ class TestStageDefaultsCanonicalOrder:
         flow-file."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  skills:\n"
-            "    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  skills:\n    - goga-propose\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -192,12 +146,7 @@ class TestStageDefaultsCanonicalOrder:
         """The injected defaults survive a YAML round-trip with the expected types."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -218,13 +167,7 @@ class TestStageDefaultsDoNotLeak:
         """A source stage without ``agents`` keeps the parsed body clean."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  prompt: Do A\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  prompt: Do A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -240,13 +183,7 @@ class TestStageDefaultsDoNotLeak:
         default injection does not retroactively populate it."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  agents: []\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: []\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -331,13 +268,7 @@ class TestStageDefaultsCoexistWithWorkflowOverride:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: propose\n"
-            "  title: Propose\n"
-            "  prompt: Body prompt\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  prompt: Body prompt\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(

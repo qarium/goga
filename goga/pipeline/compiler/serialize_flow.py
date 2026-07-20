@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 class _FlowAgents(list):
     """Marker class — list that must serialize in flow-style."""
+
     pass
 
 
@@ -38,6 +39,7 @@ def _represent_flow_agents(dumper: yaml.Dumper, data: _FlowAgents) -> yaml.Node:
 
 class _BlockLiteralPrompt(str):
     """Marker class — string that must serialize in block-literal scalar style."""
+
     pass
 
 
@@ -48,6 +50,7 @@ def _represent_block_literal_prompt(dumper: yaml.Dumper, data: _BlockLiteralProm
 
 class _CanonicalDumper(yaml.SafeDumper):
     """``SafeDumper`` subclass carrying the marker-class representers."""
+
     pass
 
 

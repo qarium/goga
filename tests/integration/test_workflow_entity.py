@@ -78,9 +78,7 @@ def _stage_by_id(stages: list[dict[str, object]], stage_id: str) -> dict[str, ob
 class TestFeaturePhasesEndToEndCompile:
     """The reference ``feature-phases`` fixtures compiled together end-to-end."""
 
-    def test_feature_phases_compile_applies_overrides_and_loop_expansion(
-        self, tmp_path: Path
-    ) -> None:
+    def test_feature_phases_compile_applies_overrides_and_loop_expansion(self, tmp_path: Path) -> None:
         """``parse_workflow`` + ``compile_flow`` apply overrides, expansion, and rewriting.
 
         The reference ``feature-phases`` workflow sets a top-level ``prompt``, an
@@ -99,9 +97,7 @@ class TestFeaturePhasesEndToEndCompile:
         flow_path = tmp_path / "flow.yml"
         workflow = parse_workflow(_FEATURE_WORKFLOW)
 
-        pipeline_doc, flow_doc = compile_flow(
-            _FEATURE_PHASES_PIPELINE, flow_path, workflow=workflow
-        )
+        pipeline_doc, flow_doc = compile_flow(_FEATURE_PHASES_PIPELINE, flow_path, workflow=workflow)
 
         # The ORIGINAL pipeline body is untouched — reconstruction lives only in
         # FlowDocument.stages.
@@ -148,9 +144,7 @@ class TestFeaturePhasesEndToEndCompile:
 class TestFeatureStagesLoopExpansion:
     """STAGES-format loop-expansion rewrites external refs to the LAST id (5c)."""
 
-    def test_feature_stages_loop_expansion_rewrites_to_last_expanded_id(
-        self, tmp_path: Path
-    ) -> None:
+    def test_feature_stages_loop_expansion_rewrites_to_last_expanded_id(self, tmp_path: Path) -> None:
         """STAGES loop-expansion rewrites downstream external refs to the LAST id.
 
         The reference ``feature-stages`` pipeline is STAGES-format with authored

@@ -148,9 +148,7 @@ class TestPipelineWorkflowFlagSurface:
         (workflows_dir / "custom.yml").write_text("prompt: hi\n")
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--workflow", "custom"])
 
         assert result.exit_code == 0
@@ -165,9 +163,7 @@ class TestPipelineWorkflowFlagSurface:
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(
-            _pipeline_module, "run_pipeline_container", return_value=0
-        ) as mock_run:
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy", "--no-workflow"])
 
         assert result.exit_code == 0

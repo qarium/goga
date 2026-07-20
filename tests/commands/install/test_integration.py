@@ -149,9 +149,7 @@ class TestInstallEndToEndPaths:
             CliRunner().invoke(app, ["install"])
         assert not (tmp_path / ".pytest_home" / ".goga" / "connect.yml").exists()
 
-    def test_install_bulk_path_full_cross_entity_argv(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_install_bulk_path_full_cross_entity_argv(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Cross-entity: a real ``.goga/config.yml`` drives load_config ->
         resolve_version -> one ``subprocess.run`` with composed argv.
 
@@ -160,11 +158,7 @@ class TestInstallEndToEndPaths:
         """
         _write_config(
             tmp_path,
-            "language: python\n"
-            "tools:\n"
-            "  afm: 1.0.x\n"
-            "  viewer: latest\n"
-            "  go: 1.2.3\n",
+            "language: python\ntools:\n  afm: 1.0.x\n  viewer: latest\n  go: 1.2.3\n",
         )
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
@@ -177,9 +171,7 @@ class TestInstallEndToEndPaths:
         assert argv[-1] == "-U"
         assert _pkgs_from_argv(argv) == ["goga-tool-afm~=1.0.0", "goga-tool-viewer", "goga-tool-go==1.2.3"]
 
-    def test_install_empty_path_with_sudo_still_empty(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_install_empty_path_with_sudo_still_empty(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Edge: empty path + ``--sudo`` stays empty — sudo never materializes.
 
         With no ``tools:`` the empty branch fires before argv composition, so

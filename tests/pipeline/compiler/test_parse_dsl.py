@@ -256,17 +256,7 @@ class TestParseDslLogic:
 
     def test_parse_dsl_stages_body_excludes_depends_on_and_title(self) -> None:
         """The stages step body excludes title and depends_on (separate fields)."""
-        text = (
-            "name: X\n"
-            "description: Y\n"
-            "---\n"
-            "\n"
-            "a:\n"
-            "  title: A\n"
-            "  depends_on: []\n"
-            "  agents:\n"
-            "    - planning\n"
-        )
+        text = "name: X\ndescription: Y\n---\n\na:\n  title: A\n  depends_on: []\n  agents:\n    - planning\n"
 
         _header, _fmt, body = parse_dsl(text)
 
@@ -297,16 +287,7 @@ class TestParseDslLogic:
         whose position-derived depends_on is None) survives into the output as a dangling
         dependency. Stripping it makes phases consistent with the position-derived contract.
         """
-        text = (
-            "name: X\n"
-            "description: Y\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  depends_on: [zzz]\n"
-            "  prompt: Do A\n"
-        )
+        text = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n  depends_on: [zzz]\n  prompt: Do A\n"
 
         _header, fmt, body = parse_dsl(text)
 
@@ -320,16 +301,7 @@ class TestParseDslLogic:
         Without this, the authored value leaks into ``PhaseStep.body`` and clobbers the
         serializer's seeded stage id, breaking the position-derived depends_on chain.
         """
-        text = (
-            "name: X\n"
-            "description: Y\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-            "  id: collision-a\n"
-            "  prompt: Do A\n"
-        )
+        text = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n  id: collision-a\n  prompt: Do A\n"
 
         _header, fmt, body = parse_dsl(text)
 
@@ -420,16 +392,7 @@ class TestParseDslAgentsBlock:
     def test_parse_dsl_header_agents_is_typed_pipeline_agents_or_none(self) -> None:
         """``header.agents`` is either a ``PipelineAgents`` or ``None`` — never a raw mapping."""
         text_without_agents = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
-        text_with_agents = (
-            "name: X\n"
-            "description: Y\n"
-            "agents:\n"
-            "  planning: P\n"
-            "---\n"
-            "\n"
-            "- name: a\n"
-            "  title: A\n"
-        )
+        text_with_agents = "name: X\ndescription: Y\nagents:\n  planning: P\n---\n\n- name: a\n  title: A\n"
 
         header_none, _fmt, _body = parse_dsl(text_without_agents)
         header_typed, _fmt, _body = parse_dsl(text_with_agents)

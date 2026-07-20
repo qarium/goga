@@ -131,10 +131,7 @@ def _extract_top_level(loaded: dict[str, Any]) -> tuple[str | None, dict[str, An
 
             stages_raw = value
         else:
-            raise WorkflowSyntaxError(
-                f"unknown key in workflow: {key}; valid keys: "
-                f"{', '.join(_TOP_LEVEL_KEYS)}"
-            )
+            raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
     return prompt, stages_raw
 
@@ -209,8 +206,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             loop = field_value
         else:
             raise WorkflowSyntaxError(
-                f"unknown key in workflow.stages.{name}: {key}; valid keys: "
-                f"{', '.join(_STAGE_KEYS)}"
+                f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}"
             )
 
     return WorkflowStage(agent=agent, prompt=prompt, loop=loop)

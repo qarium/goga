@@ -135,9 +135,7 @@ def pipeline(  # noqa: PLR0913
     # AttributeError. This also covers run_pipeline_container transitively — it
     # is only reachable through this command, so a single check here is enough.
     if config.pipeline is None:
-        raise click.ClickException(
-            "pipeline section is required in .goga/config.yml to run 'goga pipeline'"
-        )
+        raise click.ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")
 
     # Resolve the proxy: the --proxy CLI value wins over config.pipeline.proxy.
     resolved_proxy = proxy if proxy is not None else config.pipeline.proxy

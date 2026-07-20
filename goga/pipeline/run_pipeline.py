@@ -167,9 +167,7 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     for key in _AGENT_KEYS:
         override = getattr(agents, key) if agents is not None else None
         if override is None and not (defaults_dir / f"{key}.md").exists():
-            raise RuntimeError(
-                f"{key}: default prompt missing from package and no inline override supplied"
-            )
+            raise RuntimeError(f"{key}: default prompt missing from package and no inline override supplied")
 
     # 8c — wipe + recreate so re-runs are idempotent regardless of prior state.
     prompts_dir = afm_dir / "prompts"

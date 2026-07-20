@@ -156,11 +156,7 @@ class TestRunPipelineWorkflowResolution:
         # Basename fallback: workflow-file named after the pipeline ("deploy.yml").
         workflows_dir = tmp_path / ".goga" / "workflows"
         workflows_dir.mkdir(parents=True)
-        (workflows_dir / "deploy.yml").write_text(
-            "stages:\n"
-            "  build:\n"
-            "    agent: codex\n"
-        )
+        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    agent: codex\n")
 
         project_dir = tmp_path / ".goga" / "pipelines"
         project_dir.mkdir(parents=True)
