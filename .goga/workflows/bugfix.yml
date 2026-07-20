@@ -10,4 +10,4 @@ stages:
       - Ask user about approve plan
 
       Constraints:
-      - Don't implementation without approve of user
+      - Don't implementation without approve from user

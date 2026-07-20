@@ -1,0 +1,12 @@
+prompt: |
+  Answer in Russian language
+
+stages:
+  ad-hoc: |
+    Ask user about task and implement it.
+
+    Requirements:
+    - Ask user about approve plan before implementation
+
+    Constraints:
+    - Don't implementation without approve from user
