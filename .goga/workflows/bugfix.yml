@@ -1,0 +1,13 @@
+prompt: |
+  Answer in Russian language
+
+stages:
+  hotfix:
+    prompt: |
+      Find problem and fix it.
+
+      Requirements:
+      - Ask user about approve plan
+
+      Constraints:
+      - Don't implementation without approve of user
