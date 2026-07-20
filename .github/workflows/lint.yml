@@ -11,9 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/ruff-action@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          args: check goga/ tests/
-      - uses: astral-sh/ruff-action@v3
-        with:
-          args: format --check goga/ tests/
+          python-version: "3.x"
+      - name: Install ruff
+        # Installed from PyPI (not via astral-sh/ruff-action) so the step does
+        # not depend on Astral's version-resolution API, which is unreachable
+        # often enough to break CI ("No server is currently available...").
+        run: pip install "ruff>=0.15.0"
+      - name: Ruff check
+        run: ruff check goga/ tests/
+      - name: Ruff format --check
+        run: ruff format --check goga/ tests/
