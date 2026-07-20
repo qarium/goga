@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 import typing
 
-from goga.connect import connect
+from goga.connect import connect, resync_registered_agents
 
 
 class TestInstallContract:
@@ -30,3 +30,17 @@ class TestInstallContract:
     def test_connect_force_overwrite_default_is_false(self) -> None:
         sig = inspect.signature(connect)
         assert sig.parameters["force_overwrite"].default is False
+
+
+class TestResyncContract:
+    def test_resync_importable_from_facade(self) -> None:
+        assert resync_registered_agents is not None
+
+    def test_resync_has_correct_signature(self) -> None:
+        sig = inspect.signature(resync_registered_agents)
+        params = list(sig.parameters.keys())
+        assert params == ["goga_home"]
+
+    def test_resync_returns_int(self) -> None:
+        hints = typing.get_type_hints(resync_registered_agents)
+        assert hints["return"] is int

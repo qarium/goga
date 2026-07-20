@@ -7,6 +7,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import requests
@@ -336,3 +337,84 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
     _print_summary(summary_commands, skills, goga_home)
 
     return 0
+
+
+@contextlib.contextmanager
+def _home_override(target_home: Path | None) -> Iterator[None]:
+    """Point ``$HOME`` at ``target_home`` for the duration of the block.
+
+    ``connect()`` resolves its central ``~/.goga`` root and each agent's target
+    directory through :func:`pathlib.Path.home` (which reads ``$HOME``), so
+    re-syncing an installation owned by another home directory requires ``$HOME``
+    to point there while ``connect()`` runs. A ``None`` ``target_home`` leaves the
+    environment untouched. ``$HOME`` is always restored on exit, even on error.
+    """
+    if target_home is None:
+        yield
+        return
+    saved = os.environ.get("HOME")
+    os.environ["HOME"] = str(target_home)
+    try:
+        yield
+    finally:
+        if saved is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = saved
+
+
+def resync_registered_agents(goga_home: Path) -> int:
+    """Re-apply activation to every agent recorded in ``<goga_home>/connect.yml``.
+
+    Reads the connect registry at ``<goga_home>/connect.yml`` and re-runs
+    :func:`connect` for each recorded agent, forwarding that agent's persisted
+    ``force_overwrite`` (never hardcoded). ``$HOME`` is pointed at
+    ``goga_home.parent`` while ``connect`` runs so its internal
+    :func:`pathlib.Path.home` resolution targets the owning installation (D1);
+    the original ``$HOME`` is restored afterwards, even on error.
+
+    Re-syncing never runs under sudo and never writes the registry — ``connect``
+    is the single writer. A missing or empty registry is a normal condition (no
+    agents connected yet) and returns ``0``. A YAML parse failure is reported to
+    stderr and returns a non-zero code. Agent failures are aggregated: the loop
+    continues after a single failure and the first non-zero result is returned.
+
+    Args:
+        goga_home: Directory containing ``connect.yml`` (typically ``~/.goga``).
+
+    Returns:
+        ``0`` when every recorded agent re-synced (or the registry is
+        missing/empty), otherwise the first non-zero per-agent exit code.
+    """
+    # 1-2. No registry yet — no agents connected, re-sync is a no-op.
+    connect_yml = goga_home / "connect.yml"
+    if not connect_yml.exists():
+        return 0
+
+    # 3. Parse; a malformed registry is a hard failure (non-zero).
+    try:
+        loaded = yaml.safe_load(connect_yml.read_text())
+    except yaml.YAMLError as exc:
+        print(f"failed to parse {connect_yml}: {exc}", file=sys.stderr)
+        return 1
+
+    # 4. A non-mapping registry, or a missing/empty agents map, is a no-op.
+    if not isinstance(loaded, dict):
+        return 0
+    agents = loaded.get("agents", {})
+    if not isinstance(agents, dict) or not agents:
+        return 0
+
+    # 5. Re-sync each agent under a $HOME override pointing at the owning home,
+    #    forwarding each agent's own force_overwrite. Continue after a failure
+    #    and remember only the first non-zero result.
+    first_failure = 0
+    with _home_override(goga_home.parent):
+        for agent_name, entry in agents.items():
+            per_agent_force = bool(entry.get("force_overwrite", False)) if isinstance(entry, dict) else False
+            rc = connect(agents=[agent_name], force_overwrite=per_agent_force)
+            if rc != 0 and first_failure == 0:
+                first_failure = rc
+
+    # 6. Return the first non-zero result, or 0 on full success.
+    return first_failure
