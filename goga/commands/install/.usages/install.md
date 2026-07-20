@@ -148,6 +148,9 @@ With `--no-connect`, the exit code is always pip's (install-only semantics).
 - On success (and without `--no-connect`), activates every agent in
   `~/.goga/connect.yml`: recreates central assets, downloads `dsl.md`, creates
   agent symlinks, and refreshes pipelines — via the shared activation routine.
+- During activation, emits a `Re-syncing <N> registered agent(s): <list>` banner
+  to stderr followed by a `Connecting agent: <name>` line per agent. A missing
+  or empty registry is a silent no-op (no banner).
 - Bulk mode performs exactly one `subprocess.run` regardless of how many tools
   are declared.
 

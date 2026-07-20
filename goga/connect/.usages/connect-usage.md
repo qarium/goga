@@ -54,6 +54,27 @@ Return value: `0` when every agent re-synced or the registry is missing/empty;
 otherwise the first non-zero `connect` exit code. The loop continues after a
 per-agent failure and reports the first one.
 
+## Diagnostic Output
+
+Every invocation of `connect()` prints a per-agent line to stderr as soon as it
+begins processing that agent:
+
+```
+Connecting agent: claude
+```
+
+When `resync_registered_agents()` runs against a non-empty registry, it first
+prints a one-line banner so the user can distinguish a re-sync from a direct
+`goga connect`:
+
+```
+Re-syncing 3 registered agent(s): claude, codex, opencode
+```
+
+The banner is followed by the per-agent lines from `connect()` and the regular
+central-install / pipeline / symlink summaries. A missing or empty registry is
+a silent no-op (return 0, no banner).
+
 ## Central Installation Model
 
 `~/.goga/` is the single source of truth:

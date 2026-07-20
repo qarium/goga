@@ -199,6 +199,58 @@ class TestPrintSummary:
         assert "Installed 1 skills: goga-cell" in captured.err
 
 
+class TestConnectAgentDiagnostic:
+    """Per-agent diagnostic emitted at the start of each agent's processing.
+
+    The line ``Connecting agent: <name>`` MUST appear in stderr for every
+    agent in the call, in the order agents were passed. Used by both direct
+    ``goga connect`` invocations and the re-sync loop in
+    ``resync_registered_agents`` so the user can tell which agent is being
+    processed at any moment.
+    """
+
+    def test_single_agent_emits_connecting_line(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "assets"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=home),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+        ):
+            result = connect(agents=["claude"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Connecting agent: claude" in captured.err
+
+    def test_multi_agent_emits_line_per_agent_in_order(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        _create_agent_resources(tmp_path)
+        source = tmp_path / "goga" / "assets"
+        home = tmp_path / "home"
+        home.mkdir()
+
+        with (
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod.Path, "home", return_value=home),
+            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+        ):
+            result = connect(agents=["claude", "codex", "cursor"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        err_lines = [line for line in captured.err.splitlines() if line.startswith("Connecting agent:")]
+        assert err_lines == [
+            "Connecting agent: claude",
+            "Connecting agent: codex",
+            "Connecting agent: cursor",
+        ]
+
+
 # --- Contract tests for connect() signature (byte-identical) ---
 
 

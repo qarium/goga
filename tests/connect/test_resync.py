@@ -246,5 +246,117 @@ class TestResyncLogicUnreadableRegistry:
         mock_connect.assert_not_called()
 
 
+class TestResyncBanner:
+    """Diagnostic banner emitted before the re-sync loop starts.
+
+    A non-empty registry MUST print a one-line banner of the form
+    ``Re-syncing <N> registered agent(s): <list>`` to stderr so the user can
+    distinguish a re-sync run from a direct ``goga connect`` and see the full
+    set of agents about to be processed. The banner MUST NOT be emitted for a
+    missing, empty, or non-mapping registry (silent no-op).
+    """
+
+    def test_banner_lists_agents_with_count(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        goga_home = tmp_path / ".goga"
+        _write_registry(
+            goga_home,
+            {"claude": {"force_overwrite": False}, "codex": {"force_overwrite": True}},
+        )
+        with (
+            mock.patch("pathlib.Path.home", return_value=goga_home.parent),
+            mock.patch.object(_connect_module, "connect", return_value=0),
+        ):
+            rc = resync_registered_agents(goga_home)
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        assert "Re-syncing 2 registered agent(s): claude, codex" in captured.err
+
+    def test_banner_respects_agent_count_and_order(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        goga_home = tmp_path / ".goga"
+        _write_registry(
+            goga_home,
+            {
+                "cursor": {"force_overwrite": False},
+                "claude": {"force_overwrite": False},
+                "opencode": {"force_overwrite": False},
+            },
+        )
+        with (
+            mock.patch("pathlib.Path.home", return_value=goga_home.parent),
+            mock.patch.object(_connect_module, "connect", return_value=0),
+        ):
+            rc = resync_registered_agents(goga_home)
+
+        assert rc == 0
+        captured = capsys.readouterr()
+        # Count matches.
+        assert "Re-syncing 3 registered agent(s)" in captured.err
+        # All three agents appear in the banner (order is whatever YAML round-trip
+        # produced — asserted as a set, not a sequence).
+        banner_line = next(
+            (line for line in captured.err.splitlines() if line.startswith("Re-syncing")),
+            "",
+        )
+        assert "claude" in banner_line
+        assert "cursor" in banner_line
+        assert "opencode" in banner_line
+
+    def test_no_banner_when_registry_missing(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        goga_home = tmp_path / ".goga"
+        with mock.patch.object(_connect_module, "connect") as mock_connect:
+            rc = resync_registered_agents(goga_home)
+
+        assert rc == 0
+        mock_connect.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Re-syncing" not in captured.err
+
+    def test_no_banner_when_agents_empty(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        goga_home = tmp_path / ".goga"
+        _write_registry(goga_home, {})
+        with mock.patch.object(_connect_module, "connect") as mock_connect:
+            rc = resync_registered_agents(goga_home)
+
+        assert rc == 0
+        mock_connect.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Re-syncing" not in captured.err
+
+    def test_no_banner_on_malformed_registry(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        goga_home = tmp_path / ".goga"
+        goga_home.mkdir(parents=True, exist_ok=True)
+        (goga_home / "connect.yml").write_text("agents: [unclosed")
+        with mock.patch.object(_connect_module, "connect") as mock_connect:
+            rc = resync_registered_agents(goga_home)
+
+        assert rc != 0
+        mock_connect.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Re-syncing" not in captured.err
+
+    def test_no_banner_when_top_level_is_non_mapping(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        goga_home = tmp_path / ".goga"
+        goga_home.mkdir(parents=True, exist_ok=True)
+        (goga_home / "connect.yml").write_text("just a string")
+        with mock.patch.object(_connect_module, "connect") as mock_connect:
+            rc = resync_registered_agents(goga_home)
+
+        assert rc == 0
+        mock_connect.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Re-syncing" not in captured.err
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

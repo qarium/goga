@@ -79,6 +79,9 @@ supplies.
 - Calls `resync_registered_agents(goga_home)`, which reads `~/.goga/connect.yml` and re-applies
   `connect()` once per listed agent (each with its own side effects: centralized asset installation,
   symlink creation, and `connect.yml` updates).
+- During re-sync, emits a `Re-syncing <N> registered agent(s): <list>` banner to stderr, followed
+  by a `Connecting agent: <name>` line per agent from `connect()`. A missing or empty registry is
+  a silent no-op (no banner).
 
 ## Preconditions
 

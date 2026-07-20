@@ -318,6 +318,7 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
 
     # Step 4 — per-agent purge + symlinks (symlink OSError is non-fatal).
     for agent in agents:
+        print(f"Connecting agent: {agent}", file=sys.stderr)
         target = _resolve_target_dir(agent)
         try:
             _create_agent_symlinks(agent, target, goga_home)
@@ -407,7 +408,12 @@ def resync_registered_agents(goga_home: Path) -> int:
     if not isinstance(agents, dict) or not agents:
         return 0
 
-    # 5. Re-sync each agent under a $HOME override pointing at the owning home,
+    # 5. Emit a one-line banner so the user can tell a re-sync from a direct
+    #    ``goga connect`` and see which agents are about to be processed.
+    agent_names = ", ".join(agents.keys())
+    print(f"Re-syncing {len(agents)} registered agent(s): {agent_names}", file=sys.stderr)
+
+    # 6. Re-sync each agent under a $HOME override pointing at the owning home,
     #    forwarding each agent's own force_overwrite. Continue after a failure
     #    and remember only the first non-zero result.
     first_failure = 0
@@ -418,5 +424,5 @@ def resync_registered_agents(goga_home: Path) -> int:
             if rc != 0 and first_failure == 0:
                 first_failure = rc
 
-    # 6. Return the first non-zero result, or 0 on full success.
+    # 7. Return the first non-zero result, or 0 on full success.
     return first_failure

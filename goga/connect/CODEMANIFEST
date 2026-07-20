@@ -69,21 +69,24 @@ Annotations: |
             copy <package>/skills/* into ~/.goga/skills/ with goga-tool- prefix
           - Conflict resolution: skip-with-warning when force_overwrite=False, overwrite when True
     4. For each agent in `agents`:
-       a. Resolve the agent's target directory:
+       a. Emit a diagnostic line "Connecting agent: <name>" to sys.stderr so the
+          user can tell which agent is being processed (used by both direct
+          connect and the re-sync loop in `resync_registered_agents`)
+       b. Resolve the agent's target directory:
           - claude → ~/.claude/
           - codex → ~/.codex/
           - cursor → ~/.cursor/
           - opencode → ~/.config/opencode/
-       b. Pattern-matching purge of stale installations at symlink targets:
+       c. Pattern-matching purge of stale installations at symlink targets:
           - Scan ~/.<agent>/skills/ for entries matching goga-* naming pattern
             (both real directories AND stale symlinks); delete all matches
           - For claude and opencode: also scan and delete ~/.<agent>/commands/goga if it exists
             as a real directory or stale symlink
-       c. Create symlinks (after purge in 4b, targets are clean):
+       d. Create symlinks (after purge in 4c, targets are clean):
           - For each ~/.goga/skills/goga-* entry: create symlink
             ~/.<agent>/skills/<basename> → ~/.goga/skills/<basename>
           - For claude and opencode: also create ~/.<agent>/commands/goga → ~/.goga/commands
-       d. On symlink creation failure (existing real dir not purged, Windows privilege error):
+       e. On symlink creation failure (existing real dir not purged, Windows privilege error):
           - Emit clear message to stderr, do not corrupt existing state, continue with other agents
     5. Install pipelines by calling `install_pipelines` with target ~/.goga/pipelines/ and force_overwrite propagated
        (executed once after all agents; pipelines are shared)
@@ -190,12 +193,16 @@ Annotations: |
     3. Parse the registry as YAML per `connect_yml_schema`; on a parse failure,
        emit diagnostics to stderr and return non-zero
     4. If the parsed agents map is missing or empty, return 0
-    5. Wrap the loop below in an environment override that sets $HOME to goga_home.parent
+    5. Emit a one-line diagnostic banner to sys.stderr of the form
+       "Re-syncing <N> registered agent(s): <comma-separated list>" so the user
+       can distinguish a re-sync run from a direct connect invocation and
+       see the full set of agents about to be processed
+    6. Wrap the loop below in an environment override that sets $HOME to goga_home.parent
        so the internal home resolution of `connect` targets the owning installation, then
        for each recorded agent call `connect` with agents=[<name>] and that agent's
        recorded force_overwrite; remember the first non-zero result and continue with
        the remaining agents. Restore the original $HOME after the loop
-    6. Return 0 when every agent re-synced, otherwise the first non-zero result
+    7. Return 0 when every agent re-synced, otherwise the first non-zero result
 
     Requirements:
     - Missing or empty registry returns 0 (normal condition, not an error)
@@ -206,6 +213,8 @@ Annotations: |
     - Override $HOME to goga_home.parent for the duration of the `connect` loop so the
       internal home resolution of `connect` targets the installation that owns
       `goga_home`; restore $HOME afterwards
+    - Emit the re-sync banner ONLY when the registry contains at least one agent;
+      a missing or empty registry is a silent no-op (return 0)
 
     Constraints:
     - Do not write connect.yml; `connect` is the single writer
