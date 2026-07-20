@@ -1,45 +1,17 @@
 from __future__ import annotations
 
-import contextlib
 import importlib.metadata
 import logging
-import os
 import pwd
 import subprocess
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 
 import click
-import yaml
 
-from ...connect import connect
+from ...connect import resync_registered_agents
 
 logger = logging.getLogger(__name__)
-
-
-@contextlib.contextmanager
-def _home_override(target_home: Path | None) -> Iterator[None]:
-    """Point ``$HOME`` at ``target_home`` for the duration of the block.
-
-    ``connect()`` resolves its central ``~/.goga`` root and each agent's target
-    directory through :func:`pathlib.Path.home` (which reads ``$HOME``), so
-    re-syncing *another* user's installation (``--user``) requires ``$HOME`` to
-    point at that user while ``connect()`` runs. A ``None`` ``target_home``
-    leaves the environment untouched. ``$HOME`` is always restored on exit.
-    """
-    if target_home is None:
-        yield
-        return
-    saved = os.environ.get("HOME")
-    os.environ["HOME"] = str(target_home)
-    try:
-        yield
-    finally:
-        if saved is None:
-            os.environ.pop("HOME", None)
-        else:
-            os.environ["HOME"] = saved
 
 
 def _build_pip_command(include_tools: bool, use_sudo: bool) -> list[str]:
@@ -71,7 +43,7 @@ def _build_pip_command(include_tools: bool, use_sudo: bool) -> list[str]:
 
 
 def _resolve_goga_home(target_user: str | None) -> Path | None:
-    """Resolve the ``~/.goga`` directory for the registry lookup (step 4).
+    """Resolve the ``~/.goga`` directory for activation (Algorithm step 4a/4b).
 
     Returns ``None`` (and logs) when ``target_user`` is unknown to
     :func:`pwd.getpwnam` so the caller can surface a non-zero exit code without
@@ -94,62 +66,16 @@ def _resolve_goga_home(target_user: str | None) -> Path | None:
         return None
 
 
-def _read_connect_registry(connect_yml: Path) -> dict | None:
-    """Load the ``connect.yml`` registry (step 5).
-
-    A missing file is a normal condition (no agents connected yet) and yields an
-    empty mapping so the re-sync loop is a no-op. A YAML parse error is logged
-    and signals failure to the caller via ``None``.
-
-    Args:
-        connect_yml: Path to the registry file.
-
-    Returns:
-        The parsed registry mapping (possibly empty), or ``None`` on parse error.
-    """
-    if not connect_yml.exists():
-        return {}
-    try:
-        loaded = yaml.safe_load(connect_yml.read_text())
-    except yaml.YAMLError as exc:
-        logger.error("failed to parse %s: %s", connect_yml, exc)
-        return None
-    return loaded if isinstance(loaded, dict) else {}
-
-
-def _resync_agents(registry: dict) -> int:
-    """Re-sync every agent in the registry, returning the first failure (step 6).
-
-    Each agent's own ``force_overwrite`` is read from the registry and forwarded
-    to :func:`connect`; remaining agents are still processed after a failure so a
-    single bad agent does not skip the rest.
-
-    Args:
-        registry: The parsed ``connect.yml`` mapping.
-
-    Returns:
-        The first non-zero agent exit code, or ``0`` if all agents succeeded.
-    """
-    agents = registry.get("agents", {})
-    if not isinstance(agents, dict):
-        return 0
-
-    first_failure = 0
-    for agent_name, entry in agents.items():
-        per_agent_force = bool(entry.get("force_overwrite", False)) if isinstance(entry, dict) else False
-        rc = connect(agents=[agent_name], force_overwrite=per_agent_force)
-        if rc != 0 and first_failure == 0:
-            first_failure = rc
-    return first_failure
-
-
 def _upgrade(use_sudo: bool = False, target_user: str | None = None, include_tools: bool = False) -> int:
-    """Upgrade goga via pip then re-sync agents from the ``connect.yml`` registry.
+    """Upgrade goga via pip then delegate agent re-sync to the shared routine.
 
     Runs ``pip install goga -U`` (optionally with discovered ``goga_tool_*``
-    packages and/or under ``sudo --preserve-env=HOME``), then re-syncs every agent
-    recorded in ``<goga_home>/connect.yml`` using each agent's persisted
-    ``force_overwrite`` value (never hardcoded).
+    packages and/or under ``sudo --preserve-env=HOME``), then resolves the
+    owning user's ``~/.goga`` and delegates the registry re-sync to
+    :func:`resync_registered_agents`, which reads ``<goga_home>/connect.yml``,
+    re-activates every recorded agent with that agent's persisted
+    ``force_overwrite``, and redirects ``$HOME`` to the owning home internally
+    (D1) so ``connect()`` targets the correct installation.
 
     Args:
         use_sudo: Prepend ``sudo --preserve-env=HOME`` to the pip command for
@@ -159,8 +85,9 @@ def _upgrade(use_sudo: bool = False, target_user: str | None = None, include_too
         include_tools: Also upgrade discovered ``goga_tool_*`` packages.
 
     Returns:
-        0 on success, the pip exit code on pip failure, or the first non-zero
-        agent re-sync failure.
+        0 on success, the pip exit code on pip failure, ``1`` when
+        ``target_user`` is unknown, or the activation outcome (first non-zero
+        per-agent failure) from the delegated re-sync.
     """
     logger.info("upgrade start")
     if use_sudo:
@@ -172,25 +99,19 @@ def _upgrade(use_sudo: bool = False, target_user: str | None = None, include_too
         logger.error("pip failed with exit code %s", result.returncode)
         return result.returncode
 
+    # 4. Resolve the owning user's ~/.goga; an unknown target_user is a hard fail.
     goga_home = _resolve_goga_home(target_user)
     if goga_home is None:
         return 1
 
-    registry = _read_connect_registry(goga_home / "connect.yml")
-    if registry is None:
-        return 1
-
-    # Re-sync against the resolved user's HOME so connect() actually targets them:
-    # with --user, goga_home.parent is that user's home dir and connect() reads it
-    # via Path.home(), so $HOME must point there while the re-sync runs.
-    target_home = goga_home.parent if target_user is not None else None
-    with _home_override(target_home):
-        first_failure = _resync_agents(registry)
-    if first_failure != 0:
-        logger.error("re-sync failed with exit code %s", first_failure)
+    # 5-6. Delegate activation (registry read + per-agent connect + $HOME override
+    #      via D1) to the shared routine — upgrade never reads connect.yml itself.
+    outcome = resync_registered_agents(goga_home)
+    if outcome != 0:
+        logger.error("re-sync failed with exit code %s", outcome)
     else:
         logger.info("upgrade complete")
-    return first_failure
+    return outcome
 
 
 @click.command()
@@ -202,9 +123,11 @@ def upgrade(ctx: click.Context, sudo: bool, user: str | None, tools: bool) -> No
     """Upgrade goga (and optionally goga_tool_* packages) then re-sync agents.
 
     Runs ``pip install goga -U`` on the current interpreter, then re-syncs every
-    agent recorded in ``~/.goga/connect.yml`` using each agent's persisted
-    ``force_overwrite`` setting. Use ``--user`` to re-sync another user's goga
-    installation and ``--sudo`` for system-Python installs requiring root.
+    agent recorded in ``~/.goga/connect.yml`` by delegating to the shared
+    :func:`resync_registered_agents` routine, which re-applies each agent's
+    persisted ``force_overwrite`` setting. Use ``--user`` to re-sync another
+    user's goga installation and ``--sudo`` for system-Python installs requiring
+    root.
 
     Args:
         ctx: Click execution context used to control process exit codes.
