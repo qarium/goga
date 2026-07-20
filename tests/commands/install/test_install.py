@@ -55,7 +55,13 @@ class TestInstallFacade:
 
     def test_install_has_two_options(self) -> None:
         names = {p.name for p in install.params if isinstance(p, click.Option)}
-        assert names == {"sudo", "version"}
+        assert names == {"sudo", "version", "no_connect"}
+
+    def test_install_no_connect_option_is_flag_default_false(self) -> None:
+        param = next(p for p in install.params if p.name == "no_connect")
+        assert isinstance(param, click.Option)
+        assert param.is_flag
+        assert param.default is False
 
     def test_install_argument_name_present(self) -> None:
         arg = next(p for p in install.params if isinstance(p, click.Argument) and p.name == "name")
@@ -77,7 +83,10 @@ class TestInstallLogicPositive:
     """Positive behavioral scenarios — single / bulk / empty argv composition."""
 
     def test_install_single_path_composes_argv(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install", "foo", "--version", "1.0.x"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
@@ -85,7 +94,10 @@ class TestInstallLogicPositive:
         assert mock_run.call_args.kwargs.get("check") is False
 
     def test_install_single_path_with_sudo_prefixes_preserve_env_home(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install", "foo", "--sudo"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
@@ -98,7 +110,10 @@ class TestInstallLogicPositive:
             "language: python\ntools:\n  afm: 1.0.x\n  ralphex: 1.x\n  go: 1.0.1\n",
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
         assert mock_run.call_count == 1
@@ -112,7 +127,10 @@ class TestInstallLogicPositive:
     def test_install_bulk_path_with_sudo(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install", "--sudo"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
@@ -126,7 +144,10 @@ class TestInstallLogicPositive:
             "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n",
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
@@ -299,7 +320,10 @@ class TestInstallWiringInvariants:
             "language: python\ntools:\n  afm: 1.0.x\n  ralphex: 1.x\n",
         )
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install", "foo"])
         assert result.exit_code == 0
         assert mock_run.call_count == 1
@@ -309,10 +333,86 @@ class TestInstallWiringInvariants:
         # BULK path must not consult --version — each tool's own form is used.
         _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
             result = CliRunner().invoke(app, ["install", "--version", "2.0"])
         assert result.exit_code == 0
         argv = mock_run.call_args[0][0]
         # The declared afm form resolves; the --version "2.0" never leaks in.
         assert _pkgs_from_argv(argv) == ["goga-tool-afm~=1.0.0"]
         assert "goga-tool-afm==2.0" not in argv
+
+
+class TestInstallActivation:
+    """Post-install activation wiring — ``--no-connect`` flag + ACTIVATION step.
+
+    On a successful pip in the single or bulk path, activation runs once through
+    ``resync_registered_agents(Path.home() / ".goga")``; the ``--no-connect``
+    flag, a pip failure, and the empty path all skip activation.
+    """
+
+    def test_install_single_path_runs_activation_on_pip_success(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "foo", "--version", "1.0.x"])
+        assert result.exit_code == 0
+        mock_resync.assert_called_once()
+        # Activation targets the current user's ~/.goga.
+        assert mock_resync.call_args[0][0] == Path.home() / ".goga"
+
+    def test_install_bulk_path_runs_activation_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n  go: 1.0.1\n")
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert mock_run.call_count == 1
+        assert mock_resync.call_count == 1
+        # Resolved packages preserve YAML insertion order in the single pip argv.
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-afm~=1.0.0", "goga-tool-go==1.0.1"]
+
+    def test_install_no_connect_skips_activation(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "foo", "--no-connect"])
+        assert result.exit_code == 0
+        mock_resync.assert_not_called()
+
+    def test_install_pip_failure_skips_activation(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(42)),
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "foo"])
+        assert result.exit_code == 42
+        mock_resync.assert_not_called()
+
+    def test_install_activation_failure_propagates_exit_code(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=7),
+        ):
+            result = CliRunner().invoke(app, ["install", "foo"])
+        assert result.exit_code == 7
+
+    def test_install_empty_path_no_activation(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(tmp_path, "language: python\n")
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert result.output.strip() == "Nothing to install"
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()

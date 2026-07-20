@@ -3,11 +3,13 @@ from __future__ import annotations
 import logging
 import subprocess
 import sys
+from pathlib import Path
 
 import click
 import yaml
 
 from ...config import load_config
+from ...connect import resync_registered_agents
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +142,30 @@ def _resolve_pkg(name: str, form: str | None) -> str:
     return f"goga-tool-{name}" + (spec or "")
 
 
+def _after_pip(pip_rc: int, no_connect: bool) -> int:
+    """Decide the final exit code after pip (Algorithm step 3 — ACTIVATION).
+
+    Activation (the post-install agent re-sync) runs only when pip succeeded
+    (``pip_rc == 0``) and the caller did not opt out with ``no_connect``. When
+    skipped — because pip failed or ``no_connect`` is set — pip's own outcome is
+    the final exit code. The re-sync targets the current user's ``~/.goga`` and
+    is the single path through which activation runs; this routine never writes
+    ``connect.yml`` and never runs under sudo.
+
+    Args:
+        pip_rc: The exit code returned by the pip invocation.
+        no_connect: When True, skip activation and keep ``pip_rc`` verbatim.
+
+    Returns:
+        ``pip_rc`` when activation is skipped, otherwise the re-sync outcome
+        (0 on full success or a missing/empty registry, else the first
+        non-zero per-agent failure).
+    """
+    if no_connect or pip_rc != 0:
+        return pip_rc
+    return resync_registered_agents(Path.home() / ".goga")
+
+
 @click.command()
 @click.argument("name", required=False)
 @click.option("--sudo", is_flag=True, default=False, help="Run pip under sudo with --preserve-env=HOME")
@@ -148,8 +174,21 @@ def _resolve_pkg(name: str, form: str | None) -> str:
     default=None,
     help="Version form for the tool (single-path only); resolved into a pip specifier",
 )
+@click.option(
+    "--no-connect",
+    "no_connect",
+    is_flag=True,
+    default=False,
+    help="Skip post-install agent activation (install-only)",
+)
 @click.pass_context
-def install(ctx: click.Context, name: str | None, sudo: bool, version: str | None) -> None:
+def install(
+    ctx: click.Context,
+    name: str | None,
+    sudo: bool,
+    version: str | None,
+    no_connect: bool = False,
+) -> None:
     """Install goga-tool packages into the current interpreter via pip.
 
     Three paths, selected by whether ``name`` is given:
@@ -173,6 +212,8 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
             Omit to drive the bulk/empty path from ``.goga/config.yml``.
         sudo: When True, run pip under ``sudo --preserve-env=HOME``.
         version: Version form for the single path, resolved by ``resolve_version``.
+        no_connect: When True, skip the post-install agent activation re-sync;
+            the command performs the pip install only.
     """
     if name is not None:
         # SINGLE PATH — install one tool, grammar-resolving --version.
@@ -180,7 +221,8 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
             pkg = _resolve_pkg(name, version)
         except ValueError as exc:
             raise click.ClickException(f"invalid --version value {version!r}: {exc}") from exc
-        ctx.exit(_run_pip(_pip_argv([pkg], sudo), sudo))
+        pip_rc = _run_pip(_pip_argv([pkg], sudo), sudo)
+        ctx.exit(_after_pip(pip_rc, no_connect))
 
     # BULK / EMPTY PATH — driven by .goga/config.yml.
     try:
@@ -202,4 +244,5 @@ def install(ctx: click.Context, name: str | None, sudo: bool, version: str | Non
             pkgs.append(_resolve_pkg(tool_name, form))
         except ValueError as exc:
             raise click.ClickException(f"invalid version for tool {tool_name!r}: {exc}") from exc
-    ctx.exit(_run_pip(_pip_argv(pkgs, sudo), sudo))
+    pip_rc = _run_pip(_pip_argv(pkgs, sudo), sudo)
+    ctx.exit(_after_pip(pip_rc, no_connect))
