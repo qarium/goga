@@ -46,12 +46,13 @@ nav:
       - Build: workflow/build.md
       - Change: workflow/change.md
       - Accept: workflow/accept.md
-  - Tools: tools.md
   - Pipelines:
       - pipelines/index.md
       - Pipeline File: pipelines/pipeline-file.md
       - Workflows: pipelines/workflows.md
       - Shipped Pipelines: pipelines/shipped.md
+  - Tools: tools.md
+  - Configuration: configuration.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
@@ -78,7 +79,6 @@ nav:
       - AST Errors: architecture/ast-errors.md
       - Validation Rules: architecture/validation-rules.md
       - Contract Extraction: architecture/contract-extraction.md
-  - Configuration: configuration.md
   - Languages:
       - languages/index.md
       - Python: languages/python.md
