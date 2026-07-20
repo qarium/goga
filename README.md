@@ -19,6 +19,8 @@ A full-fledged **Specification-Driven Development (SDD)** framework: describe ce
 **Agents**
 
 <img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
+<img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
 <img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">
 
 [Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/) · [Pipelines](https://qarium.github.io/goga/pipelines/) · [Configuration](https://qarium.github.io/goga/configuration/)
