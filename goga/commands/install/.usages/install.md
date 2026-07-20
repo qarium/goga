@@ -3,9 +3,9 @@
 ## Overview
 
 The `goga install` command adds goga-tool packages into the current runtime
-interpreter — the exact Python that runs goga. It targets the running
-interpreter's pip directly, so the install lands in the correct environment
-regardless of how goga was deployed (pipx venv, system Python, or any other).
+interpreter — the exact Python that runs goga — and then activates every
+already-connected agent so the freshly installed skills and pipelines appear in
+`~/.goga/` and in each agent's symlink tree.
 
 The command operates in three modes:
 
@@ -16,35 +16,33 @@ The command operates in three modes:
 - **Empty mode** (`goga install` with no `tools` section): no-op, prints
   `Nothing to install`, exits 0.
 
-The command is install-only: it does not run the tool and does not touch goga's
-connection configuration. To execute an installed tool, invoke the dedicated
-tool-runner command.
+After a successful pip in single and bulk mode, the command runs a post-install
+activation: it re-syncs every agent recorded in `~/.goga/connect.yml` (using each
+agent's persisted `force_overwrite`) so the new tool's skills and pipelines are
+linked into place. Pass `--no-connect` to skip activation — the command performs
+the install only (useful in CI/Docker where a non-zero activation must not fail
+the install). Empty mode performs neither pip nor activation.
 
 ## CLI Usage
 
 ### Single mode
 
 ```bash
-# Plain install — current user, no sudo, latest version
+# Plain install + activation — current user, no sudo, latest version
 goga install foo
 
-# Install a specific concrete version
+# Install a specific concrete version, then activate
 goga install foo --version 1.0.1
 
 # Install within a minor x-range (>=1.0.0, <1.1.0)
 goga install foo --version 1.0.x
 
-# Install within a major x-range (>=1.0.0, <2.0.0)
-goga install foo --version 1.x
-
-# Pin to latest explicitly (same as omitting --version)
-goga install foo --version latest
-
-# Install with sudo (system-Python installs requiring root)
+# Install with sudo (system-Python installs requiring root); activation runs
+# without sudo against the preserved $HOME
 goga install foo --sudo
 
-# Combined: sudo + version form
-goga install foo --sudo --version 1.0.x
+# Install only — skip activation (escape-hatch for CI/Docker)
+goga install foo --no-connect
 ```
 
 ### Bulk mode
@@ -54,25 +52,26 @@ Declare tools in `.goga/config.yml`:
 ```yaml
 tools:
   viewer: latest        # → no specifier (pip selects newest)
-  afm: 1.0.x            # → ~=1.0.0 (minor x-range, >=1.0.0,<1.1.0)
-  ralphex: 1.x          # → ~=1.0   (major x-range, >=1.0.0,<2.0.0)
+  afm: 1.0.x            # → ~=1.0.0 (minor x-range)
+  ralphex: 1.x          # → ~=1.0   (major x-range)
   go: 1.0.1             # → ==1.0.1 (concrete pin)
 ```
 
-Then install them all in a single pip invocation:
+Then install and activate in a single command:
 
 ```bash
-# Install every declared tool under the current user
+# Install every declared tool, then one activation pass over connect.yml
 goga install
 
-# Same, but under sudo with HOME preserved
+# Same, but pip under sudo with HOME preserved
 goga install --sudo
+
+# Bulk install only, no activation
+goga install --no-connect
 ```
 
-The bulk mode issues **exactly one** `pip install` call whose argv contains
-every resolved `goga-tool-<name><spec>` in YAML order. This lets pip's resolver
-see the whole set together under `-U`, avoiding dependency drift between
-sequential installs.
+Bulk mode issues **exactly one** `pip install` call whose argv contains every
+resolved `goga-tool-<name><spec>` in YAML order, followed by one activation pass.
 
 ### Empty mode
 
@@ -84,15 +83,25 @@ goga install
 # exit code: 0
 ```
 
-pip is not invoked.
+Neither pip nor activation is invoked.
 
 ## Options
 
 | Option | Type | Default | Purpose |
 |---|---|---|---|
 | `name` (positional, optional) | string | None | Tool name without the goga-tool- / goga_tool_ prefix. When absent, bulk/empty mode runs from `config.tools`. |
-| `--sudo` | flag | False | Run pip under `sudo --preserve-env=HOME` (Unix-only). Applies to both single and bulk modes. |
+| `--sudo` | flag | False | Run pip under `sudo --preserve-env=HOME` (Unix-only). Applies to pip only; activation never uses sudo. |
 | `--version <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. |
+| `--no-connect` | flag | False | Skip post-install activation. When set, the command performs the install only and the exit code is pip's. |
+
+## Post-install Activation
+
+When pip succeeds in single or bulk mode and `--no-connect` is not set, the
+command activates every agent listed in `~/.goga/connect.yml`, each with its own
+recorded `force_overwrite`. Activation is a local operation on `$HOME` and never
+runs under `--sudo`. A missing or empty registry is a no-op that returns 0: the
+tool is installed on the interpreter but not yet linked to any agent — connect an
+agent later with `goga connect <agent>` and the tool will be picked up.
 
 ## Version Form Grammar
 
@@ -107,53 +116,28 @@ specifiers as follows:
 | Latest marker | `latest` | *no specifier* | pip selects newest under `-U` |
 | (absent `--version`) | — | *no specifier* | same as `latest` (single mode only) |
 
-Major vs minor x-range is distinguished by **counting dots**: `1.x` has one dot
-(major bound `~=1.0`, PEP 440 `<2.0`); `1.0.x` has two dots (minor bound
-`~=1.0.0`, PEP 440 `<1.1.0`). The trailing `.0` in the minor case is what
-drives the tighter upper bound — `~=1.0` alone has only a major bound.
-
-The following forms are **rejected** with a non-zero exit code and a clear
-error:
-
-| Rejected form | Reason |
-|---|---|
-| `==1.0`, `>=1.0`, `~=1.0`, `<2.0`, `!=1.0` | Operator-prefixed — write the grammar form instead; the command emits the operator |
-| `foo`, `1.x.0`, `1.0.x.y` | Malformed — not in the four-form grammar |
-| YAML-null `tools` value (e.g. `viewer:`) | Structural type error in loader — write `latest` explicitly |
+Rejected forms: operator-prefixed (`==1.0`, `>=1.0`), malformed (`1.x.0`), and
+YAML-null `tools` values (e.g. `viewer:`) — each exits non-zero with a clear error.
 
 ## Python API
 
-### Click command
-
 ```python
-from goga.commands.install.install import install
+from goga.commands.install.install import install, resolve_version
 
 # Click commands are normally invoked via the CLI. For testing or programmatic
 # invocation, use click.testing.CliRunner — see .goga/usages/cooks/click.md.
-```
-
-### resolve_version
-
-```python
-from goga.commands.install.install import resolve_version
-
-# resolve_version is the sole owner of the four-form grammar
-resolve_version("1.0.x")    # -> "~=1.0.0"  (PEP 440: >=1.0.0,<1.1.0)
-resolve_version("1.x")      # -> "~=1.0"    (PEP 440: >=1.0.0,<2.0.0)
-resolve_version("1.0.1")    # -> "==1.0.1"
-resolve_version("1.0")      # -> "==1.0"    (concrete pin — N.M is valid)
-resolve_version("latest")   # -> None
-resolve_version(None)       # -> None  (for absent --version flag)
-resolve_version("==1.0")    # raises ValueError
 ```
 
 ## Return Values
 
 | Exit code | Condition |
 |---|---|
-| 0 | pip succeeded (single / bulk mode), or empty mode no-op |
-| non-zero (pip) | pip failed — its returncode propagated verbatim, with no translation |
-| 1 (`ClickException`) | `resolve_version` rejected a version form, or `load_config` failed in bulk/empty mode (missing/invalid `.goga/config.yml`, malformed YAML, or a non-string / YAML-null `tools` value), or the pip/sudo executable could not start |
+| 0 | pip succeeded and activation succeeded (or registry missing/empty), or empty mode no-op |
+| non-zero (pip) | pip failed — its returncode propagated verbatim; activation is not run |
+| non-zero (activation) | pip succeeded but activation failed for one or more agents — the first non-zero per-agent failure is returned |
+| 1 (`ClickException`) | `resolve_version` rejected a form, or `load_config` failed in bulk/empty mode |
+
+With `--no-connect`, the exit code is always pip's (install-only semantics).
 
 ## Side Effects
 
@@ -161,6 +145,9 @@ resolve_version("==1.0")    # raises ValueError
   may require root under system-Python installs).
 - The installed package(s) become importable in the running interpreter's
   environment.
+- On success (and without `--no-connect`), activates every agent in
+  `~/.goga/connect.yml`: recreates central assets, downloads `dsl.md`, creates
+  agent symlinks, and refreshes pipelines — via the shared activation routine.
 - Bulk mode performs exactly one `subprocess.run` regardless of how many tools
   are declared.
 
@@ -169,7 +156,7 @@ resolve_version("==1.0")    # raises ValueError
 - The current interpreter (`sys.executable`) must be the one where goga is
   installed.
 - The caller must have write access to the site-packages directory (or pass
-  `--sudo`).
+  `--sudo`) and to `~/.goga/` for activation.
 - For bulk mode, `.goga/config.yml` must exist and contain a `tools` section
   (otherwise empty mode runs — a no-op, not an error).
 - On Windows, `--sudo` is unavailable (sudo is Unix-only).
@@ -177,14 +164,13 @@ resolve_version("==1.0")    # raises ValueError
 ## Anti-patterns
 
 - Do not pass operator-prefixed forms (`--version '==1.0'`) — write
-  `--version 1.0.1` for a pin or `--version 1.0.x` for a range. The command
-  emits the operator from the grammar form.
-- Do not declare `tools:` values with YAML-null (`viewer:`) — the loader rejects
-  null values structurally. Write `viewer: latest` to request "no specifier".
-- Do not expect the command to run the tool after install — this API is
-  install-only.
+  `--version 1.0.1` or `--version 1.0.x`; the command emits the operator.
+- Do not declare `tools:` values with YAML-null (`viewer:`) — write
+  `viewer: latest`.
 - Do not bypass the command and call `pip` with `sudo` directly without
-  `--preserve-env=HOME`: post-install tool discovery depends on reading the
-  caller's `$HOME`.
-- Do not expect `--version` to apply in bulk mode — bulk mode reads
-  `config.tools` exclusively; `--version` is ignored when `name` is absent.
+  `--preserve-env=HOME`: post-install activation depends on reading the caller's
+  `$HOME`.
+- Do not expect `--version` to apply in bulk mode — it is ignored when `name`
+  is absent.
+- In CI/Docker where a transient activation failure must not fail the install,
+  pass `--no-connect` to keep install-only exit semantics.

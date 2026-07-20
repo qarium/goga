@@ -4,8 +4,9 @@
 
 The `goga upgrade` command performs a transactive upgrade: it runs `pip install goga -U` on the
 current Python interpreter, then re-syncs all agents recorded in `~/.goga/connect.yml` using their
-persisted `force_overwrite` settings. This replaces the manual `goga post-install` workflow with a
-single command that handles both the package upgrade and the agent re-sync.
+persisted `force_overwrite` settings. The post-upgrade re-sync is delegated to the shared
+`resync_registered_agents` routine in `goga/connect`, the single owner of the registry and the
+re-sync logic.
 
 ## CLI Usage
 
@@ -58,6 +59,11 @@ exit_code = upgrade()
 exit_code = upgrade(use_sudo=True, target_user="alice", include_tools=True)
 ```
 
+The post-upgrade re-sync is delegated to `goga.connect.resync_registered_agents(goga_home)`, which
+reads the registry and re-applies `connect` per agent. The resolved `goga_home` (`Path.home()` or
+`pwd.getpwnam(target_user).pw_dir / ".goga"`) is the only piece of registry context this command
+supplies.
+
 ## Return Values
 
 | Exit code | Condition |
@@ -70,9 +76,9 @@ exit_code = upgrade(use_sudo=True, target_user="alice", include_tools=True)
 ## Side Effects
 
 - Runs `pip install` as a subprocess (network/disk activity; may require root).
-- Reads `~/.goga/connect.yml`.
-- Calls `connect()` once per agent listed in the registry (each call has its own side effects,
-  including centralized asset installation, symlink creation, and `connect.yml` updates).
+- Calls `resync_registered_agents(goga_home)`, which reads `~/.goga/connect.yml` and re-applies
+  `connect()` once per listed agent (each with its own side effects: centralized asset installation,
+  symlink creation, and `connect.yml` updates).
 
 ## Preconditions
 
@@ -83,6 +89,6 @@ exit_code = upgrade(use_sudo=True, target_user="alice", include_tools=True)
 ## Anti-patterns
 
 - Do not call `pip` as a bare subprocess — always use `<python> -m pip` to target the correct interpreter.
-- Do not hardcode `force_overwrite=True` — read the per-agent value from `connect.yml`.
+- Do not read or parse `connect.yml` directly — delegate activation to `resync_registered_agents`.
 - Do not run `--sudo` without `--preserve-env=HOME` — the subsequent re-sync would target `/root/.goga`.
 - Do not write to `connect.yml` from this command — `goga/connect` is the single writer.

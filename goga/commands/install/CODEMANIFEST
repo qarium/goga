@@ -5,6 +5,9 @@ Imports:
     Usages:
       - configuration
     From: goga/config
+  - Types:
+      - resync_registered_agents
+    From: goga/connect
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -19,11 +22,15 @@ Annotations: |
   - Understanding the general principles and rules of development and testing in the project
 
   Use the `click` practice to build the command, its options, the optional
-  positional argument, and exit-code propagation.
+  positional argument, the --no-connect flag, and exit-code propagation.
 
   Use the `configuration` practice when the bulk path needs to read
   .goga/config.yml — load_config is the single entrypoint for config consumption,
   and its tools field is a raw mapping validated structurally only.
+
+  After a successful pip install in single and bulk mode, activate every agent
+  recorded in ~/.goga/connect.yml via `resync_registered_agents`; the --no-connect
+  flag suppresses this activation, and empty mode never activates.
 
 ---
 
@@ -95,19 +102,21 @@ Annotations: |
     - Do NOT read .goga/config.yml — this routine is a pure transformer
     - Do NOT log or perform I/O — it is a pure function
 
-"install(ctx: click.Context, name: str | None, sudo: bool, version: str | None) -> exit_code: int":
+"install(ctx: click.Context, name: str | None, sudo: bool, version: str | None, no_connect: bool = False) -> exit_code: int":
   location: install.py
   annotations: |
     Install one or more goga-tool packages into the current runtime interpreter
-    via pip. Branches on `name`: the single path resolves --version via
-    resolve_version and installs one package; the bulk path reads cfg.tools
-    and installs all declared packages in a single pip invocation; the empty
-    path prints "Nothing to install" and exits 0. Propagates pip's returncode
-    as the exit code in every path without translation.
+    via pip and, on success, activate every already-connected agent. Branches on
+    `name`: the single path resolves --version via resolve_version and installs
+    one package; the bulk path reads cfg.tools and installs all declared packages
+    in a single pip invocation; the empty path prints "Nothing to install" and
+    exits 0. After a successful pip in single and bulk mode, runs the activation
+    re-sync unless `no_connect` is set. Propagates pip's returncode as the exit
+    code whenever pip is invoked or re-sync is skipped; otherwise propagates the
+    re-sync outcome (first non-zero per-agent failure).
 
-    `exit_code`: pip's outcome propagated verbatim in single/bulk paths; 0 in
-      the empty path.
-
+    `exit_code`: pip's outcome when pip is invoked or re-sync is skipped; the
+      first non-zero per-agent re-sync failure otherwise; 0 in the empty path.
     `ctx`: Click execution context used to control process exit codes.
     `name`: optional tool identifier without the goga-tool- / goga_tool_ prefix
       (CLI positional argument). When present, the single path runs and the
@@ -117,48 +126,47 @@ Annotations: |
       the single path only (ignored in the bulk path). Resolved by
       resolve_version; operator-prefixed or malformed forms raise ValueError
       at resolution time.
+    `no_connect`: when True, skip the post-install activation re-sync — the
+      command performs the pip install only. Defaults to False (re-sync enabled).
 
     Algorithm:
     1. If `name` is not None → SINGLE PATH:
-       a. Resolve `version` via resolve_version; if it rejects the form, surface
-          the error as a user-facing CLI exception with a non-zero exit
+       a. Resolve `version` via resolve_version; on rejection, surface a
+          user-facing CLI exception with a non-zero exit
        b. Compose the package identifier from `name` and the resolved specifier
           (empty when resolve_version returned None)
        c. Issue one pip install invocation against the current interpreter with
           the composed identifier and an upgrade request; apply sudo with HOME
           preservation when `sudo` is set
-       d. Propagate pip's outcome as the exit code
+       d. Propagate pip's outcome as the pip exit code
     2. If `name` is None → BULK / EMPTY PATH:
        a. Load configuration via `load_config`; the result is a `Config` instance.
           Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
-          MUST be wrapped into a user-facing ClickException from `click` (non-zero
-          exit) — never let a raw loader exception surface as a traceback.
-          OSError (not just FileNotFoundError) covers every read failure:
-          missing file, a path that is a directory, or an unreadable file
+          MUST be wrapped into a user-facing ClickException (non-zero exit) —
+          never let a raw loader exception surface as a traceback.
        b. Read the tools mapping from cfg.tools (treat None as empty)
-       c. If the mapping is empty → EMPTY PATH:
-          - Print "Nothing to install" to stdout
-          - Exit 0 without invoking pip
-       d. Else → BULK PATH:
-          - For each (tool_name, form) in the mapping, preserving insertion
-            order:
-            * Resolve the form via resolve_version; if it rejects the form,
-              surface the error as a user-facing CLI exception with a non-zero
-              exit
-            * Compose the identifier from the tool name and the resolved
-              specifier (empty when resolve_version returned None)
-            * Collect the identifier
-          - Issue exactly one pip install invocation against the current
-            interpreter with every collected identifier and an upgrade request;
-            apply sudo with HOME preservation when `sudo` is set
-          - Propagate pip's outcome as the exit code
+       c. If the mapping is empty → EMPTY PATH: print "Nothing to install" to
+          stdout and exit 0 without invoking pip and without activation
+       d. Else → BULK PATH: for each (tool_name, form) preserving insertion
+          order, resolve the form via resolve_version (surface rejection as a
+          user-facing CLI exception), compose the identifier, collect it; issue
+          exactly one pip install invocation with every collected identifier
+          and an upgrade request; apply sudo with HOME preservation when `sudo`
+          is set; propagate pip's outcome as the pip exit code
+    3. ACTIVATION (single and bulk paths only, after pip):
+       a. If `no_connect` is True → keep the pip exit code and stop
+       b. If the pip exit code is non-zero → keep the pip exit code and stop
+       c. Otherwise call `resync_registered_agents` with the current user's goga
+          home (~/.goga); the routine reads ~/.goga/connect.yml and re-activates
+          every recorded agent
+       d. The final exit code becomes the re-sync outcome (0 on full success or
+          a missing/empty registry; otherwise the first non-zero per-agent failure)
 
     Apply `click` for the command shape, the optional positional argument, the
-    flag, the option, ctx.pass_context, ctx.exit, click.echo for the
-    empty-path message, and exit-code propagation. Apply `convention` for
-    docstring style, import discipline, and structured logging. Apply
-    `configuration` for load_config() semantics and the no-validation contract
-    on cfg.tools.
+    flags, the option, ctx.pass_context, ctx.exit, click.echo for the empty-path
+    message, and exit-code propagation. Apply `convention` for docstring style,
+    import discipline, and structured logging. Apply `configuration` for
+    load_config() semantics and the no-validation contract on cfg.tools.
 
     Requirements:
     - The single path MUST ignore cfg.tools entirely — name + flags fully
@@ -166,29 +174,34 @@ Annotations: |
     - The bulk path MUST issue exactly one pip invocation whose argv contains
       every resolved goga-tool-<name><spec> in YAML order
     - The empty path MUST print "Nothing to install" to stdout and exit 0
-      without invoking pip
+      without invoking pip and without activation
     - The --version option is used by the single path only; the bulk path
       MUST NOT consult it
     - --sudo MUST apply sudo with HOME preservation to the (single) pip argv in
-      both single and bulk modes
-    - The exit code MUST equal pip's outcome in the single and bulk paths; the
-      empty path MUST exit 0
-    - pip MUST be invoked through the current interpreter so the package lands
-      in the same environment, with an upgrade request present in every
-      invocation (idempotent for the already-installed case)
+      both single and bulk modes; activation never runs under sudo
+    - Activation MUST run only when pip succeeded (exit 0) in single or bulk
+      mode and `no_connect` is False; it MUST NOT run in the empty path or after
+      a non-zero pip
+    - The final exit code MUST equal the pip outcome when pip failed, when
+      `no_connect` is set, or in the empty path; otherwise it MUST equal the
+      activation re-sync outcome
+    - pip MUST be invoked through the current interpreter with an upgrade
+      request present in every invocation
 
     Constraints:
     - Do NOT validate, parse, or modify `version` outside resolve_version —
       resolve_version is the sole owner of the grammar and the single point
       where malformed forms raise ValueError
-    - Do NOT accept operator-prefixed forms (==1.0, >=1.0, ~=1.0) in either
-      --version or cfg.tools — they raise ValueError at resolution time
+    - Do NOT accept operator-prefixed forms in either --version or cfg.tools —
+      they raise ValueError at resolution time
     - Do NOT install packages sequentially in the bulk path — all resolved
-      packages MUST land in one pip argv so pip's resolver sees the whole set
-      together
+      packages MUST land in one pip argv
     - Do NOT auto-select sudo — the caller opts in via --sudo
-    - Do NOT re-sync agents, edit connection config, or run the tool after
-      install — activation is owned by a separate concern
+    - Do NOT run activation under sudo — activation operates on the local user
+      home; only pip honors --sudo
+    - Do NOT write ~/.goga/connect.yml directly — activation goes through
+      `resync_registered_agents`; connect is the single writer of the registry,
+      and this command never writes it
     - Do NOT probe whether the package is already installed — the upgrade
       request handles it
     - Do NOT chunk the bulk argv — even a long argv is issued as a single pip
@@ -202,9 +215,9 @@ CreatedAt: 13/07/26
 
 Description: |
   Installs one or more goga-tool packages into the current runtime interpreter
-  via pip and propagates pip's outcome as the exit code. Supports single-path
-  install (one named tool with an optional four-form version), bulk-path
-  install (every tool declared in config.tools in a single pip invocation),
-  and empty-path no-op (Nothing to install). The four-form version grammar
-  (1.0.x, 1.x, 1.0.1, latest) is owned by resolve_version — the sole point
-  where malformed or operator-prefixed forms raise ValueError.
+  via pip, propagates pip's outcome as the exit code, and — on success — activates
+  every already-connected agent via the shared re-sync. Supports single-path install
+  (one named tool with an optional four-form version), bulk-path install (every tool
+  declared in config.tools in a single pip invocation), and empty-path no-op
+  (Nothing to install). The four-form version grammar is owned by resolve_version;
+  the --no-connect flag suppresses post-install activation.

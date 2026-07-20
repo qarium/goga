@@ -9,7 +9,7 @@ Usages:
     ```yaml
     agents:
       <agent_name>:              # one of: claude, codex, cursor, opencode
-        force_overwrite: <bool>  # per-agent setting; persisted by connect(), read by upgrade()
+        force_overwrite: <bool>  # per-agent; persisted by connect(), read by upgrade()/install() via resync_registered_agents
     ```
 
     Semantics:
@@ -26,11 +26,16 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding general development and testing principles and rules in the project
 
+  The registry at ~/.goga/connect.yml is the single source of truth for connected
+  agents and their per-agent force_overwrite; it has exactly one writer and is
+  consumed read-only by activation re-sync.
+
   Use `requests` library for HTTP requests (DSL spec download).
   Use `beautiful_yaml` practice for writing ~/.goga/connect.yml.
   Use `connect_yml_schema` practice for the registry's structure and semantics.
   Use shutil for centralized file copying into ~/.goga/.
   Use os.symlink / pathlib.Path.symlink_to for creating agent-side symlinks into ~/.goga/.
+  Read and parse ~/.goga/connect.yml as YAML during registry re-sync.
   Route all output through sys.stderr (click is not used).
 
 ---
@@ -113,7 +118,8 @@ Annotations: |
 
     Constraints:
     - Do not install pipelines into project-level .goga/pipelines/ (that directory is user-owned)
-    - Do not write to ~/.goga/connect.yml from any cell other than goga/connect and goga/commands/upgrade (read-only there)
+    - Do not write ~/.goga/connect.yml from outside this cell — `connect` is the single writer; the
+      install and upgrade commands consume it read-only through `resync_registered_agents`
     - Windows symlink privilege limitations are documented as a known constraint;
       OSError from symlink_to MUST be caught and reported (do not crash)
 
@@ -167,6 +173,45 @@ Annotations: |
     - Do not touch project-level .goga/pipelines/ — only the user-level ~/.goga/pipelines/
     - Do not parse or validate pipeline-file contents
 
+"resync_registered_agents(goga_home: Path) -> exit_code: int":
+  location: connect.py
+  annotations: |
+    Re-apply `connect` to every agent recorded in the registry, each with its own
+    persisted force_overwrite, so agent-side skills, symlinks, and pipelines track
+    the currently installed packages.
+
+    `goga_home`: goga home directory that holds connect.yml (typically ~/.goga/)
+    `exit_code`: 0 when every recorded agent re-synced, or when the registry is
+      missing/empty; otherwise the first non-zero `connect` exit code
+
+    Algorithm:
+    1. Resolve the registry path <goga_home>/connect.yml
+    2. If the registry file is absent, return 0 (no agents connected yet)
+    3. Parse the registry as YAML per `connect_yml_schema`; on a parse failure,
+       emit diagnostics to stderr and return non-zero
+    4. If the parsed agents map is missing or empty, return 0
+    5. Wrap the loop below in an environment override that sets $HOME to goga_home.parent
+       so the internal home resolution of `connect` targets the owning installation, then
+       for each recorded agent call `connect` with agents=[<name>] and that agent's
+       recorded force_overwrite; remember the first non-zero result and continue with
+       the remaining agents. Restore the original $HOME after the loop
+    6. Return 0 when every agent re-synced, otherwise the first non-zero result
+
+    Requirements:
+    - Missing or empty registry returns 0 (normal condition, not an error)
+    - Each agent re-syncs with its own recorded force_overwrite, never a hardcoded value
+    - Re-sync continues after a per-agent failure and reports the first failure
+    - Re-sync never runs under sudo; it operates on the home that owns `goga_home`
+      (the local user by default; another user under the upgrade --user flag)
+    - Override $HOME to goga_home.parent for the duration of the `connect` loop so the
+      internal home resolution of `connect` targets the installation that owns
+      `goga_home`; restore $HOME afterwards
+
+    Constraints:
+    - Do not write connect.yml; `connect` is the single writer
+    - Do not run pip or install packages; this routine only re-applies activation
+    - Do not abort the whole loop on one agent failure
+
 ---
 
 Author: Goga
@@ -175,4 +220,6 @@ CreatedAt: 28/06/26
 Description: |
   Manifest describing the centralized goga skill/command/pipeline installation logic:
   assets are installed once into ~/.goga/, agents receive symlinks into ~/.goga/,
-  and a per-agent connection registry is maintained at ~/.goga/connect.yml.
+  and a per-agent connection registry is maintained at ~/.goga/connect.yml. Provides
+  the shared re-sync that re-applies activation to every registered agent after a
+  package change.
