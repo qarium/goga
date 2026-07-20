@@ -25,6 +25,8 @@ After installing, connect the tool to your agent:
 goga connect <agent>
 ```
 
+If you have already connected an agent, `goga install` automatically re-syncs every connected agent after a successful pip, so the new tool's skills and pipelines appear immediately — no separate `goga connect` call is needed. `goga connect` is only required the first time (or to connect a new agent); pass `goga install --no-connect` to opt out of activation.
+
 `goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. If the package ships any pipeline `*.yml` files under `pipelines/`, those are installed into `~/.goga/pipelines/` in the same step — see [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the conflict-resolution rules. The tool becomes available both as an agent skill and as a CLI command.
 
 ## Built-in tools

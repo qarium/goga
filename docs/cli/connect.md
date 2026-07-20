@@ -10,7 +10,7 @@ goga connect AGENTS... [--force-overwrite]
 
 ## Description
 
-`goga connect` installs goga's commands, skills, and DSL specification for one or more AI coding agents. Assets are installed **centrally** into `~/.goga/`, then each connected agent receives **symlinks** into that central store. A registry at `~/.goga/connect.yml` records the connected agents and their `force_overwrite` setting, so [`goga upgrade`](upgrade.md) can re-sync them after a package upgrade.
+`goga connect` installs goga's commands, skills, and DSL specification for one or more AI coding agents. Assets are installed **centrally** into `~/.goga/`, then each connected agent receives **symlinks** into that central store. A registry at `~/.goga/connect.yml` records the connected agents and their `force_overwrite` setting, so [`goga install`](install.md) and [`goga upgrade`](upgrade.md) can re-sync them after a package change.
 
 ## Arguments
 

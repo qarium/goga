@@ -53,7 +53,7 @@ class TestInstallFacade:
         assert isinstance(install, click.Command)
         assert install.name == "install"
 
-    def test_install_has_two_options(self) -> None:
+    def test_install_has_three_options(self) -> None:
         names = {p.name for p in install.params if isinstance(p, click.Option)}
         assert names == {"sudo", "version", "no_connect"}
 
@@ -222,18 +222,27 @@ class TestInstallLogicNegative:
         mock_run.assert_not_called()
 
     def test_install_pip_failure_propagates_exit_code_single(self) -> None:
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)):
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)),
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
             result = CliRunner().invoke(app, ["install", "foo"])
         assert result.exit_code == 1
+        # Pip failed → activation must not run (and must not touch the real ~/.goga).
+        mock_resync.assert_not_called()
 
     def test_install_pip_failure_propagates_exit_code_bulk(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n")
         monkeypatch.chdir(tmp_path)
-        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(42)):
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(42)),
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
             result = CliRunner().invoke(app, ["install"])
         assert result.exit_code == 42
+        mock_resync.assert_not_called()
 
     def test_install_missing_executable_surfaces_click_exception(self) -> None:
         # sudo/pip binary absent → subprocess.run raises FileNotFoundError →
@@ -354,6 +363,7 @@ class TestInstallActivation:
     """
 
     def test_install_single_path_runs_activation_on_pip_success(self) -> None:
+        expected_home = Path.home() / ".goga"
         with (
             mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
             mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
@@ -362,7 +372,7 @@ class TestInstallActivation:
         assert result.exit_code == 0
         mock_resync.assert_called_once()
         # Activation targets the current user's ~/.goga.
-        assert mock_resync.call_args[0][0] == Path.home() / ".goga"
+        assert mock_resync.call_args[0][0] == expected_home
 
     def test_install_bulk_path_runs_activation_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _write_config(tmp_path, "language: python\ntools:\n  afm: 1.0.x\n  go: 1.0.1\n")

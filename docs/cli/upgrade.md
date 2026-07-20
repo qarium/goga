@@ -37,7 +37,7 @@ pip is always invoked via the `<python> -m pip` form (never the bare `pip` execu
 
 ## The connect.yml registry
 
-`~/.goga/connect.yml` is written by `goga connect` and read by `goga upgrade`:
+`~/.goga/connect.yml` is written by `goga connect` and read by `goga install` and `goga upgrade` (via the shared re-sync routine):
 
 ```yaml
 agents:

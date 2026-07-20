@@ -39,7 +39,7 @@ class TestFacadeWiringIntegration:
     """
 
     def test_resync_registered_agents_importable_from_connect_facade(self) -> None:
-        assert resync_registered_agents is not None
+        assert callable(resync_registered_agents)
 
     def test_resync_registered_agents_in_connect_all(self) -> None:
         facade = importlib.import_module("goga.connect")

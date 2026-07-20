@@ -340,18 +340,15 @@ def connect(agents: list[str], force_overwrite: bool = False) -> int:
 
 
 @contextlib.contextmanager
-def _home_override(target_home: Path | None) -> Iterator[None]:
+def _home_override(target_home: Path) -> Iterator[None]:
     """Point ``$HOME`` at ``target_home`` for the duration of the block.
 
     ``connect()`` resolves its central ``~/.goga`` root and each agent's target
     directory through :func:`pathlib.Path.home` (which reads ``$HOME``), so
     re-syncing an installation owned by another home directory requires ``$HOME``
-    to point there while ``connect()`` runs. A ``None`` ``target_home`` leaves the
-    environment untouched. ``$HOME`` is always restored on exit, even on error.
+    to point there while ``connect()`` runs. ``$HOME`` is always restored on
+    exit, even on error.
     """
-    if target_home is None:
-        yield
-        return
     saved = os.environ.get("HOME")
     os.environ["HOME"] = str(target_home)
     try:
@@ -375,7 +372,8 @@ def resync_registered_agents(goga_home: Path) -> int:
 
     Re-syncing never runs under sudo and never writes the registry — ``connect``
     is the single writer. A missing or empty registry is a normal condition (no
-    agents connected yet) and returns ``0``. A YAML parse failure is reported to
+    agents connected yet) and returns ``0``. A malformed or unreadable registry
+    (YAML parse failure, permission error, or non-UTF-8 bytes) is reported to
     stderr and returns a non-zero code. Agent failures are aggregated: the loop
     continues after a single failure and the first non-zero result is returned.
 
@@ -391,10 +389,14 @@ def resync_registered_agents(goga_home: Path) -> int:
     if not connect_yml.exists():
         return 0
 
-    # 3. Parse; a malformed registry is a hard failure (non-zero).
+    # 3. Parse; a malformed or unreadable registry is a hard failure (non-zero).
     try:
         loaded = yaml.safe_load(connect_yml.read_text())
-    except yaml.YAMLError as exc:
+    except FileNotFoundError:
+        # Vanished between the existence check and the read — treat it as the
+        # "missing registry" normal condition (return 0), per the contract.
+        return 0
+    except (yaml.YAMLError, OSError, UnicodeError) as exc:
         print(f"failed to parse {connect_yml}: {exc}", file=sys.stderr)
         return 1
 

@@ -159,3 +159,16 @@ class TestUpgradeLogicEdge:
             rc = _upgrade(target_user="unknown")
         assert rc != 0
         mock_resync.assert_not_called()
+
+    def test_upgrade_pwd_lookup_oserror_returns_nonzero_no_resync(self) -> None:
+        # OSError (NIS/LDAP backend failure) from pwd.getpwnam is the other arm of
+        # _resolve_goga_home's except tuple; it must surface a non-zero exit
+        # without crashing and without invoking activation.
+        with (
+            mock.patch.object(_upgrade_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_upgrade_module.pwd, "getpwnam", side_effect=OSError("nis failure")),
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+        ):
+            rc = _upgrade(target_user="ghost")
+        assert rc != 0
+        mock_resync.assert_not_called()

@@ -34,7 +34,7 @@ class TestInstallContract:
 
 class TestResyncContract:
     def test_resync_importable_from_facade(self) -> None:
-        assert resync_registered_agents is not None
+        assert callable(resync_registered_agents)
 
     def test_resync_has_correct_signature(self) -> None:
         sig = inspect.signature(resync_registered_agents)
