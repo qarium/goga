@@ -387,6 +387,52 @@ def _embed_extend_stages_stages(
                 target.depends_on.append(name)
 
 
+def _resolve_phases_insert_index(
+    name: str,
+    after_positions: list[int],
+    before_positions: list[int],
+    len_steps: int,
+) -> tuple[int, bool]:
+    """Resolve the PHASES insertion index for one extend-stage.
+
+    Returns ``(idx, before_anchored)``. ``idx`` sits immediately after the LAST
+    resolvable ``after``-target (preferred when both resolve consistently), or
+    immediately before the FIRST resolvable ``before``-target, or at
+    ``len_steps`` (append) when none resolve. ``before_anchored`` is ``True``
+    only for a sole ``before`` (no ``after``); the caller offsets every other
+    (after-anchored) insertion so siblings sharing a target stack in authored
+    order. A WARNING is logged on the inconsistent and unresolvable fall-backs.
+
+    Args:
+        name: The extend-stage name (used in WARNING messages).
+        after_positions: Sorted positions of resolvable ``after``-targets.
+        before_positions: Sorted positions of resolvable ``before``-targets.
+        len_steps: Current ``len(steps)`` — the append index when nothing
+            resolves.
+
+    Returns:
+        The insertion index and whether the position is before-anchored.
+    """
+    after_index = (max(after_positions) + 1) if after_positions else None
+    before_index = min(before_positions) if before_positions else None
+    if after_index is not None and before_index is not None:
+        if after_index > before_index:
+            logger.warning(
+                "compile_flow: extend %r after/before inconsistent; using after",
+                name,
+            )
+        return after_index, False
+    if after_index is not None:
+        return after_index, False
+    if before_index is not None:
+        return before_index, True
+    logger.warning(
+        "compile_flow: extend %r has no resolvable position; appending at end",
+        name,
+    )
+    return len_steps, False
+
+
 def _embed_extend_stages_phases(
     steps: list[PhaseStep],
     workflow: WorkflowDocument,
@@ -400,8 +446,11 @@ def _embed_extend_stages_phases(
     extend-stages whose ``before``/``after`` targets are either original steps
     or extend-stages already placed. The insertion index sits immediately after
     the LAST resolvable ``after``-target and/or immediately before the FIRST
-    resolvable ``before``-target. When both are resolvable but inconsistent (the
-    ``after``-target positioned after the ``before``-target) a ``WARNING`` is
+    resolvable ``before``-target. Several stages anchored on the same resolvable
+    target (or appended at the end) stack in authored order — same-index
+    insertions are offset by how many siblings already landed there. When both
+    are resolvable but inconsistent (the ``after``-target positioned after the
+    ``before``-target) a ``WARNING`` is
     logged and the ``after`` index is used. Targets naming no known step are
     dangling; when ALL targets dangle the stage is appended at the end with a
     ``WARNING``. A pass that places nothing indicates an unresolvable cycle —
@@ -419,6 +468,15 @@ def _embed_extend_stages_phases(
         placed_names = {step.name for step in steps}
         next_pending: list[tuple[str, WorkflowExtendStage]] = []
         progress = False
+        # Two after-anchored stages sharing a target both compute the same
+        # ``after_index`` (the target's index never moves, even as siblings
+        # insert after it), so the second ``steps.insert(idx, ...)`` would shift
+        # the first sibling right and reverse authored order. Offset each
+        # after-anchored insertion by how many already landed at that index this
+        # iteration so they stack in author order. ``before``-anchored insertions
+        # are exempt — their target shifts forward on each insert, advancing the
+        # index naturally (see ``test_compile_flow_phases_extend_same_anchor_preserves_author_order``).
+        after_inserts_at_index: dict[int, int] = {}
         for name, ext in pending:
             after_targets = ext.after or []
             before_targets = ext.before or []
@@ -432,27 +490,13 @@ def _embed_extend_stages_phases(
             before_positions = [
                 i for i, step in enumerate(steps) if step.name in before_targets and step.name in known_names
             ]
-            after_index = (max(after_positions) + 1) if after_positions else None
-            before_index = min(before_positions) if before_positions else None
-            if after_index is not None and before_index is not None:
-                if after_index <= before_index:
-                    idx = after_index
-                else:
-                    logger.warning(
-                        "compile_flow: extend %r after/before inconsistent; using after",
-                        name,
-                    )
-                    idx = after_index
-            elif after_index is not None:
-                idx = after_index
-            elif before_index is not None:
-                idx = before_index
-            else:
-                logger.warning(
-                    "compile_flow: extend %r has no resolvable position; appending at end",
-                    name,
-                )
-                idx = len(steps)
+            idx, before_anchored = _resolve_phases_insert_index(name, after_positions, before_positions, len(steps))
+            if not before_anchored:
+                # Offset by prior same-iteration insertions at this computed
+                # index (keyed by the pre-offset index) before recording this one.
+                offset = after_inserts_at_index.get(idx, 0)
+                after_inserts_at_index[idx] = offset + 1
+                idx += offset
             title, body_for_step = _extend_step_title_and_body(name, ext)
             steps.insert(idx, PhaseStep(name=name, title=title, body=body_for_step))
             progress = True

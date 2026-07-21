@@ -864,6 +864,39 @@ class TestCompileFlowExtendPhases:
         x = next(s for s in stages if s["id"] == "x")
         assert x["depends_on"] == ["b"]
 
+    def test_compile_flow_phases_extend_same_anchor_preserves_author_order(self, tmp_path: Path) -> None:
+        """PHASES stages anchored on the same target stack in authored order.
+
+        [a, b] with ``extend={x: after=[a], y: after=[a]}``: both anchor on
+        ``a`` and would otherwise reverse (each ``insert`` shifts the prior
+        sibling right while ``a`` stays put). Authored order wins →
+        [a, x, y, b]; x depends on a, y on x, b on y. Symmetric with
+        ``before=[b]`` (which already advanced naturally) and with the append
+        fallback.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "x": WorkflowExtendStage(after=["a"], body={"title": "X"}),
+                "y": WorkflowExtendStage(after=["a"], body={"title": "Y"}),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "x", "y", "b"]
+        x = next(s for s in stages if s["id"] == "x")
+        y = next(s for s in stages if s["id"] == "y")
+        b = next(s for s in stages if s["id"] == "b")
+        assert x["depends_on"] == ["a"]
+        assert y["depends_on"] == ["x"]
+        assert b["depends_on"] == ["y"]
+
     def test_compile_flow_phases_extend_after_before_both_consistent(self, tmp_path: Path) -> None:
         """PHASES after+before consistent inserts between the two targets.
 
