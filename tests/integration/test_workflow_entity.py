@@ -184,6 +184,244 @@ class TestFeatureStagesLoopExpansion:
         assert brainstorm_review["depends_on"] == ["brainstorm"]
 
 
+# --- Item 4 — ``extend`` directive end-to-end (workflow-file -> compiler) ---
+
+
+def _write_stages_pipeline(tmp_path: Path) -> Path:
+    """Write a minimal STAGES pipeline (propose -> review) and return its path.
+
+    Args:
+        tmp_path: Project root used as the working directory for the test.
+
+    Returns:
+        The path to the freshly written pipeline-file.
+    """
+    pipeline_path = tmp_path / "pipeline-stages.yml"
+    pipeline_path.write_text(
+        "name: T\n"
+        "description: T\n"
+        "---\n"
+        "\n"
+        "propose:\n"
+        "  title: Propose\n"
+        "review:\n"
+        "  title: Review\n"
+        "  depends_on: [propose]\n",
+    )
+    return pipeline_path
+
+
+def _write_phases_pipeline(tmp_path: Path) -> Path:
+    """Write a 3-step PHASES pipeline (a, b, c) and return its path.
+
+    Args:
+        tmp_path: Project root used as the working directory for the test.
+
+    Returns:
+        The path to the freshly written pipeline-file.
+    """
+    pipeline_path = tmp_path / "pipeline-phases.yml"
+    pipeline_path.write_text(
+        "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n- name: c\n  title: C\n",
+    )
+    return pipeline_path
+
+
+def _write_workflow(tmp_path: Path, body: str) -> Path:
+    """Write a workflow-file carrying ``body`` and return its path.
+
+    Args:
+        tmp_path: Project root used as the working directory for the test.
+        body: The raw YAML body of the workflow-file.
+
+    Returns:
+        The path to the freshly written workflow-file.
+    """
+    workflow_path = tmp_path / "workflow.yml"
+    workflow_path.write_text(body)
+    return workflow_path
+
+
+class TestExtendDirectiveEndToEnd:
+    """The ``extend`` directive exercised across the workflow -> compiler boundary.
+
+    An authored workflow-file carries an ``extend`` map; ``parse_workflow``
+    materialises it into ``WorkflowDocument.extend`` and ``compile_flow`` embeds
+    the extend-stages into ``FlowDocument.stages`` (never the original
+    ``PipelineDocument.body``). Unlike the cell-local logic tests (which build a
+    ``WorkflowDocument`` in memory), these scenarios drive the full chain through
+    real workflow-files so the parser-to-compiler handoff is exercised on authored
+    YAML.
+    """
+
+    def test_stages_extend_after_compiles_depends_on(self, tmp_path: Path) -> None:
+        """A STAGES extend ``after`` entry reaches the flow-file as a dependency.
+
+        A workflow-file ``extend: {extra: {after: [review], title: Extra}}`` parsed
+        and compiled against the STAGES propose->review pipeline yields a flow-file
+        whose stages are [propose, review, extra] with ``extra`` depending on
+        ``review`` and the authored review->propose dependency preserved.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  extra:\n    after: [review]\n    title: Extra\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        ids = [stage["id"] for stage in stages]
+        assert ids == ["propose", "review", "extra"]
+        extra = _stage_by_id(stages, "extra")
+        assert extra["depends_on"] == ["review"]
+        review = _stage_by_id(stages, "review")
+        assert review["depends_on"] == ["propose"]
+
+    def test_stages_extend_before_appends_to_target(self, tmp_path: Path) -> None:
+        """A STAGES extend ``before`` entry appends the new stage to the target's deps.
+
+        A workflow-file ``extend: {warmup: {before: [propose], title: Warmup}}``
+        yields a flow-file where ``propose`` depends on ``warmup``.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  warmup:\n    before: [propose]\n    title: Warmup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        propose = _stage_by_id(stages, "propose")
+        assert propose["depends_on"] == ["warmup"]
+
+    def test_phases_extend_after_inserts_positionally(self, tmp_path: Path) -> None:
+        """A PHASES extend ``after`` entry inserts positionally with derived deps.
+
+        A workflow-file ``extend: {x: {after: [b], title: X}}`` parsed and compiled
+        against the PHASES [a, b, c] pipeline yields [a, b, x, c] where x depends on
+        b and c depends on x by list position.
+        """
+        pipeline_path = _write_phases_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  x:\n    after: [b]\n    title: X\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        ids = [stage["id"] for stage in stages]
+        assert ids == ["a", "b", "x", "c"]
+        x = _stage_by_id(stages, "x")
+        c = _stage_by_id(stages, "c")
+        assert x["depends_on"] == ["b"]
+        assert c["depends_on"] == ["x"]
+
+    def test_title_fallback_uses_extend_stage_name(self, tmp_path: Path) -> None:
+        """An extend-entry without ``title`` falls back to its name as display label.
+
+        A workflow-file ``extend: {warmup: {before: [propose]}}`` (no title) yields
+        a flow-file stage ``warmup`` whose display ``name`` is the extend-stage name.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  warmup:\n    before: [propose]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        warmup = _stage_by_id(stages, "warmup")
+        assert warmup["name"] == "warmup"
+
+    def test_workflow_without_extend_matches_no_workflow_stages(self, tmp_path: Path) -> None:
+        """A workflow-file with no ``extend`` compiles to the same stages as workflow=None.
+
+        Parsing a workflow-file that carries no ``extend`` key yields a
+        ``WorkflowDocument.extend`` that is the empty default map; compiling it
+        embeds no extend-stage and the resulting stages match the no-workflow path.
+        Only the ``stages`` list is compared — the workflow path additionally emits
+        its top-level ``prompt``, which the no-workflow path does not.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(tmp_path, "prompt: |\n  Drive the pipeline\n")
+        flow_path = tmp_path / "flow.yml"
+        flow_path_none = tmp_path / "flow-none.yml"
+
+        workflow = parse_workflow(workflow_path)
+        assert workflow.extend == {}
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+        compile_flow(pipeline_path, flow_path_none)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        stages_none = yaml.safe_load(flow_path_none.read_text())["stages"]
+        ids = [stage["id"] for stage in stages]
+        assert ids == [stage["id"] for stage in stages_none] == ["propose", "review"]
+        review = _stage_by_id(stages, "review")
+        review_none = _stage_by_id(stages_none, "review")
+        assert review["depends_on"] == review_none["depends_on"] == ["propose"]
+        assert all("extend" not in stage for stage in stages)
+
+    def test_extend_populates_document_and_embeds_only_in_flow(self, tmp_path: Path) -> None:
+        """Cross-entity: parsed extend reaches FlowDocument.stages, not PipelineDocument.body.
+
+        A workflow-file with an ``extend`` block parses into a ``WorkflowDocument``
+        whose ``extend`` map is populated with the authored entry;
+        ``compile_flow`` embeds the extend-stage into ``FlowDocument.stages`` while
+        the ``PipelineDocument.body`` carries only the original parsed steps.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  extra:\n    after: [review]\n    title: Extra\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        assert set(workflow.extend) == {"extra"}
+        assert workflow.extend["extra"].after == ["review"]
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        # The ORIGINAL parsed body never carries the extend-stage.
+        assert [step.name for step in pipeline_doc.body.steps] == ["propose", "review"]
+        # The extend-stage is embedded only in the compiled FlowDocument.stages.
+        assert [stage.id for stage in flow_doc.stages] == ["propose", "review", "extra"]
+
+    def test_stages_extend_dangling_after_ref_surfaced_verbatim(self, tmp_path: Path) -> None:
+        """A dangling STAGES extend ``after`` ref reaches the flow-file verbatim.
+
+        A workflow-file ``extend: {x: {after: [ghost], title: X}}`` (ghost unknown)
+        yields a flow-file where ``x`` depends on ``ghost`` — the dangling ref is
+        surfaced for afm to reject, with no crash and no drop in the compiler.
+        """
+        pipeline_path = _write_stages_pipeline(tmp_path)
+        workflow_path = _write_workflow(
+            tmp_path,
+            "extend:\n  x:\n    after: [ghost]\n    title: X\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        x = _stage_by_id(stages, "x")
+        assert x["depends_on"] == ["ghost"]
+
+
 # --- Item 3 — full CLI invocation -> launcher workflow layer + env-file ---
 
 
