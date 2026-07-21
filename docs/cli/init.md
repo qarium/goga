@@ -31,11 +31,11 @@ The wizard proceeds through the following steps in order:
 
    | Language | Images |
    |---|---|
-   | python | `qarium/goga-python-3.10:1.0` ... `qarium/goga-python-3.14:1.0` |
-   | golang | `qarium/goga-golang-1.23:1.0` ... `qarium/goga-golang-1.26:1.0` |
-   | javascript | `qarium/goga-node-22:1.0`, `qarium/goga-node-24:1.0` |
-   | kotlin | `qarium/goga-kotlin-2.0:1.0` ... `qarium/goga-kotlin-2.3:1.0` |
-   | swift | `qarium/goga-swift-6.0:1.0` ... `qarium/goga-swift-6.2:1.0` |
+   | python | `qarium/goga-python-3.10:1.1` ... `qarium/goga-python-3.14:1.1` |
+   | golang | `qarium/goga-golang-1.23:1.1` ... `qarium/goga-golang-1.26:1.1` |
+   | javascript | `qarium/goga-node-22:1.1`, `qarium/goga-node-24:1.1` |
+   | kotlin | `qarium/goga-kotlin-2.0:1.1` ... `qarium/goga-kotlin-2.3:1.1` |
+   | swift | `qarium/goga-swift-6.0:1.1` ... `qarium/goga-swift-6.2:1.1` |
 
 7. **Custom Dockerfile** -- Optionally create a custom Dockerfile based on the selected image. When accepted, the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path.
 

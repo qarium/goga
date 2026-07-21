@@ -119,11 +119,11 @@ goga provides prebuilt language images for build execution:
 
 | Language | Images |
 |----------|--------|
-| Python | `qarium/goga-python-3.10:1.0` through `qarium/goga-python-3.14:1.0` |
-| Go | `qarium/goga-golang-1.23:1.0` through `qarium/goga-golang-1.26:1.0` |
-| JavaScript | `qarium/goga-node-22:1.0`, `qarium/goga-node-24:1.0` |
-| Kotlin | `qarium/goga-kotlin-2.0:1.0` through `qarium/goga-kotlin-2.3:1.0` |
-| Swift | `qarium/goga-swift-6.0:1.0` through `qarium/goga-swift-6.2:1.0` |
+| Python | `qarium/goga-python-3.10:1.1` through `qarium/goga-python-3.14:1.1` |
+| Go | `qarium/goga-golang-1.23:1.1` through `qarium/goga-golang-1.26:1.1` |
+| JavaScript | `qarium/goga-node-22:1.1`, `qarium/goga-node-24:1.1` |
+| Kotlin | `qarium/goga-kotlin-2.0:1.1` through `qarium/goga-kotlin-2.3:1.1` |
+| Swift | `qarium/goga-swift-6.0:1.1` through `qarium/goga-swift-6.2:1.1` |
 
 ## Validation errors
 

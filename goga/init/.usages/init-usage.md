@@ -68,11 +68,11 @@ Run an interactive user survey and generate project files.
 5. **agent** — select an AI executor (claude, codex)
 6. **image** — Docker image: display language-specific hints, default to the last entry; accept free-form input
    - Captures the top-level `image` (NOT `build.image`)
-   - python: qarium/goga-python-3.10:1.0 .. qarium/goga-python-3.14:1.0
-   - golang: qarium/goga-golang-1.23:1.0 .. qarium/goga-golang-1.26:1.0
-   - javascript: qarium/goga-node-22:1.0 .. qarium/goga-node-24:1.0
-   - kotlin: qarium/goga-kotlin-2.0:1.0 .. qarium/goga-kotlin-2.3:1.0
-   - swift: qarium/goga-swift-6.0:1.0 .. qarium/goga-swift-6.2:1.0
+   - python: qarium/goga-python-3.10:1.1 .. qarium/goga-python-3.14:1.1
+   - golang: qarium/goga-golang-1.23:1.1 .. qarium/goga-golang-1.26:1.1
+   - javascript: qarium/goga-node-22:1.1 .. qarium/goga-node-24:1.1
+   - kotlin: qarium/goga-kotlin-2.0:1.1 .. qarium/goga-kotlin-2.3:1.1
+   - swift: qarium/goga-swift-6.0:1.1 .. qarium/goga-swift-6.2:1.1
 7. **dockerfile** — optional custom Dockerfile creation
    - On acceptance, request the path (default: ".goga/Dockerfile")
    - The Dockerfile contains `FROM {image}`

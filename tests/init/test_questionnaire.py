@@ -378,6 +378,17 @@ class TestLogic:
         for language in _LANGUAGES:
             assert language in _IMAGE_MAP, f"Language '{language}' missing from _IMAGE_MAP"
 
+    def test_image_map_defaults_use_version_1_1(self) -> None:
+        """All suggested Docker images use the current default tag `:1.1`."""
+        from goga.init.questionnaire import _IMAGE_MAP
+
+        for language, images in _IMAGE_MAP.items():
+            assert images, f"Language '{language}' has no image entries"
+            for image in images:
+                assert image.endswith(":1.1"), (
+                    f"Image '{image}' for language '{language}' must use the :1.1 tag"
+                )
+
     def test_questionnaire_ask_goga_config_duplicate_usage_name_skipped(self) -> None:
         prompts = iter(
             [

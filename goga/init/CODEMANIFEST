@@ -14,11 +14,11 @@ Usages:
     For languages with predefined images, display a list of suggestions; default to the last entry.
     Accept arbitrary user input for the image name.
     Language → available image mapping:
-    - python: qarium/goga-python-{3.10-3.14}:latest
-    - golang: qarium/goga-golang-{1.23, 1.24, 1.25, 1.26}:latest
-    - javascript: qarium/goga-node-{22, 24}:latest
-    - kotlin: qarium/goga-kotlin-{2.0, 2.1, 2.2, 2.3}:latest
-    - swift: qarium/goga-swift-{6.0, 6.1, 6.2}:latest
+    - python: qarium/goga-python-{3.10-3.14}:1.1
+    - golang: qarium/goga-golang-{1.23, 1.24, 1.25, 1.26}:1.1
+    - javascript: qarium/goga-node-{22, 24}:1.1
+    - kotlin: qarium/goga-kotlin-{2.0, 2.1, 2.2, 2.3}:1.1
+    - swift: qarium/goga-swift-{6.0, 6.1, 6.2}:1.1
   agent_env_defaults: |
     Map each agent to a list of environment variable keys for prompting.
     Display the keys to the user; collect corresponding values.
