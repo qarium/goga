@@ -2,20 +2,24 @@
 
 ``parse_workflow`` is the entry point of the workflow cell: it reads a project
 workflow-file, parses it as YAML, structurally validates the expected keys and
-field types, builds one ``WorkflowStage`` per ``stages`` entry, and returns the
-aggregated ``WorkflowDocument``. No content validation lives here beyond the
-structural schema (the top-level key set, the per-stage key set, field types,
-and the ``loop >= 1`` bound); agent-name resolution, loop expansion, and
-``depends_on`` rewriting are all the compiler's responsibility. The cell is
-intentionally declarative — it returns instructions, never their resolution.
+field types, builds one ``WorkflowStage`` per ``stages`` entry, builds one
+``WorkflowExtendStage`` per ``extend`` entry, and returns the aggregated
+``WorkflowDocument``. No content validation lives here beyond the structural
+schema (the top-level key set, the per-stage key set, the extend-entry
+positioning rules, field types, and the ``loop >= 1`` bound); agent-name
+resolution, loop expansion, extend-stage embedding, and ``depends_on`` rewriting
+are all the compiler's responsibility. The cell is intentionally declarative —
+it returns instructions, never their resolution.
 
 A workflow-file is structurally malformed when its YAML is invalid, its root is
 not a mapping, it carries an unknown top-level or per-stage key, a field has the
-wrong type, a ``loop`` is below one, or it provides neither a top-level prompt
-nor any stage entry. Each of those raises ``WorkflowSyntaxError`` (a
-``ValueError`` subclass, mirroring the compiler cell's ``StructuralError``) with
-an authored-time message. A missing or unreadable file lets the underlying
-``OSError`` propagate unchanged — consistent with the compiler behavior.
+wrong type, an extend-entry forbids ``depends_on`` / mistypes ``before`` /
+``after`` / omits both, a ``loop`` is below one, or it provides neither a
+top-level prompt, any stage entry, nor any extend entry. Each of those raises
+``WorkflowSyntaxError`` (a ``ValueError`` subclass, mirroring the compiler
+cell's ``StructuralError``) with an authored-time message. A missing or
+unreadable file lets the underlying ``OSError`` propagate unchanged —
+consistent with the compiler behavior.
 """
 
 from __future__ import annotations
@@ -26,10 +30,11 @@ from typing import Any
 import yaml
 
 from .workflow_document import WorkflowDocument
+from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_stage import WorkflowStage
 
 # Fixed keys of the top-level workflow mapping. Used for unknown-key rejection.
-_TOP_LEVEL_KEYS = ("prompt", "stages")
+_TOP_LEVEL_KEYS = ("prompt", "stages", "extend")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
@@ -41,10 +46,12 @@ class WorkflowSyntaxError(ValueError):
 
     A structural error is an authored-time defect in the workflow-file: invalid
     YAML, a non-mapping root, an unknown top-level or per-stage key, a
-    wrong-typed field, a ``loop`` below one, or a workflow that provides neither
-    a top-level prompt nor any stage entry. Agent-name resolution, loop
-    expansion, and ``depends_on`` rewriting are the compiler's responsibility —
-    they never surface as structural errors here.
+    wrong-typed field, an extend-entry that forbids ``depends_on`` / mistypes
+    ``before`` / ``after`` / omits both, a ``loop`` below one, or a workflow
+    that provides neither a top-level prompt, any stage entry, nor any extend
+    entry. Agent-name resolution, loop expansion, extend-stage embedding, and
+    ``depends_on`` rewriting are the compiler's responsibility — they never
+    surface as structural errors here.
     """
 
 
@@ -52,12 +59,15 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     """Structurally parse a workflow-file into a ``WorkflowDocument``.
 
     Read the file at ``workflow_path``, parse it as YAML, validate the expected
-    top-level keys (``prompt``, ``stages``) and the per-stage key set
-    (``agent``, ``prompt``, ``loop``), type-check each present field, enforce
-    ``loop >= 1``, build one ``WorkflowStage`` per entry, and return the
+    top-level keys (``prompt``, ``stages``, ``extend``) and the per-stage key
+    set (``agent``, ``prompt``, ``loop``), type-check each present field,
+    validate each extend-entry's positioning (``before``/``after`` as
+    ``list[str]``, ``depends_on`` forbidden, at least one of ``before``/``after``
+    required), enforce ``loop >= 1``, build one ``WorkflowStage`` per ``stages``
+    entry and one ``WorkflowExtendStage`` per ``extend`` entry, and return the
     aggregated ``WorkflowDocument``. No content validation beyond the structural
-    schema; no agent-name resolution, no loop expansion, no ``depends_on``
-    rewriting.
+    schema; no agent-name resolution, no loop expansion, no extend-stage
+    embedding, no ``depends_on`` rewriting.
 
     Args:
         workflow_path: Absolute path to the workflow-file.
@@ -71,8 +81,11 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
             (propagated unchanged).
         WorkflowSyntaxError: If the file is invalid YAML, the root is not a
             mapping, an unknown top-level or per-stage key is present, a field
-            has the wrong type, ``loop`` is below one, or the workflow provides
-            neither a top-level prompt nor any stage entry.
+            has the wrong type, an extend-entry is malformed (non-mapping value,
+            ``depends_on`` present, ``before``/``after`` not a ``list[str]``,
+            neither ``before`` nor ``after``), ``loop`` is below one, or the
+            workflow provides neither a top-level prompt, any stage entry, nor
+            any extend entry.
     """
     text = workflow_path.read_text()
 
@@ -86,38 +99,47 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     if not isinstance(loaded, dict):
         raise WorkflowSyntaxError("workflow must be a mapping")
 
-    prompt, stages_raw = _extract_top_level(loaded)
+    prompt, stages_raw, extend_raw = _extract_top_level(loaded)
 
     stages = _build_stages(stages_raw)
+    extend = _build_extend(extend_raw)
 
-    if prompt is None and not stages:
-        raise WorkflowSyntaxError("empty workflow — provide at least prompt or one stage")
+    if prompt is None and not stages and not extend:
+        raise WorkflowSyntaxError(
+            "empty workflow — provide at least prompt, one stage, or one extend entry"
+        )
 
-    return WorkflowDocument(prompt=prompt, stages=stages)
+    return WorkflowDocument(prompt=prompt, stages=stages, extend=extend)
 
 
-def _extract_top_level(loaded: dict[str, Any]) -> tuple[str | None, dict[str, Any] | None]:
-    """Validate the top-level mapping and split out the ``prompt`` and ``stages`` values.
+def _extract_top_level(
+    loaded: dict[str, Any],
+) -> tuple[str | None, dict[str, Any] | None, dict[str, Any] | None]:
+    """Validate the top-level mapping and split out ``prompt``/``stages``/``extend``.
 
     Iterates the top-level keys once: ``prompt`` must be a str, ``stages`` must
-    be a mapping, and any other key is unknown. Returns the validated ``prompt``
-    text (or ``None``) and the raw ``stages`` mapping (or ``None``); the
-    per-stage entries are validated by ``_build_stages``.
+    be a mapping, ``extend`` must be a mapping, and any other key is unknown.
+    Returns the validated ``prompt`` text (or ``None``), the raw ``stages``
+    mapping (or ``None``), and the raw ``extend`` mapping (or ``None``); the
+    per-stage entries are validated by ``_build_stages`` and the per-extend
+    entries by ``_build_extend``.
 
     Args:
         loaded: The YAML-parsed top-level mapping.
 
     Returns:
-        A 2-tuple ``(prompt, stages_raw)`` where ``prompt`` is the validated
-        top-level prompt (``None`` when absent) and ``stages_raw`` is the raw
-        stages mapping (``None`` when absent).
+        A 3-tuple ``(prompt, stages_raw, extend_raw)`` where ``prompt`` is the
+        validated top-level prompt (``None`` when absent), ``stages_raw`` is the
+        raw stages mapping (``None`` when absent), and ``extend_raw`` is the raw
+        extend mapping (``None`` when absent).
 
     Raises:
         WorkflowSyntaxError: If a top-level key is unknown, ``prompt`` is not a
-            str, or ``stages`` is not a mapping.
+            str, ``stages`` is not a mapping, or ``extend`` is not a mapping.
     """
     prompt: str | None = None
     stages_raw: dict[str, Any] | None = None
+    extend_raw: dict[str, Any] | None = None
 
     for key, value in loaded.items():
         if key == "prompt":
@@ -130,10 +152,15 @@ def _extract_top_level(loaded: dict[str, Any]) -> tuple[str | None, dict[str, An
                 raise WorkflowSyntaxError("non-mapping stages block in workflow")
 
             stages_raw = value
+        elif key == "extend":
+            if not isinstance(value, dict):
+                raise WorkflowSyntaxError("non-mapping extend block in workflow")
+
+            extend_raw = value
         else:
             raise WorkflowSyntaxError(f"unknown key in workflow: {key}; valid keys: {', '.join(_TOP_LEVEL_KEYS)}")
 
-    return prompt, stages_raw
+    return prompt, stages_raw, extend_raw
 
 
 def _build_stages(stages_raw: dict[str, Any] | None) -> dict[str, WorkflowStage]:
@@ -210,3 +237,78 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             )
 
     return WorkflowStage(agent=agent, prompt=prompt, loop=loop)
+
+
+def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:
+    """Validate every ``extend`` entry and build the ``WorkflowExtendStage`` map.
+
+    An absent ``extend`` block (``None``) yields an empty map; a present mapping
+    is validated entry by entry via ``_build_extend_stage``. The map key is the
+    new stage name and is NOT validated against any pipeline here — the compiler
+    embeds the stage and derives ``depends_on`` from the positioning.
+
+    Args:
+        extend_raw: The raw ``extend`` mapping, or ``None`` when absent.
+
+    Returns:
+        The map of stage name to validated ``WorkflowExtendStage``.
+    """
+    if extend_raw is None:
+        return {}
+
+    return {name: _build_extend_stage(name, value) for name, value in extend_raw.items()}
+
+
+def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
+    """Validate one ``extend`` entry and build a ``WorkflowExtendStage`` from it.
+
+    The entry value must be a mapping. ``depends_on`` is forbidden inside it
+    (positioning is declared via ``before``/``after`` instead); ``before`` and
+    ``after`` (when present) must each be a ``list[str]``; at least one of
+    ``before``/``after`` must be present. Every other key passes through
+    verbatim as the stage body. ``before`` and ``after`` are removed from the
+    body before construction.
+
+    Args:
+        name: The stage-name map key (used in error messages).
+        value: The raw entry value for this extend stage.
+
+    Returns:
+        The validated ``WorkflowExtendStage``.
+
+    Raises:
+        WorkflowSyntaxError: If the entry value is not a mapping, it contains a
+            ``depends_on`` key, ``before`` is not a ``list[str]``, ``after`` is
+            not a ``list[str]``, or neither ``before`` nor ``after`` is present.
+    """
+    if not isinstance(value, dict):
+        raise WorkflowSyntaxError(f"non-mapping extend entry {name} in workflow.extend")
+
+    if "depends_on" in value:
+        raise WorkflowSyntaxError(f"depends_on is forbidden in workflow.extend.{name}")
+
+    before = value.get("before")
+    if before is not None and not _is_list_of_str(before):
+        raise WorkflowSyntaxError(f"non-list-of-str before in workflow.extend.{name}")
+
+    after = value.get("after")
+    if after is not None and not _is_list_of_str(after):
+        raise WorkflowSyntaxError(f"non-list-of-str after in workflow.extend.{name}")
+
+    if before is None and after is None:
+        raise WorkflowSyntaxError(f"extend entry {name} requires at least one of before/after")
+
+    body = {key: entry_value for key, entry_value in value.items() if key not in ("before", "after")}
+
+    return WorkflowExtendStage(before=before, after=after, body=body)
+
+
+def _is_list_of_str(value: Any) -> bool:
+    """Return whether ``value`` is a ``list`` whose every element is a ``str``.
+
+    ``bool`` elements are correctly rejected: ``isinstance(True, str)`` is
+    ``False``, so ``all(isinstance(x, str) for x in value)`` already yields
+    ``False`` for ``[True]``. Mirrors the ``loop``-type check that rejects
+    ``bool`` first in ``_build_stage``.
+    """
+    return isinstance(value, list) and all(isinstance(element, str) for element in value)

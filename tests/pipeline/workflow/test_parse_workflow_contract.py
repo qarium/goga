@@ -10,7 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from goga.pipeline.workflow import WorkflowDocument, parse_workflow
+from goga.pipeline.workflow import (
+    WorkflowDocument,
+    WorkflowExtendStage,
+    parse_workflow,
+)
 
 
 class TestParseWorkflowContract:
@@ -40,3 +44,21 @@ class TestParseWorkflowContract:
         assert document.prompt == "top-level guidance"
         assert "propose" in document.stages
         assert document.stages["propose"].agent == "codex"
+
+    def test_parse_workflow_populates_extend_for_valid_workflow_file(self, tmp_path: Path) -> None:
+        """A workflow-file with an extend block yields a non-empty extend map of WorkflowExtendStage.
+
+        Pins the contract: the extend block is part of the parse_workflow Return
+        value, populated as ``dict[str, WorkflowExtendStage]``.
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "extend:\n  warmup:\n    before: [propose]\n    title: Warmup\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert isinstance(document, WorkflowDocument)
+        assert isinstance(document.extend, dict)
+        assert set(document.extend) == {"warmup"}
+        assert isinstance(document.extend["warmup"], WorkflowExtendStage)

@@ -13,7 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from goga.pipeline.workflow import WorkflowSyntaxError, parse_workflow
+from goga.pipeline.workflow import (
+    WorkflowSyntaxError,
+    parse_workflow,
+)
 
 
 def _write(tmp_path: Path, name: str, text: str) -> Path:
@@ -87,6 +90,99 @@ class TestParseWorkflowPositive:
         assert document.stages["propose"].prompt is None
         assert document.stages["propose"].loop is None
 
+    def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
+        """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n"
+            "  warmup:\n"
+            "    before: [propose]\n"
+            "    title: Warmup\n"
+            "    prompt: Bootstrap\n"
+            "  extra:\n"
+            "    after: [review]\n"
+            "    title: Extra\n"
+            "    skills: [goga-review]\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert set(document.extend) == {"warmup", "extra"}
+
+        warmup = document.extend["warmup"]
+        assert warmup.before == ["propose"]
+        assert warmup.after is None
+        assert warmup.body == {"title": "Warmup", "prompt": "Bootstrap"}
+
+        extra = document.extend["extra"]
+        assert extra.before is None
+        assert extra.after == ["review"]
+        assert extra.body == {"title": "Extra", "skills": ["goga-review"]}
+
+    def test_parse_workflow_extend_only_is_valid_not_empty(self, tmp_path: Path) -> None:
+        """A workflow-file with only an extend block is valid (not an empty workflow)."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  warmup:\n    before: [propose]\n    title: Warmup\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert document.prompt is None
+        assert document.stages == {}
+        assert set(document.extend) == {"warmup"}
+
+    def test_parse_workflow_extend_body_passes_through_unknown_fields(self, tmp_path: Path) -> None:
+        """An extend-entry body carries arbitrary stage fields verbatim; before/after are stripped."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n"
+            "  extra:\n"
+            "    after: [review]\n"
+            "    before: [propose]\n"
+            "    title: Extra\n"
+            "    prompt: Run extra checks\n"
+            "    skills: [goga-review]\n"
+            "    agents: [codex]\n"
+            "    interactive: true\n"
+            "    custom:\n"
+            "      deep: 1\n"
+            "      nested:\n"
+            "        leaf: value\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        extra = document.extend["extra"]
+        assert extra.before == ["propose"]
+        assert extra.after == ["review"]
+        # before/after are removed from the body; everything else passes through.
+        assert "before" not in extra.body
+        assert "after" not in extra.body
+        assert extra.body["title"] == "Extra"
+        assert extra.body["prompt"] == "Run extra checks"
+        assert extra.body["skills"] == ["goga-review"]
+        assert extra.body["agents"] == ["codex"]
+        assert extra.body["interactive"] is True
+        assert extra.body["custom"] == {"deep": 1, "nested": {"leaf": "value"}}
+
+    def test_parse_workflow_extend_before_empty_list_passes(self, tmp_path: Path) -> None:
+        """A before: [] (empty list) satisfies list[str]; semantics are deferred to the compiler."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  warmup:\n    before: []\n    after: [propose]\n    title: Warmup\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        warmup = document.extend["warmup"]
+        assert warmup.before == []
+        assert warmup.after == ["propose"]
+
 
 class TestParseWorkflowNegative:
     """Negative logic tests — structural defects raise WorkflowSyntaxError with the documented message."""
@@ -104,7 +200,10 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow: unknown_key" in message
-        assert "valid keys: prompt, stages" in message
+        # Strengthened: the exact valid-keys list now includes ``extend``; the
+        # substring ``prompt, stages`` alone would pass even without ``extend``,
+        # so assert the full trailing fragment.
+        assert "valid keys: prompt, stages, extend" in message
 
     def test_parse_workflow_rejects_non_mapping_root(self, tmp_path: Path) -> None:
         """A non-mapping YAML root raises WorkflowSyntaxError('workflow must be a mapping')."""
@@ -196,6 +295,85 @@ class TestParseWorkflowNegative:
     def test_parse_workflow_rejects_empty_workflow(self, tmp_path: Path) -> None:
         """A workflow with empty stages and no prompt raises WorkflowSyntaxError('empty workflow')."""
         workflow_path = _write(tmp_path, "workflow.yml", "stages: {}\n")
+
+        with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_non_mapping_extend_block(self, tmp_path: Path) -> None:
+        """A non-mapping extend block raises WorkflowSyntaxError('non-mapping extend block')."""
+        workflow_path = _write(tmp_path, "workflow.yml", "extend: not-a-mapping\n")
+
+        with pytest.raises(WorkflowSyntaxError, match="non-mapping extend block in workflow"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_non_mapping_extend_entry(self, tmp_path: Path) -> None:
+        """A non-mapping extend entry value raises WorkflowSyntaxError naming the entry."""
+        workflow_path = _write(tmp_path, "workflow.yml", "extend:\n  x: codex\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-mapping extend entry x in workflow\.extend"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_extend_depends_on_forbidden(self, tmp_path: Path) -> None:
+        """A depends_on key inside an extend entry raises WorkflowSyntaxError naming the entry."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    after: [review]\n    depends_on: [propose]\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"depends_on is forbidden in workflow\.extend\.x"):
+            parse_workflow(workflow_path)
+
+    @pytest.mark.parametrize(
+        "before_yaml",
+        ["codex", "[1, 2]", "[true]"],
+        ids=["scalar", "list-of-int", "list-of-bool"],
+    )
+    def test_parse_workflow_rejects_extend_before_non_list_of_str(
+        self, tmp_path: Path, before_yaml: str
+    ) -> None:
+        """A non-list[str] before raises WorkflowSyntaxError('non-list-of-str before ...')."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"extend:\n  x:\n    before: {before_yaml}\n    title: X\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str before in workflow\.extend\.x"):
+            parse_workflow(workflow_path)
+
+    @pytest.mark.parametrize(
+        "after_yaml",
+        ["codex", "[1, 2]", "[true]"],
+        ids=["scalar", "list-of-int", "list-of-bool"],
+    )
+    def test_parse_workflow_rejects_extend_after_non_list_of_str(
+        self, tmp_path: Path, after_yaml: str
+    ) -> None:
+        """A non-list[str] after raises WorkflowSyntaxError('non-list-of-str after ...')."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"extend:\n  x:\n    after: {after_yaml}\n    title: X\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str after in workflow\.extend\.x"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_extend_neither_before_nor_after(self, tmp_path: Path) -> None:
+        """An extend entry with neither before nor after raises WorkflowSyntaxError."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    title: Just a body\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"extend entry x requires at least one of before/after"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_empty_workflow_with_empty_extend(self, tmp_path: Path) -> None:
+        """A workflow with empty extend map, empty stages, and no prompt is still empty."""
+        workflow_path = _write(tmp_path, "workflow.yml", "extend: {}\n")
 
         with pytest.raises(WorkflowSyntaxError, match="empty workflow"):
             parse_workflow(workflow_path)
