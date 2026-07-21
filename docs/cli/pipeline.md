@@ -96,7 +96,7 @@ At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mo
 
 ### Workflow files
 
-A pipeline run can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, and loop-expansion on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
+A pipeline run can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, loop-expansion, and new stages via `extend` on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
 
 Three invocation modes (mutually exclusive in the explicit cases):
 
@@ -106,7 +106,7 @@ Three invocation modes (mutually exclusive in the explicit cases):
 
 When a workflow will actually be applied (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The previously emitted `Web UI: http://localhost:<port>` dashboard line has been removed — the launcher now surfaces only the workflow log line and the `docker` output stream.
 
-The workflow name reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). Inside the container `goga.pipeline` resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
+The workflow name reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). Inside the container `goga.pipeline` resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
 
 Example workflow-file:
 

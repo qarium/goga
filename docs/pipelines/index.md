@@ -33,8 +33,8 @@ The pipelines layer is split into two authoring surfaces:
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
-  prompt overrides, and loop expansion. Authored per project; lives in
-  `.goga/workflows/<name>.yml` (project-only).
+  prompt overrides, loop expansion, and new stages declared via `extend`.
+  Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
 **how the same pipeline should behave in this particular project** without
@@ -63,15 +63,17 @@ process owned by the `goga/pipeline/compiler` cell:
    (`name`, `description`, optional `agents`), and detects the body format
    (phases list or stages map).
 2. **Serialize** — `serialize_flow` applies per-format `depends_on` rules,
-   merges any workflow overrides, performs loop expansion, resolves the
-   agent mode for each stage, and writes a byte-exact flow-file.
+   merges any workflow overrides, embeds any `extend` stages, performs loop
+   expansion, resolves the agent mode for each stage, and writes a byte-exact
+   flow-file.
 
 When a workflow is in scope, the compiler reconstructs the parsed body
-**before** building the output stages: per-stage `agent` overrides choose
-which CLI agent runs the stage, per-stage `prompt` overrides layer
-additional context alongside the stage's own prompt, and `loop: N`
-expands the stage into N chained copies. See [Workflows](workflows.md)
-for the full semantics.
+**before** building the output stages: `extend` entries inject new stages
+positioned via `before`/`after`, per-stage `agent` overrides choose which
+CLI agent runs the stage, per-stage `prompt` overrides layer additional
+context alongside the stage's own prompt, and `loop: N` expands the stage
+into N chained copies. See [Workflows](workflows.md) for the full
+semantics.
 
 ## Where to next
 
