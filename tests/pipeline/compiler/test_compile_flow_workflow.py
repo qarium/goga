@@ -25,7 +25,7 @@ from goga.pipeline.compiler import (
     PipelineDocument,
     compile_flow,
 )
-from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
+from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "workflow"
 _FEATURE_PHASES = _FIXTURES / "phases.yml"
@@ -498,3 +498,450 @@ class TestCompileFlowWorkflowOverrideMatrix:
         fields = yaml.safe_load(flow_path.read_text())["stages"][0]
         assert fields["description"] == "only-prompt"
         assert "command" not in fields
+
+
+def _write_stages_propose_review(tmp_path: Path) -> Path:
+    """Write a 2-step STAGES pipeline (propose→review) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\n"
+        "description: T\n"
+        "---\n"
+        "\n"
+        "propose:\n"
+        "  title: Propose\n"
+        "review:\n"
+        "  title: Review\n"
+        "  depends_on: [propose]\n",
+    )
+    return pipeline_path
+
+
+def _write_stages_two_step(tmp_path: Path) -> Path:
+    """Write a 2-step STAGES pipeline (a→b) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\ndescription: T\n---\n\na:\n  title: A\nb:\n  title: B\n  depends_on: [a]\n",
+    )
+    return pipeline_path
+
+
+def _write_stages_single(tmp_path: Path, name: str = "propose") -> Path:
+    """Write a 1-step STAGES pipeline and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        f"name: T\ndescription: T\n---\n\n{name}:\n  title: {name.capitalize()}\n",
+    )
+    return pipeline_path
+
+
+class TestCompileFlowExtendStages:
+    """Step 4a0 — ``workflow.extend`` embedding in STAGES-format bodies.
+
+    STAGES derives ``depends_on`` from ``before``/``after`` (two passes). The new
+    stage's ``after``-refs become its own ``depends_on`` (verbatim, including
+    dangling ones — afm surfaces them); its ``before``-refs cause the new stage's
+    name to be appended to each target's ``depends_on`` (existing refs preserved).
+    """
+
+    def test_compile_flow_stages_extend_after_sets_depends_on(self, tmp_path: Path) -> None:
+        """STAGES extend ``after`` sets the new stage's depends_on to the named stage.
+
+        propose→review with ``extend={extra: after=[review]}`` yields
+        [propose, review, extra]; extra depends on review; review's authored dep
+        on propose is preserved; propose keeps no depends_on.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"extra": WorkflowExtendStage(after=["review"], body={"title": "Extra"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["propose", "review", "extra"]
+        propose = next(s for s in stages if s["id"] == "propose")
+        review = next(s for s in stages if s["id"] == "review")
+        extra = next(s for s in stages if s["id"] == "extra")
+        assert extra["depends_on"] == ["review"]
+        assert review["depends_on"] == ["propose"]
+        assert "depends_on" not in propose
+
+    def test_compile_flow_stages_extend_before_appends_to_target(self, tmp_path: Path) -> None:
+        """STAGES extend ``before`` appends the new stage to each target's depends_on.
+
+        propose→review with ``extend={warmup: before=[propose]}`` makes propose
+        depend on warmup; warmup itself has no depends_on (no ``after``).
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"warmup": WorkflowExtendStage(before=["propose"], body={"title": "Warmup"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        propose = next(s for s in stages if s["id"] == "propose")
+        warmup = next(s for s in stages if s["id"] == "warmup")
+        assert propose["depends_on"] == ["warmup"]
+        assert "depends_on" not in warmup
+
+    def test_compile_flow_stages_extend_after_dangling_kept_verbatim(self, tmp_path: Path) -> None:
+        """STAGES extend ``after`` with a dangling ref keeps it verbatim (no WARNING).
+
+        Symmetric with step 4c: a dangling after-ref lands in depends_on and is
+        left for afm to surface — not dropped or warned about.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["ghost"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["depends_on"] == ["ghost"]
+
+    def test_compile_flow_stages_extend_preserves_existing_depends_on(self, tmp_path: Path) -> None:
+        """STAGES extend ``before`` appends without clobbering an existing depends_on.
+
+        a→b→c with ``extend={x: before=[b, c]}``: b keeps its authored [a] and
+        gains x ([a, x]); c keeps its authored [b] and gains x ([b, x]).
+        """
+        pipeline_path = _write_stages_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(before=["b", "c"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        b = next(s for s in stages if s["id"] == "b")
+        c = next(s for s in stages if s["id"] == "c")
+        assert b["depends_on"] == ["a", "x"]
+        assert c["depends_on"] == ["b", "x"]
+
+    def test_compile_flow_extend_loop_expansion_rewrites_after_ref(self, tmp_path: Path) -> None:
+        """A loop-expanded after-target rewrites the extend after-ref to LAST id.
+
+        a→b with ``stages={b: loop=2}`` and ``extend={x: after=[b]}`` yields
+        [a, b-1, b-2, x]; x's after-ref to b is rewritten to b-2 by step 4c.
+        """
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"b": WorkflowStage(loop=2)},
+            extend={"x": WorkflowExtendStage(after=["b"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b-1", "b-2", "x"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["depends_on"] == ["b-2"]
+
+    def test_compile_flow_extend_cross_reference_resolved(self, tmp_path: Path) -> None:
+        """Two extend-stages cross-referencing each other resolve by name.
+
+        propose with ``extend={first: after=[propose], second: after=[first]}``:
+        first depends on propose; second depends on first (cross-ref between
+        extend-stages, name-based — pass 2 finds both after pass 1).
+        """
+        pipeline_path = _write_stages_single(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "first": WorkflowExtendStage(after=["propose"], body={"title": "First"}),
+                "second": WorkflowExtendStage(after=["first"], body={"title": "Second"}),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        first = next(s for s in stages if s["id"] == "first")
+        second = next(s for s in stages if s["id"] == "second")
+        assert first["depends_on"] == ["propose"]
+        assert second["depends_on"] == ["first"]
+
+    def test_compile_flow_extend_title_fallback_to_name(self, tmp_path: Path) -> None:
+        """An extend-stage with no ``title`` falls back to its name as display label.
+
+        The display label (``name`` field) is the extend-stage name when the body
+        carries no ``title`` — no error, the stage is emitted with that label.
+        """
+        pipeline_path = _write_stages_single(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "warmup": WorkflowExtendStage(before=["propose"], body={"prompt": "Bootstrap"}),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        warmup = next(s for s in stages if s["id"] == "warmup")
+        assert warmup["name"] == "warmup"
+        # The body's prompt lands in the step body (canonical fields inject
+        # defaults around it) without raising.
+        assert "prompt" in warmup
+
+    def test_compile_flow_extend_override_applies_to_extend_stage(self, tmp_path: Path) -> None:
+        """A per-stage override applies to a same-named extend-stage (4a after 4a0).
+
+        propose with ``stages={extra: agent=codex}`` and ``extend={extra: ...}``:
+        the extend-stage extra receives the composed command slot.
+        """
+        pipeline_path = _write_stages_single(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"extra": WorkflowStage(agent="codex")},
+            extend={"extra": WorkflowExtendStage(after=["propose"], body={"title": "Extra"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        extra = next(s for s in stages if s["id"] == "extra")
+        assert extra["command"] == "/home/goga/bin/codex-as-claude.sh"
+
+
+class TestCompileFlowExtendPhases:
+    """Step 4a0 — ``workflow.extend`` embedding in PHASES-format bodies.
+
+    PHASES inserts each extend-stage positionally (no explicit ``depends_on`` —
+    list position derives it later). A deferred-resolution loop places each stage
+    immediately after its LAST resolvable ``after``-target and/or immediately
+    before its FIRST resolvable ``before``-target.
+    """
+
+    def test_compile_flow_phases_extend_after_inserts_positionally(self, tmp_path: Path) -> None:
+        """PHASES extend ``after`` inserts the stage right after the target.
+
+        [a, b, c] with ``extend={x: after=[b]}`` yields [a, b, x, c]; by position
+        x depends on b and c depends on x.
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["b"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "x", "c"]
+        x = next(s for s in stages if s["id"] == "x")
+        c = next(s for s in stages if s["id"] == "c")
+        assert x["depends_on"] == ["b"]
+        assert c["depends_on"] == ["x"]
+
+    def test_compile_flow_phases_extend_before_inserts_positionally(self, tmp_path: Path) -> None:
+        """PHASES extend ``before`` inserts the stage right before the target.
+
+        [a, b, c] with ``extend={x: before=[c]}`` yields [a, b, x, c]; by position
+        x depends on b and c depends on x.
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(before=["c"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "x", "c"]
+        x = next(s for s in stages if s["id"] == "x")
+        c = next(s for s in stages if s["id"] == "c")
+        assert x["depends_on"] == ["b"]
+        assert c["depends_on"] == ["x"]
+
+    def test_compile_flow_phases_extend_multi_target_after(self, tmp_path: Path) -> None:
+        """PHASES multi-target ``after`` inserts after the LAST (max-index) target.
+
+        [a, b, c] with ``extend={x: after=[a, b]}``: b is the later target, so x
+        lands right after b → [a, b, x, c]; x depends on b.
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["a", "b"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "x", "c"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["depends_on"] == ["b"]
+
+    def test_compile_flow_phases_extend_after_before_both_consistent(self, tmp_path: Path) -> None:
+        """PHASES after+before consistent inserts between the two targets.
+
+        [a, b, c] with ``extend={x: after=[a], before=[c]}``: after-index (1) ≤
+        before-index (2), so x lands at the after-index → [a, x, b, c].
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["a"], before=["c"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "x", "b", "c"]
+        x = next(s for s in stages if s["id"] == "x")
+        b = next(s for s in stages if s["id"] == "b")
+        assert x["depends_on"] == ["a"]
+        assert b["depends_on"] == ["x"]
+
+    def test_compile_flow_phases_extend_after_before_inconsistent_warns(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """PHASES after+before inconsistent falls back to after-index with a WARNING.
+
+        [a, b, c] with ``extend={x: after=[c], before=[a]}``: after-index (3) >
+        before-index (0) — inconsistent; the after-index wins and a WARNING is
+        logged → [a, b, c, x]; x depends on c.
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["c"], before=["a"], body={"title": "X"})},
+        )
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "c", "x"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["depends_on"] == ["c"]
+        assert any("inconsistent" in r.getMessage() for r in caplog.records)
+
+    def test_compile_flow_phases_extend_all_dangling_appends_end(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """PHASES extend with ALL targets dangling appends at the end with a WARNING.
+
+        [a, b] with ``extend={x: after=[ghost]}`` (ghost unknown): x has no
+        resolvable position → appended at end → [a, b, x]; x depends on b by
+        position; a WARNING is logged.
+        """
+        pipeline_path = _write_phases_three_step(tmp_path)
+        # Use a two-step pipeline by overwriting with [a, b].
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"x": WorkflowExtendStage(after=["ghost"], body={"title": "X"})},
+        )
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "x"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["depends_on"] == ["b"]
+        assert any("no resolvable position" in r.getMessage() for r in caplog.records)
+
+    def test_compile_flow_phases_extend_cycle_appends_end(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """PHASES mutual before/after between extend-stages appends at end + WARNING.
+
+        [a, b] with ``extend={p: after=[q], q: after=[p]}``: p and q can never
+        both resolve → unresolved cycle; both appended at the end with a WARNING
+        → [a, b, p, q].
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "p": WorkflowExtendStage(after=["q"], body={"title": "P"}),
+                "q": WorkflowExtendStage(after=["p"], body={"title": "Q"}),
+            },
+        )
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b", "p", "q"]
+        assert any("unresolved cycle" in r.getMessage() for r in caplog.records)
+
+
+class TestCompileFlowExtendRegression:
+    """Step 4a0 regressions — no-workflow / empty-extend / original-body preservation."""
+
+    def test_compile_flow_extend_workflow_none_regression(self, tmp_path: Path) -> None:
+        """``compile_flow`` with workflow=None never runs 4a0 (no extend in output).
+
+        The flow-file carries the authored stages verbatim; no extend key is
+        synthesized and the step sequence is unchanged.
+        """
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b"]
+        assert all("extend" not in stage for stage in stages)
+
+    def test_compile_flow_extend_empty_extend_map_noop(self, tmp_path: Path) -> None:
+        """An empty ``extend`` map is a no-op (early-exit), equivalent to no extend.
+
+        a→b with ``extend={}`` yields the same [a, b] sequence and authored
+        depends_on as a workflow without extend.
+        """
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(extend={})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b"]
+        b = next(s for s in stages if s["id"] == "b")
+        assert b["depends_on"] == ["a"]
+
+    def test_compile_flow_extend_preserves_original_body(self, tmp_path: Path) -> None:
+        """Extend-stages land only in ``FlowDocument.stages``; ``PipelineDocument.body`` stays original.
+
+        The ``PipelineDocument.body`` carries the ORIGINAL parsed steps (no
+        extend-stage), while the ``FlowDocument.stages`` carry the embedded
+        extend-stage — the reconstruction never leaks into the parsed body.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"extra": WorkflowExtendStage(after=["review"], body={"title": "Extra"})},
+        )
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        # ORIGINAL body — only the authored propose/review steps.
+        assert [step.name for step in pipeline_doc.body.steps] == ["propose", "review"]
+        # FlowDocument carries the embedded extend-stage.
+        assert [stage.id for stage in flow_doc.stages] == ["propose", "review", "extra"]

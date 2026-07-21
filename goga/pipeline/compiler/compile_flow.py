@@ -40,7 +40,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from goga.pipeline.workflow import WorkflowDocument
+from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage
 
 from .body_format import BodyFormat
 from .flow_document import FlowDocument
@@ -303,6 +303,185 @@ def _rewrite_external_depends_on(
         step.depends_on = rewritten
 
 
+def _extend_step_title_and_body(
+    name: str,
+    ext: WorkflowExtendStage,
+) -> tuple[str, dict[str, Any]]:
+    """Return the ``(title, body)`` for one extend-stage step.
+
+    ``title`` falls back to the extend-stage name when the body carries no
+    ``title`` key (Design Decision 1: the display label is the stage name).
+    ``body`` is the extend body minus ``title``, with every value deep-copied so
+    the embedded step never aliases the workflow's declarative body.
+
+    Args:
+        name: The extend-stage name (map key in ``workflow.extend``).
+        ext: The extend-stage declaration.
+
+    Returns:
+        The resolved display title and a deep-copied body without ``title``.
+    """
+    title = ext.body.get("title", name)
+    body_for_step = {k: copy.deepcopy(v) for k, v in ext.body.items() if k != "title"}
+    return title, body_for_step
+
+
+def _embed_extend_stages_stages(
+    steps: list[StageStep],
+    workflow: WorkflowDocument,
+) -> None:
+    """STAGES branch — embed extend-stages by deriving ``depends_on`` (two passes).
+
+    Pass 1 appends one ``StageStep`` per extend-entry in source order: the new
+    stage's ``depends_on`` is a copy of its ``after`` refs (or ``None`` when no
+    ``after``), so ``after``-refs land verbatim — including dangling ones, which
+    afm surfaces (no WARNING here, mirroring step 4c). Pass 2 applies ``before``:
+    the new stage's name is appended to each ``before``-target's ``depends_on``,
+    initialising the list to ``[]`` when it was ``None`` and appending
+    idempotently (a name is never recorded twice). A ``before``-ref naming no
+    existing step is skipped with a ``WARNING``. Cross-references between
+    extend-stages resolve automatically — after pass 1 every extend step is
+    already in ``steps``.
+
+    Args:
+        steps: The working (deep-copied) STAGES step sequence, mutated in place.
+        workflow: The declarative workflow instructions (source of extend-entries).
+    """
+    for name, ext in workflow.extend.items():
+        title, body_for_step = _extend_step_title_and_body(name, ext)
+        depends_on = list(ext.after) if ext.after is not None else None
+        steps.append(
+            StageStep(name=name, title=title, depends_on=depends_on, body=body_for_step),
+        )
+    by_name = {step.name: step for step in steps}
+    for name, ext in workflow.extend.items():
+        for bname in ext.before or []:
+            target = by_name.get(bname)
+            if target is None:
+                logger.warning(
+                    "compile_flow: extend before ref %r not found; skipping",
+                    bname,
+                )
+                continue
+            if target.depends_on is None:
+                target.depends_on = []
+            if name not in target.depends_on:
+                target.depends_on.append(name)
+
+
+def _embed_extend_stages_phases(
+    steps: list[PhaseStep],
+    workflow: WorkflowDocument,
+    known_names: set[str],
+) -> None:
+    """PHASES branch — embed extend-stages by positional insertion.
+
+    Each ``PhaseStep`` carries no ``depends_on`` (position derives it later in
+    ``compile_flow``); this branch only places each extend-stage at the right
+    list index. A deferred-resolution loop places, per iteration, the
+    extend-stages whose ``before``/``after`` targets are either original steps
+    or extend-stages already placed. The insertion index sits immediately after
+    the LAST resolvable ``after``-target and/or immediately before the FIRST
+    resolvable ``before``-target. When both are resolvable but inconsistent (the
+    ``after``-target positioned after the ``before``-target) a ``WARNING`` is
+    logged and the ``after`` index is used. Targets naming no known step are
+    dangling; when ALL targets dangle the stage is appended at the end with a
+    ``WARNING``. A pass that places nothing indicates an unresolvable cycle —
+    the remaining stages are appended at the end with a ``WARNING`` and the loop
+    stops.
+
+    Args:
+        steps: The working (deep-copied) PHASES step sequence, mutated in place.
+        workflow: The declarative workflow instructions (source of extend-entries).
+        known_names: Union of original step names and extend-stage names; targets
+            outside this set are treated as dangling.
+    """
+    pending: list[tuple[str, WorkflowExtendStage]] = list(workflow.extend.items())
+    while pending:
+        placed_names = {step.name for step in steps}
+        next_pending: list[tuple[str, WorkflowExtendStage]] = []
+        progress = False
+        for name, ext in pending:
+            after_targets = ext.after or []
+            before_targets = ext.before or []
+            # Defer when any target is an extend-stage that is not yet placed.
+            if any(t in known_names and t not in placed_names for t in after_targets + before_targets):
+                next_pending.append((name, ext))
+                continue
+            after_positions = [
+                i for i, step in enumerate(steps) if step.name in after_targets and step.name in known_names
+            ]
+            before_positions = [
+                i for i, step in enumerate(steps) if step.name in before_targets and step.name in known_names
+            ]
+            after_index = (max(after_positions) + 1) if after_positions else None
+            before_index = min(before_positions) if before_positions else None
+            if after_index is not None and before_index is not None:
+                if after_index <= before_index:
+                    idx = after_index
+                else:
+                    logger.warning(
+                        "compile_flow: extend %r after/before inconsistent; using after",
+                        name,
+                    )
+                    idx = after_index
+            elif after_index is not None:
+                idx = after_index
+            elif before_index is not None:
+                idx = before_index
+            else:
+                logger.warning(
+                    "compile_flow: extend %r has no resolvable position; appending at end",
+                    name,
+                )
+                idx = len(steps)
+            title, body_for_step = _extend_step_title_and_body(name, ext)
+            steps.insert(idx, PhaseStep(name=name, title=title, body=body_for_step))
+            progress = True
+        pending = next_pending
+        if not progress:
+            for name, ext in pending:
+                logger.warning(
+                    "compile_flow: extend %r unresolved cycle; appending at end",
+                    name,
+                )
+                title, body_for_step = _extend_step_title_and_body(name, ext)
+                steps.append(PhaseStep(name=name, title=title, body=body_for_step))
+            break
+
+
+def _embed_extend_stages(
+    steps: list[PhaseStep | StageStep],
+    workflow: WorkflowDocument,
+    fmt: BodyFormat,
+) -> None:
+    """Step 4a0 — embed ``workflow.extend`` stages into the working step sequence.
+
+    Extend-stages are declarative new stages positioned relative to existing
+    ones via ``before``/``after``. This step materialises them as real steps in
+    ``steps`` so the generic downstream machine (4a overrides, 4b loop-expansion,
+    4c external depends_on rewrite) processes them by the common rules. A no-op
+    when ``workflow.extend`` is empty. The STAGES branch derives ``depends_on``
+    from ``after``/``before`` (two passes); the PHASES branch inserts
+    positionally (no ``depends_on`` — position derives it later).
+
+    Args:
+        steps: The working (deep-copied) step sequence, mutated in place. Called
+            after the deep-copy in ``_reconstruct_body`` and before the 4a
+            override pass — so extend-stages receive overrides, loops, and
+            external-ref rewrites too.
+        workflow: The declarative workflow instructions (source of extend-entries).
+        fmt: The body format — selects the STAGES vs PHASES embedding branch.
+    """
+    if not workflow.extend:
+        return
+    known_names = {step.name for step in steps} | set(workflow.extend)
+    if fmt is BodyFormat.STAGES:
+        _embed_extend_stages_stages(steps, workflow)
+    else:
+        _embed_extend_stages_phases(steps, workflow, known_names)
+
+
 def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
@@ -311,11 +490,13 @@ def _reconstruct_body(
     """Apply the workflow reconstruction branch, returning a NEW step sequence.
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
-    ``PipelineDocument``) is never mutated, then runs the four sub-steps from the
-    CODEMANIFEST algorithm: (5a) per-stage overrides; (5b) loop-expansion with
-    the expanded-ids map; (5c) external depends_on rewrite (STAGES only); the
-    result (5d) is the reconstructed step list consumed for ``FlowStage``
-    assembly.
+    ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
+    (4a0) embed ``workflow.extend`` stages; (4a) per-stage overrides; (4b)
+    loop-expansion with the expanded-ids map; (4c) external depends_on rewrite
+    (STAGES only); the result (4d) is the reconstructed step list consumed for
+    ``FlowStage`` assembly. The 4a0 → 4a → 4b → 4c ordering is mandatory:
+    extend-stages must be in ``steps`` before overrides, loops, and external-ref
+    rewrites run, so the generic machine treats them by the common rules.
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -326,6 +507,7 @@ def _reconstruct_body(
         The reconstructed step sequence (PHASES or STAGES steps).
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
+    _embed_extend_stages(steps, workflow, fmt)
     _apply_per_stage_overrides(steps, workflow)
     expanded, expanded_ids = _expand_loops(steps, workflow, fmt)
     if fmt is BodyFormat.STAGES:
