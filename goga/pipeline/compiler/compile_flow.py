@@ -303,6 +303,18 @@ def _rewrite_external_depends_on(
         step.depends_on = rewritten
 
 
+# Extend-step keys carried as a separate field or dropped, never inside the
+# verbatim body handed to ``FlowStage.fields``. ``title`` becomes the step's
+# display label (falling back to the extend name); ``name`` and ``id`` are
+# serializer-reserved identity keys — the id derives from the extend map key and
+# the display name from the resolved title. An authored ``name``/``id`` would
+# otherwise survive into ``FlowStage.fields`` and clobber the serializer's seeded
+# ``name``/``id`` (``_build_stage_repr`` sets them first, then iterates fields),
+# silently corrupting the flow-file. Mirrors ``parse_dsl._STAGE_STEP_KEYS`` /
+# ``_PHASE_STEP_KEYS`` for original stages.
+_EXTEND_STEP_RESERVED_KEYS = frozenset({"title", "name", "id"})
+
+
 def _extend_step_title_and_body(
     name: str,
     ext: WorkflowExtendStage,
@@ -311,18 +323,24 @@ def _extend_step_title_and_body(
 
     ``title`` falls back to the extend-stage name when the body carries no
     ``title`` key (Design Decision 1: the display label is the stage name).
-    ``body`` is the extend body minus ``title``, with every value deep-copied so
-    the embedded step never aliases the workflow's declarative body.
+    ``body`` is the extend body minus the serializer-reserved identity keys
+    (``title``, ``name``, ``id``), with every value deep-copied so the embedded
+    step never aliases the workflow's declarative body. Dropping ``name``/``id``
+    keeps the serializer's seeded identity intact — see
+    ``_EXTEND_STEP_RESERVED_KEYS``.
 
     Args:
         name: The extend-stage name (map key in ``workflow.extend``).
         ext: The extend-stage declaration.
 
     Returns:
-        The resolved display title and a deep-copied body without ``title``.
+        The resolved display title and a deep-copied body without ``title``,
+        ``name``, or ``id``.
     """
     title = ext.body.get("title", name)
-    body_for_step = {k: copy.deepcopy(v) for k, v in ext.body.items() if k != "title"}
+    body_for_step = {
+        key: copy.deepcopy(value) for key, value in ext.body.items() if key not in _EXTEND_STEP_RESERVED_KEYS
+    }
     return title, body_for_step
 
 

@@ -763,6 +763,36 @@ class TestCompileFlowExtendStages:
         assert extra["command"] == "/home/goga/bin/codex-as-claude.sh"
         assert extra["description"] == "Extra instructions"
 
+    def test_compile_flow_stages_extend_body_reserved_keys_do_not_corrupt(self, tmp_path: Path) -> None:
+        """Serializer-reserved ``id``/``name`` in an extend body never corrupt output.
+
+        An extend entry may carry authored ``id``/``name`` keys (e.g. copied from an
+        afm stage definition). They must NOT survive into ``FlowStage.fields``: the
+        serializer seeds ``id`` from the extend map key and ``name`` from the
+        resolved title, so an authored value would otherwise overwrite them and
+        silently break the flow-file's identity/dependency chain. Mirrors
+        ``parse_dsl`` dropping ``name``/``id`` for original stages.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "x": WorkflowExtendStage(
+                    after=["review"],
+                    body={"title": "X", "id": "evil", "name": "EVIL"},
+                ),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["propose", "review", "x"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["id"] == "x"
+        assert x["name"] == "X"
+        assert x["depends_on"] == ["review"]
+
 
 class TestCompileFlowExtendPhases:
     """Step 4a0 — ``workflow.extend`` embedding in PHASES-format bodies.
@@ -993,6 +1023,36 @@ class TestCompileFlowExtendPhases:
         stages = yaml.safe_load(flow_path.read_text())["stages"]
         assert _ids(stages) == ["a", "b", "p", "q"]
         assert any("unresolved cycle" in r.getMessage() for r in caplog.records)
+
+    def test_compile_flow_phases_extend_body_reserved_keys_do_not_corrupt(self, tmp_path: Path) -> None:
+        """Serializer-reserved ``id``/``name`` in a PHASES extend body never corrupt.
+
+        Same guard as the STAGES case: an authored ``id``/``name`` in the extend
+        body is dropped so the serializer seeds identity from the extend key and
+        the resolved title. PHASES uses the shared ``_extend_step_title_and_body``
+        helper, so this pins the guard for the positional-insertion branch too.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "x": WorkflowExtendStage(
+                    after=["a"],
+                    body={"title": "X", "id": "evil", "name": "EVIL"},
+                ),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "x", "b"]
+        x = next(s for s in stages if s["id"] == "x")
+        assert x["id"] == "x"
+        assert x["name"] == "X"
 
 
 class TestCompileFlowExtendRegression:
