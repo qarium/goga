@@ -2,8 +2,9 @@
 
 A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
-top-level prompt, override the agent or prompt of specific stages, and expand
-a stage into N chained copies via `loop`.
+top-level prompt, override the agent or prompt of specific stages, expand
+a stage into N chained copies via `loop`, and **declaratively add new stages**
+to the pipeline via `extend`.
 
 Workflow-files live at:
 
@@ -17,7 +18,7 @@ traversal via `..` or an absolute prefix is rejected.
 
 ## Document shape
 
-A workflow-file is a YAML mapping with up to two top-level keys:
+A workflow-file is a YAML mapping with up to three top-level keys:
 
 ```yaml
 prompt: |
@@ -29,18 +30,27 @@ stages:
     prompt: |                 # optional per-stage prompt override
       Additional per-stage instruction.
     loop: 2                   # optional iteration count (>= 1)
+
+extend:
+  <new-stage-name>:
+    after: [propose]          # position the new stage relative to existing ones
+    title: Warmup             # optional display label; defaults to the entry key
+    prompt: |                 # any other stage field passes through verbatim
+      Bootstrap instruction for the new stage.
 ```
 
 | Key      | Type   | Required | Description                                                |
 |----------|--------|----------|------------------------------------------------------------|
 | `prompt` | string | no*      | Top-level prompt emitted as the first key of the output.   |
 | `stages` | map   | no*      | Per-stage override instructions keyed by stage name.       |
+| `extend` | map   | no*      | New stages to add to the pipeline, keyed by new stage name. |
 
-\* At least one of `prompt` or a non-empty `stages` block must be present;
-an empty workflow is rejected with a structural error.
+\* At least one of `prompt`, a non-empty `stages` block, or a non-empty
+`extend` block must be present; an empty workflow is rejected with a
+structural error.
 
 Unknown top-level keys are rejected with
-`unknown key in workflow: <KEY>; valid keys: prompt, stages`.
+`unknown key in workflow: <KEY>; valid keys: prompt, stages, extend`.
 
 ## Stage entries
 
@@ -160,11 +170,157 @@ stages:
 In the second form, the `Requirements:` and `Constraints:` blocks are the
 load-bearing parts — the leading paragraph is still just context.
 
+## Extending the pipeline with new stages
+
+The `stages` block only overrides stages that already exist in the target
+pipeline. The `extend` block does the complementary thing: it **adds brand-new
+stages** that are not in the pipeline-file at all. Each `extend` entry is one
+new stage, positioned relative to existing stages via `before` / `after`:
+
+```yaml
+extend:
+  <new-stage-name>:
+    before: [plan]            # place this new stage BEFORE the named stage(s)
+    after: [propose]          # place this new stage AFTER the named stage(s)
+    title: Warmup             # optional; any other stage field passes through
+    prompt: |                 # verbatim stage body — same fields as a pipeline stage
+      Bootstrap the environment before the pipeline runs.
+```
+
+Positioning (`before` / `after`) and the stage body are separate concerns:
+
+- `before` and `after` are **lists of existing stage names**. The new stage is
+  declared to run before the `before` names and after the `after` names. At
+  least one of the two must be present — an entry with neither is rejected.
+- Everything else in the entry (`title`, `prompt`, `skills`, `agents`,
+  `interactive`, or any other stage field) is the **verbatim body** of the new
+  stage. It is carried through unchanged and embedded as an ordinary stage in
+  the compiled output. `before`, `after`, and `depends_on` are never part of
+  the body — `depends_on` in particular is forbidden here (positioning is
+  declared structurally, not as a dependency edge).
+- The `title` field, when omitted, falls back to the entry key — so a stage
+  declared under `extend: warmup:` without a `title` is still labeled
+  `warmup` in the output.
+
+Unlike `stages` entries, extend-stage names are **not** matched against the
+pipeline and silently skipped. The new stage is always inserted; if a name
+collides with an existing stage, the duplicate is surfaced downstream by afm.
+
+### Positioning semantics by body format
+
+How `before` / `after` translate into run order depends on the compiled
+body format of the target pipeline:
+
+- **Stages format** — the compiler derives `depends_on` edges from the names.
+  Each `after` name is added to the new stage's `depends_on` (so the new stage
+  runs after it), and the new stage's name is added to the `depends_on` of each
+  `before` target (so they run after it). Existing `depends_on` on the targets
+  is preserved — the new edge is appended, not overwritten. Execution order is
+  then governed entirely by `depends_on`, exactly as for any other stage.
+- **Phases format** — the compiler inserts the new stage **positionally**:
+  immediately after the last resolvable `after` target and/or immediately
+  before the first resolvable `before` target. Run order comes from list
+  position, not `depends_on`. When `after` and `before` targets place the stage
+  inconsistently, the `after` position wins and a warning is logged; when no
+  target can be resolved, the stage is appended at the end with a warning.
+
+### Examples
+
+A STAGES pipeline `propose → review` with a new `warmup` stage that runs after
+`propose`, and a new `extra` stage that runs before `review`:
+
+```yaml
+extend:
+  warmup:
+    after: [propose]
+    title: Warmup
+    prompt: |
+      Bootstrap instruction.
+  extra:
+    before: [review]
+    title: Extra
+    prompt: |
+      Additional pass before review.
+```
+
+Compiled effect (stages format): `warmup` depends on `propose`, and `review`
+gains `extra` as an additional dependency —
+`propose → warmup`, `extra → review`.
+
+The same idea for a PHASES pipeline `[a, b, c]` — insert `x` after `b`:
+
+```yaml
+extend:
+  x:
+    after: [b]
+    title: X
+    prompt: |
+      Stage inserted between b and c.
+```
+
+Compiled effect (phases format): the run order becomes `[a, b, x, c]`.
+
+A workflow can consist of `extend` alone — this is a valid, non-empty workflow:
+
+```yaml
+extend:
+  teardown:
+    after: [summary]
+    title: Teardown
+    prompt: |
+      Final cleanup after the summary stage.
+```
+
+### Rules and anti-patterns
+
+- `depends_on` is **forbidden** inside an extend entry. Positioning is declared
+  via `before` / `after`; the compiler derives the dependency edges.
+- At least one of `before` / `after` must be present. An entry with neither is
+  rejected with
+  `extend entry <NAME> requires at least one of before/after`.
+- `before` and `after` must each be a `list[str]` when present. A scalar or a
+  list with non-string elements is rejected with `non-list-of-str before in
+  workflow.extend.<NAME>` / `non-list-of-str after in workflow.extend.<NAME>`.
+- An extend entry that names a target that does not exist in the pipeline is a
+  **dangling reference**. In stages format a dangling `after` is passed through
+  verbatim in `depends_on` (afm surfaces the unknown name); a dangling `before`
+  is skipped with a warning. In phases format an entry whose targets cannot be
+  resolved at all is appended at the end with a warning.
+- Extend-stages are embedded into the compiled `FlowDocument.stages` only. The
+  original `PipelineDocument.body` is never modified — `extend` is a run-time
+  layering, like the rest of a workflow-file.
+
 ## How the compiler applies a workflow
 
 When `compile_flow` is invoked with a non-None `WorkflowDocument`, the
-compiler reconstructs the parsed body in three deterministic passes **before**
-building the output stages.
+compiler reconstructs the parsed body in a fixed sequence of passes **before**
+building the output stages. The ordering is mandatory: extend-stages are
+embedded first, then per-stage overrides are applied, then loops are expanded,
+then external `depends_on` references are rewritten. Embedding first means a
+per-stage override (Pass 1) or loop expansion (Pass 2) can also target a stage
+introduced by `extend`, by name.
+
+### Pass 0 — Embed extend-stages (in-place)
+
+For each entry in `workflow.extend`, the compiler appends a new stage to the
+working step sequence — the verbatim entry body minus `title`, labeled with the
+entry's `title` (or, falling back, the entry key). Positioning is then applied
+by body format:
+
+- **Stages format** — each `after` name becomes a `depends_on` entry on the new
+  stage, and the new stage's name is appended to the `depends_on` of each
+  `before` target (existing entries preserved; idempotent). A dangling
+  `before` target is skipped with a warning; a dangling `after` target is
+  passed through verbatim, like any unknown `depends_on` reference.
+- **Phases format** — the new stage is inserted positionally after the last
+  resolvable `after` target and/or before the first resolvable `before`
+  target, with no explicit `depends_on`. Inconsistent `after`/`before`
+  positions fall back to the `after` position with a warning; targets that
+  cannot be resolved at all cause the stage to be appended at the end with a
+  warning.
+
+After this pass the extend-stages live in the working sequence alongside the
+originals, so Passes 1–3 below apply to them by the same generic rules.
 
 ### Pass 1 — Per-stage overrides (in-place)
 
@@ -328,6 +484,31 @@ Here `codex` does the heavy authoring (propose, brainstorm) and `claude`
 runs the reviews. The underlying pipeline-file stays unchanged — every
 project can pin its own agent-per-stage matrix in its workflow-file.
 
+A workflow that adds stages which are not in the pipeline-file at all — a
+`warmup` that runs after `propose`, and an `extra` review that runs before
+`plan-review`:
+
+```yaml
+extend:
+  warmup:
+    after: [propose]
+    title: Warmup
+    prompt: |
+      Boot up tooling context before the pipeline runs.
+
+  extra:
+    before: [plan-review]
+    title: Extra review
+    prompt: |
+      An additional review pass before the plan is finalized.
+```
+
+Compiled effect: two stages absent from the pipeline-file now appear in the
+run. In stages format `warmup` depends on `propose`, and `plan-review` gains
+`extra` as an additional dependency; in phases format `warmup` is inserted
+after `propose` and `extra` before `plan-review`. The pipeline-file itself is
+untouched — `extend` layers new stages on top at run time.
+
 ## Errors
 
 | Condition                                                       | Exception                                                                   |
@@ -336,14 +517,20 @@ project can pin its own agent-per-stage matrix in its workflow-file.
 | Root is not a mapping                                           | `workflow must be a mapping`                                                |
 | `prompt` present but not a string                               | `non-str value in workflow.prompt`                                          |
 | `stages` present but not a mapping                              | `non-mapping stages block in workflow`                                      |
-| Unknown top-level key                                           | `unknown key in workflow: <KEY>; valid keys: prompt, stages`                |
+| Unknown top-level key                                           | `unknown key in workflow: <KEY>; valid keys: prompt, stages, extend`        |
 | Stage value is not a mapping                                    | `non-mapping stage <NAME> in workflow.stages`                               |
+| `extend` present but not a mapping                              | `non-mapping extend block in workflow`                                      |
+| Extend entry value is not a mapping                             | `non-mapping extend entry <NAME> in workflow.extend`                        |
+| `depends_on` present in an extend entry                         | `depends_on is forbidden in workflow.extend.<NAME>`                         |
+| `before` in an extend entry not a `list[str]`                   | `non-list-of-str before in workflow.extend.<NAME>`                          |
+| `after` in an extend entry not a `list[str]`                    | `non-list-of-str after in workflow.extend.<NAME>`                           |
+| Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
 | Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
 | `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
-| Neither `prompt` nor `stages` entries are present               | `empty workflow — provide at least prompt or one stage`                     |
+| None of `prompt`, `stages`, `extend` entries are present        | `empty workflow — provide at least prompt, one stage, or one extend entry`  |
 
 ## See also
 
