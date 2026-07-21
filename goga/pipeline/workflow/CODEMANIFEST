@@ -10,19 +10,23 @@ Annotations: |
   - Understanding the general principles and rules of development and testing in the project
 
   This cell is a pure parser of project-level workflow-files. It reads a
-  workflow-file, validates its structure (known keys, field types, loop
-  counts), and returns a `WorkflowDocument` carrying declarative instructions
-  for the compiler. It performs no I/O beyond the path it receives, performs
+  workflow-file, validates its structure (known top-level keys prompt /
+  stages / extend, field types, loop counts, extend-entry positioning),
+  and returns a `WorkflowDocument` carrying declarative instructions for the
+  compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on
   the Python standard library and PyYAML.
 
   This cell is intentionally DECLARATIVE: it does NOT know about the compiler
   or any compiler-level concept (flow documents, flow stages, the compile
-  routine). It returns instructions; the consumer (compiler) consumes them.
-  This keeps the import graph one-directional: the compiler imports
-  `WorkflowDocument` from this cell, never the reverse. The cell does not
-  resolve agent names to wrapper paths, does not apply loop-expansion, and
-  does not rewrite depends_on — all of that is the compiler's responsibility.
+  routine, body embedding, depends_on derivation). It returns instructions
+  (per-stage overrides for stages, NEW stages for extend); the consumer
+  (compiler) consumes them. This keeps the import graph one-directional: the
+  compiler imports `WorkflowDocument` (and `WorkflowExtendStage`) from this
+  cell, never the reverse. The cell does not resolve agent names to wrapper
+  paths, does not embed extend-stages, does not derive depends_on, does not
+  apply loop-expansion, and does not rewrite depends_on — all of that is the
+  compiler's responsibility.
 
   Use `convention` for code style, dataclass usage, and test layout.
 
@@ -72,7 +76,57 @@ Annotations: |
       Positive iteration count (>= 1) instructing the compiler to expand the
       stage into N copies, or None when not specified (no expansion).
 
-"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None)":
+"WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, body: dict[str, Any])":
+  location: workflow_extend_stage.py
+  annotations: |
+    Data model of a single extend-entry in a workflow-file — a new stage to be
+    embedded into a target pipeline, carrying positioning instructions
+    (`before`/`after`) and the verbatim stage body. Constructed by
+    `parse_workflow` from one entry of the workflow-file extend map; carried
+    verbatim inside `WorkflowDocument` (its extend field). Consumed by the
+    compiler, which embeds the stage and derives depends_on from the
+    positioning — this cell performs NO embedding and NO depends_on derivation.
+
+    `before`: list of stage names the new stage precedes (the compiler adds
+              this stage to the depends_on of each named stage), or None when
+              not specified
+    `after`: list of stage names the new stage follows (the compiler adds each
+             named stage to this stage's depends_on), or None when not specified
+    `body`: verbatim copy of the stage body (title, prompt, skills, agents,
+            interactive, and any other stage field) EXCLUDING before, after,
+            and depends_on. Open-ended — this cell does not know the stage
+            field schema
+
+    Build the data model with the standard library dataclasses module
+    (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
+
+    Requirements:
+    - Use @dataclass(kw_only=True) (per `convention`)
+    - `before` and `after` default to None — an extend-entry may omit either;
+      `parse_workflow` enforces that at least one is present before this
+      dataclass is built
+    - `body` is required (no default) — every extend-stage carries stage content
+    - Field order is fixed: before, after, body
+
+    Constraints:
+    - Do not validate "at least one of before/after" here — `parse_workflow`
+      enforces it during parsing
+    - Do not validate that body excludes depends_on here — `parse_workflow`
+      rejects depends_on in an extend-entry before this dataclass is built
+    - Do not embed the stage or derive depends_on here — the compiler performs both
+    - Do not validate before/after names against any pipeline — the compiler
+      matches and silently ignores unknown names with a warning
+  properties:
+    "before -> list[str] | None": |
+      List of stage names the new stage precedes (compiler adds this stage to
+      their depends_on), or None when not specified.
+    "after -> list[str] | None": |
+      List of stage names the new stage follows (compiler adds them to this
+      stage's depends_on), or None when not specified.
+    "body -> dict[str, Any]": |
+      Verbatim stage body excluding before, after, and depends_on. Open-ended.
+
+"WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None)":
   location: workflow_document.py
   annotations: |
     Aggregated workflow-file document — the parsed representation of a
@@ -90,6 +144,11 @@ Annotations: |
               compiler (a workflow-file may cover multiple pipelines). An
               empty map (default) means the workflow provides only a
               top-level prompt and no per-stage overrides.
+    `extend`: map of new-stage extend-instructions keyed by stage name; an
+              entry is embedded into the target pipeline by the compiler and
+              positioned via before/after. Stages in `extend` that reference
+              unknown names are silently ignored with a warning by the compiler.
+              An empty map (default) means the workflow provides no new stages.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -100,9 +159,12 @@ Annotations: |
     - `stages` defaults to an empty dict via field(default_factory=dict)
       in the implementation; the signature default None is a DSL
       representation, the actual default factory is applied at construction
-    - A workflow-file with neither a top-level `prompt` nor any stage entries
-      is rejected by `parse_workflow` with a structural error before this
-      dataclass is built — at least one must be present
+    - `extend` defaults to an empty dict via field(default_factory=dict)
+      in the implementation; the signature default None is a DSL
+      representation, the actual default factory is applied at construction
+    - A workflow-file with none of a top-level `prompt`, any stage entries, or
+      any extend entries is rejected by `parse_workflow` with a structural
+      error before this dataclass is built — at least one must be present
 
     Constraints:
     - Do not validate stage-name keys against any pipeline — the compiler
@@ -118,6 +180,9 @@ Annotations: |
     "stages -> dict[str, WorkflowStage]": |
       Map of per-stage override instructions keyed by stage name. Empty map
       when the workflow-file has no stages section.
+    "extend -> dict[str, WorkflowExtendStage]": |
+      Map of new-stage extend-instructions keyed by stage name. Empty map when
+      the workflow-file has no extend section.
 
 "parse_workflow(workflow_path: Path) -> workflow: WorkflowDocument":
   location: parse_workflow.py
@@ -146,8 +211,10 @@ Annotations: |
          error "non-str value in workflow.prompt"
        - stages: if present, must be a dict; otherwise raise a structural
          error "non-mapping stages block in workflow"
+       - extend: if present, must be a dict; otherwise raise a structural
+         error "non-mapping extend block in workflow"
     5. For every other top-level key — raise a structural error
-       "unknown key in workflow: KEY; valid keys: prompt, stages"
+       "unknown key in workflow: KEY; valid keys: prompt, stages, extend"
     6. For each entry of stages (when present), identified by stage name
        and stage value:
        a. If the stage value is not a dict — raise a structural error
@@ -163,17 +230,39 @@ Annotations: |
           "non-int value in workflow.stages.NAME.loop" (non-int) or
           "loop must be >= 1 in workflow.stages.NAME" (int < 1)
        f. Build a `WorkflowStage` from the validated values
-    7. If both prompt is None AND stages is empty (no entries) — raise a
-       structural error "empty workflow — provide at least prompt or one
-       stage"
+    6b. For each entry of extend (when present), identified by stage name
+        and entry value:
+        a. If the entry value is not a dict — raise a structural error
+           "non-mapping extend entry NAME in workflow.extend"
+        b. If the entry value contains a depends_on key — raise a structural
+           error "depends_on is forbidden in workflow.extend.NAME"
+        c. before (when present) must be a list[str]; otherwise raise
+           "non-list-of-str before in workflow.extend.NAME"
+        d. after (when present) must be a list[str]; otherwise raise
+           "non-list-of-str after in workflow.extend.NAME"
+        e. If neither before nor after is present — raise a structural error
+           "extend entry NAME requires at least one of before/after"
+        f. Other keys of the entry value are NOT validated (open-ended: title,
+           prompt, skills, agents, interactive, and any other stage field) and
+           pass through verbatim
+        g. Build a `WorkflowExtendStage` from the validated before/after and
+           the remaining entry value as body
+    7. If prompt is None AND stages is empty (no entries) AND extend is empty
+       (no entries) — raise a structural error "empty workflow — provide at
+       least prompt, one stage, or one extend entry"
     8. Return `WorkflowDocument` from the parsed prompt and stages
 
     Apply `convention` for code style, exception message formatting, and
     docstring style.
 
     Requirements:
-    - Top-level unknown keys are a structural error — only prompt and
-      stages are accepted
+    - Top-level unknown keys are a structural error — only prompt, stages,
+      and extend are accepted
+    - extend-entry depends_on is a structural error; before/after (when
+      present) must be list[str]; at least one of before/after is required
+    - extend-entry names are NOT validated against any pipeline — unknown
+      before/after names pass through; the compiler decides whether to apply
+      or ignore (silently with a warning)
     - Per-stage unknown keys are a structural error — only agent, prompt,
       loop are accepted
     - loop must be an int >= 1; zero, negative values, and non-int types

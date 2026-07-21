@@ -53,6 +53,46 @@ documents = compile_flow(pipeline_path, flow_path, workflow=workflow)
 # pipeline_doc.body reflects the ORIGINAL parsed body (NOT reconstructed).
 ```
 
+### Workflow with extend (new stages injected)
+
+```python
+from pathlib import Path
+from goga.pipeline.compiler import compile_flow
+from goga.pipeline.workflow import parse_workflow
+
+pipeline_path = Path("/workspace/.goga/pipelines/feature-phases.yml")
+workflow_path = Path("/workspace/.goga/workflows/feature-with-extend.yml")
+flow_path = Path("/home/goga/pipeline/flow.yml")
+
+workflow = parse_workflow(workflow_path)
+documents = compile_flow(pipeline_path, flow_path, workflow=workflow)
+# In addition to per-stage overrides and loop-expansion, the compiled
+# flow-file carries the extend-stages embedded and positioned via
+# before/after. Dangling before/after refs are skipped with a WARNING.
+```
+
+A workflow-file with an `extend:` block:
+
+```yaml
+prompt: |
+  Top-level prompt emitted as the first directive of the compiled flow-file
+
+extend:
+  warmup:
+    before: [propose]
+    title: Warmup
+    prompt: Bootstrap context before the first stage
+  extra-check:
+    after: [review]
+    title: Extra check
+```
+
+Each extend-entry is positioned by the compiler: `after` adds the named stages
+to the new stage's `depends_on` (STAGES) or places it after them (PHASES);
+`before` adds the new stage to the named stages' `depends_on` (STAGES) or
+places it before them (PHASES). `depends_on` is forbidden in an extend-entry;
+at least one of `before`/`after` is required.
+
 ## Parameters
 
 - `pipeline_path: Path` — absolute path to the input pipeline-file. The file
@@ -64,8 +104,10 @@ documents = compile_flow(pipeline_path, flow_path, workflow=workflow)
 - `workflow: WorkflowDocument | None = None` — optional declarative instructions
   from a project workflow-file. When a `WorkflowDocument` is passed (parsed via
   `parse_workflow`), the cell reconstructs the parsed body per the workflow
-  instructions BEFORE building the FlowStages. When `None` — no workflow is
-  applied, the output carries no top-level prompt and no per-stage overrides.
+  instructions BEFORE building the FlowStages. The workflow may carry an
+  `extend` block (new stages positioned via `before`/`after`). When `None` —
+  no workflow is applied, the output carries no top-level prompt and no
+  per-stage overrides.
 
 ## Return Values
 
@@ -119,6 +161,16 @@ handled by `parse_dsl` per its contract; the `agents` data is carried through
 When `compile_flow` is called with a non-None `workflow`, the cell reconstructs
 the parsed body BEFORE building the FlowStages:
 
+0. **Embed extend-stages**: for each entry in `workflow.extend`, position the
+   new stage. STAGES: build a `StageStep` whose `depends_on` is initialized
+   from `after`, and append the new stage to the `depends_on` of each
+   `before`-target. PHASES: insert the new `PhaseStep` into the body list
+   after its `after`-targets and before its `before`-targets (`PhaseStep`
+   carries no `depends_on`; ordering is positional). Dangling refs → WARNING +
+   skip; cross-references resolved. Runs BEFORE per-stage overrides,
+   loop-expansion, and reference rewriting (which then apply to extend-stages
+   uniformly; after loop-expansion both `after`- and `before`-derived refs in
+   STAGES resolve to the LAST expanded id).
 1. **Per-stage overrides (in-place on the step body)**: for each
    `(stage_name, workflow_stage)` in `workflow.stages`:
    - Find the step in the body whose `name`/id equals `stage_name`.
@@ -258,3 +310,6 @@ pipelines.
 - Do not pass the `PipelineDocument.body` to a consumer as the source of truth
   for workflow-modified stages — only `FlowDocument.stages` reflects the
   workflow.
+- Do not expect `compile_flow` to embed extend-stages after loop-expansion —
+  embedding (step 0) precedes overrides, loop-expansion, and reference
+  rewriting, which then apply to extend-stages uniformly.

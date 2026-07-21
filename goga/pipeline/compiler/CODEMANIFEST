@@ -2,6 +2,7 @@ Imports:
   - Types:
       - WorkflowDocument
       - WorkflowStage
+      - WorkflowExtendStage
     Usages:
       - parse-workflow
     From: goga/pipeline/workflow
@@ -109,15 +110,25 @@ Annotations: |
   Workflow application (when `compile_flow` is called with a non-None
   workflow argument): the cell reconstructs the body per the workflow
   instructions BEFORE building the `FlowDocument`. The reconstruction is:
+  (0) extend-stages from the workflow's extend map embedded into the body
+  and positioned via before/after — BEFORE per-stage overrides,
+  loop-expansion and reference rewriting, so the existing machinery applies
+  to extend-stages uniformly. STAGES positions an extend-stage by deriving
+  its explicit depends_on from before/after; PHASES positions an
+  extend-stage by list insertion (no depends_on field on `PhaseStep`).
   (a) per-stage overrides applied in-place to the body of `PhaseStep` /
-  `StageStep`; (b) loop-expansion producing N copies with ids NAME-1..N
-  and chain-style internal depends_on; (c) external depends_on references
-  rewritten via the expanded_ids map (any reference to a base-name whose
-  loop count was >= 2 is replaced with the LAST expanded id). Unknown
-  stage names in workflow stages
-  are silently ignored with a warning (a workflow may cover multiple
-  pipelines). The agent instruction is composed into the in-container
-  wrapper path directly — the cell does NOT call any host-side resolver.
+  `StageStep` (now also matching embedded extend-stages by name);
+  (b) loop-expansion producing N copies with ids NAME-1..N and chain-style
+  internal depends_on (now also expanding extend-stages when the workflow's
+  loop override for that name is set);
+  (c) external depends_on references rewritten via the expanded_ids map
+  (now also rewriting before/after-derived refs: both after and before
+  → LAST expanded id — any reference to a loop-expanded chain points to its
+  completion). Unknown stage names in workflow stages and dangling refs in
+  extend before/after are silently ignored with a warning (a workflow may
+  cover multiple pipelines). The agent instruction is composed into the
+  in-container wrapper path directly — the cell does NOT call any host-side
+  resolver.
 
 ---
 
@@ -643,7 +654,8 @@ Annotations: |
                  not create it
     `workflow`: optional `WorkflowDocument` carrying declarative
                 instructions for extending the pipeline (top-level prompt,
-                per-stage agent/prompt/loop overrides). When None — no
+                per-stage agent/prompt/loop overrides, AND new stages via
+                extend with before/after positioning). When None — no
                 workflow is applied, the output carries no top-level prompt
                 and no per-stage overrides. Supplied by the consumer
                 (the run_pipeline routine in goga/pipeline), parsed from a
@@ -664,8 +676,70 @@ Annotations: |
     3. If the body has zero steps — raise a structural error "empty body"
     4. When `workflow` is not None — reconstruct the body per the `workflow`
        instructions (BEFORE building FlowStages):
-       a. Apply per-stage overrides (in-place mutation of the body's step
-          bodies):
+       4a0. Embed extend-stages and position them via before/after — STAGES
+            derives their explicit depends_on, PHASES inserts them into the
+            body list (only when the workflow's extend map is non-empty):
+            1. Build the set of known names: every step name/id present in
+               the body, plus every extend-stage name. The set resolves
+               cross-references between extend-stages.
+            2. For each extend-stage name and its `WorkflowExtendStage` in
+               the workflow's extend map (resolve cross-references via the
+               known-names set; a second pass or deferred resolution handles
+               extend-stages referencing not-yet-embedded extend-stages):
+               - STAGES branch (explicit depends_on via the StageStep field):
+                 a. Construct a `StageStep` whose name is the extend-stage
+                    name, whose title comes from the extend-stage body,
+                    whose depends_on is initialized from the extend-stage
+                    after (None when after is None), and whose body is the
+                    extend-stage body minus title.
+                 b. For each name in the extend-stage before (when present):
+                    append the extend-stage name to the depends_on of the
+                    existing body step whose name/id equals that name
+                    (initialize to an empty list when it had no depends_on).
+               - PHASES branch (positional insertion — `PhaseStep` carries
+                 NO depends_on field; depends_on is derived by list position
+                 in step 5):
+                 a. Construct a `PhaseStep` whose name is the extend-stage
+                    name and whose title and body come from the extend-stage
+                    body.
+                 b. Compute the insertion index from the positioning fields:
+                    immediately AFTER the step whose name/id equals the LAST
+                    resolvable after name, and/or immediately BEFORE the
+                    step whose name/id equals the FIRST resolvable before
+                    name. When both after and before are present, the index
+                    must satisfy both (after-targets precede
+                    before-targets); when inconsistent, fall back to the
+                    after-based index and emit a WARNING.
+                 c. Insert the `PhaseStep` at the computed index; subsequent
+                    steps shift down. Step 5's positional derivation then
+                    yields the correct depends_on: the extend-stage depends
+                    on its positional predecessor (the after-target, or the
+                    after-target's last loop-expanded copy once 4b runs),
+                    and each before-target gains the extend-stage as its
+                    positional predecessor. Multi-target before/after in
+                    PHASES reduces to a single positional predecessor per
+                    step, but the transitive execution order still respects
+                    every target (an extend-stage after [A, B] is placed
+                    after the last of A and B, so it runs after both via the
+                    positional chain).
+               - Dangling reference (a before/after name absent from the
+                 known-names set) — emit a WARNING via logging and skip
+                 that single reference. When ALL before/after names of a
+                 PHASES extend-stage are dangling (no resolvable position),
+                 append the extend-stage at the end of the body list with a
+                 WARNING.
+            3. Place the constructed extend-steps into the body sequence:
+               - STAGES: add the `StageStep`s to the body map, keyed by
+                 name (their explicit depends_on encodes before/after).
+               - PHASES: the `PhaseStep`s are already inserted at their
+                 computed positions; depends_on is derived purely by list
+                 position in step 5 (no explicit depends_on is carried).
+
+       4a. Apply per-stage overrides (in-place mutation of the body's step
+           bodies) — unchanged; now also matches embedded extend-stages by
+           name (AC11): for each (stage name, stage value) in `workflow`
+           stages, the agent/prompt fields apply to an extend-stage when its
+           name matches:
           - For each pair of (stage name, stage value) in `workflow` stages:
             * Find the step in the body whose name/id equals the stage name
             * If not found — silently skip with a warning (a workflow may
@@ -679,7 +753,9 @@ Annotations: |
               - when the prompt field of `WorkflowStage` is not None —
                 assign that prompt text to the description slot of the
                 step body
-       b. Build a new ordered list of steps with loop-expansion applied:
+       4b. Build a new ordered list of steps with loop-expansion applied —
+           unchanged; now also expands an extend-stage when the workflow's
+           loop override for that name is set (producing NAME-1..N):
           - Maintain an expanded-ids map from each base-name to the list
             of ids produced for it
           - For each step in the body (in source order):
@@ -702,8 +778,10 @@ Annotations: |
             subsequent copies depend on their predecessor copy by list
             position; the next ORIGINAL step after the expanded one
             naturally depends on the LAST copy via list position)
-       c. Rewrite external depends_on references (STAGES format only —
-          PHASES format is handled by position in step 5):
+       4c. Rewrite external depends_on references — unchanged mechanism,
+           now also rewriting before/after-derived refs (symmetric — both
+           point to the chain's completion). STAGES only — PHASES format is
+           handled by position in step 5:
           - For each StageStep in the new sequence with non-None
             depends_on: for each ref in depends_on:
             * When ref matches a base-name whose loop_count >= 2 — replace
@@ -714,8 +792,18 @@ Annotations: |
             * Otherwise (ref does not match any base-name in the body) —
               keep ref as-is and let afm surface a dangling-reference
               error if applicable
-       d. Replace the body's step list with the new (expanded + rewritten)
-          sequence
+          - The same LAST-expanded-id rewrite applies to
+            before/after-derived refs: a ref equal to an after name whose
+            loop_count >= 2, and a before-target's ref to the new
+            extend-stage whose loop_count >= 2, both resolve to the LAST
+            expanded id (depends_on means "runs after", so any reference
+            to a loop-expanded chain points to its LAST copy). PHASES
+            extend-stages were positionally inserted at 4a0; loop-expansion
+            at 4b chains their copies in place, so each extend-stage's
+            positional predecessor is the after-target's last expanded
+            copy — no explicit rewrite needed for PHASES.
+       4d. Replace the body's step list with the new (embedded + expanded +
+           rewritten) sequence.
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
          derived from list position (first step has none; each subsequent
@@ -787,6 +875,31 @@ Annotations: |
     - Loop-expansion for PHASES format relies on list position to chain
       expanded copies and to make the next original step depend on the last
       copy — no explicit external rewrite pass is needed
+    - When the workflow's extend map is non-empty — extend-stages are
+      embedded into the body BEFORE per-stage overrides and loop-expansion;
+      their depends_on is derived from before/after (after → the new stage's
+      depends_on; before → the new stage is added to the depends_on of each
+      named existing stage), without losing the prior dependencies of those
+      stages
+    - Dangling refs in before/after (names not in the body and not among the
+      extend-stages) are silently ignored with a warning; the remaining
+      embedding proceeds (consistent with the stages block)
+    - Cross-references between extend-stages (one extend-stage's
+      before/after names another extend-stage) are resolved
+    - After loop-expansion, before/after-derived references are rewritten
+      with the existing expanded_ids map: both after and before → LAST
+      expanded id (any reference to a loop-expanded chain points to its
+      completion, since depends_on means "runs after")
+    - In PHASES format, extend-stages carry NO explicit depends_on (PhaseStep
+      has no such field); instead they are POSITIONALLY inserted into the
+      body list (after their after-targets, before their before-targets),
+      and depends_on is derived purely by list position in step 5.
+      Multi-target before/after reduces to a single positional predecessor
+      per step; transitive execution order still respects every target
+    - extend-stages compile into ordinary `FlowStage` instances — no change
+      to `FlowDocument`, `FlowStage`, or `serialize_flow`
+    - When `workflow` is None, step 4a0 is skipped entirely (as is the whole
+      reconstruction)
     - Consumers must NOT re-invoke `parse_dsl` to obtain the agents — they
       read header agents from `PipelineDocument` returned by this routine
     - Default stage-field injection: a step body with no usable agents
@@ -834,6 +947,20 @@ Annotations: |
     - Do not inject defaults when the source step body carries a non-empty
       agents value — authored agents always wins; the compiler must not
       second-guess the user's choice of agents
+    - Do not embed extend-stages after loop-expansion — the order
+      4a0 → 4a → 4b → 4c is mandatory (correctness of the symmetric
+      before/after → LAST expanded-id rewriting in STAGES, and of PHASES
+      positional insertion preceding loop-expansion, depends on it)
+    - Do not add a depends_on field to PhaseStep or carry explicit depends_on
+      for PHASES extend-stages — PHASES positioning is achieved by list
+      insertion only (positional derivation in step 5)
+    - Do not validate before/after refs for dangling ids, cycles, or
+      duplicates — afm's responsibility (as for ordinary depends_on)
+    - Do not change the stages block contract — overrides/loop/silent-skip
+      of unknown names are unchanged
+    - Do not leak embedded extend-stages into `PipelineDocument` body — it
+      stays a faithful mirror of the original parsed body (as for the current
+      workflow-reconstructed stages)
 
 ---
 

@@ -23,22 +23,29 @@ if workflow.prompt is not None:
 
 for stage_name, stage in workflow.stages.items():
     print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}")
+
+for name, extend_stage in workflow.extend.items():
+    print(f"extend {name}: before={extend_stage.before}, after={extend_stage.after}")
 ```
 
 ## Parameters
 
 - `workflow_path: Path` — absolute path to the workflow-file. The file must
-  be a YAML document whose root is a mapping containing up to two optional
-  keys: `prompt` (a string) and `stages` (a mapping of stage-name to override
-  object).
+  be a YAML document whose root is a mapping containing up to three optional
+  keys: `prompt` (a string), `stages` (a mapping of stage-name to override
+  object), and `extend` (a mapping of stage-name to new-stage extend-entry).
 
 ## Return value
 
-A `WorkflowDocument` with two fields:
+A `WorkflowDocument` with three fields:
 
 - `prompt: str | None` — top-level prompt text, or `None` when the file has no `prompt:`
 - `stages: dict[str, WorkflowStage]` — map of per-stage overrides keyed by
   stage name; an empty map when the file has no `stages:`
+- `extend: dict[str, WorkflowExtendStage]` — map of new-stage extend-instructions
+  keyed by stage name; an empty map when the file has no `extend:`. Each
+  `WorkflowExtendStage` exposes `before: list[str] | None`,
+  `after: list[str] | None`, and `body: dict[str, Any]`.
 
 Each `WorkflowStage` exposes:
 
@@ -55,8 +62,11 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 
 - `workflow_path` must point to an existing readable file.
 - The file must be a valid YAML document with a mapping root.
-- Top-level allowed keys: `prompt`, `stages`. Any other top-level key raises
-  a structural error.
+- Top-level allowed keys: `prompt`, `stages`, `extend`. Any other top-level
+  key raises a structural error.
+- An extend-entry forbids `depends_on` (structural error), requires at least
+  one of `before`/`after`, and `before`/`after` (when present) must be
+  `list[str]`.
 - Per-stage allowed keys: `agent`, `prompt`, `loop`. Any other stage key
   raises a structural error.
 - `loop` must be `int >= 1`. Zero, negative values, and non-int types raise a
@@ -69,16 +79,22 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 | `workflow_path` does not exist or is unreadable | `FileNotFoundError` / `PermissionError` (propagated) |
 | Invalid YAML | structural error "invalid YAML in workflow-file" |
 | YAML root is not a mapping | structural error "workflow must be a mapping" |
-| Top-level key not in {prompt, stages} | structural error "unknown key in workflow: <key>; valid keys: prompt, stages" |
+| Top-level key not in {prompt, stages, extend} | structural error "unknown key in workflow: <key>; valid keys: prompt, stages, extend" |
 | `prompt` is not a `str` | structural error "non-str value in workflow.prompt" |
 | `stages` is not a `dict` | structural error "non-mapping stages block in workflow" |
+| `extend` is not a `dict` | structural error "non-mapping extend block in workflow" |
 | Stage entry is not a `dict` | structural error "non-mapping stage '<name>' in workflow.stages" |
 | Stage key not in {agent, prompt, loop} | structural error "unknown key in workflow.stages.<name>: <key>; valid keys: agent, prompt, loop" |
 | `agent` is not a `str` | structural error "non-str value in workflow.stages.<name>.agent" |
 | Stage `prompt` is not a `str` | structural error "non-str value in workflow.stages.<name>.prompt" |
 | `loop` is not an `int` | structural error "non-int value in workflow.stages.<name>.loop" |
 | `loop < 1` | structural error "loop must be >= 1 in workflow.stages.<name>" |
-| Both `prompt` absent and no stage entries | structural error "empty workflow — provide at least prompt or one stage" |
+| Extend entry value is not a `dict` | structural error "non-mapping extend entry `<name>` in workflow.extend" |
+| Extend entry contains `depends_on` | structural error "depends_on is forbidden in workflow.extend.<name>" |
+| `before` not a `list[str]` | structural error "non-list-of-str before in workflow.extend.<name>" |
+| `after` not a `list[str]` | structural error "non-list-of-str after in workflow.extend.<name>" |
+| Neither `before` nor `after` present | structural error "extend entry `<name>` requires at least one of before/after" |
+| `prompt` absent, no stage entries, and no extend entries | structural error "empty workflow — provide at least prompt, one stage, or one extend entry" |
 
 ## Example workflow-file
 
@@ -96,11 +112,24 @@ stages:
   propose-review:
     loop: 2
     agent: claude
+
+extend:
+  extra-check:
+    after: [propose-review]
+    title: Extra check
+    prompt: |
+      Additional verification stage inserted after propose-review
+  warmup:
+    before: [propose]
+    title: Warmup
 ```
 
 All three per-stage fields (`agent`, `prompt`, `loop`) are optional. The `stages`
-section may be absent entirely. The top-level `prompt` may also be absent — but
-a workflow providing neither is rejected.
+section may be absent entirely. The top-level `prompt` may also be absent. An
+`extend:` entry carries `before`/`after` (at least one required; `depends_on`
+forbidden) plus any stage body fields (`title`, `prompt`, `skills`, `agents`,
+`interactive`, …) passed through verbatim. A workflow providing none of
+`prompt`, `stages`, or `extend` is rejected.
 
 ## Anti-patterns
 
@@ -117,6 +146,9 @@ a workflow providing neither is rejected.
 - Do not expect `parse_workflow` to rewrite `depends_on` references. The
   workflow supplies instructions; the compiler rebuilds the pipeline body
   accordingly.
+- Do not expect `parse_workflow` to embed extend-stages or derive
+  `depends_on` — it returns positioning instructions (`before`/`after`); the
+  compiler embeds the stage and derives `depends_on`.
 - Do not call `parse_workflow` on the host. The workflow-file is read and
   parsed inside the goga container
   (`/workspace/.goga/workflows/<name>.yml`); the host performs only the
