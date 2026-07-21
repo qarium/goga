@@ -1,16 +1,21 @@
 """Contract tests for the ``WorkflowDocument`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the two declared properties (``prompt`` and
-``stages``), the ``prompt=None`` / ``stages={}`` defaults (the factory is
-applied at construction, so the default ``stages`` is an empty dict, not
-None), and kw_only construction with explicit stages. These tests pin the
+importability from the facade, the three declared properties (``prompt``,
+``stages``, and ``extend``), the ``prompt=None`` / ``stages={}`` /
+``extend={}`` defaults (the factories are applied at construction, so the
+default ``stages``/``extend`` are empty dicts, not None), and kw_only
+construction with explicit stages and extend maps. These tests pin the
 contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
 
-from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
+from goga.pipeline.workflow import (
+    WorkflowDocument,
+    WorkflowExtendStage,
+    WorkflowStage,
+)
 
 
 class TestWorkflowDocumentContract:
@@ -55,3 +60,26 @@ class TestWorkflowDocumentContract:
         assert document.prompt == "guidance"
         assert document.stages == stages
         assert document.stages["propose"].agent == "codex"
+
+    def test_workflow_document_has_extend_property(self) -> None:
+        """WorkflowDocument exposes an ``extend`` property."""
+        document = WorkflowDocument()
+
+        assert hasattr(document, "extend")
+
+    def test_workflow_document_default_extend_is_empty_dict(self) -> None:
+        """The default ``extend`` is an empty dict — the factory is applied at construction."""
+        document = WorkflowDocument()
+
+        assert document.extend == {}
+        # Factory default, not the None DSL representation.
+        assert document.extend is not None
+
+    def test_workflow_document_constructible_kw_only_with_explicit_extend(self) -> None:
+        """WorkflowDocument accepts extend as a keyword-only argument and stores the map."""
+        extend = {"extra": WorkflowExtendStage(after=["review"], body={"title": "Extra"})}
+        document = WorkflowDocument(extend=extend)
+
+        assert set(document.extend) == {"extra"}
+        assert document.extend["extra"].after == ["review"]
+        assert document.extend["extra"].body == {"title": "Extra"}
