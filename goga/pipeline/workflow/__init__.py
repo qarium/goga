@@ -14,10 +14,12 @@ entry. With the parser landed, the contract names ``parse_workflow``,
 
 from .parse_workflow import WorkflowSyntaxError, parse_workflow
 from .workflow_document import WorkflowDocument
+from .workflow_extend_stage import WorkflowExtendStage
 from .workflow_stage import WorkflowStage
 
 __all__: list[str] = [
     "WorkflowDocument",
+    "WorkflowExtendStage",
     "WorkflowStage",
     "WorkflowSyntaxError",
     "parse_workflow",
