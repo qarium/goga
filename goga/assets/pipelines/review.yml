@@ -1,0 +1,45 @@
+name: GogaAnalyze
+description: Analyze project
+---
+
+- name: conventions
+  title: Find drift between conventions and source and fix it
+  interactive: true
+  agents:
+    - planning
+    - implementation
+    - review
+  prompt: |
+    Detect deviations from the conventions in the change scope and fix them.
+
+    `change scope`: the set of changed lines under review — the diff against the default branch, or an explicitly selected scope provided by the user.
+
+    Requirements:
+    - Read the convention `.goga/usages/conventions.md` before scanning the `change scope`
+    - For each deviation, produce a finding with: `location` (file and line range), `convention` (the backtick rule from `.goga/usages/conventions.md` it violates), and `severity`
+    - Fix only the deviations within the `change scope` confirmed by the user
+
+    Constraints:
+    - Do not decide on the default branch when it is ambiguous (main, master, etc...)
+    - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
+
+- name: lint-and-tests
+  title: Check and fix lint/format/tests
+  agents:
+    - planning
+    - implementation
+    - review
+  prompt: |
+    Run lint, format, and tests in accordance with the convention `.goga/usages/conventions.md`.
+
+    Requirements:
+    - Fix every error detected by lint, format, or tests, independent of scope and independent of the root cause that introduced it
+    - If the convention does not define how lint, format, and tests are executed, ask the user to specify the verification procedure
+
+    Constraints:
+    - Do not ignore any error; the branch must remain green on CI
+
+- name: commit-changes
+  title: Commit changes after review
+  prompt: |
+    Commit all untracked changes
