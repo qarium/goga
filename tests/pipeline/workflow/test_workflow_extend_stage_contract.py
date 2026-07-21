@@ -10,7 +10,6 @@ pin the contract surface — behavior lives in the logic test module.
 from __future__ import annotations
 
 import pytest
-
 from goga.pipeline.workflow import WorkflowExtendStage
 
 

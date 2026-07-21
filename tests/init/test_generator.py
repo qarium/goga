@@ -82,8 +82,14 @@ class TestLogic:
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions for code rules.",
         )
+        mock_response = MagicMock()
+        mock_response.text = "# Python conventions"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+
         gen = self._make_gen(tmp_path)
-        gen.generate_goga_config(config)
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
+            gen.generate_goga_config(config)
 
         config_path = tmp_path / ".goga" / "config.yml"
         assert config_path.exists()
@@ -378,9 +384,15 @@ class TestNewSchema:
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions.",
         )
+        mock_response = MagicMock()
+        mock_response.text = "# Python conventions"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        gen.generate_goga_config(config)
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
+            gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         canonical = ["language", "image", "commands", "build", "pipeline", "codemanifest"]
@@ -398,9 +410,15 @@ class TestNewSchema:
             codemanifest_usages={"conventions": ".goga/usages/conventions.md"},
             codemanifest_annotations="Use conventions.",
         )
+        mock_response = MagicMock()
+        mock_response.text = "# Python conventions"
+        mock_response.status_code = 200
+        mock_response.raise_for_status = MagicMock()
+
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        gen.generate_goga_config(config)
+        with patch("goga.init.generator.requests.get", return_value=mock_response):
+            gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert list(data.keys()) == ["language", "image", "dockerfile", "build", "pipeline", "codemanifest"]

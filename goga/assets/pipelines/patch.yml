@@ -10,9 +10,6 @@ description: "Refactoring or miniman changes"
 
 - name: commit-changes
   title: "Commit changes"
-  agents:
-    - planning
-    - implementation
   prompt: |
     Commit all untracked changes
 

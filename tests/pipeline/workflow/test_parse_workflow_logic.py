@@ -329,9 +329,7 @@ class TestParseWorkflowNegative:
         ["codex", "[1, 2]", "[true]"],
         ids=["scalar", "list-of-int", "list-of-bool"],
     )
-    def test_parse_workflow_rejects_extend_before_non_list_of_str(
-        self, tmp_path: Path, before_yaml: str
-    ) -> None:
+    def test_parse_workflow_rejects_extend_before_non_list_of_str(self, tmp_path: Path, before_yaml: str) -> None:
         """A non-list[str] before raises WorkflowSyntaxError('non-list-of-str before ...')."""
         workflow_path = _write(
             tmp_path,
@@ -347,9 +345,7 @@ class TestParseWorkflowNegative:
         ["codex", "[1, 2]", "[true]"],
         ids=["scalar", "list-of-int", "list-of-bool"],
     )
-    def test_parse_workflow_rejects_extend_after_non_list_of_str(
-        self, tmp_path: Path, after_yaml: str
-    ) -> None:
+    def test_parse_workflow_rejects_extend_after_non_list_of_str(self, tmp_path: Path, after_yaml: str) -> None:
         """A non-list[str] after raises WorkflowSyntaxError('non-list-of-str after ...')."""
         workflow_path = _write(
             tmp_path,

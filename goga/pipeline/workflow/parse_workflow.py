@@ -105,9 +105,7 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     extend = _build_extend(extend_raw)
 
     if prompt is None and not stages and not extend:
-        raise WorkflowSyntaxError(
-            "empty workflow — provide at least prompt, one stage, or one extend entry"
-        )
+        raise WorkflowSyntaxError("empty workflow — provide at least prompt, one stage, or one extend entry")
 
     return WorkflowDocument(prompt=prompt, stages=stages, extend=extend)
 
@@ -310,5 +308,12 @@ def _is_list_of_str(value: Any) -> bool:
     ``False``, so ``all(isinstance(x, str) for x in value)`` already yields
     ``False`` for ``[True]``. Mirrors the ``loop``-type check that rejects
     ``bool`` first in ``_build_stage``.
+
+    Args:
+        value: The candidate value to type-check.
+
+    Returns:
+        ``True`` when ``value`` is a ``list`` whose every element is a ``str``,
+        else ``False``.
     """
     return isinstance(value, list) and all(isinstance(element, str) for element in value)

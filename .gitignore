@@ -224,3 +224,6 @@ docs/design/
 docs/arch/
 docs/tasks/
 docs/superpowers/
+
+# Orchestration run artifacts
+/plan.md

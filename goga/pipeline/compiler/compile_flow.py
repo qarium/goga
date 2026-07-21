@@ -40,8 +40,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage
-
+from ..workflow import WorkflowDocument, WorkflowExtendStage
 from .body_format import BodyFormat
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
@@ -372,13 +371,14 @@ def _embed_extend_stages_stages(
             StageStep(name=name, title=title, depends_on=depends_on, body=body_for_step),
         )
     by_name = {step.name: step for step in steps}
+
     for name, ext in workflow.extend.items():
         for bname in ext.before or []:
             target = by_name.get(bname)
             if target is None:
                 logger.warning(
-                    "compile_flow: extend before ref %r not found; skipping",
-                    bname,
+                    "compile_flow: extend before ref not found; skipping",
+                    extra={"extend_stage": name, "before_ref": bname},
                 )
                 continue
             if target.depends_on is None:
@@ -415,11 +415,12 @@ def _resolve_phases_insert_index(
     """
     after_index = (max(after_positions) + 1) if after_positions else None
     before_index = min(before_positions) if before_positions else None
+
     if after_index is not None and before_index is not None:
         if after_index > before_index:
             logger.warning(
-                "compile_flow: extend %r after/before inconsistent; using after",
-                name,
+                "compile_flow: extend after/before inconsistent; using after",
+                extra={"extend_stage": name},
             )
         return after_index, False
     if after_index is not None:
@@ -427,8 +428,8 @@ def _resolve_phases_insert_index(
     if before_index is not None:
         return before_index, True
     logger.warning(
-        "compile_flow: extend %r has no resolvable position; appending at end",
-        name,
+        "compile_flow: extend has no resolvable position; appending at end",
+        extra={"extend_stage": name},
     )
     return len_steps, False
 
@@ -464,6 +465,7 @@ def _embed_extend_stages_phases(
             outside this set are treated as dangling.
     """
     pending: list[tuple[str, WorkflowExtendStage]] = list(workflow.extend.items())
+
     while pending:
         placed_names = {step.name for step in steps}
         next_pending: list[tuple[str, WorkflowExtendStage]] = []
@@ -477,6 +479,7 @@ def _embed_extend_stages_phases(
         # are exempt — their target shifts forward on each insert, advancing the
         # index naturally (see ``test_compile_flow_phases_extend_same_anchor_preserves_author_order``).
         after_inserts_at_index: dict[int, int] = {}
+
         for name, ext in pending:
             after_targets = ext.after or []
             before_targets = ext.before or []
@@ -504,8 +507,8 @@ def _embed_extend_stages_phases(
         if not progress:
             for name, ext in pending:
                 logger.warning(
-                    "compile_flow: extend %r unresolved cycle; appending at end",
-                    name,
+                    "compile_flow: extend unresolved cycle; appending at end",
+                    extra={"extend_stage": name},
                 )
                 title, body_for_step = _extend_step_title_and_body(name, ext)
                 steps.append(PhaseStep(name=name, title=title, body=body_for_step))
@@ -538,6 +541,7 @@ def _embed_extend_stages(
     if not workflow.extend:
         return
     known_names = {step.name for step in steps} | set(workflow.extend)
+
     if fmt is BodyFormat.STAGES:
         _embed_extend_stages_stages(steps, workflow)
     else:

@@ -385,9 +385,7 @@ class TestLogic:
         for language, images in _IMAGE_MAP.items():
             assert images, f"Language '{language}' has no image entries"
             for image in images:
-                assert image.endswith(":1.1"), (
-                    f"Image '{image}' for language '{language}' must use the :1.1 tag"
-                )
+                assert image.endswith(":1.1"), f"Image '{image}' for language '{language}' must use the :1.1 tag"
 
     def test_questionnaire_ask_goga_config_duplicate_usage_name_skipped(self) -> None:
         prompts = iter(

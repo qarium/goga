@@ -78,9 +78,6 @@ description: "Feature implementation"
 - name: commit-changes
   title: "Commit changes and wait for the coding plan was built"
   interactive: true
-  agents:
-    - planning
-    - implementation
   prompt: |
     Steps:
       1. Commit all untracked changes.

@@ -25,6 +25,7 @@ description: Analyze project
 
 - name: lint-and-tests
   title: Check and fix lint/format/tests
+  interactive: true
   agents:
     - planning
     - implementation
