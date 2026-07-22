@@ -85,12 +85,12 @@ Rules:
 ### Workflow `agent` — choosing the CLI agent
 
 > **Two different `agent` concepts.** The pipeline-file stage field
-> `agents` (plural) names the **roles** that organize the work inside a
-> stage — `planning`, `implementation`, `review`, `summary`. See
-> [Agent modes](pipeline-file.md#agent-modes). The workflow-file stage
-> field `agent` (singular) is a different concept: it names the **CLI
-> agent** that runs the stage — `claude`, `codex`, `opencode`, or any
-> other installed wrapper. The two are orthogonal.
+> `roles` names the **roles** that organize the work inside a stage —
+> `planner`, `executor`, `reviewer` (plus the always-on `summary`
+> report). See [stage modes](pipeline-file.md#roles). The workflow-file
+> stage field `agent` (singular) is a different concept: it names the
+> **CLI agent** that runs the stage — `claude`, `codex`, `opencode`, or
+> any other installed wrapper. The two are orthogonal.
 
 A workflow's per-stage `agent` field lets the **same pipeline run different
 stages on different CLI agents**. This is what makes a pipeline portable
@@ -201,7 +201,7 @@ stage body are separate concerns:
   least one of the two must be present — an entry with neither is rejected.
 - `agent` and `loop` are optional **default overrides** extracted from the
   entry (see [Inline agent and loop overrides](#inline-agent-and-loop-overrides)).
-- Everything else in the entry (`title`, `prompt`, `skills`, `agents`,
+- Everything else in the entry (`title`, `prompt`, `skills`, `roles`,
   `interactive`, or any other stage field) is the **verbatim body** of the new
   stage. It is carried through unchanged and embedded as an ordinary stage in
   the compiled output. `before`, `after`, `agent`, `loop`, and `depends_on` are
@@ -441,14 +441,14 @@ For example, if stage `review` has `loop: 2` and another stage declares
 
 After overrides and expansion, the compiler resolves the agent mode for
 every stage the same way the no-workflow path does: a stage without an
-authored non-empty `agents` value runs in autonomous mode, and a stage
-with an authored non-empty `agents` value runs in coordinated mode. See
-[Agent modes](pipeline-file.md#agent-modes) for the functional description
+authored non-empty `roles` value runs in autonomous mode, and a stage
+with an authored non-empty `roles` value runs in coordinated mode. See
+[stage modes](pipeline-file.md#roles) for the functional description
 of each mode.
 
 A workflow-applied `command` override (from a per-stage `agent` field) and
 the stage's own agent-mode resolution are independent — the override
-selects which agent binary runs the stage, while the `agents` field
+selects which agent binary runs the stage, while the `roles` field
 selects how the work is organized inside it.
 
 ## Invocation modes

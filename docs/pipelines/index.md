@@ -60,7 +60,7 @@ Each pipeline-file is compiled into a flow-file in a deterministic two-stage
 process owned by the `goga/pipeline/compiler` cell:
 
 1. **Parse** — `parse_dsl` reads the pipeline-file, validates the header
-   (`name`, `description`, optional `agents`), and detects the body format
+   (`name`, `description`, optional `roles`), and detects the body format
    (phases list or stages map).
 2. **Serialize** — `serialize_flow` applies per-format `depends_on` rules,
    merges any workflow overrides, embeds any `extend` stages, performs loop

@@ -16,7 +16,7 @@ goga pipeline <name>    # run mode: run a pipeline by name (in-container)
 The `pipeline` command is a single Click command (not a group). Its behavior depends on whether a name is given:
 
 - **Without `name` (discovery mode):** launches the goga Docker image running `python -m goga.pipeline list`, which prints the `Available pipelines:` header followed by one pipeline per line. Project pipelines are annotated with `(project)`; user pipelines are printed bare.
-- **With `name` (run mode):** allocates a free localhost port, writes a private afm-config tmpfile (`client.command: <resolved wrapper path>` — the absolute `resolve_wrapper_path(config.pipeline.agent)` value, never a bare agent name) mounted read-only at the fixed path `/home/goga/.afm/config.yaml`, ensures a persistent afm state host directory exists (wiping it first when `--clean` is set) and mounts it read-write at `/home/goga/pipeline`, writes a private env-file combining `config.pipeline.env` with git identity, `extra_env`, `AFM_DIR=/home/goga/pipeline`, the workflow env vars (see [Workflow files](#workflow-files)), and — when a proxy is set — the proxy env vars, prints a workflow log line when a workflow is applied, and launches the goga Docker image running `python -m goga.pipeline run <name> --port <port>`. Credential files for claude/codex/opencode are detected on the host and bind-mounted read-only into the container automatically. Inside the container `goga.pipeline` resolves the pipeline to its absolute path, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `agents` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and invokes `afm run --port <port> <compiled-flow-path>`. The container's exit code is propagated via `ctx.exit`.
+- **With `name` (run mode):** allocates a free localhost port, writes a private afm-config tmpfile (`client.command: <resolved wrapper path>` — the absolute `resolve_wrapper_path(config.pipeline.agent)` value, never a bare agent name) mounted read-only at the fixed path `/home/goga/.afm/config.yaml`, ensures a persistent afm state host directory exists (wiping it first when `--clean` is set) and mounts it read-write at `/home/goga/pipeline`, writes a private env-file combining `config.pipeline.env` with git identity, `extra_env`, `AFM_DIR=/home/goga/pipeline`, the workflow env vars (see [Workflow files](#workflow-files)), and — when a proxy is set — the proxy env vars, prints a workflow log line when a workflow is applied, and launches the goga Docker image running `python -m goga.pipeline run <name> --port <port>`. Credential files for claude/codex/opencode are detected on the host and bind-mounted read-only into the container automatically. Inside the container `goga.pipeline` resolves the pipeline to its absolute path, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and invokes `afm run --port <port> <compiled-flow-path>`. The container's exit code is propagated via `ctx.exit`.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -72,16 +72,16 @@ If the name exists in both sources, the project source wins. The container exit 
 
 ### Custom agent prompts
 
-A pipeline-file header may carry an optional `agents` block with four fixed keys — `planning`, `implementation`, `review`, `summary` — each an inline prompt that fully **replaces** (does not merge with) the corresponding shipped default prompt (`goga/assets/afm/prompts/<key>.md`):
+A pipeline-file header may carry an optional `roles` block with three fixed keys — `planner`, `executor`, `reviewer` — each an inline prompt that fully **replaces** (does not merge with) the corresponding shipped default prompt (`goga/assets/afm/prompts/<stem>.md`, where the planner/executor/reviewer keys map to the planning/implementation/review stems). The `summary` prompt is not overridable — it is always the shipped default.
 
 ```yaml
 name: deploy
 description: Deploy pipeline
-agents:
-  planning: |
-    You are the planning agent for this deploy pipeline.
+roles:
+  planner: |
+    You are the planner for this deploy pipeline.
     Break the work into reviewable steps.
-  review: |
+  reviewer: |
     Review each change against the deploy checklist.
 ---
 
@@ -90,9 +90,9 @@ agents:
   prompt: Build it
 ```
 
-Only those four keys are valid; an unknown key, a non-string value, or a non-mapping `agents` block is rejected as a structural DSL error at compile time (before any prompt file is written). When the block is absent or empty, the four shipped defaults are used unchanged. The overrides are a goga-side artifact and are not carried into the compiled flow-file.
+Only those three keys are valid; an unknown key (including `summary`), a non-string value, a non-mapping `roles` block, or the legacy `agents` key is rejected as a structural DSL error at compile time (before any prompt file is written). When the block is absent or empty, the three shipped defaults are used unchanged (`summary.md` is always copied from its default). The overrides are a goga-side artifact and are not carried into the compiled flow-file.
 
-At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mounted at `/home/goga/pipeline/prompts`) before `afm` starts, and `afm` reads them through the `prompts_dir` field in its config. That `prompts/` directory is wiped and rebuilt from the defaults plus any `agents` overrides on every run, so files manually placed there do not persist.
+At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mounted at `/home/goga/pipeline/prompts`) before `afm` starts, and `afm` reads them through the `prompts_dir` field in its config. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
 
 ### Workflow files
 
@@ -146,7 +146,7 @@ Run mode mounts a host directory at `/home/goga/pipeline` inside the container a
 
 It is created before launch and is **not** deleted on exit. Use `--clean` to wipe it before launch when you want a fresh run.
 
-Note that the `prompts/` subdirectory inside it is regenerated on every run (wiped and rebuilt from the shipped defaults plus any `agents` overrides) — it does not persist user-placed content even though the parent directory survives across runs.
+Note that the `prompts/` subdirectory inside it is regenerated on every run (wiped and rebuilt from the shipped defaults plus any `roles` overrides) — it does not persist user-placed content even though the parent directory survives across runs.
 
 ### Proxy and hosts
 

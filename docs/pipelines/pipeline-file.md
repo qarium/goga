@@ -25,7 +25,7 @@ Every pipeline-file is a two-segment YAML document separated by a `---` line:
 ```
 
 - The **header** is a YAML mapping with `name`, `description`, and an
-  optional `agents` block (see [Agents](#agents)).
+  optional `roles` block (see [Roles](#roles)).
 - The **body** is either a YAML **list** (phases format) or a YAML **dict**
   (stages format).
 
@@ -37,16 +37,16 @@ structural error.
 ```yaml
 name: GogaFeature
 description: "Feature implementation"
-agents:        # optional block — see "Agents"
-  planning: |
-    Inline prompt that replaces the shipped default for the planning agent.
+roles:         # optional block — see "Roles"
+  planner: |
+    Inline prompt that replaces the shipped default for the planner role.
 ```
 
 | Field         | Type   | Required | Description                                            |
 |---------------|--------|----------|--------------------------------------------------------|
 | `name`        | string | yes      | Pipeline identifier, must be non-empty                 |
 | `description` | string | yes      | Short human-readable purpose                           |
-| `agents`      | map   | no       | Inline overrides for the four agent prompts. See [Agents](#agents). |
+| `roles`       | map   | no       | Inline overrides for the three role prompts. See [Roles](#roles). |
 
 A header missing `name` or `description` is rejected with a structural
 error.
@@ -126,7 +126,7 @@ assigned semantics:
 | `interactive` | bool             | false                       | Whether the stage prompts for user input.                                    |
 | `prompt`      | string           | —                           | Stage-level prompt text; emitted as the compiled `prompt` field.             |
 | `skills`      | list of strings  | —                           | Skills the agent must apply at this stage.                                   |
-| `agents`      | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Agents](#agents).                    |
+| `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
 
 ### Body step `title` field
@@ -142,9 +142,9 @@ that cover the most common authoring lifecycles. See
 [Shipped Pipelines](shipped.md) for the per-pipeline walkthrough and how
 to use them as templates.
 
-## Agents
+## Roles
 
-The pipeline-file carries `agents` in **two distinct places**, and they
+The pipeline-file carries `roles` in **two distinct places**, and they
 serve different purposes. A third `agent` concept exists in
 [workflow-files](workflows.md#workflow-agent--choosing-the-cli-agent) and
 is intentionally different — see the comparison at the end of this
@@ -152,86 +152,95 @@ section.
 
 | Where                    | Field     | Type            | Purpose                                                              |
 |--------------------------|-----------|-----------------|----------------------------------------------------------------------|
-| Header                   | `agents`  | map             | Replace shipped default **prompts** for the four agent roles.        |
-| Body stage               | `agents`  | list of strings | Choose which agent **roles** run the stage (its mode).               |
+| Header                   | `roles`   | map             | Replace shipped default **prompts** for the three authorable roles.  |
+| Body stage               | `roles`   | list of strings | Choose which **roles** run the stage (its mode).                     |
 | Workflow-file stage      | `agent`   | string          | Choose which **CLI agent** runs the stage (e.g. codex, claude).      |
 
 The rest of this section covers the first two — both live in the
 pipeline-file. The third is documented in [Workflows](workflows.md).
 
-### The four agent roles
+### The agent roles
 
 When a stage runs in **coordinated mode** (see below), the roles in its
-`agents` list execute in sequence — each role's output becomes the next
-role's input. Goga ships a default prompt for each of the four roles:
+`roles` list execute in sequence — each role's output becomes the next
+role's input. You author the three overridable roles by alias; the
+compiler maps each alias to the afm agent name (and the matching shipped
+prompt file):
 
-| Role            | Responsibility                                                                                              |
-|-----------------|-------------------------------------------------------------------------------------------------------------|
-| `planning`      | Read the task, decompose it into a verifiable plan, hand off. Does not execute the work.                    |
-| `implementation`| Execute the plan task-by-task, including any required research, code, or analysis. Produces the deliverable.|
-| `review`        | Verify the deliverable against the plan and acceptance criteria. Approves or requests changes.             |
-| `summary`       | Produce the final report for the run, covering every stage.                                                |
+| Author as (alias) | afm agent / prompt stem | Responsibility                                                                                              |
+|-------------------|-------------------------|-------------------------------------------------------------------------------------------------------------|
+| `planner`         | `planning`              | Read the task, decompose it into a verifiable plan, hand off. Does not execute the work.                    |
+| `executor`        | `implementation`        | Execute the plan task-by-task, including any required research, code, or analysis. Produces the deliverable.|
+| `reviewer`        | `review`                | Verify the deliverable against the plan and acceptance criteria. Approves or requests changes.             |
+
+A fourth afm role, **`summary`**, produces the final report for the run,
+covering every stage. It is **not** an authorable role: it never appears
+as a key in the header `roles` block, and its prompt file (`summary.md`)
+is always materialized from the shipped default. (`summary` may still be
+listed in a stage's `roles` field — like any non-alias value it passes
+through to the afm `agents` list verbatim — but it is never an override
+target.)
 
 #### What each role does
 
-**`planning`** decomposes the incoming task into an actionable plan with
-three sections: a numbered task list, the assumptions made along the way,
-and explicit acceptance criteria the work must meet. It does not perform
-the work itself — it hands the plan to the next role. It makes decisions
-autonomously rather than asking questions, and documents every non-obvious
-choice under assumptions.
+**`planner`** (`planning`) decomposes the incoming task into an actionable
+plan with three sections: a numbered task list, the assumptions made along
+the way, and explicit acceptance criteria the work must meet. It does not
+perform the work itself — it hands the plan to the next role. It makes
+decisions autonomously rather than asking questions, and documents every
+non-obvious choice under assumptions.
 
-**`implementation`** executes the plan top to bottom. For each task it
-decides the nature of the work — research, analysis, code, discussion —
-and acts accordingly. It runs the acceptance criteria checks before
-declaring the stage complete, and produces an honest report (not a false
-"done") when a criterion cannot be met.
+**`executor`** (`implementation`) executes the plan top to bottom. For
+each task it decides the nature of the work — research, analysis, code,
+discussion — and acts accordingly. It runs the acceptance criteria checks
+before declaring the stage complete, and produces an honest report (not a
+false "done") when a criterion cannot be met.
 
-**`review`** audits the deliverable against the plan: every task actually
-done, every acceptance criterion met, the result matching the intent of
-the prompt, edge cases handled. It returns a single verdict — `approved`
-or `needs_changes` — with a list of critical blockers and a list of
-non-blocking suggestions.
+**`reviewer`** (`review`) audits the deliverable against the plan: every
+task actually done, every acceptance criterion met, the result matching
+the intent of the prompt, edge cases handled. It returns a single verdict
+— `approved` or `needs_changes` — with a list of critical blockers and a
+list of non-blocking suggestions.
 
 **`summary`** reads the logs of every stage in the run and produces a
 final report: a one-paragraph overview, a per-stage breakdown of what
-happened, and any open issues carried over from review.
+happened, and any open issues carried over from review. Because it is not
+an authorable role, its prompt is always the shipped default.
 
-### Body stage `agents` — choosing the stage mode
+### Body stage `roles` — choosing the stage mode
 
-The per-stage `agents` field is a list of role names. A stage runs in one
+The per-stage `roles` field is a list of role aliases. A stage runs in one
 of two modes depending on whether the list is non-empty:
 
-- **Autonomous mode** — `agents` is absent, `null`, or an empty list `[]`.
+- **Autonomous mode** — `roles` is absent, `null`, or an empty list `[]`.
   The stage receives its task and decides for itself how to organize the
   work: which steps to take, in which order, and when the result is
   complete. Use this for stages that should not be decomposed ahead of
   time — research, free-form authoring, exploratory analysis.
-- **Coordinated mode** — `agents` is a non-empty list (e.g.
-  `[planning, implementation]`). The listed roles run in sequence and
-  organize the work for the incoming task: the `planning` agent decomposes
-  the task into a verifiable plan, the `implementation` agent executes
-  that plan, the `review` agent validates the result, and the `summary`
-  agent produces the final report. Use this for stages where you want
-  predictable, reviewable execution — feature builds, bug fixes, anything
-  with acceptance criteria.
+- **Coordinated mode** — `roles` is a non-empty list (e.g.
+  `[planner, executor]`). The listed roles run in sequence and organize
+  the work for the incoming task: the `planner` decomposes the task into a
+  verifiable plan, the `executor` executes that plan, the `reviewer`
+  validates the result, and the `summary` role produces the final report.
+  Use this for stages where you want predictable, reviewable execution —
+  feature builds, bug fixes, anything with acceptance criteria.
 
 The two modes are mutually exclusive per stage — there is no hybrid.
-Authoring even a single-element list (`agents: [planning]`) is enough to
+Authoring even a single-element list (`roles: [planner]`) is enough to
 switch the stage into coordinated mode; an authored non-empty value
 always wins.
 
 #### Choosing between modes
 
-- Leave `agents` out for stages whose work cannot be planned ahead of
+- Leave `roles` out for stages whose work cannot be planned ahead of
   time — exploratory research, free-form authoring, asking a question.
-- Author `agents` for stages whose work is structurally predictable —
+- Author `roles` for stages whose work is structurally predictable —
   building a feature, fixing a bug, anything where you want a plan,
   execution, review, and a final report.
 
 #### Examples
 
-**Autonomous mode** — no `agents` field. The stage receives the prompt and
+**Autonomous mode** — no `roles` field. The stage receives the prompt and
 organizes the work itself:
 
 ```yaml
@@ -242,102 +251,106 @@ organizes the work itself:
     in this codebase and summarize what you find.
 ```
 
-**Coordinated mode** — `planning` and `implementation` roles assigned. The
-stage decomposes the task into a plan, then executes it:
+**Coordinated mode** — `planner` and `executor` roles assigned. The stage
+decomposes the task into a plan, then executes it:
 
 ```yaml
 - name: ship
   title: "Build and ship artifacts"
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Build the artifacts for the current branch and ship them.
 ```
 
-**Full lifecycle** — all four roles. Useful for stages where you want
-end-to-end verification:
+**Full lifecycle** — all three authorable roles. Useful for stages where
+you want end-to-end verification (the automatic `summary` report covers
+the stage on top):
 
 ```yaml
 - name: deliver
   title: "Deliver the feature end-to-end"
-  agents:
-    - planning
-    - implementation
-    - review
-    - summary
+  roles:
+    - planner
+    - executor
+    - reviewer
   prompt: |
     Implement the feature described in the task file, verify
     it meets the acceptance criteria, and produce a report.
 ```
 
-### Header `agents` — overriding the default prompts
+### Header `roles` — overriding the default prompts
 
-The header-level `agents` block lets you replace the shipped default prompt
-for any of the four roles with an inline prompt of your own. An override
-fully **replaces** the default — it does not merge with it. When the block
-is absent or empty, the four shipped defaults are used unchanged.
+The header-level `roles` block lets you replace the shipped default prompt
+for any of the three authorable roles with an inline prompt of your own.
+An override fully **replaces** the default — it does not merge with it.
+When the block is absent or empty, the three shipped defaults are used
+unchanged. (`summary` has no override slot — its prompt is always the
+default.)
 
-The block accepts exactly four keys — one per role:
+The block accepts exactly three keys — one per authorable role:
 
-| Key              | Replaces shipped default prompt for role |
-|------------------|------------------------------------------|
-| `planning`       | `planning`                               |
-| `implementation` | `implementation`                         |
-| `review`         | `review`                                 |
-| `summary`        | `summary`                                |
+| Key        | Replaces shipped default prompt for afm agent |
+|------------|-----------------------------------------------|
+| `planner`  | `planning`                                    |
+| `executor` | `implementation`                              |
+| `reviewer` | `review`                                      |
 
 Example:
 
 ```yaml
 name: GogaFeature
 description: "Feature implementation"
-agents:
-  planning: |
-    You are the planning agent for this feature pipeline.
+roles:
+  planner: |
+    You are the planner for this feature pipeline.
     Break the work into reviewable steps.
-  review: |
+  reviewer: |
     Review each change against the feature's acceptance criteria.
 ---
 ```
 
 Rules:
 
-- Only those four keys are valid. An unknown key is rejected at compile
-  time with `unknown agent in header.agents: <key>; valid keys: planning,
-  implementation, review, summary`.
+- Only those three keys are valid. An unknown key (including `summary`) is
+  rejected at compile time with `unknown role in header.roles: <key>;
+  valid keys: planner, executor, reviewer`.
 - Each value must be a string. A non-string value raises
-  `non-str value in header.agents.<key>`.
-- An absent `agents` block and an empty `agents:` mapping are both treated
-  identically — no overrides, the four shipped defaults are used unchanged.
+  `non-str value in header.roles.<key>`.
+- The legacy `agents` key is rejected outright with `agents key is
+  forbidden in header; use roles`.
+- An absent `roles` block and an empty `roles:` mapping are both treated
+  identically — no overrides, the three shipped defaults are used
+  unchanged.
 - Overrides are a pipeline-file-side artifact. They are **not** carried
   into the compiled flow-file — they are materialized into a separate
   prompts directory at run time.
 
-### How header and stage `agents` relate
+### How header and stage `roles` relate
 
-The two pipeline-file `agents` declarations compose without collision:
+The two pipeline-file `roles` declarations compose without collision:
 
-- The **per-stage** `agents` list decides **which roles** execute and in
+- The **per-stage** `roles` list decides **which roles** execute and in
   which order — i.e. the stage's mode.
-- The **header-level** `agents` map decides **what each role's prompt
+- The **header-level** `roles` map decides **what each role's prompt
   says** when it runs.
 
 A stage running in coordinated mode picks up the header-level overrides
 for whatever roles appear in its list. If no override is supplied for a
 role, that role uses its shipped default. The header overrides do **not**
 add roles to a stage — they only change the prompt of roles already listed
-in the stage's `agents` field. A stage in autonomous mode (no `agents`
+in the stage's `roles` field. A stage in autonomous mode (no `roles`
 field) is unaffected by header overrides.
 
-### Pipeline-file `agents` vs workflow-file `agent`
+### Pipeline-file `roles` vs workflow-file `agent`
 
-| Aspect          | Pipeline-file header `agents`           | Pipeline-file stage `agents`            | Workflow-file stage `agent`                          |
+| Aspect          | Pipeline-file header `roles`           | Pipeline-file stage `roles`             | Workflow-file stage `agent`                          |
 |-----------------|-----------------------------------------|-----------------------------------------|------------------------------------------------------|
 | Scope           | Pipeline-wide default                   | Single stage                            | Single stage (overrides at run time)                 |
-| Value           | Map of role → prompt                    | List of role names                      | Single CLI agent name                                |
+| Value           | Map of role → prompt                    | List of role aliases                    | Single CLI agent name                                |
 | Controls        | The prompt text of each role            | Which roles run, in which order (mode)  | Which CLI binary runs the stage                      |
-| Examples        | `{planning: "...", review: "..."}`      | `[planning, implementation]`            | `codex`, `claude`, `opencode`                        |
+| Examples        | `{planner: "...", reviewer: "..."}`     | `[planner, executor]`                   | `codex`, `claude`, `opencode`                        |
 
 Use pipeline-file declarations for the **stable structure** of a pipeline
 (its roles and their prompts). Use workflow-file `agent` for **per-project
@@ -351,8 +364,11 @@ workflow-agent semantics.
 |----------------------------------------------------------|-----------------------------------------------------------------|
 | `---` separator missing                                  | `missing body separator`                                        |
 | Header missing `name` or `description`                   | `header missing name/description`                               |
-| Unknown key in header `agents` block                     | `unknown agent in header.agents: <key>; valid keys: planning, implementation, review, summary` |
-| Non-string value in header `agents.<key>`                | `non-str value in header.agents.<key>`                          |
+| Legacy `agents` key in header                            | `agents key is forbidden in header; use roles`                  |
+| Unknown key in header `roles` block (incl. `summary`)    | `unknown role in header.roles: <key>; valid keys: planner, executor, reviewer` |
+| Non-mapping `roles` block in header                      | `non-mapping roles block in header`                             |
+| Non-string value in header `roles.<key>`                 | `non-str value in header.roles.<key>`                           |
+| Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
 | Body shape is neither list nor dict                      | `unsupported body format`                                       |
 | Body has zero steps                                      | `empty body`                                                    |
 
