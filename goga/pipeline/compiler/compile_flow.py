@@ -159,7 +159,10 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
     The input-only ``roles`` key is ALWAYS dropped from the output. When ``body``
     carries a usable ``roles`` value (non-empty list), each role is translated to
     its afm agent name via ``translate_role`` (the single source of truth) and the
-    result is placed under the output ``agents`` key. Otherwise the single default
+    result is placed under the output ``agents`` key. A non-str element raises
+    ``StructuralError("non-str value in stage roles list: ...")`` (the body is
+    parsed verbatim, so ``translate_role`` — which must not validate — is shielded
+    from unhashable/non-str elements here). Otherwise the single default
     ``agents=["auto"]`` is injected. ``supervisor``/``supervisor_prompt`` are NOT
     injected — they are authored-only and flow through the canonical slot via
     ``_canonical_fields`` only when the source body already carries them. The
@@ -175,7 +178,20 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
     """
     out = {key: value for key, value in body.items() if key != "roles"}
     if _has_usable_roles(body):
-        out["agents"] = [translate_role(role) for role in body["roles"]]
+        # The pipeline-file body is parsed verbatim (``parse_dsl`` performs no
+        # field-content validation by design), so an authored ``roles`` list may
+        # carry unhashable (dict/list) or non-str elements. ``translate_role`` is
+        # contractually required NOT to validate (open afm namespace): an unhashable
+        # element would raise a raw ``TypeError`` from its dict lookup, and a hashable
+        # non-str (e.g. an int) would pollute the ``list[str]`` output unchanged.
+        # Reject non-str elements here with a clean ``StructuralError`` instead —
+        # mirroring the header ``roles`` validation in ``parse_dsl._extract_roles``.
+        agents: list[str] = []
+        for role in body["roles"]:
+            if not isinstance(role, str):
+                raise StructuralError(f"non-str value in stage roles list: {role!r}")
+            agents.append(translate_role(role))
+        out["agents"] = agents
     else:
         out["agents"] = list(_DEFAULT_AGENTS)
     return out

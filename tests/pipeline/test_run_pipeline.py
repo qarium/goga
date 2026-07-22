@@ -651,6 +651,38 @@ class TestRunPipelineMaterialization:
         # Validate-before-wipe: the prompts dir was never created.
         assert not (afm_dir / "prompts").exists()
 
+    def test_run_pipeline_raises_when_summary_default_missing(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing summary default raises before the prompts dir exists.
+
+        ``summary`` has no override channel — it is always materialized from the
+        package default. Step 8b checks the summary default explicitly (after the
+        role loop) and raises ``RuntimeError("summary: default prompt missing
+        from package")`` BEFORE the prompts directory is created (atomicity: no
+        partial state on disk when the run aborts). Without this check a missing
+        ``summary.md`` would instead surface as a ``FileNotFoundError`` at the
+        post-wipe ``shutil.copy``, leaving a half-populated prompts dir behind.
+        """
+        defaults_dir = tmp_path / "defaults"
+        # All three role defaults present; only summary.md (always-default channel) absent.
+        _write_defaults(defaults_dir, stems=("planning", "implementation", "review"))
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(RuntimeError, match="summary: default prompt missing from package"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_run_flow.assert_not_called()
+        # Validate-before-wipe: the prompts dir was never created.
+        assert not (afm_dir / "prompts").exists()
+
     def test_run_pipeline_writes_prompts_before_run_flow(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

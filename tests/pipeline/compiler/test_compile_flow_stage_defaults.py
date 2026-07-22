@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 from goga.pipeline.compiler import compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
@@ -292,6 +293,25 @@ class TestStageDefaultsHelper:
         assert injected["agents"] == ["foo"]
         assert "supervisor" not in injected
         assert "supervisor_prompt" not in injected
+
+    def test_inject_defaults_rejects_non_str_role(self) -> None:
+        """Non-str ``roles`` elements raise ``StructuralError`` (not a raw ``TypeError``).
+
+        The body is parsed verbatim, so an authored ``roles`` list may carry
+        unhashable (dict/list) or hashable non-str (int) elements. ``translate_role``
+        must not validate (open afm namespace); ``_inject_defaults`` shields it by
+        rejecting non-str elements with a clean ``StructuralError`` rather than
+        crashing on the dict lookup or silently polluting the ``list[str]`` output.
+        """
+        from goga.pipeline.compiler import StructuralError
+        from goga.pipeline.compiler.compile_flow import _inject_defaults
+
+        # Hashable non-str (int) — would otherwise pass through into the output list.
+        with pytest.raises(StructuralError, match="non-str value in stage roles list"):
+            _inject_defaults({"roles": [42]})
+        # Unhashable (dict) — would otherwise raise a raw ``TypeError`` from the lookup.
+        with pytest.raises(StructuralError, match="non-str value in stage roles list"):
+            _inject_defaults({"roles": [{"planner": "x"}]})
 
     def test_inject_when_roles_empty_list(self) -> None:
         from goga.pipeline.compiler.compile_flow import _inject_defaults
