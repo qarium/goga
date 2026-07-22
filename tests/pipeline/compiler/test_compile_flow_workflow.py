@@ -1378,6 +1378,25 @@ class TestCompileFlowReconstructionHelpers:
         # Non-list pipeline + no workflow override → empty → None (no key).
         assert _merge_skills({"a": 1}, None) is None
 
+    def test_merge_skills_unhashable_or_non_str_pipeline_does_not_crash(self) -> None:
+        """A pipeline ``skills`` list with unhashable/non-str elements is filtered.
+
+        ``parse_dsl`` passes pipeline body fields through verbatim, so a malformed
+        ``skills`` list may carry dicts, nested lists, or non-str scalars. The merge
+        must not raise ``TypeError: unhashable type`` on ``skill not in seen``, and
+        must keep only ``str`` skills so the merged result stays a ``list[str]``.
+        """
+        from goga.pipeline.compiler.compile_flow import _merge_skills
+
+        # Unhashable element (dict) would crash ``skill not in seen`` without the guard.
+        assert _merge_skills([{"name": "web-search"}], ["audit"]) == ["audit"]
+        # Nested list element (also unhashable).
+        assert _merge_skills([["web-search"]], ["audit"]) == ["audit"]
+        # Hashable non-str element dropped (keeps the ``list[str]`` contract).
+        assert _merge_skills([1, 2], ["audit"]) == ["audit"]
+        # Mix of valid str and malformed elements → only valid str kept.
+        assert _merge_skills(["web-search", {"x": 1}, 3], ["audit"]) == ["web-search", "audit"]
+
     def test_effective_overrides_inline_seed_only(self) -> None:
         """An extend-only entry seeds an effective stage carrying agent/loop only."""
         from goga.pipeline.compiler.compile_flow import _effective_overrides

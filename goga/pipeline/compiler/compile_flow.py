@@ -237,7 +237,11 @@ def _merge_skills(
     merged: list[str] = []
     seen: set[str] = set()
     for skill in pipeline_list + (workflow_skills or []):
-        if skill not in seen:
+        # Only ``str`` skills are kept; a verbatim pipeline-file ``skills`` list may
+        # otherwise carry unhashable (dict/list) or non-str elements, which would
+        # raise ``TypeError`` on ``skill not in seen`` or pollute the ``list[str]``
+        # result. ``workflow_skills`` is always ``list[str]`` (validated upstream).
+        if isinstance(skill, str) and skill not in seen:
             seen.add(skill)
             merged.append(skill)
     return merged if merged else None
