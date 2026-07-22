@@ -92,6 +92,41 @@ _LOOP_EXPANSION_THRESHOLD = 2
 # carries them.
 _DEFAULT_AGENTS: tuple[str, ...] = ("auto",)
 
+# Single source of truth for the bijection between an authoring-side role and its
+# afm-side agent name / prompt-file stem. The three known role aliases
+# (``planner``/``executor``/``reviewer``) map to their afm stems
+# (``planning``/``implementation``/``review``); every other value is passed
+# through verbatim by ``translate_role`` — the afm agent namespace is open, so
+# already-afm names, ``summary``, ``auto``, and arbitrary names need no
+# translation and no validation. Declared exactly once here; consumers
+# (``compile_flow`` stage translation, ``run_pipeline`` prompt materialization)
+# import ``translate_role`` rather than re-declaring this mapping.
+_ROLE_ALIASES: dict[str, str] = {
+    "planner": "planning",
+    "executor": "implementation",
+    "reviewer": "review",
+}
+
+
+def translate_role(role: str) -> str:
+    """Map an authoring-side ``role`` to its afm-side agent name / prompt-file stem.
+
+    The single source of truth for the role ↔ ``{afm-agent-name, prompt-file-stem}``
+    bijection. Maps the three known role aliases to their afm stems and passes every
+    other value through verbatim. ``role`` values are NOT validated — the afm agent
+    namespace is open, so already-afm names (``planning``/``implementation``/``review``),
+    ``summary`` (a separate, non-role channel), ``auto`` (a compiler-side default
+    sentinel, NOT injected here), and arbitrary agent names all return unchanged.
+
+    Args:
+        role: The authoring-side role value (an alias or an already-afm name).
+
+    Returns:
+        The afm-side agent name / prompt-file stem for a known alias, or ``role``
+        unchanged for any other value.
+    """
+    return _ROLE_ALIASES.get(role, role)
+
 
 def _has_usable_agents(body: dict[str, Any]) -> bool:
     """Return ``True`` when ``body`` carries a non-empty ``agents`` list.
