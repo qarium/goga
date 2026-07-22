@@ -1,7 +1,7 @@
 """Contract tests for the ``WorkflowStage`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the three declared properties, the all-``None``
+importability from the facade, the four declared properties, the all-``None``
 defaults, and kw_only construction. These tests pin the contract surface —
 behavior lives in the logic test module.
 """
@@ -39,6 +39,13 @@ class TestWorkflowStageContract:
         assert hasattr(stage, "loop")
         assert stage.loop == 3
 
+    def test_workflow_stage_has_skills_property(self) -> None:
+        """WorkflowStage exposes a ``skills`` property."""
+        stage = WorkflowStage(skills=["web-search"])
+
+        assert hasattr(stage, "skills")
+        assert stage.skills == ["web-search"]
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -46,11 +53,15 @@ class TestWorkflowStageContract:
         assert stage.agent is None
         assert stage.prompt is None
         assert stage.loop is None
+        assert stage.skills is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all three fields as keyword-only arguments."""
-        stage = WorkflowStage(agent="codex", prompt="text", loop=2)
+        """WorkflowStage accepts all four fields as keyword-only arguments."""
+        stage = WorkflowStage(
+            agent="codex", prompt="text", loop=2, skills=["web-search", "goga-propose"]
+        )
 
         assert stage.agent == "codex"
         assert stage.prompt == "text"
         assert stage.loop == 2
+        assert stage.skills == ["web-search", "goga-propose"]
