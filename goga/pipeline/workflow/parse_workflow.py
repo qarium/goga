@@ -333,11 +333,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     if before is None and after is None:
         raise WorkflowSyntaxError(f"extend entry {name} requires at least one of before/after")
 
-    body = {
-        key: entry_value
-        for key, entry_value in value.items()
-        if key not in ("before", "after", "agent", "loop")
-    }
+    body = {key: entry_value for key, entry_value in value.items() if key not in ("before", "after", "agent", "loop")}
 
     return WorkflowExtendStage(before=before, after=after, agent=agent, loop=loop, body=body)
 

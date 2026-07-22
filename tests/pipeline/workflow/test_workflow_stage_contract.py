@@ -57,9 +57,7 @@ class TestWorkflowStageContract:
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
         """WorkflowStage accepts all four fields as keyword-only arguments."""
-        stage = WorkflowStage(
-            agent="codex", prompt="text", loop=2, skills=["web-search", "goga-propose"]
-        )
+        stage = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["web-search", "goga-propose"])
 
         assert stage.agent == "codex"
         assert stage.prompt == "text"

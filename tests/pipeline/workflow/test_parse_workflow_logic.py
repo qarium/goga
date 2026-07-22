@@ -95,10 +95,7 @@ class TestParseWorkflowPositive:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "stages:\n"
-            "  propose:\n"
-            "    agent: codex\n"
-            "    skills: [web-search, goga-propose]\n",
+            "stages:\n  propose:\n    agent: codex\n    skills: [web-search, goga-propose]\n",
         )
 
         document = parse_workflow(workflow_path)
@@ -435,12 +432,17 @@ class TestParseWorkflowNegative:
 
     @pytest.mark.parametrize(
         ("loop_yaml", "expected"),
-        [("0", r"loop must be >= 1 in workflow\.extend\.warmup"),
-         ("true", r"non-int value in workflow\.extend\.warmup\.loop")],
+        [
+            ("0", r"loop must be >= 1 in workflow\.extend\.warmup"),
+            ("true", r"non-int value in workflow\.extend\.warmup\.loop"),
+        ],
         ids=["below-one", "bool"],
     )
     def test_parse_workflow_extend_inline_loop_invalid_rejected(
-        self, tmp_path: Path, loop_yaml: str, expected: str,
+        self,
+        tmp_path: Path,
+        loop_yaml: str,
+        expected: str,
     ) -> None:
         """An invalid inline extend loop (< 1 or bool) raises WorkflowSyntaxError."""
         workflow_path = _write(
@@ -454,8 +456,10 @@ class TestParseWorkflowNegative:
 
     @pytest.mark.parametrize(
         ("field", "expected"),
-        [("agent", r"non-str value in workflow\.extend\.warmup\.agent"),
-         ("loop", r"non-int value in workflow\.extend\.warmup\.loop")],
+        [
+            ("agent", r"non-str value in workflow\.extend\.warmup\.agent"),
+            ("loop", r"non-int value in workflow\.extend\.warmup\.loop"),
+        ],
         ids=["agent-null", "loop-null"],
     )
     def test_parse_workflow_extend_inline_null_rejected(self, tmp_path: Path, field: str, expected: str) -> None:
@@ -476,13 +480,18 @@ class TestParseWorkflowNegative:
 
     @pytest.mark.parametrize(
         ("field_yaml", "expected"),
-        [("agent: 5", r"non-str value in workflow\.extend\.warmup\.agent"),
-         ("loop: 0", r"loop must be >= 1 in workflow\.extend\.warmup"),
-         ("loop: true", r"non-int value in workflow\.extend\.warmup\.loop")],
+        [
+            ("agent: 5", r"non-str value in workflow\.extend\.warmup\.agent"),
+            ("loop: 0", r"loop must be >= 1 in workflow\.extend\.warmup"),
+            ("loop: true", r"non-int value in workflow\.extend\.warmup\.loop"),
+        ],
         ids=["bad-agent", "below-one-loop", "bool-loop"],
     )
     def test_parse_workflow_extend_multi_defect_surfaces_type_error_first(
-        self, tmp_path: Path, field_yaml: str, expected: str,
+        self,
+        tmp_path: Path,
+        field_yaml: str,
+        expected: str,
     ) -> None:
         """A multi-defect entry surfaces the type error, not the positional one.
 

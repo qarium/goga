@@ -1478,4 +1478,3 @@ class TestCompileFlowReconstructionHelpers:
         from goga.pipeline.compiler.compile_flow import _effective_overrides
 
         assert _effective_overrides(WorkflowDocument(prompt="P")) == {}
-

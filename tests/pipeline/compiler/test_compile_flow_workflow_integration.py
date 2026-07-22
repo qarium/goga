@@ -76,13 +76,7 @@ class TestSkillsMergeWithLoopExpansion:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "review:\n"
-            "  title: Review\n"
-            "  skills: [a]\n",
+            "name: T\ndescription: T\n---\n\nreview:\n  title: Review\n  skills: [a]\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"review": WorkflowStage(skills=["b"], loop=2)})
@@ -105,13 +99,7 @@ class TestSkillsMergeWithLoopExpansion:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: review\n"
-            "  title: Review\n"
-            "  skills: [a]\n",
+            "name: T\ndescription: T\n---\n\n- name: review\n  title: Review\n  skills: [a]\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"review": WorkflowStage(skills=["b"], loop=2)})
@@ -216,14 +204,7 @@ class TestEndToEndParseCompile:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "- name: propose\n"
-            "  title: Propose\n"
-            "  skills:\n"
-            "    - goga-propose\n",
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-propose\n",
         )
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(

@@ -88,12 +88,7 @@ class TestParseWorkflowContract:
         """
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "extend:\n"
-            "  warmup:\n"
-            "    before: [propose]\n"
-            "    title: Warmup\n"
-            "    agent: codex\n"
-            "    loop: 3\n",
+            "extend:\n  warmup:\n    before: [propose]\n    title: Warmup\n    agent: codex\n    loop: 3\n",
         )
 
         document = parse_workflow(workflow_path)

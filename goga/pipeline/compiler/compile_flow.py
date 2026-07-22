@@ -289,6 +289,7 @@ def _apply_per_stage_overrides(
             step.body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=stage.agent)
         if stage.prompt is not None:
             step.body["description"] = stage.prompt
+
         if stage.skills is not None:
             merged = _merge_skills(step.body.get("skills"), stage.skills)
             if merged is not None:

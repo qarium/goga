@@ -111,9 +111,7 @@ class TestWorkflowExtendStageLogic:
 
     def test_provided_values_round_trip_unchanged(self) -> None:
         """Provided values round-trip verbatim."""
-        ext = WorkflowExtendStage(
-            before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"}
-        )
+        ext = WorkflowExtendStage(before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"})
 
         assert ext.before == ["a"]
         assert ext.after == ["b"]
@@ -123,11 +121,7 @@ class TestWorkflowExtendStageLogic:
 
     def test_equality_of_identical_constructions(self) -> None:
         """Two extend-stages with identical fields compare equal."""
-        first = WorkflowExtendStage(
-            before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"}
-        )
-        second = WorkflowExtendStage(
-            before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"}
-        )
+        first = WorkflowExtendStage(before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"})
+        second = WorkflowExtendStage(before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"})
 
         assert first == second

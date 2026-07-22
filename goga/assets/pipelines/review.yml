@@ -8,7 +8,6 @@ description: Analyze project
   agents:
     - planning
     - implementation
-    - review
   prompt: |
     Detect deviations from the conventions in the change scope and fix them.
 
@@ -16,6 +15,7 @@ description: Analyze project
 
     Requirements:
     - Read the convention `.goga/usages/conventions.md` before scanning the `change scope`
+    - The rules of the convention take precedence over the existed source code
     - For each deviation, produce a finding with: `location` (file and line range), `convention` (the backtick rule from `.goga/usages/conventions.md` it violates), and `severity`
     - Fix only the deviations within the `change scope` confirmed by the user
 
@@ -29,7 +29,6 @@ description: Analyze project
   agents:
     - planning
     - implementation
-    - review
   prompt: |
     Run lint, format, and tests in accordance with the convention `.goga/usages/conventions.md`.
 
