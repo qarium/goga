@@ -2,7 +2,7 @@
 
 A phases-DSL body is a YAML list; each item is a single ``PhaseStep`` carrying
 its ``name`` (the step id), ``title`` (the display label) and a verbatim
-``body`` dict of every other field in the item (agents, prompt, skills,
+``body`` dict of every other field in the item (roles, prompt, skills,
 interactive, and any extra fields) excluding name and title.
 
 ``PhaseStep`` does NOT carry ``depends_on`` — the compiler derives it from list

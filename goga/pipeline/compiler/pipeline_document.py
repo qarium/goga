@@ -4,7 +4,7 @@ A parsed pipeline-file combines three things: its header (``PipelineHeader``),
 its detected body format (``BodyFormat``), and its typed body (``PhasesBody``
 or ``StagesBody``). ``PipelineDocument`` aggregates these into a single value
 so consumers (``run_pipeline``) can obtain the parsed representation — including
-``header.agents`` — from a single return value without re-invoking
+``header.roles`` — from a single return value without re-invoking
 ``parse_dsl``.
 
 ``compile_flow`` builds this dataclass from ``parse_dsl``'s 3-tuple output and
@@ -32,7 +32,7 @@ class PipelineDocument:
     are required — a ``PipelineDocument`` is always complete.
 
     Args:
-        header: Parsed pipeline-file header (name, description, optional agents).
+        header: Parsed pipeline-file header (name, description, optional roles).
         format: Detected body format — PHASES or STAGES.
         body: Parsed body. ``PhasesBody`` when format is PHASES,
             ``StagesBody`` when format is STAGES.

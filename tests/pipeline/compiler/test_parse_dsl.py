@@ -15,8 +15,8 @@ import pytest
 from goga.pipeline.compiler import (
     BodyFormat,
     PhasesBody,
-    PipelineAgents,
     PipelineHeader,
+    PipelineRoles,
     StagesBody,
     StructuralError,
     parse_dsl,
@@ -354,24 +354,27 @@ class TestParseDslLogic:
             parse_dsl(text)
 
 
-class TestParseDslAgentsBlock:
-    """Contract and logic tests for the optional header-level ``agents`` block.
+class TestParseDslRolesBlock:
+    """Contract and logic tests for the optional header-level ``roles`` block.
 
-    The ``agents`` block carries four optional inline prompt overrides
-    (planning, implementation, review, summary). ``parse_dsl`` extracts and
-    structurally validates it: unknown keys, non-str values, and non-mapping
-    blocks are structural errors; an absent or empty-mapping block yields
-    ``header.agents is None``.
+    The ``roles`` block carries three optional inline prompt overrides
+    (planner, executor, reviewer). ``parse_dsl`` extracts and structurally
+    validates it: the legacy ``agents`` header key is a hard-rename error,
+    unknown keys (incl. ``summary`` — a separate, non-role channel), non-str
+    values, and non-mapping blocks are structural errors; an absent or
+    empty-mapping block yields ``header.roles is None``.
     """
 
-    def test_parse_dsl_extracts_agents_planning_only(self) -> None:
-        """A partial override (planning only) is extracted; the other three fields stay None."""
+    def test_parse_dsl_extracts_roles_overrides(self) -> None:
+        """A partial override (planner, reviewer) is extracted; executor stays None; no summary."""
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            "agents:\n"
-            "  planning: |\n"
-            "    Custom planning prompt.\n"
+            "roles:\n"
+            "  planner: |\n"
+            "    plan prompt\n"
+            "  reviewer: |\n"
+            "    review prompt\n"
             "---\n"
             "\n"
             "- name: propose\n"
@@ -382,111 +385,137 @@ class TestParseDslAgentsBlock:
 
         assert header.name == "Goga feature"
         assert header.description == "Feature implementation"
-        assert header.agents is not None
-        assert header.agents.planning == "Custom planning prompt.\n"
-        assert header.agents.implementation is None
-        assert header.agents.review is None
-        assert header.agents.summary is None
+        assert header.roles is not None
+        assert header.roles.planner == "plan prompt\n"
+        assert header.roles.executor is None
+        assert header.roles.reviewer == "review prompt\n"
+        # summary is NOT a role — the carrier has no such attribute at all.
+        assert not hasattr(header.roles, "summary")
         assert fmt is BodyFormat.PHASES
 
-    def test_parse_dsl_header_agents_is_typed_pipeline_agents_or_none(self) -> None:
-        """``header.agents`` is either a ``PipelineAgents`` or ``None`` — never a raw mapping."""
-        text_without_agents = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
-        text_with_agents = "name: X\ndescription: Y\nagents:\n  planning: P\n---\n\n- name: a\n  title: A\n"
+    def test_parse_dsl_header_roles_is_typed_pipeline_roles_or_none(self) -> None:
+        """``header.roles`` is either a ``PipelineRoles`` or ``None`` — never a raw mapping."""
+        text_without_roles = "name: X\ndescription: Y\n---\n\n- name: a\n  title: A\n"
+        text_with_roles = "name: X\ndescription: Y\nroles:\n  planner: P\n---\n\n- name: a\n  title: A\n"
 
-        header_none, _fmt, _body = parse_dsl(text_without_agents)
-        header_typed, _fmt, _body = parse_dsl(text_with_agents)
+        header_none, _fmt, _body = parse_dsl(text_without_roles)
+        header_typed, _fmt, _body = parse_dsl(text_with_roles)
 
         # Absent block → None (not an empty dict).
-        assert header_none.agents is None
+        assert header_none.roles is None
 
-        # Present block → a typed PipelineAgents, never the raw YAML dict.
-        assert isinstance(header_typed.agents, PipelineAgents)
-        assert header_typed.agents.planning == "P"
+        # Present block → a typed PipelineRoles, never the raw YAML dict.
+        assert isinstance(header_typed.roles, PipelineRoles)
+        assert header_typed.roles.planner == "P"
 
-    def test_parse_dsl_rejects_unknown_agent_key(self) -> None:
-        """An unknown agent key (e.g. ``researcher``) is rejected with a readable error."""
+    def test_parse_dsl_rejects_legacy_agents_header_key(self) -> None:
+        """The legacy ``agents`` header key is forbidden — a hard-rename error.
+
+        A user copying the old ``agents:`` header shape is caught with a clear
+        message pointing at the replacement directive (``roles``), rather than
+        the block being silently dropped.
+        """
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
             "agents:\n"
-            "  researcher: Should fail\n"
+            "  planning: x\n"
             "---\n"
             "\n"
             "- name: propose\n"
             "  title: Propose\n"
         )
 
-        with pytest.raises(StructuralError, match=r"unknown agent in header\.agents: researcher"):
+        with pytest.raises(StructuralError, match="agents key is forbidden in header; use roles"):
+            parse_dsl(text)
+
+    def test_parse_dsl_rejects_unknown_role_including_summary(self) -> None:
+        """An unknown role key (e.g. ``summary``) is rejected — summary is NOT an overridable role."""
+        text = (
+            "name: Goga feature\n"
+            "description: Feature implementation\n"
+            "roles:\n"
+            "  planner: x\n"
+            "  summary: s\n"
+            "---\n"
+            "\n"
+            "- name: propose\n"
+            "  title: Propose\n"
+        )
+
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown role in header\.roles: summary; valid keys: planner, executor, reviewer",
+        ):
             parse_dsl(text)
 
     @pytest.mark.parametrize(
-        ("agents_value", "case"),
+        ("roles_value", "case"),
         [
             ('"not a mapping"\n', "scalar string"),
             ("42\n", "scalar number"),
-            ("\n  - planning\n", "list"),
+            ("\n  - planner\n", "list"),
         ],
     )
-    def test_parse_dsl_rejects_non_mapping_agents_block(self, agents_value: str, case: str) -> None:
-        """A non-mapping ``agents`` value (scalar/string/list) is rejected.
+    def test_parse_dsl_rejects_non_mapping_roles_block(self, roles_value: str, case: str) -> None:
+        """A non-mapping ``roles`` value (scalar/string/list) is rejected.
 
         The list case is the most likely real-world mistake: step-level
-        ``agents`` in this same DSL IS a list (``agents: [planning]``), so a user
+        ``roles`` in this same DSL IS a list (``roles: [planner]``), so a user
         copying that shape into the header block must be caught as non-mapping.
         """
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            f"agents: {agents_value}"
+            f"roles: {roles_value}"
             "---\n"
             "\n"
             "- name: propose\n"
             "  title: Propose\n"
         )
 
-        with pytest.raises(StructuralError, match="non-mapping agents block in header"):
+        with pytest.raises(StructuralError, match="non-mapping roles block in header"):
             parse_dsl(text)
 
     @pytest.mark.parametrize(
-        ("agent_value_line", "case"),
+        ("role_value_line", "case"),
         [
-            ("  planning: 42\n", "int"),
-            ("  planning: true\n", "bool"),
-            ("  planning: 3.14\n", "float"),
-            ("  planning:\n", "null value"),
-            ("  planning:\n    nested: x\n", "nested mapping"),
+            ("  planner: 42\n", "int"),
+            ("  planner: true\n", "bool"),
+            ("  planner: 3.14\n", "float"),
+            ("  planner:\n", "null value"),
+            ("  planner:\n    nested: x\n", "nested mapping"),
         ],
     )
-    def test_parse_dsl_rejects_non_str_agent_value(self, agent_value_line: str, case: str) -> None:
-        """A non-str value for a known agent key is rejected — no silent type coercion.
+    def test_parse_dsl_rejects_non_str_role_value(self, role_value_line: str, case: str) -> None:
+        """A non-str value for a known role key is rejected — no silent type coercion.
 
         Covers the full non-str surface: scalar types (int/bool/float), a null
-        value (``planning:`` with nothing — a plausible omission), and a nested
-        mapping (``planning:\\n  nested: x`` — step-level keys mis-nested under
+        value (``planner:`` with nothing — a plausible omission), and a nested
+        mapping (``planner:\\n  nested: x`` — step-level keys mis-nested under
         the header block). All hit the ``not isinstance(value, str)`` branch and
         raise; none are silently coerced or treated as "no override".
         """
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            "agents:\n"
-            f"{agent_value_line}"
+            "roles:\n"
+            f"{role_value_line}"
             "---\n"
             "\n"
             "- name: propose\n"
             "  title: Propose\n"
         )
 
-        with pytest.raises(StructuralError, match=r"non-str value in header\.agents\.planning"):
+        with pytest.raises(StructuralError, match=r"non-str value in header\.roles\.planner"):
             parse_dsl(text)
 
-    def test_parse_dsl_treats_empty_agents_mapping_as_none(self) -> None:
-        """An empty ``agents: {}`` mapping is treated identically to an absent block (None)."""
+    def test_parse_dsl_empty_roles_block_equals_none(self) -> None:
+        """An empty ``roles: {}`` mapping is treated identically to an absent block (None)."""
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            "agents: {}\n"
+            "roles: {}\n"
             "---\n"
             "\n"
             "- name: propose\n"
@@ -495,14 +524,14 @@ class TestParseDslAgentsBlock:
 
         header, _fmt, _body = parse_dsl(text)
 
-        assert header.agents is None
+        assert header.roles is None
 
-    def test_parse_dsl_agents_null_value_treated_as_none(self) -> None:
-        """A null ``agents:`` value (no body) is treated identically to an absent block (None)."""
+    def test_parse_dsl_roles_null_value_treated_as_none(self) -> None:
+        """A null ``roles:`` value (no body) is treated identically to an absent block (None)."""
         text = (
             "name: Goga feature\n"
             "description: Feature implementation\n"
-            "agents:\n"
+            "roles:\n"
             "---\n"
             "\n"
             "- name: propose\n"
@@ -511,4 +540,4 @@ class TestParseDslAgentsBlock:
 
         header, _fmt, _body = parse_dsl(text)
 
-        assert header.agents is None
+        assert header.roles is None

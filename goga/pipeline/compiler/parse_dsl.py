@@ -23,8 +23,8 @@ import yaml
 from .body_format import BodyFormat
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
-from .pipeline_agents import PipelineAgents
 from .pipeline_header import PipelineHeader
+from .pipeline_roles import PipelineRoles
 from .stage_step import StageStep
 from .stages_body import StagesBody
 
@@ -34,10 +34,12 @@ logger = logging.getLogger(__name__)
 # and exactly two (header, body) when it is present.
 _EXPECTED_SEGMENT_COUNT = 2
 
-# Fixed keys of the header-level ``agents`` block (one per afm agent prompt file).
+# Fixed keys of the header-level ``roles`` block (one per overridable role alias;
+# each translates to its afm agent name / prompt-file stem via ``translate_role``).
 # Used both for unknown-key rejection and for projecting the validated mapping
-# onto the ``PipelineAgents`` fields.
-_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+# onto the ``PipelineRoles`` fields. ``summary`` is intentionally absent — it is
+# a separate, always-default channel, not an overridable role.
+_ROLE_KEYS = ("planner", "executor", "reviewer")
 
 # Phase-step keys carried as separate fields, not inside the verbatim body.
 # ``depends_on`` is reserved — phases derive it from list position (compile_flow),
@@ -95,13 +97,14 @@ def _parse_header(header_text: str) -> PipelineHeader:
         header_text: The header segment text (before the ``---`` line).
 
     Returns:
-        The parsed ``PipelineHeader`` (with ``agents`` set when the header
-        carries a non-empty ``agents`` block).
+        The parsed ``PipelineHeader`` (with ``roles`` set when the header
+        carries a non-empty ``roles`` block).
 
     Raises:
         StructuralError: If the header is not a mapping, lacks string
-            name/description, or carries a malformed ``agents`` block
-            (non-mapping, unknown key, or non-str value).
+            name/description, carries the legacy ``agents`` key (hard-rename
+            error), or carries a malformed ``roles`` block (non-mapping,
+            unknown key, or non-str value).
     """
     header_data = yaml.safe_load(header_text)
 
@@ -114,27 +117,35 @@ def _parse_header(header_text: str) -> PipelineHeader:
     if not (isinstance(name, str) and isinstance(description, str)):
         raise StructuralError("header missing name/description")
 
-    agents = _extract_agents(header_data.get("agents"))
+    # Hard-rename: the legacy ``agents`` header key is forbidden — the
+    # authoring directive is now ``roles`` (3 overridable role aliases). A
+    # user copying the old shape into the header is caught here rather than
+    # silently dropped. Checked after name/description but before ``roles``
+    # extraction so the rename error surfaces before any role-block error.
+    if "agents" in header_data:
+        raise StructuralError("agents key is forbidden in header; use roles")
 
-    return PipelineHeader(name=name, description=description, agents=agents)
+    roles = _extract_roles(header_data.get("roles"))
+
+    return PipelineHeader(name=name, description=description, roles=roles)
 
 
-def _extract_agents(raw: Any) -> PipelineAgents | None:
-    """Validate the optional ``agents`` block and build a ``PipelineAgents`` from it.
+def _extract_roles(raw: Any) -> PipelineRoles | None:
+    """Validate the optional ``roles`` block and build a ``PipelineRoles`` from it.
 
     An absent block (``raw is None``) and an empty mapping (``raw == {}``) are
     treated identically — both yield ``None`` (no overrides). A non-mapping
-    value, an unknown key, or a non-str value are structural errors. The four
-    fixed keys are projected onto the ``PipelineAgents`` fields; keys absent
+    value, an unknown key, or a non-str value are structural errors. The three
+    fixed keys are projected onto the ``PipelineRoles`` fields; keys absent
     from the block stay ``None``. No merging with defaults and no content
     validation happens here (verbatim pass-through).
 
     Args:
-        raw: The raw YAML-parsed value of the header's ``agents`` entry.
+        raw: The raw YAML-parsed value of the header's ``roles`` entry.
 
     Returns:
         ``None`` when the block is absent or empty, otherwise a
-        ``PipelineAgents`` carrying the validated inline overrides.
+        ``PipelineRoles`` carrying the validated inline overrides.
 
     Raises:
         StructuralError: If ``raw`` is a non-mapping, has an unknown key, or
@@ -144,17 +155,15 @@ def _extract_agents(raw: Any) -> PipelineAgents | None:
         return None
 
     if not isinstance(raw, dict):
-        raise StructuralError("non-mapping agents block in header")
+        raise StructuralError("non-mapping roles block in header")
 
     for key, value in raw.items():
-        if key not in _AGENT_KEYS:
-            raise StructuralError(
-                f"unknown agent in header.agents: {key}; valid keys: planning, implementation, review, summary"
-            )
+        if key not in _ROLE_KEYS:
+            raise StructuralError(f"unknown role in header.roles: {key}; valid keys: planner, executor, reviewer")
         if not isinstance(value, str):
-            raise StructuralError(f"non-str value in header.agents.{key}")
+            raise StructuralError(f"non-str value in header.roles.{key}")
 
-    return PipelineAgents(**{key: raw.get(key) for key in _AGENT_KEYS})
+    return PipelineRoles(**{key: raw.get(key) for key in _ROLE_KEYS})
 
 
 def _extract_phase_step(item: Any) -> PhaseStep:

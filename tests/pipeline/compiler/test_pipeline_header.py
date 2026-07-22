@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 
 import pytest
-from goga.pipeline.compiler import PipelineAgents, PipelineHeader
+from goga.pipeline.compiler import PipelineHeader, PipelineRoles
 
 
 class TestPipelineHeaderContract:
@@ -15,30 +15,30 @@ class TestPipelineHeaderContract:
         """PipelineHeader must be importable from the compiler facade."""
         assert PipelineHeader is not None
 
-    def test_pipeline_header_field_order_keeps_agents_last(self) -> None:
-        """Existing name/description fields are unchanged; agents is appended last."""
+    def test_pipeline_header_field_order_keeps_roles_last(self) -> None:
+        """Existing name/description fields are unchanged; roles is appended last."""
         field_names = [f.name for f in dataclasses.fields(PipelineHeader)]
 
-        assert field_names == ["name", "description", "agents"]
+        assert field_names == ["name", "description", "roles"]
 
-    def test_pipeline_header_accepts_agents_field(self) -> None:
-        """An agents override is carried verbatim under header.agents."""
-        header = PipelineHeader(name="x", description="y", agents=PipelineAgents(planning="P"))
+    def test_pipeline_header_accepts_roles_field(self) -> None:
+        """A roles override is carried verbatim under header.roles."""
+        header = PipelineHeader(name="x", description="y", roles=PipelineRoles(planner="P"))
 
-        assert header.agents is not None
-        assert header.agents.planning == "P"
+        assert header.roles is not None
+        assert header.roles.planner == "P"
 
-    def test_pipeline_header_agents_defaults_to_none(self) -> None:
-        """When agents is omitted, header.agents is None (no agents block or empty)."""
+    def test_pipeline_header_roles_defaults_to_none(self) -> None:
+        """When roles is omitted, header.roles is None (no roles block or empty)."""
         header = PipelineHeader(name="x", description="y")
 
-        assert header.agents is None
+        assert header.roles is None
 
-    def test_pipeline_header_agents_accepts_none_explicit(self) -> None:
-        """An explicit agents=None is accepted and stored as None."""
-        header = PipelineHeader(name="x", description="y", agents=None)
+    def test_pipeline_header_roles_accepts_none_explicit(self) -> None:
+        """An explicit roles=None is accepted and stored as None."""
+        header = PipelineHeader(name="x", description="y", roles=None)
 
-        assert header.agents is None
+        assert header.roles is None
 
     def test_existing_name_and_description_fields_unchanged(self) -> None:
         """The name and description fields keep their required, default-less semantics."""
@@ -59,39 +59,36 @@ class TestPipelineHeaderContract:
 
 
 class TestPipelineHeaderLogic:
-    """Edge-case / behavior tests for the ``agents`` field."""
+    """Edge-case / behavior tests for the ``roles`` field."""
 
-    def test_pipeline_header_agents_partial_override(self) -> None:
-        """A partial agents override leaves the unspecified agent keys as None."""
-        header = PipelineHeader(name="x", description="y", agents=PipelineAgents(planning="P"))
+    def test_pipeline_header_roles_partial_override(self) -> None:
+        """A partial roles override leaves the unspecified role keys as None."""
+        header = PipelineHeader(name="x", description="y", roles=PipelineRoles(planner="P"))
 
-        assert header.agents is not None
-        assert header.agents.planning == "P"
-        assert header.agents.implementation is None
-        assert header.agents.review is None
-        assert header.agents.summary is None
+        assert header.roles is not None
+        assert header.roles.planner == "P"
+        assert header.roles.executor is None
+        assert header.roles.reviewer is None
 
-    def test_pipeline_header_agents_full_override(self) -> None:
-        """All four agent overrides are carried verbatim."""
+    def test_pipeline_header_roles_full_override(self) -> None:
+        """All three role overrides are carried verbatim."""
         header = PipelineHeader(
             name="x",
             description="y",
-            agents=PipelineAgents(
-                planning="plan",
-                implementation="impl",
-                review="review",
-                summary="summary",
+            roles=PipelineRoles(
+                planner="plan",
+                executor="impl",
+                reviewer="review",
             ),
         )
 
-        assert header.agents is not None
-        assert header.agents.planning == "plan"
-        assert header.agents.implementation == "impl"
-        assert header.agents.review == "review"
-        assert header.agents.summary == "summary"
+        assert header.roles is not None
+        assert header.roles.planner == "plan"
+        assert header.roles.executor == "impl"
+        assert header.roles.reviewer == "review"
 
-    def test_pipeline_header_agents_field_is_optional_with_default_none(self) -> None:
-        """The agents field has a default value of None — it is optional."""
-        agents_field = {f.name: f for f in dataclasses.fields(PipelineHeader)}["agents"]
+    def test_pipeline_header_roles_field_is_optional_with_default_none(self) -> None:
+        """The roles field has a default value of None — it is optional."""
+        roles_field = {f.name: f for f in dataclasses.fields(PipelineHeader)}["roles"]
 
-        assert agents_field.default is None
+        assert roles_field.default is None

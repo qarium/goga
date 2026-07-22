@@ -1,7 +1,7 @@
 """Compiler cell — pure transformer from goga DSL pipeline-files to afm flow-files.
 
 Built incrementally: each entity task adds its module's import and ``__all__``
-entry. Once all entity tasks land, all 12 contract names are re-exported here.
+entry. Once all entity tasks land, all 15 contract names are re-exported here.
 """
 
 from .body_format import BodyFormat
@@ -11,9 +11,9 @@ from .flow_stage import FlowStage
 from .parse_dsl import StructuralError, parse_dsl
 from .phase_step import PhaseStep
 from .phases_body import PhasesBody
-from .pipeline_agents import PipelineAgents
 from .pipeline_document import PipelineDocument
 from .pipeline_header import PipelineHeader
+from .pipeline_roles import PipelineRoles
 from .serialize_flow import serialize_flow
 from .stage_step import StageStep
 from .stages_body import StagesBody
@@ -24,9 +24,9 @@ __all__: list[str] = [
     "FlowStage",
     "PhaseStep",
     "PhasesBody",
-    "PipelineAgents",
     "PipelineDocument",
     "PipelineHeader",
+    "PipelineRoles",
     "StageStep",
     "StagesBody",
     "StructuralError",
