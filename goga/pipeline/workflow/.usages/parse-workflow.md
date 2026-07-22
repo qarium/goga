@@ -22,10 +22,11 @@ if workflow.prompt is not None:
     print(workflow.prompt)
 
 for stage_name, stage in workflow.stages.items():
-    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}")
+    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}, skills={stage.skills}")
 
 for name, extend_stage in workflow.extend.items():
-    print(f"extend {name}: before={extend_stage.before}, after={extend_stage.after}")
+    print(f"extend {name}: before={extend_stage.before}, after={extend_stage.after}, "
+          f"agent={extend_stage.agent}, loop={extend_stage.loop}")
 ```
 
 ## Parameters
@@ -45,13 +46,17 @@ A `WorkflowDocument` with three fields:
 - `extend: dict[str, WorkflowExtendStage]` — map of new-stage extend-instructions
   keyed by stage name; an empty map when the file has no `extend:`. Each
   `WorkflowExtendStage` exposes `before: list[str] | None`,
-  `after: list[str] | None`, and `body: dict[str, Any]`.
+  `after: list[str] | None`, `agent: str | None`, `loop: int | None`, and
+  `body: dict[str, Any]` (the `body` excludes `before` / `after` / `agent` /
+  `loop` / `depends_on`).
 
 Each `WorkflowStage` exposes:
 
 - `agent: str | None` — agent name (e.g. `"codex"`), or `None`
 - `prompt: str | None` — per-stage prompt text, or `None`
 - `loop: int | None` — positive iteration count (>= 1), or `None` (no expansion)
+- `skills: list[str] | None` — skill names merged with the pipeline-file
+  skills by the compiler, or `None` (no merge)
 
 ## Side Effects
 
@@ -65,12 +70,14 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 - Top-level allowed keys: `prompt`, `stages`, `extend`. Any other top-level
   key raises a structural error.
 - An extend-entry forbids `depends_on` (structural error), requires at least
-  one of `before`/`after`, and `before`/`after` (when present) must be
-  `list[str]`.
-- Per-stage allowed keys: `agent`, `prompt`, `loop`. Any other stage key
-  raises a structural error.
-- `loop` must be `int >= 1`. Zero, negative values, and non-int types raise a
-  structural error.
+  one of `before`/`after`, accepts optional inline `agent` (str) and `loop`
+  (int `>= 1`), and `before`/`after` (when present) must be `list[str]`.
+- Per-stage allowed keys: `agent`, `prompt`, `loop`, `skills`. Any other
+  stage key raises a structural error.
+- `loop` (per-stage and inline extend) must be `int >= 1`. Zero, negative
+  values, and non-int types raise a structural error.
+- `skills` (when present) must be `list[str]`; a non-list-of-str value raises
+  a structural error.
 
 ## Errors
 
@@ -84,15 +91,19 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 | `stages` is not a `dict` | structural error "non-mapping stages block in workflow" |
 | `extend` is not a `dict` | structural error "non-mapping extend block in workflow" |
 | Stage entry is not a `dict` | structural error "non-mapping stage '<name>' in workflow.stages" |
-| Stage key not in {agent, prompt, loop} | structural error "unknown key in workflow.stages.<name>: <key>; valid keys: agent, prompt, loop" |
+| Stage key not in {agent, prompt, loop, skills} | structural error "unknown key in workflow.stages.<name>: <key>; valid keys: agent, prompt, loop, skills" |
 | `agent` is not a `str` | structural error "non-str value in workflow.stages.<name>.agent" |
 | Stage `prompt` is not a `str` | structural error "non-str value in workflow.stages.<name>.prompt" |
 | `loop` is not an `int` | structural error "non-int value in workflow.stages.<name>.loop" |
 | `loop < 1` | structural error "loop must be >= 1 in workflow.stages.<name>" |
+| `skills` not a `list[str]` | structural error "non-list-of-str skills in workflow.stages.<name>" |
 | Extend entry value is not a `dict` | structural error "non-mapping extend entry `<name>` in workflow.extend" |
 | Extend entry contains `depends_on` | structural error "depends_on is forbidden in workflow.extend.<name>" |
 | `before` not a `list[str]` | structural error "non-list-of-str before in workflow.extend.<name>" |
 | `after` not a `list[str]` | structural error "non-list-of-str after in workflow.extend.<name>" |
+| Inline extend `agent` is not a `str` | structural error "non-str value in workflow.extend.<name>.agent" |
+| Inline extend `loop` is not an `int` | structural error "non-int value in workflow.extend.<name>.loop" |
+| Inline extend `loop < 1` | structural error "loop must be >= 1 in workflow.extend.<name>" |
 | Neither `before` nor `after` present | structural error "extend entry `<name>` requires at least one of before/after" |
 | `prompt` absent, no stage entries, and no extend entries | structural error "empty workflow — provide at least prompt, one stage, or one extend entry" |
 
@@ -109,6 +120,8 @@ stages:
     agent: codex
     prompt: |
       Additional prompt merged into this stage's description channel
+    skills:
+      - web-search
   propose-review:
     loop: 2
     agent: claude
@@ -122,14 +135,20 @@ extend:
   warmup:
     before: [propose]
     title: Warmup
+    agent: codex
+    loop: 3
+    prompt: |
+      Looped warmup stage running on a specific agent (3 copies: warmup-1..3)
 ```
 
-All three per-stage fields (`agent`, `prompt`, `loop`) are optional. The `stages`
-section may be absent entirely. The top-level `prompt` may also be absent. An
-`extend:` entry carries `before`/`after` (at least one required; `depends_on`
-forbidden) plus any stage body fields (`title`, `prompt`, `skills`, `agents`,
-`interactive`, …) passed through verbatim. A workflow providing none of
-`prompt`, `stages`, or `extend` is rejected.
+All four per-stage fields (`agent`, `prompt`, `loop`, `skills`) are optional.
+The `stages` section may be absent entirely. The top-level `prompt` may also be
+absent. An `extend:` entry carries `before`/`after` (at least one required;
+`depends_on` forbidden), optional inline `agent` (str) and `loop` (int `>= 1`)
+— extracted into the model, not part of the body — plus any stage body fields
+(`title`, `prompt`, `skills`, `agents`, `interactive`, …) passed through
+verbatim. A workflow providing none of `prompt`, `stages`, or `extend` is
+rejected.
 
 ## Anti-patterns
 
@@ -149,6 +168,12 @@ forbidden) plus any stage body fields (`title`, `prompt`, `skills`, `agents`,
 - Do not expect `parse_workflow` to embed extend-stages or derive
   `depends_on` — it returns positioning instructions (`before`/`after`); the
   compiler embeds the stage and derives `depends_on`.
+- Do not expect `parse_workflow` to compose the extend-entry `agent` into a
+  wrapper path, expand its `loop`, or merge its `skills` — it extracts and
+  type-validates these fields; the compiler applies them.
+- Do not expect inline `agent` / `loop` of an extend-entry to appear in
+  `extend_stage.body` — they are extracted into dedicated model fields and
+  never reach the flow-file as stage fields.
 - Do not call `parse_workflow` on the host. The workflow-file is read and
   parsed inside the goga container
   (`/workspace/.goga/workflows/<name>.yml`); the host performs only the

@@ -11,28 +11,32 @@ Annotations: |
 
   This cell is a pure parser of project-level workflow-files. It reads a
   workflow-file, validates its structure (known top-level keys prompt /
-  stages / extend, field types, loop counts, extend-entry positioning),
-  and returns a `WorkflowDocument` carrying declarative instructions for the
-  compiler. It performs no I/O beyond the path it receives, performs
+  stages / extend, field types, loop counts, extend-entry positioning, and
+  the inline agent/loop fields of an extend-entry), and returns a
+  `WorkflowDocument` carrying declarative instructions for the compiler. It performs no I/O beyond the path it receives, performs
   no network or subprocess calls, and has no Imports — it depends only on
   the Python standard library and PyYAML.
 
   This cell is intentionally DECLARATIVE: it does NOT know about the compiler
   or any compiler-level concept (flow documents, flow stages, the compile
-  routine, body embedding, depends_on derivation). It returns instructions
-  (per-stage overrides for stages, NEW stages for extend); the consumer
+  routine, body embedding, depends_on derivation, command composition,
+  loop-expansion, skills merging). It returns instructions (per-stage
+  overrides for stages — now including a skills override; NEW stages for
+  extend — now carrying extracted inline agent/loop); the consumer
   (compiler) consumes them. This keeps the import graph one-directional: the
   compiler imports `WorkflowDocument` (and `WorkflowExtendStage`) from this
-  cell, never the reverse. The cell does not resolve agent names to wrapper
-  paths, does not embed extend-stages, does not derive depends_on, does not
-  apply loop-expansion, and does not rewrite depends_on — all of that is the
-  compiler's responsibility.
+  cell, never the reverse. The cell extracts inline agent/loop from an
+  extend-entry into the model (as it extracts before/after today) but does
+  not resolve agent names to wrapper paths, does not embed extend-stages,
+  does not derive depends_on, does not apply loop-expansion, does not merge
+  skills, and does not rewrite depends_on — all of that is the compiler's
+  responsibility.
 
   Use `convention` for code style, dataclass usage, and test layout.
 
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None)":
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
@@ -48,22 +52,31 @@ Annotations: |
     `loop`: positive integer (>= 1) instructing the compiler to expand the
             stage into N copies with ids NAME-1..N, or None when not
             specified (equivalent to loop=1 — no expansion)
+    `skills`: list of skill names the compiler merges with the stage's
+              pipeline-file skills (pipeline first, then these, deduplicated
+              by value), or None when not specified (no merge — the
+              pipeline-file skills pass through unchanged)
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - All three fields default to None — workflow-files may omit any field;
+    - All four fields default to None — workflow-files may omit any field;
       the parser produces None for missing fields
-    - Field order is fixed: agent, prompt, loop — matches the canonical
-      order of the per-stage keys in the workflow-file
+    - Field order is fixed: agent, prompt, loop, skills — matches the
+      canonical order of the per-stage keys in the workflow-file
 
     Constraints:
     - Do not validate loop >= 1 here — `parse_workflow` enforces it during
       parsing and raises a structural error before this dataclass is built
+    - Do not validate that skills is a list[str] here — `parse_workflow`
+      enforces it during parsing and raises a structural error before this
+      dataclass is built
     - Do not resolve `agent` to a wrapper path here — the compiler performs
       that composition when applying the instruction
+    - Do not merge `skills` with anything here — the compiler performs the
+      merge with the pipeline-file skills when applying the instruction
     - Do not validate `prompt` contents — pass through verbatim to the consumer
   properties:
     "agent -> str | None": |
@@ -75,8 +88,12 @@ Annotations: |
     "loop -> int | None": |
       Positive iteration count (>= 1) instructing the compiler to expand the
       stage into N copies, or None when not specified (no expansion).
+    "skills -> list[str] | None": |
+      Skill names the compiler merges with the stage's pipeline-file skills
+      (pipeline first, then these, deduplicated by value), or None when not
+      specified (no merge).
 
-"WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, body: dict[str, Any])":
+"WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
   annotations: |
     Data model of a single extend-entry in a workflow-file — a new stage to be
@@ -92,10 +109,20 @@ Annotations: |
               not specified
     `after`: list of stage names the new stage follows (the compiler adds each
              named stage to this stage's depends_on), or None when not specified
+    `agent`: agent name (e.g. "codex", "claude") the compiler composes into
+             the new stage's command wrapper path, exactly as a stages-block
+             `agent` override does — or None when not specified. Acts as a
+             DEFAULT override; an explicit stages-block entry for the same
+             name wins (per-field)
+    `loop`: positive integer (>= 1) instructing the compiler to expand the new
+            stage into N copies with ids NAME-1..N, exactly as a stages-block
+            `loop` override does — or None when not specified (no expansion).
+            Acts as a DEFAULT override; an explicit stages-block entry for
+            the same name wins (per-field)
     `body`: verbatim copy of the stage body (title, prompt, skills, agents,
             interactive, and any other stage field) EXCLUDING before, after,
-            and depends_on. Open-ended — this cell does not know the stage
-            field schema
+            agent, loop, and depends_on. Open-ended — this cell does not know
+            the stage field schema
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -105,15 +132,24 @@ Annotations: |
     - `before` and `after` default to None — an extend-entry may omit either;
       `parse_workflow` enforces that at least one is present before this
       dataclass is built
+    - `agent` and `loop` default to None — an extend-entry may omit either
     - `body` is required (no default) — every extend-stage carries stage content
-    - Field order is fixed: before, after, body
+    - Field order is fixed: before, after, agent, loop, body
 
     Constraints:
     - Do not validate "at least one of before/after" here — `parse_workflow`
       enforces it during parsing
     - Do not validate that body excludes depends_on here — `parse_workflow`
       rejects depends_on in an extend-entry before this dataclass is built
+    - Do not validate that body excludes agent/loop here — `parse_workflow`
+      extracts agent/loop from the entry before this dataclass is built, so
+      they never leak into body as stray stage fields
+    - Do not validate loop >= 1 here — `parse_workflow` enforces it during
+      parsing and raises a structural error before this dataclass is built
     - Do not embed the stage or derive depends_on here — the compiler performs both
+    - Do not compose the agent into a wrapper path, expand the loop, or apply
+      the per-field priority vs a stages-block entry here — all of that is
+      the compiler's responsibility
     - Do not validate before/after names against any pipeline — the compiler
       matches and silently ignores unknown names with a warning
   properties:
@@ -123,8 +159,17 @@ Annotations: |
     "after -> list[str] | None": |
       List of stage names the new stage follows (compiler adds them to this
       stage's depends_on), or None when not specified.
+    "agent -> str | None": |
+      Agent name the compiler composes into the new stage's command wrapper
+      path (default override; a stages-block entry for the same name wins),
+      or None when not specified.
+    "loop -> int | None": |
+      Positive iteration count (>= 1) instructing the compiler to expand the
+      new stage into N copies (default override; a stages-block entry for
+      the same name wins), or None when not specified (no expansion).
     "body -> dict[str, Any]": |
-      Verbatim stage body excluding before, after, and depends_on. Open-ended.
+      Verbatim stage body excluding before, after, agent, loop, and depends_on.
+      Open-ended.
 
 "WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None)":
   location: workflow_document.py
@@ -219,9 +264,9 @@ Annotations: |
        and stage value:
        a. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
-       b. Validate the key set of the stage value against agent, prompt, loop:
-          an unknown key raises "unknown key in workflow.stages.NAME: KEY;
-          valid keys: agent, prompt, loop"
+       b. Validate the key set of the stage value against agent, prompt,
+          loop, skills: an unknown key raises "unknown key in
+          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills"
        c. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
        d. prompt (when present) must be a str; otherwise raise
@@ -229,7 +274,10 @@ Annotations: |
        e. loop (when present) must be an int and >= 1; otherwise raise
           "non-int value in workflow.stages.NAME.loop" (non-int) or
           "loop must be >= 1 in workflow.stages.NAME" (int < 1)
-       f. Build a `WorkflowStage` from the validated values
+       f. skills (when present) must be a list[str]; otherwise raise
+          "non-list-of-str skills in workflow.stages.NAME"
+       g. Build a `WorkflowStage` from the validated values (agent, prompt,
+          loop, skills)
     6b. For each entry of extend (when present), identified by stage name
         and entry value:
         a. If the entry value is not a dict — raise a structural error
@@ -240,13 +288,21 @@ Annotations: |
            "non-list-of-str before in workflow.extend.NAME"
         d. after (when present) must be a list[str]; otherwise raise
            "non-list-of-str after in workflow.extend.NAME"
-        e. If neither before nor after is present — raise a structural error
+        e. agent (when present) must be a str; otherwise raise
+           "non-str value in workflow.extend.NAME.agent"
+        f. loop (when present) must be an int and >= 1; otherwise raise
+           "non-int value in workflow.extend.NAME.loop" (non-int) or
+           "loop must be >= 1 in workflow.extend.NAME" (int < 1)
+        g. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
-        f. Other keys of the entry value are NOT validated (open-ended: title,
-           prompt, skills, agents, interactive, and any other stage field) and
-           pass through verbatim
-        g. Build a `WorkflowExtendStage` from the validated before/after and
-           the remaining entry value as body
+        h. Other keys of the entry value are NOT validated (open-ended:
+           title, prompt, skills, agents, interactive, and any other stage
+           field) and pass through verbatim
+        i. Build a `WorkflowExtendStage` from the validated before/after,
+           agent/loop, and the REMAINING entry value (excluding before,
+           after, agent, loop, and depends_on) as body — agent/loop are
+           extracted into the model, not carried in body, so they never
+           reach the flow-file as stray stage fields
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
        (no entries) — raise a structural error "empty workflow — provide at
        least prompt, one stage, or one extend entry"
@@ -264,9 +320,17 @@ Annotations: |
       before/after names pass through; the compiler decides whether to apply
       or ignore (silently with a warning)
     - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop are accepted
+      loop, skills are accepted
+    - skills (when present) must be a list[str]; a non-list-of-str value is
+      a structural error
     - loop must be an int >= 1; zero, negative values, and non-int types
       are structural errors
+    - An extend-entry's inline agent (when present) must be a str, and its
+      inline loop (when present) must be an int >= 1 — same type rules as the
+      stages block; non-conforming values are structural errors
+    - Inline agent/loop of an extend-entry are EXTRACTED into the model and
+      excluded from the verbatim body (like before/after) — they do not pass
+      through as stage fields
     - Stage-name keys are NOT validated against any pipeline — unknown stage
       names pass through; the compiler decides whether to apply or ignore
       (silently with a warning)

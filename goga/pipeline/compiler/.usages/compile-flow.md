@@ -77,11 +77,18 @@ A workflow-file with an `extend:` block:
 prompt: |
   Top-level prompt emitted as the first directive of the compiled flow-file
 
+stages:
+  propose:
+    skills:
+      - web-search
+
 extend:
   warmup:
     before: [propose]
+    agent: codex
+    loop: 3
     title: Warmup
-    prompt: Bootstrap context before the first stage
+    prompt: Bootstrap context before the first stage (looped on codex)
   extra-check:
     after: [review]
     title: Extra check
@@ -92,6 +99,15 @@ to the new stage's `depends_on` (STAGES) or places it after them (PHASES);
 `before` adds the new stage to the named stages' `depends_on` (STAGES) or
 places it before them (PHASES). `depends_on` is forbidden in an extend-entry;
 at least one of `before`/`after` is required.
+
+An extend-entry may additionally carry inline `agent` (str) and `loop`
+(int `>= 1`) — extracted into the model, not part of the body. These act as
+DEFAULT overrides for the new stage; a `stages`-block entry for the same name
+wins per field (see Priority rule above). A `stages`-block entry may also carry
+`skills`, which the compiler merges with the step's pipeline-file skills. Any
+stage — extend or original — that ends up with no authored `agents` value
+carries the default `agents: [auto]` in the compiled flow-file (see Default
+stage-field injection above).
 
 ## Parameters
 
@@ -104,10 +120,11 @@ at least one of `before`/`after` is required.
 - `workflow: WorkflowDocument | None = None` — optional declarative instructions
   from a project workflow-file. When a `WorkflowDocument` is passed (parsed via
   `parse_workflow`), the cell reconstructs the parsed body per the workflow
-  instructions BEFORE building the FlowStages. The workflow may carry an
-  `extend` block (new stages positioned via `before`/`after`). When `None` —
-  no workflow is applied, the output carries no top-level prompt and no
-  per-stage overrides.
+  instructions BEFORE building the FlowStages. `workflow.stages` entries may
+  carry `agent` / `prompt` / `loop` / `skills`; `workflow.extend` entries may
+  additionally carry inline `agent` (str) and `loop` (int `>= 1`) extracted
+  from the entry body. When `None` — no workflow is applied, the output
+  carries no top-level prompt and no per-stage overrides.
 
 ## Return Values
 
@@ -171,40 +188,66 @@ the parsed body BEFORE building the FlowStages:
    loop-expansion, and reference rewriting (which then apply to extend-stages
    uniformly; after loop-expansion both `after`- and `before`-derived refs in
    STAGES resolve to the LAST expanded id).
-1. **Per-stage overrides (in-place on the step body)**: for each
-   `(stage_name, workflow_stage)` in `workflow.stages`:
-   - Find the step in the body whose `name`/id equals `stage_name`.
+1. **Per-stage overrides (in-place on the step body)**: for each stage name
+   that has an explicit `stages`-block entry OR originated from an
+   extend-entry carrying inline `agent`/`loop`, determine the EFFECTIVE
+   override (per-field: `stages`-block value when provided, else the
+   extend-entry's inline value, else None/1 — the `stages` block wins per
+   field):
+   - Find the step in the body whose `name`/id equals the stage name.
    - If not found — silently skip with a warning (a workflow may cover multiple
      pipelines; unknown stage names are not errors).
    - If found:
-     - when `workflow_stage.agent` is not None — add
-       `body["command"] = "/home/goga/bin/{workflow_stage.agent}-as-claude.sh"`
+     - when the effective agent is not None — add
+       `body["command"] = "/home/goga/bin/{effective_agent}-as-claude.sh"`
        (path composition inline, no host-side resolver call)
      - when `workflow_stage.prompt` is not None — add
-       `body["description"] = workflow_stage.prompt`
+       `body["description"] = workflow_stage.prompt` (prompt has no inline
+       extend equivalent — an extend-entry's prompt already lives in its body)
+     - when `workflow_stage.skills` is not None — merge skills:
+       `body["skills"] = dedup(pipeline_skills ++ workflow_skills)`, where
+       `pipeline_skills` is the step body's existing `skills` (or `[]`) and
+       `workflow_skills` is the `stages`-block skills list (`++` concatenates
+       pipeline first; dedup drops later duplicates by value). Both-empty
+       yields no `skills` key.
 2. **Loop-expansion (build a new ordered sequence of steps)**: for each step
-   determine `loop_count` from `workflow.stages[name].loop` if present, else 1.
-   When `loop_count >= 2`, append N copies with id `<name>-1`, ..., `<name>-N`,
-   each subsequent copy depending on the previous one. Record
-   `expanded_ids: dict[str, list[str]]` mapping base-name to the list of ids
-   produced.
+   determine `loop_count` as the EFFECTIVE loop: `stages`-block `loop` when
+   provided, else the extend-entry's inline `loop` when the step originated
+   from an extend-entry carrying one, else 1. When `loop_count >= 2`, append N
+   copies with id `<name>-1`, ..., `<name>-N`, each subsequent copy depending
+   on the previous one. Record `expanded_ids: dict[str, list[str]]` mapping
+   base-name to the list of ids produced.
 3. **External depends_on rewrite** (STAGES format only — PHASES is handled by
    list position): for each `StageStep` with non-None `depends_on`, replace any
    reference matching a base-name with `loop_count >= 2` with
    `expanded_ids[ref][-1]` (the LAST expanded id).
 
+**Priority rule (inline extend vs `stages` block)**: an extend-entry's inline
+`agent`/`loop` are DEFAULT override values; an explicit `stages`-block entry
+for the same name wins PER FIELD. Thus a `stages`-block `agent` → command
+composition wins over an inline `agent`, and a `stages`-block `loop` wins over
+an inline `loop`. Inline `agent`/`loop` never appear in the compiled flow-file
+as stage fields — they are extracted into the model by `parse_workflow` and
+consumed only as override defaults. Extend-entry `skills` are NOT merged — they
+pass through verbatim as the new stage's skills (a new stage has no pipeline
+side to merge with).
+
 ## Default stage-field injection
 
 When a step body has **no usable `agents` value** (the `agents:` key is absent,
-explicitly `null`, or set to an empty list `[]`), the compiler injects three
-default fields into the assembled `FlowStage.fields` of the compiled afm
+explicitly `null`, or set to an empty list `[]`), the compiler injects a SINGLE
+default field into the assembled `FlowStage.fields` of the compiled afm
 flow-file:
 
-- `agents: [planning]`
-- `supervisor: true`
-- `supervisor_prompt: "Make this stage autonomous"`
+- `agents: [auto]`
 
-These defaults are an **output-side** concern — they live only in the compiled
+`auto` is a **sentinel agent mode**: goga emits the literal string `auto`
+verbatim and does NOT interpret it — the actual agent selection is performed on
+the afm side. `supervisor` and `supervisor_prompt` are NO LONGER
+default-injected; they remain valid authored fields that pass through to their
+canonical slots when the source step body carries them.
+
+This default is an **output-side** concern — it lives only in the compiled
 `FlowDocument.stages`, never in the `PipelineDocument.body` returned to
 consumers (which stays a faithful mirror of the source pipeline-file).
 
@@ -213,13 +256,14 @@ always wins and disables injection entirely — the compiler does not second-gue
 the user's choice of agents. The injection runs uniformly on both the
 non-workflow path and the workflow path (after per-stage overrides and
 loop-expansion), so workflow-applied command/description overrides coexist with
-the injected defaults in the same stage without collision.
+the injected default in the same stage without collision.
 
-The injected fields land in the canonical per-stage key order between `agents`
-and `skills`:
+The canonical per-stage key order is unchanged (`supervisor` /
+`supervisor_prompt` retain their slots between `agents` and `skills`, but appear
+only when authored):
 
 ```
-interactive, command, prompt, description, agents, supervisor, supervisor_prompt, skills, …
+interactive, command, prompt, description, agents, [supervisor, supervisor_prompt,] skills, …
 ```
 
 Example — source pipeline-file stage without `agents`:
@@ -230,14 +274,12 @@ Example — source pipeline-file stage without `agents`:
   prompt: Run deployment
 ```
 
-Compiled flow-file stage (defaults injected):
+Compiled flow-file stage (default injected):
 
 ```yaml
 - id: deploy
   name: Deploy
-  agents: [planning]
-  supervisor: true
-  supervisor_prompt: Make this stage autonomous
+  agents: [auto]
   prompt: |
     Run deployment
 ```
@@ -313,3 +355,10 @@ pipelines.
 - Do not expect `compile_flow` to embed extend-stages after loop-expansion —
   embedding (step 0) precedes overrides, loop-expansion, and reference
   rewriting, which then apply to extend-stages uniformly.
+- Do not expect an extend-entry's inline `agent` / `loop` to appear in the
+  compiled stage as a field — they are override defaults, consumed into
+  `command` / loop-expansion (and a `stages`-block entry for the same name
+  wins per field).
+- Do not expect `supervisor` / `supervisor_prompt` to appear by default — they
+  are authored-only now; the default `agents` value injected into a stage
+  without an authored `agents` value is `[auto]`.
