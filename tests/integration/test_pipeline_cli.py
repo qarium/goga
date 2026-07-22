@@ -83,11 +83,11 @@ def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
     """Build the documents tuple ``compile_flow`` now returns, for mock wiring.
 
     ``run_pipeline`` unpacks ``(pipeline_doc, _flow_doc) = compile_flow(...)`` and
-    reads ``pipeline_doc.header.agents`` (None here → step 6.5 copies the four
+    reads ``pipeline_doc.header.roles`` (None here → step 6.5 copies the four
     package default prompts). Mirrors ``tests/pipeline/test_run_pipeline._fake_documents``.
     """
     pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d", agents=None),
+        header=PipelineHeader(name="deploy", description="d", roles=None),
         format=BodyFormat.PHASES,
         body=PhasesBody(steps=[]),
     )
