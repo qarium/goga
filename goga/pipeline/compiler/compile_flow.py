@@ -4,21 +4,29 @@
 pipeline-file (phases-list or stages-map), parses it via ``parse_dsl``, applies
 the per-format ``depends_on`` rules (PHASES: position-derived; STAGES:
 pass-through), reorders each step body into canonical key order via the internal
-``_canonical_fields`` helper (injecting the single default ``agents`` field when
-the source body lacks a usable ``agents`` value), builds a ``FlowDocument``,
+``_canonical_fields`` helper (translating the authoring-side ``roles`` field into
+the output ``agents`` field via ``translate_role``, injecting the single default
+``agents=["auto"]`` when the source body lacks a usable ``roles`` value, and
+hard-failing on the legacy ``agents`` stage-body key), builds a ``FlowDocument``,
 serializes it via ``serialize_flow``, and writes the result to ``flow_path``. It
 performs no environment-variable reads and no subprocess calls — the caller
 supplies both paths explicitly.
 
-When a step body has no ``agents`` key, has ``agents: null``, or has
-``agents: []``, ``_canonical_fields`` injects a single default into the assembled
-``FlowStage.fields``: ``agents=["auto"]``. Authored non-empty ``agents`` always
-wins — no injection happens when the source carries one. ``auto`` is a sentinel
-string emitted verbatim (goga does not interpret it; afm resolves the agent).
-``supervisor``/``supervisor_prompt`` are authored-only — never injected, but
-they pass through the canonical slot when the source body carries them. The
-injection lives in ``FlowStage`` assembly only — the ``PipelineDocument.body``
-returned to consumers stays a faithful mirror of the source pipeline-file.
+The authoring-side stage-body field is ``roles``; the compiled afm output field is
+``agents``. When a step body carries a usable ``roles`` value (a non-empty list),
+each role is translated to its afm agent name via ``translate_role`` (the single
+source of truth) and the result is placed under the output ``agents`` key. When a
+step body has no ``roles`` key, has ``roles: null``, or has ``roles: []``,
+``_canonical_fields`` injects a single default into the assembled
+``FlowStage.fields``: ``agents=["auto"]``. A legacy ``agents`` key in a step body
+is rejected with ``StructuralError("agents key is forbidden in stage body; use
+roles")`` — the input-only ``roles`` key never reaches the output. ``auto`` is a
+sentinel string emitted verbatim (goga does not interpret it; afm resolves the
+agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
+but they pass through the canonical slot when the source body carries them. The
+translation/injection lives in ``FlowStage`` assembly only — the
+``PipelineDocument.body`` returned to consumers stays a faithful mirror of the
+source pipeline-file.
 
 When the caller passes a non-``None`` ``workflow`` (a ``WorkflowDocument``), the
 parsed body is reconstructed BEFORE the ``FlowStage`` assembly: per-stage
@@ -84,12 +92,13 @@ _WRAPPER_PATH_TEMPLATE = "/home/goga/bin/{agent}-as-claude.sh"
 _LOOP_EXPANSION_THRESHOLD = 2
 
 # Default value injected into ``FlowStage.fields`` when the source step body
-# carries no usable ``agents`` value. A missing ``agents`` key OR an empty list
-# both trigger injection — authored non-empty ``agents`` always wins. ``auto`` is
-# a sentinel string emitted verbatim; goga does NOT interpret it (afm resolves
-# the agent). Authored ``supervisor``/``supervisor_prompt`` are NOT injected —
-# they are authored-only and pass through the canonical slot when the source body
-# carries them.
+# carries no usable ``roles`` value. A missing ``roles`` key, an explicit
+# ``None``, OR an empty list all trigger injection — authored non-empty ``roles``
+# always wins (each value translated to its afm agent name via ``translate_role``).
+# ``auto`` is a sentinel string emitted verbatim; goga does NOT interpret it (afm
+# resolves the agent). Authored ``supervisor``/``supervisor_prompt`` are NOT
+# injected — they are authored-only and pass through the canonical slot when the
+# source body carries them.
 _DEFAULT_AGENTS: tuple[str, ...] = ("auto",)
 
 # Single source of truth for the bijection between an authoring-side role and its
@@ -128,66 +137,80 @@ def translate_role(role: str) -> str:
     return _ROLE_ALIASES.get(role, role)
 
 
-def _has_usable_agents(body: dict[str, Any]) -> bool:
-    """Return ``True`` when ``body`` carries a non-empty ``agents`` list.
+def _has_usable_roles(body: dict[str, Any]) -> bool:
+    """Return ``True`` when ``body`` carries a non-empty ``roles`` list.
 
-    A missing ``agents`` key, an explicit ``None``, or an empty list all return
+    A missing ``roles`` key, an explicit ``None``, or an empty list all return
     ``False`` — these are the trigger conditions for default injection.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
 
     Returns:
-        ``True`` when ``agents`` is a non-empty list; ``False`` otherwise.
+        ``True`` when ``roles`` is a non-empty list; ``False`` otherwise.
     """
-    agents = body.get("agents")
-    return isinstance(agents, list) and len(agents) > 0
+    roles = body.get("roles")
+    return isinstance(roles, list) and len(roles) > 0
 
 
 def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
-    """Return a body dict with the single default ``agents`` injected when needed.
+    """Return a body dict with ``roles`` translated to ``agents`` (or the default injected).
 
-    When ``body`` carries a usable ``agents`` value (non-empty list) — returns a
-    shallow copy of ``body`` unchanged. Otherwise returns a copy with a single
-    default added: ``agents=["auto"]``. ``supervisor``/``supervisor_prompt`` are
-    NOT injected — they are authored-only and flow through the canonical slot
-    via ``_canonical_fields`` only when the source body already carries them.
-    The input is never mutated; the returned dict is independent so the caller
-    can deep-copy / reorder freely without touching the parsed body.
+    The input-only ``roles`` key is ALWAYS dropped from the output. When ``body``
+    carries a usable ``roles`` value (non-empty list), each role is translated to
+    its afm agent name via ``translate_role`` (the single source of truth) and the
+    result is placed under the output ``agents`` key. Otherwise the single default
+    ``agents=["auto"]`` is injected. ``supervisor``/``supervisor_prompt`` are NOT
+    injected — they are authored-only and flow through the canonical slot via
+    ``_canonical_fields`` only when the source body already carries them. The
+    input is never mutated; the returned dict is independent so the caller can
+    deep-copy / reorder freely without touching the parsed body.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
 
     Returns:
-        A new dict carrying either the original ``agents`` or the injected
-        single ``["auto"]`` default.
+        A new dict without the ``roles`` key, carrying either the translated
+        ``agents`` list or the injected single ``["auto"]`` default.
     """
-    if _has_usable_agents(body):
-        return dict(body)
-    injected = dict(body)
-    injected["agents"] = list(_DEFAULT_AGENTS)
-    return injected
+    out = {key: value for key, value in body.items() if key != "roles"}
+    if _has_usable_roles(body):
+        out["agents"] = [translate_role(role) for role in body["roles"]]
+    else:
+        out["agents"] = list(_DEFAULT_AGENTS)
+    return out
 
 
 def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
-    The single default ``agents`` field is injected first via ``_inject_defaults``
-    when the source body lacks a usable ``agents`` value. Known keys
-    (``interactive``, ``command``, ``prompt``, ``description``, ``agents``,
-    ``supervisor``, ``supervisor_prompt``, ``skills``) are emitted in that fixed
-    order; any remaining keys are appended alphabetically. ``supervisor``/
-    ``supervisor_prompt`` are authored-only — they appear in the output only when
-    the source body carries them. Each value is deep-copied so the returned dict
-    shares no structure with the parsed body — isolating the compiler's output
-    from caller mutation.
+    A legacy ``agents`` key in the step body is rejected up front with
+    ``StructuralError("agents key is forbidden in stage body; use roles")`` — the
+    authoring-side field is ``roles``; ``agents`` is the output-only afm field.
+    The ``roles`` field is then translated to ``agents`` (or the single default
+    ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source body
+    lacks a usable ``roles`` value. Known keys (``interactive``, ``command``,
+    ``prompt``, ``description``, ``agents``, ``supervisor``,
+    ``supervisor_prompt``, ``skills``) are emitted in that fixed order; any
+    remaining keys are appended alphabetically. The input-only ``roles`` key
+    never reaches the output (dropped in ``_inject_defaults``).
+    ``supervisor``/``supervisor_prompt`` are authored-only — they appear in the
+    output only when the source body carries them. Each value is deep-copied so
+    the returned dict shares no structure with the parsed body — isolating the
+    compiler's output from caller mutation.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
 
     Returns:
         A new dict in canonical key order with deep-copied values.
+
+    Raises:
+        StructuralError: If ``body`` carries the legacy ``agents`` key — the
+            authoring-side field is ``roles``; ``agents`` is output-only.
     """
+    if "agents" in body:
+        raise StructuralError("agents key is forbidden in stage body; use roles")
     source = _inject_defaults(body)
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:
@@ -744,13 +767,16 @@ def compile_flow(
     propagate unchanged; ``compile_flow`` does not read ``AFM_DIR``.
 
     Each ``FlowStage.fields`` is assembled via ``_canonical_fields``, which
-    injects a single default field when the source step body has no usable
-    ``agents`` (missing key, ``null``, or empty list): ``agents=["auto"]``. An
-    authored non-empty ``agents`` value always wins and disables injection.
-    ``supervisor``/``supervisor_prompt`` are authored-only — never injected, but
-    they pass through the canonical slot when the source body carries them. The
-    injection is local to ``FlowStage.fields`` — the ``PipelineDocument.body``
-    returned to consumers is never affected.
+    translates the authoring-side ``roles`` field into the output ``agents`` field
+    via ``translate_role`` (the single source of truth). A usable non-empty
+    ``roles`` list is translated element-wise; a missing ``roles`` key, ``null``,
+    or empty list injects the single default ``agents=["auto"]``. A legacy
+    ``agents`` key in a step body is rejected with ``StructuralError`` — the
+    authoring-side field is ``roles``. ``supervisor``/``supervisor_prompt`` are
+    authored-only — never injected, but they pass through the canonical slot when
+    the source body carries them. The translation/injection is local to
+    ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
+    never affected.
 
     When ``workflow`` is not ``None``, the parsed body is reconstructed
     (per-stage overrides, loop-expansion, external depends_on rewrite) on a deep
@@ -760,11 +786,12 @@ def compile_flow(
     no per-stage overrides.
 
     In addition to the flow-file, it builds a ``PipelineDocument`` aggregating the
-    parsed ``header`` (including any inline ``agents`` overrides), ``format``, and
+    parsed ``header`` (including any inline ``roles`` overrides), ``format``, and
     the ORIGINAL ``body`` (never the reconstructed one) so consumers can obtain
     the parsed representation without re-invoking ``parse_dsl``. ``FlowDocument``
-    never carries ``agents`` — it is a goga-side artifact of the compiler, not
-    part of the compiled afm flow-file.
+    never carries ``roles`` — the input-only ``roles`` field is translated away
+    into the output ``agents`` field; ``FlowDocument`` is a goga-side artifact of
+    the compiler, not part of the compiled afm flow-file.
 
     Args:
         pipeline_path: Absolute path to the input goga DSL pipeline-file. The file
@@ -777,14 +804,15 @@ def compile_flow(
 
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
-        ``PipelineDocument`` carries the parsed header (with ``header.agents``),
+        ``PipelineDocument`` carries the parsed header (with ``header.roles``),
         format, and the ORIGINAL body; the ``FlowDocument`` carries the name,
-        description, optional top-level prompt, and compiled stages (without
-        ``agents``).
+        description, optional top-level prompt, and compiled stages (the input
+        ``roles`` field translated to the output ``agents`` field).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
-            ``parse_dsl``) or on an empty body.
+            ``parse_dsl``), on an empty body, or on a legacy ``agents`` key in a
+            stage body.
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
         PermissionError: If ``pipeline_path`` is unreadable (propagated).

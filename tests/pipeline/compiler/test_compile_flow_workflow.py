@@ -360,7 +360,7 @@ class TestCompileFlowWorkflowCanonicalOrder:
             "s:\n"
             "  title: S\n"
             "  skills: [goga-propose]\n"
-            "  agents: [claude]\n"
+            "  roles: [claude]\n"
             "  prompt: body-prompt\n"
             "  interactive: true\n",
         )

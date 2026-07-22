@@ -5,9 +5,9 @@ description: "Feature implementation"
 - name: propose
   title: "Propose"
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
@@ -16,9 +16,9 @@ description: "Feature implementation"
 - name: propose-review
   title: "Propose Review"
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:
@@ -27,9 +27,9 @@ description: "Feature implementation"
 - name: brainstorm
   title: "Architecture Brainstorm"
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`

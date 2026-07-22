@@ -151,7 +151,7 @@ class TestDataModelsLogic:
 
     def test_phase_step_body_retains_arbitrary_keys(self) -> None:
         """The body dict carries verbatim content with no normalization."""
-        payload = {"foo": [1, 2, 3], "nested": {"k": "v"}, "agents": ["planning"]}
+        payload = {"foo": [1, 2, 3], "nested": {"k": "v"}, "roles": ["planner"]}
         step = PhaseStep(name="a", title="b", body=payload)
 
         assert step.body == payload

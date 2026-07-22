@@ -63,18 +63,18 @@ class TestCompileFlowContract:
         assert isinstance(flow_doc, FlowDocument)
         # FlowDocument never carries agents (goga-side artifact).
         assert not hasattr(flow_doc, "agents")
-        # No agents block → header.agents is None.
-        assert pipeline_doc.header.agents is None
+        # No roles block → header.roles is None.
+        assert pipeline_doc.header.roles is None
         assert flow_path.exists()
 
-    def test_compile_flow_returns_documents_tuple_with_agents(self, tmp_path: Path) -> None:
-        """A pipeline-file with an ``agents.planning`` override surfaces it on the returned PipelineDocument."""
+    def test_compile_flow_returns_documents_tuple_with_roles(self, tmp_path: Path) -> None:
+        """A pipeline-file with a ``roles.planner`` override surfaces it on the returned PipelineDocument."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
             "name: T\n"
             "description: T\n"
-            "agents:\n"
-            "  planning: |\n"
+            "roles:\n"
+            "  planner: |\n"
             "    Custom planning prompt.\n"
             "---\n"
             "\n"
@@ -90,15 +90,15 @@ class TestCompileFlowContract:
         pipeline_doc, flow_doc = documents
         assert isinstance(pipeline_doc, PipelineDocument)
         assert isinstance(flow_doc, FlowDocument)
-        assert pipeline_doc.header.agents is not None
-        assert pipeline_doc.header.agents.planning == "Custom planning prompt.\n"
+        assert pipeline_doc.header.roles is not None
+        assert pipeline_doc.header.roles.planner == "Custom planning prompt.\n"
         # FlowDocument does not carry agents (goga-side artifact).
         assert not hasattr(flow_doc, "agents")
         # The flow-file is still written as a side effect.
         assert flow_path.exists()
 
-    def test_compile_flow_returns_pipeline_document_with_none_agents_when_absent(self, tmp_path: Path) -> None:
-        """A pipeline-file without an ``agents`` block yields a PipelineDocument whose agents is None."""
+    def test_compile_flow_returns_pipeline_document_with_none_roles_when_absent(self, tmp_path: Path) -> None:
+        """A pipeline-file without a ``roles`` block yields a PipelineDocument whose roles is None."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
             "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n",
@@ -107,21 +107,21 @@ class TestCompileFlowContract:
 
         pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
 
-        assert pipeline_doc.header.agents is None
+        assert pipeline_doc.header.roles is None
 
-    def test_pipeline_doc_agents_does_not_leak_into_flow_file_text(self, tmp_path: Path) -> None:
-        """Inline agent prompts ride on PipelineDocument but never reach the compiled flow-file."""
+    def test_pipeline_doc_roles_does_not_leak_into_flow_file_text(self, tmp_path: Path) -> None:
+        """Inline role prompts ride on PipelineDocument but never reach the compiled flow-file."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\nagents:\n  planning: Custom\n---\n\n- name: a\n  title: A\n",
+            "name: T\ndescription: T\nroles:\n  planner: Custom\n---\n\n- name: a\n  title: A\n",
         )
         flow_path = tmp_path / "flow.yml"
 
         pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path)
 
         # The override is visible on the returned PipelineDocument ...
-        assert pipeline_doc.header.agents is not None
-        assert pipeline_doc.header.agents.planning == "Custom"
+        assert pipeline_doc.header.roles is not None
+        assert pipeline_doc.header.roles.planner == "Custom"
         # ... but never serialized into the afm flow-file.
         assert "Custom" not in flow_path.read_text()
 
@@ -291,19 +291,22 @@ class TestCompileFlowLogic:
         """
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
-        source_body = {"agents": ["planning"], "nested": {"k": 1}}
+        source_body = {"roles": ["planner"], "nested": {"k": 1}}
         fields = _canonical_fields(source_body)
 
-        # Canonical order is established (``agents`` is a known key) and values match.
+        # Canonical order is established (``agents`` is a known output key) and the
+        # input ``roles`` was translated to the output ``agents`` via translate_role.
         assert list(fields.keys()) == ["agents", "nested"]
         assert fields["agents"] == ["planning"]
+        # The input-only ``roles`` key never reaches the output fields.
+        assert "roles" not in fields
 
         # Mutating the ordered fields must not reach back into the source body
         # (genuine deep-copy isolation, not an alias to the source values).
         fields["agents"].append("hacked")
         fields["nested"]["extra"] = True
 
-        assert source_body["agents"] == ["planning"]
+        assert source_body["roles"] == ["planner"]
         assert source_body["nested"] == {"k": 1}
 
     def test_compile_flow_missing_flow_path_parent_raises(self, tmp_path: Path) -> None:
@@ -357,8 +360,8 @@ class TestCompileFlowLogic:
             "a:\n"
             "  title: Real Label\n"
             "  name: Collision Name\n"
-            "  agents:\n"
-            "    - planning\n",
+            "  roles:\n"
+            "    - planner\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -400,3 +403,85 @@ class TestCompileFlowLogic:
 
         with pytest.raises(StructuralError, match="stage name must be a string"):
             compile_flow(pipeline_path, flow_path)
+
+
+class TestCompileFlowRolesTranslation:
+    """The authoring-side ``roles`` stage-body field translates to the output ``agents`` field.
+
+    Pins the input ``roles`` → output ``agents`` translation via the single
+    ``translate_role`` source of truth: known aliases map, unknown values pass
+    through verbatim, an empty/missing ``roles`` injects ``["auto"]``, and the
+    input-only ``roles`` key never reaches the compiled flow-file. A legacy
+    ``agents`` key in a stage body hard-fails with a structural error.
+    """
+
+    def test_compile_flow_translates_stage_roles_to_output_agents(self, tmp_path: Path) -> None:
+        """A stage body ``roles: [planner, executor]`` compiles to ``agents: [planning, implementation]``.
+
+        The known aliases are translated to their afm stems; the input-only
+        ``roles`` key never appears in the compiled flow-file.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  roles:\n    - planner\n    - executor\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        text = flow_path.read_text()
+        # Known aliases translated element-wise via translate_role (flow-style).
+        assert "agents: [planning, implementation]" in text
+        # The input-only ``roles`` key never reaches the compiled flow-file.
+        assert "roles:" not in text
+
+    def test_compile_flow_rejects_legacy_agents_in_stage_body(self, tmp_path: Path) -> None:
+        """A legacy ``agents`` key in a stage body raises StructuralError.
+
+        The authoring-side stage-body field is ``roles``; ``agents`` is the
+        output-only afm field and is forbidden on the input side.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  agents:\n    - planning\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(StructuralError, match="agents key is forbidden in stage body; use roles"):
+            compile_flow(pipeline_path, flow_path)
+
+    def test_compile_flow_empty_roles_injects_auto(self, tmp_path: Path) -> None:
+        """A stage body ``roles: []`` injects the single ``agents: [auto]`` default.
+
+        An empty ``roles`` list is unusable, so the default fires; the
+        input-only ``roles`` key never reaches the compiled flow-file.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  roles: []\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        text = flow_path.read_text()
+        assert "agents: [auto]" in text
+        assert "roles:" not in text
+
+    def test_compile_flow_roles_verbatim_passthrough_values(self, tmp_path: Path) -> None:
+        """Unknown ``roles`` values pass through verbatim (no translation, no validation).
+
+        ``planning`` (an already-afm name) and ``custom-thing`` (an arbitrary
+        afm name) are not aliases, so ``translate_role`` returns them unchanged.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  roles:\n    - planning\n    - custom-thing\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["agents"] == ["planning", "custom-thing"]
+        assert "roles" not in fields

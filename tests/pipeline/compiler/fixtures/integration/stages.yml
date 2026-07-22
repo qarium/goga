@@ -5,9 +5,9 @@ description: "Feature implementation"
 propose:
   title: "Propose"
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
@@ -16,9 +16,9 @@ propose:
 propose-review:
   title: "Propose Review"
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:

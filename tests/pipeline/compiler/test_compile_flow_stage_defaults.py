@@ -1,12 +1,13 @@
 """Behavioral tests for the default stage-field injection in ``compile_flow``.
 
 Covers the user-requested extension: when a pipeline-DSL stage lacks a usable
-``agents`` value (key absent, ``null``, or empty list), the compiler injects a
+``roles`` value (key absent, ``null``, or empty list), the compiler injects a
 single default into the assembled ``FlowStage.fields``:
 
 - ``agents=["auto"]``
 
-An authored non-empty ``agents`` always wins — no injection happens.
+An authored non-empty ``roles`` always wins — each value is translated to its
+afm agent name via ``translate_role`` and no injection happens.
 ``supervisor``/``supervisor_prompt`` are authored-only — never injected, but
 they pass through the canonical slot when the source body carries them. The
 injection lives in ``FlowStage`` assembly only — ``PipelineDocument.body``
@@ -23,7 +24,7 @@ from goga.pipeline.workflow import WorkflowDocument, WorkflowStage
 
 
 class TestStageDefaultsInjection:
-    """When ``agents`` is missing or empty, the single default is injected."""
+    """When ``roles`` is missing or empty, the single default is injected."""
 
     def test_phases_stage_without_agents_gets_defaults(self, tmp_path: Path) -> None:
         """A PHASES stage with no ``agents`` key gets the single default field."""
@@ -55,11 +56,11 @@ class TestStageDefaultsInjection:
         assert "supervisor" not in fields
         assert "supervisor_prompt" not in fields
 
-    def test_stage_with_empty_agents_gets_defaults(self, tmp_path: Path) -> None:
-        """``agents: []`` triggers default injection — empty list is unusable."""
+    def test_stage_with_empty_roles_gets_defaults(self, tmp_path: Path) -> None:
+        """``roles: []`` triggers default injection — empty list is unusable."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: []\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles: []\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -70,11 +71,11 @@ class TestStageDefaultsInjection:
         assert "supervisor" not in fields
         assert "supervisor_prompt" not in fields
 
-    def test_stage_with_null_agents_gets_defaults(self, tmp_path: Path) -> None:
-        """``agents: null`` (explicit YAML null) triggers default injection."""
+    def test_stage_with_null_roles_gets_defaults(self, tmp_path: Path) -> None:
+        """``roles: null`` (explicit YAML null) triggers default injection."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: null\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles: null\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -108,13 +109,13 @@ class TestStageDefaultsInjection:
 
 
 class TestStageDefaultsRespectAuthored:
-    """An authored non-empty ``agents`` value disables default injection."""
+    """An authored non-empty ``roles`` value disables default injection."""
 
     def test_stage_with_single_agent_no_defaults(self, tmp_path: Path) -> None:
-        """``agents: [foo]`` is preserved verbatim; no defaults are injected."""
+        """``roles: [foo]`` is translated verbatim (unknown alias); no defaults are injected."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents:\n    - foo\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles:\n    - foo\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -126,10 +127,10 @@ class TestStageDefaultsRespectAuthored:
         assert "supervisor_prompt" not in fields
 
     def test_stage_with_multiple_agents_no_defaults(self, tmp_path: Path) -> None:
-        """``agents: [planning, implementation]`` is preserved; no defaults."""
+        """``roles: [planner, executor]`` translates to ``agents: [planning, implementation]``; no defaults."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents:\n    - planning\n    - implementation\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles:\n    - planner\n    - executor\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -140,16 +141,16 @@ class TestStageDefaultsRespectAuthored:
         assert "supervisor" not in fields
         assert "supervisor_prompt" not in fields
 
-    def test_compile_flow_authored_agents_disables_injection(self, tmp_path: Path) -> None:
-        """An authored non-empty ``agents`` value disables the single injection.
+    def test_compile_flow_authored_roles_disables_injection(self, tmp_path: Path) -> None:
+        """An authored non-empty ``roles`` value disables the single injection.
 
-        Authored input (``agents: [foo]``) is non-empty → injection does not
-        fire, so the source value survives and no ``supervisor``/``agents=[auto]``
-        injection appears.
+        Authored input (``roles: [foo]``) is a non-empty list → injection does
+        not fire, so the translated value survives and no
+        ``supervisor``/``agents=[auto]`` injection appears.
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents:\n    - foo\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles:\n    - foo\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -251,19 +252,19 @@ class TestStageDefaultsDoNotLeak:
         assert "supervisor" not in body
         assert "supervisor_prompt" not in body
 
-    def test_pipeline_document_body_preserves_empty_agents(self, tmp_path: Path) -> None:
-        """``agents: []`` in the source stays ``[]`` in the parsed body —
+    def test_pipeline_document_body_preserves_empty_roles(self, tmp_path: Path) -> None:
+        """``roles: []`` in the source stays ``[]`` in the parsed body —
         default injection does not retroactively populate it."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  agents: []\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  roles: []\n",
         )
         flow_path = tmp_path / "flow.yml"
 
         pipeline_doc, _ = compile_flow(pipeline_path, flow_path)
 
         body = pipeline_doc.body.steps[0].body
-        assert body["agents"] == []
+        assert body["roles"] == []
         assert "supervisor" not in body
         assert "supervisor_prompt" not in body
 
@@ -282,30 +283,30 @@ class TestStageDefaultsHelper:
         # The source body is not mutated.
         assert "agents" not in body
 
-    def test_no_inject_when_agents_non_empty(self) -> None:
+    def test_no_inject_when_roles_non_empty(self) -> None:
         from goga.pipeline.compiler.compile_flow import _inject_defaults
 
-        body = {"agents": ["foo"]}
+        body = {"roles": ["foo"]}
         injected = _inject_defaults(body)
 
         assert injected["agents"] == ["foo"]
         assert "supervisor" not in injected
         assert "supervisor_prompt" not in injected
 
-    def test_inject_when_agents_empty_list(self) -> None:
+    def test_inject_when_roles_empty_list(self) -> None:
         from goga.pipeline.compiler.compile_flow import _inject_defaults
 
-        body = {"agents": []}
+        body = {"roles": []}
         injected = _inject_defaults(body)
 
         assert injected["agents"] == ["auto"]
         assert "supervisor" not in injected
         assert "supervisor_prompt" not in injected
 
-    def test_inject_when_agents_null(self) -> None:
+    def test_inject_when_roles_null(self) -> None:
         from goga.pipeline.compiler.compile_flow import _inject_defaults
 
-        body = {"agents": None}
+        body = {"roles": None}
         injected = _inject_defaults(body)
 
         assert injected["agents"] == ["auto"]
