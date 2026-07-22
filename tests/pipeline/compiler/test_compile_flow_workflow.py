@@ -1142,3 +1142,255 @@ class TestCompileFlowExtendRegression:
         assert [step.name for step in pipeline_doc.body.steps] == ["propose", "review"]
         # FlowDocument carries the embedded extend-stage.
         assert [stage.id for stage in flow_doc.stages] == ["propose", "review", "extra"]
+
+
+class TestCompileFlowSkillsMerge:
+    """Trace 4 — skills-merge (pipeline-file skills + workflow-stage skills).
+
+    The compiler merges the stage's pipeline-file ``skills`` (first, position
+    preserved) with the workflow-stage ``skills`` override, deduplicating by
+    value. An explicit stages-block is the only source of a skills override —
+    inline-extend body skills are verbatim, never merged.
+    """
+
+    def test_compile_flow_skills_merge_dedup(self, tmp_path: Path) -> None:
+        """Pipeline skills keep their position; workflow skills append, dups dropped.
+
+        pipeline ``skills:[goga-propose]`` + workflow ``stages.propose.skills:[web-search, goga-propose]``
+        → ``fields["skills"] == ["goga-propose", "web-search"]`` (the duplicate
+        ``goga-propose`` from the workflow side is dropped, pipeline position wins).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n  skills:\n    - goga-propose\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(skills=["web-search", "goga-propose"])})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["skills"] == ["goga-propose", "web-search"]
+
+    def test_compile_flow_skills_merge_both_empty_no_key(self, tmp_path: Path) -> None:
+        """Both pipeline and workflow skills empty → no ``skills`` key at all.
+
+        pipeline carries no ``skills``; workflow ``stages.x.skills: []``. The merge
+        is empty → ``None`` → the slot is left untouched, so the field is absent
+        (NOT ``skills: null``) in the assembled fields.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: x\n  title: X\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"x": WorkflowStage(skills=[])})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert "skills" not in flow_doc.stages[0].fields
+
+    def test_compile_flow_extend_skills_not_merged_verbatim(self, tmp_path: Path) -> None:
+        """An extend-stage body carries ``skills`` verbatim (no pipeline side, no merge).
+
+        The extend entry ``extra`` has ``skills:[audit]`` in its body and no matching
+        stages-block, so the effective override has ``skills=None`` and the merge
+        branch never runs. The body skills survive untouched → ``["audit"]``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "extra": WorkflowExtendStage(after=["propose"], body={"title": "Extra", "skills": ["audit"]}),
+            },
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        extra = next(stage for stage in flow_doc.stages if stage.id == "extra")
+        assert extra.fields["skills"] == ["audit"]
+
+
+class TestCompileFlowEffectiveOverrides:
+    """Trace 4/5 — effective override (inline extend → stages overlay) + effective loop.
+
+    Inline-extend ``agent``/``loop`` seed the DEFAULT override; an explicit
+    stages-block entry overlays per-field and WINS whenever its field is not
+    ``None``. Loop-expansion reads the effective ``loop`` (stages OR inline).
+    """
+
+    def test_compile_flow_effective_agent_inline_fallback(self, tmp_path: Path) -> None:
+        """An inline-extend ``agent`` applies with no matching stages-block.
+
+        extend ``warmup`` inline ``agent: codex``, no ``stages.warmup``: the
+        effective override carries the inline agent, composing the wrapper command.
+        The inline ``agent``/``loop`` never leak as separate flow-file keys.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"warmup": WorkflowExtendStage(after=["propose"], agent="codex", body={"title": "Warmup"})},
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        warmup = next(stage for stage in flow_doc.stages if stage.id == "warmup")
+        assert warmup.fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+        # Inline agent/loop must not leak as separate keys (Trace 6 non-leak).
+        assert "agent" not in warmup.fields
+        assert "loop" not in warmup.fields
+
+    def test_compile_flow_stages_block_wins_per_field_over_inline(self, tmp_path: Path) -> None:
+        """Stages-block agent wins per-field while inline loop still applies.
+
+        extend ``warmup`` inline ``agent: codex, loop: 3``; explicit ``stages.warmup.agent: claude``
+        (no loop). Effective = agent claude (stages wins), loop 3 (stages loop is
+        None → inline fallback). So the command composes ``claude`` (NOT codex) and
+        the stage expands to ``warmup-1..3``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(agent="claude")},
+            extend={
+                "warmup": WorkflowExtendStage(after=["propose"], agent="codex", loop=3, body={"title": "Warmup"}),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["propose", "warmup-1", "warmup-2", "warmup-3"]
+        # Every warmup copy composes the stages-block agent (claude), not the inline codex.
+        for stage in stages[1:]:
+            assert stage["command"] == "/home/goga/bin/claude-as-claude.sh"
+
+    def test_compile_flow_effective_inline_extend_loop_expansion(self, tmp_path: Path) -> None:
+        """An inline-extend ``loop`` expands the stage with no matching stages-block.
+
+        extend ``warmup`` inline ``loop: 3`` (no stages-block): the effective
+        override carries the inline loop → expansion to ``warmup-1..3``. Symmetric
+        with the stages-``loop`` expansion path.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={"warmup": WorkflowExtendStage(after=["propose"], loop=3, body={"title": "Warmup"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["propose", "warmup-1", "warmup-2", "warmup-3"]
+
+    def test_compile_flow_explicit_stages_loop_wins_over_inline_extend_loop(self, tmp_path: Path) -> None:
+        """An explicit stages-``loop`` wins per-field over an inline-extend ``loop``.
+
+        extend ``warmup`` inline ``loop: 3``; explicit ``stages.warmup.loop: 2``.
+        Effective loop = 2 (stages wins) → expansion to ``warmup-1..2`` only, NOT
+        the inline 3.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(loop=2)},
+            extend={"warmup": WorkflowExtendStage(after=["propose"], loop=3, body={"title": "Warmup"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["propose", "warmup-1", "warmup-2"]
+
+
+class TestCompileFlowReconstructionHelpers:
+    """Direct unit tests for the private reconstruction helpers.
+
+    ``_merge_skills`` and ``_effective_overrides`` are internal implementation
+    helpers (not on the facade); they are exercised directly via import to pin
+    their pure, deterministic behavior independently of the full compile pipeline.
+    """
+
+    def test_merge_skills_dedup_pipeline_first(self) -> None:
+        """Pipeline skills precede workflow skills; duplicates drop by first occurrence."""
+        from goga.pipeline.compiler.compile_flow import _merge_skills
+
+        assert _merge_skills(["a", "b"], ["b", "c"]) == ["a", "b", "c"]
+        # Pipeline position is preserved even when a workflow skill would reorder.
+        assert _merge_skills(["goga-propose"], ["web-search", "goga-propose"]) == ["goga-propose", "web-search"]
+
+    def test_merge_skills_both_empty_returns_none(self) -> None:
+        """All empty/None combinations return ``None`` (the no-key marker)."""
+        from goga.pipeline.compiler.compile_flow import _merge_skills
+
+        assert _merge_skills(None, None) is None
+        assert _merge_skills([], []) is None
+        assert _merge_skills(None, []) is None
+        assert _merge_skills([], None) is None
+
+    def test_merge_skills_one_side_only(self) -> None:
+        """A single non-empty side yields that side's skills (deduplicated)."""
+        from goga.pipeline.compiler.compile_flow import _merge_skills
+
+        assert _merge_skills(None, ["a"]) == ["a"]
+        assert _merge_skills(["a"], None) == ["a"]
+        assert _merge_skills(["a", "a"], None) == ["a"]
+
+    def test_effective_overrides_inline_seed_only(self) -> None:
+        """An extend-only entry seeds an effective stage carrying agent/loop only."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(
+            extend={"warmup": WorkflowExtendStage(after=["propose"], agent="codex", loop=3, body={"title": "W"})},
+        )
+
+        effective = _effective_overrides(workflow)
+
+        assert set(effective.keys()) == {"warmup"}
+        assert effective["warmup"].agent == "codex"
+        assert effective["warmup"].loop == 3
+        # Inline extend carries no prompt/skills override.
+        assert effective["warmup"].prompt is None
+        assert effective["warmup"].skills is None
+
+    def test_effective_overrides_stages_block_only(self) -> None:
+        """A stages-only entry passes through verbatim (no inline fallback involved)."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(stages={"propose": WorkflowStage(agent="claude", prompt="P", skills=["s"])})
+
+        effective = _effective_overrides(workflow)
+
+        assert set(effective.keys()) == {"propose"}
+        assert effective["propose"].agent == "claude"
+        assert effective["propose"].prompt == "P"
+        assert effective["propose"].loop is None
+        assert effective["propose"].skills == ["s"]
+
+    def test_effective_overrides_per_field_overlay(self) -> None:
+        """A stages-block overlays an inline seed per-field, winning when not None."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(agent="claude")},
+            extend={"warmup": WorkflowExtendStage(after=["propose"], agent="codex", loop=3, body={"title": "W"})},
+        )
+
+        effective = _effective_overrides(workflow)
+
+        # Stages agent wins (not None); inline loop falls back (stages loop is None).
+        assert effective["warmup"].agent == "claude"
+        assert effective["warmup"].loop == 3
+        # Prompt/skills come from the stages-block (None here — no inline equivalent).
+        assert effective["warmup"].prompt is None
+        assert effective["warmup"].skills is None
+
+    def test_effective_overrides_empty_workflow(self) -> None:
+        """A workflow with only a top-level prompt yields an empty effective map."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        assert _effective_overrides(WorkflowDocument(prompt="P")) == {}
+

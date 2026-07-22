@@ -40,7 +40,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from ..workflow import WorkflowDocument, WorkflowExtendStage
+from ..workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage
 from .body_format import BodyFormat
 from .flow_document import FlowDocument
 from .flow_stage import FlowStage
@@ -160,27 +160,101 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     return ordered
 
 
+def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]:
+    """Resolve the per-stage effective override map (inline extend → stages overlay).
+
+    Computed ONCE per reconstruction and threaded into ``_apply_per_stage_overrides``
+    and ``_expand_loops`` so the per-field merge lives in exactly one place. The
+    inline ``agent``/``loop`` carried by ``workflow.extend`` seed the default
+    override (an extend-stage with no matching stages-block still gets its inline
+    agent/loop applied); an explicit ``workflow.stages`` entry then overlays
+    per-field and WINS whenever its field is not ``None`` (the inline value is the
+    fallback only). ``prompt``/``skills`` have no inline equivalent, so a
+    stages-block entry's own values always pass straight through, and a name with
+    only an extend entry carries ``prompt``/``skills`` as ``None``.
+
+    Args:
+        workflow: The declarative workflow instructions.
+
+    Returns:
+        The effective per-stage override map keyed by stage name. Extend-seeded
+        entries carry only ``agent``/``loop``; stages-block entries carry their
+        full ``WorkflowStage``; merged entries combine them per-field.
+    """
+    effective: dict[str, WorkflowStage] = {}
+    for name, ext in workflow.extend.items():
+        # Inline extend carries agent/loop only — no prompt/skills override.
+        effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop)
+    for name, stg in workflow.stages.items():
+        base = effective.get(name)
+        if base is None:
+            # Explicit stages-block with no inline fallback — use it verbatim.
+            effective[name] = stg
+            continue
+        # Per-field overlay: stages-block wins whenever its field is not None.
+        effective[name] = WorkflowStage(
+            agent=stg.agent if stg.agent is not None else base.agent,
+            prompt=stg.prompt,
+            loop=stg.loop if stg.loop is not None else base.loop,
+            skills=stg.skills,
+        )
+    return effective
+
+
+def _merge_skills(
+    pipeline_skills: list[str] | None,
+    workflow_skills: list[str] | None,
+) -> list[str] | None:
+    """Merge pipeline-file and workflow-stage skills, deduplicating by value.
+
+    Pipeline-file skills come first (their relative order is preserved), then the
+    workflow-stage skills, with any value already seen dropped. Deduplication is
+    deterministic (first-occurrence order). Both inputs empty (or ``None``) yields
+    ``None`` — the absence marker the caller uses to leave the ``skills`` slot
+    untouched, so an absent key stays absent.
+
+    Args:
+        pipeline_skills: The stage's pipeline-file ``skills`` value, or ``None``.
+        workflow_skills: The workflow-stage ``skills`` override, or ``None``.
+
+    Returns:
+        The merged deduplicated list, or ``None`` when both inputs are empty.
+    """
+    merged: list[str] = []
+    seen: set[str] = set()
+    for skill in (pipeline_skills or []) + (workflow_skills or []):
+        if skill not in seen:
+            seen.add(skill)
+            merged.append(skill)
+    return merged if merged else None
+
+
 def _apply_per_stage_overrides(
     steps: list[PhaseStep | StageStep],
-    workflow: WorkflowDocument,
+    effective: dict[str, WorkflowStage],
 ) -> None:
-    """Inject per-stage agent/prompt overrides into the matching step bodies.
+    """Inject per-stage agent/prompt/skills overrides into the matching step bodies.
 
-    For each ``(name, WorkflowStage)`` in ``workflow.stages``: the step with a
-    matching name/id is found in ``steps`` (mutated in place); when no step
-    matches, a ``WARNING`` is logged and the entry is skipped (a workflow may
-    intentionally cover multiple pipelines). When found, a non-``None`` ``agent``
-    composes the in-container wrapper path into the step body's ``command`` slot,
-    and a non-``None`` ``prompt`` copies its text into the step body's
-    ``description`` slot. Operates on the supplied (already deep-copied) working
-    sequence so the ORIGINAL parsed body stays untouched.
+    For each ``(name, WorkflowStage)`` in ``effective``: the step with a matching
+    name/id is found in ``steps`` (mutated in place); when no step matches, a
+    ``WARNING`` is logged and the entry is skipped (a workflow may intentionally
+    cover multiple pipelines). When found, a non-``None`` ``agent`` composes the
+    in-container wrapper path into the step body's ``command`` slot, a
+    non-``None`` ``prompt`` copies its text into the step body's ``description``
+    slot, and a non-``None`` ``skills`` merges with the step body's existing
+    ``skills`` via ``_merge_skills`` (pipeline-first dedup). ``effective`` already
+    folds the inline-extend default together with the explicit stages-block, so
+    inline ``agent``/``loop`` apply even without a stages-block, and an explicit
+    stages-block wins per-field. Operates on the supplied (already deep-copied)
+    working sequence so the ORIGINAL parsed body stays untouched.
 
     Args:
         steps: The working (deep-copied) step sequence to mutate in place.
-        workflow: The declarative workflow instructions.
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name.
     """
     steps_by_name = {step.name: step for step in steps}
-    for name, stage in workflow.stages.items():
+    for name, stage in effective.items():
         step = steps_by_name.get(name)
         if step is None:
             logger.warning(
@@ -192,6 +266,10 @@ def _apply_per_stage_overrides(
             step.body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=stage.agent)
         if stage.prompt is not None:
             step.body["description"] = stage.prompt
+        if stage.skills is not None:
+            merged = _merge_skills(step.body.get("skills"), stage.skills)
+            if merged is not None:
+                step.body["skills"] = merged
 
 
 def _make_expanded_copy(
@@ -236,21 +314,26 @@ def _make_expanded_copy(
 
 def _expand_loops(
     steps: list[PhaseStep | StageStep],
-    workflow: WorkflowDocument,
     fmt: BodyFormat,
+    effective: dict[str, WorkflowStage],
 ) -> tuple[list[PhaseStep | StageStep], dict[str, list[str]]]:
     """Expand looped stages into N chained copies, preserving source order.
 
-    For each step in source order: ``loop_count`` is the workflow's ``loop`` for
-    the step's name when set, otherwise ``1``. A ``loop_count`` of ``1`` appends
-    the step unchanged and records the base-name → ``[base-name]``. A
-    ``loop_count >= 2`` appends ``N`` copies ``NAME-1``..``NAME-N`` (built via
-    ``_make_expanded_copy``) and records the base-name → ``[NAME-1, ..., NAME-N]``.
+    For each step in source order: ``loop_count`` is the effective override's
+    ``loop`` for the step's name when set, otherwise ``1``. ``effective`` already
+    folds the inline-extend ``loop`` default together with the explicit
+    stages-block ``loop`` (stages-block wins per-field), so an inline-extend loop
+    expands even without a stages-block, and an explicit stages-loop wins. A
+    ``loop_count`` of ``1`` appends the step unchanged and records the base-name →
+    ``[base-name]``. A ``loop_count >= 2`` appends ``N`` copies ``NAME-1``..``NAME-N``
+    (built via ``_make_expanded_copy``) and records the base-name →
+    ``[NAME-1, ..., NAME-N]``.
 
     Args:
         steps: The override-applied working step sequence.
-        workflow: The declarative workflow instructions (source of loop counts).
         fmt: The body format — selects the expanded step type.
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), source of loop counts.
 
     Returns:
         The new ordered step list and the base-name → produced-ids map.
@@ -259,9 +342,9 @@ def _expand_loops(
     expanded_ids: dict[str, list[str]] = {}
     for step in steps:
         loop_count = 1
-        wf_stage = workflow.stages.get(step.name)
-        if wf_stage is not None and wf_stage.loop is not None:
-            loop_count = wf_stage.loop
+        eff = effective.get(step.name)
+        if eff is not None and eff.loop is not None:
+            loop_count = eff.loop
         if loop_count < _LOOP_EXPANSION_THRESHOLD:
             expanded.append(step)
             expanded_ids[step.name] = [step.name]
@@ -557,12 +640,15 @@ def _reconstruct_body(
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
     ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
-    (4a0) embed ``workflow.extend`` stages; (4a) per-stage overrides; (4b)
-    loop-expansion with the expanded-ids map; (4c) external depends_on rewrite
-    (STAGES only); the result (4d) is the reconstructed step list consumed for
-    ``FlowStage`` assembly. The 4a0 → 4a → 4b → 4c ordering is mandatory:
-    extend-stages must be in ``steps`` before overrides, loops, and external-ref
-    rewrites run, so the generic machine treats them by the common rules.
+    (4a0) embed ``workflow.extend`` stages; (4pre) resolve the effective
+    per-stage override map ONCE (inline extend → stages overlay); (4a) per-stage
+    overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
+    depends_on rewrite (STAGES only); the result (4d) is the reconstructed step
+    list consumed for ``FlowStage`` assembly. The 4a0 → 4pre → 4a → 4b → 4c
+    ordering is mandatory: extend-stages must be in ``steps`` before the effective
+    map is resolved (so their inline ``agent``/``loop`` seed the default
+    override), and before overrides, loops, and external-ref rewrites run — the
+    generic machine treats them by the common rules.
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -574,8 +660,9 @@ def _reconstruct_body(
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
     _embed_extend_stages(steps, workflow, fmt)
-    _apply_per_stage_overrides(steps, workflow)
-    expanded, expanded_ids = _expand_loops(steps, workflow, fmt)
+    effective = _effective_overrides(workflow)
+    _apply_per_stage_overrides(steps, effective)
+    expanded, expanded_ids = _expand_loops(steps, fmt, effective)
     if fmt is BodyFormat.STAGES:
         _rewrite_external_depends_on(expanded, expanded_ids)
     return expanded
