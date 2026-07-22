@@ -4,17 +4,19 @@
 pipeline-file (phases-list or stages-map), parses it via ``parse_dsl``, applies
 the per-format ``depends_on`` rules (PHASES: position-derived; STAGES:
 pass-through), reorders each step body into canonical key order via the internal
-``_canonical_fields`` helper (injecting default stage fields when the source body
-lacks a usable ``agents`` value), builds a ``FlowDocument``, serializes it via
-``serialize_flow``, and writes the result to ``flow_path``. It performs no
-environment-variable reads and no subprocess calls — the caller supplies both
-paths explicitly.
+``_canonical_fields`` helper (injecting the single default ``agents`` field when
+the source body lacks a usable ``agents`` value), builds a ``FlowDocument``,
+serializes it via ``serialize_flow``, and writes the result to ``flow_path``. It
+performs no environment-variable reads and no subprocess calls — the caller
+supplies both paths explicitly.
 
 When a step body has no ``agents`` key, has ``agents: null``, or has
-``agents: []``, ``_canonical_fields`` injects three defaults into the assembled
-``FlowStage.fields``: ``agents=["planning"]``, ``supervisor=True``,
-``supervisor_prompt="Make this stage autonomous"``. Authored non-empty
-``agents`` always wins — no injection happens when the source carries one. The
+``agents: []``, ``_canonical_fields`` injects a single default into the assembled
+``FlowStage.fields``: ``agents=["auto"]``. Authored non-empty ``agents`` always
+wins — no injection happens when the source carries one. ``auto`` is a sentinel
+string emitted verbatim (goga does not interpret it; afm resolves the agent).
+``supervisor``/``supervisor_prompt`` are authored-only — never injected, but
+they pass through the canonical slot when the source body carries them. The
 injection lives in ``FlowStage`` assembly only — the ``PipelineDocument.body``
 returned to consumers stays a faithful mirror of the source pipeline-file.
 
@@ -81,12 +83,14 @@ _WRAPPER_PATH_TEMPLATE = "/home/goga/bin/{agent}-as-claude.sh"
 # depends_on rewrite to the LAST expanded id); a count of ``1`` is a no-op.
 _LOOP_EXPANSION_THRESHOLD = 2
 
-# Default values injected into ``FlowStage.fields`` when the source step body
+# Default value injected into ``FlowStage.fields`` when the source step body
 # carries no usable ``agents`` value. A missing ``agents`` key OR an empty list
-# both trigger injection — authored non-empty ``agents`` always wins.
-_DEFAULT_AGENTS: tuple[str, ...] = ("planning",)
-_DEFAULT_SUPERVISOR: bool = True
-_DEFAULT_SUPERVISOR_PROMPT: str = "Make this stage autonomous"
+# both trigger injection — authored non-empty ``agents`` always wins. ``auto`` is
+# a sentinel string emitted verbatim; goga does NOT interpret it (afm resolves
+# the agent). Authored ``supervisor``/``supervisor_prompt`` are NOT injected —
+# they are authored-only and pass through the canonical slot when the source body
+# carries them.
+_DEFAULT_AGENTS: tuple[str, ...] = ("auto",)
 
 
 def _has_usable_agents(body: dict[str, Any]) -> bool:
@@ -106,42 +110,42 @@ def _has_usable_agents(body: dict[str, Any]) -> bool:
 
 
 def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
-    """Return a body dict with default stage fields injected when needed.
+    """Return a body dict with the single default ``agents`` injected when needed.
 
     When ``body`` carries a usable ``agents`` value (non-empty list) — returns a
-    shallow copy of ``body`` unchanged. Otherwise returns a copy with three
-    defaults added: ``agents=["planning"]``, ``supervisor=True``,
-    ``supervisor_prompt="Make this stage autonomous"``. The input is never
-    mutated; the returned dict is independent so the caller can deep-copy /
-    reorder freely without touching the parsed body.
+    shallow copy of ``body`` unchanged. Otherwise returns a copy with a single
+    default added: ``agents=["auto"]``. ``supervisor``/``supervisor_prompt`` are
+    NOT injected — they are authored-only and flow through the canonical slot
+    via ``_canonical_fields`` only when the source body already carries them.
+    The input is never mutated; the returned dict is independent so the caller
+    can deep-copy / reorder freely without touching the parsed body.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
 
     Returns:
-        A new dict carrying either the original ``agents`` or the three
-        injected defaults.
+        A new dict carrying either the original ``agents`` or the injected
+        single ``["auto"]`` default.
     """
     if _has_usable_agents(body):
         return dict(body)
     injected = dict(body)
     injected["agents"] = list(_DEFAULT_AGENTS)
-    injected["supervisor"] = _DEFAULT_SUPERVISOR
-    injected["supervisor_prompt"] = _DEFAULT_SUPERVISOR_PROMPT
     return injected
 
 
 def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
-    Default stage fields (``agents``, ``supervisor``, ``supervisor_prompt``) are
-    injected first via ``_inject_defaults`` when the source body lacks a usable
-    ``agents`` value. Known keys (``interactive``, ``command``, ``prompt``,
-    ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
-    ``skills``) are emitted in that fixed order; any remaining keys are appended
-    alphabetically. Each value is deep-copied so the returned dict shares no
-    structure with the parsed body — isolating the compiler's output from caller
-    mutation.
+    The single default ``agents`` field is injected first via ``_inject_defaults``
+    when the source body lacks a usable ``agents`` value. Known keys
+    (``interactive``, ``command``, ``prompt``, ``description``, ``agents``,
+    ``supervisor``, ``supervisor_prompt``, ``skills``) are emitted in that fixed
+    order; any remaining keys are appended alphabetically. ``supervisor``/
+    ``supervisor_prompt`` are authored-only — they appear in the output only when
+    the source body carries them. Each value is deep-copied so the returned dict
+    shares no structure with the parsed body — isolating the compiler's output
+    from caller mutation.
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
@@ -685,10 +689,11 @@ def compile_flow(
     propagate unchanged; ``compile_flow`` does not read ``AFM_DIR``.
 
     Each ``FlowStage.fields`` is assembled via ``_canonical_fields``, which
-    injects three default fields when the source step body has no usable
-    ``agents`` (missing key, ``null``, or empty list): ``agents=["planning"]``,
-    ``supervisor=True``, ``supervisor_prompt="Make this stage autonomous"``. An
-    authored non-empty ``agents`` value always wins and disables injection. The
+    injects a single default field when the source step body has no usable
+    ``agents`` (missing key, ``null``, or empty list): ``agents=["auto"]``. An
+    authored non-empty ``agents`` value always wins and disables injection.
+    ``supervisor``/``supervisor_prompt`` are authored-only — never injected, but
+    they pass through the canonical slot when the source body carries them. The
     injection is local to ``FlowStage.fields`` — the ``PipelineDocument.body``
     returned to consumers is never affected.
 
