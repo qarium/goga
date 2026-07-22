@@ -6,14 +6,16 @@ import sys
 from pathlib import Path
 
 from ..afm import run_flow
-from .compiler import compile_flow
+from .compiler import compile_flow, translate_role
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
 from .workflow import WorkflowDocument, parse_workflow
 
-# The four fixed agent-prompt keys. Each file stem equals its key, so the inline
-# ``agents`` header overrides and the package defaults share the same names.
-_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+# The three overridable pipeline roles. Each role resolves to its afm prompt-file
+# stem via the single source of truth ``translate_role`` (planner→planning,
+# executor→implementation, reviewer→review). ``summary`` is NOT a role — it is a
+# separate, always-default channel materialized from the literal ``summary.md``.
+_ROLES = ("planner", "executor", "reviewer")
 
 
 def _resolve_defaults_dir() -> Path:
@@ -91,15 +93,20 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     propagated; a missing pipeline returns a non-zero code without invoking the
     compiler or the binary.
 
-    Step 8 materializes one prompt file per agent key
+    Step 8 materializes the four afm prompt files
     (``planning``, ``implementation``, ``review``, ``summary``) into
-    ``<AFM_DIR>/prompts/``. For each key, an inline override from the
-    pipeline-file ``agents`` header replaces the file wholesale; otherwise the
-    package default is copied. The step is validate-first: every key is checked
-    (override present or package default exists) BEFORE the prompts directory is
-    wiped, so a missing default with no override raises before any file is
-    written and the directory is left untouched (atomicity). The wipe + recreate
-    makes re-runs idempotent regardless of prior directory state.
+    ``<AFM_DIR>/prompts/``. The first three correspond to the overridable roles
+    (``planner``/``executor``/``reviewer``), each resolved to its afm stem via
+    :func:`translate_role`; for each role, an inline override from the
+    pipeline-file ``roles`` header replaces the file wholesale at its stem,
+    otherwise the package default is copied. ``summary`` is a separate,
+    always-default channel — it is never overridden and is always copied from the
+    package default. The step is validate-first: every role is checked (override
+    present or package default exists at its stem) AND the summary default is
+    checked BEFORE the prompts directory is wiped, so a missing default with no
+    override raises before any file is written and the directory is left
+    untouched (atomicity). The wipe + recreate makes re-runs idempotent
+    regardless of prior directory state.
 
     Args:
         name: pipeline name without extension (e.g. ``"deploy"``).
@@ -118,9 +125,11 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     Raises:
         RuntimeError: When the ``AFM_DIR`` environment variable is unset or empty
             (message ``"AFM_DIR not set"``), or when step 8 finds a missing
-            package default for an agent key with no inline override (message
-            ``"<key>: default prompt missing from package and no inline override
-            supplied"``), raised before the prompts directory is wiped.
+            package default for an overridable role's stem with no inline override
+            (message ``"<stem>: default prompt missing from package and no inline
+            override supplied"``), or when the ``summary`` package default is
+            missing (message ``"summary: default prompt missing from package"``),
+            raised before the prompts directory is wiped.
         WorkflowSyntaxError: On a structural defect in a resolved workflow-file,
             propagated unchanged from :func:`parse_workflow` (step 6) when
             ``GOGA_WORKFLOW_DISABLED`` is not ``"1"`` and the resolved
@@ -159,15 +168,21 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
 
     # Step 8: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     defaults_dir = _resolve_defaults_dir()
-    agents = pipeline_doc.header.agents
+    roles = pipeline_doc.header.roles
 
-    # 8b — validate-all before wipe (atomicity): every key needs an inline
-    # override or an existing package default. A missing default with no override
-    # raises BEFORE any file is written, so a failed run leaves prompts/ as-is.
-    for key in _AGENT_KEYS:
-        override = getattr(agents, key) if agents is not None else None
-        if override is None and not (defaults_dir / f"{key}.md").exists():
-            raise RuntimeError(f"{key}: default prompt missing from package and no inline override supplied")
+    # 8b — validate-all before wipe (atomicity): each overridable role needs an
+    # inline override (from ``header.roles``) or an existing package default at
+    # its ``translate_role`` stem; ``summary`` always needs its package default
+    # (it is a separate, non-overridable channel). A missing default with no
+    # override raises BEFORE any file is written, so a failed run leaves prompts/
+    # as-is.
+    for role in _ROLES:
+        stem = translate_role(role)
+        override = getattr(roles, role) if roles is not None else None
+        if override is None and not (defaults_dir / f"{stem}.md").exists():
+            raise RuntimeError(f"{stem}: default prompt missing from package and no inline override supplied")
+    if not (defaults_dir / "summary.md").exists():
+        raise RuntimeError("summary: default prompt missing from package")
 
     # 8c — wipe + recreate so re-runs are idempotent regardless of prior state.
     prompts_dir = afm_dir / "prompts"
@@ -175,21 +190,27 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
         shutil.rmtree(prompts_dir)
     prompts_dir.mkdir(parents=True, exist_ok=False)
 
-    # 8d — write per key: an override replaces the file; otherwise copy default.
-    for key in _AGENT_KEYS:
-        override = getattr(agents, key) if agents is not None else None
-        target = prompts_dir / f"{key}.md"
+    # 8d — write per role: an override replaces the file at its stem; otherwise
+    # copy the package default. ``summary`` is always copied from the default —
+    # it has no inline override channel.
+    for role in _ROLES:
+        stem = translate_role(role)
+        override = getattr(roles, role) if roles is not None else None
+        target = prompts_dir / f"{stem}.md"
         if override is not None:
             target.write_text(override)
         else:
-            shutil.copy(defaults_dir / f"{key}.md", target)
+            shutil.copy(defaults_dir / f"{stem}.md", target)
+    shutil.copy(defaults_dir / "summary.md", prompts_dir / "summary.md")
 
-    # 8e — exactly four prompt files materialized. A real guard, not an
-    # ``assert``: the count must hold in optimized runs (``python -O``) too, and
-    # a divergence here (concurrent writer, FS oddity) is a RuntimeError rather
-    # than a bare AssertionError surfacing at the CLI.
+    # 8e — exactly four prompt files materialized (planning/implementation/review
+    # from ``_ROLES`` via ``translate_role`` plus the literal summary). A real
+    # guard, not an ``assert``: the count must hold in optimized runs
+    # (``python -O``) too, and a divergence here (concurrent writer, FS oddity)
+    # is a RuntimeError rather than a bare AssertionError surfacing at the CLI.
+    expected_stems = [translate_role(role) for role in _ROLES] + ["summary"]
     materialized = sorted(prompts_dir.iterdir())
-    expected = sorted(prompts_dir / f"{key}.md" for key in _AGENT_KEYS)
+    expected = sorted(prompts_dir / f"{stem}.md" for stem in expected_stems)
     if materialized != expected:
         raise RuntimeError(f"prompt materialization incomplete: expected {expected}, got {materialized}")
 

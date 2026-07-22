@@ -21,10 +21,12 @@ from goga.pipeline.compiler import (
 # [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
-# The four fixed agent-prompt keys; mirrors run_pipeline._AGENT_KEYS. Used only
-# to populate the patched defaults directory so materialization does not depend
-# on the real package assets in these workflow-focused tests.
-_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+# The four materialized afm prompt-file stems (planning/implementation/review
+# from the overridable roles via translate_role, plus the always-default
+# summary). Used only to populate the patched defaults directory so
+# materialization does not depend on the real package assets in these
+# workflow-focused tests.
+_PROMPT_STEMS = ("planning", "implementation", "review", "summary")
 
 
 def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
@@ -44,8 +46,8 @@ def _fake_documents() -> tuple[PipelineDocument, FlowDocument]:
 def _patch_defaults(monkeypatch: pytest.MonkeyPatch, defaults_dir: Path) -> None:
     """Point ``_resolve_defaults_dir`` at a tmp dir holding four default files."""
     defaults_dir.mkdir(parents=True, exist_ok=True)
-    for key in _AGENT_KEYS:
-        (defaults_dir / f"{key}.md").write_text(f"default {key}\n")
+    for stem in _PROMPT_STEMS:
+        (defaults_dir / f"{stem}.md").write_text(f"default {stem}\n")
     monkeypatch.setattr(_run_pipeline_module, "_resolve_defaults_dir", lambda: defaults_dir)
 
 

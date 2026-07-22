@@ -5,7 +5,7 @@ mocked unit tests in ``test_run_pipeline.py`` do not by themselves exercise as a
 single flow:
 
 ``compile_flow`` (mocked to emit a documents tuple) → ``run_pipeline`` (real)
-unpacks the tuple, runs the validate-first materialization of the four agent
+unpacks the tuple, runs the validate-first materialization of the four afm
 prompt files into ``<AFM_DIR>/prompts/`` (real filesystem I/O), then calls
 ``run_flow`` (mocked) with the compiled flow path.
 
@@ -15,11 +15,11 @@ while ``compile_flow`` and ``run_flow`` are patched at the module so the
 documents tuple and the afm invocation are controlled. The three scenarios
 mirror the design document's Data Flows:
 
-- **A** (no ``agents`` block): the documents tuple carries ``agents=None``;
+- **A** (no ``roles`` block): the documents tuple carries ``roles=None``;
   exactly four prompt files land in ``<AFM_DIR>/prompts/`` and their contents
   match the package defaults; ``run_flow`` is still called once with the flow
   path.
-- **B** (partial override — ``agents.planning`` only): ``prompts/planning.md``
+- **B** (partial override — ``roles.planner`` only): ``prompts/planning.md``
   carries the inline override; the other three are copied from defaults;
   ``run_flow`` still fires once.
 - **C** (missing default + no override — atomicity): a defaults dir with only
@@ -44,9 +44,9 @@ from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
     PhasesBody,
-    PipelineAgents,
     PipelineDocument,
     PipelineHeader,
+    PipelineRoles,
 )
 
 # goga.pipeline.run_pipeline is shadowed in the package __init__ by the
@@ -56,8 +56,10 @@ from goga.pipeline.compiler import (
 # [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
-# The four fixed agent-prompt keys; mirrors run_pipeline._AGENT_KEYS.
-_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+# The four materialized afm prompt-file stems. The first three resolve from the
+# overridable roles (planner/executor/reviewer) via translate_role; summary is a
+# separate, always-default channel. Output-side afm names, not role aliases.
+_PROMPT_STEMS = ("planning", "implementation", "review", "summary")
 
 
 @pytest.fixture
@@ -81,21 +83,21 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
     (directory / f"{name}.yml").write_text("pipeline")
 
 
-def _write_defaults(defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS) -> None:
-    """Write ``default <key>\\n`` prompt files for the given keys into defaults_dir."""
+def _write_defaults(defaults_dir: Path, stems: tuple[str, ...] = _PROMPT_STEMS) -> None:
+    """Write ``default <stem>\\n`` prompt files for the given stems into defaults_dir."""
     defaults_dir.mkdir(parents=True, exist_ok=True)
-    for key in keys:
-        (defaults_dir / f"{key}.md").write_text(f"default {key}\n")
+    for stem in stems:
+        (defaults_dir / f"{stem}.md").write_text(f"default {stem}\n")
 
 
-def _documents(agents: PipelineAgents | None = None) -> tuple[PipelineDocument, FlowDocument]:
+def _documents(roles: PipelineRoles | None = None) -> tuple[PipelineDocument, FlowDocument]:
     """Build the documents tuple ``compile_flow`` returns, for mock wiring.
 
-    ``agents`` defaults to None (no header block). The header/body match the
+    ``roles`` defaults to None (no header block). The header/body match the
     shape run_pipeline expects when it unpacks the tuple.
     """
     pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d", agents=agents),
+        header=PipelineHeader(name="deploy", description="d", roles=roles),
         format=BodyFormat.PHASES,
         body=PhasesBody(steps=[]),
     )
@@ -121,11 +123,11 @@ class _MaterializationHarness:
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
-        defaults_keys: tuple[str, ...] = _AGENT_KEYS,
-        agents: PipelineAgents | None = None,
+        defaults_stems: tuple[str, ...] = _PROMPT_STEMS,
+        roles: PipelineRoles | None = None,
     ) -> tuple[Path, Path, Path]:
         defaults_dir = tmp_path / "defaults"
-        _write_defaults(defaults_dir, keys=defaults_keys)
+        _write_defaults(defaults_dir, stems=defaults_stems)
         _patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
@@ -136,18 +138,18 @@ class _MaterializationHarness:
 
 
 class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
-    """Scenario A — a documents tuple with ``agents=None``."""
+    """Scenario A — a documents tuple with ``roles=None``."""
 
-    def test_no_agents_materializes_four_defaults_and_invokes_run_flow(
+    def test_no_roles_materializes_four_defaults_and_invokes_run_flow(
         self,
         tmp_path: Path,
         afm_dir: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """agents=None → exactly four default files copied; run_flow still fires once.
+        """roles=None → exactly four default files copied; run_flow still fires once.
 
         The composition: ``compile_flow`` (mocked) emits a documents tuple with
-        ``header.agents is None``; ``run_pipeline`` (real) unpacks it and copies all
+        ``header.roles is None``; ``run_pipeline`` (real) unpacks it and copies all
         four package defaults into ``<AFM_DIR>/prompts/``; ``run_flow`` (mocked) is
         then called exactly once with the flow path and the port.
         """
@@ -162,7 +164,7 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
         assert exit_code == 0
         prompts_dir = afm_dir / "prompts"
 
-        # Exactly four files, one per fixed agent key — no extras, no leftovers.
+        # Exactly four files, one per materialized prompt stem — no extras, no leftovers.
         assert sorted(p.name for p in prompts_dir.iterdir()) == [
             "implementation.md",
             "planning.md",
@@ -171,8 +173,8 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
         ]
 
         # Each materialized file matches the package default byte-for-byte.
-        for key in _AGENT_KEYS:
-            assert (prompts_dir / f"{key}.md").read_text() == (defaults_dir / f"{key}.md").read_text()
+        for stem in _PROMPT_STEMS:
+            assert (prompts_dir / f"{stem}.md").read_text() == (defaults_dir / f"{stem}.md").read_text()
 
         # The composition still drives afm: run_flow is called once with the
         # compiled flow path (not the DSL path) and the caller-allocated port.
@@ -180,7 +182,7 @@ class TestIntegrationMaterializationScenarioA(_MaterializationHarness):
 
 
 class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
-    """Scenario B — a partial override (``agents.planning`` only)."""
+    """Scenario B — a partial override (``roles.planner`` only)."""
 
     def test_partial_override_replaces_planning_and_copies_the_rest(
         self,
@@ -188,22 +190,23 @@ class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
         afm_dir: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """agents.planning set → planning.md carries the override; others are defaults.
+        """roles.planner set → planning.md carries the override; others are defaults.
 
-        The inline override on one key flows from ``compile_flow``'s documents
-        tuple through ``run_pipeline`` step 6.5 to ``prompts/planning.md``; the
-        three unspecified keys fall back to their package defaults. ``run_flow``
-        still fires once.
+        The inline override on one role flows from ``compile_flow``'s documents
+        tuple through ``run_pipeline`` step 6.5 to ``prompts/planning.md`` (the
+        planner role's afm stem via ``translate_role``); the two unspecified roles
+        plus ``summary`` fall back to their package defaults. ``run_flow`` still
+        fires once.
         """
         override = "OVERRIDE\n"
-        agents = PipelineAgents(planning=override)
-        project_dir, user_dir, defaults_dir = self._setup(tmp_path, monkeypatch, agents=agents)
+        roles = PipelineRoles(planner=override)
+        project_dir, user_dir, defaults_dir = self._setup(tmp_path, monkeypatch, roles=roles)
 
         with (
             mock.patch.object(
                 _run_pipeline_module,
                 "compile_flow",
-                return_value=_documents(agents),
+                return_value=_documents(roles),
             ),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
         ):
@@ -215,9 +218,9 @@ class TestIntegrationMaterializationScenarioB(_MaterializationHarness):
         # The override replaces the planning file wholesale.
         assert (prompts_dir / "planning.md").read_text() == override
 
-        # The three unspecified keys use their package defaults.
-        for key in ("implementation", "review", "summary"):
-            assert (prompts_dir / f"{key}.md").read_text() == (defaults_dir / f"{key}.md").read_text()
+        # The unspecified roles + summary use their package defaults.
+        for stem in ("implementation", "review", "summary"):
+            assert (prompts_dir / f"{stem}.md").read_text() == (defaults_dir / f"{stem}.md").read_text()
 
         # Still exactly four files; afm still invoked once with the flow path.
         assert sorted(p.name for p in prompts_dir.iterdir()) == [
@@ -249,7 +252,7 @@ class TestIntegrationMaterializationScenarioC(_MaterializationHarness):
         """
         # Defaults dir with the implementation default removed.
         project_dir, user_dir, _defaults_dir = self._setup(
-            tmp_path, monkeypatch, defaults_keys=("planning", "review", "summary")
+            tmp_path, monkeypatch, defaults_stems=("planning", "review", "summary")
         )
 
         # Atomicity sentinel: a pre-existing prompts dir from a past run.

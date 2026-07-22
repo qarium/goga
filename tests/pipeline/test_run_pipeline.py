@@ -12,9 +12,9 @@ from goga.pipeline.compiler import (
     BodyFormat,
     FlowDocument,
     PhasesBody,
-    PipelineAgents,
     PipelineDocument,
     PipelineHeader,
+    PipelineRoles,
     StructuralError,
 )
 
@@ -24,8 +24,11 @@ from goga.pipeline.compiler import (
 # run_flow / compile_flow attributes directly. Per [[feedback_mock_patch_module_shadowing]].
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
-# The four fixed agent-prompt keys; mirrors run_pipeline._AGENT_KEYS.
-_AGENT_KEYS = ("planning", "implementation", "review", "summary")
+# The four materialized afm prompt-file stems. The first three resolve from the
+# overridable roles (planner/executor/reviewer) via translate_role; summary is a
+# separate, always-default channel. These are output-side afm names, not role
+# aliases — run_pipeline materializes exactly these four files.
+_PROMPT_STEMS = ("planning", "implementation", "review", "summary")
 
 
 @pytest.fixture
@@ -50,15 +53,15 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
 
 
 def _fake_documents(
-    agents: PipelineAgents | None = None,
+    roles: PipelineRoles | None = None,
 ) -> tuple[PipelineDocument, FlowDocument]:
     """Build the documents tuple ``compile_flow`` now returns, for mock wiring.
 
     Shared by the materialization tests and the existing wiring tests so they
-    exercise the same unpack shape. ``agents`` defaults to None (no header block).
+    exercise the same unpack shape. ``roles`` defaults to None (no header block).
     """
     pipeline_doc = PipelineDocument(
-        header=PipelineHeader(name="deploy", description="d", agents=agents),
+        header=PipelineHeader(name="deploy", description="d", roles=roles),
         format=BodyFormat.PHASES,
         body=PhasesBody(steps=[]),
     )
@@ -66,11 +69,11 @@ def _fake_documents(
     return (pipeline_doc, flow_doc)
 
 
-def _write_defaults(defaults_dir: Path, keys: tuple[str, ...] = _AGENT_KEYS) -> None:
-    """Write ``default <key>\\n`` prompt files for the given keys into defaults_dir."""
+def _write_defaults(defaults_dir: Path, stems: tuple[str, ...] = _PROMPT_STEMS) -> None:
+    """Write ``default <stem>\\n`` prompt files for the given stems into defaults_dir."""
     defaults_dir.mkdir(parents=True, exist_ok=True)
-    for key in keys:
-        (defaults_dir / f"{key}.md").write_text(f"default {key}\n")
+    for stem in stems:
+        (defaults_dir / f"{stem}.md").write_text(f"default {stem}\n")
 
 
 class TestRunPipelineContract:
@@ -355,18 +358,19 @@ class TestRunPipelineLogic:
         # run_flow received the compiled flow path (not the DSL path) and the port.
         mock_run_flow.assert_called_once_with(flow_path, 50321)
 
-    def test_run_pipeline_threads_real_agents_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
-        """A real ``agents`` header block threads verbatim through the whole chain.
+    def test_run_pipeline_threads_real_role_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
+        """A real ``roles`` header block threads verbatim through the whole chain.
 
         Unlike the materialization tests below (which mock ``compile_flow``), this
         drives the real parse_dsl → compile_flow → run_pipeline path with a real
-        pipeline-file carrying an inline ``agents.planning`` override. The
-        override must land byte-for-byte at ``<AFM_DIR>/prompts/planning.md``, and
-        the non-overridden keys must fall back to the REAL package defaults (the
-        resolver is NOT patched). This is the headline feature's truest path — a
-        regression that normalized or trimmed the override text (e.g. an added
-        ``.strip()``, or a block-scalar/normalization mismatch between parse and
-        write) would break it.
+        pipeline-file carrying an inline ``roles.planner`` override. The override
+        must land byte-for-byte at ``<AFM_DIR>/prompts/planning.md`` (the planner
+        role's afm stem via ``translate_role``), and the non-overridden roles plus
+        summary must fall back to the REAL package defaults (the resolver is NOT
+        patched). This is the headline feature's truest path — a regression that
+        normalized or trimmed the override text (e.g. an added ``.strip()``, or a
+        block-scalar/normalization mismatch between parse and write) would break
+        it.
         """
         afm_dir.mkdir(parents=True)
         project_dir = tmp_path / "pipelines"
@@ -375,8 +379,8 @@ class TestRunPipelineLogic:
         (project_dir / "deploy.yml").write_text(
             "name: Deploy\n"
             "description: Deploy pipeline\n"
-            "agents:\n"
-            "  planning: |\n"
+            "roles:\n"
+            "  planner: |\n"
             "    Custom planning prompt.\n"
             "    Line two.\n"
             "---\n"
@@ -391,11 +395,11 @@ class TestRunPipelineLogic:
 
         assert exit_code == 0
         prompts_dir = afm_dir / "prompts"
-        # The override lands verbatim — no normalization, no trimming.
+        # The planner override lands at planning.md verbatim — no normalization.
         assert (prompts_dir / "planning.md").read_text() == override
-        # Non-overridden keys fall back to the real package defaults (non-empty).
-        for key in ("implementation", "review", "summary"):
-            assert (prompts_dir / f"{key}.md").read_text() != ""
+        # Non-overridden roles + summary fall back to the real package defaults.
+        for stem in ("implementation", "review", "summary"):
+            assert (prompts_dir / f"{stem}.md").read_text() != ""
 
 
 class TestRunPipelineMaterialization:
@@ -432,23 +436,23 @@ class TestRunPipelineMaterialization:
         assert prompts_dir.exists()
         files = sorted(p.name for p in prompts_dir.iterdir())
         assert files == ["implementation.md", "planning.md", "review.md", "summary.md"]
-        for key in _AGENT_KEYS:
-            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+        for stem in _PROMPT_STEMS:
+            assert (prompts_dir / f"{stem}.md").read_text() == f"default {stem}\n"
 
     def test_run_pipeline_applies_partial_override(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An inline override on one key replaces only that file; others use defaults."""
+        """An inline override on one role replaces only its file; others use defaults."""
         defaults_dir = tmp_path / "defaults"
         _write_defaults(defaults_dir)
         self._patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
-        agents = PipelineAgents(planning="OVERRIDE\n")
+        roles = PipelineRoles(planner="OVERRIDE\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(roles)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -456,8 +460,8 @@ class TestRunPipelineMaterialization:
         assert exit_code == 0
         prompts_dir = afm_dir / "prompts"
         assert (prompts_dir / "planning.md").read_text() == "OVERRIDE\n"
-        for key in ("implementation", "review", "summary"):
-            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+        for stem in ("implementation", "review", "summary"):
+            assert (prompts_dir / f"{stem}.md").read_text() == f"default {stem}\n"
 
     def test_run_pipeline_writes_prompts_idempotently_on_repeat(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -489,7 +493,7 @@ class TestRunPipelineMaterialization:
     ) -> None:
         """Missing default + no override raises before wipe (validate-first atomicity)."""
         defaults_dir = tmp_path / "defaults"
-        _write_defaults(defaults_dir, keys=("planning", "review", "summary"))  # no implementation
+        _write_defaults(defaults_dir, stems=("planning", "review", "summary"))  # no implementation
         self._patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
@@ -521,17 +525,17 @@ class TestRunPipelineMaterialization:
     def test_run_pipeline_succeeds_when_default_missing_but_override_supplied(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A missing default is fine when an inline override supplies that key."""
+        """A missing default is fine when an inline override supplies that role."""
         defaults_dir = tmp_path / "defaults"
-        _write_defaults(defaults_dir, keys=("planning", "review", "summary"))  # no implementation
+        _write_defaults(defaults_dir, stems=("planning", "review", "summary"))  # no implementation
         self._patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
-        agents = PipelineAgents(implementation="OVERRIDE\n")
+        roles = PipelineRoles(executor="OVERRIDE\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(roles)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -539,23 +543,31 @@ class TestRunPipelineMaterialization:
         assert exit_code == 0
         prompts_dir = afm_dir / "prompts"
         assert (prompts_dir / "implementation.md").read_text() == "OVERRIDE\n"
-        for key in ("planning", "review", "summary"):
-            assert (prompts_dir / f"{key}.md").read_text() == f"default {key}\n"
+        for stem in ("planning", "review", "summary"):
+            assert (prompts_dir / f"{stem}.md").read_text() == f"default {stem}\n"
 
-    def test_run_pipeline_full_override_writes_all_four_files(
+    def test_run_pipeline_full_role_override_plus_summary_default(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """All four overrides → no package default read; files written in fixed order."""
+        """All three role overrides → their stems carry overrides; summary is always default.
+
+        The three overridable roles (planner/executor/reviewer) each supply an
+        override, so their stems (planning/implementation/review) carry the
+        override text. ``summary`` has NO override channel — it always comes from
+        the package default, even when every role is overridden. The defaults dir
+        must still hold ``summary.md`` (the always-default channel); the role
+        defaults are unused.
+        """
         defaults_dir = tmp_path / "defaults"
-        defaults_dir.mkdir()  # intentionally empty — overrides cover every key
+        _write_defaults(defaults_dir, stems=("summary",))  # only the always-default channel
         self._patch_defaults(monkeypatch, defaults_dir)
 
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
-        agents = PipelineAgents(planning="P\n", implementation="I\n", review="R\n", summary="S\n")
+        roles = PipelineRoles(planner="P\n", executor="I\n", reviewer="R\n")
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(roles)),
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -565,7 +577,79 @@ class TestRunPipelineMaterialization:
         assert (prompts_dir / "planning.md").read_text() == "P\n"
         assert (prompts_dir / "implementation.md").read_text() == "I\n"
         assert (prompts_dir / "review.md").read_text() == "R\n"
-        assert (prompts_dir / "summary.md").read_text() == "S\n"
+        # summary is always-default — never overridden, copied from the package default.
+        assert (prompts_dir / "summary.md").read_text() == "default summary\n"
+
+    def test_run_pipeline_materializes_overrides_and_summary_default(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A role override materializes at its stem; summary is always the package default.
+
+        Header ``roles.executor`` carries an inline override, which lands at
+        ``implementation.md`` (the executor role's afm stem via ``translate_role``).
+        The two unspecified roles fall back to their package defaults, and
+        ``summary`` is always-default — never overridden — so it carries the
+        package default text byte-for-byte. Exactly four prompt files materialize.
+        """
+        defaults_dir = tmp_path / "defaults"
+        _write_defaults(defaults_dir)
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        roles = PipelineRoles(executor="exec override")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(roles)),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        prompts_dir = afm_dir / "prompts"
+        # executor override → implementation.md (its translate_role stem).
+        assert (prompts_dir / "implementation.md").read_text() == "exec override"
+        # Unspecified roles fall back to their package defaults.
+        assert (prompts_dir / "planning.md").read_text() == "default planning\n"
+        assert (prompts_dir / "review.md").read_text() == "default review\n"
+        # summary is always-default — never overridden.
+        assert (prompts_dir / "summary.md").read_text() == "default summary\n"
+        assert sorted(p.name for p in prompts_dir.iterdir()) == [
+            "implementation.md",
+            "planning.md",
+            "review.md",
+            "summary.md",
+        ]
+
+    def test_run_pipeline_raises_when_role_default_missing_without_override(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing role default with no override raises before the prompts dir exists.
+
+        The patched defaults dir lacks ``planning.md`` (the planner role's stem).
+        With ``roles=None`` there is no override, so step 8b must raise
+        ``RuntimeError("planning: default prompt missing ...")`` during
+        validate-before-wipe — BEFORE the prompts directory is created (atomicity:
+        no partial state on disk when the run aborts).
+        """
+        defaults_dir = tmp_path / "defaults"
+        # planning.md absent — the planner role's default is missing.
+        _write_defaults(defaults_dir, stems=("implementation", "review", "summary"))
+        self._patch_defaults(monkeypatch, defaults_dir)
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(RuntimeError, match="planning: default prompt missing"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_run_flow.assert_not_called()
+        # Validate-before-wipe: the prompts dir was never created.
+        assert not (afm_dir / "prompts").exists()
 
     def test_run_pipeline_writes_prompts_before_run_flow(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -586,7 +670,7 @@ class TestRunPipelineMaterialization:
 
         project_dir = tmp_path / "pipelines"
         _write_pipeline(project_dir)
-        agents = PipelineAgents(planning="OVERRIDE\n")
+        roles = PipelineRoles(planner="OVERRIDE\n")
 
         prompts_seen: dict[str, object] = {}
 
@@ -597,7 +681,7 @@ class TestRunPipelineMaterialization:
             return 0
 
         with (
-            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(agents)),
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(roles)),
             mock.patch.object(_run_pipeline_module, "run_flow", side_effect=_run_flow_expects_prompts),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -625,6 +709,6 @@ class TestRunPipelineMaterialization:
         defaults_dir = _run_pipeline_module._resolve_defaults_dir()
 
         assert defaults_dir.is_dir()
-        for key in _AGENT_KEYS:
-            assert (defaults_dir / f"{key}.md").is_file()
-            assert (defaults_dir / f"{key}.md").read_text() != ""
+        for stem in _PROMPT_STEMS:
+            assert (defaults_dir / f"{stem}.md").is_file()
+            assert (defaults_dir / f"{stem}.md").read_text() != ""
