@@ -5,9 +5,9 @@ description: Analyze project
 - name: conventions
   title: Find drift between conventions and source and fix it
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Detect deviations from the conventions in the change scope and fix them.
 
@@ -26,9 +26,9 @@ description: Analyze project
 - name: lint-and-tests
   title: Check and fix lint/format/tests
   interactive: true
-  agents:
-    - planning
-    - implementation
+  roles:
+    - planner
+    - executor
   prompt: |
     Run lint, format, and tests in accordance with the convention `.goga/usages/conventions.md`.
 
