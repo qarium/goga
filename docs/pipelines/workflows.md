@@ -30,6 +30,7 @@ stages:
     prompt: |                 # optional per-stage prompt override
       Additional per-stage instruction.
     loop: 2                   # optional iteration count (>= 1)
+    skills: [web-search]      # optional skills merged with the pipeline stage's skills
 
 extend:
   <new-stage-name>:
@@ -54,22 +55,25 @@ Unknown top-level keys are rejected with
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to three
+Each entry under `stages` is keyed by stage name and accepts up to four
 fields:
 
-| Field   | Type   | Default | Description                                                                                              |
-|---------|--------|---------|----------------------------------------------------------------------------------------------------------|
-| `agent` | string | —       | CLI agent name (e.g. `codex`, `claude`, `opencode`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent--choosing-the-cli-agent). |
-| `prompt`| string | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command). |
-| `loop`  | int    | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
+| Field   | Type     | Default | Description                                                                                              |
+|---------|----------|---------|----------------------------------------------------------------------------------------------------------|
+| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `opencode`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent--choosing-the-cli-agent). |
+| `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command). |
+| `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
+| `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop` are valid. An unknown key is rejected with
-  `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt,
-  loop`.
+- Only `agent`, `prompt`, `loop`, `skills` are valid. An unknown key is
+  rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
+  agent, prompt, loop, skills`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
+- `skills` must be a `list[str]`. A non-list (or a list with non-string
+  elements) raises `non-list-of-str skills in workflow.stages.<NAME>`.
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are **not** validated against any pipeline schema. A name
@@ -182,22 +186,28 @@ extend:
   <new-stage-name>:
     before: [plan]            # place this new stage BEFORE the named stage(s)
     after: [propose]          # place this new stage AFTER the named stage(s)
+    agent: codex              # optional: default agent override for the new stage
+    loop: 2                   # optional: default loop override (>= 2 expands)
     title: Warmup             # optional; any other stage field passes through
     prompt: |                 # verbatim stage body — same fields as a pipeline stage
       Bootstrap the environment before the pipeline runs.
 ```
 
-Positioning (`before` / `after`) and the stage body are separate concerns:
+Positioning (`before` / `after`), default overrides (`agent` / `loop`), and the
+stage body are separate concerns:
 
 - `before` and `after` are **lists of existing stage names**. The new stage is
   declared to run before the `before` names and after the `after` names. At
   least one of the two must be present — an entry with neither is rejected.
+- `agent` and `loop` are optional **default overrides** extracted from the
+  entry (see [Inline agent and loop overrides](#inline-agent-and-loop-overrides)).
 - Everything else in the entry (`title`, `prompt`, `skills`, `agents`,
   `interactive`, or any other stage field) is the **verbatim body** of the new
   stage. It is carried through unchanged and embedded as an ordinary stage in
-  the compiled output. `before`, `after`, and `depends_on` are never part of
-  the body — `depends_on` in particular is forbidden here (positioning is
-  declared structurally, not as a dependency edge).
+  the compiled output. `before`, `after`, `agent`, `loop`, and `depends_on` are
+  never part of the body — `agent`/`loop` are extracted as override fields, and
+  `depends_on` is forbidden here (positioning is declared structurally, not as
+  a dependency edge).
 - The `title` field, when omitted, falls back to the entry key — so a stage
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
@@ -223,6 +233,29 @@ body format of the target pipeline:
   position, not `depends_on`. When `after` and `before` targets place the stage
   inconsistently, the `after` position wins and a warning is logged; when no
   target can be resolved, the stage is appended at the end with a warning.
+
+### Inline agent and loop overrides
+
+Alongside positioning, an extend entry may carry inline `agent` and `loop`
+fields. They are extracted from the body exactly like `before`/`after` — they
+never reach the compiled stage as separate fields — and act as **default
+overrides** for the new stage, mirroring what a `stages` entry provides for an
+existing stage:
+
+- `agent` (a string) is composed into the stage's `command` wrapper path by
+  the same template as a `stages`-block `agent`
+  (`/home/goga/bin/<agent>-as-claude.sh`).
+- `loop` (an int `>= 1`; `>= 2` expands) expands the new stage into
+  `<name>-1..N` chained copies by the same rules as a `stages`-block `loop`,
+  including the external `before`/`after` reference rewrite to the last
+  expanded id.
+
+An inline `agent`/`loop` is a **default**: if a `stages` entry also names the
+same stage, the `stages` value wins **per field** — an unset `stages` field
+falls back to the inline one. This lets `extend` declare a sensible default
+that a `stages` override can selectively tighten. An inline `agent: null` or
+`loop: null` is a structural type error, not an absence — omit the key to
+express absence (symmetric with the per-stage `agent`/`loop`).
 
 ### Examples
 
@@ -281,6 +314,12 @@ extend:
 - `before` and `after` must each be a `list[str]` when present. A scalar or a
   list with non-string elements is rejected with `non-list-of-str before in
   workflow.extend.<NAME>` / `non-list-of-str after in workflow.extend.<NAME>`.
+- An inline `agent` (when present) must be a string; an inline `loop` (when
+  present) must be an int `>= 1` — the same type rules as the `stages` block.
+  A non-string `agent` raises `non-str value in workflow.extend.<NAME>.agent`;
+  a non-int or `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop`
+  / `loop must be >= 1 in workflow.extend.<NAME>`. Inline `agent`/`loop` are
+  default overrides — a `stages` entry for the same name wins per field.
 - An extend entry that names a target that does not exist in the pipeline is a
   **dangling reference**. In stages format a dangling `after` is passed through
   verbatim in `depends_on` (afm surfaces the unknown name); a dangling `before`
@@ -322,27 +361,57 @@ by body format:
 After this pass the extend-stages live in the working sequence alongside the
 originals, so Passes 1–3 below apply to them by the same generic rules.
 
+Before Pass 1, the compiler resolves one **effective override map** keyed by
+stage name, computed once and shared by Passes 1 and 2: each `extend` entry
+seeds a default override from its inline `agent`/`loop`, and each `stages`
+entry then overlays per-field, winning whenever its field is not `None` (the
+inline value is the fallback). A name that appears only in `stages` is used
+verbatim; a name that appears only in `extend` carries just its inline
+`agent`/`loop`.
+
 ### Pass 1 — Per-stage overrides (in-place)
 
-For each `(stage_name, workflow_stage)` pair in `workflow.stages`:
+For each `(stage_name, effective_stage)` pair in the effective override map:
 
 1. Find the step in the body whose `name` or id equals `stage_name`.
 2. If not found — silently skip with a warning (a workflow may cover
    multiple pipelines).
 3. If found:
-   - When `workflow_stage.agent` is not None — set the stage's `command`
+   - When `effective_stage.agent` is not None — set the stage's `command`
      field to the composed wrapper path
-     `/home/goga/bin/<agent>-as-claude.sh`.
-   - When `workflow_stage.prompt` is not None — attach the prompt as
+     `/home/goga/bin/<agent>-as-claude.sh`. This applies the inline-extend
+     `agent` too, via the effective map.
+   - When `effective_stage.prompt` is not None — attach the prompt as
      per-stage context for the agent running the stage. The prompt has
      lower precedence than the stage's own `prompt` field and is treated
      as ambient guidance, not as a direct command. See
      [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command).
+   - When `effective_stage.skills` is not None — merge the workflow skills
+     with the stage's existing `skills` (pipeline-first, deduplicated). See
+     [Skills merge](#skills-merge).
+
+### Skills merge
+
+A `stages`-block `skills` override is **merged** with the pipeline-file
+`skills` of the matched stage, not replaced:
+
+- Pipeline-file skills come first (their relative order is preserved), then
+  the workflow skills, with any value already seen dropped (deduplication is
+  by value, first-occurrence order).
+- A stage with no pipeline `skills` gets the workflow list as-is; a workflow
+  override of `[]` (or a stage with neither side carrying skills) leaves the
+  `skills` key absent rather than emitting an empty list.
+- An `extend` entry's own body `skills` are the new stage's pipeline-side
+  skills — when a `stages` entry also names that stage, the merge combines the
+  extend-body skills with the `stages` override. With no matching `stages`
+  entry the extend-body skills pass through verbatim.
 
 ### Pass 2 — Loop expansion
 
-For each step, determine `loop_count` from
-`workflow.stages[name].loop` if present, else `1`.
+For each step, determine `loop_count` from the effective override's `loop`
+for that stage name when set, else `1`. The effective `loop` folds an
+inline-extend `loop` together with a `stages`-block `loop` (the `stages`
+value wins per-field when both are present).
 
 When `loop_count >= 2`, the compiler appends N copies with ids
 `<name>-1`, ..., `<name>-N`, each subsequent copy depending on the previous
@@ -524,12 +593,16 @@ untouched — `extend` layers new stages on top at run time.
 | `depends_on` present in an extend entry                         | `depends_on is forbidden in workflow.extend.<NAME>`                         |
 | `before` in an extend entry not a `list[str]`                   | `non-list-of-str before in workflow.extend.<NAME>`                          |
 | `after` in an extend entry not a `list[str]`                    | `non-list-of-str after in workflow.extend.<NAME>`                           |
+| Inline `agent` in an extend entry not a string                  | `non-str value in workflow.extend.<NAME>.agent`                             |
+| Inline `loop` in an extend entry not an int                     | `non-int value in workflow.extend.<NAME>.loop`                              |
+| Inline `loop` in an extend entry is an int but `< 1`            | `loop must be >= 1 in workflow.extend.<NAME>`                               |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
 | `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
+| `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
 | None of `prompt`, `stages`, `extend` entries are present        | `empty workflow — provide at least prompt, one stage, or one extend entry`  |
 
 ## See also

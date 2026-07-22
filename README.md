@@ -187,7 +187,7 @@ Three definitions ship with goga:
 goga pipeline feature
 ```
 
-A pipeline-file answers **what** the pipeline does. A [workflow](https://qarium.github.io/goga/pipelines/workflows/) file layers **how the same pipeline should behave in this project** — per-stage CLI agent, additional prompt context, loop expansion, and new stages via `extend` — without forking the base file.
+A pipeline-file answers **what** the pipeline does. A [workflow](https://qarium.github.io/goga/pipelines/workflows/) file layers **how the same pipeline should behave in this project** — per-stage CLI agent, additional prompt context, skills overrides, loop expansion, and new stages via `extend` — without forking the base file.
 
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
 
@@ -199,7 +199,7 @@ Read the full functional model in the [Pipelines](https://qarium.github.io/goga/
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, install, upgrade, contract extraction, and pipeline commands
-- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships three ready-to-use definitions — `feature`, `bugfix`, `patch` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt overrides, loop-expansion, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`)
+- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships three ready-to-use definitions — `feature`, `bugfix`, `patch` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt/skills overrides, loop-expansion, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`)
 - **Docker builds & pipelines** — Execute build plans via ralphex and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `agents` overrides that customize the four agent prompts (planning/implementation/review/summary) per pipeline-file, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation

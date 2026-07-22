@@ -474,6 +474,33 @@ class TestParseWorkflowNegative:
         with pytest.raises(WorkflowSyntaxError, match=expected):
             parse_workflow(workflow_path)
 
+    @pytest.mark.parametrize(
+        ("field_yaml", "expected"),
+        [("agent: 5", r"non-str value in workflow\.extend\.warmup\.agent"),
+         ("loop: 0", r"loop must be >= 1 in workflow\.extend\.warmup"),
+         ("loop: true", r"non-int value in workflow\.extend\.warmup\.loop")],
+        ids=["bad-agent", "below-one-loop", "bool-loop"],
+    )
+    def test_parse_workflow_extend_multi_defect_surfaces_type_error_first(
+        self, tmp_path: Path, field_yaml: str, expected: str,
+    ) -> None:
+        """A multi-defect entry surfaces the type error, not the positional one.
+
+        An extend entry with NEITHER ``before`` nor ``after`` AND a bad inline
+        ``agent``/``loop`` carries two structural defects. The CODEMANIFEST
+        algorithm (step 6b) validates ``agent``/``loop`` (e/f) BEFORE the
+        at-least-one-of-before/after check (g), so the more specific type error
+        must win over ``extend entry NAME requires at least one of before/after``.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"extend:\n  warmup:\n    title: Just a body\n    {field_yaml}\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=expected):
+            parse_workflow(workflow_path)
+
     def test_parse_workflow_rejects_empty_workflow_with_empty_extend(self, tmp_path: Path) -> None:
         """A workflow with empty extend map, empty stages, and no prompt is still empty."""
         workflow_path = _write(tmp_path, "workflow.yml", "extend: {}\n")

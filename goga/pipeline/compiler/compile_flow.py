@@ -217,16 +217,26 @@ def _merge_skills(
     ``None`` — the absence marker the caller uses to leave the ``skills`` slot
     untouched, so an absent key stays absent.
 
+    The pipeline-file body is parsed verbatim (``parse_dsl`` performs no field
+    type validation by design), so ``pipeline_skills`` may carry any type in
+    practice — e.g. an authored scalar ``skills: web-search``. A non-list value
+    is treated as empty (the workflow override still applies) rather than
+    crashing the merge; validating the pipeline-file ``skills`` type is a
+    separate concern outside this cell. ``workflow_skills`` is always a
+    ``list[str]`` or ``None`` — it is validated by ``parse_workflow``.
+
     Args:
         pipeline_skills: The stage's pipeline-file ``skills`` value, or ``None``.
-        workflow_skills: The workflow-stage ``skills`` override, or ``None``.
+        workflow_skills: The workflow-stage ``skills`` override (always a
+            ``list[str]`` or ``None``), or ``None``.
 
     Returns:
         The merged deduplicated list, or ``None`` when both inputs are empty.
     """
+    pipeline_list = pipeline_skills if isinstance(pipeline_skills, list) else []
     merged: list[str] = []
     seen: set[str] = set()
-    for skill in (pipeline_skills or []) + (workflow_skills or []):
+    for skill in pipeline_list + (workflow_skills or []):
         if skill not in seen:
             seen.add(skill)
             merged.append(skill)

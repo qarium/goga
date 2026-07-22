@@ -1209,6 +1209,30 @@ class TestCompileFlowSkillsMerge:
         extra = next(stage for stage in flow_doc.stages if stage.id == "extra")
         assert extra.fields["skills"] == ["audit"]
 
+    def test_compile_flow_extend_body_skills_merged_with_stages_block(self, tmp_path: Path) -> None:
+        """Extend-body skills merge with a matching stages-block ``skills`` override.
+
+        When an extend entry's name ALSO appears in ``stages`` with a ``skills``
+        override, the extend body's own ``skills`` participate in the merge — the
+        only path where extend-body skills merge rather than pass verbatim:
+        extend-body skills first, then the stages-block skills, deduplicated.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"extra": WorkflowStage(skills=["web-search"])},
+            extend={
+                "extra": WorkflowExtendStage(after=["propose"], body={"title": "Extra", "skills": ["audit"]}),
+            },
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        extra = next(stage for stage in flow_doc.stages if stage.id == "extra")
+        # Extend-body skills first, stages-block skills appended, deduplicated.
+        assert extra.fields["skills"] == ["audit", "web-search"]
+
 
 class TestCompileFlowEffectiveOverrides:
     """Trace 4/5 — effective override (inline extend → stages overlay) + effective loop.
@@ -1339,6 +1363,21 @@ class TestCompileFlowReconstructionHelpers:
         assert _merge_skills(["a"], None) == ["a"]
         assert _merge_skills(["a", "a"], None) == ["a"]
 
+    def test_merge_skills_non_list_pipeline_does_not_crash(self) -> None:
+        """A non-list pipeline ``skills`` (verbatim, unvalidated) is coerced to empty.
+
+        ``parse_dsl`` passes pipeline body fields through verbatim, so a malformed
+        ``skills: just-a-string`` reaches the merge. The merge must not raise — it
+        treats the non-list value as empty and applies the workflow skills alone.
+        """
+        from goga.pipeline.compiler.compile_flow import _merge_skills
+
+        # A truthy non-list value would crash ``value + []`` without the guard.
+        assert _merge_skills("web-search", ["audit"]) == ["audit"]
+        assert _merge_skills(42, ["audit"]) == ["audit"]
+        # Non-list pipeline + no workflow override → empty → None (no key).
+        assert _merge_skills({"a": 1}, None) is None
+
     def test_effective_overrides_inline_seed_only(self) -> None:
         """An extend-only entry seeds an effective stage carrying agent/loop only."""
         from goga.pipeline.compiler.compile_flow import _effective_overrides
@@ -1387,6 +1426,32 @@ class TestCompileFlowReconstructionHelpers:
         # Prompt/skills come from the stages-block (None here — no inline equivalent).
         assert effective["warmup"].prompt is None
         assert effective["warmup"].skills is None
+
+    def test_effective_overrides_overlay_passes_through_prompt_and_skills(self) -> None:
+        """The overlay branch passes stages-block prompt/skills straight through.
+
+        A name present in BOTH ``extend`` (inline seed) and ``stages`` (block)
+        takes the overlay branch (not the verbatim ``effective[name] = stg``
+        branch). Its ``prompt`` and ``skills`` must come from the stages-block
+        entry even though the inline seed has no equivalent — pinning
+        ``prompt=stg.prompt`` / ``skills=stg.skills`` against a regression to
+        ``None``.
+        """
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(prompt="P", skills=["web-search"])},
+            extend={"warmup": WorkflowExtendStage(after=["propose"], agent="codex", loop=3, body={"title": "W"})},
+        )
+
+        effective = _effective_overrides(workflow)
+
+        # Inline agent/loop fall back (stages agent/loop are None).
+        assert effective["warmup"].agent == "codex"
+        assert effective["warmup"].loop == 3
+        # The stages-block prompt/skills pass through (NOT None).
+        assert effective["warmup"].prompt == "P"
+        assert effective["warmup"].skills == ["web-search"]
 
     def test_effective_overrides_empty_workflow(self) -> None:
         """A workflow with only a top-level prompt yields an empty effective map."""

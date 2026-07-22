@@ -265,13 +265,20 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
 
     The entry value must be a mapping. ``depends_on`` is forbidden inside it
     (positioning is declared via ``before``/``after`` instead); ``before`` and
-    ``after`` (when present) must each be a ``list[str]``; at least one of
-    ``before``/``after`` must be present. An inline ``agent`` (when present)
-    must be a ``str``; an inline ``loop`` (when present) must be an ``int >= 1``
-    (``bool`` rejected first, symmetric with the per-stage ``loop`` check).
+    ``after`` (when present) must each be a ``list[str]``; an inline ``agent``
+    (when present) must be a ``str``; an inline ``loop`` (when present) must be
+    an ``int >= 1`` (``bool`` rejected first, symmetric with the per-stage
+    ``loop`` check); at least one of ``before``/``after`` must be present.
     Every other key passes through verbatim as the stage body. ``before``,
     ``after``, ``agent`` and ``loop`` are removed from the body before
     construction (``depends_on`` never reaches it: it is rejected outright).
+
+    The structural checks run in the CODEMANIFEST order (step 6b):
+    non-mapping → ``depends_on`` → ``before`` → ``after`` → ``agent`` →
+    ``loop`` → at-least-one-of-before/after. The at-least-one check runs LAST
+    so an entry carrying BOTH a positioning defect (no ``before``/``after``)
+    AND a type defect (a bad inline ``agent``/``loop``) surfaces the more
+    specific type error first, not the positional one.
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -285,7 +292,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
             ``depends_on`` key, ``before`` is not a ``list[str]``, ``after`` is
             not a ``list[str]``, an inline ``agent`` is not a ``str``, an inline
             ``loop`` is not an ``int >= 1``, or neither ``before`` nor
-            ``after`` is present.
+            ``after`` is present (checked in that order).
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping extend entry {name} in workflow.extend")
@@ -300,9 +307,6 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     after = value.get("after")
     if after is not None and not _is_list_of_str(after):
         raise WorkflowSyntaxError(f"non-list-of-str after in workflow.extend.{name}")
-
-    if before is None and after is None:
-        raise WorkflowSyntaxError(f"extend entry {name} requires at least one of before/after")
 
     # Inline ``agent``/``loop`` are DEFAULT overrides (an explicit stages-block
     # entry for the same name wins per-field in the compiler). They are
@@ -321,6 +325,13 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     loop: int | None = None
     if "loop" in value:
         loop = _validate_loop(f"workflow.extend.{name}", value["loop"])
+
+    # At-least-one is the LAST structural check (contract step 6b g): a
+    # multi-defect entry (no positioning AND a bad inline agent/loop) must
+    # surface the more specific type error raised above, not this positional
+    # one.
+    if before is None and after is None:
+        raise WorkflowSyntaxError(f"extend entry {name} requires at least one of before/after")
 
     body = {
         key: entry_value
