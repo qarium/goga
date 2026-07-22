@@ -1,6 +1,7 @@
 Imports:
   - Types:
       - compile_flow
+      - translate_role
     Usages:
       - compile-flow
       - parse-dsl
@@ -54,14 +55,19 @@ Usages:
     package at
     goga/assets/afm/prompts/{planning,implementation,review,summary}.md.
     The directory contains exactly four files; the file stem matches the
-    fixed agent key. Resolution from the installed package location is an
+    canonical afm agent name. Three of them (planning, implementation,
+    review) correspond to the overridable DSL roles planner/executor/
+    reviewer (the role-field-name → stem mapping is resolved via
+    `translate_role`, imported from goga/pipeline/compiler); summary
+    is NOT overridable from the DSL — summary.md is always materialized
+    from the default. Resolution from the installed package location is an
     implementation detail — the consumer may use any standard mechanism
     (e.g. importlib.resources or Path(__file__) composition) that yields
     the absolute path to the package's goga/assets/afm/prompts/
     directory at runtime. All four files are expected to exist in a
     properly installed image — when a default is missing AND no inline
-    override is supplied for that key, materialization fails with a
-    readable error before launch.
+    override is supplied for the corresponding role, materialization
+    fails with a readable error before launch.
 
 Annotations: |
   The `conventions` practice is used for:
@@ -124,11 +130,14 @@ Annotations: |
   Prompt materialization step: after `compile_flow`, `run_pipeline`
   materializes the four default agent prompt files from the installed goga
   package (goga/assets/afm/prompts/, per the `default_prompts` practice)
-  into the runtime directory at <AFM_DIR>/prompts/, then applies a per-key
-  override — for each non-None agents field of the documents tuple
+  into the runtime directory at <AFM_DIR>/prompts/, then applies a
+  per-role override — for each non-None role field of the pipeline
+  document header (planner/executor/reviewer) of the documents tuple
   returned by `compile_flow` (per the `compile-flow` practice), the
-  corresponding <name>.md file is
-  overwritten with the inline prompt text. The override is a full
+  corresponding <stem>.md file — stem resolved via `translate_role`
+  (imported from goga/pipeline/compiler) — is overwritten with the inline
+  prompt text. summary has no override field; summary.md is always
+  copied from the default. The override is a full
   replacement (no merge, no concatenation). All four files are written
   unconditionally — when a default is missing from the package AND no
   inline override is supplied for that key, materialization fails with a
@@ -286,26 +295,28 @@ Annotations: |
        a. Resolve the default prompts directory in the installed goga
           package (per the `default_prompts` practice) —
           goga/assets/afm/prompts/
-       b. Validate all four fixed agent keys (planning, implementation,
-          review, summary): for each key, either
-          the documents tuple returned by `compile_flow` carries a non-None
-          inline override for that key (per the `compile-flow` practice), or
-          the corresponding default prompt file
-          (defaults_dir / "<key>.md") exists. A key with neither override
-          nor default is a fatal error raised BEFORE the directory is wiped
-          or any prompt file is written — this is the atomicity guarantee
-          (no partial state on disk)
+       b. Validate (atomic, before wipe): for each overridable role
+          (planner, executor, reviewer) — stem = `translate_role`(role);
+          either the documents tuple returned by `compile_flow` carries a
+          non-None inline override for that role (per the
+          `compile-flow` practice), or the corresponding default prompt
+          file (defaults_dir / "<stem>.md") exists. summary has no
+          override field — its default file (defaults_dir / "summary.md")
+          MUST exist. A role with neither override nor default, or a
+          missing summary default, is a fatal error raised BEFORE the
+          directory is wiped or any prompt file is written — this is the
+          atomicity guarantee (no partial state on disk)
        c. After step 8b succeeds, reset <AFM_DIR>/prompts/ to a clean
           state (rmtree + mkdir) so the directory contains exactly four
           files after step 8 succeeds, regardless of any leftover files
           from previous runs or manual edits
-       d. For each of the four fixed agent keys: write the inline prompt
-          override to <AFM_DIR>/prompts/<key>.md when the documents tuple
-          (returned by `compile_flow` per the `compile-flow` practice)
-          carries one for that key; otherwise copy the corresponding
+       d. For each overridable role (planner, executor, reviewer):
+          stem = `translate_role`(role); write the inline prompt override
+          for that role to <AFM_DIR>/prompts/<stem>.md when the
+          documents tuple carries one, otherwise copy the corresponding
           (already-validated) default prompt from the installed package.
-          By construction (step 8b) every source exists — no raise is
-          possible in this step
+          summary.md is always copied from the default (never overridden
+          from the DSL). By construction (step 8b) every source exists.
        e. After step 8d succeeds, <AFM_DIR>/prompts/ contains exactly
           four files (planning.md, implementation.md, review.md,
           summary.md)
@@ -338,9 +349,15 @@ Annotations: |
     - Always accept the return value of `compile_flow` (the documents
       tuple); never re-invoke the parse-dsl routine to obtain inline
       prompt overrides
-    - Read inline prompt overrides exclusively from
-      the documents tuple returned by `compile_flow` (per the `compile-flow`
-      practice — the compiled flow-file carries no agents data)
+    - Read inline prompt overrides exclusively from the pipeline document
+      header's roles block (planner/executor/reviewer) of the documents tuple
+      returned by `compile_flow` (per the `compile-flow` practice — the
+      compiled flow-file carries no roles data); never from a legacy agents block
+    - Resolve each overridable role to its prompt-file stem via
+      `translate_role` (imported from goga/pipeline/compiler);
+      planner→planning, executor→implementation, reviewer→review
+    - summary.md is always copied from the default — summary has no
+      override field and is not overridable from the DSL
     - <AFM_DIR>/prompts/ must contain exactly four files after step 8
       succeeds; partial state (fewer files) is an error condition that must
       surface before `run_flow` is invoked. Wipe the directory clean in
@@ -394,7 +411,7 @@ Annotations: |
       supplied for that key
     - Do not perform any prompt-related work outside step 8 — the host
       launcher writes prompts_dir into the afm config.yaml tmpfile but
-      does not know whether the pipeline-file contains an agents block
+      does not know whether the pipeline-file contains a roles block
     - Do not mutate the documents tuple returned by `compile_flow` — read
       the inline prompt overrides from it as-is
     - Do not invoke the workflow parser outside `parse_workflow`

@@ -47,7 +47,7 @@ Annotations: |
   Use `convention` for code style, dataclass usage, and test layout.
 
   The input pipeline-file is segmented by a literal three-dash line: the
-  segment before is the header (name, description, optional agents), the
+  segment before is the header (name, description, optional roles), the
   segment after is the body (either a YAML list for phases or a YAML dict
   for stages). The output flow-file is NOT segmented — it is a single flat
   YAML document with optional prompt, name, description, and stages.
@@ -74,31 +74,41 @@ Annotations: |
   they appear in their canonical slots ONLY when the source step body
   authors them — they are NO LONGER populated by default injection.
 
-  Default stage-field injection: when a step body has no usable agents
-  value (key absent, explicit null, or an empty list), the compiler injects
+  Default stage-field injection: the input stage-body field for the afm
+  agents list is roles (the old agents key in a stage body is a
+  structural error, raised by `compile_flow`). When a step body has no
+  usable roles value (key absent, explicit null, or an empty list), the
+  compiler injects
   a SINGLE default into the assembled `FlowStage` fields —
   "agents=[\"auto\"]". auto is a sentinel agent mode: goga emits the
   literal string auto verbatim and does NOT interpret it — the actual
   agent selection is performed on the afm side. supervisor and
   supervisor_prompt are NO LONGER default-injected; they remain valid
   authored fields that pass through to their canonical slots when the
-  source step body carries them. An authored non-empty agents value (any
-  list with at least one entry) always wins and disables injection entirely.
+  source step body carries them. An authored non-empty roles value (any
+  list with at least one entry) always wins and disables injection
+  entirely; its entries are translated to the output agents values via
+  `translate_role` (known aliases mapped, all other values passed through
+  verbatim).
   The injection lives in `FlowStage` assembly only — the
   `PipelineDocument` body returned to consumers is never affected (it
   stays a faithful mirror of the source pipeline-file). The injection runs
   uniformly on the non-workflow path and on the workflow path (after
   per-stage overrides and loop-expansion).
 
-  The header segment additionally supports an optional agents block
-  with four fixed string keys: planning, implementation, review, summary.
-  Each value is an inline prompt text that fully replaces (not merges
-  with) the corresponding default prompt file during pipeline run
-  materialization. Unknown keys, non-str values, and empty mappings are
-  handled by `parse_dsl` per its contract; the agents data is carried
-  in `PipelineHeader` (its agents field) and never enters the compiled
-  afm flow-file — it is a goga-side artifact surfaced to the consumer via
-  `PipelineDocument` (its header field) from `compile_flow` return value.
+  The header segment additionally supports an optional roles block
+  with three fixed string keys: planner, executor, reviewer. Each
+  value is an inline prompt text that fully replaces (not merges with)
+  the corresponding default prompt file during pipeline run
+  materialization (the planner/executor/reviewer keys map to the
+  planning/implementation/review prompt-file stems via `translate_role`).
+  summary is NOT an overridable role. The old key agents is rejected
+  with a structural error by `parse_dsl`. Unknown keys, non-str values,
+  and empty mappings are handled by `parse_dsl` per its contract; the
+  roles data is carried in `PipelineHeader` (its roles field, of type
+  `PipelineRoles`) and never enters the compiled afm flow-file — it is a
+  goga-side artifact surfaced to the consumer via `PipelineDocument` (its
+  header field) from `compile_flow` return value.
 
   `compile_flow` returns a tuple of `PipelineDocument` and `FlowDocument`: the
   input representation (`PipelineDocument`, aggregating header+format+body —
@@ -179,34 +189,37 @@ Annotations: |
       Body is a YAML dict (map keyed by step id). User-supplied depends_on
       is passed through as-is during compilation.
 
-"PipelineAgents(planning: str | None = None, implementation: str | None = None, review: str | None = None, summary: str | None = None)":
-  location: pipeline_agents.py
+"PipelineRoles(planner: str | None = None, executor: str | None = None, reviewer: str | None = None)":
+  location: pipeline_roles.py
   annotations: |
-    Data model of the header-level agents directive — four optional
-    inline prompt overrides, one per fixed agent key. Constructed by
-    `parse_dsl` when the header segment contains a non-empty agents
-    block; carried verbatim inside `PipelineHeader` (its agents field)
+    Data model of the header-level roles directive — three optional
+    inline prompt overrides, one per fixed role key. Constructed by
+    `parse_dsl` when the header segment contains a non-empty roles
+    block; carried verbatim inside `PipelineHeader` (its roles field)
     and surfaced to the consumer through `PipelineDocument`.
 
-    `planning`: inline prompt text overriding
-                goga/assets/afm/prompts/planning.md, or None when not
-                specified
-    `implementation`: inline prompt text overriding
-                      goga/assets/afm/prompts/implementation.md, or None
-    `review`: inline prompt text overriding
-              goga/assets/afm/prompts/review.md, or None
-    `summary`: inline prompt text overriding
-               goga/assets/afm/prompts/summary.md, or None
+    `planner`: inline prompt text overriding
+               goga/assets/afm/prompts/planning.md, or None when not
+               specified
+    `executor`: inline prompt text overriding
+                goga/assets/afm/prompts/implementation.md, or None
+    `reviewer`: inline prompt text overriding
+                goga/assets/afm/prompts/review.md, or None
+
+    The planner/executor/reviewer field names map to the planning/
+    implementation/review prompt-file stems via `translate_role`. summary
+    is NOT an overridable role — its prompt file is always materialized
+    from the default.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - All four fields default to None (backwards-compat with pipeline-files
-      that do not override every key)
-    - Field order is fixed: planning, implementation, review, summary —
-      matches the canonical order of the four prompt files in
+    - All three fields default to None (backwards-compat with pipeline-files
+      that do not override every role)
+    - Field order is fixed: planner, executor, reviewer — matches the
+      canonical order of the overridable prompt files in
       goga/assets/afm/prompts/
 
     Constraints:
@@ -215,21 +228,20 @@ Annotations: |
       unchanged)
     - Do not merge or concatenate with default prompt text — the consumer
       replaces the file wholesale
+    - Do not carry a summary field — summary is never overridable from the
+      DSL
 
   properties:
-    "planning -> str | None": |
-      Inline prompt text overriding
-      goga/assets/afm/prompts/planning.md, or None when not specified in
-      the header.agents block.
-    "implementation -> str | None": |
+    "planner -> str | None": |
+      Inline prompt text overriding goga/assets/afm/prompts/planning.md
+      (stem resolved via `translate_role`), or None when not specified in
+      the header.roles block.
+    "executor -> str | None": |
       Inline prompt text overriding
       goga/assets/afm/prompts/implementation.md, or None when not
       specified.
-    "review -> str | None": |
+    "reviewer -> str | None": |
       Inline prompt text overriding goga/assets/afm/prompts/review.md,
-      or None when not specified.
-    "summary -> str | None": |
-      Inline prompt text overriding goga/assets/afm/prompts/summary.md,
       or None when not specified.
 
 "PipelineDocument(header: PipelineHeader, format: BodyFormat, body: PhasesBody | StagesBody)":
@@ -240,10 +252,10 @@ Annotations: |
     and body in one dataclass. Built by `compile_flow` from `parse_dsl`'s
     3-tuple output and returned to consumers as the first element of the
     documents tuple. Exists so that consumers (run_pipeline) can obtain
-    the parsed representation — including the agents field of `header` — from a single
+    the parsed representation — including the roles field of `header` — from a single
     return value without re-invoking parse_dsl.
 
-    `header`: parsed `PipelineHeader` (name, description, optional agents)
+    `header`: parsed `PipelineHeader` (name, description, optional roles)
     `format`: detected `BodyFormat` — PHASES or STAGES
     `body`: parsed body — `PhasesBody` when format is PHASES,
             `StagesBody` when format is STAGES. The body reflects the
@@ -266,7 +278,7 @@ Annotations: |
 
   properties:
     "header -> PipelineHeader": |
-      Parsed pipeline-file header (name, description, optional agents).
+      Parsed pipeline-file header (name, description, optional roles).
     "format -> BodyFormat": |
       Detected body format — PHASES or STAGES.
     "body -> PhasesBody | StagesBody": |
@@ -274,21 +286,22 @@ Annotations: |
       when PHASES, StagesBody otherwise. The ORIGINAL parsed body —
       workflow-reconstructed stages live only in `FlowDocument`.
 
-"PipelineHeader(name: str, description: str, agents: PipelineAgents | None = None)":
+"PipelineHeader(name: str, description: str, roles: PipelineRoles | None = None)":
   location: pipeline_header.py
   annotations: |
     Header of an input pipeline-file — top-level name and description
-    appearing before the three-dash separator, plus an optional agents
-    field carrying inline prompt overrides. Parsed by `parse_dsl` from
-    the header segment of the pipeline-file text. Carried 1:1 into the
-    `PipelineDocument` (its header field) by `compile_flow`. The agents
-    field does not enter the compiled `FlowDocument` — it is a goga-side
+    appearing before the three-dash separator, plus an optional roles
+    field (of type `PipelineRoles`) carrying inline prompt overrides.
+    Parsed by `parse_dsl` from the header segment of the pipeline-file
+    text. Carried 1:1 into the `PipelineDocument` (its header field) by
+    `compile_flow`. The roles field does not enter the compiled
+    `FlowDocument` — it is a goga-side
     artifact surfaced to the consumer through `PipelineDocument`.
 
     `name`: pipeline name (e.g. "Goga feature")
     `description`: short pipeline description (e.g. "Feature implementation")
-    `agents`: optional `PipelineAgents` instance parsed from the
-              header-level agents block, or None when the block is
+    `roles`: optional `PipelineRoles` instance parsed from the
+              header-level roles block, or None when the block is
               absent or empty
 
     Build the data model with the standard library dataclasses module
@@ -297,16 +310,16 @@ Annotations: |
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
     - `name` and `description` are required (no defaults)
-    - agents defaults to None (backwards-compat with pipeline-files
-      without an agents block)
+    - roles defaults to None (backwards-compat with pipeline-files
+      without a roles block)
 
   properties:
     "name -> str": |
       Pipeline name.
     "description -> str": |
       Short pipeline description.
-    "agents -> PipelineAgents | None": |
-      Inline prompt overrides from the header-level agents block, or
+    "roles -> PipelineRoles | None": |
+      Inline prompt overrides from the header-level roles block, or
       None when the block is absent or empty. Built by `parse_dsl`;
       carried verbatim through `PipelineDocument` to the consumer. Never
       enters the compiled afm flow-file.
@@ -318,7 +331,7 @@ Annotations: |
 
     `name`: step id (the value of the name field inside the list item)
     `title`: display label (the value of title inside the item)
-    `body`: verbatim copy of every other field in the item (e.g. agents,
+    `body`: verbatim copy of every other field in the item (e.g. roles,
             prompt, skills, interactive, and any extra fields),
             excluding name and title
 
@@ -545,10 +558,10 @@ Annotations: |
 
     `text`: full pipeline-file text (must contain a three-dash separator line)
     `header`: parsed `PipelineHeader` (name, description from the header
-              segment; plus an optional agents field of type
-              `PipelineAgents` or None, carrying inline prompt overrides
-              from the header-level agents block — None when the block is
-              absent or an empty mapping, a `PipelineAgents` instance
+              segment; plus an optional roles field of type
+              `PipelineRoles` or None, carrying inline prompt overrides
+              from the header-level roles block — None when the block is
+              absent or an empty mapping, a `PipelineRoles` instance
               otherwise)
     The format output is the detected `BodyFormat` — PHASES if the body is
     a YAML list, STAGES if the body is a YAML dict.
@@ -562,17 +575,20 @@ Annotations: |
     2. Parse the header segment; extract name and description. If either
        is missing or not a str — raise a structural error
        "header missing name/description". Then extract the optional
-       agents block from the header segment. If the block is absent or
-       an empty mapping — set agents to None. If the block is present but
+       roles block from the header segment. If the block is absent or
+       an empty mapping — set roles to None. If the block is present but
        its value is not a mapping (e.g. a scalar, a string, a list) —
-       raise a structural error "non-mapping agents block in header".
-       Otherwise validate every key against the fixed set {planning,
-       implementation, review, summary}: an unknown key raises a
-       structural error "unknown agent in header.agents: <key>; valid
-       keys: planning, implementation, review, summary"; a non-str value
-       raises a structural error "non-str value in header.agents.<key>".
-       Build `PipelineAgents` from the validated entries. Build
-       `PipelineHeader` with name, description, and agents
+       raise a structural error "non-mapping roles block in header".
+       Otherwise validate every key against the fixed set {planner,
+       executor, reviewer}: an unknown key (including summary) raises
+       a structural error "unknown role in header.roles: <key>; valid
+       keys: planner, executor, reviewer"; a non-str value raises a
+       structural error "non-str value in header.roles.<key>". Build
+       `PipelineRoles` from the validated entries. Build
+       `PipelineHeader` with name, description, and roles.
+       ADDITIONALLY, if the header segment carries the legacy agents
+       key — raise a structural error "agents key is forbidden in
+       header; use roles" (hard rename, no legacy support).
     3. Parse the body segment
     4. Detect format by the structure of the parsed body:
        - a list → `BodyFormat` PHASES; build a `PhasesBody` of `PhaseStep`
@@ -596,13 +612,14 @@ Annotations: |
       emptiness
     - `PhaseStep` and `StageStep` carry deep copies of the parsed body
       dicts, so subsequent mutation does not affect the source
-    - The fixed agent key set is exactly {planning, implementation, review,
-      summary} — no other keys accepted
-    - An absent agents block and an empty agents mapping are treated
-      identically: agents is set to None
+    - The fixed role key set is exactly {planner, executor, reviewer} —
+      no other keys accepted (summary is not a valid role)
+    - An absent roles block and an empty roles mapping are treated
+      identically: roles is set to None
+    - The legacy agents key in the header is a structural error
     - A non-str value for a known key is a structural error (not silently
       coerced)
-    - A non-mapping value for the agents block itself (scalar, string,
+    - A non-mapping value for the roles block itself (scalar, string,
       list) is a structural error — the block must be a mapping or absent
 
     Constraints:
@@ -612,7 +629,7 @@ Annotations: |
     - Do not handle a pipeline-file without a three-dash separator
       (already-afm format) — it is an error by design
     - Do not validate or merge inline prompt text — `parse_dsl` passes
-      the agents values through verbatim; the consumer (the run_pipeline
+      the roles values through verbatim; the consumer (the run_pipeline
       routine in goga/pipeline)
       decides how to materialize them
 
@@ -697,7 +714,7 @@ Annotations: |
                 project workflow-file via parse_workflow (per the
                 `parse-workflow` practice).
     `documents`: a tuple of `PipelineDocument` and `FlowDocument` — the
-                 parsed input representation (carrying header agents when
+                 parsed input representation (carrying header roles when
                  present; the ORIGINAL parsed body, NOT the
                  workflow-reconstructed body) and the output flow-file model
                  (including workflow-applied overrides, loop-expansion,
@@ -865,15 +882,21 @@ Annotations: |
        - STAGES: for each `StageStep`, build a `FlowStage` with depends_on
          passed through from the (possibly rewritten) source step
        - In both branches, BEFORE canonical ordering, inject default stage
-         fields when the source step body has no usable agents value
+         fields when the source step body has no usable roles value
          (missing key, explicit null, or empty list): set agents to
-         ["auto"]. auto is a sentinel agent mode emitted verbatim — goga
-         does not interpret it (afm resolves it). supervisor and
-         supervisor_prompt are NOT default-injected (they appear only when
-         the source step body authors them). An authored non-empty agents
-         value always wins and disables injection. The ORIGINAL parsed body
-         is never mutated by this injection — defaults live in FlowStage
-         assembly only
+         ["auto"]. The input stage-body field for the afm agents list is
+         roles; an authored non-empty roles value is translated entry-
+         by-entry via `translate_role` (known aliases mapped, all other
+         values passed through verbatim) into the output agents value.
+         The legacy agents key in a stage body — pipeline-file stage OR
+         embedded extend-stage — is a structural error "agents key is
+         forbidden in stage body; use roles". auto is a sentinel agent
+         mode emitted verbatim — goga does not interpret it (afm resolves
+         it). supervisor and supervisor_prompt are NOT default-injected
+         (they appear only when the source step body authors them). An
+         authored non-empty roles value always wins and disables
+         injection. The ORIGINAL parsed body is never mutated by this
+         injection — defaults live in FlowStage assembly only
        - In both branches, assemble the fields of each `FlowStage` in
          canonical key order (interactive, command, prompt, description,
          agents, supervisor, supervisor_prompt, skills, then
@@ -955,18 +978,28 @@ Annotations: |
       to `FlowDocument`, `FlowStage`, or `serialize_flow`
     - When `workflow` is None, step 4a0 is skipped entirely (as is the whole
       reconstruction)
-    - Consumers must NOT re-invoke `parse_dsl` to obtain the agents — they
-      read header agents from `PipelineDocument` returned by this routine
-    - Default stage-field injection: a step body with no usable agents
+    - Consumers must NOT re-invoke `parse_dsl` to obtain the roles — they
+      read header roles from `PipelineDocument` returned by this routine
+    - Default stage-field injection: a step body with no usable roles
       value (missing key, explicit null, or empty list) yields a
       `FlowStage` carrying a single injected default — agents=["auto"].
       supervisor and supervisor_prompt are NOT default-injected (authored
       values pass through). auto is emitted verbatim; goga does not
       resolve it.
-      An authored non-empty agents value always wins and disables
+      An authored non-empty roles value always wins and disables
       injection. The injection runs uniformly on the non-workflow path
       and on the workflow path (after per-stage overrides and
       loop-expansion)
+    - The input stage-body field for the afm agents list is roles; the
+      legacy agents key in a stage body (pipeline-file stage or embedded
+      extend-stage) is a structural error raised by `compile_flow`
+    - Authored roles values are translated to the output agents values
+      via `translate_role`; known aliases (planner/executor/reviewer) map
+      to planning/implementation/review, every other value passes through
+      verbatim (goga does not validate the open afm agent namespace)
+    - The output field name agents, the default ["auto"] injection, the
+      canonical key order, and the flow-style serialization are unchanged
+      (afm contract stable)
     - Override priority (inline extend vs stages block): for a stage that
       originated from an extend-entry, the extend-entry's inline agent /
       loop are DEFAULT override values; an explicit stages-block entry
@@ -982,7 +1015,7 @@ Annotations: |
     - Default injection is local to `FlowStage` fields assembly — the
       `PipelineDocument` body carried alongside the `FlowDocument` is
       never affected (it stays a faithful mirror of the source
-      pipeline-file, with whatever agents value — or absence — the
+      pipeline-file, with whatever roles value — or absence — the
       source authored)
 
     Constraints:
@@ -1022,8 +1055,8 @@ Annotations: |
     - Do not merge extend-entry skills with pipeline skills — extend
       skills are verbatim (a new stage has no pipeline side)
     - Do not inject defaults when the source step body carries a non-empty
-      agents value — authored agents always wins; the compiler must not
-      second-guess the user's choice of agents
+      roles value — authored roles always wins; the compiler must not
+      second-guess the user's choice of roles
     - Do not embed extend-stages after loop-expansion — the order
       4a0 → 4a → 4b → 4c is mandatory (correctness of the symmetric
       before/after → LAST expanded-id rewriting in STAGES, and of PHASES
@@ -1038,6 +1071,40 @@ Annotations: |
     - Do not leak embedded extend-stages into `PipelineDocument` body — it
       stays a faithful mirror of the original parsed body (as for the current
       workflow-reconstructed stages)
+
+"translate_role(role: str) -> name: str":
+  location: compile_flow.py
+  annotations: |
+    Translate a single role alias from the input DSL vocabulary into the
+    canonical afm agent name, which is identical to the corresponding
+    default prompt-file stem. This is the single source of truth for the
+    role <-> {agent-name, prompt-file-stem} bijection — used by the
+    stage-list translation in `compile_flow` (role values -> output
+    agents values) and imported by the prompt-materialization consumer
+    in goga/pipeline (role override fields -> <stem>.md files).
+
+    `role`: a role value/field-name from the input DSL (planner, executor,
+            reviewer, or any other string)
+    `name`: the canonical afm agent name == prompt-file stem
+
+    Algorithm:
+    1. Map the known aliases: planner -> planning, executor -> implementation,
+       reviewer -> review
+    2. For every other value (including summary, auto, and any other afm
+       agent name) — return the input unchanged (verbatim); goga does not
+       interpret the open afm agent namespace
+
+    Requirements:
+    - The mapping is exactly {planner: planning, executor: implementation,
+      reviewer: review}; no other alias is translated
+    - Non-alias values pass through verbatim without validation
+
+    Constraints:
+    - Do not validate role values against a known set — the afm agent
+      namespace is open (summary, auto, and arbitrary agent names pass
+      through)
+    - Do not inject auto — auto is a compiler-side default for stages
+      with no usable roles value, never a role value authored in the DSL
 
 ---
 

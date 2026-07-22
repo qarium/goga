@@ -104,7 +104,7 @@ propagate unchanged with their readable messages.
 |-----------|----------------------------------------------------------------|
 | 0         | afm ran the compiled pipeline successfully                     |
 | non-zero  | pipeline not found in either source                            |
-| non-zero  | structural DSL error — an exception with a readable message propagates out of `run_pipeline` (missing `---` separator, missing header fields, unknown agent in header.agents, non-str agent value, body neither list nor dict, empty body) |
+| non-zero  | structural DSL error — an exception with a readable message propagates out of `run_pipeline` (missing `---` separator, missing header fields, legacy `agents` key in header, unknown role in header.roles, non-str role value, body neither list nor dict, empty body) |
 | non-zero  | structural workflow error — an exception with a readable message propagates out of `run_pipeline` when a resolved workflow-file fails `parse_workflow` (unknown keys, non-str/non-int values, `loop < 1`) |
 | non-zero  | materialization error — a default prompt file is missing from the installed package AND no inline override is supplied for that key (readable message, no partial prompts/ directory) |
 | 127       | `afm` not in `$PATH` inside the container (propagated)         |
@@ -121,8 +121,9 @@ four agent prompt files into `<AFM_DIR>/prompts/` — one per fixed agent
 key. For each key, the file is either a copy of the corresponding default
 prompt from the installed goga package
 (`goga/assets/afm/prompts/<key>.md`) or, when an inline override is
-present in the pipeline-file header's `agents:` block, the inline prompt
-text (full file replacement, no merge). Finally, `run_pipeline` launches afm
+present in the pipeline-file header's `roles:` block (one of
+planner/executor/reviewer), the inline prompt text (full file
+replacement, no merge). Finally, `run_pipeline` launches afm
 as a subprocess and inherits all its side effects, as defined by the
 compiled flow-file itself.
 
@@ -139,7 +140,7 @@ runs.
   project-priority resolution).
 - AFM_DIR must be set in the container environment.
 - The input pipeline file must be a goga DSL file: a header (`name`,
-  `description`, optional `agents` block) followed by a `---` separator,
+  `description`, optional `roles` block) followed by a `---` separator,
   then a body (YAML list for phases, YAML dict for stages). Already-afm-format
   files are not supported and will raise a structural error.
 - The installed goga package must contain `goga/assets/afm/prompts/` with the

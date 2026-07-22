@@ -119,7 +119,7 @@ Annotations: |
             `loop` override does — or None when not specified (no expansion).
             Acts as a DEFAULT override; an explicit stages-block entry for
             the same name wins (per-field)
-    `body`: verbatim copy of the stage body (title, prompt, skills, agents,
+    `body`: verbatim copy of the stage body (title, prompt, skills, roles,
             interactive, and any other stage field) EXCLUDING before, after,
             agent, loop, and depends_on. Open-ended — this cell does not know
             the stage field schema
@@ -296,7 +296,7 @@ Annotations: |
         g. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
         h. Other keys of the entry value are NOT validated (open-ended:
-           title, prompt, skills, agents, interactive, and any other stage
+           title, prompt, skills, roles, interactive, and any other stage
            field) and pass through verbatim
         i. Build a `WorkflowExtendStage` from the validated before/after,
            agent/loop, and the REMAINING entry value (excluding before,

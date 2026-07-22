@@ -146,7 +146,7 @@ The `stages` section may be absent entirely. The top-level `prompt` may also be
 absent. An `extend:` entry carries `before`/`after` (at least one required;
 `depends_on` forbidden), optional inline `agent` (str) and `loop` (int `>= 1`)
 — extracted into the model, not part of the body — plus any stage body fields
-(`title`, `prompt`, `skills`, `agents`, `interactive`, …) passed through
+(`title`, `prompt`, `skills`, `roles`, `interactive`, …) passed through
 verbatim. A workflow providing none of `prompt`, `stages`, or `extend` is
 rejected.
 

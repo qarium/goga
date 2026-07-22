@@ -114,7 +114,7 @@ Annotations: |
   argument or config field) and is written unconditionally; the directory
   itself is populated by the in-container run_pipeline routine (per the
   `run-pipeline` practice), so afm uses goga-managed prompts regardless of
-  whether the pipeline-file contains an agents block.
+  whether the pipeline-file contains a roles block.
 
   Workflow layer: when the user passes --workflow <name> or --no-workflow,
   the launcher performs host-side handling BEFORE container launch —
