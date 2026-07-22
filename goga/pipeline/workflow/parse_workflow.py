@@ -14,12 +14,12 @@ it returns instructions, never their resolution.
 A workflow-file is structurally malformed when its YAML is invalid, its root is
 not a mapping, it carries an unknown top-level or per-stage key, a field has the
 wrong type, an extend-entry forbids ``depends_on`` / mistypes ``before`` /
-``after`` / omits both, a ``loop`` is below one, or it provides neither a
-top-level prompt, any stage entry, nor any extend entry. Each of those raises
-``WorkflowSyntaxError`` (a ``ValueError`` subclass, mirroring the compiler
-cell's ``StructuralError``) with an authored-time message. A missing or
-unreadable file lets the underlying ``OSError`` propagate unchanged —
-consistent with the compiler behavior.
+``after`` / omits both / mistypes an inline ``agent`` / ``loop``, a ``loop`` is
+below one, or it provides neither a top-level prompt, any stage entry, nor any
+extend entry. Each of those raises ``WorkflowSyntaxError`` (a ``ValueError``
+subclass, mirroring the compiler cell's ``StructuralError``) with an
+authored-time message. A missing or unreadable file lets the underlying
+``OSError`` propagate unchanged — consistent with the compiler behavior.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ _TOP_LEVEL_KEYS = ("prompt", "stages", "extend")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
-_STAGE_KEYS = ("agent", "prompt", "loop")
+_STAGE_KEYS = ("agent", "prompt", "loop", "skills")
 
 
 class WorkflowSyntaxError(ValueError):
@@ -47,9 +47,10 @@ class WorkflowSyntaxError(ValueError):
     A structural error is an authored-time defect in the workflow-file: invalid
     YAML, a non-mapping root, an unknown top-level or per-stage key, a
     wrong-typed field, an extend-entry that forbids ``depends_on`` / mistypes
-    ``before`` / ``after`` / omits both, a ``loop`` below one, or a workflow
-    that provides neither a top-level prompt, any stage entry, nor any extend
-    entry. Agent-name resolution, loop expansion, extend-stage embedding, and
+    ``before`` / ``after`` / an inline ``agent`` / an inline ``loop`` / omits
+    both ``before`` and ``after``, a ``loop`` below one, or a workflow that
+    provides neither a top-level prompt, any stage entry, nor any extend entry.
+    Agent-name resolution, loop expansion, extend-stage embedding, and
     ``depends_on`` rewriting are the compiler's responsibility — they never
     surface as structural errors here.
     """
@@ -60,14 +61,15 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
 
     Read the file at ``workflow_path``, parse it as YAML, validate the expected
     top-level keys (``prompt``, ``stages``, ``extend``) and the per-stage key
-    set (``agent``, ``prompt``, ``loop``), type-check each present field,
-    validate each extend-entry's positioning (``before``/``after`` as
+    set (``agent``, ``prompt``, ``loop``, ``skills``), type-check each present
+    field, validate each extend-entry's positioning (``before``/``after`` as
     ``list[str]``, ``depends_on`` forbidden, at least one of ``before``/``after``
-    required), enforce ``loop >= 1``, build one ``WorkflowStage`` per ``stages``
-    entry and one ``WorkflowExtendStage`` per ``extend`` entry, and return the
-    aggregated ``WorkflowDocument``. No content validation beyond the structural
-    schema; no agent-name resolution, no loop expansion, no extend-stage
-    embedding, no ``depends_on`` rewriting.
+    required) and any inline ``agent`` (str) / ``loop`` (int >= 1), enforce
+    ``loop >= 1``, build one ``WorkflowStage`` per ``stages`` entry and one
+    ``WorkflowExtendStage`` per ``extend`` entry, and return the aggregated
+    ``WorkflowDocument``. No content validation beyond the structural schema; no
+    agent-name resolution, no loop expansion, no extend-stage embedding, no
+    ``depends_on`` rewriting.
 
     Args:
         workflow_path: Absolute path to the workflow-file.
@@ -83,6 +85,7 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
             mapping, an unknown top-level or per-stage key is present, a field
             has the wrong type, an extend-entry is malformed (non-mapping value,
             ``depends_on`` present, ``before``/``after`` not a ``list[str]``,
+            an inline ``agent`` not a str or ``loop`` not an ``int >= 1``,
             neither ``before`` nor ``after``), ``loop`` is below one, or the
             workflow provides neither a top-level prompt, any stage entry, nor
             any extend entry.
@@ -185,9 +188,10 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     """Validate one ``stages`` entry and build a ``WorkflowStage`` from it.
 
     The entry value must be a mapping. Its key set is validated against
-    ``agent``, ``prompt``, ``loop`` (unknown key → structural error); each
-    present field is then type-checked, and ``loop`` must be an ``int >= 1``.
-    Absent fields stay ``None`` on the built ``WorkflowStage``.
+    ``agent``, ``prompt``, ``loop``, ``skills`` (unknown key → structural
+    error); each present field is then type-checked, ``loop`` must be an
+    ``int >= 1``, and ``skills`` must be a ``list[str]``. Absent fields stay
+    ``None`` on the built ``WorkflowStage``.
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -198,8 +202,9 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
 
     Raises:
         WorkflowSyntaxError: If the entry value is not a mapping, an unknown
-            per-stage key is present, ``agent``/``prompt`` is not a str, or
-            ``loop`` is not an ``int >= 1``.
+            per-stage key is present, ``agent``/``prompt`` is not a str,
+            ``loop`` is not an ``int >= 1``, or ``skills`` is not a
+            ``list[str]``.
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping stage {name} in workflow.stages")
@@ -207,6 +212,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     agent: str | None = None
     prompt: str | None = None
     loop: int | None = None
+    skills: list[str] | None = None
 
     for key, field_value in value.items():
         if key == "agent":
@@ -220,21 +226,18 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
 
             prompt = field_value
         elif key == "loop":
-            # ``bool`` is a subclass of ``int`` in Python — reject it first so
-            # ``loop: true`` is reported as a non-int, not silently accepted.
-            if isinstance(field_value, bool) or not isinstance(field_value, int):
-                raise WorkflowSyntaxError(f"non-int value in workflow.stages.{name}.loop")
+            loop = _validate_loop(f"workflow.stages.{name}", field_value)
+        elif key == "skills":
+            if not _is_list_of_str(field_value):
+                raise WorkflowSyntaxError(f"non-list-of-str skills in workflow.stages.{name}")
 
-            if field_value < 1:
-                raise WorkflowSyntaxError(f"loop must be >= 1 in workflow.stages.{name}")
-
-            loop = field_value
+            skills = field_value
         else:
             raise WorkflowSyntaxError(
                 f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}"
             )
 
-    return WorkflowStage(agent=agent, prompt=prompt, loop=loop)
+    return WorkflowStage(agent=agent, prompt=prompt, loop=loop, skills=skills)
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:
@@ -263,9 +266,12 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     The entry value must be a mapping. ``depends_on`` is forbidden inside it
     (positioning is declared via ``before``/``after`` instead); ``before`` and
     ``after`` (when present) must each be a ``list[str]``; at least one of
-    ``before``/``after`` must be present. Every other key passes through
-    verbatim as the stage body. ``before`` and ``after`` are removed from the
-    body before construction.
+    ``before``/``after`` must be present. An inline ``agent`` (when present)
+    must be a ``str``; an inline ``loop`` (when present) must be an ``int >= 1``
+    (``bool`` rejected first, symmetric with the per-stage ``loop`` check).
+    Every other key passes through verbatim as the stage body. ``before``,
+    ``after``, ``agent`` and ``loop`` are removed from the body before
+    construction (``depends_on`` never reaches it: it is rejected outright).
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -277,7 +283,9 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     Raises:
         WorkflowSyntaxError: If the entry value is not a mapping, it contains a
             ``depends_on`` key, ``before`` is not a ``list[str]``, ``after`` is
-            not a ``list[str]``, or neither ``before`` nor ``after`` is present.
+            not a ``list[str]``, an inline ``agent`` is not a ``str``, an inline
+            ``loop`` is not an ``int >= 1``, or neither ``before`` nor
+            ``after`` is present.
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping extend entry {name} in workflow.extend")
@@ -296,9 +304,31 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     if before is None and after is None:
         raise WorkflowSyntaxError(f"extend entry {name} requires at least one of before/after")
 
-    body = {key: entry_value for key, entry_value in value.items() if key not in ("before", "after")}
+    # Inline ``agent``/``loop`` are DEFAULT overrides (an explicit stages-block
+    # entry for the same name wins per-field in the compiler). They are
+    # validated per-key WITHOUT an ``is not None`` guard: an explicit ``null``
+    # is a structural type error, not an absence (symmetric with the per-stage
+    # ``agent``/``loop`` and the extend ``loop``). Absence is expressed by
+    # omitting the key, which leaves the model field ``None``.
+    agent: str | None = None
+    if "agent" in value:
+        agent_value = value["agent"]
+        if not isinstance(agent_value, str):
+            raise WorkflowSyntaxError(f"non-str value in workflow.extend.{name}.agent")
 
-    return WorkflowExtendStage(before=before, after=after, body=body)
+        agent = agent_value
+
+    loop: int | None = None
+    if "loop" in value:
+        loop = _validate_loop(f"workflow.extend.{name}", value["loop"])
+
+    body = {
+        key: entry_value
+        for key, entry_value in value.items()
+        if key not in ("before", "after", "agent", "loop")
+    }
+
+    return WorkflowExtendStage(before=before, after=after, agent=agent, loop=loop, body=body)
 
 
 def _is_list_of_str(value: Any) -> bool:
@@ -317,3 +347,33 @@ def _is_list_of_str(value: Any) -> bool:
         else ``False``.
     """
     return isinstance(value, list) and all(isinstance(element, str) for element in value)
+
+
+def _validate_loop(scope: str, field_value: Any) -> int:
+    """Validate a ``loop`` field value and return the confirmed ``int``.
+
+    Shared by the per-stage ``loop`` (``_build_stage``) and the inline extend
+    ``loop`` (``_build_extend_stage``). ``bool`` is rejected first — it is a
+    subclass of ``int`` in Python, so ``loop: true`` must be reported as a
+    non-int, not silently accepted — then non-int types, then the ``>= 1``
+    bound. ``scope`` is the dotted location up to but excluding ``loop`` (e.g.
+    ``"workflow.stages.propose"``), used verbatim in both messages.
+
+    Args:
+        scope: The dotted location (without the trailing ``.loop``).
+        field_value: The raw ``loop`` value to validate.
+
+    Returns:
+        The validated ``loop`` count (an ``int >= 1``).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not an ``int`` (``bool``
+            counts as not-an-int), or is an ``int`` below one.
+    """
+    if isinstance(field_value, bool) or not isinstance(field_value, int):
+        raise WorkflowSyntaxError(f"non-int value in {scope}.loop")
+
+    if field_value < 1:
+        raise WorkflowSyntaxError(f"loop must be >= 1 in {scope}")
+
+    return field_value

@@ -90,6 +90,26 @@ class TestParseWorkflowPositive:
         assert document.stages["propose"].prompt is None
         assert document.stages["propose"].loop is None
 
+    def test_parse_workflow_skills_field_accepted(self, tmp_path: Path) -> None:
+        """A stages entry with a ``skills`` list builds a WorkflowStage carrying it."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n"
+            "  propose:\n"
+            "    agent: codex\n"
+            "    skills: [web-search, goga-propose]\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        propose = document.stages["propose"]
+        assert propose.agent == "codex"
+        assert propose.skills == ["web-search", "goga-propose"]
+        # skills is independent of the other fields; they stay None.
+        assert propose.prompt is None
+        assert propose.loop is None
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -119,6 +139,31 @@ class TestParseWorkflowPositive:
         assert extra.before is None
         assert extra.after == ["review"]
         assert extra.body == {"title": "Extra", "skills": ["goga-review"]}
+
+    def test_parse_workflow_extend_inline_agent_loop_extracted(self, tmp_path: Path) -> None:
+        """An extend entry's inline ``agent``/``loop`` are extracted into the model, not the body."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n"
+            "  warmup:\n"
+            "    before: [propose]\n"
+            "    title: Warmup\n"
+            "    prompt: Bootstrap\n"
+            "    agent: codex\n"
+            "    loop: 3\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        warmup = document.extend["warmup"]
+        assert warmup.agent == "codex"
+        assert warmup.loop == 3
+        # Inline agent/loop are extracted out of the body — they must not leak
+        # into it (the compiler applies them, the flow-file never sees them).
+        assert warmup.body == {"title": "Warmup", "prompt": "Bootstrap"}
+        assert "agent" not in warmup.body
+        assert "loop" not in warmup.body
 
     def test_parse_workflow_extend_only_is_valid_not_empty(self, tmp_path: Path) -> None:
         """A workflow-file with only an extend block is valid (not an empty workflow)."""
@@ -246,7 +291,10 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        assert "valid keys: agent, prompt, loop" in message
+        # The full valid-keys list now includes ``skills``; the substring
+        # ``agent, prompt, loop`` alone would pass even without ``skills``, so
+        # assert the full trailing fragment.
+        assert "valid keys: agent, prompt, loop, skills" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
@@ -290,6 +338,13 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    loop: -3\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"loop must be >= 1 in workflow\.stages\.propose"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_skills_non_list_of_str_rejected(self, tmp_path: Path) -> None:
+        """A non-list[str] skills raises WorkflowSyntaxError('non-list-of-str skills ...')."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  x:\n    skills: web-search\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str skills in workflow\.stages\.x"):
             parse_workflow(workflow_path)
 
     def test_parse_workflow_rejects_empty_workflow(self, tmp_path: Path) -> None:
@@ -365,6 +420,58 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"extend entry x requires at least one of before/after"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_extend_inline_agent_non_str_rejected(self, tmp_path: Path) -> None:
+        """A non-str inline extend agent raises WorkflowSyntaxError naming the entry and field."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  warmup:\n    before: [propose]\n    agent: 5\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.extend\.warmup\.agent"):
+            parse_workflow(workflow_path)
+
+    @pytest.mark.parametrize(
+        ("loop_yaml", "expected"),
+        [("0", r"loop must be >= 1 in workflow\.extend\.warmup"),
+         ("true", r"non-int value in workflow\.extend\.warmup\.loop")],
+        ids=["below-one", "bool"],
+    )
+    def test_parse_workflow_extend_inline_loop_invalid_rejected(
+        self, tmp_path: Path, loop_yaml: str, expected: str,
+    ) -> None:
+        """An invalid inline extend loop (< 1 or bool) raises WorkflowSyntaxError."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"extend:\n  warmup:\n    before: [propose]\n    loop: {loop_yaml}\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=expected):
+            parse_workflow(workflow_path)
+
+    @pytest.mark.parametrize(
+        ("field", "expected"),
+        [("agent", r"non-str value in workflow\.extend\.warmup\.agent"),
+         ("loop", r"non-int value in workflow\.extend\.warmup\.loop")],
+        ids=["agent-null", "loop-null"],
+    )
+    def test_parse_workflow_extend_inline_null_rejected(self, tmp_path: Path, field: str, expected: str) -> None:
+        """An explicit ``null`` inline extend agent/loop is a structural type error, not absence.
+
+        Symmetric with the per-stage agent/loop and the extend loop: presence of
+        the key forces a type check (no ``is not None`` guard), so ``null`` is
+        rejected. Absence is expressed by omitting the key.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"extend:\n  warmup:\n    before: [propose]\n    {field}: ~\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=expected):
             parse_workflow(workflow_path)
 
     def test_parse_workflow_rejects_empty_workflow_with_empty_extend(self, tmp_path: Path) -> None:

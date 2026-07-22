@@ -62,3 +62,45 @@ class TestParseWorkflowContract:
         assert isinstance(document.extend, dict)
         assert set(document.extend) == {"warmup"}
         assert isinstance(document.extend["warmup"], WorkflowExtendStage)
+
+    def test_parse_workflow_skills_is_accepted_stage_key(self, tmp_path: Path) -> None:
+        """``skills`` is part of the accepted per-stage key set (contract surface).
+
+        Pins the contract: ``skills`` is a valid stage key, so a stage carrying it
+        parses successfully and surfaces on the ``WorkflowStage`` model. The full
+        valid-keys enumeration is pinned in the logic test module.
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n  propose:\n    agent: codex\n    skills: [web-search]\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert isinstance(document, WorkflowDocument)
+        assert document.stages["propose"].skills == ["web-search"]
+
+    def test_parse_workflow_extend_exposes_agent_and_loop_fields(self, tmp_path: Path) -> None:
+        """An extend entry's inline ``agent``/``loop`` surface on the model (contract surface).
+
+        Pins the contract: the extend model exposes ``agent`` and ``loop`` fields,
+        extracted from the extend entry (and therefore absent from ``body``).
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "extend:\n"
+            "  warmup:\n"
+            "    before: [propose]\n"
+            "    title: Warmup\n"
+            "    agent: codex\n"
+            "    loop: 3\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        warmup = document.extend["warmup"]
+        assert isinstance(warmup, WorkflowExtendStage)
+        assert warmup.agent == "codex"
+        assert warmup.loop == 3
+        assert "agent" not in warmup.body
+        assert "loop" not in warmup.body
