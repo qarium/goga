@@ -177,6 +177,7 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
         ``agents`` list or the injected single ``["auto"]`` default.
     """
     out = {key: value for key, value in body.items() if key != "roles"}
+
     if _has_usable_roles(body):
         # The pipeline-file body is parsed verbatim (``parse_dsl`` performs no
         # field-content validation by design), so an authored ``roles`` list may
@@ -194,6 +195,7 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
         out["agents"] = agents
     else:
         out["agents"] = list(_DEFAULT_AGENTS)
+
     return out
 
 
