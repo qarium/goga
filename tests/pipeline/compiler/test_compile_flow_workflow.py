@@ -62,6 +62,7 @@ def _write_stages_three_step(tmp_path: Path) -> Path:
 
 
 def _ids(stages: list) -> list[str]:
+    """Return the ``id`` of every stage in order."""
     return [stage["id"] for stage in stages]
 
 

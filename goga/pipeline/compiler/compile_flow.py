@@ -186,9 +186,11 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
         full ``WorkflowStage``; merged entries combine them per-field.
     """
     effective: dict[str, WorkflowStage] = {}
+
     for name, ext in workflow.extend.items():
         # Inline extend carries agent/loop only — no prompt/skills override.
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop)
+
     for name, stg in workflow.stages.items():
         base = effective.get(name)
         if base is None:
@@ -202,6 +204,7 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             loop=stg.loop if stg.loop is not None else base.loop,
             skills=stg.skills,
         )
+
     return effective
 
 
@@ -236,6 +239,7 @@ def _merge_skills(
     pipeline_list = pipeline_skills if isinstance(pipeline_skills, list) else []
     merged: list[str] = []
     seen: set[str] = set()
+
     for skill in pipeline_list + (workflow_skills or []):
         # Only ``str`` skills are kept; a verbatim pipeline-file ``skills`` list may
         # otherwise carry unhashable (dict/list) or non-str elements, which would
@@ -244,6 +248,7 @@ def _merge_skills(
         if isinstance(skill, str) and skill not in seen:
             seen.add(skill)
             merged.append(skill)
+
     return merged if merged else None
 
 
