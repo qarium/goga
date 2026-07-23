@@ -21,6 +21,7 @@ from pathlib import Path
 import pytest
 import yaml
 from goga.pipeline.compiler import (
+    BodyFormat,
     FlowDocument,
     PhaseStep,
     PipelineDocument,
@@ -1619,3 +1620,584 @@ class TestCompileFlowStrictValidateEndToEnd:
 
         warmup = next(stage for stage in flow_doc.stages if stage.id == "warmup")
         assert warmup.fields["command"] == "/home/goga/bin/codex-as-claude.sh"
+
+
+def _write_stages_four_step(tmp_path: Path) -> Path:
+    """Write a 4-step STAGES pipeline (A→B→C→D authored depends_on) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\n"
+        "description: T\n"
+        "---\n"
+        "\n"
+        "a:\n"
+        "  title: A\n"
+        "b:\n"
+        "  title: B\n"
+        "  depends_on: [a]\n"
+        "c:\n"
+        "  title: C\n"
+        "  depends_on: [b]\n"
+        "d:\n"
+        "  title: D\n"
+        "  depends_on: [c]\n",
+    )
+    return pipeline_path
+
+
+def _write_phases_four_step(tmp_path: Path) -> Path:
+    """Write a 4-step PHASES pipeline (A, B, C, D) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\ndescription: T\n---\n\n"
+        "- name: a\n  title: A\n"
+        "- name: b\n  title: B\n"
+        "- name: c\n  title: C\n"
+        "- name: d\n  title: D\n",
+    )
+    return pipeline_path
+
+
+class TestCompileFlowResolveSkipHelper:
+    """Direct unit tests for the private ``_resolve_skip`` transitive resolver.
+
+    ``_resolve_skip`` walks a skipped stage's ``depends_on`` to its transitive
+    non-skipped predecessors. It is pure and deterministic, so it is pinned here
+    independently of the full compile pipeline (mirrors
+    ``TestCompileFlowReconstructionHelpers``).
+    """
+
+    def test_resolve_skip_linear_chain(self) -> None:
+        """resolve(S) returns S's single non-skipped predecessor."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        steps_by_name = {
+            "a": StageStep(name="a", title="A", depends_on=None, body={}),
+            "b": StageStep(name="b", title="B", depends_on=["a"], body={}),
+        }
+
+        # b skipped; resolving b yields its non-skipped predecessor a.
+        assert _resolve_skip("b", steps_by_name, {"b"}) == ["a"]
+
+    def test_resolve_skip_transitive_chain(self) -> None:
+        """resolve walks through consecutive skipped stages transitively."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        steps_by_name = {
+            "a": StageStep(name="a", title="A", depends_on=None, body={}),
+            "b": StageStep(name="b", title="B", depends_on=["a"], body={}),
+            "c": StageStep(name="c", title="C", depends_on=["b"], body={}),
+        }
+
+        # b and c both skipped; resolving c walks c→b→a (the non-skipped leaf).
+        assert _resolve_skip("c", steps_by_name, {"b", "c"}) == ["a"]
+
+    def test_resolve_skip_cycle_terminates_via_seen(self) -> None:
+        """A depends_on cycle among skipped stages terminates (no infinite loop)."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        steps_by_name = {
+            "a": StageStep(name="a", title="A", depends_on=["b"], body={}),
+            "b": StageStep(name="b", title="B", depends_on=["a"], body={}),
+        }
+
+        # a↔b cycle, both skipped → no non-skipped predecessor resolves → [].
+        assert _resolve_skip("a", steps_by_name, {"a", "b"}) == []
+
+    def test_resolve_skip_dangling_ref_preserved(self) -> None:
+        """A non-skipped (possibly dangling) ref is kept verbatim."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        steps_by_name = {
+            "b": StageStep(name="b", title="B", depends_on=["ghost"], body={}),
+        }
+
+        # b skipped; ghost is non-skipped (and absent from the map) → preserved.
+        assert _resolve_skip("b", steps_by_name, {"b"}) == ["ghost"]
+
+    def test_resolve_skip_none_or_empty_depends_on_yields_empty(self) -> None:
+        """A skipped stage with no (or empty) depends_on resolves to []."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        steps_by_name = {
+            "b": StageStep(name="b", title="B", depends_on=None, body={}),
+            "c": StageStep(name="c", title="C", depends_on=[], body={}),
+        }
+
+        assert _resolve_skip("b", steps_by_name, {"b"}) == []
+        assert _resolve_skip("c", steps_by_name, {"c"}) == []
+
+    def test_resolve_skip_missing_step_yields_empty(self) -> None:
+        """Resolving a name with no step in the map yields [] (no crash)."""
+        from goga.pipeline.compiler.compile_flow import _resolve_skip
+
+        assert _resolve_skip("absent", {}, {"absent"}) == []
+
+
+class TestCompileFlowRemoveSkippedStagesHelper:
+    """Direct unit tests for the private ``_remove_skipped_stages`` dispatcher.
+
+    Pins the STAGES reconnect / PHASES positional-drop semantics, the explicit
+    ``[]`` collapse, and first-occurrence dedup directly on the helper.
+    """
+
+    def test_fast_path_noop_when_nothing_skipped(self) -> None:
+        """No skipped stages → steps unchanged (no mutation)."""
+        from goga.pipeline.compiler.compile_flow import _remove_skipped_stages
+
+        steps = [
+            StageStep(name="a", title="A", depends_on=None, body={}),
+            StageStep(name="b", title="B", depends_on=["a"], body={}),
+        ]
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=False)})
+
+        _remove_skipped_stages(steps, workflow, BodyFormat.STAGES)
+
+        assert [step.name for step in steps] == ["a", "b"]
+        assert steps[1].depends_on == ["a"]
+
+    def test_stages_reconnect_and_remove(self) -> None:
+        """STAGES: a dependent's depends_on is reconnected, then the skipped step removed."""
+        from goga.pipeline.compiler.compile_flow import _remove_skipped_stages
+
+        steps = [
+            StageStep(name="a", title="A", depends_on=None, body={}),
+            StageStep(name="b", title="B", depends_on=["a"], body={}),
+            StageStep(name="c", title="C", depends_on=["b"], body={}),
+        ]
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        _remove_skipped_stages(steps, workflow, BodyFormat.STAGES)
+
+        assert [step.name for step in steps] == ["a", "c"]
+        # c's authored ref to b is reconnected to b's predecessor a.
+        assert steps[1].depends_on == ["a"]
+
+    def test_phases_positional_remove(self) -> None:
+        """PHASES: skipped steps drop; depends_on re-derives by position downstream."""
+        from goga.pipeline.compiler.compile_flow import _remove_skipped_stages
+
+        steps = [
+            PhaseStep(name="a", title="A", body={}),
+            PhaseStep(name="b", title="B", body={}),
+            PhaseStep(name="c", title="C", body={}),
+        ]
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        _remove_skipped_stages(steps, workflow, BodyFormat.PHASES)
+
+        assert [step.name for step in steps] == ["a", "c"]
+
+    def test_explicit_empty_on_collapse(self) -> None:
+        """A dependent that loses its only dep to a skipped root writes [] (not None)."""
+        from goga.pipeline.compiler.compile_flow import _remove_skipped_stages
+
+        steps = [
+            # b is a root with no ancestors.
+            StageStep(name="b", title="B", depends_on=None, body={}),
+            StageStep(name="c", title="C", depends_on=["b"], body={}),
+        ]
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        _remove_skipped_stages(steps, workflow, BodyFormat.STAGES)
+
+        assert [step.name for step in steps] == ["c"]
+        # Explicit empty list (→ ``depends_on: []``), NOT None (→ no key).
+        assert steps[0].depends_on == []
+
+    def test_dedup_preserves_first_occurrence_order(self) -> None:
+        """Two refs resolving to the same predecessor collapse to one (first occurrence)."""
+        from goga.pipeline.compiler.compile_flow import _remove_skipped_stages
+
+        steps = [
+            StageStep(name="a", title="A", depends_on=None, body={}),
+            StageStep(name="b", title="B", depends_on=["a"], body={}),
+            StageStep(name="c", title="C", depends_on=["a"], body={}),
+            # d depends on b and c, both of which depend on a.
+            StageStep(name="d", title="D", depends_on=["b", "c"], body={}),
+        ]
+        workflow = WorkflowDocument(
+            stages={"b": WorkflowStage(skip=True), "c": WorkflowStage(skip=True)},
+        )
+
+        _remove_skipped_stages(steps, workflow, BodyFormat.STAGES)
+
+        assert [step.name for step in steps] == ["a", "d"]
+        # b→a and c→a both collapse to a single a (no duplicate).
+        assert steps[1].depends_on == ["a"]
+
+
+class TestCompileFlowSkipRemovalStages:
+    """Step 4skip end-to-end — STAGES skip removal + transparent reconnection."""
+
+    def test_compile_flow_stages_skip_middle_reconnects_chain(self, tmp_path: Path) -> None:
+        """STAGES A→B→C→D, skip B → [a, c, d]; C reconnects to [a]; D unchanged [c]."""
+        pipeline_path = _write_stages_four_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "c", "d"]
+        c = next(s for s in stages if s["id"] == "c")
+        d = next(s for s in stages if s["id"] == "d")
+        # C's authored dep on B is reconnected to B's predecessor A.
+        assert c["depends_on"] == ["a"]
+        # D's authored dep on C is unaffected.
+        assert d["depends_on"] == ["c"]
+
+    def test_compile_flow_stages_skip_two_consecutive_reconnects_transitively(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES A→B→C→D, skip B and C → D reconnects to the transitive [a]."""
+        pipeline_path = _write_stages_four_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"b": WorkflowStage(skip=True), "c": WorkflowStage(skip=True)},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "d"]
+        d = next(s for s in stages if s["id"] == "d")
+        # D's dep on C resolves transitively C→B→A to the single non-skipped [a].
+        assert d["depends_on"] == ["a"]
+
+    def test_compile_flow_stages_skip_diamond_reconnects_to_common_pred(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Skip B in a diamond → D reconnects to [a, c], order preserved, no dup.
+
+        A is a common predecessor of both B and C; D depends on B and C. Skipping
+        B rewrites D's B-ref to A, while the C-ref stays — yielding [a, c] in
+        source order, with no duplicate even though A is also C's predecessor.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  title: A\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "c:\n"
+            "  title: C\n"
+            "  depends_on: [a]\n"
+            "d:\n"
+            "  title: D\n"
+            "  depends_on: [b, c]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "c", "d"]
+        d = next(s for s in stages if s["id"] == "d")
+        # B-ref → A (reconnected); C-ref stays; A appears once even though it is
+        # the predecessor of both B and C.
+        assert d["depends_on"] == ["a", "c"]
+
+    def test_compile_flow_stages_skip_collapses_to_explicit_empty_depends_on(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """C depends only on skipped B (a root) → ``depends_on: []`` (explicit empty ≠ None)."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "b:\n"
+            "  title: B\n"
+            "c:\n"
+            "  title: C\n"
+            "  depends_on: [b]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["c"]
+        c = next(s for s in stages if s["id"] == "c")
+        # B had no ancestors, so C's dep on B collapses to an explicit empty list
+        # (serialized as ``depends_on: []``), NOT omitted.
+        assert c["depends_on"] == []
+
+    def test_compile_flow_stages_skip_first_step_reconnects_to_empty(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES A→B, skip A (the first step) → B reconnects to []."""
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"a": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["b"]
+        b = next(s for s in stages if s["id"] == "b")
+        # A had no predecessors → B's dep collapses to an explicit empty list.
+        assert b["depends_on"] == []
+
+    def test_compile_flow_stages_skip_last_step_has_no_dependents(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES A→B, skip B (the last step) → [a]; A untouched (no reconnection)."""
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a"]
+        # A had no authored depends_on (first step) and nothing depended on B.
+        assert "depends_on" not in stages[0]
+
+    def test_compile_flow_stages_skip_cycle_among_skipped_terminates(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """Cycle a↔b (both skipped) + c depends on a → [c] with c.depends_on == [].
+
+        The ``_seen`` visited set terminates the cycle among skipped stages: no
+        crash, c survives, and its dep on the cyclic a collapses to [].
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  title: A\n"
+            "  depends_on: [b]\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "c:\n"
+            "  title: C\n"
+            "  depends_on: [a]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"a": WorkflowStage(skip=True), "b": WorkflowStage(skip=True)},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["c"]
+        c = next(s for s in stages if s["id"] == "c")
+        assert c["depends_on"] == []
+
+    def test_compile_flow_stages_dangling_after_ref_after_skip_preserved(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """D ``depends_on: [b, ghost]``, skip B → [a, ghost] (dangling ghost preserved)."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  title: A\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "d:\n"
+            "  title: D\n"
+            "  depends_on: [b, ghost]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "d"]
+        d = next(s for s in stages if s["id"] == "d")
+        # b-ref → a (reconnected); the non-skipped dangling ghost survives unchanged.
+        assert d["depends_on"] == ["a", "ghost"]
+
+
+class TestCompileFlowSkipRemovalPhases:
+    """Step 4skip end-to-end — PHASES positional skip removal."""
+
+    def test_compile_flow_phases_skip_collapses_positionally(self, tmp_path: Path) -> None:
+        """PHASES [A, B, C, D], skip B → [a, c, d] with position-derived depends_on."""
+        pipeline_path = _write_phases_four_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "c", "d"]
+        # Position-derived: c (now second) depends on a; d on c.
+        assert "depends_on" not in stages[0]
+        assert stages[1]["depends_on"] == ["a"]
+        assert stages[2]["depends_on"] == ["c"]
+
+    def test_compile_flow_phases_skip_first_step(self, tmp_path: Path) -> None:
+        """PHASES [A, B], skip A → [b] with no depends_on (first position)."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n- name: b\n  title: B\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"a": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["b"]
+        assert "depends_on" not in stages[0]
+
+    def test_compile_flow_phases_skip_last_step(self, tmp_path: Path) -> None:
+        """PHASES [A, B, C], skip C → [a, b] with b depending on a."""
+        pipeline_path = _write_phases_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"c": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b"]
+        assert stages[1]["depends_on"] == ["a"]
+
+
+class TestCompileFlowSkipSemantics:
+    """Skip-vs-overrides priority, ORIGINAL-body isolation, empty-body guard, extend."""
+
+    def test_compile_flow_skip_existing_stage_not_flagged_unknown(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES skip existing B → removed, NO StructuralError (valid at 4pre)."""
+        pipeline_path = _write_stages_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        # No raise: b exists, so 4pre accepts it; 4skip removes it.
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "c"]
+
+    def test_compile_flow_skip_wins_over_overrides(
+        self,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """STAGES [A, B], skip B (with agent+prompt overrides) → [a], no WARNING.
+
+        ``skip`` wins over ``agent``/``prompt``/``loop``/``skills`` overrides:
+        B is removed at 4skip before the 4a override pass, so B's effective entry
+        is a silent not-found (no WARNING) and the stage never appears.
+        """
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"b": WorkflowStage(skip=True, agent="codex", prompt="x")},
+        )
+
+        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a"]
+        # The skipped stage's overrides never apply; the not-found is silent.
+        assert not any(
+            "not found" in record.getMessage() for record in caplog.records
+        )
+
+    def test_compile_flow_skip_does_not_leak_into_pipeline_document_body(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES [A, B], skip B → ORIGINAL body keeps [a, b]; flow-file ids [a]."""
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        # ORIGINAL parsed body is untouched (deep-copied before reconstruction).
+        assert [step.name for step in pipeline_doc.body.steps] == ["a", "b"]
+        # FlowDocument carries only the surviving stage.
+        assert [stage.id for stage in flow_doc.stages] == ["a"]
+
+    def test_compile_flow_skip_extend_stage_via_stages_entry(self, tmp_path: Path) -> None:
+        """STAGES [propose] + extend.warmup + stages.warmup.skip → warmup removed."""
+        pipeline_path = _write_stages_single(tmp_path, "propose")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(skip=True)},
+            extend={"warmup": WorkflowExtendStage(after=["propose"], body={"title": "Warmup"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        # warmup is valid at 4pre (embedded at 4a0) then removed at 4skip.
+        assert _ids(stages) == ["propose"]
+
+    def test_compile_flow_rejects_empty_body_after_skip_all(self, tmp_path: Path) -> None:
+        """STAGES [A, B], skip BOTH → StructuralError("empty body") from the guard."""
+        pipeline_path = _write_stages_two_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(skip=True),
+                "b": WorkflowStage(skip=True),
+            },
+        )
+
+        with pytest.raises(StructuralError, match="empty body"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert not flow_path.exists()
+
+
+class TestCompileFlowSkipLoopExpansionInteraction:
+    """Skip removal runs BEFORE 4b loop-expansion — no stray copies of a skipped stage."""
+
+    def test_skip_runs_before_loop_expansion(self, tmp_path: Path) -> None:
+        """STAGES A→B→C, ``stages.b.loop: 2`` AND ``stages.c.skip: true`` → [a, b-1, b-2].
+
+        c is removed at 4skip (before 4b), so no c copies appear; b is then
+        loop-expanded in place. A skipped stage's own loop is moot (removed first).
+        """
+        pipeline_path = _write_stages_three_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={
+                "b": WorkflowStage(loop=2),
+                "c": WorkflowStage(skip=True),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b-1", "b-2"]
+        # No stray c / c-N copies; b-1 inherits b's dep on a; b-2 chains to b-1.
+        assert stages[1]["depends_on"] == ["a"]
+        assert stages[2]["depends_on"] == ["b-1"]

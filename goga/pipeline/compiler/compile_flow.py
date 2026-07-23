@@ -337,9 +337,11 @@ def _apply_per_stage_overrides(
     """Inject per-stage agent/prompt/skills overrides into the matching step bodies.
 
     For each ``(name, WorkflowStage)`` in ``effective``: the step with a matching
-    name/id is found in ``steps`` (mutated in place); when no step matches, a
-    ``WARNING`` is logged and the entry is skipped (a workflow may intentionally
-    cover multiple pipelines). When found, a non-``None`` ``agent`` composes the
+    name/id is found in ``steps`` (mutated in place); when no step matches the
+    entry is silently skipped. A not-found can only be a stage removed at 4skip
+    (4pre already rejected unknown ``workflow.stages`` names before this pass
+    runs), so the skip is intentional and emits no warning. When found, a
+    non-``None`` ``agent`` composes the
     in-container wrapper path into the step body's ``command`` slot, a
     non-``None`` ``prompt`` copies its text into the step body's ``description``
     slot, and a non-``None`` ``skills`` merges with the step body's existing
@@ -359,10 +361,9 @@ def _apply_per_stage_overrides(
     for name, stage in effective.items():
         step = steps_by_name.get(name)
         if step is None:
-            logger.warning(
-                "compile_flow: workflow stage %r not found in pipeline; skipping",
-                name,
-            )
+            # A not-found can only be a stage removed at 4skip (4pre already
+            # rejected unknown ``workflow.stages`` names before this pass) — a
+            # silent, intentional skip. No warning.
             continue
         if stage.agent is not None:
             step.body["command"] = _WRAPPER_PATH_TEMPLATE.format(agent=stage.agent)
@@ -789,6 +790,134 @@ def _strict_validate_stage_names(
             raise StructuralError(f"unknown stage name in workflow.stages: {name}")
 
 
+def _resolve_skip(
+    name: str,
+    steps_by_name: dict[str, StageStep],
+    skipped_names: set[str],
+    _seen: set[str] | None = None,
+) -> list[str]:
+    """Resolve a skipped stage name to its transitive non-skipped predecessors.
+
+    Recurses over the skipped stage's ``depends_on``: a non-skipped reference is
+    kept verbatim (the reconnection target — even a dangling one, which is afm's
+    concern), while a skipped reference is resolved transitively. ``_seen``
+    terminates a ``depends_on`` cycle among skipped stages — without it, a cycle
+    would recurse forever; on cycle the recursion returns what it has so far. A
+    skipped stage with no ``depends_on`` (or a missing step) resolves to ``[]`` so
+    the caller writes an explicit empty ``depends_on: []``.
+
+    Args:
+        name: The skipped stage name to resolve.
+        steps_by_name: Name → step index over the working STAGES sequence
+            (includes skipped steps, used as the source of ``depends_on``).
+        skipped_names: The set of skipped names to recurse through.
+        _seen: The visited set for cycle termination, threaded across the
+            recursion. Callers omit it; it defaults to a fresh set on the first
+            frame.
+
+    Returns:
+        The list of non-skipped predecessors in source order (NOT deduplicated —
+        the caller dedups preserving first-occurrence order).
+    """
+    if _seen is None:
+        _seen = set()
+    if name in _seen:
+        return []
+    _seen.add(name)
+
+    step = steps_by_name.get(name)
+    if step is None:
+        return []
+
+    result: list[str] = []
+    for ref in step.depends_on or []:
+        if ref in skipped_names:
+            result.extend(_resolve_skip(ref, steps_by_name, skipped_names, _seen))
+        else:
+            result.append(ref)
+    return result
+
+
+def _reconnect_stages_depends_on(
+    steps: list[StageStep],
+    steps_by_name: dict[str, StageStep],
+    skipped_names: set[str],
+) -> None:
+    """STAGES sub-trace of 4skip — reconnect dependents of skipped stages.
+
+    For each surviving (non-skipped) ``StageStep`` whose ``depends_on`` is not
+    ``None``: rebuild the list so every reference to a skipped name ``S`` is
+    replaced with ``_resolve_skip(S)`` (S's transitive non-skipped predecessors),
+    while every other reference is kept verbatim. The rebuilt list is deduplicated
+    preserving first-occurrence order; a fully-collapsed list is written as an
+    explicit empty ``[]`` — distinct from ``None`` (which means "write no
+    depends_on key"). Skipped steps themselves are left untouched here (the caller
+    removes them).
+
+    Args:
+        steps: The working STAGES step sequence, mutated in place. Skipped steps
+            are still present here — they are only read (as the source of
+            ``depends_on``), never rewritten.
+        steps_by_name: Name → step index over ``steps`` (includes skipped steps).
+        skipped_names: The set of names to remove and reconnect around.
+    """
+    for step in steps:
+        if step.name in skipped_names or step.depends_on is None:
+            continue
+        rewritten: list[str] = []
+        seen: set[str] = set()
+        for ref in step.depends_on:
+            resolved = (
+                _resolve_skip(ref, steps_by_name, skipped_names)
+                if ref in skipped_names
+                else [ref]
+            )
+            for resolved_ref in resolved:
+                if resolved_ref not in seen:
+                    seen.add(resolved_ref)
+                    rewritten.append(resolved_ref)
+        step.depends_on = rewritten
+
+
+def _remove_skipped_stages(
+    steps: list[PhaseStep | StageStep],
+    workflow: WorkflowDocument,
+    fmt: BodyFormat,
+) -> None:
+    """Step 4skip — remove skipped stages and transparently reconnect dependents.
+
+    Stages whose ``workflow.stages[name].skip`` is True are removed from the
+    working body. STAGES reconnects: every reference to a removed stage ``S`` in a
+    surviving step's ``depends_on`` is replaced with ``S``'s transitive
+    non-skipped predecessors (via ``_resolve_skip``), deduplicated preserving
+    first-occurrence order, and a fully-collapsed list is written as an explicit
+    empty ``[]``. PHASES simply drops the skipped steps — ``depends_on``
+    re-derives by list position downstream (automatic collapse, no explicit
+    reconnection). The empty-body case (every stage skipped) is the caller's
+    responsibility — this step leaves a possibly-empty ``steps`` for the guard.
+
+    ``skip`` wins over ``agent``/``prompt``/``loop``/``skills`` overrides: this
+    step runs BEFORE the 4a override pass, so a skipped stage's effective entry is
+    a silent not-found there.
+
+    Args:
+        steps: The working step sequence after the 4a0 embed and 4pre validation,
+            mutated in place.
+        workflow: The declarative workflow instructions (source of skip flags).
+        fmt: The body format — selects the STAGES reconnect branch vs the PHASES
+            positional drop.
+    """
+    skipped_names = {name for name, stage in workflow.stages.items() if stage.skip}
+    if not skipped_names:
+        return
+
+    if fmt is BodyFormat.STAGES:
+        steps_by_name = {step.name: step for step in steps}
+        _reconnect_stages_depends_on(steps, steps_by_name, skipped_names)
+
+    steps[:] = [step for step in steps if step.name not in skipped_names]
+
+
 def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
@@ -800,17 +929,20 @@ def _reconstruct_body(
     ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
     (4a0) embed ``workflow.extend`` stages; (4pre) strictly validate every
     ``workflow.stages`` name against the full name set (an unknown name is a
-    ``StructuralError``); resolve the effective per-stage override map ONCE
-    (inline extend → stages overlay); (4a) per-stage overrides; (4b)
-    loop-expansion with the expanded-ids map; (4c) external depends_on rewrite
-    (STAGES only); the result (4d) is the reconstructed step list consumed for
-    ``FlowStage`` assembly. The interim 4a0 → 4pre → effective → 4a → 4b → 4c
-    ordering is mandatory: extend-stages must be in ``steps`` before strict
-    validation (so an extend-embedded name is a valid ``workflow.stages`` target)
-    and before the effective map is resolved (so their inline ``agent``/``loop``
-    seed the default override), and all of this before overrides, loops, and
-    external-ref rewrites run — the generic machine treats them by the common
-    rules.
+    ``StructuralError``); (4skip) remove skipped stages and transparently
+    reconnect their dependents' ``depends_on``, then (guard) raise
+    ``StructuralError("empty body")`` if nothing survives; resolve the effective
+    per-stage override map ONCE (inline extend → stages overlay); (4a) per-stage
+    overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
+    depends_on rewrite (STAGES only); the result (4d) is the reconstructed step
+    list consumed for ``FlowStage`` assembly. The mandatory
+    ``4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c`` ordering
+    is load-bearing: extend-stages must be in ``steps`` before strict validation
+    (so an extend-embedded name is a valid ``workflow.stages`` target) and before
+    the effective map is resolved (so their inline ``agent``/``loop`` seed the
+    default override); skip removal runs before ``4a`` so a skipped stage's
+    overrides are never applied ("skip wins"); the empty-body guard runs once on
+    the working copy, format-agnostic, before any assembly.
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -819,10 +951,17 @@ def _reconstruct_body(
 
     Returns:
         The reconstructed step sequence (PHASES or STAGES steps).
+
+    Raises:
+        StructuralError: When a ``workflow.stages`` name matches no step name
+            (4pre) or when every step is skipped (post-4skip empty-body guard).
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
     _embed_extend_stages(steps, workflow, fmt)
     _strict_validate_stage_names(steps, workflow)
+    _remove_skipped_stages(steps, workflow, fmt)
+    if not steps:
+        raise StructuralError("empty body")
     effective = _effective_overrides(workflow)
     _apply_per_stage_overrides(steps, effective)
     expanded, expanded_ids = _expand_loops(steps, fmt, effective)
