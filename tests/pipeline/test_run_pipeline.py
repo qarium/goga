@@ -131,9 +131,15 @@ class TestRunPipelineLogic:
 
         assert exit_code == 0
         # compile_flow receives the user-dir pipeline path (resolved), the flow
-        # path, and the resolved workflow (None — no workflow env, no basename
-        # file at <cwd>/.goga/workflows/deploy.yml).
-        mock_compile.assert_called_once_with((user_dir / "deploy.yml").resolve(), afm_dir / "flow.yml", workflow=None)
+        # path, the resolved workflow (None — no workflow env, no basename
+        # file at <cwd>/.goga/workflows/deploy.yml), and the in-container
+        # project root as root_dir (resolved from Path.cwd()).
+        mock_compile.assert_called_once_with(
+            (user_dir / "deploy.yml").resolve(),
+            afm_dir / "flow.yml",
+            workflow=None,
+            root_dir=str(Path.cwd().resolve()),
+        )
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
@@ -290,6 +296,36 @@ class TestRunPipelineLogic:
 
         assert captured["flow_path"].is_absolute()
         assert captured["flow_path"] == (tmp_path / ".afm").resolve() / "flow.yml"
+
+    def test_run_pipeline_forwards_cwd_as_root_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``run_pipeline`` forwards the in-container project root (``Path.cwd()``) as ``root_dir``.
+
+        The host-side launcher sets ``workdir=/workspace`` and bind-mounts the
+        project there, so ``Path.cwd()`` inside the container is the single
+        source of truth for the afm ``root_dir`` directive. Mirrors the mount
+        decision rather than re-declaring the literal.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str(tmp_path / ".afm"))
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+        captured: dict[str, object] = {}
+
+        def _capture(pipeline_path: Path, flow_path: Path, **kwargs: object) -> tuple[PipelineDocument, FlowDocument]:
+            captured["root_dir"] = kwargs.get("root_dir")
+            return _fake_documents()
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", side_effect=_capture),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        # root_dir is the resolved in-container CWD — single source of truth,
+        # not a re-declared literal.
+        assert captured["root_dir"] == str(tmp_path.resolve())
 
     def test_run_pipeline_empty_afm_dir_raises_runtime_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

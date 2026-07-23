@@ -772,6 +772,7 @@ def compile_flow(
     pipeline_path: Path,
     flow_path: Path,
     workflow: WorkflowDocument | None = None,
+    root_dir: str | None = None,
 ) -> tuple[PipelineDocument, FlowDocument]:
     """Compile a goga DSL pipeline-file into an afm flow-file and return both documents.
 
@@ -803,6 +804,14 @@ def compile_flow(
     ``None`` no workflow is applied — the output carries no top-level prompt and
     no per-stage overrides.
 
+    When ``root_dir`` is not ``None``, it is carried into the ``FlowDocument``
+    and emitted by ``serialize_flow`` as the top-level ``root_dir`` key
+    immediately after ``prompt`` (when present) and before ``name``. When
+    ``root_dir`` is ``None`` the key is omitted entirely. The compiler performs
+    no environment-variable reads — the caller (the ``run_pipeline`` routine in
+    ``goga/pipeline``) computes the value from the in-container project root
+    (``Path.cwd()`` resolves to ``/workspace`` inside the goga container).
+
     In addition to the flow-file, it builds a ``PipelineDocument`` aggregating the
     parsed ``header`` (including any inline ``roles`` overrides), ``format``, and
     the ORIGINAL ``body`` (never the reconstructed one) so consumers can obtain
@@ -819,13 +828,19 @@ def compile_flow(
         workflow: Optional ``WorkflowDocument`` carrying declarative instructions
             for extending the pipeline (top-level prompt, per-stage
             agent/prompt/loop overrides). When ``None`` no workflow is applied.
+        root_dir: Optional top-level afm ``root_dir`` directive emitted after
+            ``prompt`` (when present) and before ``name``. When ``None`` the key
+            is omitted entirely (back-compat). The caller computes the value
+            (typically the in-container project root via ``Path.cwd()``); the
+            compiler itself performs no environment-variable reads.
 
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
         ``PipelineDocument`` carries the parsed header (with ``header.roles``),
         format, and the ORIGINAL body; the ``FlowDocument`` carries the name,
-        description, optional top-level prompt, and compiled stages (the input
-        ``roles`` field translated to the output ``agents`` field).
+        description, optional top-level prompt, optional top-level ``root_dir``,
+        and compiled stages (the input ``roles`` field translated to the output
+        ``agents`` field).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
@@ -874,7 +889,13 @@ def compile_flow(
             )
 
     flow_prompt = workflow.prompt if workflow is not None else None
-    doc = FlowDocument(prompt=flow_prompt, name=header.name, description=header.description, stages=stages)
+    doc = FlowDocument(
+        prompt=flow_prompt,
+        root_dir=root_dir,
+        name=header.name,
+        description=header.description,
+        stages=stages,
+    )
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)
     text_out = serialize_flow(doc)
     flow_path.write_text(text_out)

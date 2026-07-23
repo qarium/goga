@@ -113,13 +113,16 @@ propagate unchanged with their readable messages.
 ## Side Effects
 
 `run_pipeline` writes the compiled flow-file to the runtime directory (the
-directory pointed to by AFM_DIR). When a workflow is applied, the
-flow-file reflects the workflow-applied extensions: top-level `prompt:`
-directive (when present), per-stage `command:` and `description:` fields,
-loop-expanded stages with rewritten depends_on. It materializes exactly
-four agent prompt files into `<AFM_DIR>/prompts/` — one per fixed agent
-key. For each key, the file is either a copy of the corresponding default
-prompt from the installed goga package
+directory pointed to by AFM_DIR). The compiled flow-file carries a top-level
+`root_dir:` directive populated from the in-container project root
+(`Path.cwd()` resolves to `/workspace` inside the goga container — the single
+source of truth mirroring the host-side mount decision). When a workflow is
+applied, the flow-file additionally reflects the workflow-applied extensions:
+top-level `prompt:` directive (when present), per-stage `command:` and
+`description:` fields, loop-expanded stages with rewritten depends_on. It
+materializes exactly four agent prompt files into `<AFM_DIR>/prompts/` — one
+per fixed agent key. For each key, the file is either a copy of the
+corresponding default prompt from the installed goga package
 (`goga/assets/afm/prompts/<key>.md`) or, when an inline override is
 present in the pipeline-file header's `roles:` block (one of
 planner/executor/reviewer), the inline prompt text (full file

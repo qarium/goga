@@ -37,8 +37,11 @@ Path("/tmp/out.yml").write_text(text)
 - `doc: FlowDocument` — the document to serialize. The `prompt` of each
   `FlowDocument` may be `None` (the key is omitted from output) or a `str`
   (emitted as the FIRST top-level key, in block-literal scalar style). The
-  `fields` of each `FlowStage` must already be in canonical key order
-  (`interactive`, `command`, `prompt`, `description`, `agents`, `supervisor`,
+  `root_dir` of each `FlowDocument` may be `None` (the key is omitted from
+  output) or a `str` (emitted as the SECOND top-level key — after `prompt`
+  when present, before `name` — as a plain scalar). The `fields` of each
+  `FlowStage` must already be in canonical key order (`interactive`,
+  `command`, `prompt`, `description`, `agents`, `supervisor`,
   `supervisor_prompt`, `skills`, then alphabetically-sorted extra keys) —
   `serialize_flow` does not reorder. Use `compile_flow` to build a
   correctly-ordered document from a pipeline-file.
@@ -47,7 +50,8 @@ Path("/tmp/out.yml").write_text(text)
 
 A `str` containing the YAML representation, byte-exact with the canonical
 `flow.yml` format for equivalent content. When `doc.prompt` is `None`, the
-output omits the `prompt` key entirely.
+output omits the `prompt` key entirely. When `doc.root_dir` is `None`, the
+output omits the `root_dir` key entirely.
 
 ## Side Effects
 

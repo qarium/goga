@@ -164,7 +164,16 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     # to compile_flow; structural workflow errors propagate from parse_workflow.
     workflow = _resolve_workflow(name)
 
-    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+    # The in-container project root is the single source of truth for the afm
+    # ``root_dir`` directive emitted into the compiled flow-file. ``Path.cwd()``
+    # resolves to ``/workspace`` inside the goga container (the host-side
+    # launcher sets ``workdir=/workspace`` and bind-mounts the project there),
+    # so this mirrors the mount decision rather than re-declaring the literal.
+    # Forwarded as an explicit parameter so the compiler stays a pure
+    # transformer with no environment-variable reads.
+    root_dir = str(Path.cwd().resolve())
+
+    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow, root_dir=root_dir)
 
     # Step 8: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     defaults_dir = _resolve_defaults_dir()

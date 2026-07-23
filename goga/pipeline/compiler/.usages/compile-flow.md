@@ -125,6 +125,15 @@ stage-field injection above).
   additionally carry inline `agent` (str) and `loop` (int `>= 1`) extracted
   from the entry body. When `None` — no workflow is applied, the output
   carries no top-level prompt and no per-stage overrides.
+- `root_dir: str | None = None` — optional top-level afm `root_dir` directive.
+  When a non-`None` string is passed, the compiled flow-file carries a
+  top-level `root_dir:` key (emitted immediately after `prompt` when present,
+  before `name`). When `None` — the `root_dir:` key is omitted entirely
+  (back-compat with flow-files that carry no `root_dir`). The compiler
+  performs NO environment-variable reads: the caller computes the value.
+  In the standard in-container pipeline, `run_pipeline` resolves the value
+  from `Path.cwd()` (= `/workspace` inside the goga container — the single
+  source of truth mirroring the host-side mount decision).
 
 ## Return Values
 
@@ -370,3 +379,8 @@ pipelines.
 - Do not expect `supervisor` / `supervisor_prompt` to appear by default — they
   are authored-only now; the default `agents` value injected into a stage
   without an authored `roles` value is `[auto]`.
+- Do not read `AFM_DIR`, `Path.cwd()`, or any environment variable inside
+  `compile_flow` to derive `root_dir` — the compiler is contractually a pure
+  transformer with no env reads. The caller supplies the value explicitly via
+  the `root_dir` parameter; in the standard in-container pipeline this is
+  `run_pipeline` resolving `Path.cwd()` and forwarding it.

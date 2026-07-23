@@ -89,9 +89,11 @@ def serialize_flow(doc: FlowDocument) -> str:
     """Serialize a ``FlowDocument`` into canonical afm flow-file YAML.
 
     Top-level keys are emitted in fixed order — ``prompt`` first when not
-    ``None`` (block-literal scalar style), then ``name``, ``description``,
-    ``stages``. When ``doc.prompt is None`` the ``prompt`` key is omitted
-    entirely. Each stage is emitted as ``id``, ``name``, then the stage's
+    ``None`` (block-literal scalar style), then ``root_dir`` when not
+    ``None`` (plain scalar), then ``name``, ``description``, ``stages``.
+    When ``doc.prompt is None`` the ``prompt`` key is omitted entirely;
+    when ``doc.root_dir is None`` the ``root_dir`` key is omitted entirely.
+    Each stage is emitted as ``id``, ``name``, then the stage's
     ``fields`` verbatim (preserving their canonical order), then ``depends_on``
     only when it is not ``None``. ``agents`` lists serialize in flow-style;
     ``skills`` and ``depends_on`` serialize in block-style. The output ends with
@@ -103,7 +105,7 @@ def serialize_flow(doc: FlowDocument) -> str:
     Args:
         doc: The document to serialize. Each ``FlowStage.fields`` must already be
             in canonical key order and ``depends_on`` must be ``None`` or a list
-            of strings. ``prompt`` must be ``None`` or a ``str``.
+            of strings. ``prompt`` and ``root_dir`` must be ``None`` or a ``str``.
 
     Returns:
         The canonical afm flow-file content as a string.
@@ -111,6 +113,8 @@ def serialize_flow(doc: FlowDocument) -> str:
     top: dict[str, object] = {}
     if doc.prompt is not None:
         top["prompt"] = _BlockLiteralPrompt(doc.prompt)
+    if doc.root_dir is not None:
+        top["root_dir"] = doc.root_dir
     top["name"] = doc.name
     top["description"] = doc.description
     top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]

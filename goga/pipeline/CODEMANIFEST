@@ -286,10 +286,16 @@ Annotations: |
           is not an error)
     7. Compile the pipeline-file via `compile_flow` (per the `compile-flow`
        practice) with the resolved workflow as the optional workflow
-       argument — receive the documents tuple as the return value
-       (per the `compile-flow` practice). When workflow is None, no
-       workflow is applied. Structural DSL errors propagate unchanged;
-       structural workflow errors propagate unchanged from `parse_workflow`
+       argument and the in-container project root (Path.cwd(), which
+       resolves to /workspace inside the goga container — the single
+       source of truth mirroring the host-side mount decision) as the
+       optional root_dir argument — receive the documents tuple as the
+       return value (per the `compile-flow` practice). When workflow is
+       None, no workflow is applied. The root_dir is always supplied
+       (computed from Path.cwd()), so the compiled flow-file carries a
+       top-level root_dir directive. Structural DSL errors propagate
+       unchanged; structural workflow errors propagate unchanged from
+       `parse_workflow`
     8. Materialize agent prompts inline (atomic: validate-all, then wipe,
        then write):
        a. Resolve the default prompts directory in the installed goga
@@ -385,6 +391,16 @@ Annotations: |
       project_dir.parent IS NOT the project root; project_dir itself is
       /workspace/.goga/pipelines, so Path.cwd() (= /workspace in-container)
       is the project root. Workflows are project-only.
+    - root_dir resolution is CWD-based: the in-container project root
+      (Path.cwd(), which resolves to /workspace inside the goga container
+      because the host-side launcher sets workdir=/workspace and
+      bind-mounts the project there) is forwarded to `compile_flow` as
+      the root_dir argument. Path.cwd() is the single source of truth —
+      it mirrors the host-side mount decision rather than re-declaring
+      the literal, so a future change to the mount target propagates
+      automatically. The value is resolved via Path.cwd().resolve() to
+      guarantee an absolute path regardless of how the container's CWD
+      was set.
     - A non-existent workflow-file is a silent miss (workflow = None), NOT
       an error — the host-side launcher performs explicit --workflow
       existence validation; the basename fallback is opt-in

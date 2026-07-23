@@ -36,16 +36,22 @@ class TestCompileFlowContract:
         assert compile_flow is not None
 
     def test_compile_flow_signature(self) -> None:
-        """``compile_flow`` takes three parameters: ``pipeline_path``, ``flow_path``, ``workflow``."""
+        """``compile_flow`` takes four parameters: ``pipeline_path``, ``flow_path``, ``workflow``, ``root_dir``."""
         parameters = list(inspect.signature(compile_flow).parameters)
 
-        assert parameters == ["pipeline_path", "flow_path", "workflow"]
+        assert parameters == ["pipeline_path", "flow_path", "workflow", "root_dir"]
 
     def test_compile_flow_workflow_kwarg_defaults_to_none(self) -> None:
         """The optional ``workflow`` parameter defaults to ``None``."""
         workflow_param = inspect.signature(compile_flow).parameters["workflow"]
 
         assert workflow_param.default is None
+
+    def test_compile_flow_root_dir_kwarg_defaults_to_none(self) -> None:
+        """The optional ``root_dir`` parameter defaults to ``None``."""
+        root_dir_param = inspect.signature(compile_flow).parameters["root_dir"]
+
+        assert root_dir_param.default is None
 
     def test_compile_flow_returns_documents_tuple_on_minimal_valid_input(self, tmp_path: Path) -> None:
         """A minimal valid phases input compiles and returns the documents tuple."""

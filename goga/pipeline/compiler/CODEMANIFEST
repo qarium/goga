@@ -21,10 +21,12 @@ Annotations: |
 
   This cell is a pure transformer: it reads a pipeline-file written in goga
   DSL (phases-list or stages-map) and writes an equivalent afm flow-file
-  (flat YAML with top-level prompt (when present), name, description, and a
-  stages list). It performs no I/O beyond the two paths it receives and the
-  optional workflow-file instruction source, performs no network or subprocess
-  calls.
+  (flat YAML with top-level prompt (when present), top-level root_dir (when
+  supplied by the caller), name, description, and a stages list). It performs
+  no I/O beyond the two paths it receives and the optional workflow-file
+  instruction source, performs no network or subprocess calls, and performs
+  no environment-variable reads — the caller supplies the root_dir value
+  explicitly.
 
   The cell imports two types from goga/pipeline/workflow: `WorkflowDocument`
   (consumed as the optional workflow argument of `compile_flow`) and
@@ -506,19 +508,28 @@ Annotations: |
       are present only when authored (not default-injected); agents defaults
       to ["auto"] when no usable agents value is authored.
 
-"FlowDocument(prompt: str | None = None, name: str, description: str, stages: list[FlowStage])":
+"FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, stages: list[FlowStage])":
   location: flow_document.py
   annotations: |
-    Output afm flow-file — a single flat YAML document with up to four
-    top-level keys (prompt (when present), name, description, stages). No
-    segmentation, no header sub-object: the format is flat, and this type
-    mirrors that flatness.
+    Output afm flow-file — a single flat YAML document with up to five
+    top-level keys (prompt (when present), root_dir (when supplied),
+    name, description, stages). No segmentation, no header sub-object:
+    the format is flat, and this type mirrors that flatness.
 
     `prompt`: top-level prompt value emitted as the FIRST top-level key of
               the flow-file when not None. Populated from the prompt field
               of `WorkflowDocument` when a workflow supplies one;
               None otherwise (omitted from output — no top-level prompt
               key in the flow-file).
+    `root_dir`: top-level afm root_dir directive value emitted as the
+              SECOND top-level key of the flow-file (immediately after
+              the prompt key when present, before the name key) when not
+              None. Populated by the caller (the run_pipeline routine in
+              goga/pipeline) from the in-container project root
+              (Path.cwd() resolves to /workspace inside the goga container);
+              None when the caller did not supply one (omitted from output
+              — no top-level root_dir key in the flow-file). The compiler
+              itself performs no environment-variable reads.
     `name`: top-level name value (carried 1:1 from `PipelineHeader` name)
     `description`: top-level description value (carried 1:1 from
                    `PipelineHeader` description)
@@ -537,11 +548,19 @@ Annotations: |
     - Use @dataclass(kw_only=True) (per `convention`)
     - `prompt` defaults to None — the flow-file omits the top-level prompt
       key when no workflow supplies one
+    - `root_dir` defaults to None — the flow-file omits the top-level
+      root_dir key when the caller did not supply one
+    - Field order is fixed: prompt, root_dir, name, description, stages —
+      matches the canonical emission order in `serialize_flow`
 
   properties:
     "prompt -> str | None": |
       Top-level flow prompt, or None when no workflow supplied one. Emitted
       as the first top-level key when not None.
+    "root_dir -> str | None": |
+      Top-level afm root_dir directive, or None when the caller did not
+      supply one. Emitted as the second top-level key (after prompt when
+      present, before name) when not None.
     "name -> str": |
       Top-level flow name.
     "description -> str": |
@@ -642,7 +661,7 @@ Annotations: |
 
     `doc`: the `FlowDocument` to serialize (fields must already be in
            canonical key order — `compile_flow` enforces this when building;
-           top-level prompt may be None or a str)
+           top-level prompt and root_dir may each be None or a str)
     `text`: the resulting YAML string, byte-equivalent to flow.yml for
             equivalent content
 
@@ -652,6 +671,10 @@ Annotations: |
          top-level key, in block-literal scalar style (multi-line prompt
          text). When `doc` prompt is None — omit the key entirely
          (no top-level prompt key in the output)
+       - when `doc` root_dir is not None — emit root_dir as the SECOND
+         top-level key (after prompt when present, before name), as a
+         plain scalar. When `doc` root_dir is None — omit the key entirely
+         (no top-level root_dir key in the output)
        - name, then description, then stages (per step 2)
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
@@ -669,12 +692,17 @@ Annotations: |
 
     Requirements:
     - Output is canonical afm flow-file YAML: optional prompt (first,
-      when present), then fixed top-level key order (name, description,
-      stages), canonical per-stage key order (extended to include command
-      and description), flow-style for agents, block-style for skills and
-      depends_on, single trailing newline
+      when present), optional root_dir (second, when supplied), then
+      fixed top-level key order (name, description, stages), canonical
+      per-stage key order (extended to include command and description),
+      flow-style for agents, block-style for skills and depends_on, single
+      trailing newline
     - When `doc` prompt is None — the output omits the prompt key
       entirely (no top-level prompt key in the output)
+    - When `doc` root_dir is None — the output omits the root_dir key
+      entirely (no top-level root_dir key in the output)
+    - root_dir is emitted as a plain scalar (NOT block-literal style like
+      the top-level prompt)
     - agents is emitted in flow-style; skills, depends_on, and the
       top-level prompt are emitted in block-style
     - Empty list values (e.g. an explicit empty depends_on) are written
@@ -687,7 +715,7 @@ Annotations: |
       constructed it)
     - Do not write to disk — return the string; the caller writes it
 
-"compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
+"compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None, root_dir: str | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
   annotations: |
     Entry point of the cell: compile a pipeline-file (goga DSL) into an afm
@@ -713,14 +741,26 @@ Annotations: |
                 (the run_pipeline routine in goga/pipeline), parsed from a
                 project workflow-file via parse_workflow (per the
                 `parse-workflow` practice).
+    `root_dir`: optional top-level afm root_dir directive carried into the
+                `FlowDocument` and emitted by `serialize_flow` as the
+                top-level root_dir key immediately after the prompt key
+                (when present) and before the name key. When None — the
+                root_dir key is omitted entirely (back-compat with
+                flow-files that carry no root_dir). Supplied by the
+                consumer (the run_pipeline routine in goga/pipeline),
+                which resolves the value from the in-container project
+                root (Path.cwd() == /workspace inside the goga container —
+                the single source of truth mirroring the host-side mount
+                decision).
     `documents`: a tuple of `PipelineDocument` and `FlowDocument` — the
                  parsed input representation (carrying header roles when
                  present; the ORIGINAL parsed body, NOT the
                  workflow-reconstructed body) and the output flow-file model
                  (including workflow-applied overrides, loop-expansion,
-                 rewritten depends_on, and the top-level prompt when a
-                 workflow supplied one). The text flow-file is also written
-                 to `flow_path` as a side effect.
+                 rewritten depends_on, the top-level prompt when a
+                 workflow supplied one, and the top-level root_dir when
+                 the caller supplied one). The text flow-file is also
+                 written to `flow_path` as a side effect.
 
     Algorithm:
     1. Read `pipeline_path` as text
@@ -904,6 +944,9 @@ Annotations: |
          (defaults-injected) step body
     6. Build `FlowDocument`:
        - prompt = `workflow` prompt when `workflow` is not None, else None
+       - root_dir = the `root_dir` parameter passed by the caller (forwarded
+         verbatim — None when the caller did not supply one; the compiler
+         performs no environment-variable reads to derive it)
        - name, description from the header
        - stages from the assembled FlowStages
     7. Build `PipelineDocument` from (header, format, ORIGINAL body) — the
@@ -1017,6 +1060,14 @@ Annotations: |
       never affected (it stays a faithful mirror of the source
       pipeline-file, with whatever roles value — or absence — the
       source authored)
+    - The optional `root_dir` parameter is carried verbatim into the
+      `FlowDocument` — the compiler performs no environment-variable
+      reads (no Path.cwd(), no AFM_DIR inspection) to derive it. The
+      caller (the run_pipeline routine in goga/pipeline) computes the
+      value from the in-container project root (Path.cwd() inside the
+      goga container resolves to /workspace, mirroring the host-side
+      mount decision). When the caller does not supply `root_dir`, the
+      compiled flow-file carries no top-level root_dir key (back-compat).
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
