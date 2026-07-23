@@ -30,7 +30,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from goga.pipeline.compiler import compile_flow
+from goga.pipeline.compiler import PipelineDocument, compile_flow
 from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
@@ -266,6 +266,211 @@ class TestEndToEndParseCompile:
 
         # The ORIGINAL parsed body is untouched by the reconstruction.
         assert [step.name for step in pipeline_doc.body.steps] == ["propose"]
+
+
+def _write_stages_chain_four_step(tmp_path: Path) -> Path:
+    """Write a 4-step STAGES pipeline (A→B→C→D authored depends_on) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\n"
+        "description: T\n"
+        "---\n"
+        "\n"
+        "a:\n"
+        "  title: A\n"
+        "b:\n"
+        "  title: B\n"
+        "  depends_on: [a]\n"
+        "c:\n"
+        "  title: C\n"
+        "  depends_on: [b]\n"
+        "d:\n"
+        "  title: D\n"
+        "  depends_on: [c]\n",
+    )
+    return pipeline_path
+
+
+def _write_phases_chain_four_step(tmp_path: Path) -> Path:
+    """Write a 4-step PHASES pipeline (A, B, C, D) and return its path."""
+    pipeline_path = tmp_path / "pipeline.yml"
+    pipeline_path.write_text(
+        "name: T\ndescription: T\n---\n\n"
+        "- name: a\n  title: A\n"
+        "- name: b\n  title: B\n"
+        "- name: c\n  title: C\n"
+        "- name: d\n  title: D\n",
+    )
+    return pipeline_path
+
+
+class TestSkipStageRoundTrip:
+    """Cross-cell ``skip: true`` integration — the parse → compile → flow-file round-trip.
+
+    Unlike the cell-local skip tests (``test_compile_flow_workflow.py`` build an
+    in-memory ``WorkflowDocument``), these drive the real consumer path: an
+    authored workflow-file carrying ``skip: true`` is parsed by the workflow
+    cell's ``parse_workflow`` (exercising the 5-key per-stage set, the bool
+    type-check, and the extend-skip prohibition across the cell boundary) and the
+    resulting ``WorkflowDocument`` is handed to the compiler cell's
+    ``compile_flow`` (exercising ``4pre`` strict validation, ``4skip`` removal +
+    transparent reconnection, the empty-body guard, and the silent ``4a``
+    not-found). The compiled flow-file YAML is then asserted via ``yaml.safe_load``.
+    """
+
+    def test_stages_round_trip_skip_reconnects_chain(self, tmp_path: Path) -> None:
+        """STAGES A→B→C→D + authored ``stages.b.skip: true`` → [a, c, d] reconnected.
+
+        ``parse_workflow`` accepts the ``skip`` key (5-key per-stage set) and
+        type-checks it as a bool; ``compile_flow`` removes B at ``4skip`` and
+        transparently reconnects C's authored dep on B to B's predecessor A, while
+        D's dep on C is unaffected. The flow-file YAML (parsed back) carries the
+        expected ids and reconnected ``depends_on``.
+        """
+        pipeline_path = _write_stages_chain_four_step(tmp_path)
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  b:\n"
+            "    skip: true\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["a", "c", "d"]
+        # C's authored dep on B is reconnected to B's predecessor A; D's dep on C stays.
+        assert _stage_by_id(stages, "c")["depends_on"] == ["a"]
+        assert _stage_by_id(stages, "d")["depends_on"] == ["c"]
+
+    def test_phases_round_trip_skip_collapses_positionally(self, tmp_path: Path) -> None:
+        """PHASES [A, B, C, D] + authored ``stages.b.skip: true`` → [a, c, d] by position.
+
+        PHASES has no explicit reconnection — the skipped B drops and downstream
+        ``depends_on`` re-derives by list position: C (now second) depends on A;
+        D on C.
+        """
+        pipeline_path = _write_phases_chain_four_step(tmp_path)
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  b:\n"
+            "    skip: true\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["a", "c", "d"]
+        # Position-derived: a is first (no dep), c depends on a, d depends on c.
+        assert "depends_on" not in _stage_by_id(stages, "a")
+        assert _stage_by_id(stages, "c")["depends_on"] == ["a"]
+        assert _stage_by_id(stages, "d")["depends_on"] == ["c"]
+
+    def test_skip_plus_extend_stage_removed_via_stages_entry(self, tmp_path: Path) -> None:
+        """``extend.warmup`` + authored ``stages.warmup.skip: true`` → warmup removed.
+
+        The extend-embedded ``warmup`` is valid at ``4pre`` (it is in the steps
+        after ``4a0`` embedding) and then removed at ``4skip`` via the matching
+        ``stages`` entry. The flow-file carries only the original propose stage.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  warmup:\n"
+            "    skip: true\n"
+            "extend:\n"
+            "  warmup:\n"
+            "    after: [propose]\n"
+            "    title: Warmup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["propose"]
+
+    def test_skip_runs_before_loop_expansion_authored(self, tmp_path: Path) -> None:
+        """STAGES A→B→C, authored ``b.loop: 2`` AND ``c.skip: true`` → [a, b-1, b-2].
+
+        Skip removal runs BEFORE ``4b`` loop-expansion: C is removed first (so no
+        stray ``c``/``c-N`` copies appear), then B is expanded in place. A skipped
+        stage's own expansion is moot (it is removed first).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  title: A\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "c:\n"
+            "  title: C\n"
+            "  depends_on: [b]\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  b:\n"
+            "    loop: 2\n"
+            "  c:\n"
+            "    skip: true\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert [stage["id"] for stage in stages] == ["a", "b-1", "b-2"]
+        # No stray c / c-N copies; b-1 inherits b's dep on a; b-2 chains to b-1.
+        assert _stage_by_id(stages, "b-1")["depends_on"] == ["a"]
+        assert _stage_by_id(stages, "b-2")["depends_on"] == ["b-1"]
+
+    def test_skip_preserves_original_pipeline_body_across_cells(self, tmp_path: Path) -> None:
+        """After a skip compile, ``PipelineDocument.body`` still lists every authored stage.
+
+        The deep-copy in ``_reconstruct_body`` isolates the ORIGINAL parsed body:
+        the skipped stage and any embedded extend-stage never leak into it. This
+        pins the cross-cell invariant — the workflow cell's parsed instructions
+        are consumed but the compiler never mutates the parsed pipeline body.
+        """
+        pipeline_path = _write_stages_chain_four_step(tmp_path)
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  b:\n"
+            "    skip: true\n"
+            "  warmup:\n"
+            "    skip: true\n"
+            "extend:\n"
+            "  warmup:\n"
+            "    after: [d]\n"
+            "    title: Warmup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        workflow = parse_workflow(workflow_path)
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert isinstance(pipeline_doc, PipelineDocument)
+        # ORIGINAL parsed body keeps the four authored stages — neither the
+        # skipped B nor the embedded (then skipped) extend-stage warmup leaks in.
+        assert [step.name for step in pipeline_doc.body.steps] == ["a", "b", "c", "d"]
+        # The flow-file carries the surviving stages: b and warmup both removed.
+        assert [stage.id for stage in flow_doc.stages] == ["a", "c", "d"]
 
 
 class TestNonLeakRegression:
