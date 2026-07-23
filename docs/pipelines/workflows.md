@@ -3,8 +3,14 @@
 A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
 top-level prompt, override the agent or prompt of specific stages, expand
-a stage into N chained copies via `loop`, and **declaratively add new stages**
-to the pipeline via `extend`.
+a stage into N chained copies via `loop`, **skip (delete) a stage**, and
+**declaratively add new stages** to the pipeline via `extend`.
+
+> **Behavioral change (strict validation).** A name in `workflow.stages` that
+> does not match any pipeline step or extend-stage is now a compile error, not
+> a silent skip. Workflows that intentionally reference names absent from the
+> target pipeline (to cover multiple pipelines from one file) must be split or
+> pruned.
 
 Workflow-files live at:
 
@@ -55,7 +61,7 @@ Unknown top-level keys are rejected with
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to four
+Each entry under `stages` is keyed by stage name and accepts up to five
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -64,21 +70,26 @@ fields:
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
+| `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills` are valid. An unknown key is
-  rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills`.
+- Only `agent`, `prompt`, `loop`, `skills`, `skip` are valid. An unknown key
+  is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
+  agent, prompt, loop, skills, skip`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
   elements) raises `non-list-of-str skills in workflow.stages.<NAME>`.
+- `skip` (when present) must be a `bool`. A non-bool value raises
+  `non-bool value in workflow.stages.<NAME>.skip`. `skip` is allowed only in
+  the `stages` block — it is a structural error under `extend` (see
+  [Skipping a stage](#skipping-a-stage)).
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
-- Stage names are **not** validated against any pipeline schema. A name
-  that does not match any step in the target pipeline is silently skipped
-  with a warning — a workflow may intentionally cover multiple pipelines.
+- Stage names are validated against the target pipeline: a name that does not
+  match any step in the pipeline or any `extend`-stage is a structural error,
+  not a silent skip (see the behavioral-change note at the top of this page).
 - `agent` is not validated against a known agent set. Absence of the
   corresponding wrapper file is surfaced at run time.
 
@@ -173,6 +184,25 @@ stages:
 
 In the second form, the `Requirements:` and `Constraints:` blocks are the
 load-bearing parts — the leading paragraph is still just context.
+
+### Skipping a stage
+
+A `stages` entry may set `skip: true` to remove the named stage from the
+compiled pipeline. The stage disappears from the flow-file entirely, and its
+dependents are **transparently reconnected**: any stage that depended on the
+skipped stage instead depends on the skipped stage's own predecessors. Chains
+are resolved transitively — in `A → B → C`, skipping `B` makes `C` depend on
+`A`; skipping both `A` and `B` makes `C` depend on whatever `A` depended on
+(nothing, in the limit). For a **phases** pipeline, removal is positional (the
+next stage simply chains to the new predecessor). `skip` wins over
+`agent`/`prompt`/`loop`/`skills` overrides on the same entry, and removing
+every stage is a structural error (`empty body`).
+
+```yaml
+stages:
+  task-review:
+    skip: true
+```
 
 ## Extending the pipeline with new stages
 
@@ -334,10 +364,11 @@ extend:
 When `compile_flow` is invoked with a non-None `WorkflowDocument`, the
 compiler reconstructs the parsed body in a fixed sequence of passes **before**
 building the output stages. The ordering is mandatory: extend-stages are
-embedded first, then per-stage overrides are applied, then loops are expanded,
-then external `depends_on` references are rewritten. Embedding first means a
-per-stage override (Pass 1) or loop expansion (Pass 2) can also target a stage
-introduced by `extend`, by name.
+embedded first, stage names are strictly validated and skipped stages removed,
+then per-stage overrides are applied, then loops are expanded, then external
+`depends_on` references are rewritten. Embedding first means a per-stage
+override (Pass 1) or loop expansion (Pass 2) can also target a stage introduced
+by `extend`, by name.
 
 ### Pass 0 — Embed extend-stages (in-place)
 
@@ -369,13 +400,30 @@ inline value is the fallback). A name that appears only in `stages` is used
 verbatim; a name that appears only in `extend` carries just its inline
 `agent`/`loop`.
 
+### Pass 0.5 — Strict validation of stage names
+
+Before applying any override, the compiler validates every name in `workflow.stages`
+against the full name set = original pipeline step names ∪ extend-stage names. A name
+absent from both is a **structural error** (`unknown stage name in workflow.stages:
+<name>`) — it is no longer silently skipped. A stage that exists — even if also marked
+`skip: true` — is NOT flagged (the check runs on the full set before removal). Strictness
+applies only to `workflow.stages`; dangling `extend.<name>.before/.after` refs stay
+WARNING+skip.
+
+### Pass 0.6 — Skip removal + transparent reconnection
+
+Stages with `skip: true` are removed from the working body. Dependents' `depends_on` are
+reconnected to the skipped stage's predecessors (transitively for chains; positional
+collapse for phases). `skip` wins over other overrides (removal precedes Pass 1). If the
+reconstructed body is empty, the compiler raises `empty body`.
+
 ### Pass 1 — Per-stage overrides (in-place)
 
 For each `(stage_name, effective_stage)` pair in the effective override map:
 
 1. Find the step in the body whose `name` or id equals `stage_name`.
-2. If not found — silently skip with a warning (a workflow may cover
-   multiple pipelines).
+2. If not found — silent (only an intentionally skipped stage removed at Pass 0.6
+   reaches here; unknown names already errored at Pass 0.5).
 3. If found:
    - When `effective_stage.agent` is not None — set the stage's `command`
      field to the composed wrapper path
@@ -597,12 +645,16 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `loop` in an extend entry not an int                     | `non-int value in workflow.extend.<NAME>.loop`                              |
 | Inline `loop` in an extend entry is an int but `< 1`            | `loop must be >= 1 in workflow.extend.<NAME>`                               |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
 | `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
 | `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
+| `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
+| `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
+| Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
+| All stages skipped (empty reconstructed body)                   | `empty body`                                                                |
 | None of `prompt`, `stages`, `extend` entries are present        | `empty workflow — provide at least prompt, one stage, or one extend entry`  |
 
 ## See also

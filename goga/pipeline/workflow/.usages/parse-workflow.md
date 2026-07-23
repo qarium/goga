@@ -22,7 +22,8 @@ if workflow.prompt is not None:
     print(workflow.prompt)
 
 for stage_name, stage in workflow.stages.items():
-    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}, skills={stage.skills}")
+    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}, "
+          f"skills={stage.skills}, skip={stage.skip}")
 
 for name, extend_stage in workflow.extend.items():
     print(f"extend {name}: before={extend_stage.before}, after={extend_stage.after}, "
@@ -57,6 +58,12 @@ Each `WorkflowStage` exposes:
 - `loop: int | None` — positive iteration count (>= 1), or `None` (no expansion)
 - `skills: list[str] | None` — skill names merged with the pipeline-file
   skills by the compiler, or `None` (no merge)
+- `skip: bool` — flag instructing the compiler to DELETE the corresponding
+  stage from the compiled flow-file. `False` (default, key absent, or
+  `skip: false`) = not skipped; `True` (`skip: true`) = the compiler removes
+  the stage entirely and transparently reconnects its dependents'
+  `depends_on`. The deletion and reconnection are the compiler's job;
+  `parse_workflow` only carries the flag through.
 
 ## Side Effects
 
@@ -70,14 +77,18 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 - Top-level allowed keys: `prompt`, `stages`, `extend`. Any other top-level
   key raises a structural error.
 - An extend-entry forbids `depends_on` (structural error), requires at least
-  one of `before`/`after`, accepts optional inline `agent` (str) and `loop`
-  (int `>= 1`), and `before`/`after` (when present) must be `list[str]`.
-- Per-stage allowed keys: `agent`, `prompt`, `loop`, `skills`. Any other
-  stage key raises a structural error.
+  one of `before`/`after`, AND forbids `skip` (structural error), accepts
+  optional inline `agent` (str) and `loop` (int `>= 1`), and `before`/`after`
+  (when present) must be `list[str]`.
+- Per-stage allowed keys: `agent`, `prompt`, `loop`, `skills`, `skip`. Any
+  other stage key raises a structural error.
 - `loop` (per-stage and inline extend) must be `int >= 1`. Zero, negative
   values, and non-int types raise a structural error.
 - `skills` (when present) must be `list[str]`; a non-list-of-str value raises
   a structural error.
+- `skip` (when present) must be a `bool`; a non-bool value raises a structural
+  error. `skip` is valid only in the `stages` block — it is forbidden in an
+  `extend`-entry (structural error).
 
 ## Errors
 
@@ -91,14 +102,16 @@ I/O, no network calls, no subprocesses. Pure (modulo exceptions).
 | `stages` is not a `dict` | structural error "non-mapping stages block in workflow" |
 | `extend` is not a `dict` | structural error "non-mapping extend block in workflow" |
 | Stage entry is not a `dict` | structural error "non-mapping stage '<name>' in workflow.stages" |
-| Stage key not in {agent, prompt, loop, skills} | structural error "unknown key in workflow.stages.<name>: <key>; valid keys: agent, prompt, loop, skills" |
+| Stage key not in {agent, prompt, loop, skills, skip} | structural error "unknown key in workflow.stages.<name>: <key>; valid keys: agent, prompt, loop, skills, skip" |
 | `agent` is not a `str` | structural error "non-str value in workflow.stages.<name>.agent" |
 | Stage `prompt` is not a `str` | structural error "non-str value in workflow.stages.<name>.prompt" |
 | `loop` is not an `int` | structural error "non-int value in workflow.stages.<name>.loop" |
 | `loop < 1` | structural error "loop must be >= 1 in workflow.stages.<name>" |
 | `skills` not a `list[str]` | structural error "non-list-of-str skills in workflow.stages.<name>" |
+| `skip` is not a `bool` | structural error "non-bool value in workflow.stages.<name>.skip" |
 | Extend entry value is not a `dict` | structural error "non-mapping extend entry `<name>` in workflow.extend" |
 | Extend entry contains `depends_on` | structural error "depends_on is forbidden in workflow.extend.<name>" |
+| Extend entry contains `skip` | structural error "skip is forbidden in workflow.extend.<name>" |
 | `before` not a `list[str]` | structural error "non-list-of-str before in workflow.extend.<name>" |
 | `after` not a `list[str]` | structural error "non-list-of-str after in workflow.extend.<name>" |
 | Inline extend `agent` is not a `str` | structural error "non-str value in workflow.extend.<name>.agent" |
@@ -125,6 +138,8 @@ stages:
   propose-review:
     loop: 2
     agent: claude
+  task-review:
+    skip: true
 
 extend:
   extra-check:
@@ -141,10 +156,11 @@ extend:
       Looped warmup stage running on a specific agent (3 copies: warmup-1..3)
 ```
 
-All four per-stage fields (`agent`, `prompt`, `loop`, `skills`) are optional.
-The `stages` section may be absent entirely. The top-level `prompt` may also be
-absent. An `extend:` entry carries `before`/`after` (at least one required;
-`depends_on` forbidden), optional inline `agent` (str) and `loop` (int `>= 1`)
+All five per-stage fields (`agent`, `prompt`, `loop`, `skills`, `skip`) are
+optional. The `stages` section may be absent entirely. The top-level `prompt`
+may also be absent. An `extend:` entry carries `before`/`after` (at least one
+required; `depends_on` AND `skip` forbidden), optional inline `agent` (str) and
+`loop` (int `>= 1`)
 — extracted into the model, not part of the body — plus any stage body fields
 (`title`, `prompt`, `skills`, `roles`, `interactive`, …) passed through
 verbatim. A workflow providing none of `prompt`, `stages`, or `extend` is
@@ -156,8 +172,8 @@ rejected.
   relative path depends on the current working directory.
 - Do not expect `parse_workflow` to match stage names against any pipeline. The
   stage names in `stages:` are NOT validated against the target pipeline's
-  stages — the compiler performs that match during apply and silently ignores
-  unknown names with a warning (a workflow may cover multiple pipelines).
+  stages — the compiler performs that match during apply and now raises a
+  structural error on names absent from both the pipeline and the extend-stages.
 - Do not expect `parse_workflow` to expand `loop` cycles. `WorkflowStage.loop`
   is a count; the compiler performs the expansion.
 - Do not expect `parse_workflow` to translate `agent` into a wrapper path. The
@@ -165,6 +181,10 @@ rejected.
 - Do not expect `parse_workflow` to rewrite `depends_on` references. The
   workflow supplies instructions; the compiler rebuilds the pipeline body
   accordingly.
+- Do not expect `parse_workflow` to DELETE a stage when `skip: true`. `skip`
+  is a declarative instruction carried on `WorkflowStage`; the actual removal
+  of the stage and the transparent reconnection of dependents' `depends_on`
+  are the compiler's job.
 - Do not expect `parse_workflow` to embed extend-stages or derive
   `depends_on` — it returns positioning instructions (`before`/`after`); the
   compiler embeds the stage and derives `depends_on`.

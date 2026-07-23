@@ -199,6 +199,29 @@ the parsed body BEFORE building the FlowStages:
    loop-expansion, and reference rewriting (which then apply to extend-stages
    uniformly; after loop-expansion both `after`- and `before`-derived refs in
    STAGES resolve to the LAST expanded id).
+0.5. **Strict validation of `workflow.stages` names**: build the valid-name set =
+   (every original step name) ∪ (every extend-stage name embedded at step 0).
+   For each name in `workflow.stages`: if the name is NOT in the valid-name set,
+   raise a structural error `unknown stage name in workflow.stages: <name>`.
+   This REPLACES the previous silent warning+skip for unknown names. The check
+   runs on the FULL set (before skip removal), so a stage that exists — even if
+   also marked `skip: true` — is NOT flagged as unknown. Extend-stage names are
+   valid (embedded first). Strictness applies ONLY to `workflow.stages` names;
+   dangling `extend.<name>.before/.after` refs keep WARNING+skip.
+
+0.6. **Skip removal + transparent depends_on reconnection**: stages whose
+   `workflow.stages[name].skip` is True (and exist) are removed from the
+   working body.
+   - Stages format: dependents' `depends_on` are transparently reconnected — a
+     reference to a removed stage S is replaced with S's transitive non-skipped
+     predecessors (`resolve(S)`); chains resolved; no dangling refs or duplicates.
+     `resolve` uses a visited set so a `depends_on` cycle among skipped stages
+     terminates (cycles stay afm's concern; the compiler does not crash on one).
+   - Phases format: removed steps drop from the list; `depends_on` re-derives by
+     position (automatic collapse).
+   `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides (removal runs
+   before Pass 1). If the reconstructed body becomes empty (every stage
+   skipped), raise a structural error `empty body`.
 1. **Per-stage overrides (in-place on the step body)**: for each stage name
    that has an explicit `stages`-block entry OR originated from an
    extend-entry carrying inline `agent`/`loop`, determine the EFFECTIVE
@@ -206,8 +229,8 @@ the parsed body BEFORE building the FlowStages:
    extend-entry's inline value, else None/1 — the `stages` block wins per
    field):
    - Find the step in the body whose `name`/id equals the stage name.
-   - If not found — silently skip with a warning (a workflow may cover multiple
-     pipelines; unknown stage names are not errors).
+   - If not found — silent (it can only be an intentionally skipped stage
+     removed at Pass 0.6; unknown names already errored at Pass 0.5).
    - If found:
      - when the effective agent is not None — add
        `body["command"] = "/home/goga/bin/{effective_agent}-as-claude.sh"`
@@ -333,15 +356,21 @@ If `flow_path` already exists, it is overwritten.
 | Non-str value in header `roles.<key>`           | structural error "non-str value in header.roles.<key>" |
 | Body shape is neither list nor dict             | structural error "unsupported body format" |
 | Body has zero steps                             | structural error "empty body"             |
+| Unknown name in `workflow.stages`               | structural error "unknown stage name in workflow.stages: <name>" |
+| All stages skipped — reconstructed body empty   | structural error "empty body"             |
 | `flow_path.parent` does not exist               | `FileNotFoundError` (propagated)          |
 
 Unknown stage names in `workflow.stages` (names not matching any step in the
-body) are NOT an error — the cell emits a warning via the standard `logging`
-module and skips them. The workflow-file may intentionally cover multiple
-pipelines.
+body or any extend-stage) are NOW a structural error (formerly a warning+skip).
+Dangling `extend.<name>.before/.after` refs remain WARNING+skip.
 
 ## Anti-patterns
 
+- Do not expect an unknown `workflow.stages` name to be silently skipped
+  anymore — strict validation now raises a structural error. Split or prune
+  workflows that intentionally reference names absent from the target pipeline.
+- Do not expect `compile_flow` to leave dangling `depends_on` after a skip —
+  dependents are transparently reconnected to the skipped stage's predecessors.
 - Do not pass a relative path — both paths must be absolute.
 - Do not expect `compile_flow` to create `flow_path.parent`. Create the
   directory before calling.

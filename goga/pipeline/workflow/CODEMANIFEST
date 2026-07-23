@@ -20,27 +20,30 @@ Annotations: |
   This cell is intentionally DECLARATIVE: it does NOT know about the compiler
   or any compiler-level concept (flow documents, flow stages, the compile
   routine, body embedding, depends_on derivation, command composition,
-  loop-expansion, skills merging). It returns instructions (per-stage
-  overrides for stages — now including a skills override; NEW stages for
-  extend — now carrying extracted inline agent/loop); the consumer
+  loop-expansion, skills merging, stage REMOVAL or depends_on RECONNECTION).
+  It returns instructions (per-stage overrides for stages — agent, prompt,
+  loop, skills, AND a skip flag that instructs the compiler to DELETE the
+  stage; NEW stages for extend — now carrying extracted inline agent/loop);
+  the consumer
   (compiler) consumes them. This keeps the import graph one-directional: the
   compiler imports `WorkflowDocument` (and `WorkflowExtendStage`) from this
   cell, never the reverse. The cell extracts inline agent/loop from an
   extend-entry into the model (as it extracts before/after today) but does
   not resolve agent names to wrapper paths, does not embed extend-stages,
   does not derive depends_on, does not apply loop-expansion, does not merge
-  skills, and does not rewrite depends_on — all of that is the compiler's
-  responsibility.
+  skills, does not DELETE stages, and does not rewrite depends_on — all of
+  that is the compiler's responsibility.
 
   Use `convention` for code style, dataclass usage, and test layout.
 
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None)":
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
-    which agent, which prompt, and how many loop iterations. Constructed by
+    which agent, which prompt, how many loop iterations, which skills to merge,
+    and whether to SKIP (delete) the stage. Constructed by
     `parse_workflow` from one entry of the workflow-file stages map;
     carried verbatim inside `WorkflowDocument`.
 
@@ -56,6 +59,13 @@ Annotations: |
               pipeline-file skills (pipeline first, then these, deduplicated
               by value), or None when not specified (no merge — the
               pipeline-file skills pass through unchanged)
+    `skip`: bool flag instructing the compiler to DELETE the corresponding
+            stage from the compiled flow-file. False (default, key absent, or
+            skip: false) means the stage is NOT skipped; True (skip: true)
+            means the compiler removes the stage entirely and transparently
+            reconnects its dependents' depends_on. Defaults to False per
+            `convention` — None is reserved for fields with a meaningful
+            absence, and for skip absent is equivalent to False
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -64,7 +74,9 @@ Annotations: |
     - Use @dataclass(kw_only=True) (per `convention`)
     - All four fields default to None — workflow-files may omit any field;
       the parser produces None for missing fields
-    - Field order is fixed: agent, prompt, loop, skills — matches the
+    - `skip` defaults to False (NOT None) — a missing `skip` key and an
+      explicit skip: false are equivalent (both = do not skip)
+    - Field order is fixed: agent, prompt, loop, skills, skip — matches the
       canonical order of the per-stage keys in the workflow-file
 
     Constraints:
@@ -73,10 +85,15 @@ Annotations: |
     - Do not validate that skills is a list[str] here — `parse_workflow`
       enforces it during parsing and raises a structural error before this
       dataclass is built
+    - Do not validate that skip is a bool here — `parse_workflow` enforces it
+      during parsing and raises a structural error before this dataclass is built
     - Do not resolve `agent` to a wrapper path here — the compiler performs
       that composition when applying the instruction
     - Do not merge `skills` with anything here — the compiler performs the
       merge with the pipeline-file skills when applying the instruction
+    - Do not DELETE the stage or RECONNECT dependents' depends_on here —
+      `skip` is a declarative instruction; the compiler performs the actual
+      removal and depends_on reconnection when applying the workflow
     - Do not validate `prompt` contents — pass through verbatim to the consumer
   properties:
     "agent -> str | None": |
@@ -92,6 +109,11 @@ Annotations: |
       Skill names the compiler merges with the stage's pipeline-file skills
       (pipeline first, then these, deduplicated by value), or None when not
       specified (no merge).
+    "skip -> bool": |
+      Flag instructing the compiler to delete the corresponding stage from the
+      compiled flow-file. False (default / key absent / skip: false) = not
+      skipped; True (skip: true) = compiler removes the stage entirely and
+      transparently reconnects its dependents' depends_on.
 
 "WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
@@ -152,6 +174,12 @@ Annotations: |
       the compiler's responsibility
     - Do not validate before/after names against any pipeline — the compiler
       matches and silently ignores unknown names with a warning
+    - Do not accept skip in an extend-entry — `parse_workflow` raises a
+      structural error "skip is forbidden in workflow.extend.<name>" before
+      this dataclass is built. skip is defined only for existing pipeline
+      stages (via the stages block); an extend-entry is a positional new stage
+      (before/after + body) and carries no skip semantics. No skip field is
+      added to this dataclass.
   properties:
     "before -> list[str] | None": |
       List of stage names the new stage precedes (compiler adds this stage to
@@ -185,8 +213,12 @@ Annotations: |
     `stages`: map of per-stage override instructions keyed by stage name;
               an entry's key MUST match the name/id of a stage in the
               target pipeline-file. Stages in `stages` that do not match any
-              pipeline stage are silently ignored with a warning by the
-              compiler (a workflow-file may cover multiple pipelines). An
+              pipeline stage OR any extend-stage are a STRUCTURAL ERROR at
+              compile time — "unknown stage name in workflow.stages: <name>"
+              (a workflow-file no longer silently covers multiple pipelines;
+              strict validation runs on the full original∪extend name set
+              before skip removal, so a really-existing skipped stage is NOT
+              flagged). An
               empty map (default) means the workflow provides only a
               top-level prompt and no per-stage overrides.
     `extend`: map of new-stage extend-instructions keyed by stage name; an
@@ -213,8 +245,10 @@ Annotations: |
 
     Constraints:
     - Do not validate stage-name keys against any pipeline — the compiler
-      performs that match during apply (and silently ignores unknown names
-      with a warning)
+      performs that match during apply and raises a structural error on
+      names absent from both the pipeline and the extend-stages (strict
+      validation; no longer a warning+skip). This cell does NOT validate
+      names itself — it stays declarative
     - Do not mutate `stages` after construction — consumers treat the
       document as read-only
   properties:
@@ -265,8 +299,8 @@ Annotations: |
        a. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
        b. Validate the key set of the stage value against agent, prompt,
-          loop, skills: an unknown key raises "unknown key in
-          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills"
+          loop, skills, skip: an unknown key raises "unknown key in
+          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills, skip"
        c. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
        d. prompt (when present) must be a str; otherwise raise
@@ -276,14 +310,18 @@ Annotations: |
           "loop must be >= 1 in workflow.stages.NAME" (int < 1)
        f. skills (when present) must be a list[str]; otherwise raise
           "non-list-of-str skills in workflow.stages.NAME"
-       g. Build a `WorkflowStage` from the validated values (agent, prompt,
-          loop, skills)
+       g. skip (when present) must be a bool; otherwise raise a structural
+          error "non-bool value in workflow.stages.NAME.skip"
+       h. Build a `WorkflowStage` from the validated values (agent, prompt,
+          loop, skills, skip)
     6b. For each entry of extend (when present), identified by stage name
         and entry value:
         a. If the entry value is not a dict — raise a structural error
            "non-mapping extend entry NAME in workflow.extend"
         b. If the entry value contains a depends_on key — raise a structural
            error "depends_on is forbidden in workflow.extend.NAME"
+        b2. If the entry value contains a skip key — raise a structural
+            error "skip is forbidden in workflow.extend.NAME"
         c. before (when present) must be a list[str]; otherwise raise
            "non-list-of-str before in workflow.extend.NAME"
         d. after (when present) must be a list[str]; otherwise raise
@@ -320,7 +358,11 @@ Annotations: |
       before/after names pass through; the compiler decides whether to apply
       or ignore (silently with a warning)
     - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop, skills are accepted
+      loop, skills, skip are accepted
+    - skip (when present) must be a bool; a non-bool value is a structural
+      error
+    - skip is forbidden in an extend-entry — a structural error (skip is
+      defined only for existing pipeline stages via the stages block)
     - skills (when present) must be a list[str]; a non-list-of-str value is
       a structural error
     - loop must be an int >= 1; zero, negative values, and non-int types
@@ -331,11 +373,18 @@ Annotations: |
     - Inline agent/loop of an extend-entry are EXTRACTED into the model and
       excluded from the verbatim body (like before/after) — they do not pass
       through as stage fields
-    - Stage-name keys are NOT validated against any pipeline — unknown stage
-      names pass through; the compiler decides whether to apply or ignore
-      (silently with a warning)
-    - Stage-name keys MAY repeat names across different pipeline-files — the
-      same workflow-file can apply to several pipelines
+    - Strict-validation fallout — two Requirements bullets described the
+      OLD silent WARNING+skip and are corrected to match the new behavior:
+    - Stage-name keys are NOT validated against any pipeline IN THIS CELL
+      — unknown stage names pass through; the compiler raises a structural
+      error on names absent from both the pipeline and the extend-stages
+      (strict validation; no longer "decides whether to apply or ignore
+      silently with a warning"). This cell stays declarative — it does NOT
+      validate names itself
+    - A single workflow-file can apply to several pipelines ONLY when
+      every name it references exists in each target pipeline; a name
+      absent from a target pipeline is now a structural error (was: silent
+      warning+skip) — split or prune such workflows
     - A workflow-file with neither prompt nor any stage entries is rejected
       — at least one must be present
     - agent value is NOT validated against a known agent set; absence of
@@ -351,7 +400,11 @@ Annotations: |
     - Do not rewrite depends_on here — the compiler handles external
       references after expansion
     - Do not validate stage names against any pipeline schema — the compiler
-      matches and silently ignores unknown names
+      performs the match (now raising a structural error on names absent from
+      both the pipeline and the extend-stages)
+    - Do not DELETE a stage or RECONNECT dependents when skip is True —
+      skip is a declarative instruction; the compiler performs the removal
+      and reconnection
     - Do not skip structural validation on missing files — OSError
       propagates unchanged (consistent with the compiler behavior)
     - Do not accept YAML files whose root is not a mapping — that is a
