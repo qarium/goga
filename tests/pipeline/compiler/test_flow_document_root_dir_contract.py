@@ -19,13 +19,13 @@ class TestFlowDocumentRootDirContract:
     """Contract tests — the ``root_dir`` slot declared by the CODEMANIFEST."""
 
     def test_flow_document_has_root_dir_field(self) -> None:
-        """``FlowDocument`` must declare a ``root_dir`` field."""
+        """The ``FlowDocument`` class must declare a ``root_dir`` field."""
         names = [f.name for f in dataclass_fields(FlowDocument)]
 
         assert "root_dir" in names
 
     def test_flow_document_root_dir_is_second_slot(self) -> None:
-        """``root_dir`` must be the SECOND field of ``FlowDocument`` (after ``prompt``)."""
+        """The ``root_dir`` field must be the SECOND field of ``FlowDocument`` (after ``prompt``)."""
         ordered = [f.name for f in dataclass_fields(FlowDocument)]
 
         assert ordered[0] == "prompt"
@@ -33,7 +33,7 @@ class TestFlowDocumentRootDirContract:
         assert ordered[2] == "name"
 
     def test_flow_document_root_dir_type_is_optional_str(self) -> None:
-        """``root_dir`` must be typed ``str | None``."""
+        """The ``root_dir`` field must be typed ``str | None``."""
         root_dir_field = next(f for f in dataclass_fields(FlowDocument) if f.name == "root_dir")
 
         assert root_dir_field.type == "str | None"

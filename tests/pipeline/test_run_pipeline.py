@@ -297,10 +297,8 @@ class TestRunPipelineLogic:
         assert captured["flow_path"].is_absolute()
         assert captured["flow_path"] == (tmp_path / ".afm").resolve() / "flow.yml"
 
-    def test_run_pipeline_forwards_cwd_as_root_dir(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """``run_pipeline`` forwards the in-container project root (``Path.cwd()``) as ``root_dir``.
+    def test_run_pipeline_forwards_cwd_as_root_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The ``run_pipeline`` routine forwards the in-container project root (``Path.cwd()``) as ``root_dir``.
 
         The host-side launcher sets ``workdir=/workspace`` and bind-mounts the
         project there, so ``Path.cwd()`` inside the container is the single

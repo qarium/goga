@@ -889,6 +889,7 @@ def compile_flow(
             )
 
     flow_prompt = workflow.prompt if workflow is not None else None
+
     doc = FlowDocument(
         prompt=flow_prompt,
         root_dir=root_dir,

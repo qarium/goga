@@ -61,7 +61,7 @@ class TestSerializeFlowRootDirSlot:
         assert "prompt:" not in text
 
     def test_serialize_flow_root_dir_plain_scalar(self) -> None:
-        """``root_dir`` is emitted as a plain scalar (not block-literal like ``prompt``)."""
+        """The ``root_dir`` value is emitted as a plain scalar (not block-literal like ``prompt``)."""
         doc = FlowDocument(
             root_dir="/workspace",
             name="N",
@@ -108,7 +108,7 @@ class TestCompileFlowRootDir:
     """End-to-end compile path: ``root_dir`` parameter forwarding into the flow-file."""
 
     def test_compile_flow_without_root_dir_omits_key(self, tmp_path: Path) -> None:
-        """``compile_flow`` without ``root_dir`` writes no top-level ``root_dir`` key (back-compat)."""
+        """Calling ``compile_flow`` without ``root_dir`` writes no top-level ``root_dir`` key (back-compat)."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
@@ -120,7 +120,7 @@ class TestCompileFlowRootDir:
         assert text.startswith("name: N\n")
 
     def test_compile_flow_with_root_dir_emits_key(self, tmp_path: Path) -> None:
-        """``compile_flow`` with ``root_dir`` emits the top-level ``root_dir`` key before ``name``."""
+        """Calling ``compile_flow`` with ``root_dir`` emits the top-level ``root_dir`` key before ``name``."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text("name: N\ndescription: D\n---\n\n- name: a\n  title: A\n")
         flow_path = tmp_path / "flow.yml"
@@ -133,9 +133,7 @@ class TestCompileFlowRootDir:
         # Order: root_dir < name.
         assert text.index("root_dir: /workspace") < text.index("name: N")
 
-    def test_compile_flow_with_root_dir_and_workflow_emits_both_prompt_and_root_dir(
-        self, tmp_path: Path
-    ) -> None:
+    def test_compile_flow_with_root_dir_and_workflow_emits_both_prompt_and_root_dir(self, tmp_path: Path) -> None:
         """When both workflow and root_dir are supplied, prompt precedes root_dir in the output."""
         from goga.pipeline.workflow import WorkflowDocument
 
