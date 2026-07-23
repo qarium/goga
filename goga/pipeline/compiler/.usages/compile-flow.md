@@ -68,7 +68,8 @@ workflow = parse_workflow(workflow_path)
 documents = compile_flow(pipeline_path, flow_path, workflow=workflow)
 # In addition to per-stage overrides and loop-expansion, the compiled
 # flow-file carries the extend-stages embedded and positioned via
-# before/after. Dangling before/after refs are skipped with a WARNING.
+# before/after. A dangling before/after ref (naming no step and no
+# extend-stage) now raises a structural error.
 ```
 
 A workflow-file with an `extend:` block:
@@ -194,11 +195,25 @@ the parsed body BEFORE building the FlowStages:
    from `after`, and append the new stage to the `depends_on` of each
    `before`-target. PHASES: insert the new `PhaseStep` into the body list
    after its `after`-targets and before its `before`-targets (`PhaseStep`
-   carries no `depends_on`; ordering is positional). Dangling refs → WARNING +
-   skip; cross-references resolved. Runs BEFORE per-stage overrides,
+   carries no `depends_on`; ordering is positional). Every before/after ref is
+   guaranteed to resolve here — step 0.45 strict-validates them BEFORE the embed
+   and raises a structural error on a dangling ref; cross-references between
+   extend-stages resolve. Runs BEFORE per-stage overrides,
    loop-expansion, and reference rewriting (which then apply to extend-stages
    uniformly; after loop-expansion both `after`- and `before`-derived refs in
    STAGES resolve to the LAST expanded id).
+0.45. **Strict validation of `extend.<name>.before/.after` refs**: build the
+   valid-name set = (every original step name) ∪ (every extend-stage name in
+   `workflow.extend` — so a cross-reference to another extend-stage resolves).
+   For each `before`/`after` ref: if the ref is NOT in the valid-name set, raise
+   a structural error `unknown stage name in workflow.extend.<name>.before: <ref>`
+   (or `.after`). This REPLACES the previous silent WARNING+skip / verbatim
+   pass-through. Runs BEFORE the step-0 embed (and before any skip removal), so a
+   ref to a stage that exists in the original body — even if also marked
+   `skip: true` — is NOT flagged (it is removed later at step 0.6; referencing a
+   skipped stage is not a dangling ref). Existence only is checked; cycles,
+   self-references, and duplicate refs stay afm's concern.
+
 0.5. **Strict validation of `workflow.stages` names**: build the valid-name set =
    (every original step name) ∪ (every extend-stage name embedded at step 0).
    For each name in `workflow.stages`: if the name is NOT in the valid-name set,
@@ -206,8 +221,9 @@ the parsed body BEFORE building the FlowStages:
    This REPLACES the previous silent warning+skip for unknown names. The check
    runs on the FULL set (before skip removal), so a stage that exists — even if
    also marked `skip: true` — is NOT flagged as unknown. Extend-stage names are
-   valid (embedded first). Strictness applies ONLY to `workflow.stages` names;
-   dangling `extend.<name>.before/.after` refs keep WARNING+skip.
+   valid (embedded first). Strictness over `extend.<name>.before/.after` refs is
+   enforced symmetrically at step 0.45 (a dangling ref is a structural error
+   there too).
 
 0.6. **Skip removal + transparent depends_on reconnection**: stages whose
    `workflow.stages[name].skip` is True (and exist) are removed from the
@@ -357,18 +373,25 @@ If `flow_path` already exists, it is overwritten.
 | Body shape is neither list nor dict             | structural error "unsupported body format" |
 | Body has zero steps                             | structural error "empty body"             |
 | Unknown name in `workflow.stages`               | structural error "unknown stage name in workflow.stages: <name>" |
+| Dangling `extend.<name>.before`/`.after` ref    | structural error "unknown stage name in workflow.extend.<name>.before/.after: <ref>" |
 | All stages skipped — reconstructed body empty   | structural error "empty body"             |
 | `flow_path.parent` does not exist               | `FileNotFoundError` (propagated)          |
 
 Unknown stage names in `workflow.stages` (names not matching any step in the
 body or any extend-stage) are NOW a structural error (formerly a warning+skip).
-Dangling `extend.<name>.before/.after` refs remain WARNING+skip.
+Dangling `extend.<name>.before`/`.after` refs (naming no step and no
+extend-stage) are likewise NOW a structural error (formerly a warning+skip /
+verbatim pass-through).
 
 ## Anti-patterns
 
 - Do not expect an unknown `workflow.stages` name to be silently skipped
   anymore — strict validation now raises a structural error. Split or prune
   workflows that intentionally reference names absent from the target pipeline.
+- Do not expect a dangling `extend.<name>.before`/`.after` ref to be silently
+  skipped anymore — strict validation now raises a structural error (symmetric
+  with `workflow.stages`). A ref to an existing stage also marked `skip: true`
+  is NOT flagged (validation runs before removal).
 - Do not expect `compile_flow` to leave dangling `depends_on` after a skip —
   dependents are transparently reconnected to the skipped stage's predecessors.
 - Do not pass a relative path — both paths must be absolute.
