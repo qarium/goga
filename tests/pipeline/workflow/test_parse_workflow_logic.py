@@ -107,6 +107,45 @@ class TestParseWorkflowPositive:
         assert propose.prompt is None
         assert propose.loop is None
 
+    def test_parse_workflow_skip_true_carried_through(self, tmp_path: Path) -> None:
+        """``skip: true`` on a stage flows through to the WorkflowStage.skip field."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  propose:\n    skip: true\n")
+
+        document = parse_workflow(workflow_path)
+
+        propose = document.stages["propose"]
+        assert propose.skip is True
+        # skip is independent of the other fields; they stay None.
+        assert propose.agent is None
+
+    def test_parse_workflow_skip_false_and_absent_equivalent(self, tmp_path: Path) -> None:
+        """``skip: false`` and an omitted ``skip`` are equivalent (both yield False)."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  a:\n    skip: false\n  b: {}\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert document.stages["a"].skip is False
+        assert document.stages["b"].skip is False
+
+    def test_skip_in_stage_with_other_fields(self, tmp_path: Path) -> None:
+        """``skip`` coexists with ``agent`` and ``skills`` in one stage entry."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  propose:\n    agent: codex\n    skills: [web-search]\n    skip: true\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        propose = document.stages["propose"]
+        assert propose.skip is True
+        assert propose.agent == "codex"
+        assert propose.skills == ["web-search"]
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -288,10 +327,10 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        # The full valid-keys list now includes ``skills``; the substring
-        # ``agent, prompt, loop`` alone would pass even without ``skills``, so
-        # assert the full trailing fragment.
-        assert "valid keys: agent, prompt, loop, skills" in message
+        # The full valid-keys list now includes ``skip`` (5th key); the substring
+        # ``agent, prompt, loop, skills`` alone would pass even without ``skip``,
+        # so assert the full trailing fragment.
+        assert "valid keys: agent, prompt, loop, skills, skip" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
@@ -342,6 +381,51 @@ class TestParseWorkflowNegative:
         workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  x:\n    skills: web-search\n")
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-list-of-str skills in workflow\.stages\.x"):
+            parse_workflow(workflow_path)
+
+    @pytest.mark.parametrize(
+        "skip_yaml",
+        ['"yes"', "1"],
+        ids=["str", "int"],
+    )
+    def test_parse_workflow_rejects_non_bool_skip(self, tmp_path: Path, skip_yaml: str) -> None:
+        """A non-bool skip raises WorkflowSyntaxError('non-bool value ... skip').
+
+        A quoted ``"yes"`` is a ``str`` (note: the unquoted ``yes`` would parse
+        as a YAML bool, so it must be quoted to exercise the non-bool path); an
+        int ``1`` is also rejected because ``isinstance(1, bool)`` is ``False``.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"stages:\n  x:\n    skip: {skip_yaml}\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.x\.skip"):
+            parse_workflow(workflow_path)
+
+    def test_skip_explicit_null_rejected(self, tmp_path: Path) -> None:
+        """An explicit ``null`` skip is a non-bool, rejected as a structural type error.
+
+        Symmetric with the per-stage agent/prompt and the extend agent/loop:
+        presence of the key forces a type check, so ``null`` is rejected.
+        Absence is expressed by omitting the key (``skip`` then defaults to
+        ``False``).
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  x:\n    skip: ~\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.x\.skip"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_rejects_skip_in_extend(self, tmp_path: Path) -> None:
+        """A skip key inside an extend entry raises WorkflowSyntaxError naming the entry."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    after: [review]\n    skip: true\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"skip is forbidden in workflow\.extend\.x"):
             parse_workflow(workflow_path)
 
     def test_parse_workflow_rejects_empty_workflow(self, tmp_path: Path) -> None:

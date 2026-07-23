@@ -80,6 +80,26 @@ class TestParseWorkflowContract:
         assert isinstance(document, WorkflowDocument)
         assert document.stages["propose"].skills == ["web-search"]
 
+    def test_parse_workflow_accepts_skip_key(self, tmp_path: Path) -> None:
+        """``skip`` is part of the accepted per-stage key set (contract surface).
+
+        Pins the contract: ``skip`` is a valid stage key (5th key, after
+        ``skills``), so a stage carrying ``skip: true`` parses successfully, the
+        facade ``WorkflowDocument`` shape is unchanged, and the entry surfaces as a
+        ``WorkflowStage``. The bool check, the false/absent equivalence, and the
+        extend-prohibition are pinned in the logic test module.
+        """
+        from goga.pipeline.workflow import WorkflowStage
+
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  propose:\n    skip: true\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert isinstance(document, WorkflowDocument)
+        assert "propose" in document.stages
+        assert isinstance(document.stages["propose"], WorkflowStage)
+
     def test_parse_workflow_extend_exposes_agent_and_loop_fields(self, tmp_path: Path) -> None:
         """An extend entry's inline ``agent``/``loop`` surface on the model (contract surface).
 
