@@ -133,6 +133,19 @@ Annotations: |
   extend-stage by deriving its explicit depends_on from before/after; PHASES
   positions an extend-stage by list insertion (no depends_on field on
   `PhaseStep`).
+  (0.45) STRICT VALIDATION of workflow.extend.<name>.before/.after refs
+  against the FULL name set (every step name/id present in the ORIGINAL body,
+  plus every extend-stage name in workflow.extend): for each before/after ref,
+  an unknown ref (naming no original step and no extend-stage) raises a
+  structural error "unknown stage name in workflow.extend.<name>.before: <ref>"
+  (or .after) — this REPLACES the former silent WARNING+skip / verbatim
+  pass-through. The check runs BEFORE the (0) embed (extend names come from
+  workflow.extend keys, so cross-references between extend-stages resolve
+  without embedding) and BEFORE any skip removal, so a ref to a stage that
+  exists in the original body — even if also marked skip: true — is NOT flagged
+  (referencing a skipped stage is not a dangling ref). Existence only is
+  checked — cycles, self-references, and duplicate refs remain afm's
+  responsibility.
   (0.5) STRICT VALIDATION of workflow.stages names against the FULL name set
   (every step name/id present in the ORIGINAL body, plus every extend-stage
   name embedded at (0)): for each name in workflow.stages, an unknown name
@@ -141,9 +154,8 @@ Annotations: |
   REPLACES the former silent WARNING+skip. The check runs on the FULL set
   BEFORE any skip removal, so a stage that exists in the original body —
   even if also marked skip: true — is NOT flagged as unknown. Extend-stage
-  names are valid here (embedded before this check). Strictness applies
-  ONLY to workflow.stages names; dangling extend.<name>.before/.after
-  references keep their existing WARNING+skip behavior.
+  names are valid here (embedded before this check). Strictness over
+  extend.<name>.before/.after refs is enforced separately at (0.45).
   (0.6) SKIP REMOVAL + transparent depends_on reconnection: stages whose
   workflow.stages[name].skip is True (and which exist) are removed from
   the working body. STAGES: each remaining stage's depends_on is
@@ -841,11 +853,11 @@ Annotations: |
                     after the last of A and B, so it runs after both via the
                     positional chain).
                - Dangling reference (a before/after name absent from the
-                 known-names set) — emit a WARNING via logging and skip
-                 that single reference. When ALL before/after names of a
-                 PHASES extend-stage are dangling (no resolvable position),
-                 append the extend-stage at the end of the body list with a
-                 WARNING.
+                 known-names set) — cannot occur at this step: step (0.45)
+                 strict-validates every before/after ref BEFORE the embed and
+                 raises a structural error "unknown stage name in
+                 workflow.extend.<name>.before/.after: <ref>". The embed thus
+                 runs as a pure transform that may assume every ref resolves.
             3. Place the constructed extend-steps into the body sequence:
                - STAGES: add the `StageStep`s to the body map, keyed by
                  name (their explicit depends_on encodes before/after).
@@ -853,6 +865,19 @@ Annotations: |
                  computed positions; depends_on is derived purely by list
                  position in step 5 (no explicit depends_on is carried).
 
+       4a0-pre. Strict-validation of workflow.extend.<name>.before/.after refs:
+                build the valid-name set = { every step name/id in the
+                ORIGINAL body } ∪ { every extend-stage name in workflow.extend }.
+                For each before/after ref: if the ref is NOT in the valid-name
+                set — raise a structural error "unknown stage name in
+                workflow.extend.<name>.before/.after: <ref>". Runs BEFORE the 4a0
+                embed (extend names come from workflow.extend keys, so cross-
+                references between extend-stages resolve without embedding) and
+                BEFORE any skip removal, so a really-existing skipped stage is
+                NOT flagged (referencing a skipped stage is not a dangling ref).
+                Existence only — cycles, self-references, and duplicate refs
+                remain afm's responsibility. This REPLACES the former silent
+                WARNING+skip / verbatim-pass-through.
        4pre. Strict-validation of workflow.stages names: build the valid-name
              set = { every step name/id in the ORIGINAL body } ∪ { every
              extend-stage name embedded at 4a0 }. For each name in
@@ -860,10 +885,9 @@ Annotations: |
              a structural error "unknown stage name in workflow.stages: <name>".
              The check runs on the FULL set BEFORE any skip removal, so a
              really-existing skipped stage is NOT flagged as unknown. Extend-
-             stage names are valid here (embedded before this check). NOTE:
-             strictness applies ONLY to workflow.stages names — dangling
-             extend.<name>.before/.after refs keep their existing
-             WARNING+skip behavior (unchanged).
+             stage names are valid here (embedded before this check). Strictness
+             over extend.<name>.before/.after refs is enforced at 4a0-pre
+             (above); a workflow may no longer carry a dangling extend ref.
        4skip. Skip removal + transparent depends_on reconnection: determine the
              skipped-name set = { name : workflow.stages[name].skip is True
              AND name exists in the working body }. Then:
@@ -1067,6 +1091,12 @@ Annotations: |
       "unknown stage name in workflow.stages: <name>" (no longer a warning);
       a really-existing skipped stage is NOT flagged (validation runs on the
       full original∪extend set before removal)
+    - Dangling refs in workflow.extend.<name>.before/.after (refs naming no
+      original step and no extend-stage) raise a structural error "unknown
+      stage name in workflow.extend.<name>.before/.after: <ref>" (no longer a
+      warning nor a verbatim pass-through); a ref to a really-existing skipped
+      stage is NOT flagged (validation runs before skip removal); cross-references
+      between extend-stages resolve (extend names are valid targets)
     - stages.<name>.skip: true for an existing stage → the stage is removed
       from the compiled flow-file; dependents' depends_on are transparently
       reconnected (STAGES via resolve, PHASES positional collapse); chains
@@ -1090,9 +1120,11 @@ Annotations: |
       depends_on; before → the new stage is added to the depends_on of each
       named existing stage), without losing the prior dependencies of those
       stages
-    - Dangling refs in before/after (names not in the body and not among the
-      extend-stages) are silently ignored with a warning; the remaining
-      embedding proceeds (consistent with the stages block)
+    - Dangling refs in before/after (names in neither the body nor the
+      extend-stages) raise a structural error "unknown stage name in
+      workflow.extend.<name>.before/.after: <ref>" — strict validation at
+      4a0-pre (a workflow no longer carries a dangling extend ref; symmetric
+      with workflow.stages strictness)
     - Cross-references between extend-stages (one extend-stage's
       before/after names another extend-stage) are resolved
     - After loop-expansion, before/after-derived references are rewritten
@@ -1179,9 +1211,11 @@ Annotations: |
       absence of the wrapper file is surfaced by afm at invocation time
     - Do not silently skip unknown workflow.stages names — strict validation
       raises a structural error (a workflow no longer silently covers multiple
-      pipelines); before/after dangling refs still WARNING+skip (unchanged)
-    - Do not apply strictness to extend.<name>.before/.after refs — those
-      keep WARNING+skip
+      pipelines); dangling extend.<name>.before/.after refs are likewise a
+      structural error at 4a0-pre (symmetric strictness, no silent WARNING+skip)
+    - Do not validate before/after refs for cycles, self-references, or
+      duplicates — existence only is checked at 4a0-pre; ordering/cycle concerns
+      remain afm's responsibility
     - Do not leave dangling depends_on after a skip — dependents are
       transparently reconnected to the skipped stage's predecessors
     - Do not leak skip-removed stages into `PipelineDocument` body — it stays
@@ -1209,8 +1243,10 @@ Annotations: |
     - Do not add a depends_on field to PhaseStep or carry explicit depends_on
       for PHASES extend-stages — PHASES positioning is achieved by list
       insertion only (positional derivation in step 5)
-    - Do not validate before/after refs for dangling ids, cycles, or
-      duplicates — afm's responsibility (as for ordinary depends_on)
+    - Do not validate before/after refs for cycles, self-references, or
+      duplicates after the existence check — existence IS validated at 4a0-pre
+      (a dangling ref is a structural error); only cycles, self-references, and
+      duplicates remain afm's responsibility (as for ordinary depends_on)
     - Do not change the stages block contract — overrides/loop/silent-skip
       of unknown names are unchanged
     - Do not leak embedded extend-stages into `PipelineDocument` body — it

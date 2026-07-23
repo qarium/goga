@@ -36,9 +36,10 @@ expanded into N chained copies (``NAME-1``..``NAME-N``), and external
 reconstruction operates on a deep copy of the parsed steps — the
 ``PipelineDocument`` returned to the consumer always carries the ORIGINAL parsed
 body, never the reconstructed one. Unknown ``workflow.stages`` names (names
-absent from both the ORIGINAL body and every embedded extend-stage) are rejected
-with a ``StructuralError`` BEFORE reconstruction — strict validation; only
-dangling ``extend.<name>.before/.after`` refs keep their ``WARNING``+skip behavior.
+absent from both the ORIGINAL body and every embedded extend-stage) AND dangling
+``extend.<name>.before/.after`` refs (refs naming no step in the ORIGINAL body
+nor an extend-stage) are both rejected with a ``StructuralError`` up front,
+before the body is rebuilt — strict validation in both directions.
 
 I/O exceptions and structural errors from ``parse_dsl`` propagate unchanged. An
 empty body raises ``StructuralError("empty body")`` here — not in ``parse_dsl``,
@@ -551,14 +552,14 @@ def _embed_extend_stages_stages(
 
     Pass 1 appends one ``StageStep`` per extend-entry in source order: the new
     stage's ``depends_on`` is a copy of its ``after`` refs (or ``None`` when no
-    ``after``), so ``after``-refs land verbatim — including dangling ones, which
-    afm surfaces (no WARNING here, mirroring step 4c). Pass 2 applies ``before``:
-    the new stage's name is appended to each ``before``-target's ``depends_on``,
+    ``after``), so ``after``-refs land verbatim. Pass 2 applies ``before``: the
+    new stage's name is appended to each ``before``-target's ``depends_on``,
     initialising the list to ``[]`` when it was ``None`` and appending
-    idempotently (a name is never recorded twice). A ``before``-ref naming no
-    existing step is skipped with a ``WARNING``. Cross-references between
-    extend-stages resolve automatically — after pass 1 every extend step is
-    already in ``steps``.
+    idempotently (a name is never recorded twice). Every before/after ref is
+    guaranteed to resolve — step 4a1 (``_strict_validate_extend_refs``) rejects
+    any dangling ref with a ``StructuralError`` before this function runs, so no
+    WARNING is emitted here. Cross-references between extend-stages resolve
+    automatically — after pass 1 every extend step is already in ``steps``.
 
     Args:
         steps: The working (deep-copied) STAGES step sequence, mutated in place.
@@ -575,14 +576,10 @@ def _embed_extend_stages_stages(
 
     for name, ext in workflow.extend.items():
         for bname in ext.before or []:
-            target = by_name.get(bname)
-
-            if target is None:
-                logger.warning(
-                    "compile_flow: extend before ref not found; skipping",
-                    extra={"extend_stage": name, "before_ref": bname},
-                )
-                continue
+            # 4a0-pre (``_strict_validate_extend_refs``) guarantees every
+            # before-ref resolves to a step in ``by_name`` — a missing key here
+            # would be an internal invariant breach, not a recoverable state.
+            target = by_name[bname]
 
             if target.depends_on is None:
                 target.depends_on = []
@@ -656,11 +653,12 @@ def _embed_extend_stages_phases(
     insertions are offset by how many siblings already landed there. When both
     are resolvable but inconsistent (the ``after``-target positioned after the
     ``before``-target) a ``WARNING`` is
-    logged and the ``after`` index is used. Targets naming no known step are
-    dangling; when ALL targets dangle the stage is appended at the end with a
-    ``WARNING``. A pass that places nothing indicates an unresolvable cycle —
-    the remaining stages are appended at the end with a ``WARNING`` and the loop
-    stops.
+    logged and the ``after`` index is used. Dangling targets (naming no known
+    step) never reach this branch — step 4a0-pre
+    (``_strict_validate_extend_refs``) rejects them with a ``StructuralError``
+    first. A pass that places nothing
+    indicates an unresolvable cycle between extend-stages — the remaining stages
+    are appended at the end with a ``WARNING`` and the loop stops.
 
     Args:
         steps: The working (deep-copied) PHASES step sequence, mutated in place.
@@ -755,6 +753,52 @@ def _embed_extend_stages(
         _embed_extend_stages_phases(steps, workflow, known_names)
 
 
+def _strict_validate_extend_refs(
+    steps: list[PhaseStep | StageStep],
+    workflow: WorkflowDocument,
+) -> None:
+    """Step 4a0-pre — strictly validate every ``workflow.extend.<name>.before/.after`` ref.
+
+    Builds the valid-name set as the union of every ORIGINAL step name in
+    ``steps`` and every extend-stage name (``workflow.extend`` keys) — so a
+    cross-reference to another extend-stage resolves. Any before/after ref
+    absent from that set raises a ``StructuralError`` — replacing the former
+    silent WARNING+skip / verbatim-pass-through. Runs BEFORE the 4a0 embed (and
+    before any skip removal), so a before/after ref to a stage that also carries
+    ``skip: true`` is NOT flagged here — it still exists in the ORIGINAL body at
+    this point and is removed later at 4skip (referencing a skipped stage is not
+    a dangling ref). The check is format-agnostic: ``step.name`` is the identity
+    key for both ``StageStep`` and ``PhaseStep``. Validating before the embed
+    keeps ``_embed_extend_stages`` a pure transform that can assume every ref
+    resolves. Mirrors ``_strict_validate_stage_names`` (4pre) for
+    ``workflow.stages`` names, extending strictness symmetrically to the
+    extend-direction. Does NOT validate cycles, self-references, or duplicate
+    refs — existence only; ordering/cycle concerns remain afm's responsibility.
+
+    Args:
+        steps: The working step sequence BEFORE the 4a0 embed (deep-copied
+            ORIGINAL body only).
+        workflow: The declarative workflow instructions (source of the extend
+            names and their ``before``/``after`` refs).
+
+    Raises:
+        StructuralError: When a ``workflow.extend.<name>.before`` or ``.after``
+            ref names no ORIGINAL step and no extend-stage.
+    """
+    valid_names = {step.name for step in steps} | set(workflow.extend)
+    for name, ext in workflow.extend.items():
+        for ref in ext.before or []:
+            if ref not in valid_names:
+                raise StructuralError(
+                    f"unknown stage name in workflow.extend.{name}.before: {ref}"
+                )
+        for ref in ext.after or []:
+            if ref not in valid_names:
+                raise StructuralError(
+                    f"unknown stage name in workflow.extend.{name}.after: {ref}"
+                )
+
+
 def _strict_validate_stage_names(
     steps: list[PhaseStep | StageStep],
     workflow: WorkflowDocument,
@@ -770,9 +814,9 @@ def _strict_validate_stage_names(
     FULL set BEFORE any skip removal, so a genuinely-existing stage that is also
     skipped is NOT flagged here — it is removed later at 4skip. The check is
     format-agnostic: ``step.name`` is the identity key for both ``StageStep``
-    and ``PhaseStep``. Strictness applies ONLY to ``workflow.stages`` names;
-    dangling ``extend.<name>.before/.after`` refs keep their existing
-    WARNING+skip behavior.
+    and ``PhaseStep``. Strictness over ``extend.<name>.before/.after`` refs is
+    enforced separately by ``_strict_validate_extend_refs`` (step 4a0-pre),
+    which runs before the 4a0 embed and before this pass.
 
     Args:
         steps: The working step sequence after 4a0 (deep-copied ORIGINAL +
@@ -930,6 +974,8 @@ def _reconstruct_body(
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
     ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
+    (4a0-pre) strictly validate every ``workflow.extend.<name>.before/.after``
+    ref against the full name set (a dangling ref is a ``StructuralError``);
     (4a0) embed ``workflow.extend`` stages; (4pre) strictly validate every
     ``workflow.stages`` name against the full name set (an unknown name is a
     ``StructuralError``); (4skip) remove skipped stages and transparently
@@ -939,13 +985,16 @@ def _reconstruct_body(
     overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
     depends_on rewrite (STAGES only); the result (4d) is the reconstructed step
     list consumed for ``FlowStage`` assembly. The mandatory
-    ``4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c`` ordering
-    is load-bearing: extend-stages must be in ``steps`` before strict validation
-    (so an extend-embedded name is a valid ``workflow.stages`` target) and before
-    the effective map is resolved (so their inline ``agent``/``loop`` seed the
-    default override); skip removal runs before ``4a`` so a skipped stage's
-    overrides are never applied ("skip wins"); the empty-body guard runs once on
-    the working copy, format-agnostic, before any assembly.
+    ``4a0-pre → 4a0 → 4pre → 4skip → empty-body guard → effective → 4a → 4b → 4c``
+    ordering is load-bearing: extend-ref validation runs before the 4a0 embed
+    (extend names come from ``workflow.extend`` keys, so cross-references between
+    extend-stages resolve without embedding); extend-stages must be in ``steps``
+    before strict validation (so an extend-embedded name is a valid
+    ``workflow.stages`` target) and before the effective map is resolved (so
+    their inline ``agent``/``loop`` seed the default override); skip removal runs
+    before ``4a`` so a skipped stage's overrides are never applied ("skip wins");
+    the empty-body guard runs once on the working copy, format-agnostic, before
+    any assembly.
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -956,10 +1005,13 @@ def _reconstruct_body(
         The reconstructed step sequence (PHASES or STAGES steps).
 
     Raises:
-        StructuralError: When a ``workflow.stages`` name matches no step name
-            (4pre) or when every step is skipped (post-4skip empty-body guard).
+        StructuralError: When a ``workflow.extend.<name>.before/.after`` ref
+            matches no step name (4a1), when a ``workflow.stages`` name matches
+            no step name (4pre), or when every step is skipped (post-4skip
+            empty-body guard).
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
+    _strict_validate_extend_refs(steps, workflow)
     _embed_extend_stages(steps, workflow, fmt)
     _strict_validate_stage_names(steps, workflow)
     _remove_skipped_stages(steps, workflow, fmt)

@@ -37,7 +37,7 @@ import yaml
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
-from goga.pipeline.compiler import compile_flow
+from goga.pipeline.compiler import StructuralError, compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
 # The reference fixtures live under tests/integration/fixtures/ — authored
@@ -400,12 +400,13 @@ class TestExtendDirectiveEndToEnd:
         # The extend-stage is embedded only in the compiled FlowDocument.stages.
         assert [stage.id for stage in flow_doc.stages] == ["propose", "review", "extra"]
 
-    def test_stages_extend_dangling_after_ref_surfaced_verbatim(self, tmp_path: Path) -> None:
-        """A dangling STAGES extend ``after`` ref reaches the flow-file verbatim.
+    def test_stages_extend_dangling_after_ref_rejected_at_compile(self, tmp_path: Path) -> None:
+        """A dangling STAGES extend ``after`` ref is rejected at compile time.
 
         A workflow-file ``extend: {x: {after: [ghost], title: X}}`` (ghost unknown)
-        yields a flow-file where ``x`` depends on ``ghost`` — the dangling ref is
-        surfaced for afm to reject, with no crash and no drop in the compiler.
+        raises a ``StructuralError`` from ``compile_flow`` — strict validation
+        (4a0-pre) rejects the dangling ref up front; it no longer reaches the
+        flow-file verbatim. End-to-end: ``parse_workflow`` → ``compile_flow``.
         """
         pipeline_path = _write_stages_pipeline(tmp_path)
         workflow_path = _write_workflow(
@@ -415,11 +416,11 @@ class TestExtendDirectiveEndToEnd:
         flow_path = tmp_path / "flow.yml"
 
         workflow = parse_workflow(workflow_path)
-        compile_flow(pipeline_path, flow_path, workflow=workflow)
-
-        stages = yaml.safe_load(flow_path.read_text())["stages"]
-        x = _stage_by_id(stages, "x")
-        assert x["depends_on"] == ["ghost"]
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.extend\.x\.after: ghost",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
 
 
 # --- Item 3 — full CLI invocation -> launcher workflow layer + env-file ---

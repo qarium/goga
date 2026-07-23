@@ -592,11 +592,12 @@ class TestCompileFlowExtendStages:
         assert propose["depends_on"] == ["warmup"]
         assert "depends_on" not in warmup
 
-    def test_compile_flow_stages_extend_after_dangling_kept_verbatim(self, tmp_path: Path) -> None:
-        """STAGES extend ``after`` with a dangling ref keeps it verbatim (no WARNING).
+    def test_compile_flow_stages_extend_after_dangling_raises(self, tmp_path: Path) -> None:
+        """STAGES extend ``after`` with a dangling ref raises StructuralError (4a0-pre).
 
-        Symmetric with step 4c: a dangling after-ref lands in depends_on and is
-        left for afm to surface — not dropped or warned about.
+        A dangling after-ref naming no stage in the body (and no extend-stage)
+        is rejected up front by strict validation — it no longer reaches the
+        flow-file verbatim. Mirrors the workflow.stages strict-validation error.
         """
         pipeline_path = _write_stages_propose_review(tmp_path)
         flow_path = tmp_path / "flow.yml"
@@ -604,24 +605,19 @@ class TestCompileFlowExtendStages:
             extend={"x": WorkflowExtendStage(after=["ghost"], body={"title": "X"})},
         )
 
-        compile_flow(pipeline_path, flow_path, workflow=workflow)
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.extend\.x\.after: ghost",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
 
-        stages = yaml.safe_load(flow_path.read_text())["stages"]
-        x = next(s for s in stages if s["id"] == "x")
-        assert x["depends_on"] == ["ghost"]
-
-    def test_compile_flow_stages_extend_before_dangling_warns(
-        self,
-        tmp_path: Path,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """STAGES extend ``before`` with a dangling ref warns and skips that ref.
+    def test_compile_flow_stages_extend_before_dangling_raises(self, tmp_path: Path) -> None:
+        """STAGES extend ``before`` with a dangling ref raises StructuralError (4a0-pre).
 
         propose→review with ``extend={x: before=[ghost]}`` (ghost unknown): the
-        before-ref names no step, so it is skipped with a WARNING. This pins the
-        documented asymmetry with the after-direction — a dangling ``after`` is
-        kept verbatim with NO warning (tested above), while a dangling ``before``
-        warns. x is still emitted with no depends_on (no after, before skipped).
+        before-ref names no stage, so strict validation rejects it — it is no
+        longer skipped with a WARNING. Symmetric with the after-direction (both
+        dangling directions now error).
         """
         pipeline_path = _write_stages_propose_review(tmp_path)
         flow_path = tmp_path / "flow.yml"
@@ -629,13 +625,61 @@ class TestCompileFlowExtendStages:
             extend={"x": WorkflowExtendStage(before=["ghost"], body={"title": "X"})},
         )
 
-        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.extend\.x\.before: ghost",
+        ):
             compile_flow(pipeline_path, flow_path, workflow=workflow)
 
+    def test_compile_flow_stages_extend_cross_reference_resolved(self, tmp_path: Path) -> None:
+        """STAGES cross-references between extend-stages resolve (4a0-pre allows them).
+
+        propose→review with ``extend={first: after=[review], second: after=[first]}``:
+        ``second``'s after-ref names the extend-stage ``first`` — a valid target
+        (extend names are in the valid-name set). Compiles to
+        [propose, review, first, second]; first depends on review; second on first.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "first": WorkflowExtendStage(after=["review"], body={"title": "First"}),
+                "second": WorkflowExtendStage(after=["first"], body={"title": "Second"}),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
         stages = yaml.safe_load(flow_path.read_text())["stages"]
+        first = next(s for s in stages if s["id"] == "first")
+        second = next(s for s in stages if s["id"] == "second")
+        assert first["depends_on"] == ["review"]
+        assert second["depends_on"] == ["first"]
+
+    def test_compile_flow_stages_extend_before_after_to_skipped_stage_valid(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A before/after ref to a skip:true stage is valid (it exists at 4a0-pre).
+
+        propose→review with ``stages={review: skip=True}`` and
+        ``extend={x: after=[review]}``: review still exists at validation time
+        (removed later at 4skip), so the after-ref is NOT flagged as dangling —
+        x compiles, then 4skip reconnects x to review's predecessors.
+        """
+        pipeline_path = _write_stages_propose_review(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"review": WorkflowStage(skip=True)},
+            extend={"x": WorkflowExtendStage(after=["review"], body={"title": "X"})},
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["propose", "x"]
         x = next(s for s in stages if s["id"] == "x")
-        assert "depends_on" not in x
-        assert any("not found" in record.getMessage() for record in caplog.records)
+        assert x["depends_on"] == ["propose"]
 
     def test_compile_flow_stages_extend_preserves_existing_depends_on(self, tmp_path: Path) -> None:
         """STAGES extend ``before`` appends without clobbering an existing depends_on.
@@ -948,16 +992,13 @@ class TestCompileFlowExtendPhases:
         assert x["depends_on"] == ["c"]
         assert any("inconsistent" in r.getMessage() for r in caplog.records)
 
-    def test_compile_flow_phases_extend_all_dangling_appends_end(
-        self,
-        tmp_path: Path,
-        caplog: pytest.LogCaptureFixture,
-    ) -> None:
-        """PHASES extend with ALL targets dangling appends at the end with a WARNING.
+    def test_compile_flow_phases_extend_all_dangling_raises(self, tmp_path: Path) -> None:
+        """PHASES extend with a dangling target raises StructuralError (4a0-pre).
 
-        [a, b] with ``extend={x: after=[ghost]}`` (ghost unknown): x has no
-        resolvable position → appended at end → [a, b, x]; x depends on b by
-        position; a WARNING is logged.
+        [a, b] with ``extend={x: after=[ghost]}`` (ghost unknown): strict
+        validation rejects the dangling after-ref up front — x is no longer
+        appended at the end with a WARNING. The direction (before/after) is
+        reported in the message.
         """
         pipeline_path = _write_phases_three_step(tmp_path)
         # Use a two-step pipeline by overwriting with [a, b].
@@ -969,14 +1010,11 @@ class TestCompileFlowExtendPhases:
             extend={"x": WorkflowExtendStage(after=["ghost"], body={"title": "X"})},
         )
 
-        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.extend\.x\.after: ghost",
+        ):
             compile_flow(pipeline_path, flow_path, workflow=workflow)
-
-        stages = yaml.safe_load(flow_path.read_text())["stages"]
-        assert _ids(stages) == ["a", "b", "x"]
-        x = next(s for s in stages if s["id"] == "x")
-        assert x["depends_on"] == ["b"]
-        assert any("no resolvable position" in r.getMessage() for r in caplog.records)
 
     def test_compile_flow_phases_extend_loop_expansion_chains_copies(self, tmp_path: Path) -> None:
         """PHASES extend combined with loop-expansion chains copies in place.
