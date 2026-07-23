@@ -2,7 +2,7 @@ name: GogaAnalyze
 description: Analyze project
 ---
 
-- name: conventions
+- name: compliance-convention
   title: Find drift between conventions and source and fix it
   interactive: true
   roles:
@@ -22,8 +22,9 @@ description: Analyze project
     Constraints:
     - Do not decide on the default branch when it is ambiguous (main, master, etc...)
     - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
+    - Do not run lint/format/tests, only fix apply fixes
 
-- name: lint-and-tests
+- name: testing-changes
   title: Check and fix lint/format/tests
   interactive: true
   roles:
