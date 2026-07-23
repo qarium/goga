@@ -46,6 +46,11 @@ class TestWorkflowStageContract:
         assert hasattr(stage, "skills")
         assert stage.skills == ["web-search"]
 
+    def test_workflow_stage_has_skip_property(self) -> None:
+        """WorkflowStage exposes a ``skip`` property defaulting to False."""
+        assert hasattr(WorkflowStage(), "skip")
+        assert WorkflowStage(skip=True).skip is True
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -56,10 +61,17 @@ class TestWorkflowStageContract:
         assert stage.skills is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all four fields as keyword-only arguments."""
-        stage = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["web-search", "goga-propose"])
+        """WorkflowStage accepts all five fields as keyword-only arguments."""
+        stage = WorkflowStage(
+            agent="codex",
+            prompt="text",
+            loop=2,
+            skills=["web-search", "goga-propose"],
+            skip=True,
+        )
 
         assert stage.agent == "codex"
         assert stage.prompt == "text"
         assert stage.loop == 2
         assert stage.skills == ["web-search", "goga-propose"]
+        assert stage.skip is True

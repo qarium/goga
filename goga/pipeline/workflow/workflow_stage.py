@@ -11,13 +11,15 @@ The model is intentionally declarative — it holds instructions, never their
 resolution. ``agent`` is the raw agent name (the compiler composes the wrapper
 path); ``prompt`` is verbatim text (the compiler places it in the description
 slot); ``loop`` is a count (the compiler expands it); ``skills`` is a list of
-skill names (the compiler merges them with the stage's pipeline-file skills).
+skill names (the compiler merges them with the stage's pipeline-file skills);
+``skip`` is a bool flag (the compiler deletes the corresponding stage and
+transparently reconnects its dependents' ``depends_on``).
 No validation lives here either: ``parse_workflow`` enforces every invariant
-(key set, field types, ``loop >= 1``) and raises a structural error before this
-dataclass is built.
+(key set, field types, ``loop >= 1``, ``skip`` is a bool) and raises a
+structural error before this dataclass is built.
 
-Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills`` — to match
-the canonical order of the per-stage keys in the workflow-file.
+Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip`` —
+to match the canonical order of the per-stage keys in the workflow-file.
 """
 
 from __future__ import annotations
@@ -29,10 +31,11 @@ from dataclasses import dataclass
 class WorkflowStage:
     """A single per-stage override instruction from a workflow-file.
 
-    All four fields default to ``None`` — a workflow-file may omit any of
-    them, and ``parse_workflow`` produces ``None`` for missing fields. Field
-    order is fixed (``agent``, ``prompt``, ``loop``, ``skills``) to match the
-    canonical order of the per-stage keys in the workflow-file.
+    The four fields ``agent``, ``prompt``, ``loop``, and ``skills`` default to
+    ``None`` — a workflow-file may omit any of them, and ``parse_workflow``
+    produces ``None`` for missing fields; ``skip`` defaults to ``False``. Field
+    order is fixed (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``) to
+    match the canonical order of the per-stage keys in the workflow-file.
 
     Args:
         agent: Agent name consumed by the compiler to compose the per-stage
@@ -44,9 +47,16 @@ class WorkflowStage:
         skills: List of skill names the compiler merges with the stage's
             pipeline-file skills (pipeline first, then these, deduplicated by
             value), or ``None`` when not specified (no merge).
+        skip: Bool flag instructing the compiler to DELETE the corresponding
+            stage entirely and transparently reconnect its dependents'
+            ``depends_on``. ``False`` (the default, the key absent, or
+            ``skip: false``) means the stage is NOT skipped; ``True``
+            (``skip: true``) means the compiler removes it. Defaults to
+            ``False`` — for ``skip`` absence is equivalent to ``False``.
     """
 
     agent: str | None = None
     prompt: str | None = None
     loop: int | None = None
     skills: list[str] | None = None
+    skip: bool = False

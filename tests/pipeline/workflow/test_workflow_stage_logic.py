@@ -8,6 +8,8 @@ round-trip unchanged).
 
 from __future__ import annotations
 
+from dataclasses import fields
+
 from goga.pipeline.workflow import WorkflowStage
 
 
@@ -104,3 +106,37 @@ class TestWorkflowStageLogic:
         second = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["a"])
 
         assert first == second
+
+    def test_workflow_stage_skip_defaults_false(self) -> None:
+        """skip defaults to False and is read back as a genuine bool."""
+        assert WorkflowStage().skip is False
+        assert WorkflowStage(agent="codex").skip is False
+        assert WorkflowStage(skip=True).skip is True
+
+    def test_skip_field_order_fifth(self) -> None:
+        """skip is the 5th and final field, after agent/prompt/loop/skills."""
+        names = [field.name for field in fields(WorkflowStage)]
+
+        assert names == ["agent", "prompt", "loop", "skills", "skip"]
+
+    def test_skip_accepts_true_and_false(self) -> None:
+        """skip=True and skip=False round-trip verbatim."""
+        assert WorkflowStage(skip=True).skip is True
+        assert WorkflowStage(skip=False).skip is False
+
+    def test_skip_in_stage_with_other_fields(self) -> None:
+        """skip coexists with the other fields without interfering."""
+        stage = WorkflowStage(agent="codex", prompt="text", loop=2, skills=["a"], skip=True)
+
+        assert stage.agent == "codex"
+        assert stage.prompt == "text"
+        assert stage.loop == 2
+        assert stage.skills == ["a"]
+        assert stage.skip is True
+
+    def test_all_defaults_construction_yields_skip_false(self) -> None:
+        """The all-None construction still equals the skip-less construction (skip defaults False)."""
+        stage = WorkflowStage()
+
+        assert stage == WorkflowStage(agent=None, prompt=None, loop=None, skills=None)
+        assert stage.skip is False
