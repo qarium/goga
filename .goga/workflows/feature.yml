@@ -15,8 +15,6 @@ stages:
       - Don't write code examples in the task
       - Don't build architecture in the task
       - Don't research project before request task
-  task-review:
-    skip: true
   brainstorm:
     prompt: |
       Architectural design process.
