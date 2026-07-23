@@ -35,8 +35,10 @@ expanded into N chained copies (``NAME-1``..``NAME-N``), and external
 ``depends_on`` references are rewritten to the LAST expanded id. The
 reconstruction operates on a deep copy of the parsed steps — the
 ``PipelineDocument`` returned to the consumer always carries the ORIGINAL parsed
-body, never the reconstructed one. Unknown workflow stage names (names absent
-from the pipeline) are skipped with a ``WARNING`` log line.
+body, never the reconstructed one. Unknown ``workflow.stages`` names (names
+absent from both the ORIGINAL body and every embedded extend-stage) are rejected
+with a ``StructuralError`` BEFORE reconstruction — strict validation; only
+dangling ``extend.<name>.before/.after`` refs keep their ``WARNING``+skip behavior.
 
 I/O exceptions and structural errors from ``parse_dsl`` propagate unchanged. An
 empty body raises ``StructuralError("empty body")`` here — not in ``parse_dsl``,
@@ -752,6 +754,41 @@ def _embed_extend_stages(
         _embed_extend_stages_phases(steps, workflow, known_names)
 
 
+def _strict_validate_stage_names(
+    steps: list[PhaseStep | StageStep],
+    workflow: WorkflowDocument,
+) -> None:
+    """Step 4pre — strictly validate every ``workflow.stages`` name against the body.
+
+    Builds the valid-name set from every step currently in ``steps`` — after the
+    4a0 embed this is the union of the deep-copied ORIGINAL body and every
+    extend-stage embedded at 4a0, so an extend-embedded name is a valid
+    ``workflow.stages`` target.
+    Any ``workflow.stages`` name absent from that set raises a
+    ``StructuralError`` (replacing the former silent WARNING+skip). Runs on the
+    FULL set BEFORE any skip removal, so a genuinely-existing stage that is also
+    skipped is NOT flagged here — it is removed later at 4skip. The check is
+    format-agnostic: ``step.name`` is the identity key for both ``StageStep``
+    and ``PhaseStep``. Strictness applies ONLY to ``workflow.stages`` names;
+    dangling ``extend.<name>.before/.after`` refs keep their existing
+    WARNING+skip behavior.
+
+    Args:
+        steps: The working step sequence after 4a0 (deep-copied ORIGINAL +
+            embedded extend-stages).
+        workflow: The declarative workflow instructions (source of the
+            ``workflow.stages`` names to validate).
+
+    Raises:
+        StructuralError: When a ``workflow.stages`` name matches no step name in
+            ``steps``.
+    """
+    valid_names = {step.name for step in steps}
+    for name in workflow.stages:
+        if name not in valid_names:
+            raise StructuralError(f"unknown stage name in workflow.stages: {name}")
+
+
 def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
@@ -761,15 +798,19 @@ def _reconstruct_body(
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
     ``PipelineDocument``) is never mutated, then runs the CODEMANIFEST algorithm:
-    (4a0) embed ``workflow.extend`` stages; (4pre) resolve the effective
-    per-stage override map ONCE (inline extend → stages overlay); (4a) per-stage
-    overrides; (4b) loop-expansion with the expanded-ids map; (4c) external
-    depends_on rewrite (STAGES only); the result (4d) is the reconstructed step
-    list consumed for ``FlowStage`` assembly. The 4a0 → 4pre → 4a → 4b → 4c
-    ordering is mandatory: extend-stages must be in ``steps`` before the effective
-    map is resolved (so their inline ``agent``/``loop`` seed the default
-    override), and before overrides, loops, and external-ref rewrites run — the
-    generic machine treats them by the common rules.
+    (4a0) embed ``workflow.extend`` stages; (4pre) strictly validate every
+    ``workflow.stages`` name against the full name set (an unknown name is a
+    ``StructuralError``); resolve the effective per-stage override map ONCE
+    (inline extend → stages overlay); (4a) per-stage overrides; (4b)
+    loop-expansion with the expanded-ids map; (4c) external depends_on rewrite
+    (STAGES only); the result (4d) is the reconstructed step list consumed for
+    ``FlowStage`` assembly. The interim 4a0 → 4pre → effective → 4a → 4b → 4c
+    ordering is mandatory: extend-stages must be in ``steps`` before strict
+    validation (so an extend-embedded name is a valid ``workflow.stages`` target)
+    and before the effective map is resolved (so their inline ``agent``/``loop``
+    seed the default override), and all of this before overrides, loops, and
+    external-ref rewrites run — the generic machine treats them by the common
+    rules.
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -781,6 +822,7 @@ def _reconstruct_body(
     """
     steps: list[PhaseStep | StageStep] = [copy.deepcopy(step) for step in body.steps]
     _embed_extend_stages(steps, workflow, fmt)
+    _strict_validate_stage_names(steps, workflow)
     effective = _effective_overrides(workflow)
     _apply_per_stage_overrides(steps, effective)
     expanded, expanded_ids = _expand_loops(steps, fmt, effective)

@@ -138,6 +138,24 @@ class TestCompileFlowContract:
         assert "_canonical_fields" not in facade_all
         assert "_CANONICAL_KEY_ORDER" not in facade_all
 
+    def test_compile_flow_and_structural_error_importable_from_facade(self) -> None:
+        """``compile_flow`` and ``StructuralError`` are both importable from the facade.
+
+        Step 4pre strict-validation raises ``StructuralError`` from ``compile_flow``;
+        both names must be present on the compiler facade (no new export needed).
+        """
+        from goga.pipeline.compiler import StructuralError as facade_error
+        from goga.pipeline.compiler import compile_flow as facade_compile_flow
+
+        assert facade_compile_flow is compile_flow
+        assert facade_error is StructuralError
+
+    def test_strict_validate_stage_names_helper_exists(self) -> None:
+        """The ``_strict_validate_stage_names`` reconstruction helper (step 4pre) exists."""
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        assert callable(_strict_validate_stage_names)
+
 
 class TestCompileFlowLogic:
     """Behavioral tests against the documented algorithm and edge cases."""

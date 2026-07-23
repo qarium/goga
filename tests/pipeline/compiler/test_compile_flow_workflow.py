@@ -22,7 +22,10 @@ import pytest
 import yaml
 from goga.pipeline.compiler import (
     FlowDocument,
+    PhaseStep,
     PipelineDocument,
+    StageStep,
+    StructuralError,
     compile_flow,
 )
 from goga.pipeline.workflow import WorkflowDocument, WorkflowExtendStage, WorkflowStage
@@ -214,12 +217,17 @@ class TestCompileFlowWorkflowEdgeCases:
         assert "name: N" in text
         assert "description: D" in text
 
-    def test_compile_flow_workflow_unknown_stage_warns_and_skips(
+    def test_compile_flow_workflow_unknown_stage_raises_structural_error(
         self,
         tmp_path: Path,
-        caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """An unknown workflow stage name warns and is skipped; known stages still apply."""
+        """An unknown workflow stage name now raises StructuralError (4pre strict validation).
+
+        The PHASES input carries a ``stages={"missing-stage": ...}`` entry whose
+        name matches no pipeline step → ``StructuralError("unknown stage name in
+        workflow.stages: missing-stage")`` BEFORE reconstruction. The STAGES
+        variant is covered by ``test_compile_flow_rejects_unknown_workflow_stages_name``.
+        """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
             "name: T\ndescription: T\n---\n\n- name: propose\n  title: Propose\n- name: other\n  title: Other\n",
@@ -232,17 +240,11 @@ class TestCompileFlowWorkflowEdgeCases:
             },
         )
 
-        with caplog.at_level(logging.WARNING, logger="goga.pipeline.compiler.compile_flow"):
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.stages: missing-stage",
+        ):
             compile_flow(pipeline_path, flow_path, workflow=workflow)
-
-        # The unknown name appears in a WARNING record.
-        assert any("missing-stage" in record.getMessage() for record in caplog.records)
-        # The known stage still receives the override.
-        flow_doc_stages = yaml.safe_load(flow_path.read_text())["stages"]
-        propose = next(stage for stage in flow_doc_stages if stage["id"] == "propose")
-        assert propose["command"] == "/home/goga/bin/claude-as-claude.sh"
-        # The unknown stage leaves no command slot on any output stage.
-        assert all("command" not in stage for stage in flow_doc_stages if stage["id"] != "propose")
 
     def test_compile_flow_workflow_top_level_prompt_emitted(self, tmp_path: Path) -> None:
         """A workflow with a top-level prompt emits it as the first flow-file key."""
@@ -1478,3 +1480,142 @@ class TestCompileFlowReconstructionHelpers:
         from goga.pipeline.compiler.compile_flow import _effective_overrides
 
         assert _effective_overrides(WorkflowDocument(prompt="P")) == {}
+
+
+class TestCompileFlowStrictValidateStageNames:
+    """Step 4pre — strict validation of ``workflow.stages`` names.
+
+    Every ``workflow.stages`` name must exist in the full name set (original
+    plus embedded extend) before any skip removal; an unknown name is a
+    ``StructuralError`` (replacing the former silent WARNING+skip). Format-
+    agnostic — ``step.name`` is the identity key for both ``StageStep`` and
+    ``PhaseStep``.
+    """
+
+    def test_strict_validate_known_name_passes(self) -> None:
+        """A name present in ``steps`` raises nothing (no-op for valid input)."""
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [StageStep(name="a", title="A", depends_on=None, body={})]
+        workflow = WorkflowDocument(stages={"a": WorkflowStage()})
+
+        _strict_validate_stage_names(steps, workflow)  # no raise
+
+    def test_strict_validate_unknown_name_raises_with_exact_message(self) -> None:
+        """A name absent from ``steps`` raises StructuralError with the exact message."""
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [StageStep(name="a", title="A", depends_on=None, body={})]
+        workflow = WorkflowDocument(stages={"ghost": WorkflowStage()})
+
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.stages: ghost",
+        ):
+            _strict_validate_stage_names(steps, workflow)
+
+    def test_strict_validate_unknown_name_raises_for_phase_step(self) -> None:
+        """4pre is format-agnostic: an unknown name raises for a ``PhaseStep`` body too."""
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [PhaseStep(name="a", title="A", body={})]
+        workflow = WorkflowDocument(stages={"ghost": WorkflowStage()})
+
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.stages: ghost",
+        ):
+            _strict_validate_stage_names(steps, workflow)
+
+    def test_strict_validate_skipped_existing_name_not_flagged(self) -> None:
+        """A name that exists (and is skipped) is NOT flagged — it is in valid_names.
+
+        4pre runs BEFORE skip removal; a genuinely-existing skipped stage stays
+        valid here and is removed later at 4skip.
+        """
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [StageStep(name="a", title="A", depends_on=None, body={})]
+        workflow = WorkflowDocument(stages={"a": WorkflowStage(skip=True)})
+
+        _strict_validate_stage_names(steps, workflow)  # no raise
+
+    def test_strict_validate_empty_stages_is_noop(self) -> None:
+        """An empty ``workflow.stages`` map validates nothing (no raise)."""
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [StageStep(name="a", title="A", depends_on=None, body={})]
+        workflow = WorkflowDocument(prompt="P")  # no stages
+
+        _strict_validate_stage_names(steps, workflow)  # no raise
+
+    def test_strict_validate_extend_embedded_name_passes(self) -> None:
+        """A name embedded by 4a0 extend is valid — it is in ``steps`` after embed.
+
+        Mirrors the contract: 4pre runs AFTER 4a0, so an extend-embedded name is
+        a valid ``workflow.stages`` target (the caller passes the post-embed steps).
+        """
+        from goga.pipeline.compiler.compile_flow import _strict_validate_stage_names
+
+        steps = [
+            StageStep(name="propose", title="Propose", depends_on=None, body={}),
+            StageStep(name="warmup", title="Warmup", depends_on=None, body={}),
+        ]
+        workflow = WorkflowDocument(stages={"warmup": WorkflowStage()})
+
+        _strict_validate_stage_names(steps, workflow)  # no raise
+
+
+class TestCompileFlowStrictValidateEndToEnd:
+    """End-to-end ``compile_flow`` coverage for the 4pre strict-validation pass."""
+
+    def test_compile_flow_rejects_unknown_workflow_stages_name(self, tmp_path: Path) -> None:
+        """STAGES: an unknown ``workflow.stages`` name raises StructuralError.
+
+        The single-step STAGES pipeline names only ``propose``; the workflow
+        targets ``ghost`` (no such step) → ``StructuralError`` before
+        reconstruction, and no flow-file is written.
+        """
+        pipeline_path = _write_stages_single(tmp_path, "propose")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"ghost": WorkflowStage(skip=False)})
+
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.stages: ghost",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert not flow_path.exists()
+
+    def test_compile_flow_rejects_unknown_workflow_stages_name_phases(self, tmp_path: Path) -> None:
+        """PHASES: 4pre is format-agnostic — an unknown name raises StructuralError."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\n- name: a\n  title: A\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"ghost": WorkflowStage(skip=False)})
+
+        with pytest.raises(
+            StructuralError,
+            match=r"unknown stage name in workflow\.stages: ghost",
+        ):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+    def test_compile_flow_unknown_name_with_extend_set_valid(self, tmp_path: Path) -> None:
+        """STAGES: an extend-embedded name is valid at 4pre — NOT flagged — and its override applies.
+
+        ``propose`` pipeline + ``extend.warmup`` + ``stages.warmup: {agent: codex}``:
+        the extend-embedded ``warmup`` is in ``steps`` after 4a0, so 4pre does NOT
+        flag it, and the per-stage override still applies (the composed command).
+        """
+        pipeline_path = _write_stages_single(tmp_path, "propose")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"warmup": WorkflowStage(agent="codex")},
+            extend={"warmup": WorkflowExtendStage(after=["propose"], body={"title": "Warmup"})},
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        warmup = next(stage for stage in flow_doc.stages if stage.id == "warmup")
+        assert warmup.fields["command"] == "/home/goga/bin/codex-as-claude.sh"
