@@ -75,7 +75,7 @@ description: "Feature implementation"
   skills:
     - goga-review-plan
 
-- name: commit-changes
+- name: commit-architecture
   title: "Commit changes and wait for the coding plan was built"
   interactive: true
   prompt: |
