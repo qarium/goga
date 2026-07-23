@@ -852,7 +852,10 @@ def _reconnect_stages_depends_on(
     preserving first-occurrence order; a fully-collapsed list is written as an
     explicit empty ``[]`` — distinct from ``None`` (which means "write no
     depends_on key"). Skipped steps themselves are left untouched here (the caller
-    removes them).
+    removes them). A resolved reference back to the step itself is dropped — a
+    surviving step never legitimately depends on itself, and such a reference is
+    reachable only from already-cyclic input (the skipped stage also depends on this
+    survivor); cycle detection otherwise stays afm's concern.
 
     Args:
         steps: The working STAGES step sequence, mutated in place. Skipped steps
@@ -873,7 +876,7 @@ def _reconnect_stages_depends_on(
                 else [ref]
             )
             for resolved_ref in resolved:
-                if resolved_ref not in seen:
+                if resolved_ref != step.name and resolved_ref not in seen:
                     seen.add(resolved_ref)
                     rewritten.append(resolved_ref)
         step.depends_on = rewritten

@@ -27,4 +27,8 @@ class TestCompileFlowSkipContract:
         facade.
         """
         assert BodyFormat is not None
-        assert {BodyFormat.STAGES, BodyFormat.PHASES} == {BodyFormat.STAGES, BodyFormat.PHASES}
+        # The 4skip pass dispatches on the two-body-format universe; pin that
+        # STAGES/PHASES are exactly the members (and distinct), not just that a
+        # set literal equals itself.
+        assert {BodyFormat.STAGES, BodyFormat.PHASES} == set(BodyFormat)
+        assert BodyFormat.STAGES is not BodyFormat.PHASES

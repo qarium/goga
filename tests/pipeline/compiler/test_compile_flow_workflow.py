@@ -2005,6 +2005,42 @@ class TestCompileFlowSkipRemovalStages:
         c = next(s for s in stages if s["id"] == "c")
         assert c["depends_on"] == []
 
+    def test_compile_flow_stages_skip_drops_self_reference_from_cyclic_input(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """A skipped stage that 2-cycles with a survivor yields no self-dependency.
+
+        s→x and x→s is already-cyclic input (afm rejects it regardless). Skipping
+        x reconnects s's x-ref through x back to s itself — the reconnection must
+        DROP that self-reference (a surviving stage never legitimately depends on
+        itself) rather than write a ``depends_on: [s]`` self-loop.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: T\n"
+            "---\n"
+            "\n"
+            "s:\n"
+            "  title: S\n"
+            "  depends_on: [x]\n"
+            "x:\n"
+            "  title: X\n"
+            "  depends_on: [s]\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"x": WorkflowStage(skip=True)})
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["s"]
+        s = next(st for st in stages if st["id"] == "s")
+        # The self-reference (reconnecting s's x-ref through x back to s) is
+        # dropped → explicit empty, not a self-loop.
+        assert s["depends_on"] == []
+
     def test_compile_flow_stages_dangling_after_ref_after_skip_preserved(
         self,
         tmp_path: Path,
@@ -2175,6 +2211,31 @@ class TestCompileFlowSkipSemantics:
 
         assert not flow_path.exists()
 
+    def test_compile_flow_phases_rejects_empty_body_after_skip_all(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """PHASES [A, B, C, D], skip ALL → StructuralError("empty body") from the guard.
+
+        The post-4skip empty-body guard is format-agnostic: it must also fire on
+        the PHASES branch (positional drop), not only the STAGES reconnect branch.
+        """
+        pipeline_path = _write_phases_four_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(skip=True),
+                "b": WorkflowStage(skip=True),
+                "c": WorkflowStage(skip=True),
+                "d": WorkflowStage(skip=True),
+            },
+        )
+
+        with pytest.raises(StructuralError, match="empty body"):
+            compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert not flow_path.exists()
+
 
 class TestCompileFlowSkipLoopExpansionInteraction:
     """Skip removal runs BEFORE 4b loop-expansion — no stray copies of a skipped stage."""
@@ -2201,3 +2262,35 @@ class TestCompileFlowSkipLoopExpansionInteraction:
         # No stray c / c-N copies; b-1 inherits b's dep on a; b-2 chains to b-1.
         assert stages[1]["depends_on"] == ["a"]
         assert stages[2]["depends_on"] == ["b-1"]
+
+    def test_skip_reconnects_through_skipped_to_loop_expanded_target(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """STAGES A→B→C→D, skip C + ``b.loop: 2`` → [a, b-1, b-2, d], d→[b-2].
+
+        A SURVIVING stage (D) reconnects THROUGH a skipped stage (C) to a target
+        (B) that is then loop-expanded: 4skip rewrites D's C-ref to B, then 4b
+        expands B into b-1/b-2, then 4c rewrites the reconnected B-ref to the
+        last expanded id b-2. Covers the cross-feature interaction the leaf-skip
+        test above does not (C there is a leaf nothing depends on).
+        """
+        pipeline_path = _write_stages_four_step(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={
+                "b": WorkflowStage(loop=2),
+                "c": WorkflowStage(skip=True),
+            },
+        )
+
+        compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        stages = yaml.safe_load(flow_path.read_text())["stages"]
+        assert _ids(stages) == ["a", "b-1", "b-2", "d"]
+        assert stages[1]["depends_on"] == ["a"]
+        assert stages[2]["depends_on"] == ["b-1"]
+        d = next(s for s in stages if s["id"] == "d")
+        # D's authored dep on C reconnects to B (4skip), then 4c rewrites it to
+        # the last loop-expanded copy b-2.
+        assert d["depends_on"] == ["b-2"]

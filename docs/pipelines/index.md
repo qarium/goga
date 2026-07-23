@@ -33,7 +33,7 @@ The pipelines layer is split into two authoring surfaces:
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
-  prompt overrides, loop expansion, and new stages declared via `extend`.
+  prompt overrides, loop expansion, stage skipping via `skip`, and new stages declared via `extend`.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -71,7 +71,7 @@ When a workflow is in scope, the compiler reconstructs the parsed body
 **before** building the output stages: `extend` entries inject new stages
 positioned via `before`/`after`, per-stage `agent` overrides choose which
 CLI agent runs the stage, per-stage `prompt` overrides layer additional
-context alongside the stage's own prompt, and `loop: N` expands the stage
+context alongside the stage's own prompt, `skip: true` removes the stage and reconnects its dependents' `depends_on`, and `loop: N` expands the stage
 into N chained copies. See [Workflows](workflows.md) for the full
 semantics.
 
