@@ -353,6 +353,7 @@ def _apply_per_stage_overrides(
             ``_effective_overrides``), keyed by stage name.
     """
     steps_by_name = {step.name: step for step in steps}
+
     for name, stage in effective.items():
         step = steps_by_name.get(name)
         if step is None:
@@ -396,8 +397,10 @@ def _make_expanded_copy(
         A new step instance for the expanded copy.
     """
     body = copy.deepcopy(step.body)
+
     if fmt is BodyFormat.PHASES:
         return PhaseStep(name=new_id, title=step.title, body=body)
+
     # STAGES: first copy inherits the original external depends_on (rewritten in
     # 5c); later copies chain to the previous copy by id.
     if index == 1:
@@ -409,6 +412,7 @@ def _make_expanded_copy(
         depends_on = copy.deepcopy(step.depends_on)
     else:
         depends_on = [f"{step.name}-{index - 1}"]
+
     return StageStep(name=new_id, title=step.title, depends_on=depends_on, body=body)
 
 
@@ -440,19 +444,25 @@ def _expand_loops(
     """
     expanded: list[PhaseStep | StageStep] = []
     expanded_ids: dict[str, list[str]] = {}
+
     for step in steps:
         loop_count = 1
         eff = effective.get(step.name)
+
         if eff is not None and eff.loop is not None:
             loop_count = eff.loop
         if loop_count < _LOOP_EXPANSION_THRESHOLD:
             expanded.append(step)
             expanded_ids[step.name] = [step.name]
             continue
+
         ids = [f"{step.name}-{i}" for i in range(1, loop_count + 1)]
+
         for index, new_id in enumerate(ids, start=1):
             expanded.append(_make_expanded_copy(step, new_id, index, fmt))
+
         expanded_ids[step.name] = ids
+
     return expanded, expanded_ids
 
 
@@ -475,13 +485,17 @@ def _rewrite_external_depends_on(
     for step in steps:
         if step.depends_on is None:
             continue
+
         rewritten: list[str] = []
+
         for ref in step.depends_on:
             produced = expanded_ids.get(ref)
+
             if produced is not None and len(produced) >= _LOOP_EXPANSION_THRESHOLD:
                 rewritten.append(produced[-1])
             else:
                 rewritten.append(ref)
+
         step.depends_on = rewritten
 
 
@@ -553,17 +567,20 @@ def _embed_extend_stages_stages(
         steps.append(
             StageStep(name=name, title=title, depends_on=depends_on, body=body_for_step),
         )
+
     by_name = {step.name: step for step in steps}
 
     for name, ext in workflow.extend.items():
         for bname in ext.before or []:
             target = by_name.get(bname)
+
             if target is None:
                 logger.warning(
                     "compile_flow: extend before ref not found; skipping",
                     extra={"extend_stage": name, "before_ref": bname},
                 )
                 continue
+
             if target.depends_on is None:
                 target.depends_on = []
             if name not in target.depends_on:
@@ -610,6 +627,7 @@ def _resolve_phases_insert_index(
         return after_index, False
     if before_index is not None:
         return before_index, True
+
     logger.warning(
         "compile_flow: extend has no resolvable position; appending at end",
         extra={"extend_stage": name},
@@ -686,7 +704,9 @@ def _embed_extend_stages_phases(
             title, body_for_step = _extend_step_title_and_body(name, ext)
             steps.insert(idx, PhaseStep(name=name, title=title, body=body_for_step))
             progress = True
+
         pending = next_pending
+
         if not progress:
             for name, ext in pending:
                 logger.warning(
@@ -723,6 +743,7 @@ def _embed_extend_stages(
     """
     if not workflow.extend:
         return
+
     known_names = {step.name for step in steps} | set(workflow.extend)
 
     if fmt is BodyFormat.STAGES:
@@ -763,8 +784,10 @@ def _reconstruct_body(
     effective = _effective_overrides(workflow)
     _apply_per_stage_overrides(steps, effective)
     expanded, expanded_ids = _expand_loops(steps, fmt, effective)
+
     if fmt is BodyFormat.STAGES:
         _rewrite_external_depends_on(expanded, expanded_ids)
+
     return expanded
 
 
@@ -864,6 +887,7 @@ def compile_flow(
     reconstructed = _reconstruct_body(fmt, body, workflow) if workflow is not None else list(body.steps)
 
     stages: list[FlowStage] = []
+
     if fmt is BodyFormat.PHASES:
         for i, step in enumerate(reconstructed):
             depends_on = [reconstructed[i - 1].name] if i > 0 else None
@@ -900,4 +924,5 @@ def compile_flow(
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)
     text_out = serialize_flow(doc)
     flow_path.write_text(text_out)
+
     return (pipeline_doc, doc)

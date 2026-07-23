@@ -111,10 +111,12 @@ def serialize_flow(doc: FlowDocument) -> str:
         The canonical afm flow-file content as a string.
     """
     top: dict[str, object] = {}
+
     if doc.prompt is not None:
         top["prompt"] = _BlockLiteralPrompt(doc.prompt)
     if doc.root_dir is not None:
         top["root_dir"] = doc.root_dir
+
     top["name"] = doc.name
     top["description"] = doc.description
     top["stages"] = [_build_stage_repr(stage) for stage in doc.stages]
