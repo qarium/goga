@@ -1,14 +1,15 @@
 # Shipped Pipelines
 
-Goga ships three pipeline-files inside the installed package at
-`goga/assets/pipelines/`. They cover the three most common authoring
+Goga ships four pipeline-files inside the installed package at
+`goga/assets/pipelines/`. They cover the most common authoring
 lifecycles and can be used as templates for project-specific pipelines.
 
-| Pipeline  | Purpose                                                |
-|-----------|--------------------------------------------------------|
-| `feature` | End-to-end feature implementation lifecycle            |
-| `bugfix`  | Root-cause analysis and resolution for a defect        |
-| `patch`   | Refactoring or minimal change with a formalized plan   |
+| Pipeline | Purpose                                                |
+|----------|--------------------------------------------------------|
+| `feature` | End-to-end feature implementation lifecycle           |
+| `bugfix`  | Root-cause analysis and resolution for a defect       |
+| `patch`   | Refactoring or minimal change with a formalized plan  |
+| `review`  | Convention drift detection and lint/format/tests pass |
 
 ## How pipelines get installed
 
@@ -70,12 +71,12 @@ formulation through acceptance:
 
 ```
 propose → task-review → brainstorm → architecture-review → apply →
-design → design-review → plan → plan-review → commit-changes → accept
+design → design-review → plan → plan-review → commit-architecture → accept
 ```
 
 The `propose`, `brainstorm`, `design`, and `plan` stages emit documents
 named after the current git branch; the `*-review` stages validate them;
-`commit-changes` waits for user confirmation before acceptance runs.
+`commit-architecture` waits for user confirmation before acceptance runs.
 
 ## `bugfix`
 
@@ -99,13 +100,38 @@ ad-hoc → commit-changes → accept
 `ad-hoc` runs the `goga-change` skill for task formalization, plan, and
 implementation in one stage.
 
+## `review`
+
+Project analysis against conventions. Three stages:
+
+```
+compliance-convention → testing-changes → commit-changes
+```
+
+`compliance-convention` reads `.goga/usages/conventions.md`, scans the
+change scope (the diff against the default branch, or a user-selected
+scope), and fixes only the convention drift the user confirms. It
+deliberately does not run lint, format, or tests — those are the job of
+the next stage. `testing-changes` runs lint, format, and tests per the
+same convention file and fixes every error so the branch stays green on
+CI. `commit-changes` then commits the accumulated fixes.
+
+Both `compliance-convention` and `testing-changes` carry explicit
+constraints: the convention stage must not pick a default branch when it
+is ambiguous (main, master, …) and must not fabricate a finding priority
+when it is not obvious; the testing stage must not ignore any error. The
+default branch ambiguity is resolved by asking the user.
+
 ## Shared `commit-changes` stage
 
-All three pipelines share the same `commit-changes` stage. It commits the
-untracked changes accumulated during the previous stages and asks the
-user whether the implementation is built and ready for acceptance. The
-stage is `interactive` and never autoconfirms the user's answer — it
-genuinely waits for explicit confirmation before `accept` runs.
+The `bugfix`, `patch`, and `review` pipelines share the same
+`commit-changes` stage, and `feature` ships a stage named
+`commit-architecture` with the same behavior. Each of these stages
+commits the untracked changes accumulated during the previous stages and,
+in `feature`/`bugfix`, asks the user whether the implementation is built
+and ready for acceptance. The stage is `interactive` and never
+autoconfirms the user's answer — it genuinely waits for explicit
+confirmation before `accept` runs.
 
 The stage explicitly excludes `docs/<tasks|arch|design|plans>` from the
 commit path, so in-flight design artifacts that live outside the source
