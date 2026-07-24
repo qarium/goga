@@ -365,7 +365,7 @@ class TestCompileFlowWorkflowCanonicalOrder:
             "  skills: [goga-propose]\n"
             "  roles: [claude]\n"
             "  prompt: body-prompt\n"
-            "  interactive: true\n",
+            "  communication: true\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"s": WorkflowStage(agent="codex", prompt="ov")})

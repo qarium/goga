@@ -228,7 +228,7 @@ class TestParseWorkflowPositive:
             "    prompt: Run extra checks\n"
             "    skills: [goga-review]\n"
             "    agents: [codex]\n"
-            "    interactive: true\n"
+            "    communication: true\n"
             "    custom:\n"
             "      deep: 1\n"
             "      nested:\n"
@@ -247,7 +247,7 @@ class TestParseWorkflowPositive:
         assert extra.body["prompt"] == "Run extra checks"
         assert extra.body["skills"] == ["goga-review"]
         assert extra.body["agents"] == ["codex"]
-        assert extra.body["interactive"] is True
+        assert extra.body["communication"] is True
         assert extra.body["custom"] == {"deep": 1, "nested": {"leaf": "value"}}
 
     def test_parse_workflow_extend_before_empty_list_passes(self, tmp_path: Path) -> None:

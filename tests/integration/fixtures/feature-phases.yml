@@ -4,7 +4,7 @@ description: "Feature implementation"
 
 - name: propose
   title: "Propose"
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor
@@ -15,7 +15,7 @@ description: "Feature implementation"
 
 - name: propose-review
   title: "Propose Review"
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor
@@ -26,7 +26,7 @@ description: "Feature implementation"
 
 - name: brainstorm
   title: "Architecture Brainstorm"
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor

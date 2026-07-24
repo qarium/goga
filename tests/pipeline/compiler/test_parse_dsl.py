@@ -89,7 +89,7 @@ class TestParseDslLogic:
         # name/title are separate fields; everything else is verbatim body.
         assert "name" not in first.body
         assert "title" not in first.body
-        assert first.body["interactive"] is True
+        assert first.body["communication"] is True
         assert first.body["agents"] == ["planning", "implementation"]
         assert "prompt" in first.body
 

@@ -4,7 +4,7 @@ description: "Feature implementation"
 
 propose:
   title: "Propose"
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor
@@ -15,7 +15,7 @@ propose:
 
 propose-review:
   title: "Propose Review"
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor

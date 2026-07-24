@@ -265,7 +265,7 @@ class TestCompileFlowLogic:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  zebra: 1\n  apple: 2\n  interactive: true\n",
+            "name: T\ndescription: T\n---\n\n- name: a\n  title: A\n  zebra: 1\n  apple: 2\n  communication: true\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -546,3 +546,90 @@ class TestCompileFlowRolesTranslation:
         fields = flow_doc.stages[0].fields
         assert fields["agents"] == ["planning", "custom-thing"]
         assert "roles" not in fields
+
+
+class TestCompileFlowCommunicationTranslation:
+    """The authoring-side ``communication`` stage-body field translates to the output ``interactive`` field.
+
+    Pins the input ``communication`` → output ``interactive`` translation: the
+    authoring key is renamed into the canonical ``interactive`` slot before
+    reordering, and an authoring ``interactive`` key hard-fails with a structural
+    error (the afm output key ``interactive`` is stable — only ``communication``
+    is ever authored). The canonical output key order (``interactive`` first) is
+    unchanged by this rename.
+    """
+
+    def test_canonical_fields_translates_communication_to_interactive(self) -> None:
+        """``_canonical_fields`` renames ``communication`` to the ``interactive`` slot.
+
+        The renamed ``interactive`` lands in its canonical position (first among
+        the known keys); the authoring ``communication`` key never reaches the
+        output. Other keys (e.g. ``prompt``) are preserved.
+        """
+        from goga.pipeline.compiler.compile_flow import _canonical_fields
+
+        result = _canonical_fields({"communication": True, "prompt": "p"})
+
+        # ``interactive`` present (translated), ``communication`` absent.
+        assert result["interactive"] is True
+        assert "communication" not in result
+        # ``interactive`` is the first known canonical key.
+        assert next(iter(result)) == "interactive"
+        # The unrelated ``prompt`` key survives.
+        assert result["prompt"] == "p"
+
+    def test_canonical_fields_rejects_authoring_interactive(self) -> None:
+        """An authoring ``interactive`` key raises StructuralError.
+
+        The authoring-side stage-body field is ``communication``; ``interactive``
+        is the output-only afm field and is forbidden on the input side.
+        """
+        from goga.pipeline.compiler.compile_flow import _canonical_fields
+
+        with pytest.raises(
+            StructuralError,
+            match="interactive key is forbidden in stage body; use communication",
+        ):
+            _canonical_fields({"interactive": True})
+
+    def test_compile_flow_translates_stage_communication_to_output_interactive(self, tmp_path: Path) -> None:
+        """A stage body ``communication: true`` compiles to ``interactive: true``.
+
+        The authoring key is translated into the output ``interactive`` slot, and
+        the authoring ``communication`` key never appears in the compiled flow-file.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  communication: true\n  prompt: do it\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        text = flow_path.read_text()
+        fields = flow_doc.stages[0].fields
+        # Translated into the output ``interactive`` slot.
+        assert fields["interactive"] is True
+        # Canonical ``interactive`` sits first among the known keys.
+        assert next(iter(fields)) == "interactive"
+        # The authoring ``communication`` key never reaches the output.
+        assert "communication" not in fields
+        assert "communication" not in text
+
+    def test_compile_flow_rejects_authoring_interactive_in_stage_body(self, tmp_path: Path) -> None:
+        """An authoring ``interactive`` key in a stage body raises StructuralError.
+
+        Mirrors the legacy ``agents`` rejection: the authoring-side field is
+        ``communication``; ``interactive`` is output-only.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  interactive: true\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match="interactive key is forbidden in stage body; use communication",
+        ):
+            compile_flow(pipeline_path, flow_path)

@@ -6,8 +6,10 @@ the per-format ``depends_on`` rules (PHASES: position-derived; STAGES:
 pass-through), reorders each step body into canonical key order via the internal
 ``_canonical_fields`` helper (translating the authoring-side ``roles`` field into
 the output ``agents`` field via ``translate_role``, injecting the single default
-``agents=["auto"]`` when the source body lacks a usable ``roles`` value, and
-hard-failing on the legacy ``agents`` stage-body key), builds a ``FlowDocument``,
+``agents=["auto"]`` when the source body lacks a usable ``roles`` value,
+translating the authoring-side ``communication`` field into the output
+``interactive`` field, and hard-failing on the legacy ``agents`` and authoring
+``interactive`` stage-body keys), builds a ``FlowDocument``,
 serializes it via ``serialize_flow``, and writes the result to ``flow_path``. It
 performs no environment-variable reads and no subprocess calls — the caller
 supplies both paths explicitly.
@@ -20,7 +22,13 @@ step body has no ``roles`` key, has ``roles: null``, or has ``roles: []``,
 ``_canonical_fields`` injects a single default into the assembled
 ``FlowStage.fields``: ``agents=["auto"]``. A legacy ``agents`` key in a step body
 is rejected with ``StructuralError("agents key is forbidden in stage body; use
-roles")`` — the input-only ``roles`` key never reaches the output. ``auto`` is a
+roles")`` — the input-only ``roles`` key never reaches the output. Symmetrically,
+the authoring-side stage-body field for interactivity is ``communication``; the
+compiled afm output field is ``interactive``. A step body carrying
+``communication`` is translated into the output ``interactive`` slot; an
+authoring ``interactive`` key is rejected with ``StructuralError("interactive key
+is forbidden in stage body; use communication")`` — the afm output key
+``interactive`` is stable, so only ``communication`` is ever authored. ``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
 but they pass through the canonical slot when the source body carries them. The
@@ -208,13 +216,20 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     A legacy ``agents`` key in the step body is rejected up front with
     ``StructuralError("agents key is forbidden in stage body; use roles")`` — the
     authoring-side field is ``roles``; ``agents`` is the output-only afm field.
+    Likewise, an authoring ``interactive`` key is rejected with
+    ``StructuralError("interactive key is forbidden in stage body; use
+    communication")`` — the authoring-side field is ``communication``; ``interactive``
+    is the output-only afm field. The authoring ``communication`` field is then
+    translated into the output ``interactive`` slot (renamed before
+    ``_inject_defaults`` / reordering so the canonical slot is ``interactive``).
     The ``roles`` field is then translated to ``agents`` (or the single default
     ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source body
     lacks a usable ``roles`` value. Known keys (``interactive``, ``command``,
     ``prompt``, ``description``, ``agents``, ``supervisor``,
     ``supervisor_prompt``, ``skills``) are emitted in that fixed order; any
     remaining keys are appended alphabetically. The input-only ``roles`` key
-    never reaches the output (dropped in ``_inject_defaults``).
+    never reaches the output (dropped in ``_inject_defaults``); the input-only
+    ``communication`` key never reaches the output either (renamed to ``interactive``).
     ``supervisor``/``supervisor_prompt`` are authored-only — they appear in the
     output only when the source body carries them. Each value is deep-copied so
     the returned dict shares no structure with the parsed body — isolating the
@@ -228,10 +243,21 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
 
     Raises:
         StructuralError: If ``body`` carries the legacy ``agents`` key — the
-            authoring-side field is ``roles``; ``agents`` is output-only.
+            authoring-side field is ``roles``; ``agents`` is output-only. Or if
+            ``body`` carries an authoring ``interactive`` key — the authoring-side
+            field is ``communication``; ``interactive`` is output-only.
     """
     if "agents" in body:
         raise StructuralError("agents key is forbidden in stage body; use roles")
+    if "interactive" in body:
+        raise StructuralError("interactive key is forbidden in stage body; use communication")
+    if "communication" in body:
+        # Translate the authoring ``communication`` key into the output
+        # ``interactive`` slot BEFORE ``_inject_defaults`` / reordering, so the
+        # canonical slot is ``interactive`` (afm-stable). A fresh dict is built
+        # rather than mutating ``body`` in place — the parsed body is the
+        # caller's, mirrored verbatim into ``PipelineDocument``.
+        body = {("interactive" if key == "communication" else key): value for key, value in body.items()}
     source = _inject_defaults(body)
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:

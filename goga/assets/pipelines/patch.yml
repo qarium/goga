@@ -4,7 +4,7 @@ description: "Refactoring or miniman changes"
 
 - name: ad-hoc
   title: "Formalize the task, make a plan and implement it"
-  interactive: true
+  communication: true
   skills:
     - goga-change
 
@@ -15,6 +15,6 @@ description: "Refactoring or miniman changes"
 
 - name: accept
   title: "Requirements & coverage audit"
-  interactive: true
+  communication: true
   skills:
     - goga-accept

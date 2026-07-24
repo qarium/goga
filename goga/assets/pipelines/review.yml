@@ -4,7 +4,7 @@ description: Review changes
 
 - name: compliance-convention
   title: Find drift between conventions and source and fix it
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor
@@ -26,7 +26,7 @@ description: Review changes
 
 - name: testing-changes
   title: Check and fix lint/format/tests
-  interactive: true
+  communication: true
   roles:
     - planner
     - executor

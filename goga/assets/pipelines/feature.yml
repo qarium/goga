@@ -4,7 +4,7 @@ description: "Feature implementation"
 
 - name: propose
   title: "Create the task from a user propose"
-  interactive: true
+  communication: true
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
@@ -12,7 +12,7 @@ description: "Feature implementation"
 
 - name: task-review
   title: "Review of the created task"
-  interactive: true
+  communication: true
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:
@@ -20,7 +20,7 @@ description: "Feature implementation"
 
 - name: brainstorm
   title: "Task-based architecture development"
-  interactive: true
+  communication: true
   prompt: |
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`
@@ -29,7 +29,7 @@ description: "Feature implementation"
 
 - name: architecture-review
   title: "Review of the created architectural plan"
-  interactive: true
+  communication: true
   prompt: |
     Review the architecture plan `<git branch --show-current>.md`
   skills:
@@ -44,7 +44,7 @@ description: "Feature implementation"
 
 - name: design
   title: "Designing architecture into code"
-  interactive: true
+  communication: true
   prompt: |
     Save the design document as `<git branch --show-current>.md`
   skills:
@@ -52,7 +52,7 @@ description: "Feature implementation"
 
 - name: design-review
   title: "Review of the created design plan"
-  interactive: true
+  communication: true
   prompt: |
     Review the design document `<git branch --show-current>.md`
   skills:
@@ -60,7 +60,7 @@ description: "Feature implementation"
 
 - name: plan
   title: "Create the coding plan"
-  interactive: true
+  communication: true
   prompt: |
     Use the design document `<git branch --show-current>.md`
     Save the plan as `<git branch --show-current>.md`
@@ -69,7 +69,7 @@ description: "Feature implementation"
 
 - name: plan-review
   title: "Review of the created coding plan"
-  interactive: true
+  communication: true
   prompt: |
     Review the plan `<git branch --show-current>.md`
   skills:
@@ -77,7 +77,7 @@ description: "Feature implementation"
 
 - name: commit-architecture
   title: "Commit changes and wait for the coding plan was built"
-  interactive: true
+  communication: true
   prompt: |
     Steps:
       1. Commit all untracked changes.
@@ -92,6 +92,6 @@ description: "Feature implementation"
 
 - name: accept
   title: "Requirements & coverage audit"
-  interactive: true
+  communication: true
   skills:
     - goga-accept
