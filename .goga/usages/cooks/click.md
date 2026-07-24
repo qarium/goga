@@ -93,12 +93,14 @@ class AppState:
     def __init__(self, debug=False):
         self.debug = debug
 
+
 @click.group()
-@click.option('--debug/--no-debug', default=False)
+@click.option("--debug/--no-debug", default=False)
 @click.pass_context
 def cli(ctx, debug):
     ctx.ensure_object(AppState)
     ctx.obj.debug = debug
+
 
 @cli.command()
 @click.pass_obj
@@ -120,14 +122,16 @@ def cli():
     """Основная команда."""
     pass
 
+
 @cli.group()
 def db():
     """Команды базы данных."""
     pass
 
+
 @db.command()
 def migrate():
-    click.echo('Миграция...')
+    click.echo("Миграция...")
 ```
 
 Invocation: `cli db migrate`
@@ -139,18 +143,18 @@ Invocation: `cli db migrate`
 
 ```python
 # Output to stdout
-click.echo('Сообщение')
+click.echo("Сообщение")
 
 # Colored output
-click.secho('Ошибка!', fg='red', err=True)
-click.secho('Успех!', fg='green')
+click.secho("Ошибка!", fg="red", err=True)
+click.secho("Успех!", fg="green")
 
 # Prompt the user
-name = click.prompt('Ваше имя')
-confirm = click.confirm('Продолжить?')
+name = click.prompt("Ваше имя")
+confirm = click.confirm("Продолжить?")
 
 # Exit with error code
-raise click.ClickException('Что-то пошло не так')
+raise click.ClickException("Что-то пошло не так")
 sys.exit(1)
 ```
 
@@ -165,11 +169,12 @@ Click provides the `CliRunner` utility for testing:
 ```python
 from click.testing import CliRunner
 
+
 def test_hello():
     runner = CliRunner()
-    result = runner.invoke(cli, ['--help'])
+    result = runner.invoke(cli, ["--help"])
     assert result.exit_code == 0
-    assert 'Usage' in result.output
+    assert "Usage" in result.output
 ```
 
 - Use `CliRunner` for all command tests

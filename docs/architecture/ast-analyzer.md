@@ -31,8 +31,7 @@ class ASTRule:
         self.tree = tree
         self.name = name
 
-    def check(self, document: DocumentRoot) -> list[ASTRuleError]:
-        ...
+    def check(self, document: DocumentRoot) -> list[ASTRuleError]: ...
 ```
 
 - The constructor receives the full tree and a human-readable rule name.

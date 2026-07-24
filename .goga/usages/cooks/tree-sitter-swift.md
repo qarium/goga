@@ -320,12 +320,14 @@ def extract_functions(root):
             return_type = return_type_node.text.decode("utf-8") if return_type_node else "Void"
             is_async = any(c.type == "simple_identifier" and c.text == b"async" for c in child.children)
             throws = any(c.type == "throws" for c in child.children)
-            functions.append({
-                "name": name,
-                "return_type": return_type,
-                "async": is_async,
-                "throws": throws,
-            })
+            functions.append(
+                {
+                    "name": name,
+                    "return_type": return_type,
+                    "async": is_async,
+                    "throws": throws,
+                }
+            )
     return functions
 ```
 

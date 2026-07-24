@@ -27,8 +27,7 @@ Each rule passed to the visitor must implement the `DocumentRule` interface:
 
 ```python
 class DocumentRule:
-    def check(self, document: DocumentRoot) -> list[DocumentRuleError]:
-        ...
+    def check(self, document: DocumentRoot) -> list[DocumentRuleError]: ...
 ```
 
 - The `check` method receives the `DocumentRoot` being validated.

@@ -172,6 +172,7 @@ for node in root.children:
     elif node.type == "type_alias":
         name = _first_child_by_type(node, "type_identifier")
 
+
 def _first_child_by_type(node, type_name):
     for child in node.children:
         if child.type == type_name:

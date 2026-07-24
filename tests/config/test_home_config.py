@@ -84,7 +84,7 @@ class TestLoadHomeConfigLogic:
         """A non-mapping root (e.g. a list) raises ValueError."""
         _write_home_yml(tmp_path, "- not a mapping\n")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="must be a YAML mapping"):
             load_home_config()
 
     def test_load_home_config_explicit_path(self, tmp_path):
@@ -122,14 +122,14 @@ class TestLoadHomeConfigLogic:
         """env present but not a mapping → ValueError."""
         _write_home_yml(tmp_path, "env:\n  - not a mapping\n")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="env must be a mapping"):
             load_home_config()
 
     def test_load_home_config_non_list_docker_token_raises(self, tmp_path, monkeypatch):
         """docker.run present but not a list → ValueError."""
         _write_home_yml(tmp_path, "docker:\n  run: not-a-list\n")
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"docker\.run must be a list"):
             load_home_config()
 
     def test_load_home_config_never_raises_on_missing_file(self, tmp_path, monkeypatch):

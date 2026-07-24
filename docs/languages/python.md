@@ -59,6 +59,7 @@ class Service:
     def _internal(self) -> None:
         pass
 
+
 def connect(host: str, port: int = 8080) -> None:
     pass
 ```
