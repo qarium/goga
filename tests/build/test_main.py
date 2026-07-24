@@ -19,7 +19,7 @@ def _write_goga_yml(tmp_path: Path) -> None:
 
 
 class TestMainEntry:
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_returns_zero_on_success(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -31,7 +31,7 @@ class TestMainEntry:
         ):
             assert main() == 0
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=1)
     def test_main_returns_nonzero_on_failure(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -43,7 +43,7 @@ class TestMainEntry:
         ):
             assert main() == 1
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_calls_build_with_parsed_args(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -61,7 +61,7 @@ class TestMainEntry:
         assert cli_options["worktree"] is True
         assert cli_options["skip_manifest_check"] is True
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_dry_run_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -76,7 +76,7 @@ class TestMainEntry:
         cli_options = mock_build.call_args[0][2]
         assert cli_options["dry_run"] is True
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_session_timeout_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -91,7 +91,7 @@ class TestMainEntry:
         cli_options = mock_build.call_args[0][2]
         assert cli_options["session_timeout"] == "30m"
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_max_iterations_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -106,7 +106,7 @@ class TestMainEntry:
         cli_options = mock_build.call_args[0][2]
         assert cli_options["max_iterations"] == 10
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_review_patience_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -121,7 +121,7 @@ class TestMainEntry:
         cli_options = mock_build.call_args[0][2]
         assert cli_options["review_patience"] == 5
 
-    @mock.patch("goga.build.__main__.load_config")
+    @mock.patch("goga.build.__main__.load_project_config")
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_idle_timeout_flag(self, mock_build, mock_config, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -141,7 +141,7 @@ class TestMainEntry:
 
         with (
             mock.patch("goga.build.__main__.build", return_value=42) as mock_build,
-            mock.patch("goga.build.__main__.load_config"),
+            mock.patch("goga.build.__main__.load_project_config"),
             mock.patch("sys.argv", ["goga.build", "plan.md", "--worktree"]),
         ):
             assert main() == 42
@@ -158,11 +158,11 @@ class TestMainEntry:
             raise AssertionError("build must not be called on the host")
 
         def _fail_config(*_args: object, **_kwargs: object) -> None:
-            raise AssertionError("load_config must not be called on the host")
+            raise AssertionError("load_project_config must not be called on the host")
 
         with (
             mock.patch("goga.build.__main__.build", side_effect=_fail_if_called) as mock_build,
-            mock.patch("goga.build.__main__.load_config", side_effect=_fail_config) as mock_config,
+            mock.patch("goga.build.__main__.load_project_config", side_effect=_fail_config) as mock_config,
             mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
             pytest.raises(SystemExit) as exc_info,
         ):
@@ -192,7 +192,7 @@ class TestContract:
         with (
             mock.patch("goga.build.__main__.ensure_in_docker", side_effect=_record_ensure) as mock_ensure,
             mock.patch("goga.build.__main__.build", side_effect=_record_build),
-            mock.patch("goga.build.__main__.load_config"),
+            mock.patch("goga.build.__main__.load_project_config"),
             mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
         ):
             main()

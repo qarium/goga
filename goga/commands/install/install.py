@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 import yaml
 
-from ...config import load_config
+from ...config import load_project_config
 from ...connect import resync_registered_agents
 
 logger = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ def install(
 
     pip's returncode is propagated as the exit code without translation — pip
     failures surface as a non-zero exit, never as a ``CalledProcessError``.
-    Errors from ``resolve_version`` and ``load_config`` surface as
+    Errors from ``resolve_version`` and ``load_project_config`` surface as
     ``click.ClickException`` (exit 1).
 
     Args:
@@ -226,7 +226,7 @@ def install(
 
     # BULK / EMPTY PATH — driven by .goga/config.yml.
     try:
-        cfg = load_config()
+        cfg = load_project_config()
     except (OSError, KeyError, ValueError, yaml.YAMLError) as exc:
         # OSError covers every failure to read .goga/config.yml: a missing file
         # (FileNotFoundError), a path that is a directory (IsADirectoryError), or

@@ -16,7 +16,7 @@ from goga.commands.pipeline.run_pipeline_container import (
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -28,9 +28,9 @@ _AFM_MOUNT_SUFFIX = ":/home/goga/.afm/config.yaml:ro"
 _CODEX_AUTH_MOUNT_SUFFIX = ":/home/goga/.codex/auth.json:ro"
 
 
-def _make_config(*, pipeline_agent: str = "claude") -> Config:
-    """Build a minimal Config satisfying the new schema (top-level image, pipeline block)."""
-    return Config(
+def _make_config(*, pipeline_agent: str = "claude") -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,

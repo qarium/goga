@@ -22,14 +22,14 @@ from goga.commands.build.build import (
     clean_build_runtime_dir,
     resolve_build_runtime_dir,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
 
-def _valid_config(*, image: str | None = "qarium/goga:latest") -> Config:
-    """Return a minimal valid Config for the build flow."""
-    return Config(
+def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
+    """Return a minimal valid ProjectConfig for the build flow."""
+    return ProjectConfig(
         lang="python",
         image=image,
         dockerfile=None,
@@ -176,7 +176,7 @@ class TestBuildRuntimeIsolationFlow:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),
@@ -204,7 +204,7 @@ class TestBuildRuntimeIsolationFlow:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(subprocess, "Popen", return_value=mock_proc),
@@ -226,7 +226,7 @@ class TestBuildRuntimeIsolationFlow:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
@@ -262,7 +262,7 @@ class TestBuildRuntimeIsolationFlow:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env),
             mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),
@@ -287,7 +287,7 @@ class TestBuildRuntimeIsolationNegative:
         monkeypatch.chdir(tmp_path)
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config(image=None)),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config(image=None)),
         ):
             result = CliRunner().invoke(build_cmd, ["plan.md"])
         assert result.exit_code == 1
@@ -363,7 +363,7 @@ class TestBuildCleansUpRalphexInProjectOnExit:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
         ):
@@ -394,7 +394,7 @@ class TestBuildCleansUpRalphexInProjectOnExit:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),
@@ -427,7 +427,7 @@ class TestBuildCleansUpRalphexInProjectOnExit:
         with (
             mock.patch.object(_build_mod, "_check_docker", return_value=True),
             mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-            mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
             mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
             mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
             mock.patch.object(subprocess, "Popen", side_effect=_fake_popen),

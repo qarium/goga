@@ -26,7 +26,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -38,9 +38,9 @@ def _make_config(
     *,
     pipeline_proxy: str | None = None,
     pipeline_hosts: dict[str, str] | None = None,
-) -> Config:
-    """Build a minimal Config, optionally with pipeline.proxy/hosts."""
-    return Config(
+) -> ProjectConfig:
+    """Build a minimal ProjectConfig, optionally with pipeline.proxy/hosts."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
@@ -112,7 +112,7 @@ class TestPipelineDispatchLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=42) as mock_run,
         ):
             result = runner.invoke(
@@ -145,7 +145,7 @@ class TestPipelineDispatchLogic:
         config = _make_config(pipeline_proxy="http://from-config:3128")
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
             result = runner.invoke(pipeline, ["deploy"])
@@ -168,7 +168,7 @@ class TestPipelineDispatchLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
             result = runner.invoke(pipeline, ["deploy", "-u"])
@@ -186,7 +186,7 @@ class TestPipelineDispatchEdge:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
             result = runner.invoke(pipeline, ["--clean"])
@@ -209,7 +209,7 @@ class TestPipelineDispatchEdge:
         config = _make_config(pipeline_hosts={"a.local": "10.0.0.1"})
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
             result = runner.invoke(
@@ -235,7 +235,7 @@ class TestPipelineDispatchEdge:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=exit_code),
         ):
             result = runner.invoke(pipeline, ["deploy"])

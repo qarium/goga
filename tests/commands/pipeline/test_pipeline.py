@@ -10,7 +10,7 @@ import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -18,9 +18,9 @@ from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
 _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 
 
-def _make_config() -> Config:
-    """Build a minimal Config satisfying the new schema (top-level image, pipeline block)."""
-    return Config(
+def _make_config() -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
@@ -73,7 +73,7 @@ class TestPipelineLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
             result = runner.invoke(pipeline, [])
@@ -96,7 +96,7 @@ class TestPipelineLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
             result = runner.invoke(pipeline, ["deploy"])
@@ -119,7 +119,7 @@ class TestPipelineLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
             result = runner.invoke(
@@ -145,7 +145,7 @@ class TestPipelineLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
             result = runner.invoke(pipeline, ["deploy", "--env", "FOO=bar"])
@@ -169,7 +169,7 @@ class TestPipelineLogic:
         config = _make_config()
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", return_value=config),
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=exit_code),
         ):
             result = runner.invoke(pipeline, ["deploy"])
@@ -180,7 +180,7 @@ class TestPipelineLogic:
         """A config load failure surfaces as a non-zero exit code via ClickException."""
         runner = CliRunner()
         with (
-            mock.patch.object(_pipeline_module, "load_config", side_effect=FileNotFoundError("no config")),
+            mock.patch.object(_pipeline_module, "load_project_config", side_effect=FileNotFoundError("no config")),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
             result = runner.invoke(pipeline, [])
@@ -199,5 +199,5 @@ class TestPipelineBoundary:
         assert "from ...pipeline import" not in source
         assert "from goga.pipeline import" not in source
         # The only goga imports are config + intra-cell run_pipeline_container.
-        assert "from ...config import load_config" in source
+        assert "from ...config import load_project_config" in source
         assert "from .run_pipeline_container import run_pipeline_container" in source

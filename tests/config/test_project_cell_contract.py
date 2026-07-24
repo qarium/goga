@@ -9,7 +9,6 @@ from goga.config.project import (
     CodemanifestConfig,
     PipelineConfig,
     ProjectConfig,
-    TaskExecutorConfig,
     load_project_config,
 )
 

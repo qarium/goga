@@ -302,7 +302,7 @@ class TestIntegration:
         assert not (tmp_path / ".goga" / "usages" / "conventions.md").exists()
 
     def test_init_emits_pipeline_block_in_generated_config(self, tmp_path: Path) -> None:
-        """Generated config.yml always contains a pipeline: block (agent required by load_config)."""
+        """Generated config.yml always contains a pipeline: block (agent required by load_project_config)."""
         config = GogaConfigAnswers(
             language="python",
             agent="claude",

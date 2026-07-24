@@ -27,14 +27,14 @@ from unittest import mock
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
 from goga.commands.build.build import resolve_build_runtime_dir
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 
 
-def _valid_config(*, image: str | None = "qarium/goga:latest") -> Config:
-    """Return a minimal valid Config for the build flow."""
-    return Config(
+def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
+    """Return a minimal valid ProjectConfig for the build flow."""
+    return ProjectConfig(
         lang="python",
         image=image,
         dockerfile=None,
@@ -83,7 +83,7 @@ def _build_patches(
     return (
         mock.patch.object(_build_mod, "_check_docker", return_value=True),
         mock.patch.object(_build_mod, "_read_git_config", return_value={}),
-        mock.patch.object(_build_mod, "load_config", return_value=_valid_config()),
+        mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
         mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
         popen,
         run,
@@ -175,7 +175,7 @@ class TestBuildRuntimeIsolationEndToEnd:
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
             stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-            stack.enter_context(mock.patch.object(_build_mod, "load_config", return_value=_valid_config()))
+            stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
             write_env = stack.enter_context(mock.patch.object(_build_mod, "_write_env_file"))
             stack.enter_context(
                 mock.patch.object(_build_mod, "resolve_build_runtime_dir", side_effect=OSError("read-only home"))

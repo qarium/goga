@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from goga.build import build
-from goga.config import load_config
+from goga.config import load_project_config
 
 
 def _write_config(
@@ -40,7 +40,7 @@ def _write_config(
 def _load_config(tmp_path: Path, monkeypatch):
     """Chdir into tmp_path and load the .goga/config.yml written there."""
     monkeypatch.chdir(tmp_path)
-    return load_config()
+    return load_project_config()
 
 
 def _init_git_repo(path: Path) -> None:

@@ -8,7 +8,7 @@ import subprocess
 from pathlib import Path
 
 from ..agents import resolve_wrapper_path
-from ..config import Config
+from ..config import ProjectConfig
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ def _find_uncommitted_manifests() -> list[str]:
     return uncommitted
 
 
-def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
+def _write_ralphex_config(config: ProjectConfig, wrapper_path: str) -> None:
     """Write the .ralphex/config INI for ralphex with the resolved wrapper path.
 
     Populates the ralphex config keys covered by the agent-wrappers contract:
@@ -91,7 +91,7 @@ def _write_ralphex_config(config: Config, wrapper_path: str) -> None:
     logger.info("wrote .ralphex/config", extra={"claude_command": wrapper_path})
 
 
-def _copy_defaults(config: Config) -> int:
+def _copy_defaults(config: ProjectConfig) -> int:
     logger.info("copying defaults")
 
     defaults_dir = DEFAULTS_PACKAGE_DIR.resolve()
@@ -119,7 +119,7 @@ def _copy_defaults(config: Config) -> int:
     return 0
 
 
-def _assemble_command(plan: str, config: Config, cli_options: dict) -> list[str]:
+def _assemble_command(plan: str, config: ProjectConfig, cli_options: dict) -> list[str]:
     cmd = ["ralphex", plan, "--config-dir", ".ralphex/"]
 
     def resolve(flag_name: str, cli_key: str, config_key: str, is_flag: bool = False) -> None:
@@ -143,7 +143,7 @@ def _assemble_command(plan: str, config: Config, cli_options: dict) -> list[str]
     return cmd
 
 
-def build(plan: str, config: Config, cli_options: dict) -> int:
+def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     """Execute the build pipeline for a given plan.
 
     Validates uncommitted CODEMANIFEST files, resolves the agent wrapper path,

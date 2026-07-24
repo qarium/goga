@@ -8,8 +8,8 @@ import pytest
 from goga.config import (
     BuildConfig,
     CodemanifestConfig,
-    Config,
     PipelineConfig,
+    ProjectConfig,
     TaskExecutorConfig,
 )
 
@@ -18,8 +18,8 @@ from goga.config import (
 
 class TestFacadeAvailability:
     def test_import_from_facade(self):
-        """Config, BuildConfig, TaskExecutorConfig are importable from goga.config."""
-        assert hasattr(goga_config_mod, "Config")
+        """ProjectConfig, BuildConfig, TaskExecutorConfig are importable from goga.config."""
+        assert hasattr(goga_config_mod, "ProjectConfig")
         assert hasattr(goga_config_mod, "BuildConfig")
         assert hasattr(goga_config_mod, "TaskExecutorConfig")
 
@@ -34,8 +34,8 @@ class TestFacadeAvailability:
         assert "CodemanifestConfig" in goga_config_mod.__all__
 
     def test_load_config_importable(self):
-        """load_config is importable from goga.config."""
-        assert hasattr(goga_config_mod, "load_config")
+        """load_project_config is importable from goga.config."""
+        assert hasattr(goga_config_mod, "load_project_config")
 
     def test_old_names_not_importable(self):
         """TaskExecutor and CodemenifestConfig are NOT importable from goga.config."""
@@ -186,33 +186,33 @@ class TestCodemanifestConfigAPIShape:
 
 class TestConfigAPIShape:
     def test_has_lang_field(self):
-        assert "lang" in Config.__dataclass_fields__
+        assert "lang" in ProjectConfig.__dataclass_fields__
 
     def test_has_image_field(self):
-        assert "image" in Config.__dataclass_fields__
+        assert "image" in ProjectConfig.__dataclass_fields__
 
     def test_has_build_field(self):
-        assert "build" in Config.__dataclass_fields__
+        assert "build" in ProjectConfig.__dataclass_fields__
 
     def test_has_pipeline_field(self):
-        assert "pipeline" in Config.__dataclass_fields__
+        assert "pipeline" in ProjectConfig.__dataclass_fields__
 
     def test_has_commands_field(self):
-        assert "commands" in Config.__dataclass_fields__
+        assert "commands" in ProjectConfig.__dataclass_fields__
 
     def test_has_codemanifest_field(self):
-        assert "codemanifest" in Config.__dataclass_fields__
+        assert "codemanifest" in ProjectConfig.__dataclass_fields__
 
     def test_has_tools_field(self):
-        assert "tools" in Config.__dataclass_fields__
+        assert "tools" in ProjectConfig.__dataclass_fields__
 
     def test_tools_defaults_to_none(self):
         """tools is optional and defaults to None when not supplied."""
-        cfg = Config(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
         assert cfg.tools is None
 
     def test_tools_accepts_string_mapping(self):
-        cfg = Config(
+        cfg = ProjectConfig(
             lang="python",
             image=None,
             dockerfile=None,
@@ -223,7 +223,7 @@ class TestConfigAPIShape:
         assert cfg.tools == {"afm": "1.0.x", "ralphex": "1.x"}
 
     def test_tools_accepts_empty_dict(self):
-        cfg = Config(
+        cfg = ProjectConfig(
             lang="python",
             image=None,
             dockerfile=None,
@@ -234,12 +234,12 @@ class TestConfigAPIShape:
         assert cfg.tools == {}
 
     def test_image_type_is_optional_str(self):
-        image_type = Config.__dataclass_fields__["image"].type
+        image_type = ProjectConfig.__dataclass_fields__["image"].type
         assert image_type == str | None or types.UnionType in type(image_type).__mro__
 
     def test_config_build_annotation_allows_none(self):
-        """None is a legal value for Config.build — the dataclass accepts it (D2)."""
-        cfg = Config(
+        """None is a legal value for ProjectConfig.build — the dataclass accepts it (D2)."""
+        cfg = ProjectConfig(
             lang="python",
             image=None,
             dockerfile=None,
@@ -255,7 +255,7 @@ class TestConfigAPIShape:
         """typing.get_type_hints reports build as Optional[BuildConfig] (D2)."""
         import typing
 
-        hints = typing.get_type_hints(Config)
+        hints = typing.get_type_hints(ProjectConfig)
         build_args = set(typing.get_args(hints["build"]))
         assert BuildConfig in build_args
         assert type(None) in build_args
@@ -264,33 +264,33 @@ class TestConfigAPIShape:
         """typing.get_type_hints reports pipeline as Optional[PipelineConfig] (D2)."""
         import typing
 
-        hints = typing.get_type_hints(Config)
+        hints = typing.get_type_hints(ProjectConfig)
         pipeline_args = set(typing.get_args(hints["pipeline"]))
         assert PipelineConfig in pipeline_args
         assert type(None) in pipeline_args
 
     def test_lang_is_required(self):
-        """Config without lang raises TypeError (missing required argument)."""
+        """ProjectConfig without lang raises TypeError (missing required argument)."""
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="lang"):
-            Config(image=None, build=bc, pipeline=pc)
+            ProjectConfig(image=None, build=bc, pipeline=pc)
 
     def test_image_is_required(self):
-        """Config without image raises TypeError (image has no default)."""
+        """ProjectConfig without image raises TypeError (image has no default)."""
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
         with pytest.raises(TypeError, match="image"):
-            Config(lang="python", build=bc, pipeline=pc)
+            ProjectConfig(lang="python", build=bc, pipeline=pc)
 
     def test_pipeline_is_required(self):
-        """Config without pipeline raises TypeError."""
+        """ProjectConfig without pipeline raises TypeError."""
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         with pytest.raises(TypeError, match="pipeline"):
-            Config(lang="python", image=None, build=bc)
+            ProjectConfig(lang="python", image=None, build=bc)
 
 
 class TestKwOnlyEnforced:
@@ -304,7 +304,7 @@ class TestKwOnlyEnforced:
         assert all(f.kw_only for f in dataclasses.fields(BuildConfig))
 
     def test_config_kw_only(self):
-        assert all(f.kw_only for f in dataclasses.fields(Config))
+        assert all(f.kw_only for f in dataclasses.fields(ProjectConfig))
 
     def test_codemanifest_config_kw_only(self):
         assert all(f.kw_only for f in dataclasses.fields(CodemanifestConfig))
@@ -326,7 +326,7 @@ class TestKwOnlyEnforced:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         with pytest.raises(TypeError):
-            Config(bc)
+            ProjectConfig(bc)
 
 
 # --- Logic tests ---
@@ -447,7 +447,7 @@ class TestConfigCreation:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.lang == "python"
         assert cfg.image is None
         assert cfg.dockerfile is None
@@ -457,7 +457,7 @@ class TestConfigCreation:
         te = TaskExecutorConfig(agent="claude", env={"K": "v"})
         bc = BuildConfig(task_executor=te, worktree=True)
         pc = PipelineConfig(agent="codex", env={"P": "1"})
-        cfg = Config(
+        cfg = ProjectConfig(
             lang="python",
             image="qarium/foo:1.0",
             dockerfile="Dockerfile",
@@ -478,7 +478,7 @@ class TestConfigCreation:
         te = TaskExecutorConfig(agent="copilot", env={"A": "1", "B": "2"})
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert isinstance(cfg.build.task_executor, TaskExecutorConfig)
         assert cfg.build.task_executor.agent == "copilot"
         assert cfg.build.task_executor.env == {"A": "1", "B": "2"}
@@ -508,7 +508,7 @@ class TestConfigCodemanifestField:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=bc, pipeline=pc)
         assert cfg.codemanifest is None
 
     def test_config_with_codemanifest(self):
@@ -516,7 +516,7 @@ class TestConfigCodemanifestField:
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
         cc = CodemanifestConfig(usages={"lib": ".specs/lib.md"}, annotations="Use lib")
-        cfg = Config(
+        cfg = ProjectConfig(
             lang="python",
             image=None,
             dockerfile=None,

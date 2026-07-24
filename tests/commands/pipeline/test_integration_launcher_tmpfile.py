@@ -28,7 +28,7 @@ import yaml
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.docker import DockerRunner
 
 # Resolve the real submodule directly: the package __init__ re-exports the
@@ -46,9 +46,9 @@ def _make_config(
     image: str | None = "goga:test",
     pipeline_agent: str = "claude",
     pipeline_env: dict[str, str] | None = None,
-) -> Config:
-    """Build a minimal Config satisfying the schema (top-level image, pipeline block)."""
-    return Config(
+) -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the schema (top-level image, pipeline block)."""
+    return ProjectConfig(
         lang="python",
         image=image,
         dockerfile=None,

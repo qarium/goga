@@ -39,7 +39,7 @@ def _write_goga_yml(
 
 
 def _run_build_in_tmp(tmp_path, monkeypatch, args=None, *, skip_manifest_check=True):
-    """Run the build command from tmp_path (cwd relocated for load_config)."""
+    """Run the build command from tmp_path (cwd relocated for load_project_config)."""
     monkeypatch.chdir(tmp_path)
     runner = CliRunner()
     full_args = list(args or [])

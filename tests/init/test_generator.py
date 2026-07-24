@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests.exceptions
 import yaml
-from goga.config import load_config
+from goga.config import load_project_config
 from goga.init.answers import GogaConfigAnswers, InitAnswers
 from goga.init.generator import FileGenerator
 
@@ -71,7 +71,7 @@ class TestLogic:
             return yaml.safe_load(f)
 
     def test_generate_goga_config_yaml_compatible_with_load_config(self, tmp_path: Path) -> None:
-        """Generated YAML must be parseable by load_config()."""
+        """Generated YAML must be parseable by load_project_config()."""
         config = self._make_config(
             language="python",
             agent="claude",
@@ -96,7 +96,7 @@ class TestLogic:
 
         data = self._load_yaml(config_path)
 
-        # Verify structure compatible with load_config()
+        # Verify structure compatible with load_project_config()
         assert data["language"] == "python"
         assert data["image"] == "qarium/goga-python-3.12:1.0"
         assert data["build"]["task_executor"]["agent"] == "claude"
@@ -110,7 +110,7 @@ class TestLogic:
     def test_generate_goga_config_round_trips_through_load_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Generated config.yml must load without error via load_config()."""
+        """Generated config.yml must load without error via load_project_config()."""
         config = self._make_config(
             language="python",
             agent="claude",
@@ -122,7 +122,7 @@ class TestLogic:
         gen.generate_goga_config(config)
 
         monkeypatch.chdir(tmp_path)
-        loaded = load_config()
+        loaded = load_project_config()
         assert loaded.lang == "python"
         assert loaded.image == "qarium/goga-python-3.12:1.0"
         assert loaded.pipeline.agent == "claude"

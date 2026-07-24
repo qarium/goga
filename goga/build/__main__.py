@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from ..config import load_config
+from ..config import load_project_config
 from ..docker import ensure_in_docker
 from .build import build
 
@@ -29,7 +29,7 @@ def main() -> int:
     parser.add_argument("--review-patience", type=int, default=None)
     args = parser.parse_args()
 
-    config = load_config()
+    config = load_project_config()
 
     cli_options = {
         "worktree": args.worktree,

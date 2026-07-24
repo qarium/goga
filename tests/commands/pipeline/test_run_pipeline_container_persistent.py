@@ -34,7 +34,7 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.run_pipeline_container is the real submodule; resolve
 # it via sys.modules so string-based mock.patch paths walk the actual module
@@ -47,9 +47,9 @@ def _make_config(
     image: str | None = "qarium/goga:latest",
     pipeline_agent: str = "claude",
     pipeline_env: dict[str, str] | None = None,
-) -> Config:
-    """Build a minimal Config satisfying the schema."""
-    return Config(
+) -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the schema."""
+    return ProjectConfig(
         lang="python",
         image=image,
         dockerfile=None,

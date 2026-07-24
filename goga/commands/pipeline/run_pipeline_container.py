@@ -31,7 +31,7 @@ from pathlib import Path
 import click
 
 from ...agents import resolve_credential_mounts, resolve_wrapper_path
-from ...config import Config
+from ...config import ProjectConfig
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -169,7 +169,7 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
       ``summary``) that ``run_pipeline`` materializes in-container. Fixed to
       the value derived from the ``AFM_DIR=/home/goga/pipeline`` constant —
       NOT derived from CLI or config (goga does not duplicate afm-owned
-      settings in its own Config).
+      settings in its own configuration).
 
     Args:
         wrapper_path: The resolved absolute in-container wrapper script path
@@ -238,7 +238,7 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
 
 
 def _run_discovery(
-    config: Config,
+    config: ProjectConfig,
     container_name: str,
     hosts: dict[str, str] | None,
     update: bool,
@@ -418,7 +418,7 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
 
 def _run_named(  # noqa: PLR0913, PLR0917
     name: str,
-    config: Config,
+    config: ProjectConfig,
     container_name: str,
     extra_env: tuple[str, ...],
     proxy: str | None,
@@ -574,7 +574,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
 
 def run_pipeline_container(  # noqa: PLR0913, PLR0917
     name: str | None,
-    config: Config,
+    config: ProjectConfig,
     extra_env: tuple[str, ...] = (),
     proxy: str | None = None,
     hosts: dict[str, str] | None = None,

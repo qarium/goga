@@ -30,7 +30,7 @@ from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # Resolve the real submodules via sys.modules (the package __init__ binds the
 # function/command names, which would shadow string-based mock.patch paths
@@ -43,9 +43,9 @@ def _make_config(
     *,
     pipeline_agent: str = "claude",
     pipeline_env: dict[str, str] | None = None,
-) -> Config:
-    """Build a minimal Config with a pipeline section for run-mode dispatch."""
-    return Config(
+) -> ProjectConfig:
+    """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,

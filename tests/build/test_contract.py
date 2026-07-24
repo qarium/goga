@@ -20,10 +20,10 @@ class TestBuildContract:
         assert hints["plan"] is str
 
     def test_build_config_param_type(self) -> None:
-        from goga.config import Config
+        from goga.config import ProjectConfig
 
         hints = typing.get_type_hints(build)
-        assert hints["config"] is Config
+        assert hints["config"] is ProjectConfig
 
     def test_build_cli_options_param_is_dict(self) -> None:
         hints = typing.get_type_hints(build)

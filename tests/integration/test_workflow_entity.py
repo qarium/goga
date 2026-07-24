@@ -36,7 +36,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.pipeline.compiler import StructuralError, compile_flow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowStage, parse_workflow
 
@@ -429,9 +429,9 @@ class TestExtendDirectiveEndToEnd:
 def _make_config(
     *,
     pipeline_agent: str = "claude",
-) -> Config:
-    """Build a minimal Config with a pipeline section for run-mode dispatch."""
-    return Config(
+) -> ProjectConfig:
+    """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,

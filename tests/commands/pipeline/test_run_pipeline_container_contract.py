@@ -34,10 +34,10 @@ _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 
 def _make_config():
-    """Build a minimal Config with a pipeline section for run-mode dispatch."""
-    from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+    """Build a minimal ProjectConfig with a pipeline section for run-mode dispatch."""
+    from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
-    return Config(
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,

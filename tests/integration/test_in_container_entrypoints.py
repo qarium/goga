@@ -12,7 +12,7 @@ These stitch together the in-container entrypoint contract across three cells:
 The tests invoke the real ``python -m goga.build`` / ``python -m goga.pipeline``
 entrypoints via :mod:`runpy` (the same path the goga Docker image entrypoint uses)
 and let the REAL :func:`ensure_in_docker` guard from :mod:`goga.docker` run — only
-the leaf dispatch targets (``build``, ``load_config``, ``pipeline_cli``) are mocked,
+the leaf dispatch targets (``build``, ``load_project_config``, ``pipeline_cli``) are mocked,
 to keep the test offline and fast. This verifies the seam that only holds when the
 guard is wired into both entrypoints: the docker cell composes with the build and
 pipeline cells, and both entrypoints refuse consistently via the SAME guard routine
@@ -81,7 +81,7 @@ class TestInContainerEntrypointFlow:
         """With GOGA_DOCKER=1, ``python -m goga.build plan.md`` reaches ``build()``.
 
         Composes the docker cell (real guard), the build cell (real ``__main__``
-        argparse wiring), and the config cell (``load_config``). The guard passes;
+        argparse wiring), and the config cell (``load_project_config``). The guard passes;
         ``build()`` is invoked with the parsed plan and is the dispatch target.
         """
         monkeypatch.setenv("GOGA_DOCKER", "1")
@@ -90,7 +90,7 @@ class TestInContainerEntrypointFlow:
         with (
             _run_main_fresh("goga.build.__main__"),
             mock.patch.object(_build_mod, "build", return_value=0) as mock_build,
-            mock.patch.object(_config_mod, "load_config") as mock_config,
+            mock.patch.object(_config_mod, "load_project_config") as mock_config,
             pytest.raises(SystemExit) as exc_info,
         ):
             runpy.run_module("goga.build", run_name="__main__")
@@ -102,7 +102,7 @@ class TestInContainerEntrypointFlow:
         # build() was reached and received the parsed plan positional.
         assert mock_build.call_count == 1
         assert mock_build.call_args[0][0] == "plan.md"
-        # load_config() was reached (config cell composed).
+        # load_project_config() was reached (config cell composed).
         assert mock_config.call_count == 1
 
     def test_pipeline_entrypoint_reaches_cli_in_container(self, monkeypatch, capsys) -> None:
@@ -134,7 +134,7 @@ class TestInContainerEntrypointFlow:
 
         Both ``python -m goga.build plan.md`` and ``python -m goga.pipeline list``
         raise ``SystemExit(1)`` before any dispatch target (``build`` /
-        ``load_config`` / ``pipeline_cli``) is called, and both emit the same
+        ``load_project_config`` / ``pipeline_cli``) is called, and both emit the same
         refusal message — proving the two entrypoints refuse consistently through
         the shared ``ensure_in_docker`` routine from :mod:`goga.docker`.
         """
@@ -149,7 +149,7 @@ class TestInContainerEntrypointFlow:
         with (
             _run_main_fresh("goga.build.__main__"),
             mock.patch.object(_build_mod, "build", side_effect=_fail_if_called) as mock_build,
-            mock.patch.object(_config_mod, "load_config", side_effect=_fail_if_called) as mock_config,
+            mock.patch.object(_config_mod, "load_project_config", side_effect=_fail_if_called) as mock_config,
             pytest.raises(SystemExit) as build_exc,
         ):
             runpy.run_module("goga.build", run_name="__main__")

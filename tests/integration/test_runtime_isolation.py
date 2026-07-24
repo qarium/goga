@@ -46,7 +46,7 @@ from goga.commands.pipeline.run_pipeline_container import (
     resolve_pipeline_runtime_dir,
     run_pipeline_container,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.runtime import normalize_project_path, resolve_runtime_dir
 
 # The two consumer modules shadow their submodule names in their package
@@ -55,9 +55,9 @@ _build_mod = sys.modules["goga.commands.build.build"]
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 
-def _valid_config(*, image: str | None = "qarium/goga:latest") -> Config:
-    """Return a minimal valid Config usable by both the build and pipeline flows."""
-    return Config(
+def _valid_config(*, image: str | None = "qarium/goga:latest") -> ProjectConfig:
+    """Return a minimal valid ProjectConfig usable by both the build and pipeline flows."""
+    return ProjectConfig(
         lang="python",
         image=image,
         dockerfile=None,
@@ -157,7 +157,7 @@ class TestBuildRuntimeDirFlow:
         """Mock only the docker/config surfaces; let the runtime path machinery run for real."""
         stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
         stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-        stack.enter_context(mock.patch.object(_build_mod, "load_config", return_value=_valid_config()))
+        stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
         stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", return_value=Path("/tmp/env")))
         stack.enter_context(mock.patch.object(subprocess, "Popen", side_effect=popen_side_effect))
         stack.enter_context(mock.patch.object(subprocess, "run"))
@@ -219,7 +219,7 @@ class TestBuildRuntimeDirFlow:
         with ExitStack() as stack:
             stack.enter_context(mock.patch.object(_build_mod, "_check_docker", return_value=True))
             stack.enter_context(mock.patch.object(_build_mod, "_read_git_config", return_value={}))
-            stack.enter_context(mock.patch.object(_build_mod, "load_config", return_value=_valid_config()))
+            stack.enter_context(mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()))
             stack.enter_context(mock.patch.object(_build_mod, "_write_env_file", side_effect=_fake_write_env))
             stack.enter_context(mock.patch.object(subprocess, "Popen", side_effect=_fake_popen))
             stack.enter_context(mock.patch.object(subprocess, "run"))

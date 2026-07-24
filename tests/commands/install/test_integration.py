@@ -80,7 +80,7 @@ class TestInstallCliIntegration:
 
 class TestInstallEndToEndPaths:
     """End-to-end paths exercising cross-entity wiring (install -> resolve_version
-    -> load_config -> subprocess.run) plus regressions the bulk/empty rewrite
+    -> load_project_config -> subprocess.run) plus regressions the bulk/empty rewrite
     introduces: optional ``name``, no ``~/.goga`` writes, and empty-path isolation
     from ``--sudo``. The pip boundary is mocked so no real install runs and the
     real home dir (redirected to ``tmp_path/.pytest_home`` by the autouse
@@ -150,7 +150,7 @@ class TestInstallEndToEndPaths:
         assert not (tmp_path / ".pytest_home" / ".goga" / "connect.yml").exists()
 
     def test_install_bulk_path_full_cross_entity_argv(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Cross-entity: a real ``.goga/config.yml`` drives load_config ->
+        """Cross-entity: a real ``.goga/config.yml`` drives load_project_config ->
         resolve_version -> one ``subprocess.run`` with composed argv.
 
         Three tools, three grammar forms (minor x-range, latest, concrete),

@@ -9,7 +9,7 @@ import yaml
 
 from ...ast import AST
 from ...ast.errors import DocumentNotFoundError
-from ...config import load_config
+from ...config import load_project_config
 from ...contract import (
     EntityContract,
     MethodContract,
@@ -164,7 +164,7 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
         click.ClickException: When the configuration cannot be loaded.
     """
     try:
-        config = load_config()
+        config = load_project_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 

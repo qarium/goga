@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 import yaml
 
-from ...config import load_config
+from ...config import load_project_config
 from .run_pipeline_container import run_pipeline_container
 
 
@@ -122,12 +122,12 @@ def pipeline(  # noqa: PLR0913, PLR0917
             file that does not exist at ``<cwd>/.goga/workflows/<name>.yml``.
     """
     try:
-        config = load_config()
+        config = load_project_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     # Step 1b — host-side None-guard: the pipeline section is optional at the
-    # loader level (load_config returns config.pipeline=None when absent), but
+    # loader level (load_project_config returns config.pipeline=None when absent), but
     # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
     # any config.pipeline.* access and BEFORE dispatch into
     # run_pipeline_container, so a pipeline-less config surfaces as a clean
@@ -153,7 +153,7 @@ def pipeline(  # noqa: PLR0913, PLR0917
     # mutually exclusive. Verified BEFORE the host-side existence check and
     # BEFORE container launch so a contradictory CLI surface exits 1 with a
     # readable message rather than reaching docker. This runs after
-    # load_config / pipeline-section / proxy / hosts resolution but always
+    # load_project_config / pipeline-section / proxy / hosts resolution but always
     # before dispatch — no docker side effects can precede it.
     if workflow is not None and no_workflow:
         raise click.ClickException("--workflow and --no-workflow are mutually exclusive")

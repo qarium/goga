@@ -130,7 +130,7 @@ class TestPipelineCommandContract:
 class TestPipelineSectionGuard:
     """D4 — host-side None-guard: ClickException when the pipeline section is absent.
 
-    The guard (Algorithm step 1b) runs right after ``load_config()`` and before
+    The guard (Algorithm step 1b) runs right after ``load_project_config()`` and before
     any ``config.pipeline.*`` access or dispatch into ``run_pipeline_container``,
     so a pipeline-less config produces a clean user-facing error + exit 1 in BOTH
     modes (no AttributeError, no docker run). The same guard covers the run path

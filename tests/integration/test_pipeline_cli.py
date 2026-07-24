@@ -42,7 +42,7 @@ from unittest.mock import MagicMock
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.pipeline import pipeline_cli
 from goga.pipeline.compiler import (
     BodyFormat,
@@ -68,9 +68,9 @@ _pipeline_module = sys.modules["goga.commands.pipeline.pipeline"]
 _run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
 
 
-def _make_config() -> Config:
-    """Build a minimal Config satisfying the new schema (top-level image, pipeline block)."""
-    return Config(
+def _make_config() -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,
@@ -307,8 +307,8 @@ class TestHostEndToEnd:
         monkeypatch.setattr(_rpc_module, "_check_docker", lambda: True)
         monkeypatch.setattr(_rpc_module, "_allocate_port", lambda: 50321)
         monkeypatch.setattr(_rpc_module, "_read_git_config", lambda: {})
-        # Config load returns the new-schema Config.
-        monkeypatch.setattr(_pipeline_module, "load_config", lambda: config)
+        # ProjectConfig load returns the new-schema ProjectConfig.
+        monkeypatch.setattr(_pipeline_module, "load_project_config", lambda: config)
 
         # Simulate the in-container path: Popen.wait() returns the code that
         # `pipeline_cli` would have produced. Patch pipeline_cli at its real

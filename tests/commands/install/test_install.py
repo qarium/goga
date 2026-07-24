@@ -213,7 +213,7 @@ class TestInstallLogicNegative:
     def test_install_bulk_path_load_config_error_wrapped_in_click_exception(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # No .goga/config.yml in CWD → load_config raises FileNotFoundError → ClickException.
+        # No .goga/config.yml in CWD → load_project_config raises FileNotFoundError → ClickException.
         monkeypatch.chdir(tmp_path)
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
             result = CliRunner().invoke(app, ["install"])
@@ -279,7 +279,7 @@ class TestInstallLogicNegative:
     def test_install_bulk_path_config_is_directory_wrapped_in_click_exception(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # .goga/config.yml exists but is a directory → load_config's
+        # .goga/config.yml exists but is a directory → load_project_config's
         # config_path.open() raises IsADirectoryError (an OSError subclass that
         # is NOT FileNotFoundError) → must surface as a clean error, never as a
         # raw traceback. Pins the contract intent, not just the enumerated list.

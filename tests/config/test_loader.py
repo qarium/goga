@@ -1,4 +1,4 @@
-# tests/goga/config/test_loader.py — contract and logic tests for load_config
+# tests/goga/config/test_loader.py — contract and logic tests for load_project_config
 
 import dataclasses
 import inspect
@@ -8,12 +8,12 @@ import pytest
 import yaml
 from goga.config import (
     CodemanifestConfig,
-    Config,
     PipelineConfig,
+    ProjectConfig,
     TaskExecutorConfig,
-    load_config,
+    load_project_config,
 )
-from goga.config.loader import _parse_codemanifest, _parse_dockerfile, _parse_tools
+from goga.config.project.loader import _parse_codemanifest, _parse_dockerfile, _parse_tools
 
 # --- Helpers ---
 
@@ -91,25 +91,25 @@ commands:
 
 class TestLoadConfigFacade:
     def test_load_config_facade(self):
-        """load_config is importable from goga.config."""
-        assert hasattr(goga_config_mod, "load_config")
-        assert callable(goga_config_mod.load_config)
+        """load_project_config is importable from goga.config."""
+        assert hasattr(goga_config_mod, "load_project_config")
+        assert callable(goga_config_mod.load_project_config)
 
     def test_load_config_is_callable_no_args(self):
-        """load_config accepts no arguments."""
-        sig = inspect.signature(load_config)
+        """load_project_config accepts no arguments."""
+        sig = inspect.signature(load_project_config)
         assert list(sig.parameters.keys()) == []
 
     def test_load_config_returns_config(self):
-        """load_config returns a Config instance (annotation)."""
-        ret = inspect.signature(load_config).return_annotation
-        assert ret is Config
+        """load_project_config returns a ProjectConfig instance (annotation)."""
+        ret = inspect.signature(load_project_config).return_annotation
+        assert ret is ProjectConfig
 
     def test_load_config_returns_config_instance(self, goga_project):
-        """load_config actually returns a Config instance at runtime."""
+        """load_project_config actually returns a ProjectConfig instance at runtime."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        result = load_config()
-        assert isinstance(result, Config)
+        result = load_project_config()
+        assert isinstance(result, ProjectConfig)
 
 
 # --- Positive tests ---
@@ -119,7 +119,7 @@ class TestLoadConfigPositive:
     def test_load_config_minimal_valid_yaml(self, goga_project):
         """Minimal .goga/config.yml with language+image+pipeline+build.task_executor.agent."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.build.task_executor.agent == "claude"
@@ -130,14 +130,14 @@ class TestLoadConfigPositive:
     def test_load_config_pipeline_defaults(self, goga_project):
         """pipeline.env defaults to empty when not specified."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline.agent == "claude"
         assert config.pipeline.env == {}
 
     def test_load_config_full_yaml(self, goga_project):
         """.goga/config.yml with ALL fields populated."""
         _write_goga_yml(goga_project, FULL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "go"
         assert config.image == "goga:latest"
         assert config.commands == {"test": "go test ./...", "build": "go build ./..."}
@@ -172,14 +172,14 @@ build:
       K: v
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build.task_executor.agent == "custom:/path/to/script"
         assert config.build.task_executor.env == {"K": "v"}
 
     def test_load_config_happy_path(self, goga_project):
         """Happy path with language, env, worktree, commands."""
         _write_goga_yml(goga_project, HAPPY_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.build.task_executor.agent == "claude"
@@ -205,7 +205,7 @@ build:
       VAR3: value3
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build.task_executor.env == {
             "VAR1": "value1",
             "VAR2": "value2",
@@ -227,7 +227,7 @@ build:
   unknown_field: value
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build.task_executor.agent == "claude"
 
 
@@ -253,14 +253,14 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline.proxy == "http://corp:3128"
         assert config.pipeline.hosts == {"foo.local": "127.0.0.1", "bar.local": "10.0.0.2"}
 
     def test_load_config_pipeline_proxy_hosts_absent_defaults(self, goga_project):
         """Missing pipeline.proxy/hosts default to None and empty dict."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline.proxy is None
         assert config.pipeline.hosts == {}
 
@@ -281,14 +281,14 @@ build:
     svc.local: 192.168.1.1
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build.proxy == "http://build-proxy:8080"
         assert config.build.hosts == {"svc.local": "192.168.1.1"}
 
     def test_load_config_build_proxy_hosts_absent_defaults(self, goga_project):
         """Missing build.proxy/hosts default to None and empty dict."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.build.proxy is None
         assert config.build.hosts == {}
 
@@ -307,7 +307,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline.hosts == {}
 
     def test_load_config_proxy_null_treated_as_none(self, goga_project):
@@ -325,7 +325,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline.proxy is None
 
 
@@ -346,7 +346,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.proxy must be a string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_build_proxy_non_string_raises(self, goga_project):
         """build.proxy must be a string when present."""
@@ -364,7 +364,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"build\.proxy must be a string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_hosts_not_mapping_raises(self, goga_project):
         """pipeline.hosts must be a mapping when present."""
@@ -382,7 +382,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.hosts must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_build_hosts_not_mapping_raises(self, goga_project):
         """build.hosts must be a mapping when present."""
@@ -400,7 +400,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"build\.hosts must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_hosts_non_string_value_raises(self, goga_project):
         """pipeline.hosts values must be strings."""
@@ -420,7 +420,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.hosts must have string keys and values"):
-            load_config()
+            load_project_config()
 
     def test_load_config_build_hosts_non_string_key_raises(self, goga_project):
         """build.hosts keys must be strings."""
@@ -439,7 +439,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"build\.hosts must have string keys and values"):
-            load_config()
+            load_project_config()
 
 
 # --- Schema-break tests ---
@@ -449,7 +449,7 @@ class TestLoadConfigSchemaBreak:
     def test_load_config_minimal_valid_returns_config_with_image_and_pipeline(self, goga_project):
         """Minimal valid config exposes top-level image + pipeline + build.task_executor."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
         assert config.pipeline.agent == "claude"
@@ -477,7 +477,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"build\.image"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_absent_returns_none(self, goga_project):
         """YAML without the pipeline block yields config.pipeline is None."""
@@ -491,7 +491,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline is None
 
     def test_load_config_image_none_is_valid(self, goga_project):
@@ -507,7 +507,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.image is None
 
     def test_load_config_pipeline_agent_empty_raises(self, goga_project):
@@ -525,7 +525,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_agent_missing_raises(self, goga_project):
         """pipeline block without agent raises ValueError."""
@@ -541,7 +541,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_config()
+            load_project_config()
 
     def test_load_config_image_non_string_raises(self, goga_project):
         """image must be a string when present."""
@@ -558,7 +558,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="image must be a string"):
-            load_config()
+            load_project_config()
 
 
 # --- Optional sections tests (pipeline/build absent → None) ---
@@ -566,14 +566,14 @@ build:
 
 class TestLoadConfigOptionalSections:
     def test_load_config_minimal_only_language(self, goga_project):
-        """Config with only language → all other sections None / empty."""
+        """ProjectConfig with only language → all other sections None / empty."""
         _write_goga_yml(
             goga_project,
             """\
 language: python
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "python"
         assert config.image is None
         assert config.dockerfile is None
@@ -595,7 +595,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.pipeline is None
 
     def test_load_config_build_null_treated_as_absent(self, goga_project):
@@ -610,7 +610,7 @@ pipeline:
 build: null
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build is None
 
     def test_load_config_empty_pipeline_mapping_raises_inner_error(self, goga_project):
@@ -627,7 +627,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_config()
+            load_project_config()
 
     def test_load_config_empty_build_mapping_raises_inner_error(self, goga_project):
         """build: {} → inner validation preserved (KeyError on missing task_executor)."""
@@ -642,7 +642,7 @@ build: {}
 """,
         )
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_config()
+            load_project_config()
 
 
 # --- Negative tests ---
@@ -652,19 +652,19 @@ class TestLoadConfigNegative:
     def test_load_config_file_not_found(self, goga_project):
         """No .goga/config.yml in directory."""
         with pytest.raises(FileNotFoundError, match=r"\.goga/config\.yml"):
-            load_config()
+            load_project_config()
 
     def test_load_config_empty_file(self, goga_project):
         """0-byte .goga/config.yml."""
         _write_goga_yml(goga_project, "")
         with pytest.raises(FileNotFoundError, match=r"\.goga/config\.yml"):
-            load_config()
+            load_project_config()
 
     def test_load_config_not_a_mapping(self, goga_project):
         """YAML list content."""
         _write_goga_yml(goga_project, "- item1\n- item2\n")
         with pytest.raises(ValueError, match="mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_missing_language(self, goga_project):
         """.goga/config.yml without language key."""
@@ -680,7 +680,7 @@ build:
 """,
         )
         with pytest.raises(KeyError, match="language is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_language_null_raises(self, goga_project):
         """language: null (null, not string)."""
@@ -697,7 +697,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_language_empty_raises(self, goga_project):
         """language: '' (empty string)."""
@@ -714,7 +714,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_language_bool_raises(self, goga_project):
         """language: true (bool, not string)."""
@@ -731,7 +731,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_language_whitespace_only_raises(self, goga_project):
         """language: '   ' (whitespace-only string)."""
@@ -748,7 +748,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="language must be a non-empty string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_env_non_string_keys(self, goga_project):
         """task_executor env: {123: value} (int key)."""
@@ -767,7 +767,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_env_non_string_keys(self, goga_project):
         """pipeline env: {123: value} (int key)."""
@@ -786,7 +786,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_build_absent_returns_none(self, goga_project):
         """YAML without the build block yields config.build is None."""
@@ -799,7 +799,7 @@ pipeline:
   agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.build is None
 
     def test_load_config_missing_task_executor(self, goga_project):
@@ -816,7 +816,7 @@ build:
 """,
         )
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_empty_build_raises(self, goga_project):
         """build: {} (no task_executor)."""
@@ -831,7 +831,7 @@ build: {}
 """,
         )
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_missing_agent(self, goga_project):
         """task_executor: {} (no agent key)."""
@@ -847,7 +847,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="agent is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_empty_agent(self, goga_project):
         """agent: '' (empty string)."""
@@ -864,7 +864,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="agent is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_whitespace_agent_raises(self, goga_project):
         """agent: '   ' (whitespace-only string)."""
@@ -881,7 +881,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="agent is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_env_not_mapping(self, goga_project):
         """env: "not-a-dict"."""
@@ -899,7 +899,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_env_non_string_values(self, goga_project):
         """env: {KEY: 123}."""
@@ -918,7 +918,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_agent_bool_raises(self, goga_project):
         """agent: true (bool, not string)."""
@@ -935,7 +935,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="agent is required"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_scalar_raises(self, goga_project):
         """task_executor: claude (scalar, not mapping)."""
@@ -951,7 +951,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="task_executor must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_null_raises(self, goga_project):
         """task_executor: null (null, not mapping)."""
@@ -967,7 +967,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="task_executor must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_commands_not_dict_raises(self, goga_project):
         """commands: string (not mapping)."""
@@ -985,7 +985,7 @@ commands: string
 """,
         )
         with pytest.raises(ValueError, match="'commands' must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_build_not_dict_raises(self, goga_project):
         """build: true (not mapping)."""
@@ -1000,7 +1000,7 @@ build: true
 """,
         )
         with pytest.raises(ValueError, match="'build' must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_pipeline_not_dict_raises(self, goga_project):
         """pipeline: true (not mapping)."""
@@ -1016,7 +1016,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="'pipeline' must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_env_bool_value_raises(self, goga_project):
         """env: {DEBUG: true}."""
@@ -1035,7 +1035,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_task_executor_env_null_value_raises(self, goga_project):
         """env: {EMPTY: null}."""
@@ -1054,7 +1054,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="env must have string"):
-            load_config()
+            load_project_config()
 
 
 # --- Edge case tests ---
@@ -1064,13 +1064,13 @@ class TestLoadConfigEdgeCases:
     def test_load_config_commands_optional(self, goga_project):
         """.goga/config.yml without commands section."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.commands == {}
 
     def test_load_config_frozen_immutability(self, goga_project):
-        """Config objects are frozen — mutation raises FrozenInstanceError."""
+        """ProjectConfig objects are frozen — mutation raises FrozenInstanceError."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         with pytest.raises(dataclasses.FrozenInstanceError):
             config.lang = "go"
 
@@ -1081,7 +1081,7 @@ class TestLoadConfigEdgeCases:
             "language: python\npipeline:\n  agent: claude\nbuild:\n  task_executor:\n    agent: [unclosed\n",
         )
         with pytest.raises(yaml.YAMLError):
-            load_config()
+            load_project_config()
 
 
 # --- Contract tests for _parse_codemanifest ---
@@ -1089,7 +1089,7 @@ class TestLoadConfigEdgeCases:
 
 class TestParseCodemanifestContract:
     def test_parse_codemanifest_exists(self):
-        """_parse_codemanifest is importable from goga.config.loader."""
+        """_parse_codemanifest is importable from goga.config.project.loader."""
         assert callable(_parse_codemanifest)
 
     def test_parse_codemanifest_signature(self):
@@ -1237,7 +1237,7 @@ class TestParseCodemanifestNegative:
             _parse_codemanifest(data)
 
 
-# --- Integration tests: load_config with codemanifest ---
+# --- Integration tests: load_project_config with codemanifest ---
 
 
 class TestLoadConfigCodemanifest:
@@ -1260,7 +1260,7 @@ codemanifest:
   annotations: "Use lib for core logic"
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is not None
         assert config.codemanifest.usages == {"lib": ".specs/lib.md", "api": ".specs/api.md"}
         assert config.codemanifest.annotations == "Use lib for core logic"
@@ -1268,7 +1268,7 @@ codemanifest:
     def test_load_config_without_codemanifest_section(self, goga_project):
         """.goga/config.yml without codemanifest → codemanifest is None."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is None
 
     def test_load_config_codemanifest_empty_section(self, goga_project):
@@ -1286,7 +1286,7 @@ build:
 codemanifest: {}
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is not None
         assert config.codemanifest.usages == {}
         assert config.codemanifest.annotations is None
@@ -1307,7 +1307,7 @@ codemanifest:
   annotations: "Some notes"
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is not None
         assert config.codemanifest.usages == {}
         assert config.codemanifest.annotations == "Some notes"
@@ -1329,7 +1329,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.usages must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_annotations_not_string(self, goga_project):
         """annotations: 123 → ValueError."""
@@ -1348,7 +1348,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.annotations must be a string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_annotations_bool_raises(self, goga_project):
         """annotations: true → ValueError."""
@@ -1367,7 +1367,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.annotations must be a string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_usages_null(self, goga_project):
         """usages: null → ValueError."""
@@ -1386,7 +1386,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.usages must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_annotations_empty_string(self, goga_project):
         """annotations: '' → empty string is valid."""
@@ -1404,7 +1404,7 @@ codemanifest:
   annotations: ""
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is not None
         assert config.codemanifest.annotations == ""
 
@@ -1424,7 +1424,7 @@ codemanifest: string
 """,
         )
         with pytest.raises(ValueError, match=r"'codemanifest' must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_scalar_bool_raises(self, goga_project):
         """codemanifest: true → ValueError (not a mapping)."""
@@ -1442,7 +1442,7 @@ codemanifest: true
 """,
         )
         with pytest.raises(ValueError, match=r"'codemanifest' must be a mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_usages_non_string_key_raises(self, goga_project):
         """usages: {123: path} → ValueError (non-string key)."""
@@ -1462,7 +1462,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.usages must have string keys and values"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_usages_non_string_value_raises(self, goga_project):
         """usages: {lib: 123} → ValueError (non-string value)."""
@@ -1482,7 +1482,7 @@ codemanifest:
 """,
         )
         with pytest.raises(ValueError, match=r"codemanifest\.usages must have string keys and values"):
-            load_config()
+            load_project_config()
 
     def test_load_config_codemanifest_annotations_multiline(self, goga_project):
         """Multiline annotations and multiple usages."""
@@ -1506,7 +1506,7 @@ codemanifest:
     Line 3
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is not None
         assert config.codemanifest.usages == {"lib": ".specs/lib.md", "api": ".specs/api.md"}
         assert config.codemanifest.annotations == "Line 1\nLine 2\nLine 3\n"
@@ -1526,35 +1526,35 @@ build:
 codemanifest: null
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.codemanifest is None
 
 
-# --- Contract tests for Config.dockerfile + _parse_dockerfile ---
+# --- Contract tests for ProjectConfig.dockerfile + _parse_dockerfile ---
 
 
 class TestConfigDockerfileContract:
     def test_config_has_dockerfile_field(self):
-        """Config declares a `dockerfile` field."""
-        field_names = {f.name for f in dataclasses.fields(Config)}
+        """ProjectConfig declares a `dockerfile` field."""
+        field_names = {f.name for f in dataclasses.fields(ProjectConfig)}
         assert "dockerfile" in field_names
 
     def test_config_dockerfile_field_positioned_after_image(self):
         """dockerfile is declared immediately after image (field order)."""
-        field_names = [f.name for f in dataclasses.fields(Config)]
+        field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
         assert field_names.index("dockerfile") == field_names.index("image") + 1
 
     def test_config_dockerfile_annotation_optional_str(self):
         """dockerfile field type is str | None."""
-        dockerfile_field = {f.name: f for f in dataclasses.fields(Config)}["dockerfile"]
+        dockerfile_field = {f.name: f for f in dataclasses.fields(ProjectConfig)}["dockerfile"]
         assert dockerfile_field.type == str | None
 
     def test_load_config_still_callable(self):
-        """load_config remains callable from goga.config."""
-        assert callable(load_config)
+        """load_project_config remains callable from goga.config."""
+        assert callable(load_project_config)
 
     def test_parse_dockerfile_exists(self):
-        """_parse_dockerfile is importable from goga.config.loader."""
+        """_parse_dockerfile is importable from goga.config.project.loader."""
         assert callable(_parse_dockerfile)
 
     def test_parse_dockerfile_signature(self):
@@ -1611,7 +1611,7 @@ class TestParseDockerfileNegative:
             _parse_dockerfile({"dockerfile": {"path": "Dockerfile"}})
 
 
-# --- Integration tests: load_config with dockerfile ---
+# --- Integration tests: load_project_config with dockerfile ---
 
 
 class TestLoadConfigDockerfile:
@@ -1630,14 +1630,14 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.image == "img:tag"
         assert config.dockerfile == "Dockerfile"
 
     def test_load_config_dockerfile_defaults_none_when_absent(self, goga_project):
         """No dockerfile key → config.dockerfile is None."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.dockerfile is None
 
     def test_load_config_dockerfile_empty_string_valid(self, goga_project):
@@ -1655,7 +1655,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.dockerfile == ""
 
     def test_load_config_dockerfile_non_string_raises(self, goga_project):
@@ -1674,7 +1674,7 @@ build:
 """,
         )
         with pytest.raises(ValueError, match="dockerfile must be a string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_dockerfile_without_image(self, goga_project):
         """dockerfile set with image absent → both None-able independently."""
@@ -1690,7 +1690,7 @@ build:
     agent: claude
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.image is None
         assert config.dockerfile == "Dockerfile"
 
@@ -1700,7 +1700,7 @@ build:
 
 class TestParseToolsContract:
     def test_parse_tools_exists(self):
-        """_parse_tools is importable from goga.config.loader."""
+        """_parse_tools is importable from goga.config.project.loader."""
         assert callable(_parse_tools)
 
     def test_parse_tools_signature(self):
@@ -1816,7 +1816,7 @@ class TestParseToolsNegative:
             _parse_tools({"tools": {"afm": "1.0.x", "viewer": None, "ralphex": "1.x"}})
 
 
-# --- Integration tests: load_config with tools ---
+# --- Integration tests: load_project_config with tools ---
 
 
 class TestLoadConfigTools:
@@ -1839,7 +1839,7 @@ tools:
   weird: foo
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.tools == {
             "valid": "1.0.x",
             "operator_prefixed": "==1.0",
@@ -1850,7 +1850,7 @@ tools:
     def test_load_config_tools_absent_returns_none(self, goga_project):
         """YAML without tools → cfg.tools is None."""
         _write_goga_yml(goga_project, MINIMAL_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.tools is None
 
     def test_load_config_tools_null_returns_none(self, goga_project):
@@ -1868,7 +1868,7 @@ build:
 tools: null
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.tools is None
 
     def test_load_config_tools_empty_mapping_returns_empty_dict(self, goga_project):
@@ -1886,7 +1886,7 @@ build:
 tools: {}
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.tools == {}
 
     def test_load_config_tools_non_mapping_raises(self, goga_project):
@@ -1905,7 +1905,7 @@ tools: 5
 """,
         )
         with pytest.raises(ValueError, match=r"tools.*mapping"):
-            load_config()
+            load_project_config()
 
     def test_load_config_tools_null_value_raises(self, goga_project):
         """tools: {viewer:} (YAML-null individual) → ValueError match 'string'."""
@@ -1924,7 +1924,7 @@ tools:
 """,
         )
         with pytest.raises(ValueError, match="string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_tools_non_string_value_raises(self, goga_project):
         """tools: {viewer: 5} → ValueError (non-string value)."""
@@ -1943,7 +1943,7 @@ tools:
 """,
         )
         with pytest.raises(ValueError, match="tools"):
-            load_config()
+            load_project_config()
 
     def test_load_config_tools_non_string_value_float_raises(self, goga_project):
         """tools: {viewer: 1.0} (YAML float) → ValueError.
@@ -1966,7 +1966,7 @@ tools:
 """,
         )
         with pytest.raises(ValueError, match="string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_tools_mixed_null_and_valid_raises(self, goga_project):
         """{afm: 1.0.x, viewer: null, ralphex: 1.x} → ValueError match 'string'."""
@@ -1987,12 +1987,12 @@ tools:
 """,
         )
         with pytest.raises(ValueError, match="string"):
-            load_config()
+            load_project_config()
 
     def test_load_config_backward_compatible_without_tools(self, goga_project):
         """Existing config without tools → cfg.tools is None, other fields unchanged."""
         _write_goga_yml(goga_project, HAPPY_YAML)
-        config = load_config()
+        config = load_project_config()
         assert config.tools is None
         # Other fields unchanged
         assert config.lang == "python"
@@ -2021,7 +2021,7 @@ tools:
   afm: 1.0.x
 """,
         )
-        config = load_config()
+        config = load_project_config()
         assert config.tools == {"afm": "1.0.x"}
         assert config.codemanifest is not None
         assert config.codemanifest.annotations == "notes"

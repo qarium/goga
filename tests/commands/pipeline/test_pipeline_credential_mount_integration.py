@@ -15,16 +15,16 @@ from pathlib import Path
 from unittest import mock
 
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 # goga.commands.pipeline.run_pipeline_container is the real submodule; resolve
 # it via sys.modules so string-based mock.patch paths walk the actual module.
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
 
 
-def _make_config() -> Config:
-    """Build a minimal Config satisfying the schema."""
-    return Config(
+def _make_config() -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the schema."""
+    return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
         dockerfile=None,

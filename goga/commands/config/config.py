@@ -5,7 +5,7 @@ from dataclasses import asdict, is_dataclass
 import click
 import yaml
 
-from ...config import load_config
+from ...config import load_project_config
 
 _ALIAS_MAP: dict[str, str] = {"language": "lang"}
 _NOT_FOUND = object()
@@ -87,7 +87,7 @@ def config(ctx: click.Context, options: tuple[str, ...]) -> None:
             parsed.
     """
     try:
-        cfg = load_config()
+        cfg = load_project_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 

@@ -6,10 +6,10 @@ import pytest
 from goga.config import (
     BuildConfig,
     CodemanifestConfig,
-    Config,
     PipelineConfig,
+    ProjectConfig,
     TaskExecutorConfig,
-    load_config,
+    load_project_config,
 )
 
 FULL_YAML = """\
@@ -63,17 +63,17 @@ build:
 
 
 class TestFullConfigLoadingFlow:
-    """End-to-end: YAML file → load_config() → complete Config object graph."""
+    """End-to-end: YAML file → load_project_config() → complete ProjectConfig object graph."""
 
     def test_full_object_graph_from_yaml(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(FULL_YAML)
 
-        config = load_config()
+        config = load_project_config()
 
         # Top-level
-        assert isinstance(config, Config)
+        assert isinstance(config, ProjectConfig)
         assert config.lang == "rust"
         assert config.image == "rust-builder:1.0"
         assert config.codemanifest is None
@@ -114,7 +114,7 @@ class TestFullConfigLoadingFlow:
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
 
-        config = load_config()
+        config = load_project_config()
 
         assert config.lang == "python"
         assert config.image is None
@@ -141,7 +141,7 @@ class TestFullConfigLoadingFlow:
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(AGENT_PYTHON_YAML)
 
-        config = load_config()
+        config = load_project_config()
 
         assert config.lang == "python"
         assert config.image == "qarium/foo:1.0"
@@ -156,7 +156,7 @@ class TestFullConfigLoadingFlow:
 
 
 class TestConfigImmutability:
-    """Config, BuildConfig, TaskExecutorConfig are frozen dataclasses — fields cannot be reassigned."""
+    """ProjectConfig, BuildConfig, TaskExecutorConfig are frozen dataclasses — fields cannot be reassigned."""
 
     def test_task_executor_is_frozen(self):
         te = TaskExecutorConfig(agent="claude")
@@ -178,7 +178,7 @@ class TestConfigImmutability:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(image=None, dockerfile=None, build=bc, pipeline=pc, lang="python")
+        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, lang="python")
         with pytest.raises(dataclasses.FrozenInstanceError):  # type: ignore[attr-defined]
             cfg.lang = "go"
 
@@ -197,13 +197,13 @@ class TestConfigImmutability:
         te = TaskExecutorConfig(agent="claude")
         bc = BuildConfig(task_executor=te)
         pc = PipelineConfig(agent="claude")
-        cfg = Config(image=None, dockerfile=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
+        cfg = ProjectConfig(image=None, dockerfile=None, build=bc, pipeline=pc, commands={"a": "1"}, lang="python")
         cfg.commands["b"] = "2"  # dict content is mutable
         assert cfg.commands == {"a": "1", "b": "2"}
 
 
 class TestSequentialLoadConfigCalls:
-    """Multiple load_config calls with different .goga/config.yml contents return independent Configs."""
+    """Multiple load_project_config calls with different .goga/config.yml contents return independent Configs."""
 
     def test_sequential_calls_produce_independent_configs(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -211,14 +211,14 @@ class TestSequentialLoadConfigCalls:
         # First call — minimal config
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
-        config1 = load_config()
+        config1 = load_project_config()
         assert config1.lang == "python"
         assert config1.build.task_executor.agent == "claude"
 
         # Second call — different config
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(AGENT_PYTHON_YAML)
-        config2 = load_config()
+        config2 = load_project_config()
         assert config2.lang == "python"
         assert config2.build.task_executor.agent == "codex"
 
@@ -234,10 +234,10 @@ class TestSequentialLoadConfigCalls:
         # First call — valid file
         (tmp_path / ".goga").mkdir(exist_ok=True)
         (tmp_path / ".goga" / "config.yml").write_text(MINIMAL_YAML)
-        config1 = load_config()
+        config1 = load_project_config()
         assert config1.build.task_executor.agent == "claude"
 
         # Remove file, second call should fail
         (tmp_path / ".goga" / "config.yml").unlink()
         with pytest.raises(FileNotFoundError):
-            load_config()
+            load_project_config()

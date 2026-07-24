@@ -14,7 +14,7 @@ import click
 import yaml
 
 from ...agents import resolve_credential_mounts
-from ...config import load_config
+from ...config import load_project_config
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -290,12 +290,12 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         raise click.ClickException("docker not found in PATH")
 
     try:
-        config = load_config()
+        config = load_project_config()
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     # Step 2b — host-side None-guard: the build section is optional at the
-    # loader level (load_config returns config.build=None when absent), but
+    # loader level (load_project_config returns config.build=None when absent), but
     # `goga build` cannot run without it. Raise a clean ClickException BEFORE
     # any config.build.* access and BEFORE the secret env-file write (step 10),
     # so a build-less config surfaces as a clean message + exit 1 rather than an

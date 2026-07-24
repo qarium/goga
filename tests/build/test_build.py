@@ -15,7 +15,7 @@ from goga.build.build import (
     _write_ralphex_config,
     build,
 )
-from goga.config import BuildConfig, Config, PipelineConfig, TaskExecutorConfig
+from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 
 TEST_ENV_VARS = {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
@@ -29,10 +29,10 @@ def _make_config(
     agent: str = "claude",
     env: dict | None = None,
     **build_kwargs,
-) -> Config:
+) -> ProjectConfig:
     task_executor = TaskExecutorConfig(agent=agent, env=env or {})
     build = BuildConfig(task_executor=task_executor, **build_kwargs)
-    return Config(
+    return ProjectConfig(
         lang="python",
         image="goga:latest",
         dockerfile=None,
@@ -46,7 +46,7 @@ def _run_build_in_tmp(
     monkeypatch,
     plan: str = "plan.md",
     cli_options: dict | None = None,
-    config: Config | None = None,
+    config: ProjectConfig | None = None,
 ) -> int:
     monkeypatch.chdir(tmp_path)
     if config is None:

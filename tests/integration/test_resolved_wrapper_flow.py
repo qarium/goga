@@ -39,7 +39,7 @@ from goga.build import build
 from goga.commands.pipeline.run_pipeline_container import (
     run_pipeline_container as rpc,
 )
-from goga.config import load_config
+from goga.config import load_project_config
 
 # goga.commands.pipeline.run_pipeline_container shadows its submodule name in the
 # package __init__, so resolve the real module via sys.modules for
@@ -69,7 +69,7 @@ def _write_config(tmp_path: Path, *, agent: str, image: str = "goga:latest") -> 
 def _load_config(tmp_path: Path, monkeypatch) -> object:
     """Chdir into tmp_path and load the .goga/config.yml written there."""
     monkeypatch.chdir(tmp_path)
-    return load_config()
+    return load_project_config()
 
 
 def _capture_afm_config_popen(captured: dict) -> object:

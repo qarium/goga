@@ -1,17 +1,15 @@
 # tests/config/test_home_config.py — contract + logic tests for the goga/config/home cell
 
 import dataclasses
+from pathlib import Path
 
+import goga.config.home as home_mod
 import pytest
 from goga.config.home import (
     DockerArgsConfig,
     HomeConfig,
     load_home_config,
 )
-from pathlib import Path
-
-import goga.config.home as home_mod
-
 
 # --- Helpers ---
 

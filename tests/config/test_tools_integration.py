@@ -3,10 +3,10 @@
 from goga.config import (
     BuildConfig,
     CodemanifestConfig,
-    Config,
     PipelineConfig,
+    ProjectConfig,
     TaskExecutorConfig,
-    load_config,
+    load_project_config,
 )
 
 
@@ -75,17 +75,17 @@ codemanifest:
 
 
 class TestToolsExtractionIntegration:
-    """End-to-end: realistic .goga/config.yml → load_config() → cfg.tools populated."""
+    """End-to-end: realistic .goga/config.yml → load_project_config() → cfg.tools populated."""
 
     def test_full_config_with_tools_populated(self, tmp_path, monkeypatch):
         """Realistic config with all sections (incl. tools) → cfg.tools parsed verbatim."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, FULL_WITH_TOOLS_YAML)
 
-        config = load_config()
+        config = load_project_config()
 
         # Sanity: full object graph still intact alongside the new field.
-        assert isinstance(config, Config)
+        assert isinstance(config, ProjectConfig)
         assert config.lang == "go"
         assert config.image == "goga:latest"
         assert config.dockerfile == "Dockerfile"
@@ -107,11 +107,11 @@ class TestToolsExtractionIntegration:
         assert type(config.tools) is dict
 
     def test_full_config_without_tools_is_none_other_fields_untouched(self, tmp_path, monkeypatch):
-        """Config with all sections BUT tools → cfg.tools is None, other fields unchanged."""
+        """ProjectConfig with all sections BUT tools → cfg.tools is None, other fields unchanged."""
         monkeypatch.chdir(tmp_path)
         _write_config(tmp_path, FULL_WITHOUT_TOOLS_YAML)
 
-        config = load_config()
+        config = load_project_config()
 
         # The absent tools key resolves to None (backward-compatible default).
         assert config.tools is None
@@ -155,7 +155,7 @@ codemanifest:
 """,
         )
 
-        config = load_config()
+        config = load_project_config()
 
         # tools sits between build and codemanifest as a root-level sibling.
         assert config.tools is not None
@@ -185,7 +185,7 @@ tools: {}
 """,
         )
 
-        config = load_config()
+        config = load_project_config()
         assert config.tools == {}
         # Distinguishes "present-but-empty" from "absent" — empty dict is falsy but not None.
         assert config.tools is not None
@@ -218,7 +218,7 @@ tools:
 """,
         )
 
-        config = load_config()
+        config = load_project_config()
 
         assert config.commands == {"fmt": "black ."}
         assert config.codemanifest is not None
@@ -238,7 +238,7 @@ tools:
 """,
         )
 
-        config = load_config()
+        config = load_project_config()
         assert config.lang == "python"
         assert config.image is None
         assert config.pipeline is None
@@ -256,10 +256,10 @@ class TestToolsExtractionRegression:
         monkeypatch.chdir(tmp_path)
 
         _write_config(tmp_path, FULL_WITHOUT_TOOLS_YAML)
-        without = load_config()
+        without = load_project_config()
 
         _write_config(tmp_path, FULL_WITH_TOOLS_YAML)
-        with_tools = load_config()
+        with_tools = load_project_config()
 
         # Shared sections are identical between the two configs.
         assert with_tools.lang == without.lang
@@ -290,5 +290,5 @@ tools: null
 """,
         )
 
-        config = load_config()
+        config = load_project_config()
         assert config.tools is None

@@ -402,7 +402,7 @@ class TestEnvFileCleanup:
             assert not env_file.exists(), f"Env file {env_file} was not cleaned up"
 
 
-# --- Config loading tests ---
+# --- ProjectConfig loading tests ---
 
 
 class TestBuildUsesLoadConfigFromGogaConfig:
@@ -454,7 +454,7 @@ class TestBuildMissingGogaYmlRaisesConfigError:
 class TestBuildSectionGuard:
     """D3 — host-side None-guard: ClickException when the build section is absent.
 
-    The guard (Algorithm step 2b) runs right after ``load_config()`` and before
+    The guard (Algorithm step 2b) runs right after ``load_project_config()`` and before
     any ``config.build.*`` access or the secret env-file write, so a build-less
     config produces a clean user-facing error + exit 1 (no AttributeError, no
     docker run, no leaked env file).
@@ -746,11 +746,11 @@ class TestImageUpdateInBuild:
         assert result.exit_code == 0
 
 
-# --- Task 6: top-level Config.image contract ---
+# --- Task 6: top-level ProjectConfig.image contract ---
 
 
 class TestTopLevelImageContract:
-    """Logic tests for goga/commands/build.build reading the top-level Config.image."""
+    """Logic tests for goga/commands/build.build reading the top-level ProjectConfig.image."""
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
