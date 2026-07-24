@@ -22,12 +22,13 @@ if workflow.prompt is not None:
     print(workflow.prompt)
 
 for stage_name, stage in workflow.stages.items():
-    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}, "
-          f"skills={stage.skills}, skip={stage.skip}")
+    print(f"{stage_name}: agent={stage.agent}, loop={stage.loop}, skills={stage.skills}, skip={stage.skip}")
 
 for name, extend_stage in workflow.extend.items():
-    print(f"extend {name}: before={extend_stage.before}, after={extend_stage.after}, "
-          f"agent={extend_stage.agent}, loop={extend_stage.loop}")
+    print(
+        f"extend {name}: before={extend_stage.before}, after={extend_stage.after}, "
+        f"agent={extend_stage.agent}, loop={extend_stage.loop}"
+    )
 ```
 
 ## Parameters

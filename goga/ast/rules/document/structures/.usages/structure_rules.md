@@ -12,6 +12,7 @@ Collisions are resolved via import aliases. Embedded types (embedded=True) are e
 
 ```python
 from goga.ast.rules.document.structures import EntitiesAndRoutinesHasNotConflicts
+
 rule = EntitiesAndRoutinesHasNotConflicts()
 ```
 
@@ -21,6 +22,7 @@ Entity definitions must contain only: `location`, `annotations`, `methods`, `pro
 
 ```python
 from goga.ast.rules.document.structures import EntityHasOnlyValidKeys
+
 rule = EntityHasOnlyValidKeys()
 ```
 
@@ -30,6 +32,7 @@ Routine definitions must contain only: `location`, `annotations`.
 
 ```python
 from goga.ast.rules.document.structures import RoutineHasOnlyValidKeys
+
 rule = RoutineHasOnlyValidKeys()
 ```
 
@@ -39,6 +42,7 @@ Signature must match the format `(...) -> ...` or `(...)`.
 
 ```python
 from goga.ast.rules.document.structures import SignatureIsValid
+
 rule = SignatureIsValid()
 ```
 
@@ -49,6 +53,7 @@ Signatures without a return type are valid.
 
 ```python
 from goga.ast.rules.document.structures import ReturnTypeHasLink
+
 rule = ReturnTypeHasLink()
 ```
 
@@ -62,6 +67,7 @@ Embedded types are skipped.
 
 ```python
 from goga.ast.rules.document.structures import LocationIsRequired
+
 rule = LocationIsRequired()
 ```
 

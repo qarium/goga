@@ -21,11 +21,11 @@ All error types expose a `message` property containing the error description.
 
 ```python
 error = errors[0]  # obtained from Visitor.analyze()
-error.message   # str — error description
-error.rule      # str — name of the violated rule
+error.message  # str — error description
+error.rule  # str — name of the violated rule
 error.document  # DocumentRoot — source document
-error.node      # DocumentNode — offending node
-str(error)      # str — formatted multi-line output
+error.node  # DocumentNode — offending node
+str(error)  # str — formatted multi-line output
 ```
 
 String representation format:
@@ -41,11 +41,11 @@ Node:
 
 ```python
 error = ast_errors[0]  # obtained from Analyzer.analyze()
-error.message   # str — error description
-error.rule      # str — name of the violated rule
+error.message  # str — error description
+error.rule  # str — name of the violated rule
 error.document  # DocumentRoot | None — source document (may be None)
-error.node      # DocumentNode | None — offending node (may be None)
-str(error)      # str — formatted multi-line output
+error.node  # DocumentNode | None — offending node (may be None)
+str(error)  # str — formatted multi-line output
 ```
 
 Properties `document` and `node` may be `None` because tree-level rules are not always bound to a specific document.
@@ -56,8 +56,8 @@ Properties `document` and `node` may be `None` because tree-level rules are not 
 try:
     factory.create()
 except DocumentParseError as e:
-    e.message    # str — error description
-    e.filepath   # str — path to the CODEMANIFEST file
+    e.message  # str — error description
+    e.filepath  # str — path to the CODEMANIFEST file
 ```
 
 `Factory` raises `DocumentParseError` when it encounters unknown keys in the header or footer sections.

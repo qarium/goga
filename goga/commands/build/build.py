@@ -235,7 +235,7 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     help="Refresh the image before launch (build if a project Dockerfile is declared, else pull)",
 )
 @click.pass_context
-def build(  # noqa: PLR0913, C901, PLR0915, PLR0912
+def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     ctx: click.Context,
     plan: str,
     dry_run: bool,

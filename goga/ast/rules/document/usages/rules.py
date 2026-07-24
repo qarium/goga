@@ -138,7 +138,7 @@ class UsageUrlIsAccessible(DocumentRule):
 
     def __init__(self) -> None:
         super().__init__(name="usage_url_is_accessible")
-        self._url_cache: dict[str, None | tuple[str, int | object]] = {}
+        self._url_cache: dict[str, tuple[str, int | object] | None] = {}
 
     def check(self, node: DocumentNode) -> list[DocumentRuleError]:
         """Validate that usage URLs are reachable over HTTP.
@@ -171,7 +171,7 @@ class UsageUrlIsAccessible(DocumentRule):
         self._url_cache[url] = outcome
         return self._outcome_to_errors(outcome, item, url, document)
 
-    def _http_check(self, url: str) -> None | tuple[str, int | object]:
+    def _http_check(self, url: str) -> tuple[str, int | object] | None:
         """Perform an HTTP HEAD check and return None or an error outcome tuple."""
         try:
             response = requests.head(url, timeout=_REQUEST_TIMEOUT)
@@ -185,7 +185,7 @@ class UsageUrlIsAccessible(DocumentRule):
         except Exception as e:
             return ("error", e)
 
-    def _check_via_get(self, url: str) -> None | tuple[str, int | object]:
+    def _check_via_get(self, url: str) -> tuple[str, int | object] | None:
         """Fallback HTTP GET check when HEAD is not allowed."""
         try:
             response = requests.get(url, timeout=_REQUEST_TIMEOUT)

@@ -10,10 +10,12 @@ from goga.ast.visitor import Visitor
 from goga.ast.rules import ImportsCanNotBeEmpty, AllUsagesIsUsed
 
 visitor = Visitor(document)
-errors = visitor.analyze([
-    ImportsCanNotBeEmpty(),
-    AllUsagesIsUsed(),
-])
+errors = visitor.analyze(
+    [
+        ImportsCanNotBeEmpty(),
+        AllUsagesIsUsed(),
+    ]
+)
 ```
 
 Constructor parameters:
@@ -42,10 +44,12 @@ factory = Factory("path/to/cell")
 doc = factory.create()
 
 visitor = Visitor(doc)
-errors = visitor.analyze([
-    SignatureIsValid(),
-    LocationIsRequired(),
-])
+errors = visitor.analyze(
+    [
+        SignatureIsValid(),
+        LocationIsRequired(),
+    ]
+)
 
 for error in errors:
     print(f"{error.rule}: {error.message}")

@@ -59,7 +59,7 @@ from .run_pipeline_container import run_pipeline_container
     help="Disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in-container)",
 )
 @click.pass_context
-def pipeline(  # noqa: PLR0913
+def pipeline(  # noqa: PLR0913, PLR0917
     ctx: click.Context,
     name: str | None,
     extra_env: tuple[str, ...],

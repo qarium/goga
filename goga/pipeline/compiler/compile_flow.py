@@ -789,14 +789,10 @@ def _strict_validate_extend_refs(
     for name, ext in workflow.extend.items():
         for ref in ext.before or []:
             if ref not in valid_names:
-                raise StructuralError(
-                    f"unknown stage name in workflow.extend.{name}.before: {ref}"
-                )
+                raise StructuralError(f"unknown stage name in workflow.extend.{name}.before: {ref}")
         for ref in ext.after or []:
             if ref not in valid_names:
-                raise StructuralError(
-                    f"unknown stage name in workflow.extend.{name}.after: {ref}"
-                )
+                raise StructuralError(f"unknown stage name in workflow.extend.{name}.after: {ref}")
 
 
 def _strict_validate_stage_names(
@@ -865,6 +861,7 @@ def _resolve_skip(
     """
     if _seen is None:
         _seen = set()
+
     if name in _seen:
         return []
     _seen.add(name)
@@ -911,14 +908,11 @@ def _reconnect_stages_depends_on(
     for step in steps:
         if step.name in skipped_names or step.depends_on is None:
             continue
+
         rewritten: list[str] = []
         seen: set[str] = set()
         for ref in step.depends_on:
-            resolved = (
-                _resolve_skip(ref, steps_by_name, skipped_names)
-                if ref in skipped_names
-                else [ref]
-            )
+            resolved = _resolve_skip(ref, steps_by_name, skipped_names) if ref in skipped_names else [ref]
             for resolved_ref in resolved:
                 if resolved_ref != step.name and resolved_ref not in seen:
                     seen.add(resolved_ref)

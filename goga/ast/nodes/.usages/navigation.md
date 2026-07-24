@@ -13,17 +13,17 @@ from goga.ast.nodes import DocumentRoot
 doc: DocumentRoot = factory.create()
 
 # Section accessors
-doc.header      # HeaderNode
-doc.body        # BodyNode
-doc.footer      # FooterNode
+doc.header  # HeaderNode
+doc.body  # BodyNode
+doc.footer  # FooterNode
 
 # Metadata
-doc.path        # str — relative path to the document's directory
-doc.children    # list[DocumentRoot] — nested child documents
+doc.path  # str — relative path to the document's directory
+doc.children  # list[DocumentRoot] — nested child documents
 
 # Indexes
-doc.types       # dict[str, list[Node]] — maps type names to their nodes
-doc.links       # dict[str, list[Node]] — maps link names to their AnnotationsNode occurrences
+doc.types  # dict[str, list[Node]] — maps type names to their nodes
+doc.links  # dict[str, list[Node]] — maps link names to their AnnotationsNode occurrences
 doc.embeddings  # list[tuple[str, str]] — embedded types as (type_name, from_path) tuples
 ```
 
@@ -34,10 +34,10 @@ doc.embeddings  # list[tuple[str, str]] — embedded types as (type_name, from_p
 ```python
 header = doc.header
 
-header.imports     # ImportsNode
-header.usages      # UsagesNode
-header.annotations # AnnotationsNode
-header.types       # list[str] — names of all imported types
+header.imports  # ImportsNode
+header.usages  # UsagesNode
+header.annotations  # AnnotationsNode
+header.types  # list[str] — names of all imported types
 ```
 
 ### Imports
@@ -47,20 +47,20 @@ header.types       # list[str] — names of all imported types
 ```python
 imports = header.imports
 
-imports.types   # list[ImportTypeItemNode]
+imports.types  # list[ImportTypeItemNode]
 imports.usages  # list[ImportUsageItemNode]
 
 # Each ImportTypeItemNode
 for item in imports.types:
-    item.type_name   # set[str] — names of imported types
-    item.from_path   # str — source document path
-    item.alias       # str — alias (empty string if no alias)
+    item.type_name  # set[str] — names of imported types
+    item.from_path  # str — source document path
+    item.alias  # str — alias (empty string if no alias)
 
 # Each ImportUsageItemNode
 for item in imports.usages:
     item.usage_name  # set[str] — names of imported usages
-    item.from_path   # str — source document path
-    item.alias       # str — alias (empty string if no alias)
+    item.from_path  # str — source document path
+    item.alias  # str — alias (empty string if no alias)
 ```
 
 ### Usages
@@ -71,8 +71,8 @@ for item in imports.usages:
 usages = header.usages
 
 for item in usages.items:
-    item.name        # str — usage name
-    item.annotations # AnnotationsNode — usage content
+    item.name  # str — usage name
+    item.annotations  # AnnotationsNode — usage content
 ```
 
 ## Body — BodyNode
@@ -92,14 +92,14 @@ body.routines  # list[RoutineTypeNode]
 
 ```python
 for entity in body.entities:
-    entity.name        # str
-    entity.signature   # str — e.g. "(param: Type) -> result:Type"
-    entity.location    # str — implementation file path
-    entity.embedded    # bool — True if embedded from another document
-    entity.mutations   # list[tuple[str, str]] — (base_type_name, source_document_path)
+    entity.name  # str
+    entity.signature  # str — e.g. "(param: Type) -> result:Type"
+    entity.location  # str — implementation file path
+    entity.embedded  # bool — True if embedded from another document
+    entity.mutations  # list[tuple[str, str]] — (base_type_name, source_document_path)
     entity.properties  # list[PropertyNode]
-    entity.methods     # list[MethodNode]
-    entity.annotations # AnnotationsNode
+    entity.methods  # list[MethodNode]
+    entity.annotations  # AnnotationsNode
 ```
 
 ### Routine — RoutineTypeNode
@@ -108,11 +108,11 @@ for entity in body.entities:
 
 ```python
 for routine in body.routines:
-    routine.name        # str
-    routine.signature   # str
-    routine.location    # str
-    routine.embedded    # bool
-    routine.annotations # AnnotationsNode
+    routine.name  # str
+    routine.signature  # str
+    routine.location  # str
+    routine.embedded  # bool
+    routine.annotations  # AnnotationsNode
 ```
 
 ### Properties and methods
@@ -120,15 +120,15 @@ for routine in body.routines:
 ```python
 # PropertyNode
 for prop in entity.properties:
-    prop.name        # str
-    prop.type        # str — data type
-    prop.annotations # AnnotationsNode
+    prop.name  # str
+    prop.type  # str — data type
+    prop.annotations  # AnnotationsNode
 
 # MethodNode
 for method in entity.methods:
-    method.name        # str
-    method.signature   # str
-    method.annotations # AnnotationsNode
+    method.name  # str
+    method.signature  # str
+    method.annotations  # AnnotationsNode
 ```
 
 ## Annotations — AnnotationsNode
@@ -138,10 +138,10 @@ for method in entity.methods:
 ```python
 ann = entity.annotations
 
-ann.text     # str — inline annotation text
-ann.url      # str | None — URL of the linked usage
-ann.filepath # str | None — file path of the linked usage
-ann.links    # list[str] — extracted link names enclosed in backticks
+ann.text  # str — inline annotation text
+ann.url  # str | None — URL of the linked usage
+ann.filepath  # str | None — file path of the linked usage
+ann.links  # list[str] — extracted link names enclosed in backticks
 ```
 
 Invariant: exactly one of `text`, `url`, or `filepath` is non-None per `AnnotationsNode`.
@@ -153,9 +153,9 @@ Invariant: exactly one of `text`, `url`, or `filepath` is non-None per `Annotati
 ```python
 footer = doc.footer
 
-footer.author      # str
+footer.author  # str
 footer.created_at  # str
-footer.description # str
+footer.description  # str
 ```
 
 ## Traversing the document tree

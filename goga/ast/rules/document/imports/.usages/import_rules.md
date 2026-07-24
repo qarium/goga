@@ -11,6 +11,7 @@ The `Imports` block must not be empty — each import entry must contain at leas
 
 ```python
 from goga.ast.rules.document.imports import ImportsCanNotBeEmpty
+
 rule = ImportsCanNotBeEmpty()
 ```
 
@@ -20,6 +21,7 @@ Each import item must contain only the keys `Types`, `Usages`, `From`.
 
 ```python
 from goga.ast.rules.document.imports import ImportsHasOnlyValidKeys
+
 rule = ImportsHasOnlyValidKeys()
 ```
 
@@ -29,6 +31,7 @@ Each import item must declare at least one type or usage. Empty strings and null
 
 ```python
 from goga.ast.rules.document.imports import ImportItemIsValid
+
 rule = ImportItemIsValid()
 ```
 
@@ -38,6 +41,7 @@ Each imported usage file must exist at `{from_path}/.usages/{usage_name}.md`.
 
 ```python
 from goga.ast.rules.document.imports import ImportUsageExists
+
 rule = ImportUsageExists()
 ```
 
@@ -47,6 +51,7 @@ The `From` path must: exist on disk, be non-empty, and not escape the CWD bounda
 
 ```python
 from goga.ast.rules.document.imports import ImportHasValidFromPath
+
 rule = ImportHasValidFromPath()
 ```
 
@@ -56,6 +61,7 @@ All type names and usage names must be unique across all import entries in the d
 
 ```python
 from goga.ast.rules.document.imports import ImportHasNotDuplicate
+
 rule = ImportHasNotDuplicate()
 ```
 
@@ -68,6 +74,7 @@ Each imported type or usage must be referenced in at least one of the following 
 
 ```python
 from goga.ast.rules.document.imports import ImportIsUsed
+
 rule = ImportIsUsed()
 ```
 

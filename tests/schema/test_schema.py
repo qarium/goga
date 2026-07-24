@@ -33,7 +33,7 @@ from goga.schema.schema import (
 _schema_mod = importlib.import_module("goga.schema.schema")
 
 
-def _make_doc(  # noqa: PLR0913
+def _make_doc(  # noqa: PLR0913, PLR0917
     path: str,
     entities: list[str] | None = None,
     routines: list[str] | None = None,

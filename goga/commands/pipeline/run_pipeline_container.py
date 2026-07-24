@@ -362,7 +362,7 @@ def _resolve_workflow_env(
     return {}, None
 
 
-def _build_env_file(  # noqa: PLR0913
+def _build_env_file(  # noqa: PLR0913, PLR0917
     extra_env: tuple[str, ...],
     pipeline_env: dict[str, str],
     proxy: str | None,
@@ -416,7 +416,7 @@ def _build_env_file(  # noqa: PLR0913
     return env_file
 
 
-def _run_named(  # noqa: PLR0913
+def _run_named(  # noqa: PLR0913, PLR0917
     name: str,
     config: Config,
     container_name: str,
@@ -572,7 +572,7 @@ def _run_named(  # noqa: PLR0913
         signal.signal(signal.SIGINT, prev_int)
 
 
-def run_pipeline_container(  # noqa: PLR0913
+def run_pipeline_container(  # noqa: PLR0913, PLR0917
     name: str | None,
     config: Config,
     extra_env: tuple[str, ...] = (),

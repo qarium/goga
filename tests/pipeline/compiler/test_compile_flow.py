@@ -144,11 +144,11 @@ class TestCompileFlowContract:
         Step 4pre strict-validation raises ``StructuralError`` from ``compile_flow``;
         both names must be present on the compiler facade (no new export needed).
         """
-        from goga.pipeline.compiler import StructuralError as facade_error
+        from goga.pipeline.compiler import StructuralError as FacadeStructuralError
         from goga.pipeline.compiler import compile_flow as facade_compile_flow
 
         assert facade_compile_flow is compile_flow
-        assert facade_error is StructuralError
+        assert FacadeStructuralError is StructuralError
 
     def test_strict_validate_stage_names_helper_exists(self) -> None:
         """The ``_strict_validate_stage_names`` reconstruction helper (step 4pre) exists."""

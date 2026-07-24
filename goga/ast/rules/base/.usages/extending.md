@@ -11,6 +11,7 @@ Subclass `DocumentRule` to validate a single document in isolation.
 from goga.ast.rules.base import DocumentRule
 from goga.ast.errors import DocumentRuleError
 
+
 class MyCustomRule(DocumentRule):
     def __init__(self, name: str = "my_custom_rule"):
         super().__init__(name)
@@ -23,12 +24,14 @@ class MyCustomRule(DocumentRule):
 
         # Validation logic...
         if some_violation:
-            errors.append(DocumentRuleError(
-                message="Description of error",
-                rule=self.name,
-                document=document,
-                node=problematic_node,
-            ))
+            errors.append(
+                DocumentRuleError(
+                    message="Description of error",
+                    rule=self.name,
+                    document=document,
+                    node=problematic_node,
+                )
+            )
 
         return errors
 ```
@@ -44,6 +47,7 @@ Subclass `ASTRule` to validate documents in the context of the entire tree.
 from goga.ast.rules.base import ASTRule
 from goga.ast.errors import ASTRuleError
 
+
 class MyGlobalRule(ASTRule):
     def __init__(self, tree, name: str = "my_global_rule"):
         super().__init__(tree, name)
@@ -55,12 +59,14 @@ class MyGlobalRule(ASTRule):
 
         # Validation logic...
         if some_violation:
-            errors.append(ASTRuleError(
-                message="Description of error",
-                rule=self.name,
-                document=document,
-                node=problematic_node,
-            ))
+            errors.append(
+                ASTRuleError(
+                    message="Description of error",
+                    rule=self.name,
+                    document=document,
+                    node=problematic_node,
+                )
+            )
 
         return errors
 ```

@@ -66,8 +66,8 @@ fields:
 
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
-| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `opencode`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent--choosing-the-cli-agent). |
-| `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command). |
+| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `opencode`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
@@ -258,11 +258,11 @@ body format of the target pipeline:
   is preserved — the new edge is appended, not overwritten. Execution order is
   then governed entirely by `depends_on`, exactly as for any other stage.
 - **Phases format** — the compiler inserts the new stage **positionally**:
-  immediately after the last resolvable `after` target and/or immediately
-  before the first resolvable `before` target. Run order comes from list
-  position, not `depends_on`. When `after` and `before` targets place the stage
-  inconsistently, the `after` position wins and a warning is logged; when no
-  target can be resolved, the stage is appended at the end with a warning.
+  immediately after the last `after` target and/or immediately before the
+  first `before` target. Run order comes from list position, not `depends_on`.
+  When `after` and `before` targets place the stage inconsistently, the
+  `after` position wins. Every `before`/`after` target is guaranteed to exist
+  by Pass 0a0-pre (see [How the compiler applies a workflow](#how-the-compiler-applies-a-workflow)).
 
 ### Inline agent and loop overrides
 
@@ -350,11 +350,11 @@ extend:
   a non-int or `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop`
   / `loop must be >= 1 in workflow.extend.<NAME>`. Inline `agent`/`loop` are
   default overrides — a `stages` entry for the same name wins per field.
-- An extend entry that names a target that does not exist in the pipeline is a
-  **dangling reference**. In stages format a dangling `after` is passed through
-  verbatim in `depends_on` (afm surfaces the unknown name); a dangling `before`
-  is skipped with a warning. In phases format an entry whose targets cannot be
-  resolved at all is appended at the end with a warning.
+- An extend entry that names a `before`/`after` target that does not exist in
+  the pipeline (and is not another extend-stage) is a **dangling reference** —
+  a structural error raised by Pass 0a0-pre (`unknown stage name in
+  workflow.extend.<NAME>.before: <REF>` or the `.after` variant), not a silent
+  skip.
 - Extend-stages are embedded into the compiled `FlowDocument.stages` only. The
   original `PipelineDocument.body` is never modified — `extend` is a run-time
   layering, like the rest of a workflow-file.
@@ -379,15 +379,14 @@ by body format:
 
 - **Stages format** — each `after` name becomes a `depends_on` entry on the new
   stage, and the new stage's name is appended to the `depends_on` of each
-  `before` target (existing entries preserved; idempotent). A dangling
-  `before` target is skipped with a warning; a dangling `after` target is
-  passed through verbatim, like any unknown `depends_on` reference.
+  `before` target (existing entries preserved; idempotent). Dangling
+  `before`/`after` targets are rejected up front by Pass 0a0-pre (see below),
+  so this pass only ever sees resolvable names.
 - **Phases format** — the new stage is inserted positionally after the last
-  resolvable `after` target and/or before the first resolvable `before`
-  target, with no explicit `depends_on`. Inconsistent `after`/`before`
-  positions fall back to the `after` position with a warning; targets that
-  cannot be resolved at all cause the stage to be appended at the end with a
-  warning.
+  `after` target and/or before the first `before` target, with no explicit
+  `depends_on`. Inconsistent `after`/`before` positions fall back to the
+  `after` position. Targets that cannot be resolved are caught by Pass 0a0-pre
+  before this pass runs.
 
 After this pass the extend-stages live in the working sequence alongside the
 originals, so Passes 1–3 below apply to them by the same generic rules.
@@ -407,8 +406,20 @@ against the full name set = original pipeline step names ∪ extend-stage names.
 absent from both is a **structural error** (`unknown stage name in workflow.stages:
 <name>`) — it is no longer silently skipped. A stage that exists — even if also marked
 `skip: true` — is NOT flagged (the check runs on the full set before removal). Strictness
-applies only to `workflow.stages`; dangling `extend.<name>.before/.after` refs stay
-WARNING+skip.
+is symmetric: dangling `extend.<name>.before/.after` refs are likewise rejected by
+Pass 0a0-pre (below).
+
+### Pass 0a0-pre — Strict validation of extend refs
+
+Before the embed pass, the compiler validates every `before`/`after` ref in
+`workflow.extend` against the union of original pipeline step names and
+extend-stage names. Any ref absent from that set raises a **structural error**
+(`unknown stage name in workflow.extend.<NAME>.before: <ref>` or the `.after`
+variant) — replacing the former silent WARNING+skip / verbatim-pass-through.
+The check runs before embed and before skip removal, so a ref to a stage that
+also carries `skip: true` is NOT flagged here (it still exists in the original
+body at this point and is removed later at Pass 0.6). Existence only — cycles,
+self-references, and duplicate refs remain afm's responsibility.
 
 ### Pass 0.6 — Skip removal + transparent reconnection
 
@@ -433,7 +444,7 @@ For each `(stage_name, effective_stage)` pair in the effective override map:
      per-stage context for the agent running the stage. The prompt has
      lower precedence than the stage's own `prompt` field and is treated
      as ambient guidance, not as a direct command. See
-     [Workflow `prompt` — context, not command](#workflow-prompt--context-not-command).
+     [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command).
    - When `effective_stage.skills` is not None — merge the workflow skills
      with the stage's existing `skills` (pipeline-first, deduplicated). See
      [Skills merge](#skills-merge).
@@ -654,6 +665,8 @@ untouched — `extend` layers new stages on top at run time.
 | `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
 | `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
 | Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
+| Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |
+| Unknown ref in `workflow.extend.<NAME>.after`                  | `unknown stage name in workflow.extend.<NAME>.after: <REF>`                |
 | All stages skipped (empty reconstructed body)                   | `empty body`                                                                |
 | None of `prompt`, `stages`, `extend` entries are present        | `empty workflow — provide at least prompt, one stage, or one extend entry`  |
 

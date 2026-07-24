@@ -47,8 +47,7 @@ from goga.pipeline import run_pipeline
 # The host-side launcher already validated /workspace/.goga/workflows/custom.yml
 # exists before launching the container; run_pipeline re-resolves the path
 # in-container and parses it.
-exit_code = run_pipeline("deploy", Path("/workspace/.goga/pipelines"),
-                         Path("/home/goga/.goga/pipelines"), 50321)
+exit_code = run_pipeline("deploy", Path("/workspace/.goga/pipelines"), Path("/home/goga/.goga/pipelines"), 50321)
 ```
 
 ### With workflow disabled

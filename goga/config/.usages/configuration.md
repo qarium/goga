@@ -205,12 +205,12 @@ All objects are immutable frozen dataclasses (`frozen=True`). Fields expose read
 config = load_config()
 
 # Top-level accessors
-config.lang           # str — project language
-config.image          # str | None — top-level Docker image (shared by build and pipeline)
-config.build          # BuildConfig | None — None when the `build` section is absent
-config.pipeline       # PipelineConfig | None — None when the `pipeline` section is absent
-config.commands       # dict — custom command hooks
-config.dockerfile     # str | None — path to a project Dockerfile
+config.lang  # str — project language
+config.image  # str | None — top-level Docker image (shared by build and pipeline)
+config.build  # BuildConfig | None — None when the `build` section is absent
+config.pipeline  # PipelineConfig | None — None when the `pipeline` section is absent
+config.commands  # dict — custom command hooks
+config.dockerfile  # str | None — path to a project Dockerfile
 
 # Section accessors require a None-guard in the consuming command. The loader
 # does not enforce presence of `pipeline` or `build`; the consuming command is
@@ -226,25 +226,25 @@ if config.build is None:
 # now safe to read config.build.task_executor / proxy / hosts / ...
 
 # PipelineConfig fields (after the None-guard)
-config.pipeline.agent   # str — afm client.command inside the container
-config.pipeline.env     # dict — {str: str}
-config.pipeline.proxy   # str | None — HTTP/HTTPS proxy URL for the pipeline container
-config.pipeline.hosts   # dict[str, str] — docker run --add-host entries
+config.pipeline.agent  # str — afm client.command inside the container
+config.pipeline.env  # dict — {str: str}
+config.pipeline.proxy  # str | None — HTTP/HTTPS proxy URL for the pipeline container
+config.pipeline.hosts  # dict[str, str] — docker run --add-host entries
 
 # BuildConfig fields (after the None-guard)
-config.build.task_executor   # TaskExecutorConfig
-config.build.worktree        # bool | None
-config.build.proxy           # str | None — HTTP/HTTPS proxy URL for the build container
-config.build.hosts           # dict[str, str] — docker run --add-host entries
+config.build.task_executor  # TaskExecutorConfig
+config.build.worktree  # bool | None
+config.build.proxy  # str | None — HTTP/HTTPS proxy URL for the build container
+config.build.hosts  # dict[str, str] — docker run --add-host entries
 
 # TaskExecutorConfig fields
 config.build.task_executor.agent  # str
-config.build.task_executor.env    # dict — {str: str}
+config.build.task_executor.env  # dict — {str: str}
 
 # CodemanifestConfig fields — None when the `codemanifest` section is absent
-config.codemanifest                    # CodemanifestConfig | None
-config.codemanifest.usages             # dict — {str: str}
-config.codemanifest.annotations        # str | None
+config.codemanifest  # CodemanifestConfig | None
+config.codemanifest.usages  # dict — {str: str}
+config.codemanifest.annotations  # str | None
 ```
 
 ### `tools` accessor — no-validation contract

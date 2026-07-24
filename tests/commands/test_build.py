@@ -703,7 +703,7 @@ class TestImageUpdateInBuild:
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_read_git_config", return_value={})
     @mock.patch.object(_build_mod, "_write_env_file")
-    def test_pull_failure_warns_and_continues(  # noqa: PLR0913
+    def test_pull_failure_warns_and_continues(  # noqa: PLR0913, PLR0917
         self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch, caplog
     ) -> None:
         """A failing `docker pull` (the pull branch of docker_update) is logged as a

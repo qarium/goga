@@ -330,9 +330,7 @@ class TestSkipStageRoundTrip:
         pipeline_path = _write_stages_chain_four_step(tmp_path)
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "stages:\n"
-            "  b:\n"
-            "    skip: true\n",
+            "stages:\n  b:\n    skip: true\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -355,9 +353,7 @@ class TestSkipStageRoundTrip:
         pipeline_path = _write_phases_chain_four_step(tmp_path)
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "stages:\n"
-            "  b:\n"
-            "    skip: true\n",
+            "stages:\n  b:\n    skip: true\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -382,13 +378,7 @@ class TestSkipStageRoundTrip:
         pipeline_path.write_text("name: T\ndescription: T\n---\n\npropose:\n  title: Propose\n")
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "stages:\n"
-            "  warmup:\n"
-            "    skip: true\n"
-            "extend:\n"
-            "  warmup:\n"
-            "    after: [propose]\n"
-            "    title: Warmup\n",
+            "stages:\n  warmup:\n    skip: true\nextend:\n  warmup:\n    after: [propose]\n    title: Warmup\n",
         )
         flow_path = tmp_path / "flow.yml"
 
@@ -422,11 +412,7 @@ class TestSkipStageRoundTrip:
         )
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "stages:\n"
-            "  b:\n"
-            "    loop: 2\n"
-            "  c:\n"
-            "    skip: true\n",
+            "stages:\n  b:\n    loop: 2\n  c:\n    skip: true\n",
         )
         flow_path = tmp_path / "flow.yml"
 

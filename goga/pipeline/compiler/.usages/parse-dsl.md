@@ -18,9 +18,9 @@ from goga.pipeline.compiler import parse_dsl
 text = Path("/workspace/.goga/pipelines/feature-phases.yml").read_text()
 header, fmt, body = parse_dsl(text)
 
-print(header.name)        # "Goga feature"
-print(header.description) # "Feature implementation"
-print(fmt)                # BodyFormat.PHASES or BodyFormat.STAGES
+print(header.name)  # "Goga feature"
+print(header.description)  # "Feature implementation"
+print(fmt)  # BodyFormat.PHASES or BodyFormat.STAGES
 if header.roles is not None:
     print(header.roles.planner)  # inline override or None
 for step in body.steps:

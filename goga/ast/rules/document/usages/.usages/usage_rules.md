@@ -11,6 +11,7 @@ Every declared usage must be referenced in at least one annotation node.
 
 ```python
 from goga.ast.rules.document.usages import AllUsagesIsUsed
+
 rule = AllUsagesIsUsed()
 ```
 
@@ -25,6 +26,7 @@ Usage filepath validation:
 
 ```python
 from goga.ast.rules.document.usages import UsageFilepathExists
+
 rule = UsageFilepathExists()
 ```
 
@@ -36,6 +38,7 @@ Usage URL must respond with HTTP 200.
 
 ```python
 from goga.ast.rules.document.usages import UsageUrlIsAccessible
+
 rule = UsageUrlIsAccessible()
 ```
 
@@ -54,6 +57,7 @@ Usage names must not conflict with:
 
 ```python
 from goga.ast.rules.document.usages import UsageLinksHasNotConflicts
+
 rule = UsageLinksHasNotConflicts()
 ```
 

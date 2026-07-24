@@ -37,7 +37,7 @@ class TestContract:
 class TestLogic:
     """Logic tests for FileGenerator — uses tmp_path and mocks urllib."""
 
-    def _make_config(  # noqa: PLR0913
+    def _make_config(  # noqa: PLR0913, PLR0917
         self,
         language: str = "python",
         agent: str = "claude",

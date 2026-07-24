@@ -281,9 +281,7 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
         return field_value
     else:
-        raise WorkflowSyntaxError(
-            f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}"
-        )
+        raise WorkflowSyntaxError(f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
 
 
 def _build_extend(extend_raw: dict[str, Any] | None) -> dict[str, WorkflowExtendStage]:

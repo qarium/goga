@@ -17,11 +17,7 @@ exit_code = sync(source="/path/to/external/project/goga")
 exit_code = sync(source="https://github.com/owner/repo")
 
 # Private git repository (token and branch)
-exit_code = sync(
-    source="https://github.com/owner/private-repo",
-    token="ghp_xxx",
-    branch="v2.0"
-)
+exit_code = sync(source="https://github.com/owner/private-repo", token="ghp_xxx", branch="v2.0")
 
 # SSH
 exit_code = sync(source="git@github.com:owner/repo.git")

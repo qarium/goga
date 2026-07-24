@@ -1951,15 +1951,7 @@ class TestCompileFlowSkipRemovalStages:
         """C depends only on skipped B (a root) → ``depends_on: []`` (explicit empty ≠ None)."""
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "b:\n"
-            "  title: B\n"
-            "c:\n"
-            "  title: C\n"
-            "  depends_on: [b]\n",
+            "name: T\ndescription: T\n---\n\nb:\n  title: B\nc:\n  title: C\n  depends_on: [b]\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"b": WorkflowStage(skip=True)})
@@ -2056,16 +2048,7 @@ class TestCompileFlowSkipRemovalStages:
         """
         pipeline_path = tmp_path / "pipeline.yml"
         pipeline_path.write_text(
-            "name: T\n"
-            "description: T\n"
-            "---\n"
-            "\n"
-            "s:\n"
-            "  title: S\n"
-            "  depends_on: [x]\n"
-            "x:\n"
-            "  title: X\n"
-            "  depends_on: [s]\n",
+            "name: T\ndescription: T\n---\n\ns:\n  title: S\n  depends_on: [x]\nx:\n  title: X\n  depends_on: [s]\n",
         )
         flow_path = tmp_path / "flow.yml"
         workflow = WorkflowDocument(stages={"x": WorkflowStage(skip=True)})
@@ -2198,9 +2181,7 @@ class TestCompileFlowSkipSemantics:
         stages = yaml.safe_load(flow_path.read_text())["stages"]
         assert _ids(stages) == ["a"]
         # The skipped stage's overrides never apply; the not-found is silent.
-        assert not any(
-            "not found" in record.getMessage() for record in caplog.records
-        )
+        assert not any("not found" in record.getMessage() for record in caplog.records)
 
     def test_compile_flow_skip_does_not_leak_into_pipeline_document_body(
         self,

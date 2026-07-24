@@ -144,6 +144,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+.afm-env
 env/
 venv/
 ENV/

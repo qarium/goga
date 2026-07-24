@@ -44,7 +44,7 @@ Returns `list[PipelineEntry]` — one entry per unique name; duplicates resolved
 from goga.pipeline import PipelineEntry, PipelineSource
 
 entry = PipelineEntry(name="deploy", source=PipelineSource.PROJECT)
-entry.name    # "deploy"
+entry.name  # "deploy"
 entry.source  # PipelineSource.PROJECT (== "project", str-backed)
 ```
 

@@ -14,6 +14,7 @@ The base type of each mutation must exist in one of:
 
 ```python
 from goga.ast.rules.document.mutation import MutationExists
+
 rule = MutationExists()
 ```
 
@@ -23,6 +24,7 @@ The mutation name must differ from the entity name — a type cannot mutate from
 
 ```python
 from goga.ast.rules.document.mutation import MutationIsValid
+
 rule = MutationIsValid()
 ```
 
@@ -32,6 +34,7 @@ Embedded entities (declared with `->` prefix) must not define mutations. Embedde
 
 ```python
 from goga.ast.rules.document.mutation import EmbeddedEntityCanNotHasMutations
+
 rule = EmbeddedEntityCanNotHasMutations()
 ```
 

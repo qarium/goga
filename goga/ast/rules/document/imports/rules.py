@@ -313,7 +313,7 @@ class ImportIsUsed(DocumentRule):
 
         return errors
 
-    def _check_type_item(  # noqa: PLR0913
+    def _check_type_item(  # noqa: PLR0913, PLR0917
         self,
         item: ImportTypeItemNode,
         doc_path: str,

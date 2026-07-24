@@ -29,7 +29,7 @@ exit_code = build(
         "worktree": True,
         "skip_finalize": False,
         "skip_manifest_check": False,
-    }
+    },
 )
 ```
 
