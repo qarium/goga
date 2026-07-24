@@ -135,7 +135,7 @@ from goga.commands.install.install import install, resolve_version
 | 0 | pip succeeded and activation succeeded (or registry missing/empty), or empty mode no-op |
 | non-zero (pip) | pip failed — its returncode propagated verbatim; activation is not run |
 | non-zero (activation) | pip succeeded but activation failed for one or more agents — the first non-zero per-agent failure is returned |
-| 1 (`ClickException`) | `resolve_version` rejected a form, or `load_config` failed in bulk/empty mode |
+| 1 (`ClickException`) | `resolve_version` rejected a form, or `load_project_config` failed in bulk/empty mode |
 
 With `--no-connect`, the exit code is always pip's (install-only semantics).
 

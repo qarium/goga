@@ -56,7 +56,7 @@ class WorkflowExtendStage:
             explicit ``stages``-block entry for the same name wins (per-field)
             — or ``None`` when not specified (no expansion).
         body: Verbatim copy of the stage body (``title``, ``prompt``,
-            ``skills``, ``agents``, ``interactive``, and any other stage field)
+            ``skills``, ``roles``, ``communication``, and any other stage field)
             excluding ``before``, ``after``, ``agent``, ``loop``, and
             ``depends_on``. Open-ended — this cell does not know the stage
             field schema.

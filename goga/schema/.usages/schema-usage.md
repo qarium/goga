@@ -39,7 +39,7 @@ Each node in the tree follows this structure:
 {
   "cell": "goga/config",
   "description": "Cell description",
-  "types": ["Config", "load_config"],
+  "types": ["ProjectConfig", "load_project_config"],
   "usages": ["configuration.md"],
   "dependencies": {
     "goga/ast": {"types": ["AST"], "usages": []}

@@ -129,9 +129,10 @@ The `bugfix`, `patch`, and `review` pipelines share the same
 `commit-architecture` with the same behavior. Each of these stages
 commits the untracked changes accumulated during the previous stages and,
 in `feature`/`bugfix`, asks the user whether the implementation is built
-and ready for acceptance. The stage is `interactive` and never
+and ready for acceptance. The stage carries `communication: true` and never
 autoconfirms the user's answer — it genuinely waits for explicit
-confirmation before `accept` runs.
+confirmation before `accept` runs. (The authoring field is `communication`;
+the compiled flow-file still carries the afm key `interactive`.)
 
 The stage explicitly excludes `docs/<tasks|arch|design|plans>` from the
 commit path, so in-flight design artifacts that live outside the source

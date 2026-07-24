@@ -14,11 +14,11 @@ its `*-as-claude.sh` wrapper, and that path is written into `.ralphex/config`
 ## Usage
 
 ```python
-from goga.config import load_config
+from goga.config import load_project_config
 from goga.build import build
 
 # Load project configuration
-config = load_config()
+config = load_project_config()
 
 # Execute build
 exit_code = build(
@@ -36,7 +36,7 @@ exit_code = build(
 ## Parameters
 
 - `plan` — path to the plan file (markdown)
-- `config` — Config object loaded via `load_config`
+- `config` — ProjectConfig object loaded via `load_project_config`
 - `cli_options` — options dictionary:
   - `dry_run` (bool) — print the command without executing
   - `worktree` (bool) — enable git worktree isolation mode

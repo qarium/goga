@@ -15,12 +15,12 @@ container image before launch.
 
     from goga.docker import docker_update, docker_build_if_not_exist, DockerBuilder, docker_pull
 
-- `docker_update(image: str, dockerfile: str | None, extra_args: list[str] = []) -> None` — the `--update`
+- `docker_update(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None` — the `--update`
   entry point. When `dockerfile` is set, build the image locally from that
   Dockerfile (fatal on failure); when `dockerfile` is None, pull `image` from the
   registry (warning on failure, non-fatal). `extra_args` are forwarded verbatim
   to the build branch only (appended before `-f`); the pull branch ignores them.
-- `docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] = []) -> None` — the
+- `docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None` — the
   first-run safety net. When `image` is absent locally AND `dockerfile` is set,
   build it (fatal on failure, same semantics as the `docker_update` build branch);
   otherwise no-op. Never pulls — a registry image is left to `docker run` /
@@ -28,7 +28,7 @@ container image before launch.
   (which is gated by `--update`). `extra_args` are forwarded to the build branch
   only; the no-op branches ignore them.
 - `DockerBuilder(image, dockerfile='Dockerfile', context='.')` — stateful builder.
-  `.build(extra_args: list[str] = [], **params)` runs docker build, tagging the
+  `.build(extra_args: list[str] | None = None, **params)` runs docker build, tagging the
   result as `image` so the locally built image shadows the registry tag consumed
   by docker run. `extra_args` are appended verbatim after the translated params
   flags and before `-f`.
@@ -198,6 +198,6 @@ flag, which only decides whether `docker_update` runs at all.
   failed build means the image is wrong; continuing hides the failure.
 - Do NOT call `docker_pull` and then raise on a False return — pull failure is
   recoverable by design; the local image may already be present.
-- Do NOT pass a `Config` object to `docker_update`. It takes primitives
-  (`image`, `dockerfile`) so the docker cell stays a leaf with no dependency on
+- Do NOT pass a `ProjectConfig` object to `docker_update`. It takes primitives
+  (`image`, `dockerfile`, `extra_args`) so the docker cell stays a leaf with no dependency on
   goga/config.

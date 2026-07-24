@@ -17,11 +17,11 @@ path.
 
 - `DockerRunner(image)` — stateful runner. The image to run is concrete, so it is
   supplied to the constructor.
-- `DockerRunner(image).run(args, extra_args: list[str] = [], **params) -> int` — assemble and run
+- `DockerRunner(image).run(args, extra_args: list[str] | None = None, **params) -> int` — assemble and run
   `docker run <params-flags> <extra_args> <image> <args>`, manage the lifecycle, and return the
   container exit code. `extra_args` are raw docker tokens appended verbatim after
   the translated params flags and before the image (structural-only; docker
-  surfaces conflicts). Defaults to `[]`.
+  surfaces conflicts). Defaults to `None` (normalized to `[]`).
 
 ## Typical usage
 

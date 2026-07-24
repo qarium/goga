@@ -227,7 +227,7 @@ file is missing from the image, afm surfaces the error.
 
 ### Discovery mode
 
-1. Loads `.goga/config.yml` via `load_config`.
+1. Loads `.goga/config.yml` via `load_project_config`.
 2. When `config.pipeline` is `None` (the `pipeline` section is absent in `.goga/config.yml`) → raises `ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")` before any field access. The section is optional at the loader level, but `goga pipeline` cannot run without it.
 3. Verifies docker availability.
 4. Checks `config.image` is set (ClickException otherwise).
@@ -248,7 +248,7 @@ is involved, no workflow layer applies.
 
 ### Run mode
 
-1. Loads `.goga/config.yml` via `load_config`.
+1. Loads `.goga/config.yml` via `load_project_config`.
 2. When `config.pipeline` is `None` (the `pipeline` section is absent in `.goga/config.yml`) → raises `ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")` before any field access. Same guard as Discovery mode step 2.
 3. Validates the workflow flag combination:
    - When `--workflow` AND `--no-workflow` are both set → raises

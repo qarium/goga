@@ -97,7 +97,7 @@ Annotations: |
     Docker invocations stream the CLI's own stdout/stderr directly; click is not
     used (build failure surfaces as a raised exception the caller maps to exit 1).
   methods:
-    "build(extra_args: list[str] = [], ...params: dict[str, str | bool | list[str]]) -> none: None": |
+    "build(extra_args: list[str] | None = None, ...params: dict[str, str | bool | list[str]]) -> none: None": |
       Run docker build for this builder's image/dockerfile/context, with extra
       CLI options passed as `params` and raw extra tokens passed as `extra_args`.
       Build failure is FATAL — it propagates as a raised exception so the caller
@@ -149,7 +149,7 @@ Annotations: |
     Constraints:
     - Do not raise on pull failure — return False so the caller warns and continues
 
-"docker_update(image: str, dockerfile: str | None, extra_args: list[str] = []) -> none: None":
+"docker_update(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> none: None":
   location: builder.py
   annotations: |
     Orchestrator for the --update/-u flag: BUILD when a Dockerfile is declared,
@@ -193,7 +193,7 @@ Annotations: |
     - The pull branch ignores `extra_args` — extra tokens apply to image BUILD
       only, not to a registry pull
 
-"docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] = []) -> none: None":
+"docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> none: None":
   location: builder.py
   annotations: |
     First-run safety net: build the local image when it is ABSENT and a project
@@ -268,7 +268,7 @@ Annotations: |
 
     `image`: container image (non-None; the caller passes the validated config.image)
   methods:
-    "run(args: list[str], extra_args: list[str] = [], ...params: dict[str, str | bool | list[str]]) -> exit_code: int": |
+    "run(args: list[str], extra_args: list[str] | None = None, ...params: dict[str, str | bool | list[str]]) -> exit_code: int": |
       Assemble and run docker run <params-flags> <extra_args> <image> <args>, then
       manage the container lifecycle.
 
