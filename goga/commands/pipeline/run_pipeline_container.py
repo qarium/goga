@@ -29,9 +29,10 @@ import tempfile
 from pathlib import Path
 
 import click
+import yaml
 
 from ...agents import resolve_credential_mounts, resolve_wrapper_path
-from ...config import ProjectConfig
+from ...config import HomeConfig, ProjectConfig, load_home_config
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -239,6 +240,7 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
 
 def _run_discovery(
     config: ProjectConfig,
+    home: HomeConfig,
     container_name: str,
     hosts: dict[str, str] | None,
     update: bool,
@@ -248,12 +250,17 @@ def _run_discovery(
     Discovery honours ``hosts`` (``--add-host`` flags) and ``update``
     (image refresh via ``docker_update``), and ignores ``extra_env``, ``proxy``,
     and ``clean`` — no env-file is written and no afm state directory is involved.
-    Discovery writes no secret files, so it installs NO caller-side SIGTERM/SIGINT
-    handler: only the runner's handler applies (it performs the guaranteed
-    ``docker kill`` and restores the previous handlers).
+    ``home.env`` is therefore NOT applied here (no env-file); only
+    ``home.docker.run`` is forwarded to ``DockerRunner.run`` as the separate
+    ``extra_args`` keyword. Discovery writes no secret files, so it installs NO
+    caller-side SIGTERM/SIGINT handler: only the runner's handler applies (it
+    performs the guaranteed ``docker kill`` and restores the previous handlers).
 
     Args:
         config: Loaded project configuration (provides ``image``, ``dockerfile``).
+        home: Loaded machine-wide home config. ``home.env`` is ignored in
+            discovery (no env-file is written); ``home.docker.run`` is forwarded
+            to ``DockerRunner.run`` as ``extra_args``.
         container_name: Name assigned to the container.
         hosts: Resolved host→IP mapping forwarded as ``--add-host`` flags.
         update: When True, refresh the image before launch via ``docker_update``
@@ -297,7 +304,11 @@ def _run_discovery(
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
-    return DockerRunner(config.image).run(args, **params)
+    # extra_args is a SEPARATE keyword to DockerRunner.run (NOT part of params,
+    # which is unpacked via **). home.docker.run tokens are appended verbatim
+    # AFTER the translated flags and BEFORE the image, never translated to an
+    # --extra-args flag. Discovery applies NO env-file, so home.env is unused.
+    return DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
 
 
 def _resolve_workflow_env(
@@ -363,6 +374,7 @@ def _resolve_workflow_env(
 
 
 def _build_env_file(  # noqa: PLR0913, PLR0917
+    home_env: dict[str, str],
     extra_env: tuple[str, ...],
     pipeline_env: dict[str, str],
     proxy: str | None,
@@ -372,9 +384,11 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
 ) -> Path:
     """Build the run-mode env-file (Algorithm steps 9-11) and emit the workflow log line.
 
-    Combines git identity, ``pipeline_env`` (config.pipeline.env), ``AFM_DIR``,
-    the proxy env vars (when ``proxy`` is set), and the workflow env vars per
-    the decision matrix (``_resolve_workflow_env`` — step 9), writes them to a
+    Layers ``home_env`` (``home.env``) as the BASE (lowest-priority) env layer,
+    then git identity, then ``pipeline_env`` (config.pipeline.env — project
+    config wins over both git and home on key conflict), then ``AFM_DIR``, the
+    proxy env vars (when ``proxy`` is set), and the workflow env vars per the
+    decision matrix (``_resolve_workflow_env`` — step 9), writes them to a
     private env-file alongside the raw ``extra_env`` KEY=VALUE strings (step 11),
     and emits the ``Pipeline running with workflow "NAME"`` log line to stdout
     ONLY when a workflow will actually be applied (step 10). This cell surfaces
@@ -382,8 +396,13 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     output stream.
 
     Args:
-        extra_env: Additional raw KEY=VALUE strings appended verbatim.
-        pipeline_env: ``config.pipeline.env`` merged on top of git identity.
+        home_env: ``home.env`` from the machine-wide home config — the
+            lowest-priority env layer (project config and CLI win on key
+            conflict). Survives where unconflicted.
+        extra_env: Additional raw KEY=VALUE strings appended verbatim (a
+            SEPARATE channel appended last, winning on key conflict).
+        pipeline_env: ``config.pipeline.env`` merged on top of git identity and
+            home.env (highest-priority of the dict layers).
         proxy: Resolved HTTP/HTTPS proxy URL; populates the proxy env vars when
             non-None.
         workflow: optional workflow name from ``--workflow``.
@@ -394,7 +413,11 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
         Path to the written private env-file.
     """
     git_env = _read_git_config()
-    env = {**git_env, **pipeline_env}
+    # home.env is the BASE layer — lowest priority. Git identity and project
+    # (config.pipeline.env) override it; project wins over git (unchanged
+    # precedence). CLI extra_env is a separate raw channel appended last by
+    # _write_env_file, so it still wins on key conflict.
+    env = {**home_env, **git_env, **pipeline_env}
     # AFM_DIR redirects afm state (flows, run-state) to the rw-mounted persistent
     # directory at /home/goga/pipeline; ~/.afm/config.yaml stays the config
     # source regardless (see the `afm` practice).
@@ -419,6 +442,7 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
 def _run_named(  # noqa: PLR0913, PLR0917
     name: str,
     config: ProjectConfig,
+    home: HomeConfig,
     container_name: str,
     extra_env: tuple[str, ...],
     proxy: str | None,
@@ -432,15 +456,16 @@ def _run_named(  # noqa: PLR0913, PLR0917
 
     Run mode allocates a free port, writes a private afm-config tmpfile, ensures
     the persistent afm state host directory exists (wiping it first when
-    ``clean`` is set), writes a private env-file combining
-    ``config.pipeline.env``, git identity, ``extra_env``, ``AFM_DIR``, the
-    workflow env vars (per the workflow decision matrix), and — when ``proxy``
-    is set — the proxy env vars, emits the workflow log line when a workflow
-    will actually be applied, optionally refreshes the image via
-    ``docker_update``, and runs the container via ``DockerRunner``. The
-    persistent directory is created before launch and never deleted in
-    ``finally`` (it survives across runs and across the signal-exit path); only
-    the tmpfile and env-file are unlinked.
+    ``clean`` is set), writes a private env-file layering ``home.env`` as the
+    BASE layer under ``config.pipeline.env``, git identity, ``extra_env``,
+    ``AFM_DIR``, the workflow env vars (per the workflow decision matrix), and —
+    when ``proxy`` is set — the proxy env vars, emits the workflow log line when
+    a workflow will actually be applied, optionally refreshes the image via
+    ``docker_update``, and runs the container via ``DockerRunner`` (forwarding
+    ``home.docker.run`` as the separate ``extra_args`` keyword). The persistent
+    directory is created before launch and never deleted in ``finally`` (it
+    survives across runs and across the signal-exit path); only the tmpfile and
+    env-file are unlinked.
 
     A SIGTERM/SIGINT handler is installed BEFORE writing the secret tmpfile/
     env-file (D7): a signal during the setup window — including the
@@ -451,6 +476,11 @@ def _run_named(  # noqa: PLR0913, PLR0917
     Args:
         name: Pipeline name without extension.
         config: Loaded project configuration.
+        home: Loaded machine-wide home config. ``home.env`` is layered as the
+            BASE (lowest-priority) env layer in the env-file; ``home.docker.run``
+            is forwarded to ``DockerRunner.run`` as ``extra_args``.
+            ``home.docker.build`` is NOT forwarded here — build-token forwarding
+            is the ``goga/commands/build`` launcher's job only.
         container_name: Name assigned to the container.
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
             env-file (e.g. agent authorization tokens).
@@ -502,6 +532,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
         wrapper_path = resolve_wrapper_path(config.pipeline.agent)
         afm_config = _write_afm_config_tmpfile(wrapper_path)
         env_file = _build_env_file(
+            home_env=home.env,
             extra_env=extra_env,
             pipeline_env=config.pipeline.env,
             proxy=proxy,
@@ -560,7 +591,12 @@ def _run_named(  # noqa: PLR0913, PLR0917
             except Exception as exc:
                 raise click.ClickException(str(exc)) from exc
 
-        return DockerRunner(config.image).run(args, **params)
+        # extra_args is a SEPARATE keyword to DockerRunner.run (NOT part of
+        # params, which is unpacked via **). home.docker.run tokens are appended
+        # verbatim AFTER the translated flags and BEFORE the image, never
+        # translated to an --extra-args flag. home.docker.build is NOT forwarded
+        # here — build-token forwarding is the goga/commands/build launcher only.
+        return DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
     finally:
         # Only the tmpfile and env-file are deleted — the persistent afm state
         # directory (runtime_dir) survives under EVERY exit path.
@@ -585,6 +621,15 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
+    Home (machine-wide) config from ``~/.goga/config.yml`` is loaded once up
+    front (both modes) — an absent file yields an empty ``HomeConfig`` (no-op).
+    ``home.env`` is the lowest-priority container env layer in RUN mode only
+    (project ``pipeline.env`` and CLI win on key conflict); discovery writes no
+    env-file, so ``home.env`` does not apply there. ``home.docker.run`` is
+    forwarded to every ``DockerRunner.run`` as a separate ``extra_args`` keyword
+    (both modes). ``home.docker.build`` is NOT forwarded by this launcher —
+    build-token forwarding is ``goga/commands/build`` only.
+
     Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
     ``extra_env``, ``proxy``, and ``clean`` — it honours only ``hosts``
     (``--add-host`` flags) and ``update`` (conditional image pull); no env-file
@@ -596,16 +641,17 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     agent name) mounted read-only at the FIXED path
     ``/home/goga/.afm/config.yaml``, ensures the persistent afm state host
     directory exists (wiping it first when ``clean`` is set), writes a private
-    env-file combining ``config.pipeline.env``, git identity, ``extra_env`` (raw
-    KEY=VALUE strings), ``AFM_DIR=/home/goga/pipeline``, the workflow env vars
-    (per the workflow decision matrix), and — when ``proxy`` is set — the proxy
-    env vars, mounts the persistent directory read-write at
-    ``/home/goga/pipeline`` (it survives across runs and the signal-exit path),
-    adds ``--add-host`` flags from ``hosts``, mounts every credential file from
-    ``resolve_credential_mounts()`` read-only, emits the workflow log line when a
-    workflow will actually be applied, optionally refreshes the image via
-    ``docker_update``, and runs ``-m goga.pipeline run <name> --port <port>``
-    via ``DockerRunner``.
+    env-file layering ``home.env`` as the BASE layer under
+    ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE strings),
+    ``AFM_DIR=/home/goga/pipeline``, the workflow env vars (per the workflow
+    decision matrix), and — when ``proxy`` is set — the proxy env vars, mounts
+    the persistent directory read-write at ``/home/goga/pipeline`` (it survives
+    across runs and the signal-exit path), adds ``--add-host`` flags from
+    ``hosts``, mounts every credential file from ``resolve_credential_mounts()``
+    read-only, emits the workflow log line when a workflow will actually be
+    applied, optionally refreshes the image via ``docker_update``, and runs
+    ``-m goga.pipeline run <name> --port <port>`` via ``DockerRunner`` (forwarding
+    ``home.docker.run`` as ``extra_args``).
 
     Both modes mount the project at ``/workspace``. User pipelines are NOT
     bind-mounted from the host: the image is populated at build time via
@@ -648,11 +694,23 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
 
     Raises:
         click.ClickException: When docker is missing, ``config.image`` is None,
-            or a fatal image build is surfaced (D5).
+            the home config file is malformed (a missing file is the normal
+            no-op state), or a fatal image build is surfaced (D5).
         SystemExit: ``128 + signum`` when SIGTERM/SIGINT is received during run.
     """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")
+
+    # Home (machine-wide) config preamble — an empty HomeConfig when the file is
+    # absent (no-op). Loaded ONCE here and shared by both modes: home.env is the
+    # run-mode env-file BASE layer (lowest priority); home.docker.run reaches
+    # every docker run as a separate extra_args keyword. A malformed home file
+    # surfaces as a clean ClickException per the click-wrapping convention
+    # (absence is normal). home.docker.build is NOT forwarded by this launcher.
+    try:
+        home: HomeConfig = load_home_config()
+    except (ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if config.image is None:
         raise click.ClickException("image in .goga/config.yml is not set")
@@ -660,11 +718,12 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     container_name = f"goga-pipeline-{os.getpid()}"
 
     if name is None:
-        return _run_discovery(config, container_name, hosts, update)
+        return _run_discovery(config, home, container_name, hosts, update)
 
     return _run_named(
         name,
         config,
+        home,
         container_name,
         extra_env,
         proxy,

@@ -132,7 +132,7 @@ class TestBuildUpdateLaunchIntegration:
 
         order: list[str] = []
 
-        def fake_update(image: str, dockerfile: str | None) -> None:
+        def fake_update(image: str, dockerfile: str | None, **_kw) -> None:
             order.append("update")
             # dockerfile flows through → the build branch
             assert image == "qarium/goga:latest"
@@ -211,8 +211,9 @@ class TestBuildUpdateLaunchIntegration:
             result = _run_build(tmp_path, monkeypatch, ["--update", "plan.md"])
 
         assert result.exit_code == 0
-        # pull branch: docker_update called with (image, None)
-        mock_update.assert_called_once_with("qarium/goga:latest", None)
+        # pull branch: docker_update called with (image, None) + home.docker.build
+        # extra_args (empty list when the home file is absent — Task 5).
+        mock_update.assert_called_once_with("qarium/goga:latest", None, extra_args=[])
         # launch runs regardless of the (non-fatal) pull outcome
         mock_runner.return_value.run.assert_called_once()
         # env-file unlinked
@@ -544,7 +545,8 @@ class TestBuildFirstRunAutoBuildIntegration:
 
         assert result.exit_code == 0
         # safety net called unconditionally — it decides internally whether to build
-        mock_ensure.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        # (home.docker.build extra_args forwarded — empty list when home is absent).
+        mock_ensure.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
         # docker_update stays gated by --update (not called here)
         mock_update.assert_not_called()
         # launch proceeded
@@ -567,7 +569,7 @@ class TestBuildFirstRunAutoBuildIntegration:
             result = _run_build(tmp_path, monkeypatch, ["plan.md"])  # NO --update
 
         assert result.exit_code == 0
-        mock_ensure.assert_called_once_with("qarium/goga:latest", None)
+        mock_ensure.assert_called_once_with("qarium/goga:latest", None, extra_args=[])
         mock_update.assert_not_called()
         mock_runner.return_value.run.assert_called_once()
 
@@ -581,10 +583,10 @@ class TestBuildFirstRunAutoBuildIntegration:
 
         order: list[str] = []
 
-        def ensure_se(*_a):
+        def ensure_se(*_a, **_kw):
             order.append("ensure")
 
-        def update_se(*_a):
+        def update_se(*_a, **_kw):
             order.append("update")
 
         with (

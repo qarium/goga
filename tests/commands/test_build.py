@@ -682,8 +682,10 @@ class TestImageUpdateInBuild:
             mock_runner.return_value.run.return_value = 0
             _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
-        # dockerfile is None here → docker_update takes the pull branch.
-        mock_update.assert_called_once_with("custom-image:v2", None)
+        # dockerfile is None here → docker_update takes the pull branch. The
+        # build launcher forwards home.docker.build as extra_args (empty list
+        # when the home file is absent — Task 5 home integration).
+        mock_update.assert_called_once_with("custom-image:v2", None, extra_args=[])
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
     @mock.patch.object(_build_mod, "_write_env_file")
