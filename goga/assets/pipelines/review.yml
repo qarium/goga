@@ -1,5 +1,5 @@
-name: GogaAnalyze
-description: Analyze project
+name: GogaReview
+description: Review changes
 ---
 
 - name: compliance-convention
