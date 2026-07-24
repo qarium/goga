@@ -14,7 +14,7 @@ import click
 import yaml
 
 from ...agents import resolve_credential_mounts
-from ...config import load_project_config
+from ...config import HomeConfig, load_home_config, load_project_config
 from ...docker import DockerRunner, docker_build_if_not_exist, docker_update
 from ...runtime import resolve_runtime_dir
 
@@ -255,6 +255,14 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
 ) -> None:
     """Build code via ralphex by launching goga.build inside a Docker container.
 
+    Home (machine-wide) config from ``~/.goga/config.yml`` is loaded up front:
+    ``home.env`` is the lowest-priority container env layer (project task_executor
+    env and CLI ``-e`` win on key conflict), ``home.docker.run`` is forwarded to
+    every ``docker run`` as a separate ``extra_args`` keyword, and
+    ``home.docker.build`` is forwarded to image build
+    (``docker_build_if_not_exist`` / ``docker_update`` build branch only). An
+    absent home file yields an empty ``HomeConfig`` — no effect.
+
     Args:
         ctx: Click execution context used to control process exit codes.
         plan: Plan identifier forwarded to the in-container `goga.build` module.
@@ -288,6 +296,16 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")
+
+    # Home (machine-wide) config preamble — an empty HomeConfig when the file is
+    # absent (no-op). home.env is the lowest-priority env layer (step 7);
+    # home.docker.run reaches every docker run and home.docker.build every image
+    # build as a separate extra_args keyword. A malformed home file surfaces as a
+    # clean ClickException per the click-wrapping convention (absence is normal).
+    try:
+        home: HomeConfig = load_home_config()
+    except (ValueError, yaml.YAMLError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
     try:
         config = load_project_config()
@@ -336,7 +354,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         raise click.ClickException("image in .goga/config.yml is not set")
 
     git_env = _read_git_config()
-    env = {**git_env, **config.build.task_executor.env}
+    env = {**home.env, **git_env, **config.build.task_executor.env}
 
     # When a proxy is resolved (CLI or config), populate the standard proxy env
     # vars. NO_PROXY is fixed at localhost,127.0.0.1 — there is no --no-proxy.
@@ -414,7 +432,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         # env-file is already written above, and a fatal build unwinds to the
         # finally below which unlinks it.
         try:
-            docker_build_if_not_exist(config.image, config.dockerfile)
+            docker_build_if_not_exist(config.image, config.dockerfile, extra_args=home.docker.build)
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
@@ -424,11 +442,11 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
             # D5: a fatal build surfaces as a clean message + exit 1 rather than
             # a traceback; pull-branch failures stay a WARNING inside docker_pull.
             try:
-                docker_update(config.image, config.dockerfile)
+                docker_update(config.image, config.dockerfile, extra_args=home.docker.build)
             except Exception as exc:
                 raise click.ClickException(str(exc)) from exc
 
-        exit_code = DockerRunner(config.image).run(args, **params)
+        exit_code = DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
         ctx.exit(exit_code)
     finally:
         # Unlink the env file only if it was created: a pre-write failure or a

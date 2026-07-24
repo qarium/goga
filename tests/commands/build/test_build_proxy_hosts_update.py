@@ -265,7 +265,10 @@ class TestConditionalUpdate:
             _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
         # dockerfile is None here → docker_update delegates to the pull branch.
-        mock_update.assert_called_once_with("qarium/goga:latest", None)
+        # home.docker.build (empty for an absent home file) is forwarded as the
+        # separate extra_args keyword (build branch only — ignored on the pull
+        # branch, but still passed by the launcher).
+        mock_update.assert_called_once_with("qarium/goga:latest", None, extra_args=[])
         mock_runner.return_value.run.assert_called_once()
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
@@ -278,6 +281,11 @@ class TestConditionalUpdate:
         mock_env.return_value = Path("/tmp/env")
 
         with (
+            # docker_build_if_not_exist runs unconditionally before docker_update
+            # and is not the subject of this test — mock it to avoid a real
+            # docker build (it would otherwise shell out to a docker that is not
+            # present in the test environment).
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
             mock.patch.object(_build_mod, "docker_update") as mock_update,
             _patch_runner_ok() as mock_runner,
         ):
@@ -285,7 +293,9 @@ class TestConditionalUpdate:
             _run_build_in_tmp(tmp_path, monkeypatch, ["--update", "plan.md"])
 
         # dockerfile is set → docker_update takes the build branch.
-        mock_update.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        # home.docker.build (empty for an absent home file) is forwarded as the
+        # separate extra_args keyword (build branch only).
+        mock_update.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
         # DockerRunner is constructed with the config image.
         mock_runner.assert_called_once_with("qarium/goga:latest")
         mock_runner.return_value.run.assert_called_once()
