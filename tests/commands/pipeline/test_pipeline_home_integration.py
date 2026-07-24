@@ -1,11 +1,11 @@
 """Contract and logic tests for home-config integration in the pipeline launcher.
 
-Covers Task 6 of the add-project-name-and-home-config plan: the
-``load_home_config`` preamble, ``home.env`` as the lowest-priority env layer in
-RUN mode only (discovery writes no env-file), and ``home.docker.run`` forwarded
-to every ``DockerRunner.run`` as a separate ``extra_args`` keyword in BOTH
-modes. ``home.docker.build`` is NOT forwarded by this launcher (build-token
-forwarding is ``goga/commands/build`` only).
+Covers the ``load_home_config`` preamble, ``home.env`` as the lowest-priority
+env layer in RUN mode only (discovery writes no env-file), ``home.docker.run``
+forwarded to every ``DockerRunner.run`` as a separate ``extra_args`` keyword in
+BOTH modes, and ``home.docker.build`` forwarded to ``docker_build_if_not_exist``
+/ ``docker_update`` (build branch only) in both modes — docker CLI surfaces
+flag conflicts (e.g. ``--no-cach`` fails as ``unknown flag``).
 
 The ``_isolate_home`` autouse fixture (``tests/conftest.py``) redirects HOME to
 a tmp dir, so ``Path.home()`` resolves there and ``load_home_config()`` (the
@@ -216,15 +216,16 @@ class TestRunModeHomeEnvBaseLayer:
         assert captured["extra_env"] == ("SHARED=cli",)
 
 
-class TestPipelineDoesNotForwardHomeDockerBuild:
-    """The pipeline launcher forwards home.docker.run only — home.docker.build
-    is NOT forwarded to docker_build_if_not_exist / docker_update (that is
-    goga/commands/build's job)."""
+class TestPipelineForwardsHomeDockerBuild:
+    """The pipeline launcher forwards home.docker.build to
+    docker_build_if_not_exist / docker_update (build branch only) in BOTH modes.
+    docker CLI surfaces flag conflicts (e.g. ``--no-cach`` fails as
+    ``unknown flag`` via DockerBuildError → ClickException)."""
 
     @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
     @mock.patch.object(_rpc_mod, "docker_update")
     @mock.patch.object(_rpc_mod, "DockerRunner")
-    def test_pipeline_does_not_forward_home_docker_build(
+    def test_run_mode_forwards_home_docker_build(
         self, mock_runner, mock_update, mock_build, tmp_path: Path, monkeypatch
     ) -> None:
         config = _make_config(dockerfile="Dockerfile")
@@ -240,12 +241,59 @@ class TestPipelineDoesNotForwardHomeDockerBuild:
 
         rpc("deploy", config, update=True)
 
-        # docker_build_if_not_exist / docker_update receive NO extra_args (the
-        # pipeline launcher forwards build tokens to neither).
+        # docker_build_if_not_exist / docker_update receive home.docker.build
+        # tokens via extra_args (build branch only).
         _, kwargs = mock_build.call_args
-        assert "extra_args" not in kwargs
+        assert kwargs["extra_args"] == ["--squash"]
         _, kwargs = mock_update.call_args
-        assert "extra_args" not in kwargs
+        assert kwargs["extra_args"] == ["--squash"]
+
+    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
+    @mock.patch.object(_rpc_mod, "docker_update")
+    @mock.patch.object(_rpc_mod, "DockerRunner")
+    def test_discovery_mode_forwards_home_docker_build(
+        self, mock_runner, mock_update, mock_build, tmp_path: Path, monkeypatch
+    ) -> None:
+        """Discovery mode forwards home.docker.build to docker_build_if_not_exist
+        and docker_update (build branch only)."""
+        config = _make_config(dockerfile="Dockerfile")
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+        _write_home_yml(
+            Path.home(),
+            {"docker": {"run": ["--network=host"], "build": ["--squash"]}},
+        )
+        mock_runner.return_value.run.return_value = 0
+
+        rpc(None, config, update=True)
+
+        _, kwargs = mock_build.call_args
+        assert kwargs["extra_args"] == ["--squash"]
+        _, kwargs = mock_update.call_args
+        assert kwargs["extra_args"] == ["--squash"]
+
+    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
+    @mock.patch.object(_rpc_mod, "docker_update")
+    @mock.patch.object(_rpc_mod, "DockerRunner")
+    def test_empty_home_build_yields_empty_extra_args(
+        self, mock_runner, mock_update, mock_build, tmp_path: Path, monkeypatch
+    ) -> None:
+        """When the home file is absent or has no docker.build, extra_args=[] —
+        no effect (pre-refactor behavior preserved for the empty case)."""
+        config = _make_config(dockerfile="Dockerfile")
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        # No home file written — empty HomeConfig.
+        mock_runner.return_value.run.return_value = 0
+
+        rpc("deploy", config, update=True)
+
+        _, kwargs = mock_build.call_args
+        assert kwargs["extra_args"] == []
+        _, kwargs = mock_update.call_args
+        assert kwargs["extra_args"] == []
 
 
 class TestPipelineAbsentHomeIsNoop:

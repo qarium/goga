@@ -296,7 +296,7 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
     monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
     monkeypatch.setattr(_rpc_mod, "resolve_credential_mounts", lambda: [])
     monkeypatch.setattr(_rpc_mod, "resolve_pipeline_runtime_dir", lambda _name: runtime_dir)
-    monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", lambda *_a: None)
+    monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", lambda *_a, **_k: None)
 
     def run_side_effect(*args, **kwargs) -> mock.Mock:
         return mock.Mock(returncode=0)
@@ -334,8 +334,8 @@ class TestPipelineUpdateLaunchIntegration:
             result = rpc(None, config, update=True)
 
         assert result == 0
-        # pull branch (dockerfile None)
-        mock_update.assert_called_once_with("qarium/goga:latest", None)
+        # pull branch (dockerfile None) — extra_args=home.docker.build (empty when no home file)
+        mock_update.assert_called_once_with("qarium/goga:latest", None, extra_args=[])
         # launch happened with the discovery list command, no port/env-file/-p
         assert popen_cmds, "DockerRunner.run never launched the container"
         cmd = popen_cmds[-1]
@@ -370,8 +370,8 @@ class TestPipelineUpdateLaunchIntegration:
             result = rpc("deploy", config, update=True)
 
         assert result == 0
-        # build branch (dockerfile set)
-        mock_update.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        # build branch (dockerfile set) — extra_args=home.docker.build (empty when no home file)
+        mock_update.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
         # launch happened with the run command + port + afm-config mount
         assert popen_cmds, "DockerRunner.run never launched the container"
         cmd = popen_cmds[-1]
@@ -666,7 +666,7 @@ class TestPipelineFirstRunAutoBuildIntegration:
             result = rpc(None, config, update=False)  # NO --update
 
         assert result == 0
-        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
         _rpc_mod.docker_update.assert_not_called()
         # launch happened
         mock_popen.assert_called_once()
@@ -690,7 +690,7 @@ class TestPipelineFirstRunAutoBuildIntegration:
             result = rpc("deploy", config, update=False)  # NO --update
 
         assert result == 0
-        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile")
+        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
         _rpc_mod.docker_update.assert_not_called()
         mock_popen.assert_called_once()
 

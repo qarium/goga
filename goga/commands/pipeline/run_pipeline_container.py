@@ -250,17 +250,20 @@ def _run_discovery(
     Discovery honours ``hosts`` (``--add-host`` flags) and ``update``
     (image refresh via ``docker_update``), and ignores ``extra_env``, ``proxy``,
     and ``clean`` — no env-file is written and no afm state directory is involved.
-    ``home.env`` is therefore NOT applied here (no env-file); only
-    ``home.docker.run`` is forwarded to ``DockerRunner.run`` as the separate
-    ``extra_args`` keyword. Discovery writes no secret files, so it installs NO
-    caller-side SIGTERM/SIGINT handler: only the runner's handler applies (it
-    performs the guaranteed ``docker kill`` and restores the previous handlers).
+    ``home.env`` is therefore NOT applied here (no env-file); ``home.docker.run``
+    is forwarded to ``DockerRunner.run`` as the separate ``extra_args`` keyword,
+    and ``home.docker.build`` is forwarded to ``docker_build_if_not_exist`` and
+    ``docker_update`` (build branch only). Discovery writes no secret files,
+    so it installs NO caller-side SIGTERM/SIGINT handler: only the runner's
+    handler applies (it performs the guaranteed ``docker kill`` and restores
+    the previous handlers).
 
     Args:
         config: Loaded project configuration (provides ``image``, ``dockerfile``).
         home: Loaded machine-wide home config. ``home.env`` is ignored in
             discovery (no env-file is written); ``home.docker.run`` is forwarded
-            to ``DockerRunner.run`` as ``extra_args``.
+            to ``DockerRunner.run`` as ``extra_args``; ``home.docker.build`` is
+            forwarded to image build (build branch only).
         container_name: Name assigned to the container.
         hosts: Resolved host→IP mapping forwarded as ``--add-host`` flags.
         update: When True, refresh the image before launch via ``docker_update``
@@ -289,8 +292,9 @@ def _run_discovery(
     # Dockerfile is declared. No-op when the image exists or no Dockerfile is
     # set. Fatal build surfaces as ClickException (D5 — clean message + exit 1).
     # Discovery writes no secret files, so no D7 caller-side handler applies.
+    # home.docker.build is forwarded to image build (build branch only).
     try:
-        docker_build_if_not_exist(config.image, config.dockerfile)
+        docker_build_if_not_exist(config.image, config.dockerfile, extra_args=home.docker.build)
     except Exception as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -299,8 +303,9 @@ def _run_discovery(
         # Dockerfile is declared — fatal; else pull — WARNING, non-fatal). D5: a
         # fatal build surfaces as a clean message + exit 1 rather than a
         # traceback; pull-branch failures stay a WARNING inside docker_pull.
+        # home.docker.build forwarded in the build branch only (ignored on pull).
         try:
-            docker_update(config.image, config.dockerfile)
+            docker_update(config.image, config.dockerfile, extra_args=home.docker.build)
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
@@ -461,7 +466,8 @@ def _run_named(  # noqa: PLR0913, PLR0917
     ``AFM_DIR``, the workflow env vars (per the workflow decision matrix), and —
     when ``proxy`` is set — the proxy env vars, emits the workflow log line when
     a workflow will actually be applied, optionally refreshes the image via
-    ``docker_update``, and runs the container via ``DockerRunner`` (forwarding
+    ``docker_update`` (forwarding ``home.docker.build`` to image build in the
+    build branch only), and runs the container via ``DockerRunner`` (forwarding
     ``home.docker.run`` as the separate ``extra_args`` keyword). The persistent
     directory is created before launch and never deleted in ``finally`` (it
     survives across runs and across the signal-exit path); only the tmpfile and
@@ -478,9 +484,9 @@ def _run_named(  # noqa: PLR0913, PLR0917
         config: Loaded project configuration.
         home: Loaded machine-wide home config. ``home.env`` is layered as the
             BASE (lowest-priority) env layer in the env-file; ``home.docker.run``
-            is forwarded to ``DockerRunner.run`` as ``extra_args``.
-            ``home.docker.build`` is NOT forwarded here — build-token forwarding
-            is the ``goga/commands/build`` launcher's job only.
+            is forwarded to ``DockerRunner.run`` as ``extra_args``;
+            ``home.docker.build`` is forwarded to ``docker_build_if_not_exist``
+            and ``docker_update`` (build branch only).
         container_name: Name assigned to the container.
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
             env-file (e.g. agent authorization tokens).
@@ -576,8 +582,9 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # inside the try so the D7 leak-prevention invariant covers this window:
         # the secret tmpfile/env-file are already written above, and a fatal
         # build unwinds to the finally below which unlinks them.
+        # home.docker.build is forwarded to image build (build branch only).
         try:
-            docker_build_if_not_exist(config.image, config.dockerfile)
+            docker_build_if_not_exist(config.image, config.dockerfile, extra_args=home.docker.build)
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
@@ -586,16 +593,16 @@ def _run_named(  # noqa: PLR0913, PLR0917
             # Dockerfile is declared — fatal; else pull — WARNING, non-fatal).
             # D5: a fatal build surfaces as a clean message + exit 1 rather than
             # a traceback; pull-branch failures stay a WARNING inside docker_pull.
+            # home.docker.build forwarded in the build branch only (ignored on pull).
             try:
-                docker_update(config.image, config.dockerfile)
+                docker_update(config.image, config.dockerfile, extra_args=home.docker.build)
             except Exception as exc:
                 raise click.ClickException(str(exc)) from exc
 
         # extra_args is a SEPARATE keyword to DockerRunner.run (NOT part of
         # params, which is unpacked via **). home.docker.run tokens are appended
         # verbatim AFTER the translated flags and BEFORE the image, never
-        # translated to an --extra-args flag. home.docker.build is NOT forwarded
-        # here — build-token forwarding is the goga/commands/build launcher only.
+        # translated to an --extra-args flag.
         return DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
     finally:
         # Only the tmpfile and env-file are deleted — the persistent afm state
@@ -627,8 +634,9 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     (project ``pipeline.env`` and CLI win on key conflict); discovery writes no
     env-file, so ``home.env`` does not apply there. ``home.docker.run`` is
     forwarded to every ``DockerRunner.run`` as a separate ``extra_args`` keyword
-    (both modes). ``home.docker.build`` is NOT forwarded by this launcher —
-    build-token forwarding is ``goga/commands/build`` only.
+    (both modes). ``home.docker.build`` is forwarded to image build
+    (``docker_build_if_not_exist`` first-run safety net, ``docker_update``
+    ``--update``) in the build branch only.
 
     Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
     ``extra_env``, ``proxy``, and ``clean`` — it honours only ``hosts``
@@ -649,7 +657,8 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     across runs and the signal-exit path), adds ``--add-host`` flags from
     ``hosts``, mounts every credential file from ``resolve_credential_mounts()``
     read-only, emits the workflow log line when a workflow will actually be
-    applied, optionally refreshes the image via ``docker_update``, and runs
+    applied, optionally refreshes the image via ``docker_update`` (forwarding
+    ``home.docker.build`` to image build in the build branch only), and runs
     ``-m goga.pipeline run <name> --port <port>`` via ``DockerRunner`` (forwarding
     ``home.docker.run`` as ``extra_args``).
 
@@ -704,9 +713,10 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     # Home (machine-wide) config preamble — an empty HomeConfig when the file is
     # absent (no-op). Loaded ONCE here and shared by both modes: home.env is the
     # run-mode env-file BASE layer (lowest priority); home.docker.run reaches
-    # every docker run as a separate extra_args keyword. A malformed home file
-    # surfaces as a clean ClickException per the click-wrapping convention
-    # (absence is normal). home.docker.build is NOT forwarded by this launcher.
+    # every docker run as a separate extra_args keyword; home.docker.build is
+    # forwarded to image build (build branch only) in both modes. A malformed
+    # home file surfaces as a clean ClickException per the click-wrapping
+    # convention (absence is normal).
     try:
         home: HomeConfig = load_home_config()
     except (ValueError, yaml.YAMLError) as exc:

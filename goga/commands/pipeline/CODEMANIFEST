@@ -322,8 +322,9 @@ Annotations: |
     Load the home configuration via `load_home_config` (per the
     `home-configuration` practice) early — an empty `HomeConfig` when
     ~/.goga/config.yml is absent (no-op). Discovery writes no env-file, so
-    home.env does NOT apply here; only home.docker.run is used (passed as
-    extra_args to `DockerRunner` in step 4).
+    home.env does NOT apply here; home.docker.run is used (passed as
+    extra_args to `DockerRunner` in step 4), and home.docker.build is forwarded
+    to image build in steps 5/6 (build branch only).
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
     3. Generate a unique container_name
@@ -339,15 +340,20 @@ Annotations: |
        - The assembled form: --rm, --name, the project bind-mount as
          /workspace (set as the container working directory), --add-host per
          host, --entrypoint python3, image, args
-    5. Call `docker_build_if_not_exist` with config.image and config.dockerfile
-       — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
-       when the image already exists or when no Dockerfile is set. When the
-       image is absent and a Dockerfile is declared: build it (fatal on failure
-       — surfaces as ClickException via the D5 mapper, exit 1, launch skipped).
-       Discovery writes no secret files, so no D7 caller-side handler applies.
-    6. When `update` is True: call `docker_update` with config.image and
-       config.dockerfile — build when a project Dockerfile is declared (fatal),
-       else pull (warning, non-fatal). When `update` is False: skip the refresh.
+    5. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
+       and extra_args=home.docker.build — the first-run safety net, runs
+       UNCONDITIONALLY at launch entry. No-op when the image already exists or
+       when no Dockerfile is set. When the image is absent and a Dockerfile is
+       declared: build it (fatal on failure — surfaces as ClickException via
+       the D5 mapper, exit 1, launch skipped). home.docker.build tokens reach
+       the build branch verbatim (extra_args — appended after the translated
+       params flags, before -f); ignored on no-op branches. Discovery writes no
+       secret files, so no D7 caller-side handler applies.
+    6. When `update` is True: call `docker_update` with config.image,
+       config.dockerfile, and extra_args=home.docker.build — build when a
+       project Dockerfile is declared (fatal), else pull (warning, non-fatal).
+       home.docker.build tokens are forwarded in the build branch only (ignored
+       on the pull branch). When `update` is False: skip the refresh.
     7. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
        (extra_args is a SEPARATE keyword; params is unpacked via **) the
        runner installs the SIGTERM/SIGINT handler (exit 128 + signum), runs
@@ -365,7 +371,8 @@ Annotations: |
     `home-configuration` practice) early — an empty `HomeConfig` when
     ~/.goga/config.yml is absent (no-op). home.env is the lowest-priority env
     layer (applied in step 11); home.docker.run is appended to every docker
-    run (step 12).
+    run (step 12); home.docker.build is forwarded to image build in steps 13/14
+    (build branch only).
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
     3. Allocate a free localhost TCP port for the dashboard
@@ -447,17 +454,22 @@ Annotations: |
           the rest of afm state), --add-host per host, --env-file, each
           credential mount from `resolve_credential_mounts` read-only,
           --entrypoint python3, image, args
-    13. Call `docker_build_if_not_exist` with config.image and config.dockerfile
-        — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
-        when the image already exists or when no Dockerfile is set. When the
-        image is absent and a Dockerfile is declared: build it (fatal on failure
-        — surfaces as ClickException via the D5 mapper, exit 1, launch skipped).
-        Runs inside the try so the D7 leak-prevention invariant covers this
-        window: the secret tmpfile/env-file are already written (steps 6, 11),
-        and a fatal build unwinds to the finally which unlinks them.
-    14. When `update` is True: call `docker_update` with config.image and
-        config.dockerfile — build when a project Dockerfile is declared (fatal),
-        else pull (warning, non-fatal). When `update` is False: skip the refresh.
+    13. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
+        and extra_args=home.docker.build — the first-run safety net, runs
+        UNCONDITIONALLY at launch entry. No-op when the image already exists or
+        when no Dockerfile is set. When the image is absent and a Dockerfile is
+        declared: build it (fatal on failure — surfaces as ClickException via
+        the D5 mapper, exit 1, launch skipped). home.docker.build tokens reach
+        the build branch verbatim (extra_args — appended after the translated
+        params flags, before -f); ignored on no-op branches. Runs inside the
+        try so the D7 leak-prevention invariant covers this window: the secret
+        tmpfile/env-file are already written (steps 6, 11), and a fatal build
+        unwinds to the finally which unlinks them.
+    14. When `update` is True: call `docker_update` with config.image,
+        config.dockerfile, and extra_args=home.docker.build — build when a
+        project Dockerfile is declared (fatal), else pull (warning, non-fatal).
+        home.docker.build tokens are forwarded in the build branch only (ignored
+        on the pull branch). When `update` is False: skip the refresh.
     15. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
         (extra_args is a SEPARATE keyword; params is unpacked via **) the
         runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
@@ -492,7 +504,9 @@ Annotations: |
     step 9-11.
     Apply the `home-configuration` practice for loading the optional
     machine-wide home config (home.env as the lowest-priority env layer in
-    run mode; home.docker.run appended to every docker run in both modes).
+    run mode; home.docker.run appended to every docker run in both modes;
+    home.docker.build forwarded to image build via `docker_build_if_not_exist`
+    / `docker_update` in the build branch only).
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
@@ -520,8 +534,11 @@ Annotations: |
       env-file is written in run mode; discovery writes none). Project config
       (config.pipeline.env) and CLI extra_env override home.env on key conflict.
       home.docker.run tokens are appended to every docker run in both modes
-      (passed as extra_args to `DockerRunner`). An absent home file yields an
-      empty `HomeConfig` — no effect.
+      (passed as extra_args to `DockerRunner`). home.docker.build tokens are
+      forwarded to image build in both modes (passed as extra_args to
+      `docker_build_if_not_exist` / `docker_update`; build branch only, ignored
+      on pull/no-op branches). An absent home file yields an empty `HomeConfig`
+      — no effect.
     - Persistent afm state directory mount is read-write; the tmpfile
       client.command overlay is read-only
     - The client.command tmpfile mount target is FIXED at

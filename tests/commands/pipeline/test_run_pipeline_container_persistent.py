@@ -323,12 +323,14 @@ class TestHostsFlags:
 
 
 class TestConditionalUpdate:
-    """--update delegates to docker_update(image, dockerfile) in both modes.
+    """--update delegates to docker_update(image, dockerfile, extra_args=home.docker.build)
+    in both modes.
 
     With ``config.dockerfile`` None (the default here) docker_update takes the
     PULL branch; a set Dockerfile takes the BUILD branch. These tests assert the
     delegation call shape, not the pull/build internals (those live in the
-    ``goga/docker`` cell tests).
+    ``goga/docker`` cell tests). ``extra_args`` is the home.docker.build tokens
+    (empty list when the home file is absent — the default in these tests).
     """
 
     def test_update_false_skips_docker_update_run_mode(self, tmp_path: Path, monkeypatch) -> None:
@@ -367,8 +369,9 @@ class TestConditionalUpdate:
         ):
             run_pipeline_container("deploy", config, (), None, {}, False, True)
 
-        # dockerfile is None → docker_update(image, None) takes the pull branch.
-        mock_update.assert_called_once_with(config.image, config.dockerfile)
+        # dockerfile is None → docker_update(image, None, extra_args=[]) takes
+        # the pull branch (home.docker.build default — empty when no home file).
+        mock_update.assert_called_once_with(config.image, config.dockerfile, extra_args=[])
 
     def test_update_false_skips_docker_update_discovery(self, tmp_path: Path, monkeypatch) -> None:
         """Discovery mode with update=False does not refresh the image."""
@@ -402,7 +405,7 @@ class TestConditionalUpdate:
         ):
             run_pipeline_container(None, config, (), None, {}, False, True)
 
-        mock_update.assert_called_once_with(config.image, config.dockerfile)
+        mock_update.assert_called_once_with(config.image, config.dockerfile, extra_args=[])
 
 
 # --- Logic tests: proxy env vars (run mode) ---

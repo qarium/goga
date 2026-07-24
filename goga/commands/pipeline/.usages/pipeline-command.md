@@ -140,8 +140,11 @@ behavior is unchanged. The launcher loads it early in both modes (per the
 - **docker.run (both modes):** `home.docker.run` tokens are appended verbatim
   to every `docker run` (passed as the runner's `extra_args` channel), in both
   discovery and run mode. Raw CLI strings — docker surfaces conflicts.
-- **docker.build:** NOT consumed by the pipeline launcher (there is no image
-  build path here). `home.env` never reaches a `docker build` (no `--build-arg`).
+- **docker.build (both modes):** `home.docker.build` tokens are forwarded
+  verbatim to image build — to `docker_build_if_not_exist` (first-run safety
+  net) and `docker_update` (`--update`) in their build branch only. Effective
+  only when a project Dockerfile is declared (no-op / pull branches ignore the
+  tokens). `home.env` is NEVER passed to `docker build` (no `--build-arg`).
 
 Example `~/.goga/config.yml`:
 
@@ -151,6 +154,8 @@ env:
 docker:
   run:
     - --network=host
+  build:
+    - --no-cache
 ```
 
 ## Argument
@@ -237,8 +242,10 @@ file is missing from the image, afm surfaces the error.
 6. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
    and the image is absent locally, builds it ONCE before launch (no-op when
    the image is present or no Dockerfile is set; fatal build surfaces as
-   ClickException, launch skipped).
-7. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
+   ClickException, launch skipped). `home.docker.build` tokens are forwarded
+   verbatim to the build branch (extra_args — appended after the translated
+   params flags, before `-f`); ignored on the no-op branch.
+7. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). `home.docker.build` tokens are forwarded to the build branch only (ignored on the pull branch). Default is no refresh.
 8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] <home.docker.run tokens> --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint). `home.docker.run` tokens are appended verbatim (extra_args); absent when the home file is missing.
 9. Propagates the container's exit code.
 
@@ -316,7 +323,10 @@ is involved, no workflow layer applies.
     and the image is absent locally, builds it ONCE before launch (no-op when
     the image is present or no Dockerfile is set; fatal build surfaces as
     ClickException, launch skipped; secret tmpfile/env-file are unlinked).
-16. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
+    `home.docker.build` tokens are forwarded verbatim to the build branch
+    (extra_args — appended after the translated params flags, before `-f`);
+    ignored on the no-op branch.
+16. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). `home.docker.build` tokens are forwarded to the build branch only (ignored on the pull branch). Default is no refresh.
 17. Launches the container and waits for its exit code.
 18. In `finally`: deletes the `client.command` tmpfile and the env-file,
     `docker kill`s the container. **The persistent afm state host directory
