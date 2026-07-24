@@ -1,312 +1,51 @@
+Imports:
+  - Types:
+      - ProjectConfig
+      - load_project_config
+      - BuildConfig
+      - PipelineConfig
+      - TaskExecutorConfig
+      - CodemanifestConfig
+    From: goga/config/project
+  - Types:
+      - HomeConfig
+      - DockerArgsConfig
+      - load_home_config
+    From: goga/config/home
+
 Usages:
-  conventions: .goga/usages/conventions.md
-  yaml: |
-    Use yaml.safe_load() to parse .goga/config.yml.
-    Requires the PyYAML library.
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  All data model classes in this cell are immutable dataclasses
-  (frozen=True, kw_only=True), per `conventions`. Use the standard library
-  dataclasses module — NOT pydantic (pydantic is treated as tech debt in this
-  project).
-
-  Use the `yaml` practice for parsing .goga/config.yml via yaml.safe_load().
+  This cell is a re-export facade: it embeds (re-exports) all configuration
+  types from goga/config/project (project configuration) and goga/config/home
+  (home/docker configuration) so consumers import a single entry point
+  (From: goga/config). It owns no behavior — all logic lives in the child cells.
 
 ---
 
-"load_config() -> config:Config":
-  location: loader.py
-  annotations: |
-    Parses .goga/config.yml from the project root and returns a Config instance.
-
-    Algorithm:
-    1. Locate .goga/config.yml in the project root
-    2. Parse the YAML via the `yaml` practice
-    3. Validate the parsed document is a mapping; raise FileNotFoundError when
-       the file is absent/empty, ValueError when it is not a mapping
-    4. Extract and validate required top-level fields, raising KeyError on
-       missing fields and ValueError on invalid values:
-       - lang from the language directive
-       - image (top-level Docker image, optional — None is a valid value)
-       - dockerfile (top-level path to a project Dockerfile, optional — None is a
-         valid value; a non-string value raises ValueError), parsed like image
-    5. Extract the pipeline block. When the pipeline key is absent → set
-       pipeline to None (the section is optional at the loader level). When the
-       key is present → validate it is a mapping (raise ValueError otherwise)
-       and construct a `PipelineConfig` from its fields: agent (required,
-       non-empty), env (optional, default empty dict), proxy (optional, default
-       None), hosts (optional, default empty dict)
-    6. Extract the build block. When the build key is absent → set build to
-       None. When the key is present → validate it is a mapping (raise
-       ValueError otherwise), then validate the required task_executor
-       sub-block (raise KeyError when missing), construct a
-       `TaskExecutorConfig` from agent (required, non-empty) and env (optional,
-       default empty dict), and finally construct a `BuildConfig` from
-       task_executor, proxy (optional, default None), hosts (optional, default
-       empty dict), plus the remaining optional build fields
-    7. Extract the optional codemanifest block; when present, construct a
-       `CodemanifestConfig` from its usages and annotations fields, otherwise None
-    8. Extract the optional commands mapping (defaults to empty)
-    9. Extract the optional tools mapping via the `yaml` practice. When the key
-       is absent or YAML-null → set tools to None. When the key is present but
-       the value is not a mapping → raise ValueError. When the value is a
-       mapping → validate structurally that every key is a string and every
-       value is a string (raise ValueError on non-string keys or values —
-       YAML-null values like 'viewer:' are rejected). Perform NO semantic
-       validation of value contents: operator-prefixed forms ('==1.0',
-       '>=1.0'), malformed forms ('1.x.0', '1.0.0a1'), and any other
-       non-grammar strings pass through the loader verbatim. The loader is NOT
-       the validation authority for the version grammar — that responsibility
-       belongs to the consumer.
-    10. Construct and return a `Config` from all assembled parts, including
-        dockerfile and tools
-
-    Requirements:
-    - Top-level image is the Docker image (None is valid — consumers raise
-      ClickException when they need a concrete image)
-    - pipeline block is OPTIONAL (None when the key is absent;
-      present-but-non-mapping → ValueError); WHEN present, pipeline.agent is
-      required and non-empty
-    - pipeline.env is optional, defaults to an empty mapping
-    - pipeline.proxy is optional, defaults to None
-    - pipeline.hosts is optional, defaults to an empty mapping
-    - build block is OPTIONAL (None when the key is absent;
-      present-but-non-mapping → ValueError); WHEN present, build.task_executor
-      sub-block and build.task_executor.agent are required (non-empty)
-    - build.proxy is optional, defaults to None
-    - build.hosts is optional, defaults to an empty mapping
-    - codemanifest is optional
-    - tools is optional; values are stored verbatim with NO semantic validation
-      — invalid forms (operator-prefixed, malformed numerics) pass through
-      load_config. The loader is NOT the validation authority; the consumer
-      that owns the version grammar surfaces invalid values as ValueError at
-      resolution time
-    - Values are exposed as-is without default merge — consumers apply their own defaults
-
-    Constraints:
-    - Do not default image — None is a valid value, surface it to the caller
-    - Do NOT enforce presence of pipeline/build at the loader level — that
-      validation is the consuming command's responsibility (the pipeline and
-      build commands). The loader keeps the language requirement (KeyError) and
-      the mapping/inner-field validation of any PRESENT section
-    - Do NOT validate tools value semantics at the loader level — operator
-      syntax, x-range grammar, and the 'latest' keyword belong to the consumer
-      that owns the version grammar. The loader only enforces that each value
-      is a string (structural type check)
-    - Do NOT normalise YAML-null tools values — 'viewer:' (null) is a structural
-      type error and raises ValueError; it is NOT silently coerced to 'latest'
-
-"Config(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None)":
-  location: config.py
-  annotations: |
-    Root project configuration object. Constructed by load_config.
-
-    `lang`: project language directive
-    `image`: top-level Docker image shared by build and pipeline; None is a valid value
-    `dockerfile`: top-level path to a project Dockerfile; None is a valid value
-    `build`: build configuration as a `BuildConfig` instance, or None when the
-             build section is absent in .goga/config.yml
-    `pipeline`: pipeline configuration as a `PipelineConfig` instance, or None
-                when the pipeline section is absent in .goga/config.yml
-    `commands`: command hooks — reserved for future prompt customization
-    `codemanifest`: CODEMANIFEST configuration as a `CodemanifestConfig` instance
-    `tools`: optional raw mapping of goga-tool version declarations; values are
-             strings in the four-form grammar (1.0.x, 1.x, 1.0.1, latest) but
-             the loader performs NO semantic validation — invalid values pass
-             through verbatim and surface as ValueError at the consumer's
-             resolution step
-  properties:
-    "lang -> str": |
-      Project language. Sourced from the root language directive in .goga/config.yml.
-    "image -> str | None": |
-      Top-level Docker image shared by build and pipeline execution.
-      Sourced from the top-level image field in .goga/config.yml.
-      None is a valid value — consumers must handle the None case (e.g. raise ClickException).
-    "dockerfile -> str | None": |
-      Path to a project Dockerfile, relative to the project root. Shared by build
-      and pipeline. None is a valid value — when set, --update builds locally
-      (docker_update → DockerBuilder); when None, --update pulls (docker_pull).
-    "build -> BuildConfig | None": |
-      Build configuration from .goga/config.yml. Instance of `BuildConfig`, or None
-      when the build section is absent. Consumers that need it
-      (goga/commands/build) guard the None case and raise ClickException before
-      any field access.
-    "pipeline -> PipelineConfig | None": |
-      Pipeline configuration from .goga/config.yml. Instance of `PipelineConfig`,
-      or None when the pipeline section is absent. Consumers that need it
-      (goga/commands/pipeline) guard the None case and raise ClickException
-      before any field access.
-    "commands -> dict": |
-      Command hooks from .goga/config.yml.
-      Reserved for future prompt customization — currently unused.
-      Defaults to an empty dict when the section is absent.
-    "codemanifest -> CodemanifestConfig | None": |
-      CODEMANIFEST configuration from .goga/config.yml.
-      Instance of `CodemanifestConfig`.
-      Returns None when the codemanifest section is absent.
-    "tools -> dict[str, str] | None": |
-      Raw mapping of goga-tool version declarations from .goga/config.yml.
-      Keys are tool names (without goga-tool- / goga_tool_ prefix); values are
-      version-form strings. Defaults to None when the tools section is absent
-      or YAML-null. Returns an empty dict when the section is present but empty.
-      The loader stores values verbatim — NO semantic validation of the four-form
-      grammar (1.0.x, 1.x, 1.0.1, latest) is performed at the config layer.
-      Invalid forms (operator-prefixed '==1.0', malformed '1.x.0') pass through
-      load_config and surface as ValueError at the consumer's resolution step.
-      YAML-null values (e.g. 'viewer:') are rejected by the
-      loader as a structural type error before reaching this field.
-
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
-  location: config.py
-  annotations: |
-    Build execution configuration. Constructed by load_config from the build section of .goga/config.yml.
-
-    `task_executor`: AI agent configuration. Required.
-    `proxy`: optional HTTP/HTTPS proxy URL (e.g. "http://corp:3128"). When non-None,
-            consumers write HTTP_PROXY/HTTPS_PROXY/NO_PROXY into the container env-file.
-            Defaults to None.
-    `hosts`: optional host→IP mapping for "docker run --add-host HOST:IP" flags. Empty dict
-             when the section is absent. Consumers merge CLI --add-host flags on top.
-    All remaining fields are optional and default to None.
-
-    Requirements:
-    - task_executor is required
-    - All other fields may be None; hosts defaults to an empty dict
-  properties:
-    "task_executor -> TaskExecutorConfig": |
-      AI agent configuration. `TaskExecutorConfig` instance.
-      Required field.
-    "worktree -> bool | None": |
-      Enable isolated git worktree execution.
-    "skip_finalize -> bool | None": |
-      Skip the ralphex finalization step.
-    "session_timeout -> str | None": |
-      Session timeout duration. Go duration format ("30m", "1h").
-    "idle_timeout -> str | None": |
-      Session idle timeout duration. Go duration format.
-    "wait -> str | None": |
-      Rate-limit retry wait duration. Go duration format.
-    "max_iterations -> int | None": |
-      Maximum number of task iterations.
-    "review_patience -> int | None": |
-      Stop review after N consecutive rounds with no changes.
-    "prompts_dir -> str | None": |
-      Custom ralphex prompt directory path.
-    "agents_dir -> str | None": |
-      Custom ralphex agent directory path.
-    "codex_review -> bool | None": |
-      Enable external codex review.
-    "proxy -> str | None": |
-      Optional HTTP/HTTPS proxy URL for the build container.
-      When non-None, consumers add HTTP_PROXY, HTTPS_PROXY, and NO_PROXY to the
-      container env-file (NO_PROXY is fixed at "localhost,127.0.0.1").
-      Defaults to None.
-    "hosts -> dict[str, str]": |
-      Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
-      Defaults to an empty dict when absent in .goga/config.yml.
-
-"TaskExecutorConfig(agent: str, env: dict)":
-  location: config.py
-  annotations: |
-    AI agent configuration for task execution.
-    Constructed by load_config from the task_executor section.
-
-    `agent`: AI executor identifier
-    `env`: environment variable dictionary
-
-    Requirements:
-    - agent is required and must be a non-empty string
-    - env is optional and defaults to an empty dict
-  properties:
-    "agent -> str": |
-      AI executor identifier — agent name as declared in the goga Docker image
-      (e.g. "claude", "codex", "opencode", or any other name matching the
-      /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
-      runtime by the consumer (goga/build) into an absolute wrapper path;
-      this cell does no resolution or validation of the value.
-      Required — must not be an empty string.
-    "env -> dict": |
-      Environment variable dictionary ({str: str}).
-      Passed to the AI executor at launch to configure models and endpoints.
-      Optional — defaults to an empty dict.
-
-"PipelineConfig(agent: str, env: dict, proxy: str | None, hosts: dict[str, str])":
-  location: config.py
-  annotations: |
-    Pipeline configuration block. Constructed by load_config from the pipeline section.
-    Semantically distinct from TaskExecutorConfig: this `agent` drives the
-    afm client.command inside the container during pipeline execution.
-
-    `agent`: AI executor identifier used as afm client.command inside the container
-    `env`: environment variable dictionary
-    `proxy`: optional HTTP/HTTPS proxy URL. Same semantics as BuildConfig.proxy,
-             consumed by the pipeline container launcher. Defaults to None.
-    `hosts`: optional host→IP mapping for docker run --add-host. Defaults to an
-             empty dict.
-
-    Requirements:
-    - agent is required and must be a non-empty string
-    - env is optional and defaults to an empty dict
-    - proxy is optional and defaults to None
-    - hosts is optional and defaults to an empty dict
-  properties:
-    "agent -> str": |
-      AI executor identifier — agent name as declared in the goga Docker image
-      (e.g. "claude", "codex", "opencode", or any other name matching the
-      /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
-      runtime by the consumer (goga/commands/pipeline) into an absolute
-      wrapper path written into the afm-config tmpfile; this cell does no
-      resolution or validation of the value.
-      Required — must not be an empty string.
-    "env -> dict": |
-      Environment variable dictionary ({str: str}).
-      Passed to the container at pipeline run time.
-      Optional — defaults to an empty dict.
-    "proxy -> str | None": |
-      Optional HTTP/HTTPS proxy URL for the pipeline container.
-      When non-None, the pipeline launcher adds HTTP_PROXY, HTTPS_PROXY, and
-      NO_PROXY (fixed at "localhost,127.0.0.1") to the container env-file.
-      Defaults to None.
-    "hosts -> dict[str, str]": |
-      Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
-      Defaults to an empty dict when absent in .goga/config.yml.
-
-"CodemanifestConfig(usages: dict, annotations: str | None)":
-  location: config.py
-  annotations: |
-    CODEMANIFEST section configuration from .goga/config.yml.
-    Constructed by load_config from the codemanifest section.
-
-    `usages`: usage name-to-path mapping ({usage_name: path/to/file.md})
-    `annotations`: freeform annotations for the AI agent
-
-    Requirements:
-    - usages is required — defaults to an empty dict when absent
-    - annotations is optional and defaults to None
-  properties:
-    "usages -> dict": |
-      Usage name-to-path mapping ({usage_name: path/to/file.md}).
-      Named practices referenced in project CODEMANIFEST files.
-      Defaults to an empty dict when the usages section is absent.
-    "annotations -> str | None": |
-      Freeform annotations — instructions for the AI agent.
-      Optional — defaults to None.
+->ProjectConfig: {}
+->load_project_config: {}
+->BuildConfig: {}
+->PipelineConfig: {}
+->TaskExecutorConfig: {}
+->CodemanifestConfig: {}
+->HomeConfig: {}
+->DockerArgsConfig: {}
+->load_home_config: {}
 
 ---
 
 Author: Goga
-CreatedAt: 05/07/26
-
+CreatedAt: 24/07/26
 Description: |
-  Manifest describing unified access to project configuration via .goga/config.yml.
-  Owns the language directive, top-level image, pipeline and build/task_executor
-  blocks, codemanifest block, and the tools mapping. The loader performs only
-  structural validation; semantic validation of version-grammar values is
-  deferred to the owning consumer.
+  Re-export facade — embeds project (goga/config/project) and home
+  (goga/config/home) configuration types so consumers import a single entry
+  point. Owns no behavior.

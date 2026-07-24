@@ -76,3 +76,7 @@ a string. Pure (modulo exceptions).
   `depends_on` rules.
 - Do not expect `prompt=None` to emit an empty `prompt:` key — it omits the
   key entirely (backwards-compat behavior).
+- The output `interactive` key is unchanged — it is the afm contract field. The
+  compiler authors it from the stage-body `communication` key (the authoring
+  rename); `serialize_flow` writes whatever value `compile_flow` placed in the
+  stage `fields`. Do not expect `serialize_flow` to rename or translate keys.

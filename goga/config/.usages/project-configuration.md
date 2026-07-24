@@ -10,27 +10,27 @@ Import all types directly from `goga.config`:
 
 ```python
 from goga.config import (
-    Config,
+    ProjectConfig,
     BuildConfig,
     TaskExecutorConfig,
     PipelineConfig,
     CodemanifestConfig,
-    load_config,
+    load_project_config,
 )
 ```
 
 ## Loading Configuration
 
-### load_config() -> Config
+### load_project_config() -> ProjectConfig
 
 Parses `.goga/config.yml` from the current working directory (CWD).
 
 **Usage**:
 
 ```python
-from goga.config import load_config
+from goga.config import load_project_config
 
-config = load_config()
+config = load_project_config()
 ```
 
 **Behavior**:
@@ -46,10 +46,10 @@ config = load_config()
 **Error handling**:
 
 ```python
-from goga.config import load_config
+from goga.config import load_project_config
 
 try:
-    config = load_config()
+    config = load_project_config()
 except FileNotFoundError:
     # .goga/config.yml not found or empty
 except KeyError as e:
@@ -202,7 +202,7 @@ afm) that consume these fields.
 All objects are immutable frozen dataclasses (`frozen=True`). Fields expose read-only access.
 
 ```python
-config = load_config()
+config = load_project_config()
 
 # Top-level accessors
 config.lang  # str — project language
@@ -255,7 +255,7 @@ validation of the four-form version grammar is owned by the consumer that
 interprets these declarations.
 
 ```python
-config = load_config()
+config = load_project_config()
 
 # config.tools is dict[str, str] | None
 # - None when the `tools` section is absent or YAML-null
@@ -270,7 +270,7 @@ else:
         # `name` is the tool identifier (without goga-tool- prefix)
         # `form` is a string in the four-form grammar: 1.0.x, 1.x, 1.0.1, latest
         # Malformed values (operator-prefixed `==1.0`, malformed `1.x.0`) pass
-        # through load_config verbatim — the consumer surfaces them as ValueError
+        # through load_project_config verbatim — the consumer surfaces them as ValueError
         # at its own resolution step
         ...
 ```
@@ -299,7 +299,7 @@ tools:
 All config objects are frozen — mutation attempts raise `FrozenInstanceError`:
 
 ```python
-config = load_config()
+config = load_project_config()
 config.lang = "go"  # raises dataclasses.FrozenInstanceError
 ```
 
@@ -307,7 +307,7 @@ To derive a modified copy, use `dataclasses.replace`:
 
 ```python
 from dataclasses import replace
-from goga.config import Config
+from goga.config import ProjectConfig
 
 new_config = replace(config, lang="go")
 ```

@@ -97,6 +97,22 @@ to obtain a `WorkflowDocument`, which is forwarded to `compile_flow` as the
 optional `workflow` argument. Structural errors from `parse_workflow`
 propagate unchanged with their readable messages.
 
+## Project name prefix
+
+`run_pipeline` derives the project name in-container via `resolve_project_name`
+(basename of `git config --get remote.origin.url`, trailing `.git` stripped)
+and forwards it to `compile_flow` as the `project_name` argument. The compiled
+flow-file `description:` then becomes `[<project-name>] <header.description>`
+when the name is known, and the header description unchanged when it is `None`.
+
+- **Tolerant**: any failure (not a git repo, no origin remote, missing git
+  binary, subprocess error) yields `None` — never raises. Absence of a remote
+  is normal; the flow description then carries no prefix.
+- **In-container, mirrors `root_dir`**: derived from the in-container project
+  root (`/workspace`), not read from project config. Two independent prefix
+  channels — `root_dir:` (a top-level directive) and `[<project-name>]`
+  (prepended to `description:`).
+
 ## Return Values
 
 | Exit code | Condition                                                      |

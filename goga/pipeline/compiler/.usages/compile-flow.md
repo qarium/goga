@@ -135,6 +135,14 @@ stage-field injection above).
   In the standard in-container pipeline, `run_pipeline` resolves the value
   from `Path.cwd()` (= `/workspace` inside the goga container — the single
   source of truth mirroring the host-side mount decision).
+- `project_name: str | None = None` — optional project name used as the
+  description prefix in the compiled flow-file. When not `None`, the
+  `FlowDocument` description becomes `f"[{project_name}] {header.description}"`;
+  when `None`, the description is the header description unchanged. OUTPUT-only —
+  the `PipelineDocument` description stays the faithful mirror (like `root_dir`).
+  The compiler performs NO environment / subprocess reads; `run_pipeline`
+  resolves the value in-container via `resolve_project_name` (basename of the
+  git origin remote URL, minus a trailing `.git`; `None` when unavailable).
 
 ## Return Values
 
@@ -284,8 +292,15 @@ side to merge with).
 
 ## Default stage-field injection
 
-The input stage-body field for the afm agents list is `roles` (the legacy
-`agents` key in a stage body is a structural error). When a step body has
+The input stage-body field for the afm agents list is `roles` (an authoring
+`agents` key in a stage body is a structural error). The afm `interactive`
+field is authored as the `communication` key in a stage body (pipeline-file
+stage AND embedded extend-stage) and translated to the output `interactive`
+key in its canonical slot; an authoring `interactive` key is a structural
+error "interactive key is forbidden in stage body; use communication". The
+output canonical key order keeps `interactive` (afm contract stable).
+
+When a step body has
 **no usable `roles` value** (the `roles:` key is absent, explicitly `null`,
 or set to an empty list `[]`), the compiler injects a SINGLE default field
 into the assembled `FlowStage.fields` of the compiled afm flow-file:

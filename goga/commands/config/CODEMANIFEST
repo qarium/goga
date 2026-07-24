@@ -1,9 +1,9 @@
 Imports:
   - Types:
-      - Config
-      - load_config
+      - ProjectConfig
+      - load_project_config
     Usages:
-      - configuration
+      - project-configuration
     From: goga/config
 
 Usages:
@@ -26,18 +26,18 @@ Annotations: |
   location: config.py
   annotations: |
     The command outputs option values from the project configuration .goga/config.yml.
-    The configuration structure is described in the `configuration` practice, configuration is loaded via `load_config`.
-    The command supports navigation across all fields of the `Config` object via dot notation.
+    The configuration structure is described in the `project-configuration` practice, configuration is loaded via `load_project_config`.
+    The command supports navigation across all fields of the `ProjectConfig` object via dot notation.
     Each option is output separately with a header identifying the path.
 
     `options`: paths to options in dot notation, one or more.
     For example: build.task_executor.agent build.worktree
 
     Algorithm:
-    1. Load configuration via `load_config` → `Config`
+    1. Load configuration via `load_project_config` → `ProjectConfig`
     2. For each path from `options`:
        a. Resolve path: split by "." into components
-       b. Traverse the `Config` structure by components:
+       b. Traverse the `ProjectConfig` structure by components:
           - Start with the root Config object
           - For each component: get the object attribute
           - If attribute does not exist — error

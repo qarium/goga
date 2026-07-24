@@ -1,9 +1,9 @@
 Imports:
   - Types:
-      - Config
-      - load_config
+      - ProjectConfig
+      - load_project_config
     Usages:
-      - configuration
+      - project-configuration
     From: goga/config
   - Types:
       - resync_registered_agents
@@ -24,8 +24,8 @@ Annotations: |
   Use the `click` practice to build the command, its options, the optional
   positional argument, the --no-connect flag, and exit-code propagation.
 
-  Use the `configuration` practice when the bulk path needs to read
-  .goga/config.yml — load_config is the single entrypoint for config consumption,
+  Use the `project-configuration` practice when the bulk path needs to read
+  .goga/config.yml — load_project_config is the single entrypoint for config consumption,
   and its tools field is a raw mapping validated structurally only.
 
   After a successful pip install in single and bulk mode, activate every agent
@@ -140,7 +140,7 @@ Annotations: |
           preservation when `sudo` is set
        d. Propagate pip's outcome as the pip exit code
     2. If `name` is None → BULK / EMPTY PATH:
-       a. Load configuration via `load_config`; the result is a `Config` instance.
+       a. Load configuration via `load_project_config`; the result is a `ProjectConfig` instance.
           Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
           MUST be wrapped into a user-facing ClickException (non-zero exit) —
           never let a raw loader exception surface as a traceback.
@@ -165,8 +165,8 @@ Annotations: |
     Apply `click` for the command shape, the optional positional argument, the
     flags, the option, ctx.pass_context, ctx.exit, click.echo for the empty-path
     message, and exit-code propagation. Apply `convention` for docstring style,
-    import discipline, and structured logging. Apply `configuration` for
-    load_config() semantics and the no-validation contract on cfg.tools.
+    import discipline, and structured logging. Apply `project-configuration` for
+    load_project_config() semantics and the no-validation contract on cfg.tools.
 
     Requirements:
     - The single path MUST ignore cfg.tools entirely — name + flags fully

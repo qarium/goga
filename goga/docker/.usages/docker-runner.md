@@ -17,9 +17,11 @@ path.
 
 - `DockerRunner(image)` — stateful runner. The image to run is concrete, so it is
   supplied to the constructor.
-- `DockerRunner(image).run(args, **params) -> int` — assemble and run
-  `docker run <params-flags> <image> <args>`, manage the lifecycle, and return the
-  container exit code.
+- `DockerRunner(image).run(args, extra_args: list[str] = [], **params) -> int` — assemble and run
+  `docker run <params-flags> <extra_args> <image> <args>`, manage the lifecycle, and return the
+  container exit code. `extra_args` are raw docker tokens appended verbatim after
+  the translated params flags and before the image (structural-only; docker
+  surfaces conflicts). Defaults to `[]`.
 
 ## Typical usage
 
@@ -74,6 +76,15 @@ the builder:
 `args` is the positional command after the image — typically the module invocation
 (`-m goga.build ...`, `-m goga.pipeline ...`) plus its flags. It is positional
 because a docker run needs a command, which cannot be a flag.
+
+`extra_args` is a separate raw-token channel: unlike `params` (translated to
+flags by the shared rule), `extra_args` are docker tokens appended **verbatim**
+after the translated params flags and before the image. Use it for flags that do
+not fit the param→flag rule (e.g. `--network`, `--gpus`, `--shm-size`). Only the
+structural `list[str]` shape is checked; docker itself surfaces flag conflicts.
+Ordering in the assembled argv:
+
+    ["docker", "run", *flags, *extra_args, image, *args]
 
 ## Lifecycle
 

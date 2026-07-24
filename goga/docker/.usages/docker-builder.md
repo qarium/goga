@@ -15,21 +15,45 @@ container image before launch.
 
     from goga.docker import docker_update, docker_build_if_not_exist, DockerBuilder, docker_pull
 
-- `docker_update(image: str, dockerfile: str | None) -> None` — the `--update`
+- `docker_update(image: str, dockerfile: str | None, extra_args: list[str] = []) -> None` — the `--update`
   entry point. When `dockerfile` is set, build the image locally from that
   Dockerfile (fatal on failure); when `dockerfile` is None, pull `image` from the
-  registry (warning on failure, non-fatal).
-- `docker_build_if_not_exist(image: str, dockerfile: str | None) -> None` — the
+  registry (warning on failure, non-fatal). `extra_args` are forwarded verbatim
+  to the build branch only (appended before `-f`); the pull branch ignores them.
+- `docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] = []) -> None` — the
   first-run safety net. When `image` is absent locally AND `dockerfile` is set,
   build it (fatal on failure, same semantics as the `docker_update` build branch);
   otherwise no-op. Never pulls — a registry image is left to `docker run` /
   `--update`. Runs UNCONDITIONALLY at launch entry, complementing `docker_update`
-  (which is gated by `--update`).
+  (which is gated by `--update`). `extra_args` are forwarded to the build branch
+  only; the no-op branches ignore them.
 - `DockerBuilder(image, dockerfile='Dockerfile', context='.')` — stateful builder.
-  `.build(**params)` runs docker build, tagging the result as `image` so the
-  locally built image shadows the registry tag consumed by docker run.
+  `.build(extra_args: list[str] = [], **params)` runs docker build, tagging the
+  result as `image` so the locally built image shadows the registry tag consumed
+  by docker run. `extra_args` are appended verbatim after the translated params
+  flags and before `-f`.
 - `docker_pull(image: str) -> bool` — standalone registry pull. Returns False and
   logs a WARNING on failure (never raises).
+
+## Raw extra tokens (extra_args channel)
+
+`extra_args` is a separate channel from the `params` dict. `params` are
+translated to docker flags by the shared param→flag rule (1-char → short flag,
+snake_case → long flag, etc.). `extra_args` are raw docker tokens appended
+**verbatim** — no translation, no validation beyond the structural `list[str]`
+check. This lets a caller pass free-form docker CLI tokens (e.g. `--network`,
+`--gpus`, `--shm-size`) without inventing a param key for each.
+
+Ordering:
+
+    docker build <params-flags> <extra_args> -f <dockerfile> -t <image> <context>
+
+`docker_update` and `docker_build_if_not_exist` forward `extra_args` to
+`DockerBuilder.build` in their **build branch only** — their pull branch
+(`docker_update`) and no-op branches (`docker_build_if_not_exist`) ignore
+`extra_args`, because extra tokens apply to image BUILD, not to a registry pull
+or an absent build. Pure-leaf preserved: `extra_args` is a primitive
+(`list[str]`), so adding it keeps the cell free of `goga/config` Imports.
 
 ## Typical usage
 
@@ -102,6 +126,20 @@ for every build; this escape hatch is for the other flags they do not cover:
         context=".",
     ).build(add_host="127.0.0.1:localhost", pull=True)
     # → docker build --add-host 127.0.0.1:localhost --pull \
+    #     -f <dockerfile> -t <image> .
+
+Raw tokens that do not fit the param→flag rule (unusual flags, `--build-arg`
+repeats, experimental options) go through the `extra_args` channel instead —
+they are appended verbatim before `-f`:
+
+    from goga.docker import DockerBuilder
+
+    DockerBuilder(
+        image=config.image,
+        dockerfile=config.dockerfile,
+        context=".",
+    ).build(extra_args=["--network=host", "--squash"], pull=True)
+    # → docker build --pull --network=host --squash \
     #     -f <dockerfile> -t <image> .
 
 ### Direct pull

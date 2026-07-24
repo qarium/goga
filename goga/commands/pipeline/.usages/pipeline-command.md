@@ -125,6 +125,34 @@ workflow log is printed.
 The launcher does NOT print any dashboard URL line — stdout carries at
 most the workflow log line (above) and the docker output stream.
 
+## Home configuration (~/.goga/config.yml)
+
+The optional, machine-wide home config is a narrow docker-only layer. Its
+absence is normal — `load_home_config()` returns an empty `HomeConfig` and
+behavior is unchanged. The launcher loads it early in both modes (per the
+`home-configuration` practice).
+
+- **env (run mode only):** `home.env` is the BASE (lowest-priority) layer of
+  the container env-file. Project config (`config.pipeline.env`) and CLI
+  (`-e/--env`) override it on key conflict —
+  `home.env < config.pipeline.env < CLI extra_env`. Discovery mode writes no
+  env-file, so `home.env` does not apply there.
+- **docker.run (both modes):** `home.docker.run` tokens are appended verbatim
+  to every `docker run` (passed as the runner's `extra_args` channel), in both
+  discovery and run mode. Raw CLI strings — docker surfaces conflicts.
+- **docker.build:** NOT consumed by the pipeline launcher (there is no image
+  build path here). `home.env` never reaches a `docker build` (no `--build-arg`).
+
+Example `~/.goga/config.yml`:
+
+```yaml
+env:
+  HTTPS_PROXY: http://corp:3128
+docker:
+  run:
+    - --network=host
+```
+
 ## Argument
 
 - `name` (positional, optional) — pipeline name without extension. When absent
@@ -211,7 +239,7 @@ file is missing from the image, afm surfaces the error.
    the image is present or no Dockerfile is set; fatal build surfaces as
    ClickException, launch skipped).
 7. When `--update` is set: refreshes the image via `docker_update` (build when a project Dockerfile is declared, fatal on failure; else pull, warning on failure, non-fatal). Default is no refresh.
-8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint).
+8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] <home.docker.run tokens> --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint). `home.docker.run` tokens are appended verbatim (extra_args); absent when the home file is missing.
 9. Propagates the container's exit code.
 
 `extra_env`, `proxy`, `--clean`, `--workflow`, and `--no-workflow` have no
@@ -267,11 +295,12 @@ is involved, no workflow layer applies.
     `Pipeline running with workflow "<workflow_log_name>"` to stdout. This
     cell surfaces ONLY this workflow log line — it does NOT print any
     dashboard URL line.
-12. Builds an env-file with `config.pipeline.env` + git identity + extra
-    `KEY=VALUE` pairs supplied via `-e/--env` + `AFM_DIR=/home/goga/pipeline` +
-    `workflow_env` entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED
-    per step 10) + (when proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
-    (mode 0600).
+12. Builds an env-file layering `home.env` as the base (lowest-priority) layer,
+    then `config.pipeline.env` + git identity + extra `KEY=VALUE` pairs supplied
+    via `-e/--env` + `AFM_DIR=/home/goga/pipeline` + `workflow_env` entries
+    (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED per step 10) + (when
+    proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
+    (mode 0600). Project config and CLI override `home.env` on key conflict.
 13. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
 14. Assembles the docker run command:
     - `--rm -p <port>:<port>`
@@ -281,6 +310,7 @@ is involved, no workflow layer applies.
     - one `--add-host HOST:IP` flag per resolved hosts entry
     - one `-v <host_path>:<container_path>:ro` flag per credential file detected by `resolve_credential_mounts()` (claude/codex/opencode when present on the host)
     - `--env-file <env_file>`
+    - `home.docker.run` tokens appended verbatim to the docker run command (extra_args — both modes)
     - `--entrypoint python3 <config.image> -m goga.pipeline run <name> --port <port>`
 15. First-run safety net: when `dockerfile` is declared in `.goga/config.yml`
     and the image is absent locally, builds it ONCE before launch (no-op when

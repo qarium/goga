@@ -1,9 +1,12 @@
 Imports:
   - Types:
-      - Config
-      - load_config
+      - ProjectConfig
+      - load_project_config
+      - HomeConfig
+      - load_home_config
     Usages:
-      - configuration
+      - project-configuration
+      - home-configuration
     From: goga/config
   - Types:
       - build AS run_build
@@ -42,7 +45,10 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
-  Use `load_config` and the `configuration` practice to read .goga/config.yml.
+  Use `load_project_config` and the `project-configuration` practice to read
+  .goga/config.yml. Use `load_home_config` and the `home-configuration` practice
+  for the optional machine-wide home config layer (env base-layering, docker.run
+  tokens for every docker run, docker.build tokens forwarded to image build).
   Use the `build-usage` practice for the in-container build invocation contract.
   Use `resolve_credential_mounts` and the `resolve-credential-mounts`
   practice to obtain the list of credential files to bind-mount read-only into
@@ -75,8 +81,8 @@ Annotations: |
   inside the container, where `run_build` runs as the in-container entrypoint
   (per the `build-usage` practice). The host does not call `run_build` directly.
 
-  The Docker image is sourced from Config.image — the top-level field shared
-  by build and pipeline. See the `configuration` practice for the schema.
+  The Docker image is sourced from ProjectConfig.image — the top-level field shared
+  by build and pipeline. See the `project-configuration` practice for the schema.
 
   Ralphex runtime isolation: the host bind-mounts a centralized runtime
   directory at /workspace/.ralphex inside the container (a nested bind-mount
@@ -135,10 +141,18 @@ Annotations: |
     Apply the `docker-auth-mounts` practice for the read-only mount rule.
     Apply the `docker-builder` practice for the --update build-vs-pull refresh.
     Apply the `docker-runner` practice for the docker run launch and lifecycle.
+    Apply the `home-configuration` practice for loading the optional machine-wide
+    home config (home.env base-layering in the env-file; home.docker.run appended
+    to every docker run; home.docker.build forwarded to image build).
 
     Algorithm:
+    Load the home configuration via `load_home_config` (per the
+    `home-configuration` practice) — an empty `HomeConfig` when the home file
+    is absent (no-op). home.env is the lowest-priority env layer (step 7);
+    home.docker.run is appended to every docker run (step 14/18);
+    home.docker.build is forwarded to image build (steps 16/17, build branch).
     1. Verify docker availability; raise ClickException when missing
-    2. Load configuration via `load_config` (practice `configuration`) — get `Config`
+    2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`
     2b. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").
         Host-side guard — runs BEFORE any config.build access and BEFORE the
@@ -152,11 +166,13 @@ Annotations: |
        config entries on host-key conflict
     6. Read git identity and assemble it as git env vars; tolerate absent git
        config and continue without error
-    7. Assemble the container env: combine task_executor env, git identity env,
-       and CLI extra env (task_executor env takes precedence over git env)
+    7. Assemble the container env layering home.env as the BASE (lowest-priority)
+       layer, then git identity env, task_executor env, and CLI extra env
+       (home.env < git identity < task_executor env < CLI extra env on key
+       conflict — project config and CLI override home.env)
     8. When the resolved proxy is non-None: add HTTP_PROXY, HTTPS_PROXY, and
        NO_PROXY (fixed at localhost,127.0.0.1) to the container env
-    9. Verify Config.image is set; raise ClickException when None
+    9. Verify ProjectConfig.image is set; raise ClickException when None
     10. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
         BEFORE writing the secret env-file — the leak-prevention invariant (a
         signal in the window between the env-file write and the `DockerRunner`
@@ -181,6 +197,11 @@ Annotations: |
           host runtime dir (step 11) read-write at /workspace/.ralphex, and each
           credential mount read-only], add_host=<each resolved HOST:IP>,
           env_file=<env-file path>
+        - extra_args: home.docker.run — raw docker tokens passed as a SEPARATE
+          keyword argument to DockerRunner.run (NOT part of params: they are
+          appended verbatim AFTER the translated params flags and BEFORE the
+          image, and are NEVER translated to an --extra-args flag). Empty list
+          when the home file is absent
         - The assembled form preserves the pre-refactor launcher exactly (same
           options, same effect): --rm, --name, --entrypoint, mounts via -v
           (project at /workspace; the resolved host runtime dir at
@@ -189,20 +210,23 @@ Annotations: |
           the project dir; each credential mount from `resolve_credential_mounts`
           read-only), --add-host, --env-file, image, args
     15. On dry_run: print the assembled command and exit 0 without launching
-    16. Call `docker_build_if_not_exist` with config.image and config.dockerfile
-        — the first-run safety net, runs UNCONDITIONALLY at launch entry. No-op
-        when the image already exists or when no Dockerfile is set. When the
-        image is absent and a Dockerfile is declared: build it (fatal on failure
+    16. Call `docker_build_if_not_exist` with config.image, config.dockerfile,
+        and extra_args=home.docker.build — the first-run safety net, runs
+        UNCONDITIONALLY at launch entry. No-op when the image already exists or
+        when no Dockerfile is set (extra_args forwarded in the build branch only).
+        When the image is absent and a Dockerfile is declared: build it (fatal on failure
         — surfaces as a ClickException via the D5 mapper, exit 1, launch
         skipped). Runs inside the try so the D7 leak-prevention invariant covers
         this window: the secret env-file is already written (step 10), and a
         fatal build unwinds to the finally which unlinks it
-    17. When `update` is True: call `docker_update` with config.image and
-        config.dockerfile — build when a project Dockerfile is declared (fatal on
-        failure), else pull (warning, non-fatal). When `update` is False: skip the
-        refresh.
-    18. Launch the container via `DockerRunner`(config.image).run(args, params):
-        the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
+    17. When `update` is True: call `docker_update` with config.image,
+        config.dockerfile, and extra_args=home.docker.build — build when a
+        project Dockerfile is declared (fatal on failure; the build branch
+        forwards extra_args), else pull (warning, non-fatal; extra_args ignored).
+        When `update` is False: skip the refresh.
+    18. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
+        extra_args is a SEPARATE keyword (NOT inside params, which is
+        unpacked via **); the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
         which nests under the caller handler installed in step 10 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code
@@ -217,7 +241,13 @@ Annotations: |
 
     Requirements:
     - Docker must be installed and available in PATH
-    - Image source: Config.image (top-level)
+    - Image source: ProjectConfig.image (top-level)
+    - home.env is the lowest-priority env layer (applied in the env-file only);
+      project config (task_executor env) and CLI extra env override it on key
+      conflict. home.docker.run tokens are appended to every docker run;
+      home.docker.build tokens are forwarded to image build
+      (docker_build_if_not_exist / docker_update build branch). An absent home
+      file yields an empty HomeConfig — no effect.
     - Git identity flows into the container as GIT_AUTHOR_NAME/EMAIL,
       GIT_COMMITTER_NAME/EMAIL; absent git config does not block the build
     - When `proxy` is non-None (CLI or config), HTTP_PROXY/HTTPS_PROXY/NO_PROXY
@@ -260,6 +290,12 @@ Annotations: |
       is True. The unconditional `docker_build_if_not_exist` at launch entry is
       NOT a refresh: it builds only when the image is absent AND a Dockerfile is
       declared (first-run build, not a rebuild of an existing image)
+    - Do NOT pass home.env to docker build — home.env is a docker run container-env
+      layer only (no --build-arg). The build branch of `docker_build_if_not_exist`
+      / `docker_update` forwards only home.docker.build, never home.env
+    - Do NOT let home.env override project config or CLI env — home.env is the
+      lowest-priority (base) layer; task_executor env and CLI extra env win on
+      key conflict
     - Do not write --add-host for hosts absent in both config and CLI
     - Do not validate the "HOST:IP" format of --add-host entries beyond a
       single-colon split — Docker itself reports malformed entries

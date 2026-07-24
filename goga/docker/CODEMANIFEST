@@ -32,6 +32,15 @@ Annotations: |
   as the --name flag AND captured as the target for the guaranteed docker kill in
   the runner finally.
 
+  Raw extra docker tokens (extra_args: list[str]) are a separate channel from the
+  params dict: params are translated to flags by the shared param→flag rule, while
+  extra_args are appended verbatim. Appended after the translated flags, before the
+  image (docker run) / before -f (docker build). Structural-only validation
+  (list[str]); docker surfaces flag conflicts. docker_update and
+  docker_build_if_not_exist forward extra_args to DockerBuilder.build in their
+  build branch only; their pull / no-op branches ignore it. Pure-leaf preserved —
+  the extra_args primitive keeps the cell free of goga/config Imports.
+
   Route all output (guard error output, goga diagnostic messages) through sys.stderr
   (click is not used). Docker CLI invocations stream the CLI's own stdout/stderr
   directly.
@@ -88,20 +97,24 @@ Annotations: |
     Docker invocations stream the CLI's own stdout/stderr directly; click is not
     used (build failure surfaces as a raised exception the caller maps to exit 1).
   methods:
-    "build(...params: dict[str, str | bool | list[str]]) -> none: None": |
+    "build(extra_args: list[str] = [], ...params: dict[str, str | bool | list[str]]) -> none: None": |
       Run docker build for this builder's image/dockerfile/context, with extra
-      CLI options passed as `params`. Build failure is FATAL — it propagates as a
-      raised exception so the caller exits non-zero (exit 1).
+      CLI options passed as `params` and raw extra tokens passed as `extra_args`.
+      Build failure is FATAL — it propagates as a raised exception so the caller
+      exits non-zero (exit 1).
 
       `params`: additional docker build CLI options, translated to flags by the
                 shared rule in the cell Annotations (e.g. add_host → --add-host,
                 pull=True → --pull). The `...params` form is the DSL
                 arbitrary-arguments notation.
+      `extra_args`: raw extra docker tokens appended verbatim AFTER the translated
+                    params flags and BEFORE -f (structural-only; docker surfaces
+                    conflicts). Defaults to [].
 
       Algorithm:
       1. Translate `params` into docker flags per the shared param→flag rule
-      2. Run docker build <params-flags> -f <dockerfile> -t <image> <context>,
-         streaming docker output to the host stdout/stderr
+      2. Run docker build <params-flags> <extra_args> -f <dockerfile> -t <image>
+         <context>, streaming docker output to the host stdout/stderr
       3. On non-zero docker exit: raise (fatal) — do NOT swallow
 
       Requirements:
@@ -109,6 +122,8 @@ Annotations: |
         the registry image
       - <context> is the constructor value (project root); <dockerfile> resolves
         relative to it
+      - `extra_args` tokens are appended verbatim (no translation) between the
+        params flags and -f
 
       Constraints:
       - Do not add cache / multi-stage / platform flags unless supplied via `params`
@@ -134,7 +149,7 @@ Annotations: |
     Constraints:
     - Do not raise on pull failure — return False so the caller warns and continues
 
-"docker_update(image: str, dockerfile: str | None) -> none: None":
+"docker_update(image: str, dockerfile: str | None, extra_args: list[str] = []) -> none: None":
   location: builder.py
   annotations: |
     Orchestrator for the --update/-u flag: BUILD when a Dockerfile is declared,
@@ -142,29 +157,32 @@ Annotations: |
     pipeline-discovery, pipeline-run) share one decision point and one
     error-semantics contract (build fatal, pull warning).
 
-    Takes PRIMITIVES (`image`, `dockerfile`), not a Config object, so the goga/docker
-    cell stays a pure leaf (no Imports, no dependency on goga/config). The
-    `image: str` signature makes the non-None precondition explicit at the call
-    site — callers pass the already-validated config.image.
+    Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object, so
+    the goga/docker cell stays a pure leaf (no Imports, no dependency on
+    goga/config). The `image: str` signature makes the non-None precondition
+    explicit at the call site — callers pass the already-validated config.image.
 
     `image`: image:tag — non-None (the caller validates config.image before
              calling); used as the build tag and the pull target
     `dockerfile`: path to a project Dockerfile. None → pull branch.
+    `extra_args`: raw extra docker tokens forwarded verbatim to `DockerBuilder`
+                  .build in the build branch (appended before -f); ignored by the
+                  pull branch. Defaults to [].
 
     Algorithm:
     1. When `dockerfile` is not None: construct `DockerBuilder` with this
        `image` and `dockerfile`, context ".", and call its build method with
-       pull=True (translated to the --pull flag) so base images declared via
-       FROM refresh from the registry instead of being served from the local
-       cache — build failure is fatal (propagates)
+       pull=True (translated to the --pull flag) and the `extra_args` tokens so
+       base images declared via FROM refresh from the registry instead of being
+       served from the local cache — build failure is fatal (propagates)
     2. When `dockerfile` is None: call `docker_pull` with `image` — pull failure
-       is a WARNING, non-fatal
+       is a WARNING, non-fatal (`extra_args` is ignored on the pull branch)
 
     Requirements:
     - `image` MUST be non-None (caller-validated precondition); it is forwarded
       verbatim into `DockerBuilder` / `docker_pull`
-    - dockerfile set  → build with --pull (fatal on failure)
-    - dockerfile None → pull (WARNING on failure)
+    - dockerfile set  → build with --pull + `extra_args` (fatal on failure)
+    - dockerfile None → pull (WARNING on failure); `extra_args` ignored
 
     Constraints:
     - Exactly one of build / pull runs — no third branch
@@ -172,8 +190,10 @@ Annotations: |
     - The build branch always emits --pull; callers needing other custom build
       CLI options construct `DockerBuilder` directly (and would then import it
       themselves)
+    - The pull branch ignores `extra_args` — extra tokens apply to image BUILD
+      only, not to a registry pull
 
-"docker_build_if_not_exist(image: str, dockerfile: str | None) -> none: None":
+"docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] = []) -> none: None":
   location: builder.py
   annotations: |
     First-run safety net: build the local image when it is ABSENT and a project
@@ -183,9 +203,9 @@ Annotations: |
     locally-built image to docker run. Its purpose is to guarantee the image
     exists, not to refresh it.
 
-    Takes PRIMITIVES (`image`, `dockerfile`), not a Config object, so the
-    goga/docker cell stays a pure leaf with no Imports — same convention as
-    `docker_update`. The `image: str` signature makes the non-None precondition
+    Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object,
+    so the goga/docker cell stays a pure leaf with no Imports — same convention
+    as `docker_update`. The `image: str` signature makes the non-None precondition
     explicit at the call site — callers pass the already-validated config.image.
 
     `image`: image:tag — non-None (caller-validated precondition); used as the
@@ -193,6 +213,9 @@ Annotations: |
     `dockerfile`: path to a project Dockerfile. None → no-op when the image is
                   absent (this routine never pulls — a registry image is pulled
                   by docker run itself or by an explicit --update).
+    `extra_args`: raw extra docker tokens forwarded verbatim to `DockerBuilder`
+                  .build in the build branch (appended before -f); ignored by the
+                  no-op branches. Defaults to [].
 
     Algorithm:
     1. Probe the local image store for `image` via docker image inspect (a
@@ -200,23 +223,25 @@ Annotations: |
        A missing docker binary is tolerated and treated as "image not present"
        (the caller has already verified docker availability via _check_docker).
     2. When the image is present: return immediately (no-op — do not refresh;
-       refreshing is `docker_update`'s responsibility under --update)
+       refreshing is `docker_update`'s responsibility under --update). `extra_args`
+       is ignored.
     3. When the image is absent and `dockerfile` is not None: construct
        `DockerBuilder` with this `image` and `dockerfile`, context ".", and
-       call its build method with pull=True (translated to the --pull flag) so
-       base images declared via FROM refresh from the registry instead of being
-       served from the local cache — build failure is fatal (propagates, same
-       error semantics as the build branch of `docker_update`)
+       call its build method with pull=True (translated to the --pull flag) and
+       the `extra_args` tokens so base images declared via FROM refresh from the
+       registry instead of being served from the local cache — build failure is
+       fatal (propagates, same error semantics as the build branch of
+       `docker_update`)
     4. When the image is absent and `dockerfile` is None: return (no-op — never
-       pulls)
+       pulls). `extra_args` is ignored.
 
     Requirements:
     - `image` MUST be non-None (caller-validated precondition); it is forwarded
       verbatim into the docker image inspect probe and `DockerBuilder`
     - image present → no-op (no refresh — this routine is a safety net, not a
       refresh mechanism)
-    - image absent + dockerfile set → build with --pull (fatal on failure,
-      same as `docker_update` build branch)
+    - image absent + dockerfile set → build with --pull + `extra_args` (fatal on
+      failure, same as `docker_update` build branch)
     - image absent + dockerfile None → no-op (NEVER pulls)
 
     Constraints:
@@ -226,6 +251,8 @@ Annotations: |
     - The build branch always emits --pull; callers needing other custom build
       CLI options construct `DockerBuilder` directly (and would then import it
       themselves)
+    - The no-op branches (image present, or absent with no dockerfile) ignore
+      `extra_args` — extra tokens apply to image BUILD only
     - The caller runs this UNCONDITIONALLY at launch entry — no --update gate
       (the gate belongs to `docker_update`)
 
@@ -241,13 +268,16 @@ Annotations: |
 
     `image`: container image (non-None; the caller passes the validated config.image)
   methods:
-    "run(args: list[str], ...params: dict[str, str | bool | list[str]]) -> exit_code: int": |
-      Assemble and run docker run <params-flags> <image> <args>, then manage
-      the container lifecycle.
+    "run(args: list[str], extra_args: list[str] = [], ...params: dict[str, str | bool | list[str]]) -> exit_code: int": |
+      Assemble and run docker run <params-flags> <extra_args> <image> <args>, then
+      manage the container lifecycle.
 
       `args`: the COMMAND + ARGs after the image (e.g. the goga.build /
               goga.pipeline module invocation + flags). Required positional — a
               docker run needs a command, which cannot be a flag.
+      `extra_args`: raw extra docker tokens appended verbatim AFTER the translated
+                    params flags and BEFORE the image (structural-only; docker
+                    surfaces conflicts). Defaults to [].
       `params`: docker run CLI options, translated to flags by the SAME rule as
                 the `DockerBuilder` build method. The caller passes the pre-refactor
                 options: name, rm, v (mounts), p (port publish), add_host,
@@ -262,7 +292,7 @@ Annotations: |
       Algorithm:
       1. Translate `params` into docker flags per the shared param→flag rule;
          the name param must be present
-      2. Assemble argv: ["docker", "run", *flags, image, *args]
+      2. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
       3. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
       4. Launch docker run, streaming stdout/stderr; wait for the exit code
       5. In finally: docker kill <name> (suppress errors — the container may be

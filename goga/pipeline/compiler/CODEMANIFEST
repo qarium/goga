@@ -59,10 +59,16 @@ Annotations: |
   depends_on through as-is, then rewrites after workflow loop-expansion when
   a workflow is applied). Any other body shape is a structural error.
 
-  All step content fields (interactive, command, prompt, description, agents,
-  skills, and any extra fields) are passed through verbatim — no validation
-  of their contents, no schema enforcement. References in depends_on
-  (dangling ids, cycles, duplicates) are afm's responsibility, not this cell's.
+  Stage-body field translation: the afm interactive field is authored as the
+  communication key in a stage body (pipeline-file stage AND embedded
+  extend-stage) and translated to the output interactive key in its canonical
+  position; an authoring interactive key is a structural error "interactive key
+  is forbidden in stage body; use communication". The output canonical key order
+  keeps interactive (afm contract stable). All other step content fields
+  (command, prompt, description, agents, skills, and any extra fields) are passed
+  through verbatim — no validation of their contents, no schema enforcement.
+  References in depends_on (dangling ids, cycles, duplicates) are afm's
+  responsibility, not this cell's.
 
   Canonical `FlowStage` fields key order: interactive, command, prompt,
   description, agents, supervisor, supervisor_prompt, skills, then
@@ -77,7 +83,7 @@ Annotations: |
   authors them — they are NO LONGER populated by default injection.
 
   Default stage-field injection: the input stage-body field for the afm
-  agents list is roles (the old agents key in a stage body is a
+  agents list is roles (an authoring agents key in a stage body is a
   structural error, raised by `compile_flow`). When a step body has no
   usable roles value (key absent, explicit null, or an empty list), the
   compiler injects
@@ -643,9 +649,9 @@ Annotations: |
        structural error "non-str value in header.roles.<key>". Build
        `PipelineRoles` from the validated entries. Build
        `PipelineHeader` with name, description, and roles.
-       ADDITIONALLY, if the header segment carries the legacy agents
+       ADDITIONALLY, if the header segment carries the agents
        key — raise a structural error "agents key is forbidden in
-       header; use roles" (hard rename, no legacy support).
+       header; use roles".
     3. Parse the body segment
     4. Detect format by the structure of the parsed body:
        - a list → `BodyFormat` PHASES; build a `PhasesBody` of `PhaseStep`
@@ -673,7 +679,7 @@ Annotations: |
       no other keys accepted (summary is not a valid role)
     - An absent roles block and an empty roles mapping are treated
       identically: roles is set to None
-    - The legacy agents key in the header is a structural error
+    - The agents key in the header is a structural error
     - A non-str value for a known key is a structural error (not silently
       coerced)
     - A non-mapping value for the roles block itself (scalar, string,
@@ -753,7 +759,7 @@ Annotations: |
       constructed it)
     - Do not write to disk — return the string; the caller writes it
 
-"compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None, root_dir: str | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
+"compile_flow(pipeline_path: Path, flow_path: Path, workflow: WorkflowDocument | None = None, root_dir: str | None = None, project_name: str | None = None) -> documents: tuple[PipelineDocument, FlowDocument]":
   location: compile_flow.py
   annotations: |
     Entry point of the cell: compile a pipeline-file (goga DSL) into an afm
@@ -790,6 +796,16 @@ Annotations: |
                 root (Path.cwd() == /workspace inside the goga container —
                 the single source of truth mirroring the host-side mount
                 decision).
+    `project_name`: optional project name (basename of the git origin remote URL,
+                minus a trailing .git) used as the description prefix in the
+                compiled flow-file. When not None — the `FlowDocument` description
+                becomes f"[{project_name}] {header.description}"; when None — the
+                description is the header description unchanged. OUTPUT-only: the
+                `PipelineDocument` description stays the faithful mirror (like
+                `root_dir`). Supplied by the consumer (the run_pipeline routine in
+                goga/pipeline), which resolves it in-container via
+                resolve_project_name; the compiler performs no environment /
+                subprocess reads to derive it.
     `documents`: a tuple of `PipelineDocument` and `FlowDocument` — the
                  parsed input representation (carrying header roles when
                  present; the ORIGINAL parsed body, NOT the
@@ -1027,7 +1043,7 @@ Annotations: |
          roles; an authored non-empty roles value is translated entry-
          by-entry via `translate_role` (known aliases mapped, all other
          values passed through verbatim) into the output agents value.
-         The legacy agents key in a stage body — pipeline-file stage OR
+         An authoring agents key in a stage body — pipeline-file stage OR
          embedded extend-stage — is a structural error "agents key is
          forbidden in stage body; use roles". auto is a sentinel agent
          mode emitted verbatim — goga does not interpret it (afm resolves
@@ -1040,14 +1056,22 @@ Annotations: |
          canonical key order (interactive, command, prompt, description,
          agents, supervisor, supervisor_prompt, skills, then
          alphabetically-sorted unknown keys), copying from the
-         (defaults-injected) step body
+         (defaults-injected) step body. Stage-body field translation: the input
+         communication key maps to the output interactive key in its canonical
+         slot; an input interactive key (pipeline-file stage OR embedded
+         extend-stage) is a structural error "interactive key is forbidden in
+         stage body; use communication". The output canonical key order keeps
+         interactive (afm contract stable)
     6. Build `FlowDocument`:
        - prompt = `workflow` prompt when `workflow` is not None, else None
        - root_dir = the `root_dir` parameter passed by the caller (forwarded
          verbatim — None when the caller did not supply one; the compiler
          performs no environment-variable reads to derive it)
-       - name, description from the header
-       - stages from the assembled FlowStages
+       - description = f"[{project_name}] {header.description}" when
+         `project_name` is not None, else the header description unchanged
+         (OUTPUT-only — PipelineDocument.description stays the faithful mirror,
+         like root_dir)
+       - name from the header; stages from the assembled FlowStages
     7. Build `PipelineDocument` from (header, format, ORIGINAL body) — the
        parsed representation carried alongside the FlowDocument for the
        consumer. The body field reflects the ORIGINAL parsed body, NOT the
@@ -1154,8 +1178,11 @@ Annotations: |
       and on the workflow path (after per-stage overrides and
       loop-expansion)
     - The input stage-body field for the afm agents list is roles; the
-      legacy agents key in a stage body (pipeline-file stage or embedded
-      extend-stage) is a structural error raised by `compile_flow`
+      agents key in a stage body (pipeline-file stage or embedded
+      extend-stage) is a structural error raised by `compile_flow`. The afm
+      interactive field is authored as the communication key in a stage body
+      and translated to the output interactive key; an authoring interactive key
+      is a structural error raised by `compile_flow`
     - Authored roles values are translated to the output agents values
       via `translate_role`; known aliases (planner/executor/reviewer) map
       to planning/implementation/review, every other value passes through
@@ -1188,6 +1215,14 @@ Annotations: |
       goga container resolves to /workspace, mirroring the host-side
       mount decision). When the caller does not supply `root_dir`, the
       compiled flow-file carries no top-level root_dir key (back-compat).
+    - The optional `project_name` parameter prefixes the compiled flow-file
+      description: when not None, the `FlowDocument` description becomes
+      f"[{project_name}] {header.description}"; when None, the description is
+      the header description unchanged. OUTPUT-only — the `PipelineDocument`
+      description stays the faithful mirror (like `root_dir`). The compiler
+      performs no environment / subprocess reads to derive it; the caller
+      (the run_pipeline routine in goga/pipeline) resolves it in-container via
+      resolve_project_name.
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is

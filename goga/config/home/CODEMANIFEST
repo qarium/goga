@@ -1,0 +1,96 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  yaml: |
+    Use yaml.safe_load() to parse ~/.goga/config.yml.
+    Requires the PyYAML library.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  All data model classes in this cell are immutable dataclasses
+  (frozen=True, kw_only=True), per `convention`. Use the standard library
+  dataclasses module — NOT pydantic. Use the `yaml` practice to parse
+  ~/.goga/config.yml via yaml.safe_load().
+
+---
+
+"HomeConfig(env: dict[str, str], docker: DockerArgsConfig)":
+  location: home_config.py
+  annotations: |
+    Home (machine-wide) goga configuration from ~/.goga/config.yml. A narrow
+    docker-only layer: base container environment and extra docker CLI tokens.
+    Constructed by load_home_config; immutable per `convention`.
+
+    `env`: base (lowest-priority) environment layer for docker run containers
+           (pipeline + build); overridden by project config and CLI on key conflict
+    `docker`: extra docker CLI tokens (DockerArgsConfig)
+
+    Build with @dataclass(frozen=True, kw_only=True) per `convention`.
+  properties:
+    "env -> dict[str, str]": |
+      Base environment layer for docker run containers. Empty dict when absent.
+    "docker -> DockerArgsConfig": |
+      Extra docker CLI tokens (run + build). Empty DockerArgsConfig when absent.
+
+"DockerArgsConfig(run: list[str], build: list[str])":
+  location: home_config.py
+  annotations: |
+    Raw extra docker CLI tokens from the home config docker block. Structural
+    validation only (list[str]); docker surfaces flag conflicts.
+
+    `run`: tokens appended to every docker run (pipeline + build containers)
+    `build`: tokens appended to docker build (image build)
+
+    Build with @dataclass(frozen=True, kw_only=True) per `convention`.
+  properties:
+    "run -> list[str]": |
+      Extra docker run tokens. Empty list when absent.
+    "build -> list[str]": |
+      Extra docker build tokens. Empty list when absent.
+
+"load_home_config(path: Path | None = None) -> config: HomeConfig":
+  location: loader.py
+  annotations: |
+    Load the optional home (machine-wide) goga configuration from
+    ~/.goga/config.yml. Absence is the normal state — return an empty HomeConfig;
+    never raise on a missing file.
+
+    `path`: optional explicit path (testability); None -> Path.home()/".goga"/"config.yml"
+    `config`: a HomeConfig (empty when the file is absent)
+
+    Algorithm:
+    1. Resolve the path: `path` when provided, else Path.home()/".goga"/"config.yml"
+    2. When the file does not exist -> return an empty HomeConfig
+    3. Parse the YAML via the `yaml` practice (yaml.safe_load)
+    4. When the parsed value is not a mapping -> raise ValueError
+    5. Extract optional env (mapping, default {}); non-mapping -> ValueError
+    6. Extract optional docker; when present build DockerArgsConfig from run
+       (list[str], default []) and build (list[str], default []); non-list ->
+       ValueError; absent -> empty DockerArgsConfig
+    7. Return HomeConfig(env, docker)
+
+    Use the `yaml` practice for parsing. Apply `convention` for dataclass/error style.
+
+    Requirements:
+    - A missing file is NOT an error — return an empty HomeConfig
+    - Structural validation only: env a mapping; docker.run/docker.build lists of str
+    - Unknown keys ignored (forward-compat)
+
+    Constraints:
+    - Do NOT merge with project config here — layering is the consumer's job
+    - Do NOT raise on a missing file
+    - Do NOT semantically validate docker tokens
+
+---
+
+Author: Goga
+CreatedAt: 24/07/26
+Description: |
+  Home (machine-wide) docker-only configuration model + loader for
+  ~/.goga/config.yml. Narrow layer: base container environment (env) and extra
+  docker CLI tokens (docker.run / docker.build). Optional — absence is normal.

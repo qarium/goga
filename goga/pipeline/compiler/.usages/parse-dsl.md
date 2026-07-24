@@ -82,6 +82,10 @@ header is a structural error (never represented as None).
   cycles, and duplicates are afm's responsibility.
 - Do not mutate the returned `PipelineHeader` or `PipelineRoles` — consumers
   treat them as read-only.
+- `interactive` is NOT a header field, and parse_dsl does NOT touch it — it is
+  an open-ended stage-body field carried verbatim in the body. The
+  `communication` → `interactive` translation happens in `compile_flow`, not
+  here.
 - For the common end-to-end case, prefer `compile_flow` — it composes
   `parse_dsl` and `serialize_flow` correctly and applies the per-format
   `depends_on` rules.

@@ -10,10 +10,10 @@ Imports:
       - contract AS use_contract
     From: goga/contract
   - Types:
-      - Config
-      - load_config
+      - ProjectConfig
+      - load_project_config
     Usages:
-      - configuration
+      - project-configuration
     From: goga/config
 
 Usages:
@@ -30,7 +30,7 @@ Annotations: |
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
   Use the `use_contract` practice to understand the contract dispatcher.
-  Configuration is loaded via `load_config` using the `configuration` practice.
+  Configuration is loaded via `load_project_config` using the `project-configuration` practice.
 
 ---
 
@@ -40,16 +40,16 @@ Annotations: |
     Command for comparing CODEMANIFEST contract with implementation.
 
     `cells`: paths to cells for comparison, one or more
-    `lang`: implementation language. Priority: CLI argument > `Config`. If None — taken from `Config`.lang
+    `lang`: implementation language. Priority: CLI argument > `ProjectConfig`. If None — taken from `ProjectConfig`.lang
 
     CLI options:
-    - --lang: implementation language. If not specified — the value from `Config`.lang is used
+    - --lang: implementation language. If not specified — the value from `ProjectConfig`.lang is used
 
     Algorithm:
-    1. Load configuration via `load_config` → `Config`
+    1. Load configuration via `load_project_config` → `ProjectConfig`
     2. Resolve language:
        - If `lang` is provided (not None) — use CLI value
-       - Otherwise — use `Config`.lang
+       - Otherwise — use `ProjectConfig`.lang
     3. Create `AST` object and load the project using the `loading` practice
     4. For each path from `cells`:
       - Find the document in the tree using the `loading` practice

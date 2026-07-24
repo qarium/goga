@@ -95,6 +95,36 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 
 `--add-host HOST:IP` (and `build.hosts` in config) translate to `docker run --add-host HOST:IP` flags. CLI entries are merged on top of config; on host-key conflict, CLI wins.
 
+## Home configuration (~/.goga/config.yml)
+
+The optional, machine-wide home config is a narrow docker-only layer. Its
+absence is normal — `load_home_config()` returns an empty `HomeConfig` and the
+build is unaffected. The launcher loads it early (per the `home-configuration`
+practice).
+
+- **env (env-file base layer):** `home.env` is the BASE (lowest-priority) layer
+  of the container env-file. Project config (`build.task_executor.env`) and CLI
+  (`-e/--env`) override it on key conflict —
+  `home.env < git identity < task_executor.env < CLI extra env`.
+- **docker.run:** `home.docker.run` tokens are appended verbatim to the
+  `docker run` (the runner's `extra_args` channel).
+- **docker.build:** `home.docker.build` tokens are forwarded verbatim to image
+  build — to `docker_build_if_not_exist` (first-run safety net) and
+  `docker_update` (`--update`) in their build branch only. `home.env` is NEVER
+  passed to `docker build` (no `--build-arg`).
+
+Example `~/.goga/config.yml`:
+
+```yaml
+env:
+  HTTPS_PROXY: http://corp:3128
+docker:
+  run:
+    - --network=host
+  build:
+    - --no-cache
+```
+
 ## Ralphex runtime isolation
 
 By default, ralphex writes its state (config, prompts, agents, progress files) relative to its current working directory inside the container. The `goga build` command bind-mounts a centralized host directory at `/workspace/.ralphex` so this state never lands in the user's project directory.

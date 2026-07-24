@@ -1,9 +1,12 @@
 Imports:
   - Types:
-      - Config
-      - load_config
+      - ProjectConfig
+      - load_project_config
+      - HomeConfig
+      - load_home_config
     Usages:
-      - configuration
+      - project-configuration
+      - home-configuration
     From: goga/config
   - Types:
       - resolve_wrapper_path
@@ -68,8 +71,8 @@ Annotations: |
   goga/pipeline is docker, not Python Imports. Both discovery and run launch
   the container; the host never reads pipeline files directly.
 
-  The Docker image is sourced from Config.image — the top-level field shared
-  by build and pipeline. See the `configuration` practice for the schema.
+  The Docker image is sourced from ProjectConfig.image — the top-level field shared
+  by build and pipeline. See the `project-configuration` practice for the schema.
 
   Use `resolve_credential_mounts` and the
   `resolve-credential-mounts` practice to obtain the list of credential files
@@ -194,7 +197,7 @@ Annotations: |
     - --no-workflow (flag) — disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in the env-file)
 
     Algorithm:
-    1. Load configuration via `load_config` — fails fast on schema errors
+    1. Load configuration via `load_project_config` — fails fast on schema errors
     1b. When config.pipeline is None → raise ClickException(
         "pipeline section is required in .goga/config.yml to run 'goga
         pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts in
@@ -269,7 +272,7 @@ Annotations: |
     - Do not allow --workflow X --no-workflow to pass — exit 1 with a
       readable ClickException before any further work
 
-"run_pipeline_container(name: str | None, config: Config, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool) -> exit_code: int":
+"run_pipeline_container(name: str | None, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher. Launches the goga Docker container to run
@@ -316,6 +319,11 @@ Annotations: |
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm (discovery mode, name=None):
+    Load the home configuration via `load_home_config` (per the
+    `home-configuration` practice) early — an empty `HomeConfig` when
+    ~/.goga/config.yml is absent (no-op). Discovery writes no env-file, so
+    home.env does NOT apply here; only home.docker.run is used (passed as
+    extra_args to `DockerRunner` in step 4).
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
     3. Generate a unique container_name
@@ -324,6 +332,10 @@ Annotations: |
        - params: name=<container_name>, rm=True, entrypoint=python3,
          workdir=/workspace, v=[project:/workspace], add_host=<each resolved
          HOST:IP>. No env_file, no port publish
+       - extra_args: home.docker.run — raw docker tokens passed as a SEPARATE
+         keyword to DockerRunner.run (NOT part of params; appended verbatim
+         AFTER the translated flags and BEFORE the image, never translated to an
+         --extra-args flag). Empty list when the home file is absent
        - The assembled form: --rm, --name, the project bind-mount as
          /workspace (set as the container working directory), --add-host per
          host, --entrypoint python3, image, args
@@ -336,8 +348,9 @@ Annotations: |
     6. When `update` is True: call `docker_update` with config.image and
        config.dockerfile — build when a project Dockerfile is declared (fatal),
        else pull (warning, non-fatal). When `update` is False: skip the refresh.
-    7. Launch the container via `DockerRunner`(config.image).run(args, params):
-       the runner installs the SIGTERM/SIGINT handler (exit 128 + signum), runs
+    7. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
+       (extra_args is a SEPARATE keyword; params is unpacked via **) the
+       runner installs the SIGTERM/SIGINT handler (exit 128 + signum), runs
        docker run, streams stdout/stderr, and returns the exit code. The runner
        finally performs the guaranteed docker kill and restores the previous
        handler. Discovery writes no tmpfile/env-file, so there is no host-side
@@ -348,6 +361,11 @@ Annotations: |
     `no_workflow` — no env-file is written, no afm state directory is involved.
 
     Algorithm (run mode, name provided):
+    Load the home configuration via `load_home_config` (per the
+    `home-configuration` practice) early — an empty `HomeConfig` when
+    ~/.goga/config.yml is absent (no-op). home.env is the lowest-priority env
+    layer (applied in step 11); home.docker.run is appended to every docker
+    run (step 12).
     1. Verify docker availability; raise ClickException when missing
     2. Verify config.image is set; raise ClickException when None
     3. Allocate a free localhost TCP port for the dashboard
@@ -399,12 +417,14 @@ Annotations: |
         "Pipeline running with workflow WORKFLOW_LOG_NAME" to stdout.
         This cell surfaces only this workflow log line — it does NOT print
         any dashboard URL line.
-    11. Create a private env-file combining config.pipeline.env, git identity,
-        the `extra_env` KEY=VALUE strings (forwarded as-is, no validation),
-        AFM_DIR set to the in-container persistent state path, the
-        workflow_env entries (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED
-        per step 9), and — when `proxy` is non-None — HTTP_PROXY, HTTPS_PROXY,
-        and NO_PROXY (fixed at localhost,127.0.0.1)
+    11. Create a private env-file layering home.env as the BASE (lowest-priority)
+        layer, then config.pipeline.env, git identity, the `extra_env` KEY=VALUE
+        strings (forwarded as-is, no validation), AFM_DIR set to the in-container
+        persistent state path, the workflow_env entries (GOGA_WORKFLOW_NAME
+        and/or GOGA_WORKFLOW_DISABLED per step 9), and — when `proxy` is
+        non-None — HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at
+        localhost,127.0.0.1). Project config and CLI override home.env on key
+        conflict.
     12. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: -m goga.pipeline run <name> --port <port>
         - params: name=<container_name>, rm=True, entrypoint=python3,
@@ -414,6 +434,10 @@ Annotations: |
           tmpfile (step 6) read-only at the in-container afm config path as a
           client.command overlay, and each credential mount read-only],
           add_host=<each resolved HOST:IP>, env_file=<env-file path>
+        - extra_args: home.docker.run — raw docker tokens passed as a SEPARATE
+          keyword to DockerRunner.run (NOT part of params; appended verbatim
+          AFTER the translated flags and BEFORE the image, never translated to an
+          --extra-args flag). Empty list when the home file is absent
         - The assembled form: --rm, --name, -p <port>:<port>, the project
           bind-mount as /workspace (container working directory), the
           persistent afm state host dir read-write at the in-container
@@ -434,8 +458,9 @@ Annotations: |
     14. When `update` is True: call `docker_update` with config.image and
         config.dockerfile — build when a project Dockerfile is declared (fatal),
         else pull (warning, non-fatal). When `update` is False: skip the refresh.
-    15. Launch the container via `DockerRunner`(config.image).run(args, params):
-        the runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
+    15. Launch the container via `DockerRunner`(config.image).run(args, extra_args=home.docker.run, **params):
+        (extra_args is a SEPARATE keyword; params is unpacked via **) the
+        runner installs its own SIGTERM/SIGINT handler (exit 128 + signum),
         which nests under the caller handler installed in step 6 (saves and
         restores it), runs docker run, streams stdout/stderr, and returns the
         exit code. The runner finally performs the guaranteed docker kill and
@@ -465,6 +490,9 @@ Annotations: |
     for the workflow environment contract (GOGA_WORKFLOW_NAME /
     GOGA_WORKFLOW_DISABLED) that this launcher sets via the env-file in
     step 9-11.
+    Apply the `home-configuration` practice for loading the optional
+    machine-wide home config (home.env as the lowest-priority env layer in
+    run mode; home.docker.run appended to every docker run in both modes).
 
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
@@ -484,10 +512,16 @@ Annotations: |
       uses goga-managed prompts rather than its own built-in defaults).
       theme, open_browser, proxy.enabled, and prompts_dir are static
       launcher-side constants — they are NOT configurable via the goga
-      Config or CLI
-    - env-file content: config.pipeline.env + git identity + `extra_env`
+      ProjectConfig or CLI
+    - env-file content: home.env (base) + config.pipeline.env + git identity + `extra_env`
       KEY=VALUE strings (forwarded as-is, no validation) + AFM_DIR=/home/goga/pipeline
       + (when proxy is non-None) HTTP_PROXY/HTTPS_PROXY/NO_PROXY
+    - home.env is the lowest-priority env layer — applied ONLY in run mode (the
+      env-file is written in run mode; discovery writes none). Project config
+      (config.pipeline.env) and CLI extra_env override home.env on key conflict.
+      home.docker.run tokens are appended to every docker run in both modes
+      (passed as extra_args to `DockerRunner`). An absent home file yields an
+      empty `HomeConfig` — no effect.
     - Persistent afm state directory mount is read-write; the tmpfile
       client.command overlay is read-only
     - The client.command tmpfile mount target is FIXED at
@@ -535,6 +569,12 @@ Annotations: |
       at launch entry is NOT a refresh: it builds only when the image is absent
       AND a Dockerfile is declared (first-run build, not a rebuild of an
       existing image)
+    - Do NOT apply home.env to docker build — home.env is a docker run
+      container-env layer only (no --build-arg). The build branch of
+      `docker_update` / `docker_build_if_not_exist` never sees home.env
+    - Do NOT let home.env override project config or CLI env — home.env is the
+      lowest-priority (base) layer; config.pipeline.env and CLI extra_env win
+      on key conflict
     - Delete only the tmpfile and env-file in finally — the persistent afm
       state host directory survives across runs
     - --clean wipes the persistent afm state host directory BEFORE launch; the
@@ -560,7 +600,7 @@ Annotations: |
       or runtime argument — the value is fixed at /home/goga/pipeline/prompts
       and follows from the known AFM_DIR=/home/goga/pipeline constant. goga
       does not duplicate the afm-owned prompts_dir setting in its own
-      Config; the launcher-side value is the single source of truth
+      ProjectConfig; the launcher-side value is the single source of truth
     - Do not import parse_workflow or WorkflowDocument from
       goga/pipeline/workflow — workflow parsing happens in-container; the
       host only writes the env vars and validates file existence for
