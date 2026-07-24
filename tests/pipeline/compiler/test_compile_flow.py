@@ -36,10 +36,10 @@ class TestCompileFlowContract:
         assert compile_flow is not None
 
     def test_compile_flow_signature(self) -> None:
-        """``compile_flow`` takes four parameters: ``pipeline_path``, ``flow_path``, ``workflow``, ``root_dir``."""
+        """``compile_flow`` takes five parameters (``project_name`` added)."""
         parameters = list(inspect.signature(compile_flow).parameters)
 
-        assert parameters == ["pipeline_path", "flow_path", "workflow", "root_dir"]
+        assert parameters == ["pipeline_path", "flow_path", "workflow", "root_dir", "project_name"]
 
     def test_compile_flow_workflow_kwarg_defaults_to_none(self) -> None:
         """The optional ``workflow`` parameter defaults to ``None``."""
@@ -52,6 +52,12 @@ class TestCompileFlowContract:
         root_dir_param = inspect.signature(compile_flow).parameters["root_dir"]
 
         assert root_dir_param.default is None
+
+    def test_compile_flow_project_name_kwarg_defaults_to_none(self) -> None:
+        """The optional ``project_name`` parameter defaults to ``None``."""
+        project_name_param = inspect.signature(compile_flow).parameters["project_name"]
+
+        assert project_name_param.default is None
 
     def test_compile_flow_returns_documents_tuple_on_minimal_valid_input(self, tmp_path: Path) -> None:
         """A minimal valid phases input compiles and returns the documents tuple."""
@@ -427,6 +433,37 @@ class TestCompileFlowLogic:
 
         with pytest.raises(StructuralError, match="stage name must be a string"):
             compile_flow(pipeline_path, flow_path)
+
+    def test_compile_flow_prefixes_description_with_project_name(self, tmp_path: Path) -> None:
+        """A non-``None`` ``project_name`` prefixes the FlowDocument description.
+
+        The prefix is OUTPUT-only: ``FlowDocument.description`` carries
+        ``[{project_name}] {header.description}`` while the ``PipelineDocument``
+        mirror stays unprefixed (the same OUTPUT-only posture as ``root_dir``).
+        The written flow-file carries the prefixed description.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: Ship it\n---\n\n- name: a\n  title: A\n")
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path, project_name="widget")
+
+        assert flow_doc.description == "[widget] Ship it"
+        # PipelineDocument mirror stays unprefixed (OUTPUT-only, like root_dir).
+        assert pipeline_doc.header.description == "Ship it"
+        # The written flow-file carries the prefixed description.
+        assert "description: '[widget] Ship it'" in flow_path.read_text()
+
+    def test_compile_flow_no_prefix_when_project_name_none(self, tmp_path: Path) -> None:
+        """A ``None`` ``project_name`` leaves the description unchanged (back-compat)."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: Ship it\n---\n\n- name: a\n  title: A\n")
+        flow_path = tmp_path / "flow.yml"
+
+        pipeline_doc, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        assert flow_doc.description == "Ship it"
+        assert pipeline_doc.header.description == "Ship it"
 
 
 class TestCompileFlowRolesTranslation:

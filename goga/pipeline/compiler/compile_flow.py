@@ -1026,6 +1026,7 @@ def compile_flow(
     flow_path: Path,
     workflow: WorkflowDocument | None = None,
     root_dir: str | None = None,
+    project_name: str | None = None,
 ) -> tuple[PipelineDocument, FlowDocument]:
     """Compile a goga DSL pipeline-file into an afm flow-file and return both documents.
 
@@ -1065,6 +1066,15 @@ def compile_flow(
     ``goga/pipeline``) computes the value from the in-container project root
     (``Path.cwd()`` resolves to ``/workspace`` inside the goga container).
 
+    When ``project_name`` is not ``None``, the ``FlowDocument.description`` is
+    prefixed ``f"[{project_name}] {header.description}"``; the
+    ``PipelineDocument`` mirror keeps the unprefixed header description (the
+    prefix is OUTPUT-only, like ``root_dir``). When ``project_name is None`` the
+    description is unchanged (back-compat). The compiler performs no
+    environment/subprocess reads to derive the name — the caller (the
+    ``run_pipeline`` routine in ``goga/pipeline``) derives it in-container via
+    ``resolve_project_name``.
+
     In addition to the flow-file, it builds a ``PipelineDocument`` aggregating the
     parsed ``header`` (including any inline ``roles`` overrides), ``format``, and
     the ORIGINAL ``body`` (never the reconstructed one) so consumers can obtain
@@ -1086,14 +1096,22 @@ def compile_flow(
             is omitted entirely (back-compat). The caller computes the value
             (typically the in-container project root via ``Path.cwd()``); the
             compiler itself performs no environment-variable reads.
+        project_name: Optional project name that prefixes the output
+            ``FlowDocument.description`` as ``f"[{project_name}] {header.description}"``
+            when not ``None``. The ``PipelineDocument`` mirror keeps the
+            unprefixed header description (OUTPUT-only, like ``root_dir``). When
+            ``None`` the description is unchanged (back-compat). The caller
+            derives the value in-container via ``resolve_project_name``; the
+            compiler performs no environment/subprocess reads.
 
     Returns:
         A ``(PipelineDocument, FlowDocument)`` documents tuple. The
         ``PipelineDocument`` carries the parsed header (with ``header.roles``),
-        format, and the ORIGINAL body; the ``FlowDocument`` carries the name,
-        description, optional top-level prompt, optional top-level ``root_dir``,
-        and compiled stages (the input ``roles`` field translated to the output
-        ``agents`` field).
+        format, and the ORIGINAL body (always unprefixed); the ``FlowDocument``
+        carries the name, the optionally project-name-prefixed description,
+        optional top-level prompt, optional top-level ``root_dir``, and compiled
+        stages (the input ``roles`` field translated to the output ``agents``
+        field).
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
@@ -1144,11 +1162,20 @@ def compile_flow(
 
     flow_prompt = workflow.prompt if workflow is not None else None
 
+    # The project-name prefix is OUTPUT-only: when ``project_name`` is not ``None``,
+    # ``FlowDocument.description`` carries ``[{project_name}] {header.description}``
+    # while the ``PipelineDocument`` mirror below keeps the unprefixed header
+    # description (the same OUTPUT-only posture as ``root_dir``). When
+    # ``project_name is None`` the description is unchanged (back-compat). The
+    # compiler performs no environment/subprocess reads to derive the name — the
+    # caller supplies it.
+    description = f"[{project_name}] {header.description}" if project_name is not None else header.description
+
     doc = FlowDocument(
         prompt=flow_prompt,
         root_dir=root_dir,
         name=header.name,
-        description=header.description,
+        description=description,
         stages=stages,
     )
     pipeline_doc = PipelineDocument(header=header, format=fmt, body=body)
