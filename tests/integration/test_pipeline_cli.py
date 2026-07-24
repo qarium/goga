@@ -128,8 +128,13 @@ class TestInContainerRunPath:
             result = pipeline_cli(["run", "deploy", "--port", "50321"])
 
         assert result == 0
-        mock_subprocess.assert_called_once()
-        called_args = mock_subprocess.call_args.args[0]
+        # run_pipeline derives the project name via ``resolve_project_name()``, which
+        # also calls ``subprocess.run`` (the ``git config --get remote.origin.url``
+        # probe) before afm is reached — so the afm invocation is one of possibly
+        # several recorded calls. Locate it among the call list, then assert its shape.
+        afm_calls = [c for c in mock_subprocess.call_args_list if c.args[0][0] == "afm"]
+        assert len(afm_calls) == 1
+        called_args = afm_calls[0].args[0]
         # afm invocation shape: afm run --port <port> <resolved absolute flow path>.
         assert called_args[0] == "afm"
         assert called_args[1] == "run"

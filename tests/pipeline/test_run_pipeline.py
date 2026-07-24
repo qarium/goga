@@ -116,12 +116,17 @@ class TestRunPipelineLogic:
 
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 
-    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(self, tmp_path: Path, afm_dir: Path) -> None:
+    def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A pipeline only in user_dir still compiles + runs against its source path."""
         project_dir = tmp_path / "pipelines"
         project_dir.mkdir()
         user_dir = tmp_path / "user_pipelines"
         _write_pipeline(user_dir)
+        # resolve_project_name derives the in-container project name from git — pin
+        # it to a known value so the exact compile_flow call assertion is deterministic.
+        monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", lambda: "widget")
 
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
@@ -132,13 +137,15 @@ class TestRunPipelineLogic:
         assert exit_code == 0
         # compile_flow receives the user-dir pipeline path (resolved), the flow
         # path, the resolved workflow (None — no workflow env, no basename
-        # file at <cwd>/.goga/workflows/deploy.yml), and the in-container
-        # project root as root_dir (resolved from Path.cwd()).
+        # file at <cwd>/.goga/workflows/deploy.yml), the in-container
+        # project root as root_dir (resolved from Path.cwd()), and the resolved
+        # project_name (OUTPUT-only context derived from git at step 7).
         mock_compile.assert_called_once_with(
             (user_dir / "deploy.yml").resolve(),
             afm_dir / "flow.yml",
             workflow=None,
             root_dir=str(Path.cwd().resolve()),
+            project_name="widget",
         )
         mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
 

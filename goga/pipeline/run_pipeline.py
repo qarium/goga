@@ -222,7 +222,15 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     # transformer with no environment-variable reads.
     root_dir = str(Path.cwd().resolve())
 
-    pipeline_doc, _flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow, root_dir=root_dir)
+    # Step 7: derive the in-container project name from the git origin remote URL
+    # for the ``[<project-name>]`` description prefix (Part 2). OUTPUT-only context,
+    # mirroring ``root_dir`` — derived here from the environment, never read from
+    # config, and ``resolve_project_name`` never raises so it cannot abort the run.
+    project_name = resolve_project_name()
+
+    pipeline_doc, _flow_doc = compile_flow(
+        pipeline_path, flow_path, workflow=workflow, root_dir=root_dir, project_name=project_name
+    )
 
     # Step 8: materialize the four agent prompt files into <AFM_DIR>/prompts/.
     defaults_dir = _resolve_defaults_dir()
