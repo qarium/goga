@@ -41,14 +41,22 @@ class DockerBuilder:
         self.dockerfile = dockerfile
         self.context = context
 
-    def build(self, **params: str | bool | list[str]) -> None:
+    def build(self, extra_args: list[str] | None = None, **params: str | bool | list[str]) -> None:
         """Run ``docker build`` for this builder's image/dockerfile/context.
 
         Extra CLI options arrive as ``params`` and are translated to flags by the
-        shared param→flag rule. Docker output is streamed (inherited stdio). On a
-        non-zero docker exit, raise ``DockerBuildError`` (fatal — do NOT swallow).
+        shared param→flag rule. Raw extra docker tokens arrive as ``extra_args``
+        and are appended verbatim AFTER the translated flags and BEFORE ``-f``
+        (a separate channel from ``params`` — structural-only, no translation;
+        docker surfaces flag conflicts). Docker output is streamed (inherited
+        stdio). On a non-zero docker exit, raise ``DockerBuildError``
+        (fatal — do NOT swallow).
 
         Args:
+            extra_args: Raw extra docker tokens appended verbatim after the
+                translated params flags and before ``-f`` (structural-only —
+                docker surfaces conflicts). ``None`` normalizes to an empty list
+                (mutable-default avoidance).
             **params: Additional docker build CLI options, translated to flags by
                 the shared param→flag rule (e.g. ``add_host`` → ``--add-host``,
                 ``pull=True`` → ``--pull``).
@@ -57,11 +65,13 @@ class DockerBuilder:
             DockerBuildError: When ``docker build`` exits non-zero. Fatal by
                 contract — the caller surfaces it as exit 1.
         """
+        extra_args = list(extra_args or [])
         flags = translate_params(params)
         argv = [
             "docker",
             "build",
             *flags,
+            *extra_args,
             "-f",
             self.dockerfile,
             "-t",
@@ -93,25 +103,30 @@ def docker_pull(image: str) -> bool:
     return False
 
 
-def docker_update(image: str, dockerfile: str | None) -> None:
+def docker_update(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None:
     """The ``--update`` decision point: build when a Dockerfile is declared, else pull.
 
-    Takes PRIMITIVES (``image``, ``dockerfile``), never a ``Config`` — so this
-    cell stays a pure leaf with no dependency on goga/config. Exactly one of
-    build/pull runs: ``dockerfile`` non-None → fatal build (propagates); None →
-    non-fatal pull (WARNING, bool discarded). ``image`` non-None is a
-    caller-validated precondition.
+    Takes PRIMITIVES (``image``, ``dockerfile``, ``extra_args``), never a
+    ``Config`` — so this cell stays a pure leaf with no dependency on
+    goga/config. Exactly one of build/pull runs: ``dockerfile`` non-None → fatal
+    build (propagates); None → non-fatal pull (WARNING, bool discarded).
+    ``image`` non-None is a caller-validated precondition.
 
     The build branch passes ``pull=True`` so ``docker build`` refreshes base
     images (``FROM ...``) from the registry instead of using the local cache.
+    ``extra_args`` is forwarded to ``DockerBuilder.build`` in the build branch
+    ONLY; it is ignored on the pull branch.
 
     Args:
         image: image:tag — non-None (caller-validated); used as the build tag
             and the pull target.
         dockerfile: path to a project Dockerfile. None → pull branch.
+        extra_args: Raw extra docker tokens forwarded verbatim to
+            ``DockerBuilder.build`` in the build branch (appended before ``-f``);
+            ignored by the pull branch. ``None`` normalizes inside ``build``.
     """
     if dockerfile is not None:
-        DockerBuilder(image, dockerfile, context=".").build(pull=True)
+        DockerBuilder(image, dockerfile, context=".").build(pull=True, extra_args=extra_args)
     else:
         docker_pull(image)
 
@@ -147,19 +162,22 @@ def _image_exists(image: str) -> bool:
     return result.returncode == 0
 
 
-def docker_build_if_not_exist(image: str, dockerfile: str | None) -> None:
+def docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: list[str] | None = None) -> None:
     """First-run safety net: build the local image if it is absent and a Dockerfile is declared.
 
     Complementary to ``docker_update``: ``docker_update`` is gated by the
     ``--update`` flag (force refresh); this routine runs UNCONDITIONALLY at launch
     entry — its purpose is to guarantee the image exists, not to refresh it.
 
-    Takes PRIMITIVES (``image``, ``dockerfile``), never a ``Config`` — so this
-    cell stays a pure leaf with no dependency on goga/config. ``image`` non-None
-    is a caller-validated precondition.
+    Takes PRIMITIVES (``image``, ``dockerfile``, ``extra_args``), never a
+    ``Config`` — so this cell stays a pure leaf with no dependency on goga/config.
+    ``image`` non-None is a caller-validated precondition.
 
     The build branch passes ``pull=True`` so ``docker build`` refreshes base
     images (``FROM ...``) from the registry instead of using the local cache.
+    ``extra_args`` is forwarded to ``DockerBuilder.build`` in the build branch
+    ONLY; it is ignored by the no-op branches (image present; absent + no
+    dockerfile).
 
     Args:
         image: image:tag — non-None (caller-validated); used as the local-image
@@ -167,9 +185,12 @@ def docker_build_if_not_exist(image: str, dockerfile: str | None) -> None:
         dockerfile: path to a project Dockerfile. None → no-op when the image is
             absent (this routine never pulls — a registry image is pulled by
             ``docker run`` itself or by an explicit ``--update``).
+        extra_args: Raw extra docker tokens forwarded verbatim to
+            ``DockerBuilder.build`` in the build branch (appended before ``-f``);
+            ignored by the no-op branches. ``None`` normalizes inside ``build``.
     """
     if _image_exists(image):
         return
 
     if dockerfile is not None:
-        DockerBuilder(image, dockerfile, context=".").build(pull=True)
+        DockerBuilder(image, dockerfile, context=".").build(pull=True, extra_args=extra_args)

@@ -48,12 +48,34 @@ class TestContract:
         assert "docker_build_if_not_exist" in goga.docker.__all__
 
     def test_docker_build_if_not_exist_signature_takes_primitives(self) -> None:
-        # Takes PRIMITIVES (image, dockerfile) — never a Config — so the docker
-        # cell stays a pure leaf with no Imports, mirroring docker_update.
+        # Takes PRIMITIVES (image, dockerfile, extra_args) — never a Config — so
+        # the docker cell stays a pure leaf with no Imports, mirroring docker_update.
         sig = inspect.signature(docker_build_if_not_exist)
-        assert list(sig.parameters) == ["image", "dockerfile"]
+        assert list(sig.parameters) == ["image", "dockerfile", "extra_args"]
         for param in sig.parameters.values():
             assert param.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+
+    def test_docker_build_if_not_exist_has_extra_args_default(self) -> None:
+        # extra_args is a primitive list[str] channel defaulting to None (mutable
+        # default avoidance); the build branch forwards it verbatim.
+        sig = inspect.signature(docker_build_if_not_exist)
+        extra_args = sig.parameters["extra_args"]
+        assert extra_args.default is None
+
+    def test_docker_builder_build_accepts_extra_args(self) -> None:
+        # build accepts extra_args (raw tokens appended verbatim before -f) as a
+        # separate keyword channel from the translated **params.
+        sig = inspect.signature(DockerBuilder.build)
+        params = list(sig.parameters)
+        assert params[0] == "self"
+        assert "extra_args" in params
+        assert sig.parameters["extra_args"].default is None
+        # extra_args sits BEFORE the VAR_KEYWORD params channel.
+        extra_idx = params.index("extra_args")
+        var_kw = [p for p in sig.parameters.values() if p.kind is inspect.Parameter.VAR_KEYWORD]
+        assert var_kw
+        var_kw_idx = params.index(var_kw[0].name)
+        assert extra_idx < var_kw_idx
 
     def test_docker_builder_constructor_shape_and_defaults(self) -> None:
         builder = DockerBuilder("img:tag", dockerfile="Dockerfile", context=".")
@@ -67,11 +89,17 @@ class TestContract:
         assert callable(defaults.build)
 
     def test_docker_update_signature_takes_primitives(self) -> None:
-        # docker_update takes PRIMITIVES (image, dockerfile) — never a Config.
+        # docker_update takes PRIMITIVES (image, dockerfile, extra_args) — never a Config.
         sig = inspect.signature(docker_update)
-        assert list(sig.parameters) == ["image", "dockerfile"]
+        assert list(sig.parameters) == ["image", "dockerfile", "extra_args"]
         for param in sig.parameters.values():
             assert param.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+
+    def test_docker_update_has_extra_args_default(self) -> None:
+        # extra_args is a primitive list[str] channel defaulting to None (mutable
+        # default avoidance); the build branch forwards it verbatim.
+        sig = inspect.signature(docker_update)
+        assert sig.parameters["extra_args"].default is None
 
 
 class TestDockerBuilderBuild:
@@ -118,6 +146,48 @@ class TestDockerBuilderBuild:
 
         with pytest.raises(DockerBuildError):
             DockerBuilder("img:tag").build()
+
+    def test_docker_builder_build_inserts_extra_args_before_dash_f(self, monkeypatch) -> None:
+        # extra_args are appended verbatim AFTER the translated params flags and
+        # BEFORE -f (a separate channel from params — no translation).
+        fake = RecordingRun(returncode=0)
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake)
+
+        DockerBuilder("img:tag", "Dockerfile", context=".").build(pull=True, extra_args=["--network=host", "--squash"])
+
+        argv = fake.calls[0]
+        assert argv[:2] == ["docker", "build"]
+        # both extra tokens present verbatim (no translation to a flag form).
+        assert "--network=host" in argv
+        assert "--squash" in argv
+        # every extra_args token precedes -f.
+        dash_f_idx = argv.index("-f")
+        assert argv.index("--squash") < dash_f_idx
+        assert argv.index("--network=host") < dash_f_idx
+        # -t <image> <context> tail is preserved.
+        assert argv[-5:] == ["-f", "Dockerfile", "-t", "img:tag", "."]
+
+    def test_docker_builder_build_empty_extra_args_matches_prior_argv(self, monkeypatch) -> None:
+        # No extra_args -> argv equals the pre-refactor form (no extra slot); a
+        # true no-op when extra_args is omitted.
+        fake = RecordingRun(returncode=0)
+        monkeypatch.setattr("goga.docker.builder.subprocess.run", fake)
+
+        DockerBuilder("img:tag", "Dockerfile", context=".").build(add_host="127.0.0.1:localhost")
+
+        assert fake.calls == [
+            [
+                "docker",
+                "build",
+                "--add-host",
+                "127.0.0.1:localhost",
+                "-f",
+                "Dockerfile",
+                "-t",
+                "img:tag",
+                ".",
+            ]
+        ]
 
 
 class TestDockerPull:
@@ -198,8 +268,9 @@ class TestDockerUpdate:
         assert len(instances) == 1
         inst = instances[0]
         assert (inst.image, inst.dockerfile, inst.context) == ("img:tag", "Dockerfile", ".")
-        # build() ran with pull=True so base images (FROM ...) refresh from the registry.
-        assert inst.built_with == [{"pull": True}]
+        # build() ran with pull=True (so base images refresh from the registry) and
+        # forwarded the extra_args primitive (None here — not passed).
+        assert inst.built_with == [{"pull": True, "extra_args": None}]
         assert pulls == []
 
     def test_docker_update_pulls_when_dockerfile_none(self, monkeypatch) -> None:
@@ -243,7 +314,7 @@ class TestDockerUpdate:
         assert len(instances) == 1
         inst = instances[0]
         assert inst.dockerfile == ""
-        assert inst.built_with == [{"pull": True}]
+        assert inst.built_with == [{"pull": True, "extra_args": None}]
         assert pulls == []
 
     def test_docker_update_build_branch_invokes_docker_build_with_pull_flag(self, monkeypatch) -> None:
@@ -261,6 +332,40 @@ class TestDockerUpdate:
         assert "--pull" in argv
         # -f <dockerfile> -t <image> <context> tail is preserved.
         assert argv[-5:] == ["-f", "Dockerfile", "-t", "img:tag", "."]
+
+    def test_docker_update_ignores_extra_args_on_pull_branch(self, monkeypatch) -> None:
+        # docker_update(image, None, extra_args=[...]) -> pull branch: docker_pull
+        # runs once; DockerBuilder.build is NEVER called (extra_args applies to
+        # image BUILD only, not a registry pull).
+        builder_cls, instances = _recording_builder()
+        pulls: list[str] = []
+
+        def _fake_pull(image: str) -> bool:
+            pulls.append(image)
+            return False
+
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+        monkeypatch.setattr("goga.docker.builder.docker_pull", _fake_pull)
+
+        result = docker_update("img:tag", None, extra_args=["--squash"])
+
+        assert result is None
+        assert pulls == ["img:tag"]
+        assert instances == []  # no DockerBuilder constructed -> extra_args never reached
+
+    def test_docker_update_forwards_extra_args_to_build_branch(self, monkeypatch) -> None:
+        # docker_update(image, dockerfile, extra_args=[...]) -> build branch:
+        # extra_args forwarded verbatim to DockerBuilder.build (appended before -f).
+        builder_cls, instances = _recording_builder()
+        pulls: list[str] = []
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+        monkeypatch.setattr("goga.docker.builder.docker_pull", pulls.append)
+
+        docker_update("img:tag", "Dockerfile", extra_args=["--squash", "--network=host"])
+
+        assert pulls == []
+        assert len(instances) == 1
+        assert instances[0].built_with == [{"pull": True, "extra_args": ["--squash", "--network=host"]}]
 
 
 class TestDockerBuildIfNotExist:
@@ -295,9 +400,10 @@ class TestDockerBuildIfNotExist:
         assert len(instances) == 1
         inst = instances[0]
         assert (inst.image, inst.dockerfile, inst.context) == ("img:tag", "Dockerfile", ".")
-        # build() ran with pull=True so base images (FROM ...) refresh from the registry
-        # — mirrors docker_update build branch.
-        assert inst.built_with == [{"pull": True}]
+        # build() ran with pull=True (so base images refresh from the registry) and
+        # forwarded the extra_args primitive (None here — not passed) — mirrors
+        # docker_update build branch.
+        assert inst.built_with == [{"pull": True, "extra_args": None}]
 
     def test_noop_when_image_absent_and_dockerfile_none(self, monkeypatch) -> None:
         # dockerfile None + image absent -> no-op (NEVER pulls; a registry image
@@ -332,7 +438,7 @@ class TestDockerBuildIfNotExist:
         assert len(instances) == 1
         inst = instances[0]
         assert inst.dockerfile == ""
-        assert inst.built_with == [{"pull": True}]
+        assert inst.built_with == [{"pull": True, "extra_args": None}]
 
     def test_build_branch_invokes_docker_build_with_pull_flag(self, monkeypatch) -> None:
         # End-to-end through the real DockerBuilder + translate_params + subprocess.run:
@@ -350,6 +456,40 @@ class TestDockerBuildIfNotExist:
         assert "--pull" in argv
         # -f <dockerfile> -t <image> <context> tail is preserved.
         assert argv[-5:] == ["-f", "Dockerfile", "-t", "img:tag", "."]
+
+    def test_forwards_extra_args_to_build_branch(self, monkeypatch) -> None:
+        # image absent + dockerfile set -> extra_args forwarded verbatim to
+        # DockerBuilder.build (appended before -f).
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        docker_build_if_not_exist("img:tag", "Dockerfile", extra_args=["--squash", "--network=host"])
+
+        assert len(instances) == 1
+        assert instances[0].built_with == [{"pull": True, "extra_args": ["--squash", "--network=host"]}]
+
+    def test_ignores_extra_args_when_image_present(self, monkeypatch) -> None:
+        # image present -> no-op: extra_args never reaches DockerBuilder.build.
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: True)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        result = docker_build_if_not_exist("img:tag", "Dockerfile", extra_args=["--squash"])
+
+        assert result is None
+        assert instances == []
+
+    def test_ignores_extra_args_when_image_absent_no_dockerfile(self, monkeypatch) -> None:
+        # image absent + dockerfile None -> no-op: extra_args never reaches build.
+        builder_cls, instances = _recording_builder()
+        monkeypatch.setattr("goga.docker.builder._image_exists", lambda _image: False)
+        monkeypatch.setattr("goga.docker.builder.DockerBuilder", builder_cls)
+
+        result = docker_build_if_not_exist("img:tag", None, extra_args=["--squash"])
+
+        assert result is None
+        assert instances == []
 
 
 class TestImageExistsHelper:

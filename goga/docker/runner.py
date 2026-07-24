@@ -37,14 +37,22 @@ class DockerRunner:
     def __init__(self, image: str) -> None:
         self.image = image
 
-    def run(self, args: list[str], **params: str | bool | list[str]) -> int:
-        """Run ``docker run <params-flags> <image> <args>`` and manage lifecycle.
+    def run(
+        self,
+        args: list[str],
+        extra_args: list[str] | None = None,
+        **params: str | bool | list[str],
+    ) -> int:
+        """Run ``docker run <params-flags> <extra_args> <image> <args>`` and manage lifecycle.
 
-        ``args`` is the COMMAND + ARGs after the image. ``params`` are docker run
-        CLI options translated by the shared param→flag rule. ``name`` is
-        REQUIRED and SPECIAL: emitted as ``--name`` AND captured as the
-        ``docker kill`` target in ``finally`` (the one exception to the uniform
-        rule). Returns the container exit code.
+        ``args`` is the COMMAND + ARGs after the image. ``extra_args`` are raw
+        extra docker tokens appended verbatim AFTER the translated params flags
+        and BEFORE the image (a separate channel from ``params`` —
+        structural-only, no translation; docker surfaces flag conflicts).
+        ``params`` are docker run CLI options translated by the shared param→flag
+        rule. ``name`` is REQUIRED and SPECIAL: emitted as ``--name`` AND
+        captured as the ``docker kill`` target in ``finally`` (the one exception
+        to the uniform rule). Returns the container exit code.
         """
         # `name` is the kill target — required and special (emitted as `--name`
         # AND captured as the `docker kill` target). Validate it BEFORE installing
@@ -54,8 +62,9 @@ class DockerRunner:
         if name is None:
             raise ValueError("DockerRunner.run requires a 'name' param (the docker kill target)")
 
+        extra_args = list(extra_args or [])
         flags = translate_params(params)
-        argv = ["docker", "run", *flags, self.image, *args]
+        argv = ["docker", "run", *flags, *extra_args, self.image, *args]
 
         def _on_signal(signum: int, _frame: object) -> None:
             # Convert an asynchronous signal into a synchronous SystemExit so it

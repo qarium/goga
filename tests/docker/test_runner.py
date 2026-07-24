@@ -90,6 +90,22 @@ class TestContract:
         var_keyword = [p for p in sig.parameters.values() if p.kind is inspect.Parameter.VAR_KEYWORD]
         assert var_keyword, "run must accept **params (VAR_KEYWORD)"
 
+    def test_docker_runner_run_accepts_extra_args(self) -> None:
+        # run accepts extra_args (raw tokens appended verbatim before the image)
+        # as a separate keyword channel from the translated **params.
+        sig = inspect.signature(DockerRunner.run)
+        params = list(sig.parameters)
+        assert "extra_args" in params
+        assert sig.parameters["extra_args"].default is None
+        # extra_args sits AFTER the required args positional and BEFORE the
+        # VAR_KEYWORD params channel.
+        args_idx = params.index("args")
+        extra_idx = params.index("extra_args")
+        var_kw = [p for p in sig.parameters.values() if p.kind is inspect.Parameter.VAR_KEYWORD]
+        assert var_kw
+        var_kw_idx = params.index(var_kw[0].name)
+        assert args_idx < extra_idx < var_kw_idx
+
     def test_docker_runner_run_returns_int(self, monkeypatch) -> None:
         fake_popen = _FakePopen(_FakeProc(returncode=7))
         monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
@@ -197,3 +213,54 @@ class TestDockerRunnerRun:
         installed_signums = [signum for signum, _h in fake_signal.installs]
         assert installed_signums.count(signal.SIGTERM) == 2
         assert installed_signums.count(signal.SIGINT) == 2
+
+    def test_docker_runner_run_empty_extra_args_matches_prior_argv(self, monkeypatch) -> None:
+        # No extra_args -> argv equals the pre-refactor form (no extra slot);
+        # a true no-op when extra_args is omitted.
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1", rm=True)
+
+        argv = fake_popen.calls[0]
+        # flags (insertion order: name then rm) then image then args — no extra
+        # slot between flags and image (the pre-refactor argv form).
+        assert argv == [
+            "docker",
+            "run",
+            "--name",
+            "goga-build-1",
+            "--rm",
+            "img:tag",
+            "-m",
+            "goga.build",
+        ]
+
+    def test_docker_runner_run_inserts_extra_args_before_image(self, monkeypatch) -> None:
+        # extra_args are appended verbatim AFTER the translated params flags and
+        # BEFORE the image (a separate channel from params — no translation).
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        DockerRunner("img:tag").run(
+            ["-m", "goga.build", "plan"],
+            extra_args=["--network=host", "--gpus", "all"],
+            name="goga-build-1",
+            rm=True,
+        )
+
+        argv = fake_popen.calls[0]
+        # both extra tokens present verbatim.
+        assert "--network=host" in argv
+        assert argv.count("--gpus") == 1
+        assert argv[argv.index("--gpus") + 1] == "all"
+        # every extra_args token precedes the image.
+        img_idx = argv.index("img:tag")
+        assert argv.index("--network=host") < img_idx
+        assert argv.index("--gpus") < img_idx
+        # image precedes the args (the command after the image) — unchanged.
+        assert argv[img_idx + 1 : img_idx + 4] == ["-m", "goga.build", "plan"]
