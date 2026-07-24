@@ -132,6 +132,21 @@ class TestLoadHomeConfigLogic:
         with pytest.raises(ValueError, match=r"docker\.run must be a list"):
             load_home_config()
 
+    def test_load_home_config_non_list_docker_build_token_raises(self, tmp_path, monkeypatch):
+        """docker.build present but not a list → ValueError (mirrors the run-token guard)."""
+        _write_home_yml(tmp_path, "docker:\n  build: not-a-list\n")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        with pytest.raises(ValueError, match=r"docker\.build must be a list"):
+            load_home_config()
+
+    def test_load_home_config_non_mapping_docker_raises(self, tmp_path, monkeypatch):
+        """docker present but not a mapping → ValueError (not an AttributeError),
+        so the launcher (ValueError, yaml.YAMLError) wrapping still catches it."""
+        _write_home_yml(tmp_path, "docker: not-a-mapping\n")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        with pytest.raises(ValueError, match="docker must be a mapping"):
+            load_home_config()
+
     def test_load_home_config_never_raises_on_missing_file(self, tmp_path, monkeypatch):
         """The never-raise-on-missing-file contract is inviolable — no exception type."""
         monkeypatch.setattr(Path, "home", lambda: tmp_path)

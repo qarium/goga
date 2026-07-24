@@ -64,7 +64,7 @@ subsequent step depends on the previous one.
 ```yaml
 - name: propose
   title: "Create the task from a user propose"
-  interactive: true
+  communication: true
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
@@ -72,7 +72,7 @@ subsequent step depends on the previous one.
 
 - name: task-review
   title: "Review of the created task"
-  interactive: true
+  communication: true
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:
@@ -94,7 +94,7 @@ a base name to the **last** expanded id.
 ```yaml
 propose:
   title: "Create the task from a user propose"
-  interactive: true
+  communication: true
   prompt: |
     Save the task file as `<git branch --show-current>.md`
   skills:
@@ -103,7 +103,7 @@ propose:
 task-review:
   title: "Review of the created task"
   depends_on: [propose]
-  interactive: true
+  communication: true
   prompt: |
     Review the task `<git branch --show-current>.md`
   skills:
@@ -119,11 +119,16 @@ Both body formats accept the same set of fields per stage. The compiler
 preserves unknown fields verbatim — only the canonical fields below have
 assigned semantics:
 
+> The authoring field for user-input stages is `communication`. The compiler
+> translates it to the afm output key `interactive` (which stays stable in the
+> compiled flow-file). Authoring `interactive` directly is now rejected with a
+> structural error — use `communication`.
+
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
 | `name`        | string           | — (required, phases only)   | Stage identifier. In phases format the item's `name`; in stages the map key. |
 | `title`       | string           | — (optional, recommended)   | Display label emitted as the compiled stage's `name`.                        |
-| `interactive` | bool             | false                       | Whether the stage prompts for user input.                                    |
+| `communication` | bool             | false                       | Whether the stage prompts for user input. Authors as `communication`; compiles to the afm `interactive` key. Authoring `interactive` directly is a structural error. |
 | `prompt`      | string           | —                           | Stage-level prompt text; emitted as the compiled `prompt` field.             |
 | `skills`      | list of strings  | —                           | Skills the agent must apply at this stage.                                   |
 | `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |

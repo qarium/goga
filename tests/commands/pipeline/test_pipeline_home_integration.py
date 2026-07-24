@@ -22,6 +22,8 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import click
+import pytest
 import yaml
 from goga.commands.pipeline.run_pipeline_container import run_pipeline_container as rpc
 from goga.config import BuildConfig, HomeConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
@@ -270,3 +272,27 @@ class TestPipelineAbsentHomeIsNoop:
         rpc("deploy", config)
         run_kwargs = mock_runner.return_value.run.call_args.kwargs
         assert run_kwargs["extra_args"] == []
+
+
+class TestMalformedHomeConfigSurfacesCleanClickException:
+    """A malformed ``~/.goga/config.yml`` surfaces as a clean click.ClickException,
+    not an uncaught traceback — the launcher wraps the loader's
+    ``(ValueError, yaml.YAMLError)`` per the click-wrapping convention."""
+
+    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
+    @mock.patch.object(_rpc_mod, "DockerRunner")
+    def test_malformed_home_file_raises_click_exception(
+        self, mock_runner, mock_build, tmp_path: Path, monkeypatch
+    ) -> None:
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+        home_goga = Path.home() / ".goga"
+        home_goga.mkdir(parents=True, exist_ok=True)
+        (home_goga / "config.yml").write_text("- not a mapping\n")
+
+        with pytest.raises(click.ClickException, match="must be a YAML mapping"):
+            rpc("deploy", config)
+
+        # The home preamble fails before any docker run — no side effect.
+        mock_runner.assert_not_called()

@@ -21,9 +21,9 @@ def load_home_config(path: Path | None = None) -> HomeConfig:
         here — that is the consumer's job.
 
     Raises:
-        ValueError: if the parsed value is not a mapping, or ``env`` is present
-            but not a mapping, or ``docker.run`` / ``docker.build`` are present
-            but not lists.
+        ValueError: if the parsed value is not a mapping, ``env`` or ``docker``
+            are present but not mappings, or ``docker.run`` / ``docker.build``
+            are present but not lists.
         yaml.YAMLError: if YAML parsing fails.
     """
     config_path = path if path is not None else Path.home() / ".goga" / "config.yml"
@@ -44,6 +44,8 @@ def load_home_config(path: Path | None = None) -> HomeConfig:
     docker_data = data.get("docker")
     if docker_data is None:
         docker = DockerArgsConfig(run=[], build=[])
+    elif not isinstance(docker_data, dict):
+        raise ValueError("docker must be a mapping in ~/.goga/config.yml")
     else:
         run = docker_data.get("run", [])
         build = docker_data.get("build", [])

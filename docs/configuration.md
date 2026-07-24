@@ -137,4 +137,31 @@ The config loader raises specific exceptions for invalid configuration:
 
 ## Implementation details
 
-Configuration is loaded as immutable frozen dataclasses (`frozen=True`, `kw_only=True`). Once loaded, the `Config` object cannot be modified. This ensures consistent behavior across the build pipeline.
+Configuration is loaded as immutable frozen dataclasses (`frozen=True`, `kw_only=True`). Once loaded, the `ProjectConfig` object cannot be modified. This ensures consistent behavior across the build pipeline.
+
+## Home configuration
+
+In addition to the per-project `.goga/config.yml`, goga reads an optional
+machine-wide configuration from `~/.goga/config.yml`. This file is entirely
+optional — when it is absent (the normal state), an empty home config is used
+and nothing changes. A malformed file surfaces as a clean error and exits
+non-zero; a missing file is never an error.
+
+```yaml
+# ~/.goga/config.yml — optional, machine-wide
+env:
+  HTTP_PROXY: http://corp:3128     # applied as the lowest-priority env base layer
+docker:
+  run: ["--network=host"]          # appended to every `docker run` (build + pipeline)
+  build: ["--squash"]              # appended to image builds only (`goga build`/`--update`)
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `env` | mapping | Environment variables applied as the **lowest-priority base layer** in the container env-file. Project config and CLI `-e`/`extra_env` override these on key conflict. Applied to `docker run` containers (`goga build` and `goga pipeline <name>`); not applied to `docker build` |
+| `docker.run` | list of strings | Tokens appended to every `docker run` invocation in both `goga build` and `goga pipeline` |
+| `docker.build` | list of strings | Tokens appended to image builds only — forwarded by `goga build`/`--update` (`docker_build_if_not_exist` / `docker_update`). Not forwarded by `goga pipeline` |
+
+The env layering formula is `{**home.env, **project_env, **cli_env}` — `home.env`
+is the base, project config wins over it, and CLI extra env wins last. Unknown
+keys are ignored.

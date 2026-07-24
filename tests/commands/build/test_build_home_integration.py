@@ -92,11 +92,10 @@ class TestBuildHomeIntegrationContract:
             _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         run_kwargs = mock_runner.return_value.run.call_args.kwargs
-        assert run_kwargs["extra_args"] == ["--network=host"]
         # extra_args is a SEPARATE keyword, not inside the unpacked params map —
         # the standard params (name, rm, env_file, ...) remain independent keys.
-        assert run_kwargs["name"] == run_kwargs["name"]  # present as its own key
-        assert "extra_args" in run_kwargs
+        assert run_kwargs["extra_args"] == ["--network=host"]
+        assert "name" in run_kwargs
 
 
 # --- Logic tests ---
@@ -220,3 +219,23 @@ class TestHomeDoesNotOverrideProjectOrCli:
         assert captured["env"]["SHARED"] == "home"
         # CLI -e is a SEPARATE raw channel appended last — wins on conflict.
         assert "SHARED=cli" in captured["extra"]
+
+
+class TestMalformedHomeConfigSurfacesCleanClickException:
+    """A malformed ``~/.goga/config.yml`` surfaces as a clean ClickException
+    (exit 1), not an uncaught traceback — the launcher wraps the loader's
+    ``(ValueError, yaml.YAMLError)`` per the click-wrapping convention."""
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_malformed_home_file_raises_click_exception(self, mock_docker, tmp_path, monkeypatch) -> None:
+        home_goga = Path.home() / ".goga"
+        home_goga.mkdir(parents=True, exist_ok=True)
+        (home_goga / "config.yml").write_text("- not a mapping\n")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "must be a YAML mapping" in result.output
+        # The home preamble fails before any docker run — no side effect.
+        mock_runner.assert_not_called()

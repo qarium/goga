@@ -232,7 +232,7 @@ stage body are separate concerns:
 - `agent` and `loop` are optional **default overrides** extracted from the
   entry (see [Inline agent and loop overrides](#inline-agent-and-loop-overrides)).
 - Everything else in the entry (`title`, `prompt`, `skills`, `roles`,
-  `interactive`, or any other stage field) is the **verbatim body** of the new
+  `communication`, or any other stage field) is the **verbatim body** of the new
   stage. It is carried through unchanged and embedded as an ordinary stage in
   the compiled output. `before`, `after`, `agent`, `loop`, and `depends_on` are
   never part of the body — `agent`/`loop` are extracted as override fields, and
