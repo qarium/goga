@@ -88,4 +88,5 @@ def tool(ctx: click.Context, name: str) -> None:
         click.secho(f"Tool package '{package_name}' has no 'main' function", fg="red", err=True)
         ctx.exit(1)
 
-    main_fn(list(ctx.args))
+    injections = build_injections(main_fn)
+    main_fn(list(ctx.args), **injections)

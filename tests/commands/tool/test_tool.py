@@ -172,3 +172,169 @@ class TestBuildInjectionsEdge:
 
         assert result.keys() == {"ast"}
         assert isinstance(result["ast"], AST)
+
+
+class TestToolSurfaceRegression:
+    def test_tool_accepts_name_and_variadic_args_surface(self) -> None:
+        """The command surface is unchanged: `goga tool NAME [ARGS]...`."""
+        assert tool.name == "tool"
+        # NAME is the sole declared parameter and is required.
+        assert [p.name for p in tool.params] == ["name"]
+        assert tool.params[0].required
+        # Variadic trailing ARGS are captured (not parsed as options).
+        assert tool.context_settings["allow_extra_args"] is True
+
+    def test_minimal_dummy_invocation_unchanged(self) -> None:
+        """Invoking a minimal main(argv) dummy forwards argv unchanged (regression)."""
+        captured: list[list[str]] = []
+        dummy = types.ModuleType("goga_tool_min")
+        dummy.main = captured.append  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["min", "x", "y"])
+
+        assert result.exit_code == 0
+        assert captured == [["x", "y"]]
+
+
+class TestToolAstInjection:
+    def test_main_with_ast_receives_loaded_ast_as_kwarg(self, tmp_path, monkeypatch) -> None:
+        """A main(argv, *, ast) receives argv plus the loaded AST as a keyword argument."""
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            captured["argv"] = argv
+            captured["ast"] = ast
+
+        dummy = types.ModuleType("goga_tool_asttool")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["asttool", "--flag", "value", "x"])
+
+        assert result.exit_code == 0
+        assert captured["argv"] == ["--flag", "value", "x"]
+        captured_ast = captured["ast"]
+        assert isinstance(captured_ast, AST)
+        assert hasattr(captured_ast, "tree")
+        assert hasattr(captured_ast, "errors")
+
+    def test_argv_identical_for_both_entry_point_forms(self) -> None:
+        """Both main(argv) and main(argv, *, ast) receive identical argv."""
+        min_captured: list[list[str]] = []
+        ext_captured: list[list[str]] = []
+
+        min_dummy = types.ModuleType("goga_tool_min")
+
+        def min_main(argv):
+            min_captured.append(argv)
+
+        min_dummy.main = min_main  # type: ignore[attr-defined]
+
+        ext_dummy = types.ModuleType("goga_tool_ext")
+
+        def ext_main(argv, *, ast):
+            ext_captured.append(argv)
+
+        ext_dummy.main = ext_main  # type: ignore[attr-defined]
+
+        argv = ["--flag", "value", "x"]
+        runner = CliRunner()
+        # AST patched as a no-op stub so no filesystem load occurs for either form.
+        with mock.patch("goga.commands.tool.tool.AST"):
+            with mock.patch.object(importlib, "import_module", return_value=min_dummy):
+                runner.invoke(tool, ["min", *argv])
+            with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
+                runner.invoke(tool, ["ext", *argv])
+
+        assert min_captured == [argv]
+        assert ext_captured == [argv]
+
+
+class TestToolBackwardCompatibility:
+    def test_main_without_ast_does_not_build_ast(self) -> None:
+        """A main(argv) entry point never triggers AST construction."""
+        captured: list[list[str]] = []
+        dummy = types.ModuleType("goga_tool_notool")
+        dummy.main = captured.append  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with (
+            mock.patch("goga.commands.tool.tool.AST") as mock_ast,
+            mock.patch.object(importlib, "import_module", return_value=dummy),
+        ):
+            result = runner.invoke(tool, ["notool", "arg1"])
+
+        assert result.exit_code == 0
+        assert captured == [["arg1"]]
+        mock_ast.assert_not_called()
+
+
+class TestToolErrorBehaviorPreserved:
+    def test_package_not_found_preserves_error_behavior(self) -> None:
+        """Package-not-found still surfaces the 'not found' message and non-zero exit."""
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("goga_tool_nonexistent")):
+            result = runner.invoke(tool, ["nonexistent"])
+
+        assert result.exit_code != 0
+        assert "goga_tool_nonexistent" in result.output
+        assert "not found" in result.output.lower()
+
+    def test_missing_main_preserves_error_behavior(self) -> None:
+        """A package without main still surfaces the 'main' message and non-zero exit."""
+        dummy = types.ModuleType("goga_tool_nomain")
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["nomain"])
+
+        assert result.exit_code != 0
+        assert "goga_tool_nomain" in result.output
+        assert "main" in result.output
+
+
+class TestToolAstPassthrough:
+    def test_ast_errors_pass_through_when_manifests_invalid(self, tmp_path, monkeypatch) -> None:
+        """Invalid manifests populate ast.errors but do not block dispatch or filter errors."""
+        (tmp_path / "CODEMANIFEST").write_text('Imports: []\nUsages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        state: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            state["invoked"] = True
+            state["ast"] = ast
+
+        dummy = types.ModuleType("goga_tool_passthru")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["passthru"])
+
+        assert result.exit_code == 0
+        assert state.get("invoked") is True
+        captured_ast = state["ast"]
+        assert isinstance(captured_ast, AST)
+        assert len(captured_ast.errors) > 0
+
+    def test_no_extra_args_forwarded_as_empty_list(self) -> None:
+        """No trailing args are forwarded to main as an empty list."""
+        captured: list[list[str]] = []
+        dummy = types.ModuleType("goga_tool_empty")
+        dummy.main = captured.append  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with (
+            mock.patch("goga.commands.tool.tool.AST"),
+            mock.patch.object(importlib, "import_module", return_value=dummy),
+        ):
+            result = runner.invoke(tool, ["empty"])
+
+        assert result.exit_code == 0
+        assert captured == [[]]
