@@ -10,7 +10,7 @@ goga build PLAN [OPTIONS]
 
 ## Description
 
-`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to [ralphex](https://github.com/qarium/ralphex) running inside a Docker container with `python -m goga.build` as the entry point.
+`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to [ralphex](https://github.com/qarium/ralphex) running inside a Docker container with the goga in-container process as the entry point.
 
 The build pipeline performs these steps:
 

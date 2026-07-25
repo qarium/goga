@@ -121,7 +121,7 @@ assigned semantics:
 
 > The authoring field for user-input stages is `communication`. The compiler
 > translates it to the afm output key `interactive` (which stays stable in the
-> compiled flow-file). Authoring `interactive` directly is now rejected with a
+> compiled flow-file). Authoring `interactive` directly is rejected with a
 > structural error — use `communication`.
 
 | Field         | Type             | Default                     | Description                                                                  |
