@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import importlib
+import inspect
+import sys
 import types
 from unittest import mock
 
 import click
 from click.testing import CliRunner
-from goga.commands.tool import tool
+from goga.ast import AST
+from goga.commands.tool import build_injections, tool
 
 
 class TestFacadeAccessible:
@@ -95,3 +98,77 @@ class TestToolHelpMessage:
 
         assert result.exit_code == 0
         assert "NAME" in result.output
+
+
+class TestBuildInjectionsFacadeExported:
+    def test_build_injections_facade_exported(self) -> None:
+        """build_injections is importable from the facade, callable, and in __all__."""
+        # The module-level `from goga.commands.tool import build_injections, tool`
+        # above exercises the facade export path; verify the symbols landed.
+        assert callable(build_injections)
+
+        # The goga.commands package shadows the `tool` submodule attribute with the
+        # command, so reach the package module via sys.modules for its __all__.
+        facade = sys.modules["goga.commands.tool"]
+        assert "build_injections" in facade.__all__
+
+        # Signature shape: exactly one parameter named 'main'.
+        sig = inspect.signature(build_injections)
+        assert list(sig.parameters) == ["main"]
+
+
+class TestBuildInjectionsPositive:
+    def test_build_injections_returns_ast_when_main_declares_ast(self, tmp_path, monkeypatch) -> None:
+        """When main declares keyword-only ast, the loaded AST is injected."""
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        def f(argv, *, ast):
+            return ast
+
+        result = build_injections(f)
+
+        assert result.keys() == {"ast"}
+        assert isinstance(result["ast"], AST)
+
+
+class TestBuildInjectionsNegative:
+    def test_other_named_parameter_does_not_trigger_ast(self) -> None:
+        """A keyword-only param not named 'ast' does not build the AST."""
+
+        def f(argv, *, config): ...
+
+        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+            result = build_injections(f)
+
+        assert result == {}
+        mock_ast.assert_not_called()
+
+
+class TestBuildInjectionsEdge:
+    def test_positional_only_ast_is_not_supplied(self) -> None:
+        """A positional-only 'ast' is keyword-incapable and is not injected."""
+        # The `/` marks parameters before it as positional-only; placing `ast`
+        # before the marker makes it POSITIONAL_ONLY (keyword-incapable).
+
+        def f(argv, ast, /): ...
+
+        assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.POSITIONAL_ONLY
+
+        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+            result = build_injections(f)
+
+        assert result == {}
+        mock_ast.assert_not_called()
+
+    def test_positional_or_keyword_ast_is_supplied(self, tmp_path, monkeypatch) -> None:
+        """A positional-or-keyword 'ast' is keyword-capable and is injected."""
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        def f(argv, ast=None): ...
+
+        result = build_injections(f)
+
+        assert result.keys() == {"ast"}
+        assert isinstance(result["ast"], AST)
