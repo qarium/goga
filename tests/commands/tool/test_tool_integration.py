@@ -5,6 +5,7 @@ import types
 from unittest import mock
 
 from click.testing import CliRunner
+from goga.ast import AST
 from goga.cli import app
 
 
@@ -48,3 +49,45 @@ class TestToolNotFoundThroughApp:
         assert result.exit_code != 0
         assert "goga_tool_nonexistent" in result.output
         assert "not found" in result.output.lower()
+
+
+class TestAstInjectionThroughApp:
+    def test_ast_injection_through_app(self, tmp_path, monkeypatch) -> None:
+        """End-to-end through app: main(argv, *, ast) receives argv plus the loaded AST."""
+        (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            captured["argv"] = argv
+            captured["ast"] = ast
+
+        dummy = types.ModuleType("goga_tool_asttool")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(app, ["tool", "asttool", "--flag", "value"])
+
+        assert result.exit_code == 0
+        assert captured["argv"] == ["--flag", "value"]
+        assert isinstance(captured["ast"], AST)
+
+
+class TestNoAstInjectionThroughApp:
+    def test_no_ast_injection_through_app(self) -> None:
+        """End-to-end through app: a minimal main(argv) never triggers AST construction."""
+        captured: list[list[str]] = []
+        dummy = types.ModuleType("goga_tool_min")
+        dummy.main = captured.append  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with (
+            mock.patch("goga.commands.tool.tool.AST") as mock_ast,
+            mock.patch.object(importlib, "import_module", return_value=dummy),
+        ):
+            result = runner.invoke(app, ["tool", "min", "a"])
+
+        assert result.exit_code == 0
+        mock_ast.assert_not_called()
