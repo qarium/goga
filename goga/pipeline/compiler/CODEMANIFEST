@@ -110,7 +110,7 @@ Annotations: |
   the corresponding default prompt file during pipeline run
   materialization (the planner/executor/reviewer keys map to the
   planning/implementation/review prompt-file stems via `translate_role`).
-  summary is NOT an overridable role. The old key agents is rejected
+  summary is NOT an overridable role. An agents key is rejected
   with a structural error by `parse_dsl`. Unknown keys, non-str values,
   and empty mappings are handled by `parse_dsl` per its contract; the
   roles data is carried in `PipelineHeader` (its roles field, of type
@@ -144,8 +144,7 @@ Annotations: |
   plus every extend-stage name in workflow.extend): for each before/after ref,
   an unknown ref (naming no original step and no extend-stage) raises a
   structural error "unknown stage name in workflow.extend.<name>.before: <ref>"
-  (or .after) — this REPLACES the former silent WARNING+skip / verbatim
-  pass-through. The check runs BEFORE the (0) embed (extend names come from
+  (or .after). The check runs BEFORE the (0) embed (extend names come from
   workflow.extend keys, so cross-references between extend-stages resolve
   without embedding) and BEFORE any skip removal, so a ref to a stage that
   exists in the original body — even if also marked skip: true — is NOT flagged
@@ -156,8 +155,8 @@ Annotations: |
   (every step name/id present in the ORIGINAL body, plus every extend-stage
   name embedded at (0)): for each name in workflow.stages, an unknown name
   (absent from both the original body and the extend-stages) raises a
-  structural error "unknown stage name in workflow.stages: <name>" — this
-  REPLACES the former silent WARNING+skip. The check runs on the FULL set
+  structural error "unknown stage name in workflow.stages: <name>". The check
+  runs on the FULL set
   BEFORE any skip removal, so a stage that exists in the original body —
   even if also marked skip: true — is NOT flagged as unknown. Extend-stage
   names are valid here (embedded before this check). Strictness over
@@ -174,22 +173,20 @@ Annotations: |
   reconstructed body becomes empty (every stage skipped), raise a
   structural error "empty body".
   (a) per-stage overrides applied in-place to the body of `PhaseStep` /
-  `StageStep` (now also matching embedded extend-stages by name). A stage
+  `StageStep`, matching embedded extend-stages by name. A stage
   not found here can only be an intentionally skipped one (removed at (0.6)),
-  so the lookup is SILENT (the former WARNING is gone — unknown names are
-  errors at (0.5)). The agent override now also FALLS BACK to an
-  extend-entry's inline agent, and a skills merge is applied;
+  so the lookup is SILENT; unknown names are errors at (0.5). The agent
+  override FALLS BACK to an extend-entry's inline agent, and a skills merge
+  is applied;
   (b) loop-expansion producing N copies with ids NAME-1..N and chain-style
-  internal depends_on (now also expanding extend-stages when the effective
-  loop for that name is >= 2 (stages-block loop OR the extend-entry's inline
-  loop));
-  (c) external depends_on references rewritten via the expanded_ids map
-  (now also rewriting before/after-derived refs: both after and before
+  internal depends_on, expanding extend-stages when the effective loop for
+  that name is >= 2 (stages-block loop OR the extend-entry's inline loop);
+  (c) external depends_on references rewritten via the expanded_ids map,
+  rewriting before/after-derived refs as well: both after and before
   → LAST expanded id — any reference to a loop-expanded chain points to its
-  completion). Dangling refs in extend before/after are silently ignored
-  with a warning (a workflow may cover multiple pipelines). Unknown stage
-  names in workflow.stages are now a STRUCTURAL ERROR (no longer a
-  warning). The agent instruction is composed into the
+  completion). Unknown stage names in workflow.stages and dangling refs in
+  extend before/after are STRUCTURAL ERRORS (validated on the full
+  original∪extend name set before skip removal). The agent instruction is composed into the
   in-container wrapper path directly — the cell does NOT call any host-side
   resolver.
 
@@ -892,8 +889,7 @@ Annotations: |
                 BEFORE any skip removal, so a really-existing skipped stage is
                 NOT flagged (referencing a skipped stage is not a dangling ref).
                 Existence only — cycles, self-references, and duplicate refs
-                remain afm's responsibility. This REPLACES the former silent
-                WARNING+skip / verbatim-pass-through.
+                remain afm's responsibility.
        4pre. Strict-validation of workflow.stages names: build the valid-name
              set = { every step name/id in the ORIGINAL body } ∪ { every
              extend-stage name embedded at 4a0 }. For each name in
@@ -903,7 +899,7 @@ Annotations: |
              really-existing skipped stage is NOT flagged as unknown. Extend-
              stage names are valid here (embedded before this check). Strictness
              over extend.<name>.before/.after refs is enforced at 4a0-pre
-             (above); a workflow may no longer carry a dangling extend ref.
+             (above); a workflow must not carry a dangling extend ref.
        4skip. Skip removal + transparent depends_on reconnection: determine the
              skipped-name set = { name : workflow.stages[name].skip is True
              AND name exists in the working body }. Then:
@@ -1112,13 +1108,13 @@ Annotations: |
       merging or collision
     - Unknown stage names in workflow.stages (names absent from both the
       original body and the extend-stages) raise a structural error
-      "unknown stage name in workflow.stages: <name>" (no longer a warning);
+      "unknown stage name in workflow.stages: <name>";
       a really-existing skipped stage is NOT flagged (validation runs on the
       full original∪extend set before removal)
     - Dangling refs in workflow.extend.<name>.before/.after (refs naming no
       original step and no extend-stage) raise a structural error "unknown
-      stage name in workflow.extend.<name>.before/.after: <ref>" (no longer a
-      warning nor a verbatim pass-through); a ref to a really-existing skipped
+      stage name in workflow.extend.<name>.before/.after: <ref>" (not a verbatim
+      pass-through); a ref to a really-existing skipped
       stage is NOT flagged (validation runs before skip removal); cross-references
       between extend-stages resolve (extend names are valid targets)
     - stages.<name>.skip: true for an existing stage → the stage is removed
@@ -1147,7 +1143,7 @@ Annotations: |
     - Dangling refs in before/after (names in neither the body nor the
       extend-stages) raise a structural error "unknown stage name in
       workflow.extend.<name>.before/.after: <ref>" — strict validation at
-      4a0-pre (a workflow no longer carries a dangling extend ref; symmetric
+      4a0-pre (a workflow must not carry a dangling extend ref; symmetric
       with workflow.stages strictness)
     - Cross-references between extend-stages (one extend-stage's
       before/after names another extend-stage) are resolved
@@ -1245,7 +1241,7 @@ Annotations: |
     - Do not validate the `WorkflowStage` agent value against a known agent set —
       absence of the wrapper file is surfaced by afm at invocation time
     - Do not silently skip unknown workflow.stages names — strict validation
-      raises a structural error (a workflow no longer silently covers multiple
+      raises a structural error (a workflow does not silently cover multiple
       pipelines); dangling extend.<name>.before/.after refs are likewise a
       structural error at 4a0-pre (symmetric strictness, no silent WARNING+skip)
     - Do not validate before/after refs for cycles, self-references, or

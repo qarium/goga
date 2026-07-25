@@ -2,29 +2,147 @@ name: GogaReview
 description: Review changes
 ---
 
-- name: compliance-convention
-  title: Find drift between conventions and source and fix it
+- name: discovery-scope
+  title: Define the scope of changes
+  communication: true
+  prompt: |
+    `change scope`: the set of changed lines — the diff against the default branch, or an explicitly selected scope provided by the user.
+
+    Steps:
+    - Discovery and define `change scope`
+    - Save changes in `/tmp/changes.txt`
+
+    Requirements:
+    - Changes file **MUST** be readable for another agents
+    - Changes **MUST** contains comparison criteria, changes files and diffs
+    - Ask user if `change scope` is ambiguous
+
+    Constraints:
+    - Do not decide on the default branch when it is ambiguous (main, master, etc...)
+
+- name: code-review
+  title: Verify source code
   communication: true
   roles:
     - planner
     - executor
   prompt: |
     Detect deviations from the conventions in the change scope and fix them.
-
-    `change scope`: the set of changed lines under review — the diff against the default branch, or an explicitly selected scope provided by the user.
-
+  
     Requirements:
-    - Read the convention `.goga/usages/conventions.md` before scanning the `change scope`
+    - Read file `/tmp/changes.txt` for understanding scope changes
+    - Read the convention `.goga/usages/conventions.md`
+    - It is necessary to identify and categorize a set of rules based on the content of the convention
     - The rules of the convention take precedence over the existed source code
     - For each deviation, produce a finding with: `location` (file and line range), `convention` (the backtick rule from `.goga/usages/conventions.md` it violates), and `severity`
-    - Fix only the deviations within the `change scope` confirmed by the user
+    - Fix only the deviations within the scope changes confirmed by the user
 
     Constraints:
-    - Do not decide on the default branch when it is ambiguous (main, master, etc...)
     - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
-    - Do not run lint/format/tests, only fix apply fixes
+    - Do not run lint/format/tests, only apply fixes
 
-- name: testing-changes
+- name: contracts-review
+  title: Verify codemanifest and usage files
+  communication: true
+  roles:
+    - planner
+    - executor
+  skills:
+    - goga-cell
+    - goga-cookbook
+  prompt: |
+    # Specs review
+
+    You are spec reviewer with experience as a systems analyst and technical writer.
+    Your task is to check the correctness of the changes according to the checklists.
+
+    Requirements:
+    - Read file `/tmp/changes.txt` for understanding scope changes
+    - For each deviation, produce a finding with: `location` (file and line range) and `severity`
+    - Fix only the deviations within the scope changes confirmed by the user
+    - Liner (bash command: `goga lint`) **MUST** be clean after fix findings
+
+    Constraints:
+    - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
+    - Do not change the meaning of documents and do not invent new facts
+    - Do not run lint/format/tests, only apply fixes
+    - Do not fix findings without user confirmation
+
+    ## Cells
+
+    Review cell structure.
+
+    <cell>/
+    └── CODEMANIFEST
+    └── .usages/
+       └── *.md
+
+    Every changed cell must be verified.
+
+    ###  CODEMANIFEST
+
+    - [ ] Annotations describe the high-level order of actions and does not contains implementation details
+    - [ ] Annotations and inline usages does not declare changes and not reference previous functionality
+    - [ ] Annotations use backticks for linking and not use "X from Imports" phrasing
+    - [ ] Numbering Format: all nested sections, clauses, and sub-clauses use exclusively multilevel numerical numbering (e.g., 1.1, 1.2.1) rather than alphanumeric indexes (e.g., 1a, 1b)
+    - [ ] Footer Description briefly describes the responsibility zone
+
+    ### Usages
+
+    - [ ] Every new usage files is connected through Imports via consumer(s) and referenced in annotations
+    - [ ] Usage files are self-contained and do not reference the functionality of other cells
+    - [ ] Texts of the usage files are described in technical language, are concise and clearly reflect the essence of use for the consumer
+
+- name: documentation-review
+  title: Verify documentation files
+  communication: true
+  roles:
+    - planner
+    - executor
+  prompt: |
+    # Technical Documentation Quality Assurance Checklist
+
+    You are a technical writer. Your task is to review documentation in the change scope according to the checklist.
+
+    Requirements:
+    - Read file `/tmp/changes.txt` for understanding scope changes
+    - For each deviation, produce a finding with: `location` (file and line range) and `severity`
+    - Fix only the deviations within the scope changes confirmed by the user
+
+    Constraints:
+    - Do not review markdown (*.md) files in `.usages/` and `.goga/usages/` folders
+    - Do not review CODEMANIFEST files
+    - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
+    - Do not run lint/format/tests, only apply fixes
+    - Do not fix findings without user confirmation
+
+    ## Content Accuracy & Completeness
+    - [ ] **Technical alignment:** Features, parameters, API methods, and UI paths match the current software release exactly.
+    - [ ] **Scenario completeness:** Every user workflow includes mandatory prerequisites, step-by-step actions, and expected results.
+    - [ ] **Error handling:** System limitations, error codes, edge cases, and troubleshooting procedures are fully documented.
+    - [ ] **Code accuracy:** Code snippets, configuration examples, terminal commands, and payloads are valid, tested, and syntax-correct.
+    - [ ] **Link integrity:** All internal cross-references, anchors, and external URLs are active and point to valid targets.
+    
+    ## Structure & Information Architecture
+    - [ ] **Inverted pyramid:** The main concept, purpose, or outcome is stated first, followed by supporting details.
+    - [ ] **Task decomposition:** Complex workflows are broken down into small, single-purpose, and logically sequential steps.
+    - [ ] **Heading hierarchy:** Directory structures and heading levels (H1, H2, H3) reflect a clear hierarchy from general to specific.
+    - [ ] **Discoverability:** Table of contents, search tags, and navigation paths allow users to find information within three clicks.
+    
+    ## Terminology & Style
+    - [ ] **Term consistency:** A single object, action, or UI component uses exactly the same name throughout the entire document.
+    - [ ] **Tone of voice:** Active voice and imperative mood are used for steps ("Click", "Enter"), while descriptive present tense is used for concepts.
+    - [ ] **Plain language:** Sentences are short (under 15 words), avoiding passive voice, redundant jargon, and complex clauses.
+    - [ ] **Grammar & mechanics:** The text is verified to be free of spelling, punctuation, typos, and syntax errors.
+    
+    ## Formatting & Text Markup
+    - [ ] **List compliance:** Sequential procedures use numbered lists, while unordered sets of data or prerequisites use bulleted lists.
+    - [ ] **UI element styling:** Buttons, menus, links, and field names are consistently bolded (e.g., click **Save**).
+    - [ ] **Code literal styling:** System paths, terminal commands, variables, and inline code use monospaced font or dedicated code blocks.
+    - [ ] **Capitalization rules:** List items start with a capital or lowercase letter according to a single global rule.
+    - [ ] **Admonition styling:** Critical notes, warnings, and cautions are explicitly wrapped in standard markup blocks (e.g., Markdown admonitions).
+
+- name: testing
   title: Check and fix lint/format/tests
   communication: true
   roles:

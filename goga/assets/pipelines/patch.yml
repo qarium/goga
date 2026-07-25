@@ -13,7 +13,7 @@ description: "Refactoring or miniman changes"
   prompt: |
     Commit all untracked changes
 
-- name: accept
+- name: accept-result
   title: "Requirements & coverage audit"
   communication: true
   skills:

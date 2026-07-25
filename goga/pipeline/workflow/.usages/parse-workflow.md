@@ -173,7 +173,7 @@ rejected.
   relative path depends on the current working directory.
 - Do not expect `parse_workflow` to match stage names against any pipeline. The
   stage names in `stages:` are NOT validated against the target pipeline's
-  stages — the compiler performs that match during apply and now raises a
+  stages — the compiler performs that match during apply and raises a
   structural error on names absent from both the pipeline and the extend-stages.
 - Do not expect `parse_workflow` to expand `loop` cycles. `WorkflowStage.loop`
   is a count; the compiler performs the expansion.

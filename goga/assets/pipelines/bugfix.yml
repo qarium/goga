@@ -13,7 +13,7 @@ description: "Bug fixing"
   prompt: |
     Commit all untracked changes
 
-- name: accept
+- name: accept-result
   title: "Requirements & coverage audit"
   communication: true
   skills:

@@ -361,7 +361,7 @@ Annotations: |
     - Read inline prompt overrides exclusively from the pipeline document
       header's roles block (planner/executor/reviewer) of the documents tuple
       returned by `compile_flow` (per the `compile-flow` practice — the
-      compiled flow-file carries no roles data); never from a legacy agents block
+      compiled flow-file carries no roles data)
     - Resolve each overridable role to its prompt-file stem via
       `translate_role` (imported from goga/pipeline/compiler);
       planner→planning, executor→implementation, reviewer→review

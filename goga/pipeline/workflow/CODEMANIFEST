@@ -215,7 +215,7 @@ Annotations: |
               target pipeline-file. Stages in `stages` that do not match any
               pipeline stage OR any extend-stage are a STRUCTURAL ERROR at
               compile time — "unknown stage name in workflow.stages: <name>"
-              (a workflow-file no longer silently covers multiple pipelines;
+              (a workflow-file does not silently cover multiple pipelines;
               strict validation runs on the full original∪extend name set
               before skip removal, so a really-existing skipped stage is NOT
               flagged). An
@@ -247,7 +247,7 @@ Annotations: |
     - Do not validate stage-name keys against any pipeline — the compiler
       performs that match during apply and raises a structural error on
       names absent from both the pipeline and the extend-stages (strict
-      validation; no longer a warning+skip). This cell does NOT validate
+      validation; not a warning+skip). This cell does NOT validate
       names itself — it stays declarative
     - Do not mutate `stages` after construction — consumers treat the
       document as read-only
@@ -373,17 +373,15 @@ Annotations: |
     - Inline agent/loop of an extend-entry are EXTRACTED into the model and
       excluded from the verbatim body (like before/after) — they do not pass
       through as stage fields
-    - Strict-validation fallout — two Requirements bullets described the
-      OLD silent WARNING+skip and are corrected to match the new behavior:
     - Stage-name keys are NOT validated against any pipeline IN THIS CELL
       — unknown stage names pass through; the compiler raises a structural
       error on names absent from both the pipeline and the extend-stages
-      (strict validation; no longer "decides whether to apply or ignore
-      silently with a warning"). This cell stays declarative — it does NOT
+      (strict validation; it does not silently apply or ignore with a
+      warning). This cell stays declarative — it does NOT
       validate names itself
     - A single workflow-file can apply to several pipelines ONLY when
       every name it references exists in each target pipeline; a name
-      absent from a target pipeline is now a structural error (was: silent
+      absent from a target pipeline is a structural error (not a silent
       warning+skip) — split or prune such workflows
     - A workflow-file with neither prompt nor any stage entries is rejected
       — at least one must be present

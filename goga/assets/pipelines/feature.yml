@@ -35,14 +35,14 @@ description: "Feature implementation"
   skills:
     - goga-review-arch
 
-- name: apply
+- name: apply-architecture
   title: "Apply the created architectural plan"
   prompt: |
     Apply the architecture plan `<git branch --show-current>.md`
   skills:
     - goga-apply
 
-- name: design
+- name: code-design
   title: "Designing architecture into code"
   communication: true
   prompt: |
@@ -58,7 +58,7 @@ description: "Feature implementation"
   skills:
     - goga-review-design
 
-- name: plan
+- name: coding-plan
   title: "Create the coding plan"
   communication: true
   prompt: |
@@ -90,8 +90,8 @@ description: "Feature implementation"
       - Don't autoconfirm user answer.
       - Except changes in `docs/<tasks|arch|design|plans>`.
 
-- name: accept
-  title: "Requirements & coverage audit"
+- name: accept-result
+  title: "Contracts & coverage audit"
   communication: true
   skills:
     - goga-accept

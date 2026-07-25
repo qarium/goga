@@ -160,7 +160,7 @@ docker:
 |-------|------|-------------|
 | `env` | mapping | Environment variables applied as the **lowest-priority base layer** in the container env-file. Project config and CLI `-e`/`extra_env` override these on key conflict. Applied to `docker run` containers (`goga build` and `goga pipeline <name>`); not applied to `docker build` |
 | `docker.run` | list of strings | Tokens appended to every `docker run` invocation in both `goga build` and `goga pipeline` |
-| `docker.build` | list of strings | Tokens appended to image builds only — forwarded by `goga build`/`--update` (`docker_build_if_not_exist` / `docker_update`). Not forwarded by `goga pipeline` |
+| `docker.build` | list of strings | Tokens appended to image builds only — forwarded by both `goga build` and `goga pipeline` (`docker_build_if_not_exist` / `docker_update`, build branch only; ignored on image pull) |
 
 The env layering formula is `{**home.env, **project_env, **cli_env}` — `home.env`
 is the base, project config wins over it, and CLI extra env wins last. Unknown
