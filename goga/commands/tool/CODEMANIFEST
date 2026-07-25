@@ -1,49 +1,68 @@
+Imports:
+  - Types:
+      - AST
+    Usages:
+      - loading
+    From: goga/ast
+
 Usages:
   click: .goga/usages/cooks/click.md
   conventions: .goga/usages/conventions.md
 
 Annotations: |
-  The `conventions` practice provides rules for:
-  - codebase navigation and modification
-  - REPL development loop organization
-  - debugging and testing procedures
-  - test infrastructure setup
-  - project-wide development and testing principles
-  Use the `click` practice to implement CLI commands.
-  Dynamic import via importlib.import_module (stdlib).
+  The `conventions` practice governs codebase navigation, the REPL development cycle, debugging and testing, test infrastructure, and project-wide development principles.
+  Apply `click` to implement the CLI command.
+  The dispatcher resolves the tool package and forwards captured arguments together with the optional injections the tool entry point declares.
 
 ---
 
 "tool(name: str, args: list[str])":
   location: tool.py
   annotations: |
-    CLI wrapper command that dynamically dispatches to a tool package.
+    CLI wrapper command that resolves a tool package and dispatches to its entry point, forwarding captured arguments and the projected optional injections.
 
-    `name`: tool package identifier (without the goga_tool_ prefix). CLI positional argument.
-    `args`: variadic arguments forwarded to the tool package's main function.
-            Captured via ctx.args (allow_extra_args=True).
-
-    Click decorators:
-    - @click.command(context_settings=dict(ignore_unknown_options=True, allow_extra_args=True))
-    - @click.argument('name')
-    - @click.pass_context
+    `name`: tool package identifier. CLI positional argument.
+    `args`: variadic arguments captured after the package name, forwarded to the tool entry point.
 
     Algorithm:
-    1. Resolve the package name: f"goga_tool_{name}"
-    2. Import the package via importlib.import_module
-    3. Retrieve the main function from the imported module
-    4. Invoke main(args)
+    1. Resolve the package name from `name` using the goga_tool_ prefix
+    2. Import the package
+    3. Retrieve the entry point from the imported module
+    4. Compute the optional injections via `build_injections`
+    5. Invoke the entry point, forwarding `args` and the projected injections
 
     Error handling:
-    - ModuleNotFoundError (package not found) → user-facing message via click.secho
-    - AttributeError (main function missing) → user-facing message via click.secho
+    - Package not found → user-facing message, exit with code 1
+    - Entry point missing → user-facing message, exit with code 1
 
-    Use the `click` practice for command implementation.
+    Apply `click` for command implementation.
+
+"build_injections(main: Callable) -> injections: dict[str, object]":
+  location: tool.py
+  annotations: |
+    Project the tool entry point's signature against the optional injections the dispatcher can supply, building each requested value lazily.
+
+    `main`: the tool package entry callable.
+    `injections`: the keyword arguments to forward to the entry point.
+
+    Algorithm:
+    1. Examine the signature of `main` to enumerate its keyword-capable parameters
+    2. Start from an empty set of injections
+    3. For each declared parameter whose name matches an injection the dispatcher offers (currently the parameter named ast, of type `AST`), build the value lazily and collect it:
+       - for ast → construct the project AST at the current project root and load it, following `loading`
+    4. Return the collected injections
+
+    Requirements:
+    - Only keyword-capable parameters (positional-or-keyword and keyword-only) are considered; positional-only parameters and parameters whose name is not offered are skipped
+    - The ast injection is built only when `main` declares it
+
+    Constraints:
+    - Do not block or transform on non-empty ast.errors; validation errors pass through to the tool unchanged
+    - The offered-injection set is the single source of opt-in: a parameter with another name never triggers AST construction
 
 ---
 
 Author: Goga
 CreatedAt: 25/05/26
-
 Description: |
-  CLI wrapper command `goga tool` — runtime dispatch to external tool packages via dynamic import
+  CLI wrapper command `goga tool` — dispatch to external tool packages.
