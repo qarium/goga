@@ -423,3 +423,35 @@ class TestToolManifestLoadFailure:
         assert result.exit_code != 0
         assert state.get("invoked") is not True
         assert "Failed to load project AST" in result.output
+
+    def test_non_utf8_manifest_surfaces_clean_error(self, tmp_path, monkeypatch) -> None:
+        """An unreadable (non-UTF-8) manifest is reported as a clean error.
+
+        `Factory.create()` opens the manifest with `encoding="utf-8"`, so a file
+        containing invalid bytes raises `UnicodeDecodeError` (a `ValueError`, not
+        an `OSError`) from `AST.load()`. The dispatcher must surface this as the
+        same clean red message and non-zero exit, not an uncaught traceback.
+        """
+        # Invalid UTF-8 bytes trigger UnicodeDecodeError inside Factory.create().
+        (tmp_path / "CODEMANIFEST").write_bytes(b'Annotations: "\xff\xfe"\n')
+        monkeypatch.chdir(tmp_path)
+
+        state: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            state["invoked"] = True
+
+        dummy = types.ModuleType("goga_tool_unreadable")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["unreadable"])
+
+        assert result.exit_code != 0
+        # The raw decode error must not escape as an uncaught traceback; the
+        # clean-exit path raises click's Exit (a SystemExit subclass), which
+        # CliRunner records here — it must not be the UnicodeDecodeError itself.
+        assert not isinstance(result.exception, UnicodeDecodeError)
+        assert state.get("invoked") is not True
+        assert "Failed to load project AST" in result.output

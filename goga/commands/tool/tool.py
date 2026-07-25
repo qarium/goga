@@ -98,7 +98,7 @@ def tool(ctx: click.Context, name: str) -> None:
 
     try:
         injections = build_injections(main_fn)
-    except (DocumentParseError, yaml.YAMLError, OSError) as exc:
+    except (DocumentParseError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         click.secho(f"Failed to load project AST: {exc}", fg="red", err=True)
         ctx.exit(1)
 
