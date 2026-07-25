@@ -1,8 +1,30 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
 
 import click
+
+from ...ast import AST
+
+
+def _build_ast() -> AST:
+    """Construct and load the project AST at the current project root.
+
+    Follows the `loading` practice: build `AST(".")` at the dispatcher's
+    current working directory and call `.load()` to populate `.tree` and
+    `.errors`. Missing or invalid manifests populate `ast_obj.errors` rather
+    than raising, so this builder does not inspect or branch on errors.
+
+    Returns:
+        The loaded AST instance for the current project root.
+    """
+    ast_obj = AST(".")
+    ast_obj.load()
+    return ast_obj
+
+
+_OFFERED_INJECTIONS: dict[str, Callable[[], object]] = {"ast": _build_ast}
 
 
 @click.command(context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
