@@ -6,11 +6,9 @@ top-level prompt, override the agent or prompt of specific stages, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**, and
 **declaratively add new stages** to the pipeline via `extend`.
 
-> **Behavioral change (strict validation).** A name in `workflow.stages` that
-> does not match any pipeline step or extend-stage is now a compile error, not
-> a silent skip. Workflows that intentionally reference names absent from the
-> target pipeline (to cover multiple pipelines from one file) must be split or
-> pruned.
+Stage names in `workflow.stages` are matched strictly: a name that does not
+match any pipeline step or extend-stage is a compile error. Workflows that
+reference names absent from the target pipeline must be split or pruned.
 
 Workflow-files live at:
 
@@ -88,8 +86,7 @@ Rules:
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
-  match any step in the pipeline or any `extend`-stage is a structural error,
-  not a silent skip (see the behavioral-change note at the top of this page).
+  match any step in the pipeline or any `extend`-stage is a structural error.
 - `agent` is not validated against a known agent set. Absence of the
   corresponding wrapper file is surfaced at run time.
 
@@ -353,8 +350,7 @@ extend:
 - An extend entry that names a `before`/`after` target that does not exist in
   the pipeline (and is not another extend-stage) is a **dangling reference** —
   a structural error raised by Pass 0a0-pre (`unknown stage name in
-  workflow.extend.<NAME>.before: <REF>` or the `.after` variant), not a silent
-  skip.
+  workflow.extend.<NAME>.before: <REF>` or the `.after` variant).
 - Extend-stages are embedded into the compiled `FlowDocument.stages` only. The
   original `PipelineDocument.body` is never modified — `extend` is a run-time
   layering, like the rest of a workflow-file.
@@ -404,7 +400,7 @@ verbatim; a name that appears only in `extend` carries just its inline
 Before applying any override, the compiler validates every name in `workflow.stages`
 against the full name set = original pipeline step names ∪ extend-stage names. A name
 absent from both is a **structural error** (`unknown stage name in workflow.stages:
-<name>`) — it is no longer silently skipped. A stage that exists — even if also marked
+<name>`). A stage that exists — even if also marked
 `skip: true` — is NOT flagged (the check runs on the full set before removal). Strictness
 is symmetric: dangling `extend.<name>.before/.after` refs are likewise rejected by
 Pass 0a0-pre (below).
@@ -415,7 +411,7 @@ Before the embed pass, the compiler validates every `before`/`after` ref in
 `workflow.extend` against the union of original pipeline step names and
 extend-stage names. Any ref absent from that set raises a **structural error**
 (`unknown stage name in workflow.extend.<NAME>.before: <ref>` or the `.after`
-variant) — replacing the former silent WARNING+skip / verbatim-pass-through.
+variant) — a dangling `before`/`after` ref does not pass through verbatim.
 The check runs before embed and before skip removal, so a ref to a stage that
 also carries `skip: true` is NOT flagged here (it still exists in the original
 body at this point and is removed later at Pass 0.6). Existence only — cycles,
