@@ -24,6 +24,10 @@ description: "Feature implementation"
   prompt: |
     Use the task `<git branch --show-current>.md`
     Save the architecture plan as `<git branch --show-current>.md`
+
+    Communication:
+    - When approving report content gates (PRIMARY_ANALYSIS_REPORT, TYPE_MAP_REPORT, CELL_DISTRIBUTION_REPORT, TYPE_DETAIL_REPORT, CELL_ASSEMBLY_REPORT),
+      please provide full artifacts in the format specified in the question.
   skills:
     - goga-brainstorm
 
