@@ -36,7 +36,7 @@ structural error.
 
 ```yaml
 name: GogaFeature
-description: "Feature implementation"
+description: "Feature development"
 roles:         # optional block — see "Roles"
   planner: |
     Inline prompt that replaces the shipped default for the planner role.
@@ -306,7 +306,7 @@ Example:
 
 ```yaml
 name: GogaFeature
-description: "Feature implementation"
+description: "Feature development"
 roles:
   planner: |
     You are the planner for this feature pipeline.
