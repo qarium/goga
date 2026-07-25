@@ -60,7 +60,7 @@ description: Review changes
     - Read file `/tmp/changes.txt` for understanding scope changes
     - For each deviation, produce a finding with: `location` (file and line range) and `severity`
     - Fix only the deviations within the scope changes confirmed by the user
-    - Liner (bash command: `goga lint`) **MUST** be clean after fix findings
+    - Goga liner **MUST** be clean after fix findings (run bash command `goga lint` for check)
 
     Constraints:
     - Do not fabricate a finding priority when it is not obvious; set it as "unknown"
@@ -92,6 +92,10 @@ description: Review changes
     - [ ] Every new usage files is connected through Imports via consumer(s) and referenced in annotations
     - [ ] Usage files are self-contained and do not reference the functionality of other cells
     - [ ] Texts of the usage files are described in technical language, are concise and clearly reflect the essence of use for the consumer
+
+    ## Verify
+
+    [ ] Liner `goga lint` without errors
 
 - name: documentation-review
   title: Verify documentation files

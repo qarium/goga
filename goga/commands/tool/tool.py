@@ -27,9 +27,15 @@ def _build_ast() -> AST:
 
     Returns:
         The loaded AST instance for the current project root.
+
+    Raises:
+        DocumentParseError: If the manifest is structurally invalid (e.g. an
+            unknown header/footer key or a non-list `Imports`).
+        yaml.YAMLError: If the manifest file contains malformed YAML.
     """
     ast_obj = AST(".")
     ast_obj.load()
+
     return ast_obj
 
 
@@ -56,9 +62,16 @@ def build_injections(main: Callable) -> dict[str, object]:
     Returns:
         The keyword arguments to forward to the entry point. Empty when `main`
         declares no offered parameter; `{"ast": ast_obj}` when it declares `ast`.
+
+    Raises:
+        DocumentParseError: When `main` declares `ast` and the project manifest
+            is structurally invalid.
+        yaml.YAMLError: When `main` declares `ast` and the manifest contains
+            malformed YAML.
     """
     injections: dict[str, object] = {}
     keyword_capable = {inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY}
+
     for param in inspect.signature(main).parameters.values():
         if param.kind not in keyword_capable:
             continue
@@ -66,6 +79,7 @@ def build_injections(main: Callable) -> dict[str, object]:
         if builder is None:
             continue
         injections[param.name] = builder()
+
     return injections
 
 

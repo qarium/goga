@@ -34,6 +34,7 @@ Annotations: |
     Error handling:
     - Package not found → user-facing message, exit with code 1
     - Entry point missing → user-facing message, exit with code 1
+    - Manifest load failure → user-facing message, exit with code 1
 
     Apply `click` for command implementation.
 
@@ -57,8 +58,9 @@ Annotations: |
     - The ast injection is built only when `main` declares it
 
     Constraints:
-    - Do not block or transform on non-empty ast.errors; validation errors pass through to the tool unchanged
-    - The offered-injection set is the single source of opt-in: a parameter with another name never triggers AST construction
+    - Do not block or transform on non-empty `AST` errors; validation errors pass through to the tool unchanged
+    - Structural manifest failures (an unparseable manifest) propagate to the caller; only the validation errors exposed by the `AST` pass through as data
+    - The offered-injection set is the single source of opt-in: a parameter with another name never triggers `AST` construction
 
 ---
 

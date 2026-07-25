@@ -23,7 +23,7 @@ All remaining arguments are captured and forwarded to the tool package's entry p
 ## Exit code
 
 - 0 — success
-- 1 — error (package not found, entry point missing)
+- 1 — error (package not found, entry point missing, manifest load failure)
 
 ## Examples
 
@@ -70,8 +70,7 @@ def main(argv: list[str], *, ast: AST) -> None:
 Not declaring `ast` keeps the entry point identical to the minimal contract, and the AST is never built:
 
 ```python
-def main(argv: list[str]) -> None:
-    ...
+def main(argv: list[str]) -> None: ...
 ```
 
 ## Opt-in rules
