@@ -6,15 +6,16 @@ apply, design, plan, build, change, accept. Pipelines are flat `*.yml` files
 resolved from two directories and executed stage-by-stage inside the goga
 container.
 
-Pipelines ship three ready-to-use definitions:
+Pipelines ship four ready-to-use definitions:
 
-| Pipeline  | Purpose                                                |
-|-----------|--------------------------------------------------------|
-| `feature` | End-to-end feature implementation lifecycle            |
-| `bugfix`  | Root-cause analysis and resolution for a defect        |
-| `patch`   | Refactoring or minimal change with a formalized plan   |
+| Pipeline  | Purpose                                                              |
+|-----------|----------------------------------------------------------------------|
+| `feature` | End-to-end feature implementation lifecycle                          |
+| `bugfix`  | Root-cause analysis and resolution for a defect                      |
+| `patch`   | Refactoring or minimal change with a formalized plan                 |
+| `review`  | Scoped review of code, contracts, docs, then lint/format/tests       |
 
-The three pipelines are described in detail in
+The four pipelines are described in detail in
 [Shipped Pipelines](shipped.md).
 
 This section documents the **functional model** of pipelines — what a
