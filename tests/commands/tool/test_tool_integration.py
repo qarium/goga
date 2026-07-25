@@ -73,6 +73,8 @@ class TestAstInjectionThroughApp:
         assert result.exit_code == 0
         assert captured["argv"] == ["--flag", "value"]
         assert isinstance(captured["ast"], AST)
+        # Verify .load() actually ran: a fresh AST has an empty tree.
+        assert len(captured["ast"].tree) >= 1
 
 
 class TestNoAstInjectionThroughApp:

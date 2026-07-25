@@ -130,6 +130,8 @@ class TestBuildInjectionsPositive:
 
         assert result.keys() == {"ast"}
         assert isinstance(result["ast"], AST)
+        # Verify .load() actually ran: a fresh AST has an empty tree.
+        assert len(result["ast"].tree) >= 1
 
 
 class TestBuildInjectionsNegative:
@@ -161,6 +163,32 @@ class TestBuildInjectionsEdge:
         assert result == {}
         mock_ast.assert_not_called()
 
+    def test_var_positional_ast_is_not_supplied(self) -> None:
+        """A VAR_POSITIONAL 'ast' (*ast) is keyword-incapable and is not injected."""
+
+        def f(argv, *ast): ...
+
+        assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_POSITIONAL
+
+        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+            result = build_injections(f)
+
+        assert result == {}
+        mock_ast.assert_not_called()
+
+    def test_var_keyword_ast_is_not_supplied(self) -> None:
+        """A VAR_KEYWORD 'ast' (**ast) is keyword-incapable and is not injected."""
+
+        def f(argv, **ast): ...
+
+        assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_KEYWORD
+
+        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+            result = build_injections(f)
+
+        assert result == {}
+        mock_ast.assert_not_called()
+
     def test_positional_or_keyword_ast_is_supplied(self, tmp_path, monkeypatch) -> None:
         """A positional-or-keyword 'ast' is keyword-capable and is injected."""
         (tmp_path / "CODEMANIFEST").write_text('Usages: {}\nAnnotations: ""\n', encoding="utf-8")
@@ -172,6 +200,8 @@ class TestBuildInjectionsEdge:
 
         assert result.keys() == {"ast"}
         assert isinstance(result["ast"], AST)
+        # Verify .load() actually ran: a fresh AST has an empty tree.
+        assert len(result["ast"].tree) >= 1
 
 
 class TestToolSurfaceRegression:
@@ -221,8 +251,9 @@ class TestToolAstInjection:
         assert captured["argv"] == ["--flag", "value", "x"]
         captured_ast = captured["ast"]
         assert isinstance(captured_ast, AST)
-        assert hasattr(captured_ast, "tree")
-        assert hasattr(captured_ast, "errors")
+        # Verify .load() actually ran: a fresh AST has an empty tree, and the
+        # `hasattr` checks below would pass on an unloaded instance.
+        assert len(captured_ast.tree) >= 1
 
     def test_argv_identical_for_both_entry_point_forms(self) -> None:
         """Both main(argv) and main(argv, *, ast) receive identical argv."""
@@ -254,6 +285,30 @@ class TestToolAstInjection:
 
         assert min_captured == [argv]
         assert ext_captured == [argv]
+
+    def test_no_manifest_in_cwd_yields_empty_ast(self, tmp_path, monkeypatch) -> None:
+        """A project root with no CODEMANIFEST yields an empty (but usable) AST."""
+        # tmp_path has no CODEMANIFEST: the loader walks nothing and leaves the
+        # tree/errors empty without raising.
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            captured["ast"] = ast
+
+        dummy = types.ModuleType("goga_tool_nomanifest")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["nomanifest"])
+
+        assert result.exit_code == 0
+        captured_ast = captured["ast"]
+        assert isinstance(captured_ast, AST)
+        assert captured_ast.tree == []
+        assert captured_ast.errors == []
 
 
 class TestToolBackwardCompatibility:
@@ -338,3 +393,33 @@ class TestToolAstPassthrough:
 
         assert result.exit_code == 0
         assert captured == [[]]
+
+
+class TestToolManifestLoadFailure:
+    def test_malformed_manifest_surfaces_clean_error(self, tmp_path, monkeypatch) -> None:
+        """An unparseable manifest is reported as a clean error, not a traceback.
+
+        Validation errors (`ast.errors`) pass through to the tool unchanged, but a
+        manifest that cannot be parsed at all raises from `AST.load()` before
+        `main` can run. The dispatcher surfaces this as a clean red message and a
+        non-zero exit, matching its package-not-found and missing-main branches.
+        """
+        # An unknown header key triggers DocumentParseError inside Factory.create().
+        (tmp_path / "CODEMANIFEST").write_text('BogusHeaderKey: x\nUsages: {}\nAnnotations: ""\n', encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        state: dict[str, object] = {}
+
+        def main(argv, *, ast):
+            state["invoked"] = True
+
+        dummy = types.ModuleType("goga_tool_broken")
+        dummy.main = main  # type: ignore[attr-defined]
+
+        runner = CliRunner()
+        with mock.patch.object(importlib, "import_module", return_value=dummy):
+            result = runner.invoke(tool, ["broken"])
+
+        assert result.exit_code != 0
+        assert state.get("invoked") is not True
+        assert "Failed to load project AST" in result.output

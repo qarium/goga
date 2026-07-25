@@ -57,7 +57,7 @@ Each tool package follows a standard layout:
 
 ```
 goga_tool_<name>/
-├── __init__.py        # main(args) entry point for CLI
+├── __init__.py        # main(argv) entry point for CLI
 ├── skills/            # Required — at least one skill
 │   └── <skill>/
 │       └── SKILL.md   # Agent skill definition
@@ -70,7 +70,7 @@ A valid tool must:
 - Be named with the `goga_tool_` prefix
 - Contain a `skills/` directory with at least one skill
 - Each skill directory must include a `SKILL.md` file
-- Expose a `main(args: list[str])` function for CLI execution
+- Expose a `main(argv: list[str])` function for CLI execution
 
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` next to the
@@ -78,6 +78,15 @@ shipped pipelines, with the same conflict-resolution rules used for
 tool-skill installation. See
 [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the full
 installation algorithm.
+
+## Optional injections
+
+`main` may optionally declare a keyword-capable `ast` parameter to receive the
+project AST (loaded lazily from the current project root, only when declared).
+A tool that does not need the AST keeps the minimal `main(argv)` form and the
+AST is never built. Validation errors in the loaded tree pass through to the
+tool unchanged. See [goga tool — Optional injections](cli/tool.md#optional-injections)
+for the entry-point forms and opt-in rules.
 
 ## Skill naming
 

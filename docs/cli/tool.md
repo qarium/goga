@@ -99,10 +99,11 @@ def main(argv: list[str]) -> None: ...
 - Any keyword-capable parameter (positional-or-keyword or keyword-only) named `ast` receives the injection. Positional-only parameters are not supplied.
 - The AST is loaded from the current project root (`AST(".")`). There is no CLI flag to override the path or scope.
 - Validation errors (`ast.errors`) are passed through unchanged. The dispatcher does not block execution and does not filter errors — the tool decides how to react to an invalid manifest tree.
+- A manifest that cannot be parsed at all (malformed YAML, unknown header/footer keys, or an unreadable file) prevents the AST from loading; the dispatcher reports this as a clean error and exits non-zero instead of forwarding a partial tree to the tool.
 
 ## Exit Codes
 
 | Code | Meaning                                          |
 |------|--------------------------------------------------|
 | `0`  | Tool executed successfully                       |
-| `1`  | Tool package not found or has no `main` function |
+| `1`  | Tool package not found, has no `main` function, or the project manifest could not be loaded |

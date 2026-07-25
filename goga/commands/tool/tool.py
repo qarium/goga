@@ -5,8 +5,10 @@ import inspect
 from collections.abc import Callable
 
 import click
+import yaml
 
 from ...ast import AST
+from ...ast.errors import DocumentParseError
 
 
 def _build_ast() -> AST:
@@ -14,8 +16,14 @@ def _build_ast() -> AST:
 
     Follows the `loading` practice: build `AST(".")` at the dispatcher's
     current working directory and call `.load()` to populate `.tree` and
-    `.errors`. Missing or invalid manifests populate `ast_obj.errors` rather
-    than raising, so this builder does not inspect or branch on errors.
+    `.errors`. Validation rule violations are collected into `ast_obj.errors`
+    and passed through to the tool unchanged — this builder never inspects or
+    branches on them (see the CODEMANIFEST "Constraints"). A project root
+    without a CODEMANIFEST leaves `.tree` and `.errors` empty. Structural
+    failures — malformed YAML, unknown header/footer keys, non-list `Imports`,
+    or an unreadable manifest — are raised by the provider's loader
+    (`yaml.YAMLError` / `DocumentParseError`); this builder lets them propagate
+    to the caller, and the `tool` command catches them and reports a clean error.
 
     Returns:
         The loaded AST instance for the current project root.
@@ -88,5 +96,10 @@ def tool(ctx: click.Context, name: str) -> None:
         click.secho(f"Tool package '{package_name}' has no 'main' function", fg="red", err=True)
         ctx.exit(1)
 
-    injections = build_injections(main_fn)
+    try:
+        injections = build_injections(main_fn)
+    except (DocumentParseError, yaml.YAMLError, OSError) as exc:
+        click.secho(f"Failed to load project AST: {exc}", fg="red", err=True)
+        ctx.exit(1)
+
     main_fn(list(ctx.args), **injections)
