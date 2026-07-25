@@ -3,7 +3,7 @@ description: "Refactoring or miniman changes"
 ---
 
 - name: ad-hoc
-  title: "Formalize the task, make a plan and implement it"
+  title: "Formalize the task, make the plan and implement it"
   communication: true
   skills:
     - goga-change
