@@ -16,7 +16,7 @@ the CLI/config precedence applied, generates the `.ralphex/config`, and only the
 from goga.ralphex import run_ralphex
 
 plan = "docs/plans/my-plan.md"  # resolved by the caller (goga/build)
-options = {                      # resolved ralphex options (CLI > ProjectConfig > omit applied)
+options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
     "worktree": True,
     "max_iterations": 50,
     "session_timeout": "30m",

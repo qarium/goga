@@ -317,8 +317,6 @@ Annotations: |
       know about ~/.goga/runtime/builds/...
     - The in-container `run_build` keeps using cwd-relative .ralphex/; the
       nested mount resolves that into the host runtime directory transparently
-    - Do not add a --skip option to goga build — skip applies to goga pipeline
-      only (stage names); build keeps only the -c/--clean alias change
 
 "resolve_build_runtime_dir() -> runtime_dir: Path":
   location: build.py

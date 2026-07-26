@@ -5,7 +5,6 @@ import shutil
 import subprocess
 import sys
 
-
 # Fixed option -> ralphex CLI flag mapping. Dictated by the run_ralphex
 # contract (see the `options` annotation), NOT by the ralphex practice —
 # changing the flag set is a CODEMANIFEST change, not an implementation one.

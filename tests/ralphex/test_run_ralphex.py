@@ -70,7 +70,7 @@ class TestBuildCommand:
     # run_ralphex contract). These pin every literal so a typo in the table
     # (or a key/flag desync) cannot silently drop a user-supplied option.
     @pytest.mark.parametrize(
-        "key,flag",
+        ("key", "flag"),
         [
             ("worktree", "--worktree"),
             ("skip_finalize", "--skip-finalize"),
@@ -83,7 +83,7 @@ class TestBuildCommand:
         assert flag in cmd
 
     @pytest.mark.parametrize(
-        "key,flag,value",
+        ("key", "flag", "value"),
         [
             ("session_timeout", "--session-timeout", "30m"),
             ("idle_timeout", "--idle-timeout", "15m"),
@@ -101,9 +101,7 @@ class TestBuildCommand:
 
 
 class TestRunRalphexLogic:
-    def test_run_ralphex_dry_run_prints_command_and_returns_0(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_run_ralphex_dry_run_prints_command_and_returns_0(self, capsys: pytest.CaptureFixture[str]) -> None:
         """dry_run prints the assembled command to stderr and returns 0 without launching."""
         result = run_ralphex("plan.md", {"worktree": True}, dry_run=True)
 
@@ -115,23 +113,25 @@ class TestRunRalphexLogic:
 
     def test_run_ralphex_returns_0_on_success(self) -> None:
         """A successful (exit 0) ralphex invocation returns 0."""
-        with mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0), \
-             mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"):
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
             result = run_ralphex("plan.md", {}, False)
 
         assert result == 0
 
     def test_run_ralphex_propagates_nonzero_ralphex_exit(self) -> None:
         """A non-zero ralphex exit code is propagated unchanged (not collapsed to 1)."""
-        with mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=42), \
-             mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"):
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=42),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
             result = run_ralphex("plan.md", {}, False)
 
         assert result == 42
 
-    def test_run_ralphex_returns_1_when_binary_missing(
-        self, capsys: pytest.CaptureFixture[str]
-    ) -> None:
+    def test_run_ralphex_returns_1_when_binary_missing(self, capsys: pytest.CaptureFixture[str]) -> None:
         """A missing ralphex binary (not on PATH) yields exit code 1 and a clear message."""
         with mock.patch.object(_run_ralphex_module.shutil, "which", return_value=None):
             result = run_ralphex("plan.md", {}, False)
@@ -144,8 +144,10 @@ class TestRunRalphexLogic:
         """run_ralphex invokes subprocess.call with the cmd only and never an env=
         kwarg — it inherits os.environ so the host launcher's env-file delivers
         the build env (replaces the deleted build-cell env-merge tests)."""
-        with mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call, \
-             mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"):
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
+        ):
             run_ralphex("plan.md", {}, False)
 
         assert "env" not in mock_call.call_args.kwargs
