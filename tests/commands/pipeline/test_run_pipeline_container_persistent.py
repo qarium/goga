@@ -82,7 +82,7 @@ def _stub_runtime(monkeypatch, tmp_path: Path, *, branch: str = "main") -> Path:
 
 class TestRunPipelineContainerContract:
     def test_signature_includes_new_parameters(self) -> None:
-        """The signature exposes proxy/hosts/clean/update/workflow/no_workflow after extra_env."""
+        """The signature exposes proxy/hosts/clean/update/workflow/no_workflow/skip after extra_env."""
         import inspect
 
         params = list(inspect.signature(run_pipeline_container).parameters)
@@ -97,6 +97,7 @@ class TestRunPipelineContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "skip",
         ]
 
     def test_discovery_mode_does_not_write_env_file(self, tmp_path: Path, monkeypatch) -> None:

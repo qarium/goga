@@ -249,10 +249,11 @@ def _run_discovery(
 
     Discovery honours ``hosts`` (``--add-host`` flags) and ``update``
     (image refresh via ``docker_update``), and ignores ``extra_env``, ``proxy``,
-    and ``clean`` — no env-file is written and no afm state directory is involved.
-    ``home.env`` is therefore NOT applied here (no env-file); ``home.docker.run``
-    is forwarded to ``DockerRunner.run`` as the separate ``extra_args`` keyword,
-    and ``home.docker.build`` is forwarded to ``docker_build_if_not_exist`` and
+    ``clean``, ``workflow``, ``no_workflow``, and ``skip`` — no env-file is
+    written and no afm state directory is involved. ``home.env`` is therefore
+    NOT applied here (no env-file); ``home.docker.run`` is forwarded to
+    ``DockerRunner.run`` as the separate ``extra_args`` keyword, and
+    ``home.docker.build`` is forwarded to ``docker_build_if_not_exist`` and
     ``docker_update`` (build branch only). Discovery writes no secret files,
     so it installs NO caller-side SIGTERM/SIGINT handler: only the runner's
     handler applies (it performs the guaranteed ``docker kill`` and restores
@@ -386,6 +387,7 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     workflow: str | None,
     no_workflow: bool,
     name: str,
+    skip: tuple[str, ...] = (),
 ) -> Path:
     """Build the run-mode env-file (Algorithm steps 9-11) and emit the workflow log line.
 
@@ -394,7 +396,9 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     config wins over both git and home on key conflict), then ``AFM_DIR``, the
     proxy env vars (when ``proxy`` is set), and the workflow env vars per the
     decision matrix (``_resolve_workflow_env`` — step 9), writes them to a
-    private env-file alongside the raw ``extra_env`` KEY=VALUE strings (step 11),
+    private env-file alongside the raw ``extra_env`` KEY=VALUE strings (step 11).
+    The ``GOGA_SKIP_STAGES`` entry is layered in after the workflow env vars
+    when ``skip`` is non-empty (joined comma-separated). This cell surfaces
     and emits the ``Pipeline running with workflow "NAME"`` log line to stdout
     ONLY when a workflow will actually be applied (step 10). This cell surfaces
     NO dashboard URL line — this is the only host-side stdout besides the docker
@@ -413,6 +417,11 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
         workflow: optional workflow name from ``--workflow``.
         no_workflow: flag from ``--no-workflow``.
         name: pipeline name (the auto-match basename).
+        skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
+            When non-empty, the env-file carries
+            ``GOGA_SKIP_STAGES=<comma-joined>`` so the in-container
+            ``run_pipeline`` routine applies ``apply_skip_stages`` over the
+            resolved workflow. Omitted when empty.
 
     Returns:
         Path to the written private env-file.
@@ -435,6 +444,12 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # log name is set only when a workflow will actually be applied (step 10).
     workflow_env, workflow_log_name = _resolve_workflow_env(workflow, no_workflow, name)
     env.update(workflow_env)
+    # GOGA_SKIP_STAGES carries the -s/--skip directives to the in-container
+    # run_pipeline routine (step 6e applies apply_skip_stages over the resolved
+    # workflow). Written ONLY when `skip` is non-empty; an empty tuple leaves
+    # the env-file skip-free (discovery writes no env-file at all).
+    if skip:
+        env["GOGA_SKIP_STAGES"] = ",".join(skip)
     env_file = _write_env_file(env, extra_env)
     # Step 10 — the workflow log line. Emitted ONLY when a workflow will
     # actually be applied (explicit --workflow, or basename auto-match file
@@ -456,6 +471,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     update: bool,
     workflow: str | None,
     no_workflow: bool,
+    skip: tuple[str, ...] = (),
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
@@ -503,6 +519,11 @@ def _run_named(  # noqa: PLR0913, PLR0917
         no_workflow: flag from ``--no-workflow``. When True, the env-file
             carries ``GOGA_WORKFLOW_DISABLED=1`` and no workflow log line is
             emitted (mutually exclusive with ``workflow``, enforced by caller).
+        skip: raw stage names from the repeatable ``-s/--skip`` CLI option.
+            When non-empty, the env-file carries
+            ``GOGA_SKIP_STAGES=<comma-joined>`` so the in-container
+            ``run_pipeline`` routine applies ``apply_skip_stages`` over the
+            resolved workflow. Omitted from the env-file when empty.
 
     Returns:
         The container's exit code.
@@ -545,6 +566,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
             workflow=workflow,
             no_workflow=no_workflow,
             name=name,
+            skip=skip,
         )
 
         project_dir = Path.cwd().resolve()
@@ -625,6 +647,7 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     update: bool = False,
     workflow: str | None = None,
     no_workflow: bool = False,
+    skip: tuple[str, ...] = (),
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -639,9 +662,10 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     ``--update``) in the build branch only.
 
     Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
-    ``extra_env``, ``proxy``, and ``clean`` — it honours only ``hosts``
-    (``--add-host`` flags) and ``update`` (conditional image pull); no env-file
-    is written and no afm state directory is involved.
+    ``extra_env``, ``proxy``, ``clean``, ``workflow``, ``no_workflow``, and
+    ``skip`` — it honours only ``hosts`` (``--add-host`` flags) and ``update``
+    (conditional image pull); no env-file is written and no afm state directory
+    is involved.
 
     Run mode (``name`` provided) allocates a free port, writes a private
     afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
@@ -652,7 +676,8 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     env-file layering ``home.env`` as the BASE layer under
     ``config.pipeline.env``, git identity, ``extra_env`` (raw KEY=VALUE strings),
     ``AFM_DIR=/home/goga/pipeline``, the workflow env vars (per the workflow
-    decision matrix), and — when ``proxy`` is set — the proxy env vars, mounts
+    decision matrix), the ``GOGA_SKIP_STAGES`` entry (when ``skip`` is
+    non-empty), and — when ``proxy`` is set — the proxy env vars, mounts
     the persistent directory read-write at ``/home/goga/pipeline`` (it survives
     across runs and the signal-exit path), adds ``--add-host`` flags from
     ``hosts``, mounts every credential file from ``resolve_credential_mounts()``
@@ -697,6 +722,13 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
             mode, the env-file carries ``GOGA_WORKFLOW_DISABLED=1`` and no
             workflow log line is emitted; mutually exclusive with ``workflow``
             (enforced by the caller). Ignored in discovery mode.
+        skip: raw stage names forwarded from the repeatable ``-s/--skip`` CLI
+            option (default empty). In run mode, the env-file carries
+            ``GOGA_SKIP_STAGES=<comma-joined>`` when non-empty so the
+            in-container ``run_pipeline`` routine applies ``apply_skip_stages``
+            over the resolved workflow; the host does NOT validate the names
+            (validation is in-container). Omitted from the env-file when empty.
+            Ignored in discovery mode.
 
     Returns:
         The container's exit code.
@@ -742,4 +774,5 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         update,
         workflow,
         no_workflow,
+        skip,
     )

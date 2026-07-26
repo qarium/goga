@@ -19,6 +19,7 @@ with docker internals mocked (no docker dependency); the env-file tests capture
 
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -259,6 +260,24 @@ def _capture_env(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return captured
 
 
+class TestRunPipelineContainerSkipContract:
+    """Contract: ``run_pipeline_container`` exposes the ``skip`` parameter with a real Python default of ``()``.
+
+    The CODEMANIFEST DSL cannot express the empty-tuple default, so the contract
+    pins the semantics as "default empty" and Additional Instruction #4 mandates
+    the Python realization carry ``skip: tuple[str, ...] = ()``. These checks
+    guard that the launcher's public surface accepts ``skip`` and threads it.
+    """
+
+    def test_skip_parameter_is_present(self) -> None:
+        params = inspect.signature(rpc).parameters
+        assert "skip" in params
+
+    def test_skip_parameter_default_is_empty_tuple(self) -> None:
+        params = inspect.signature(rpc).parameters
+        assert params["skip"].default == ()
+
+
 class TestRunPipelineContainerWorkflowEnvFile:
     def test_run_pipeline_container_no_workflow_env_file_entry(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -357,3 +376,52 @@ class TestRunPipelineContainerWorkflowEnvFile:
 
         assert "GOGA_WORKFLOW_NAME" not in captured
         assert "GOGA_WORKFLOW_DISABLED" not in captured
+
+    def test_run_pipeline_container_writes_skip_env_file(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Non-empty ``skip`` writes ``GOGA_SKIP_STAGES=<csv>`` into the env-file.
+
+        Run mode threads ``skip`` end-to-end: ``run_pipeline_container`` →
+        ``_run_named`` → ``_build_env_file``. The launcher joins the stage names
+        comma-separated (Additional Instruction #3 — single env-layering point).
+        The host does NOT validate the names (in-container only).
+        """
+        config = _make_config()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        captured = _capture_env(monkeypatch)
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            rpc("deploy", config, skip=("build", "test"))
+
+        assert captured["GOGA_SKIP_STAGES"] == "build,test"
+
+    def test_run_pipeline_container_empty_skip_omits_env_entry(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty ``skip`` omits the ``GOGA_SKIP_STAGES`` entry from the env-file.
+
+        ``GOGA_SKIP_STAGES`` is written ONLY when ``skip`` is non-empty — the
+        entry is absent (not an empty string) when the default empty tuple is
+        forwarded, so the in-container ``run_pipeline`` step 6e no-ops.
+        """
+        config = _make_config()
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        captured = _capture_env(monkeypatch)
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
+            mock.patch.object(subprocess, "run"),
+        ):
+            rpc("deploy", config, skip=())
+
+        assert "GOGA_SKIP_STAGES" not in captured

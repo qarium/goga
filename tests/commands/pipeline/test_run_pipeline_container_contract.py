@@ -48,10 +48,11 @@ def _make_config():
 
 class TestRunPipelineContainerWorkflowSignature:
     def test_signature_has_workflow_and_no_workflow_as_final_params(self) -> None:
-        """``workflow`` then ``no_workflow`` are the final two signature parameters."""
+        """``workflow`` then ``no_workflow`` then ``skip`` are the final three signature parameters."""
         params = list(inspect.signature(rpc).parameters)
-        assert params[-2] == "workflow"
-        assert params[-1] == "no_workflow"
+        assert params[-3] == "workflow"
+        assert params[-2] == "no_workflow"
+        assert params[-1] == "skip"
 
     def test_workflow_param_is_optional_str(self) -> None:
         """``workflow`` is typed ``str | None`` and defaults to ``None``."""

@@ -43,7 +43,7 @@ class TestRunPipelineContainerContract:
         assert run_pipeline_container is rpc
 
     def test_signature_name_config_extra_env(self) -> None:
-        """Signature is (name, config, extra_env, proxy, hosts, clean, update, workflow, no_workflow)."""
+        """Signature is (name, config, extra_env, proxy, hosts, clean, update, workflow, no_workflow, skip)."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
@@ -57,6 +57,7 @@ class TestRunPipelineContainerContract:
             "update",
             "workflow",
             "no_workflow",
+            "skip",
         ]
 
     def test_extra_env_has_empty_tuple_default(self) -> None:
