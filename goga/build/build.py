@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import logging
-import os
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 from ..agents import resolve_wrapper_path
 from ..config import ProjectConfig
+from ..ralphex import run_ralphex
 
 logger = logging.getLogger(__name__)
 
@@ -119,36 +118,42 @@ def _copy_defaults(config: ProjectConfig) -> int:
     return 0
 
 
-def _assemble_command(plan: str, config: ProjectConfig, cli_options: dict) -> list[str]:
-    cmd = ["ralphex", plan, "--config-dir", ".ralphex/"]
+def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str | int | bool]:
+    """Resolve ralphex options with precedence CLI > BuildConfig > omit.
 
-    def resolve(flag_name: str, cli_key: str, config_key: str, is_flag: bool = False) -> None:
-        cli_value = cli_options.get(cli_key)
-        if is_flag:
-            if cli_value or getattr(config.build, config_key):
-                cmd.append(f"--{flag_name}")
-        else:
-            value = cli_value if cli_value is not None else getattr(config.build, config_key)
-            if value is not None and value not in {"", 0}:
-                cmd.extend([f"--{flag_name}", str(value)])
+    Applies the precedence HERE in the build domain so `run_ralphex` performs no
+    resolution. For store_true bool keys, a CLI value of False is treated as
+    "not set -> defer to config" — bit-identical to the original
+    ``if cli_value or getattr(config.build, ...)`` semantics. For scalar keys the
+    CLI value wins when present (not None) and otherwise falls back to BuildConfig.
+    This helper knows no ralphex flag names; `run_ralphex` maps the resolved keys.
 
-    resolve("worktree", "worktree", "worktree", is_flag=True)
-    resolve("skip-finalize", "skip_finalize", "skip_finalize", is_flag=True)
-    resolve("session-timeout", "session_timeout", "session_timeout")
-    resolve("idle-timeout", "idle_timeout", "idle_timeout")
-    resolve("wait", "wait", "wait")
-    resolve("max-iterations", "max_iterations", "max_iterations")
-    resolve("review-patience", "review_patience", "review_patience")
+    Args:
+        config: Project configuration carrying BuildConfig option defaults.
+        cli_options: CLI flags from the build invocation.
 
-    return cmd
+    Returns:
+        Resolved option dict keyed by ralphex option name.
+    """
+    resolved: dict[str, str | int | bool] = {}
+
+    for key in ("worktree", "skip_finalize"):
+        resolved[key] = bool(cli_options.get(key) or getattr(config.build, key))
+
+    for key in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience"):
+        cli_value = cli_options.get(key)
+        resolved[key] = cli_value if cli_value is not None else getattr(config.build, key)
+
+    return resolved
 
 
 def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     """Execute the build pipeline for a given plan.
 
     Validates uncommitted CODEMANIFEST files, resolves the agent wrapper path,
-    writes the ralphex config, copies default prompts and agents, and launches
-    the ralphex build command.
+    writes the ralphex config, copies default prompts and agents, resolves the
+    ralphex options (CLI > BuildConfig > omit), and delegates the ralphex launch
+    to `run_ralphex`.
 
     Args:
         plan: Path to the build plan file.
@@ -175,16 +180,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     if copy_result != 0:
         return copy_result
 
-    cmd = _assemble_command(plan, config, cli_options)
-    cmd_str = shlex.join(cmd)
+    options = _resolve_options(config, cli_options)
 
-    if cli_options.get("dry_run"):
-        logger.info("dry run", extra={"command": cmd_str})
-        return 0
-
-    if not shutil.which("ralphex"):
-        logger.error("ralphex not found in path")
-        return 1
-
-    logger.info("running build", extra={"command": cmd_str})
-    return subprocess.call(cmd, env={**os.environ, **config.build.task_executor.env})
+    logger.info("delegating to run_ralphex", extra={"plan": plan, "dry_run": cli_options.get("dry_run", False)})
+    return run_ralphex(plan, options, cli_options.get("dry_run", False))

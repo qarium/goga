@@ -8,9 +8,9 @@ from pathlib import Path
 from unittest import mock
 
 from goga.build.build import (
-    _assemble_command,
     _copy_defaults,
     _parse_porcelain_path,
+    _resolve_options,
     _unquote_git_path,
     _write_ralphex_config,
     build,
@@ -76,6 +76,32 @@ class TestBuildContract:
         assert isinstance(config.build.task_executor, TaskExecutorConfig)
         assert not hasattr(config.build, "image")
         assert config.image == "goga:latest"
+
+
+class TestResolveOptions:
+    def test_resolve_options_cli_overrides_config_scalar(self) -> None:
+        # CLI present wins over BuildConfig for scalar keys.
+        resolved = _resolve_options(_make_config(max_iterations=5), {"max_iterations": 10})
+        assert resolved["max_iterations"] == 10
+
+    def test_resolve_options_bool_false_defers_to_config(self) -> None:
+        # store_true nuance: a CLI False is "not set" -> defer to config.
+        resolved = _resolve_options(_make_config(worktree=True), {"worktree": False})
+        assert resolved["worktree"] is True
+
+    def test_resolve_options_config_value_when_cli_absent(self) -> None:
+        # No CLI value -> fall back to BuildConfig.
+        resolved = _resolve_options(_make_config(worktree=True), {})
+        assert resolved["worktree"] is True
+
+    def test_resolve_options_omits_when_config_none(self) -> None:
+        # With neither CLI nor config set, the resolved values carry the omit
+        # semantics through to run_ralphex (bool False, scalar None).
+        resolved = _resolve_options(_make_config(), {})
+        assert resolved["worktree"] is False
+        assert resolved["skip_finalize"] is False
+        assert resolved["session_timeout"] is None
+        assert resolved["max_iterations"] is None
 
 
 class TestUnquoteGitPath:
@@ -282,45 +308,6 @@ class TestCopyDefaults:
         assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text() == "custom content"
 
 
-class TestAssembleCommand:
-    def test_basic_command(self) -> None:
-        config = _make_config()
-        cmd = _assemble_command("plan.md", config, {})
-        assert cmd == ["ralphex", "plan.md", "--config-dir", ".ralphex/"]
-
-    def test_worktree_flag_from_cli(self) -> None:
-        config = _make_config()
-        cmd = _assemble_command("plan.md", config, {"worktree": True})
-        assert "--worktree" in cmd
-
-    def test_worktree_flag_from_config(self) -> None:
-        config = _make_config(worktree=True)
-        cmd = _assemble_command("plan.md", config, {})
-        assert "--worktree" in cmd
-
-    def test_session_timeout_from_cli(self) -> None:
-        config = _make_config()
-        cmd = _assemble_command("plan.md", config, {"session_timeout": "30m"})
-        assert "--session-timeout" in cmd
-        assert "30m" in cmd
-
-    def test_cli_overrides_config(self) -> None:
-        config = _make_config(worktree=False)
-        cmd = _assemble_command("plan.md", config, {"worktree": True})
-        assert "--worktree" in cmd
-
-    def test_max_iterations_forwarded(self) -> None:
-        config = _make_config()
-        cmd = _assemble_command("plan.md", config, {"max_iterations": 10})
-        assert "--max-iterations" in cmd
-        assert "10" in cmd
-
-    def test_skip_finalize_flag(self) -> None:
-        config = _make_config()
-        cmd = _assemble_command("plan.md", config, {"skip_finalize": True})
-        assert "--skip-finalize" in cmd
-
-
 # --- Full build function tests ---
 
 
@@ -343,6 +330,38 @@ class TestBuildDryRun:
             mock_call.assert_not_called()
 
 
+class TestBuildDelegation:
+    """build() delegates the ralphex launch to run_ralphex with resolved options."""
+
+    def test_build_delegates_to_run_ralphex_with_resolved_options(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
+            result = build("plan.md", _make_config(worktree=True), {"skip_manifest_check": True})
+
+        assert result == 0
+        mock_run.assert_called_once()
+        args = mock_run.call_args.args
+        assert args[0] == "plan.md"
+        assert args[1]["worktree"] is True
+        assert args[2] is False  # dry_run positional
+        assert "dry_run" not in args[1]
+
+    def test_build_returns_run_ralphex_exit_code(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        with mock.patch("goga.build.build.run_ralphex", return_value=42) as mock_run:
+            result = build("plan.md", _make_config(), {"skip_manifest_check": True})
+
+        assert result == 42
+        assert mock_run.return_value == 42
+
+    def test_build_dry_run_delegates_with_dry_run_true(self, tmp_path, monkeypatch) -> None:
+        monkeypatch.chdir(tmp_path)
+        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
+            build("plan.md", _make_config(), {"dry_run": True, "skip_manifest_check": True})
+
+        assert mock_run.call_args.args[2] is True
+
+
 class TestBuildFullExecution:
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
@@ -357,40 +376,9 @@ class TestBuildFullExecution:
         assert result == 42
 
 
-class TestBuildEnvDelivery:
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_env_passed_to_subprocess(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
-        monkeypatch.setenv("PARENT_VAR", "parent_val")
-        config = _make_config(env=TEST_ENV_VARS)
-        result = _run_build_in_tmp(
-            tmp_path,
-            monkeypatch,
-            config=config,
-            cli_options={"skip_manifest_check": True},
-        )
-        assert result == 0
-
-        passed_env = mock_call.call_args.kwargs["env"]
-        for key, value in TEST_ENV_VARS.items():
-            assert passed_env[key] == value
-        assert passed_env["PARENT_VAR"] == "parent_val"
-        assert "PATH" in passed_env
-
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_env_overrides_os_environ(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
-        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://host.example")
-        config = _make_config(env={"ANTHROPIC_BASE_URL": "https://build.example"})
-        _run_build_in_tmp(
-            tmp_path,
-            monkeypatch,
-            config=config,
-            cli_options={"skip_manifest_check": True},
-        )
-
-        passed_env = mock_call.call_args.kwargs["env"]
-        assert passed_env["ANTHROPIC_BASE_URL"] == "https://build.example"
+class TestBuildDoesNotWriteClaudeSettings:
+    """build()/run_ralphex never writes a .claude/settings.json — env delivery is
+    handled by the host launcher's docker env-file, not by this code path."""
 
     @mock.patch.object(subprocess, "call", return_value=0)
     @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
@@ -437,17 +425,6 @@ class TestBuildCodexAgent:
         _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
 
         assert not (tmp_path / ".claude").exists()
-
-
-class TestBuildMissingRalphex:
-    def test_ralphex_not_found_returns_1(self, tmp_path, monkeypatch) -> None:
-        with mock.patch.object(shutil, "which", return_value=None):
-            result = _run_build_in_tmp(
-                tmp_path,
-                monkeypatch,
-                cli_options={"skip_manifest_check": True},
-            )
-            assert result == 1
 
 
 class TestBuildDefaultsDirNotFound:
