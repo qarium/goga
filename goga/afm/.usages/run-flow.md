@@ -50,16 +50,12 @@ etc., as defined by the pipeline file itself).
   code 127). `run_flow` must not hard-code `/srv/afm`.
 - `flow_path` must be an absolute path resolved by the caller; `run_flow`
   does not validate or construct paths.
-- `port` must be allocated by the caller (typically `goga/commands/pipeline`);
+- `port` must be allocated by the caller;
   `run_flow` only forwards it to `--port`.
-- The host-side afm config (`~/.afm/config.yaml`) is generated and mounted
-  by `goga/commands/pipeline`; `run_flow` does not touch it.
+- The host-side afm config (`~/.afm/config.yaml`); `run_flow` does not touch it.
 
 ## Anti-patterns
 
-- Do not pass a bare pipeline name — `run_flow` expects an absolute path. Use `goga/pipeline`'s `run_pipeline` for name resolution.
+- Do not pass a bare file name — `run_flow` expects an absolute path.
 - Do not pass `port=0` or omit `--port` — `afm` needs a concrete port to bind its dashboard.
-- Do not hard-code `/srv/afm` inside `run_flow` — invoke `afm` via `$PATH` so the container layout can change without breaking this cell.
-- Do not expect `run_flow` to discover files in pipeline directories — discovery lives in `goga/pipeline`'s `list_pipelines`.
-- Do not allocate the port inside `run_flow` — that responsibility belongs to `goga/commands/pipeline`.
-- Do not modify or parse pipeline-file contents — that is outside this cell's responsibility.
+- Do not modify or parse flow-file contents — that is outside this cell's responsibility.
