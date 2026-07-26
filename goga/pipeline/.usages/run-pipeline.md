@@ -91,11 +91,43 @@ workflow resolution entirely.
    same name as the pipeline; `Path.cwd()` = `/workspace` in-container).
    When that file does not exist, workflow = None (silent miss, NOT an
    error — workflow is opt-in).
+4. `GOGA_SKIP_STAGES` — when set to a comma-separated list of stage names,
+   `run_pipeline` applies them as in-memory skip directives via
+   `apply_skip_stages` BEFORE `compile_flow`. Each named stage is removed
+   from the compiled flow (the compiler reconnects dependents' `depends_on`).
+   Unset/empty = no skip. The skip merges onto any resolved workflow
+   (explicit `--workflow`, basename auto-match, or none) and is NOT mutually
+   exclusive with `--workflow`; it also applies when workflow resolution is
+   disabled (`--no-workflow`) — `apply_skip_stages` constructs a workflow
+   document carrying only the skip entries. Unknown stage names are a
+   structural error raised in-container by the compiler (non-zero exit).
 
 When a resolved workflow-file exists, `run_pipeline` calls `parse_workflow`
 to obtain a `WorkflowDocument`, which is forwarded to `compile_flow` as the
 optional `workflow` argument. Structural errors from `parse_workflow`
 propagate unchanged with their readable messages.
+
+## Skipping stages (run mode, host → container)
+
+Exclude individual stages from the compiled pipeline — they are removed and
+their dependents' `depends_on` are transparently reconnected by the compiler.
+
+```bash
+# Host side:
+goga pipeline deploy --skip build --skip test
+# short form: -s build --skip test
+# Inside the container, GOGA_SKIP_STAGES=build,test is set in the env-file;
+# run_pipeline merges WorkflowStage(skip=True) for build and test onto the
+# resolved workflow, and compile_flow removes them (reconnecting dependents).
+```
+
+Skip merges onto any resolved workflow — including an explicit one:
+
+```bash
+goga pipeline deploy --workflow custom --skip review
+```
+
+Discovery mode (no name) ignores `--skip` (like `--clean`).
 
 ## Project name prefix
 
@@ -197,3 +229,8 @@ runs.
   apply — `GOGA_WORKFLOW_DISABLED=1` always wins.
 - Do not mutate the `WorkflowDocument` returned by `parse_workflow` —
   forward it as-is to `compile_flow`.
+- Do not delete skipped stages or rewrite depends_on in `run_pipeline` —
+  `compile_flow` does both; `run_pipeline` only prepares the workflow via
+  `apply_skip_stages`.
+- Do not write or generate a workflow-file for skip — the merge is in-memory
+  only.

@@ -125,6 +125,28 @@ workflow log is printed.
 The launcher does NOT print any dashboard URL line — stdout carries at
 most the workflow log line (above) and the docker output stream.
 
+### Skip layer
+
+Exclude individual stages from the compiled pipeline — they are removed and
+their dependents' `depends_on` are transparently reconnected by the compiler:
+
+```bash
+goga pipeline deploy --skip build --skip test
+# short form: -s build --skip test
+```
+
+The names are forwarded into the container env-file as
+`GOGA_SKIP_STAGES=build,test` (run mode only). The host performs NO name
+validation — unknown names surface as a structural error in-container
+(non-zero exit). `--skip` merges onto any resolved workflow and is NOT
+mutually exclusive with `--workflow`:
+
+```bash
+goga pipeline deploy --workflow custom --skip review
+```
+
+Discovery mode (no name) ignores `--skip` (like `--clean`).
+
 ## Home configuration (~/.goga/config.yml)
 
 The optional, machine-wide home config is a narrow docker-only layer. Its
@@ -179,7 +201,7 @@ docker:
 - `--add-host HOST:IP` (repeatable) — add a `docker run --add-host HOST:IP`
   entry. Merges on top of `pipeline.hosts` from config; CLI wins on host-key
   conflict. Effective in both modes.
-- `--clean` (flag) — wipe the persistent afm state host directory before
+- `-c` / `--clean` (flag) — wipe the persistent afm state host directory before
   launch. Run mode only; a no-op in discovery mode. The directory is recreated
   empty before the container starts; `client.command` is still supplied via
   the afm-config tmpfile overlay (independent of `AFM_DIR`).
@@ -199,6 +221,10 @@ docker:
   exclusive with `--workflow`. Run mode only. Sets
   `GOGA_WORKFLOW_DISABLED=1` in the container env-file, forcing the
   in-container `run_pipeline` routine to skip workflow resolution.
+- `-s` / `--skip NAME` (repeatable) — exclude a stage from the compiled
+  pipeline; one name per invocation. Run mode only; no host-side name
+  validation (the compiler validates in-container). Forwarded as
+  `GOGA_SKIP_STAGES=<name>,...` in the container env-file.
 
 ## Workflow flag matrix
 
@@ -249,9 +275,9 @@ file is missing from the image, afm surfaces the error.
 8. Runs `docker run --rm [-v <host_dir>:/workspace -w /workspace] [--add-host HOST:IP ...] <home.docker.run tokens> --entrypoint python3 <config.image> -m goga.pipeline list` (in-container entrypoint). `home.docker.run` tokens are appended verbatim (extra_args); absent when the home file is missing.
 9. Propagates the container's exit code.
 
-`extra_env`, `proxy`, `--clean`, `--workflow`, and `--no-workflow` have no
-effect in discovery mode — no env-file is written, no afm state directory
-is involved, no workflow layer applies.
+`extra_env`, `proxy`, `--clean`, `--workflow`, `--no-workflow`, and `--skip`
+have no effect in discovery mode — no env-file is written, no afm state
+directory is involved, no workflow layer applies.
 
 ### Run mode
 
@@ -305,8 +331,9 @@ is involved, no workflow layer applies.
 12. Builds an env-file layering `home.env` as the base (lowest-priority) layer,
     then `config.pipeline.env` + git identity + extra `KEY=VALUE` pairs supplied
     via `-e/--env` + `AFM_DIR=/home/goga/pipeline` + `workflow_env` entries
-    (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED per step 10) + (when
-    proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
+    (GOGA_WORKFLOW_NAME and/or GOGA_WORKFLOW_DISABLED per step 10) +
+    `GOGA_SKIP_STAGES=<csv>` (when `--skip`/`-s` is passed; the joined names)
+    + (when proxy is set) `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1`
     (mode 0600). Project config and CLI override `home.env` on key conflict.
 13. Installs SIGTERM/SIGINT handlers that `docker kill` the container.
 14. Assembles the docker run command:

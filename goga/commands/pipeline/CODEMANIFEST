@@ -131,9 +131,17 @@ Annotations: |
   basename auto-match file exists on the host. This cell surfaces only the
   workflow log line — it does not print any dashboard URL line.
 
+  Skip layer: the repeatable --skip/-s option is forwarded the same way —
+  the launcher joins the stage names comma-separated into
+  GOGA_SKIP_STAGES in the container env-file (run mode only). The host
+  performs NO stage-name validation — names are validated in-container by the
+  compiler (unknown names raise a structural error). Discovery mode writes no
+  env-file, so --skip is a no-op there (like --clean). --skip merges onto any
+  resolved workflow and is NOT mutually exclusive with --workflow.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool)":
+"pipeline(ctx: click.Context, name: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...])":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline". Both modes launch the goga Docker
@@ -176,6 +184,10 @@ Annotations: |
                    launcher forces the in-container pipeline to skip workflow
                    resolution entirely (sets GOGA_WORKFLOW_DISABLED=1 in the
                    env-file). Mutually exclusive with `workflow`.
+    `skip`: raw stage names from the repeatable -s/--skip click option (empty
+            tuple when absent). Each invocation takes exactly one name.
+            Forwarded to `run_pipeline_container` in run mode; ignored in
+            discovery mode. The host does NOT validate names.
 
     Apply the `click` practice for the command surface: a single command (not a
     group), the optional positional `name` argument, the pass_context pattern,
@@ -191,10 +203,11 @@ Annotations: |
     - -e / --env KEY=VALUE (multiple) — pass environment variables into the container
     - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.pipeline.proxy
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.pipeline.hosts
-    - --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
+    - -c / --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
     - --update / -u (flag) — pull the image before launching the container
     - --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
     - --no-workflow (flag) — disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in the env-file)
+    - -s / --skip NAME (multiple) — exclude a stage from the compiled pipeline (run mode only; one name per invocation); forwarded as GOGA_SKIP_STAGES
 
     Algorithm:
     1. Load configuration via `load_project_config` — fails fast on schema errors
@@ -226,9 +239,11 @@ Annotations: |
     7. Dispatch to `run_pipeline_container`:
        - discovery mode (`name` is None) → call with name=None, `extra_env`,
          resolved proxy, resolved hosts, clean=False (clean is a no-op in
-         discovery), `update`, `workflow`, `no_workflow`
+         discovery), `update`, `workflow`, `no_workflow`, skip=() (skip is a
+         no-op in discovery)
        - run mode (`name` provided) → call with name, `extra_env`, resolved
-         proxy, resolved hosts, `clean`, `update`, `workflow`, `no_workflow`
+         proxy, resolved hosts, `clean`, `update`, `workflow`, `no_workflow`,
+         `skip`
     8. Propagate the returned exit code via the click context (per the `click`
        practice)
 
@@ -253,6 +268,9 @@ Annotations: |
       resolved in-container by the run_pipeline routine — no host-side validation
     - --no-workflow performs NO host-side validation; it is a pure flag
       forwarded into the env-file as GOGA_WORKFLOW_DISABLED=1
+    - Expose -s/--skip NAME (multiple) bound to `skip` — one name per
+      invocation, run mode only
+    - Expose -c as a short alias of --clean (equivalent behavior)
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
@@ -271,8 +289,11 @@ Annotations: |
       in-container
     - Do not allow --workflow X --no-workflow to pass — exit 1 with a
       readable ClickException before any further work
+    - Do not validate --skip stage names on the host — validation is
+      in-container (compiler); unknown names raise a structural error there
+    - --skip is a no-op in discovery mode (like --clean)
 
-"run_pipeline_container(name: str | None, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool) -> exit_code: int":
+"run_pipeline_container(name: str | None, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...]) -> exit_code: int":
   location: run_pipeline_container.py
   annotations: |
     Host-side docker launcher. Launches the goga Docker container to run
@@ -313,6 +334,9 @@ Annotations: |
                    env-file (run mode only), forcing the run_pipeline routine to skip
                    workflow resolution entirely. Mutually exclusive with
                    `workflow` (enforced by the caller).
+    `skip`: stage names (default empty). In run mode, joined comma-separated
+            into the GOGA_SKIP_STAGES container env-file entry when non-empty.
+            Ignored in discovery mode (no env-file).
     `exit_code`: container exit code (0 success; 2 argparse error in-container;
                  127 afm missing inside the container; non-zero pipeline failure)
 
@@ -363,8 +387,9 @@ Annotations: |
        caller cleanup
     8. Return the container exit code
 
-    Note: discovery mode ignores `extra_env`, `proxy`, `clean`, `workflow`, and
-    `no_workflow` — no env-file is written, no afm state directory is involved.
+    Note: discovery mode ignores `extra_env`, `proxy`, `clean`, `workflow`,
+    `no_workflow`, and `skip` — no env-file is written, no afm state directory
+    is involved.
 
     Algorithm (run mode, name provided):
     Load the home configuration via `load_home_config` (per the
@@ -428,10 +453,11 @@ Annotations: |
         layer, then config.pipeline.env, git identity, the `extra_env` KEY=VALUE
         strings (forwarded as-is, no validation), AFM_DIR set to the in-container
         persistent state path, the workflow_env entries (GOGA_WORKFLOW_NAME
-        and/or GOGA_WORKFLOW_DISABLED per step 9), and — when `proxy` is
-        non-None — HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at
-        localhost,127.0.0.1). Project config and CLI override home.env on key
-        conflict.
+        and/or GOGA_WORKFLOW_DISABLED per step 9), the GOGA_SKIP_STAGES entry
+        when `skip` is non-empty (joined comma-separated via ",".join(skip);
+        omitted when `skip` is empty), and — when `proxy` is non-None —
+        HTTP_PROXY, HTTPS_PROXY, and NO_PROXY (fixed at localhost,127.0.0.1).
+        Project config and CLI override home.env on key conflict.
     12. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: -m goga.pipeline run <name> --port <port>
         - params: name=<container_name>, rm=True, entrypoint=python3,
@@ -572,6 +598,8 @@ Annotations: |
       GOGA_WORKFLOW_NAME=X; auto-match fallback → neither env var (container
       resolves basename). The decision is taken host-side so the workflow log
       is accurate
+    - Write GOGA_SKIP_STAGES=<csv> into the container env-file (run mode only)
+      when `skip` is non-empty
     - The "Pipeline running with workflow NAME" log line is printed ONLY
       when a workflow will actually be applied: explicit --workflow X (file
       already validated by the caller) OR basename auto-match file exists on

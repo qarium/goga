@@ -20,6 +20,7 @@ Imports:
   - Types:
       - parse_workflow
       - WorkflowDocument
+      - WorkflowStage
     Usages:
       - parse-workflow
     From: goga/pipeline/workflow
@@ -111,6 +112,15 @@ Annotations: |
   and exists, `run_pipeline` calls `parse_workflow` to obtain a
   `WorkflowDocument`, which is passed to `compile_flow` as the optional
   workflow argument.
+
+  GOGA_SKIP_STAGES=<csv> carries the CLI --skip/-s names: `run_pipeline`
+  reads them and applies via `apply_skip_stages` as in-memory `WorkflowStage`
+  skip directives merged onto the resolved workflow (or a freshly constructed
+  `WorkflowDocument` when no workflow resolved, e.g. --no-workflow or no
+  auto-match), BEFORE `compile_flow`. The compiler then removes the skipped
+  stages and transparently reconnects their dependents' depends_on. Unset/empty
+  = no skip. The host performs NO stage-name validation — unknown names surface
+  as the compiler's structural error in-container.
 
   This cell runs inside the goga Docker image when invoked through
   python -m goga.pipeline. The host-side launcher lives in
@@ -284,6 +294,14 @@ Annotations: |
        d. When workflow_path does not exist — set workflow = None (silent
           miss; this is the opt-in path — the absence of a workflow-file
           is not an error)
+    6e. Read GOGA_SKIP_STAGES from the process environment. When unset or
+        empty — skip_stages = []. Otherwise split on ',' and drop empty
+        fragments to obtain skip_stages. Then call `apply_skip_stages` with the
+        resolved workflow and skip_stages — when skip_stages is non-empty, this
+        merges `WorkflowStage` skip directives into the resolved workflow (or
+        constructs a new `WorkflowDocument` when workflow is None, e.g.
+        --no-workflow or no resolved workflow-file); when empty, the workflow
+        is unchanged. The result is forwarded to `compile_flow` at step 7.
     7. Resolve the in-container project name via `resolve_project_name` (None
        when the git origin remote is unavailable — mirroring the root_dir
        pattern, never raises). Compile the pipeline-file via `compile_flow`
@@ -409,6 +427,16 @@ Annotations: |
       existence validation; the basename fallback is opt-in
     - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME —
       when both are set, workflow = None
+    - Read GOGA_SKIP_STAGES from the process environment (comma-separated;
+      unset/empty = no skip); apply via `apply_skip_stages` BEFORE
+      `compile_flow`
+    - --skip merges onto any resolved workflow and is NOT mutually exclusive
+      with --workflow; it also applies to a workflow-less pipeline
+      (--no-workflow / no auto-match) — `apply_skip_stages` constructs a
+      `WorkflowDocument` carrying only the skip entries then
+    - Unknown skip names surface as the compiler's structural error
+      "unknown stage name in workflow.stages: <name>" (raised in-container by
+      `compile_flow` step 4pre), propagated as a non-zero exit code
 
     Constraints:
     - Do not invoke afm directly outside `run_flow`
@@ -443,10 +471,72 @@ Annotations: |
       resolution happens inside the container only; the host-side launcher
       performs explicit --workflow existence validation before launch
       when the user passes --workflow
+    - Do not delete skipped stages or rewrite depends_on in `run_pipeline` —
+      `compile_flow` does both; `run_pipeline` only prepares the workflow via
+      `apply_skip_stages`
+    - Do not write or generate a workflow-file for skip — the merge is
+      in-memory only
     - project_name is derived in-container via `resolve_project_name`
       (mirroring the root_dir pattern — derived inside the container, not read
       from config); None when the git origin remote is unavailable → the
       compiled flow description carries no [<project-name>] prefix
+
+"apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str]) -> workflow: WorkflowDocument | None":
+  location: apply_skip_stages.py
+  annotations: |
+    Pure in-memory merge of CLI skip directives into a workflow document.
+    Each name in `skip_stages` is applied as a `WorkflowStage` carrying
+    skip=True over the workflow's stages map, so the downstream `compile_flow`
+    removes those stages and transparently reconnects their dependents'
+    depends_on. This routine does NOT delete stages or rewrite depends_on — it
+    only prepares the declarative workflow that the compiler consumes.
+
+    `workflow`: optional `WorkflowDocument` resolved by `run_pipeline` (parsed
+                from a workflow-file via `parse_workflow`, or None when no
+                workflow resolved)
+    `skip_stages`: stage names to skip (from the comma-split GOGA_SKIP_STAGES
+                   container env var); an empty list is a no-op
+    `workflow`: the resulting `WorkflowDocument` carrying the skip directives,
+                or the input unchanged when `skip_stages` is empty (None stays
+                None — `compile_flow` then runs with no workflow)
+
+    Algorithm:
+    1. When `skip_stages` is empty — return `workflow` unchanged (None stays
+       None; no skip applied)
+    2. Build a new stages map: start from a copy of the stages map of `workflow`
+       when `workflow` is not None, otherwise an empty dict
+    3. For each name in `skip_stages` — set stages[name] = a `WorkflowStage`
+       carrying skip=True (skip wins over any pre-existing entry for that name;
+       the compiler removes the stage before applying overrides)
+    4. Return a NEW `WorkflowDocument`: prompt = the prompt of `workflow` when
+       `workflow` is not None else None; stages = the new map; extend = a copy
+       of the extend map of `workflow` when `workflow` is not None else the
+       default empty map. The input `workflow` and its maps are NOT mutated
+
+    Requirements:
+    - Empty `skip_stages` is a no-op — return the input unchanged
+    - Skip always wins — a name present in both the workflow stages and
+      `skip_stages` is replaced with a `WorkflowStage` carrying skip=True
+    - Do not mutate the input `workflow` or its stages/extend maps — build a
+      new `WorkflowDocument` and a new stages map (per the run-pipeline
+      anti-pattern against mutating `parse_workflow` output)
+    - When `workflow` is None and `skip_stages` is non-empty — construct a
+      `WorkflowDocument` whose stages map carries only the skip entries (prompt
+      None, extend empty); skip applies to a workflow-less pipeline
+    - Construct `WorkflowStage` with skip=True and all other fields at their
+      defaults
+    - Stage-name validation is NOT performed here — the compiler's strict check
+      (`compile_flow` step 4pre) raises a structural error on a name absent
+      from the pipeline body; this routine stays declarative
+    - Apply `conventions` for code style and docstring formatting
+
+    Constraints:
+    - Do not delete stages or rewrite depends_on here — the compiler does both
+      (`compile_flow` step 4skip)
+    - Do not validate stage names against any pipeline here
+    - Do not write, read, or generate any workflow-file — the merge operates
+      purely on in-memory Python objects
+    - Do not mutate the input `workflow` object or its maps
 
 "resolve_project_name() -> name: str | None":
   location: run_pipeline.py
