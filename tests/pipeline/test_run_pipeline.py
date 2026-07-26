@@ -562,6 +562,126 @@ class TestRunPipelineSkipStages:
         assert "" not in wf.stages
 
 
+class TestRunPipelineSkipStagesIntegration:
+    """Step 6e end-to-end through the REAL ``compile_flow``.
+
+    Unlike :class:`TestRunPipelineSkipStages`, ``compile_flow`` is NOT mocked
+    here — the :func:`apply_skip_stages`-synthesized document is consumed by the
+    real 4pre (strict name validation) + 4skip (remove + reconnect
+    ``depends_on``) + empty-body guard machinery, and the compiled
+    ``<AFM_DIR>/flow.yml`` is read back. Only ``run_flow`` is patched (→ 0) so
+    afm never runs. CWD is isolated so the basename workflow-resolution path
+    (``<cwd>/.goga/workflows/<name>.yml``) is hermetic: no workflow-file means
+    step 6 resolves ``workflow=None``, and step 6e merges the skip directives
+    onto a fresh document.
+    """
+
+    def _write_stages_pipeline(self, directory: Path, body: str, name: str = "deploy") -> None:
+        """Write a STAGES-format pipeline file (header + mapping body).
+
+        Pattern mirrors ``tests/pipeline/compiler/fixtures/compile_flow/stages.yml``.
+        The inline body is test content, not a contract.
+        """
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / f"{name}.yml").write_text(f"name: Deploy\ndescription: Deploy pipeline\n---\n\n{body}")
+
+    def test_run_pipeline_skip_removes_stage_from_compiled_flow(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GOGA_SKIP_STAGES drops the named stage and reconnects dependents end-to-end.
+
+        A STAGES deploy.yml (``build`` → ``test`` → ``review``) with
+        ``GOGA_SKIP_STAGES=build`` compiles through the real ``compile_flow``:
+        ``build`` is removed, ``test`` reconnected to nothing, ``review`` still
+        depends on ``test``. Proves Data Flow Scenario 2 (workflow-less skip)
+        end-to-end.
+        """
+        import yaml
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "build")
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        self._write_stages_pipeline(
+            project_dir,
+            "build:\n"
+            "  title: Build\n"
+            "\n"
+            "test:\n"
+            "  title: Test\n"
+            "  depends_on:\n"
+            "    - build\n"
+            "\n"
+            "review:\n"
+            "  title: Review\n"
+            "  depends_on:\n"
+            "    - test\n",
+        )
+
+        with mock.patch.object(_run_pipeline_module, "run_flow", return_value=0):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+
+        compiled = yaml.safe_load((afm_dir / "flow.yml").read_text())
+        stage_ids = [stage["id"] for stage in compiled["stages"]]
+        assert "build" not in stage_ids
+        assert set(stage_ids) == {"test", "review"}
+        # workflow-less skip → workflow.prompt is None → prompt omitted from flow.
+        assert compiled.get("prompt") is None
+
+    def test_run_pipeline_unknown_skip_raises_structural_error(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unknown --skip name surfaces as a compile_flow StructuralError (AC3).
+
+        :func:`apply_skip_stages` performs no name validation (deferred to
+        ``compile_flow`` 4pre); ``GOGA_SKIP_STAGES=ghost`` therefore merges a
+        ``ghost`` skip entry whose name matches no pipeline stage, and the real
+        ``compile_flow`` 4pre strict validation raises before ``run_flow`` runs.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "ghost")
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        self._write_stages_pipeline(
+            project_dir,
+            "build:\n  title: Build\n\ntest:\n  title: Test\n  depends_on:\n    - build\n",
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+            pytest.raises(StructuralError, match=r"unknown stage name in workflow\.stages: ghost"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_run_flow.assert_not_called()
+
+    def test_run_pipeline_all_stages_skipped_empty_body(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Skipping the only stage trips the compile_flow empty-body guard (edge).
+
+        A single-stage pipeline (``build``) with ``GOGA_SKIP_STAGES=build``
+        removes every step; the real ``compile_flow`` post-4skip empty-body guard
+        raises ``StructuralError("empty body")``.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "build")
+        afm_dir.mkdir(parents=True)
+        project_dir = tmp_path / "pipelines"
+        self._write_stages_pipeline(
+            project_dir,
+            "build:\n  title: Build\n",
+        )
+
+        with (
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+            pytest.raises(StructuralError, match="empty body"),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+
 class TestRunPipelineMaterialization:
     """Step 6.5 — materialize the four agent prompt files into <AFM_DIR>/prompts/.
 
