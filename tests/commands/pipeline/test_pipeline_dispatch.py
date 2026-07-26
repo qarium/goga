@@ -138,6 +138,7 @@ class TestPipelineDispatchLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_proxy_none_falls_back_to_config(self) -> None:
@@ -161,6 +162,7 @@ class TestPipelineDispatchLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_update_flag_forwarded(self) -> None:
@@ -202,6 +204,7 @@ class TestPipelineDispatchEdge:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_add_host_merges_over_config(self) -> None:

@@ -31,6 +31,7 @@ from .run_pipeline_container import run_pipeline_container
     help="Add a docker run --add-host HOST:IP entry; merges on top of config.pipeline.hosts",
 )
 @click.option(
+    "-c",
     "--clean",
     "clean",
     is_flag=True,
@@ -58,6 +59,13 @@ from .run_pipeline_container import run_pipeline_container
     default=False,
     help="Disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in-container)",
 )
+@click.option(
+    "-s",
+    "--skip",
+    "skip",
+    multiple=True,
+    help="Exclude a stage from the compiled pipeline (run mode only; repeatable); forwarded as GOGA_SKIP_STAGES",
+)
 @click.pass_context
 def pipeline(  # noqa: PLR0913, PLR0917
     ctx: click.Context,
@@ -69,6 +77,7 @@ def pipeline(  # noqa: PLR0913, PLR0917
     update: bool,
     workflow: str | None,
     no_workflow: bool,
+    skip: tuple[str, ...],
 ) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
@@ -113,6 +122,14 @@ def pipeline(  # noqa: PLR0913, PLR0917
             ``GOGA_WORKFLOW_DISABLED=1`` into the env-file). Mutually exclusive
             with ``workflow``. Performs NO host-side validation — it is a pure
             flag forwarded into the container.
+        skip: raw stage names from the repeatable ``-s/--skip`` option (empty
+            tuple when absent). Run mode only — when non-empty, each name is
+            joined comma-separated into the container env-file as
+            ``GOGA_SKIP_STAGES`` so the in-container ``run_pipeline`` routine
+            applies ``apply_skip_stages`` over the resolved workflow. The host
+            performs NO name validation (unknown names surface in-container as a
+            ``StructuralError``); ``--skip`` is a no-op in discovery mode, which
+            never writes an env-file.
 
     Raises:
         click.ClickException: When ``.goga/config.yml`` cannot be loaded, when
@@ -179,10 +196,11 @@ def pipeline(  # noqa: PLR0913, PLR0917
 
     # Dispatch with explicit keyword arguments so the click surface — and its
     # tests — can assert on each argument by name rather than by position.
-    # In discovery mode (name is None) clean is a no-op, so it is forced to
-    # False regardless of the CLI flag. The workflow flags are forwarded
-    # unconditionally — run_pipeline_container decides per mode (discovery is a
-    # no-op for the workflow layer; run mode writes the env-file entries).
+    # In discovery mode (name is None) clean and skip are no-ops, so they are
+    # forced to False / () regardless of the CLI flags. The workflow flags are
+    # forwarded unconditionally — run_pipeline_container decides per mode
+    # (discovery is a no-op for the workflow layer; run mode writes the
+    # env-file entries).
     exit_code = run_pipeline_container(
         name=name,
         config=config,
@@ -193,5 +211,6 @@ def pipeline(  # noqa: PLR0913, PLR0917
         update=update,
         workflow=workflow,
         no_workflow=no_workflow,
+        skip=skip if name is not None else (),
     )
     ctx.exit(exit_code)

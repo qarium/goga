@@ -66,6 +66,35 @@ class TestPipelineContract:
         # pre-option behavior of `goga pipeline`.
         assert env_option.multiple is True
 
+    def test_pipeline_has_skip_option_with_short_alias(self) -> None:
+        """The pipeline command exposes a repeatable `-s/--skip` Click option."""
+        skip_param = next(
+            (p for p in pipeline.params if isinstance(p, click.Option) and p.name == "skip"),
+            None,
+        )
+        assert skip_param is not None, "pipeline command must define a `skip` Click option"
+        # Both short and long forms must be registered.
+        assert "-s" in skip_param.opts
+        assert "--skip" in skip_param.opts
+        # Repeatable: each `-s/--skip NAME` appends one stage name -> tuple.
+        assert skip_param.multiple is True
+
+    def test_pipeline_clean_option_has_short_alias(self) -> None:
+        """The `--clean` option gains a short `-c` alias (still a flag)."""
+        clean_param = next(
+            (p for p in pipeline.params if isinstance(p, click.Option) and p.name == "clean"),
+            None,
+        )
+        assert clean_param is not None
+        assert "-c" in clean_param.opts
+        assert "--clean" in clean_param.opts
+        assert clean_param.is_flag is True
+
+    def test_pipeline_callback_has_skip_parameter(self) -> None:
+        """The decorated callback exposes a `skip` parameter."""
+        parameters = inspect.signature(pipeline_cmd.callback).parameters
+        assert "skip" in parameters
+
 
 class TestPipelineLogic:
     def test_pipeline_delegates_to_run_pipeline_container_discovery(self) -> None:
@@ -89,6 +118,7 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
@@ -112,6 +142,7 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -138,6 +169,7 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -161,7 +193,60 @@ class TestPipelineLogic:
             update=False,
             workflow=None,
             no_workflow=False,
+            skip=(),
         )
+
+    def test_pipeline_accepts_skip_and_clean_short_aliases(self) -> None:
+        """`-s/--skip` (repeatable) + `-c` short clean alias are forwarded as kwargs."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(
+                pipeline,
+                ["deploy", "--skip", "build", "-s", "test", "-c"],
+            )
+
+        assert result.exit_code == 0
+        assert mock_rpc.call_args.kwargs["skip"] == ("build", "test")
+        assert mock_rpc.call_args.kwargs["clean"] is True
+
+    def test_pipeline_discovery_forces_empty_skip(self) -> None:
+        """In discovery mode (no name) --skip is a no-op: skip forced to ()."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, ["--skip", "build"])
+
+        assert result.exit_code == 0
+        # Discovery (name is None) ignores --skip, mirroring the clean=False forcing.
+        assert mock_rpc.call_args.kwargs["name"] is None
+        assert mock_rpc.call_args.kwargs["skip"] == ()
+
+    def test_pipeline_clean_short_alias_equivalent(self) -> None:
+        """`-c` and `--clean` produce the same clean=True dispatch value."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            runner.invoke(pipeline, ["deploy", "--clean"])
+            kwargs_long = mock_rpc.call_args.kwargs["clean"]
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            runner.invoke(pipeline, ["deploy", "-c"])
+            kwargs_short_c = mock_rpc.call_args.kwargs["clean"]
+
+        assert kwargs_long is True
+        assert kwargs_long == kwargs_short_c
 
     @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])
     def test_pipeline_propagates_exit_code(self, exit_code: int) -> None:
