@@ -89,6 +89,24 @@ class TestBuildRuntimeIsolationContract:
         assert host_dir.exists()
 
 
+class TestBuildCleanShortAliasContract:
+    """``-c/--clean`` short alias and the ``--skip`` guard (skip is pipeline-only).
+
+    The ``--clean`` option gains a short ``-c`` alias (same flag, same default);
+    ``--skip`` must NOT be added to ``goga build`` (skip is a pipeline-only flag).
+    """
+
+    def test_build_has_short_clean_option(self) -> None:
+        clean_param = next(p for p in build_cmd.params if p.name == "clean")
+        assert "-c" in clean_param.opts
+        assert "--clean" in clean_param.opts
+        assert clean_param.is_flag is True
+
+    def test_build_has_no_skip_option(self) -> None:
+        # skip is a pipeline-only flag; goga build must not declare --skip.
+        assert not any(p.name == "skip" for p in build_cmd.params)
+
+
 # --- Logic tests (positive) ---
 
 
@@ -189,6 +207,36 @@ class TestBuildRuntimeIsolationFlow:
         cmd = captured["cmd"]
         assert "-v" in cmd
         assert any(arg.endswith(":/workspace/.ralphex") for arg in cmd)
+
+    def test_build_accepts_short_clean_alias(self, tmp_path: Path, monkeypatch) -> None:
+        # The short -c alias is equivalent to --clean: it must drive the same
+        # clean_build_runtime_dir wipe before docker launch.
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "test-branch")
+
+        runtime_dir = resolve_build_runtime_dir()
+        runtime_dir.mkdir(parents=True, exist_ok=True)
+        (runtime_dir / "old-state.json").write_text("{}")
+
+        mock_proc = mock.Mock()
+        mock_proc.wait.return_value = 0
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "_read_git_config", return_value={}),
+            mock.patch.object(_build_mod, "load_project_config", return_value=_valid_config()),
+            mock.patch.object(_build_mod, "resolve_credential_mounts", return_value=[]),
+            mock.patch.object(_build_mod, "_write_env_file", return_value=tmp_path / "env"),
+            mock.patch.object(_build_mod, "clean_build_runtime_dir", wraps=clean_build_runtime_dir) as mock_clean,
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            mock_runner.return_value.run.return_value = 0
+            result = CliRunner().invoke(build_cmd, ["plan.md", "-c"])
+
+        assert result.exit_code == 0, result.output
+        # -c drives the same wipe as --clean.
+        assert mock_clean.call_args == mock.call(runtime_dir)
+        assert not (runtime_dir / "old-state.json").exists()
 
     def test_build_without_clean_preserves_runtime_dir(self, tmp_path: Path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)

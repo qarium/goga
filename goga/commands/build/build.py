@@ -220,6 +220,7 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     help="Add a docker run --add-host HOST:IP entry; merges on top of config.build.hosts",
 )
 @click.option(
+    "-c",
     "--clean",
     "clean",
     is_flag=True,
