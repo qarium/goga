@@ -1,0 +1,91 @@
+Usages:
+  conventions: .goga/usages/conventions.md
+  ralphex: .goga/usages/cooks/ralphex.md
+
+Annotations: |
+  The `conventions` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is a thin launcher over the external `ralphex` binary — its sole responsibility
+  is to invoke ralphex with the resolved plan and ralphex options, then propagate the
+  subprocess exit code. Config generation (.ralphex/config), ralphex option resolution
+  (CLI > ProjectConfig > omit), and agent-wrapper resolution live in the caller
+  (goga/build): this cell performs none of them.
+
+  Use the `ralphex` practice to interact with the external ralphex binary (CLI contract,
+  invocation shape, flag set, PATH-resolved invocation, exit-code propagation).
+
+  The standard library subprocess and shutil modules are used for invoking the binary and
+  the PATH check. All output goes to sys.stderr (click is not used).
+
+---
+
+"run_ralphex(plan: str, options: dict[str, str | int | bool], dry_run: bool) -> exit_code: int":
+  location: run_ralphex.py
+  annotations: |
+    Launch the external `ralphex` binary to execute the given build plan with the resolved
+    ralphex options. goga-side entry point to ralphex; performs no config generation,
+    option resolution, or wrapper resolution — those live in goga/build.
+
+    `plan`: path to the plan file (markdown), resolved by the caller (goga/build). Passed
+           to ralphex as the positional argument.
+    `options`: resolved ralphex options — the caller (goga/build) has already applied CLI >
+              ProjectConfig > omit precedence. Keys are ralphex option names; each key maps
+              to exactly one ralphex CLI flag:
+              - worktree (bool)        → --worktree         (bare flag)
+              - skip_finalize (bool)   → --skip-finalize    (bare flag)
+              - session_timeout (str)  → --session-timeout  (value flag)
+              - idle_timeout (str)     → --idle-timeout     (value flag)
+              - wait (str)             → --wait             (value flag)
+              - max_iterations (int)   → --max-iterations   (value flag)
+              - review_patience (int)  → --review-patience  (value flag)
+    `dry_run`: when True, print the assembled ralphex command to sys.stderr and return 0
+              without launching.
+    `exit_code`: 0 on success, 1 when the ralphex binary is missing from PATH, otherwise
+                ralphex's own exit code
+
+    Algorithm:
+    1. Receive `plan`, `options`, and `dry_run` from the caller
+    2. Invoke ralphex via the `ralphex` practice with `plan` as the positional argument,
+       --config-dir .ralphex/, and the flags mapped from `options` (precedence already
+       applied by the caller)
+    3. On `dry_run`: print the assembled command to sys.stderr and return 0
+    4. Verify `ralphex` is on PATH via the `ralphex` practice; when absent — return `exit_code` 1
+    5. Execute `ralphex` via subprocess (env inherited from os.environ — the build env is
+       delivered through the container env-file by the host launcher) and propagate its exit code
+
+    Apply the `conventions` practice for error-handling style and docstring formatting.
+    Apply the `ralphex` practice for the general ralphex CLI contract (binary invocation,
+    --config-dir, PATH-resolved invocation, exit-code propagation); the option→flag
+    mapping is fixed by this contract (see `options`), not by the practice.
+
+    Requirements:
+    - Always invoke ralphex with `plan` as the positional argument and --config-dir .ralphex/,
+      plus the mapped flags — never omit the plan or --config-dir
+    - Map `options` to ralphex CLI flags per the table in `options`: a bool key that is
+      True emits a bare --<flag> (False or absent → omit the flag); a scalar key emits
+      --<flag> <value> and is omitted when the value is None, an empty string, or 0
+    - Invoke ralphex through PATH — do not hard-code the ralphex binary path
+    - Inherit the process environment (os.environ) — the build env arrives via the docker
+      env-file, not via a settings file
+    - Apply the `ralphex` practice's exit-code rules verbatim
+
+    Constraints:
+    - Do not generate the .ralphex/config file — that is the caller's responsibility
+    - Do not resolve ralphex options (CLI > ProjectConfig > omit) — caller's responsibility
+    - Do not resolve the agent wrapper path — caller's responsibility
+    - Do not hard-code the ralphex binary path — rely on PATH inside the container
+    - Do not construct the env from a config object — inherit os.environ
+
+---
+
+Author: Goga
+CreatedAt: 26/07/26
+Description: |
+  Thin launcher over the external `ralphex` binary. Invokes ralphex with the resolved
+  plan and ralphex options (resolved by the caller), then propagates the subprocess exit
+  code. Config generation, option resolution, and wrapper resolution live in goga/build.
