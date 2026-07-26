@@ -208,3 +208,27 @@ class TestPipelineWorkflowFlagEdge:
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["workflow"] == "custom"
         assert mock_run.call_args.kwargs["no_workflow"] is False
+
+    def test_pipeline_command_workflow_and_skip_not_mutually_exclusive(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--workflow X --skip Y`` coexist: both forwarded, no mutual-exclusion guard.
+
+        Unlike ``--workflow``/``--no-workflow`` (mutually exclusive), ``--skip``
+        layers independently: the host validates the workflow file exists and
+        forwards BOTH ``workflow`` and ``skip`` to ``run_pipeline_container``; the
+        skip directives merge onto the resolved workflow inside the container.
+        """
+        _write_config(tmp_path)
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        (workflows_dir / "custom.yml").write_text("prompt: hi\n")
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--workflow", "custom", "--skip", "review"])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["workflow"] == "custom"
+        assert mock_run.call_args.kwargs["skip"] == ("review",)

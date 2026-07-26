@@ -629,6 +629,12 @@ class TestRunPipelineSkipStagesIntegration:
         assert set(stage_ids) == {"test", "review"}
         # workflow-less skip → workflow.prompt is None → prompt omitted from flow.
         assert compiled.get("prompt") is None
+        # 4skip rewiring: ``test``'s reference to the removed ``build`` collapses
+        # to nothing (explicit empty list), while ``review`` still depends on
+        # ``test`` unchanged.
+        by_id = {stage["id"]: stage for stage in compiled["stages"]}
+        assert by_id["test"].get("depends_on") == []
+        assert by_id["review"].get("depends_on") == ["test"]
 
     def test_run_pipeline_unknown_skip_raises_structural_error(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch

@@ -84,6 +84,8 @@ class TestApplySkipStagesLogic:
         assert result.stages["build"].skip is True
         assert result.stages["build"].agent is None
         assert result.stages["build"].prompt is None
+        assert result.stages["build"].loop is None
+        assert result.stages["build"].skills is None
 
     def test_apply_skip_stages_none_nonempty_constructs_doc(self) -> None:
         """A None workflow with non-empty skip constructs a fresh skip-only doc."""
