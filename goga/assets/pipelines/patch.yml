@@ -11,7 +11,7 @@ description: "Refactoring or miniman changes"
 - name: commit-changes
   title: "Commit changes"
   prompt: |
-    Commit all untracked changes
+    Commit all added and modified files
 
 - name: accept-result
   title: "Requirements & coverage audit"

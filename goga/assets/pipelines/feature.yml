@@ -84,7 +84,7 @@ description: "Feature development"
   communication: true
   prompt: |
     Steps:
-      1. Commit all untracked changes.
+      1. Commit all added and modified files.
       2. Ask the user whether the implementation is built and ready for acceptance.
 
     Requirements:

@@ -173,4 +173,4 @@ description: Review changes
 - name: commit-changes
   title: Commit changes after review
   prompt: |
-    Commit all untracked changes
+    Commit all added and modified files
