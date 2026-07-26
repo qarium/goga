@@ -312,22 +312,28 @@ class TestCopyDefaults:
 
 
 class TestBuildDryRun:
+    """build() delegates dry_run to run_ralphex (the dry-run short-circuit now lives
+    in run_ralphex, not in build). These verify the delegation seam directly rather
+    than the internal subprocess call run_ralphex would make."""
+
     def test_dry_run_returns_0(self, tmp_path, monkeypatch) -> None:
-        result = _run_build_in_tmp(
-            tmp_path,
-            monkeypatch,
-            cli_options={"dry_run": True, "skip_manifest_check": True},
-        )
+        with mock.patch("goga.build.build.run_ralphex", return_value=0):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                cli_options={"dry_run": True, "skip_manifest_check": True},
+            )
         assert result == 0
 
-    def test_dry_run_does_not_call_subprocess(self, tmp_path, monkeypatch) -> None:
-        with mock.patch.object(subprocess, "call") as mock_call:
+    def test_dry_run_passes_dry_run_to_run_ralphex(self, tmp_path, monkeypatch) -> None:
+        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
             _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
                 cli_options={"dry_run": True, "skip_manifest_check": True},
             )
-            mock_call.assert_not_called()
+        # dry_run reaches run_ralphex as the positional 3rd arg.
+        assert mock_run.call_args.args[2] is True
 
 
 class TestBuildDelegation:
@@ -363,15 +369,17 @@ class TestBuildDelegation:
 
 
 class TestBuildFullExecution:
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_full_execution_returns_0(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    """build() returns whatever run_ralphex returns — mocked at the delegation seam
+    rather than at run_ralphex's internal subprocess.call, decoupling the build test
+    from ralphex internals."""
+
+    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    def test_full_execution_returns_0(self, mock_run, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
         assert result == 0
 
-    @mock.patch.object(subprocess, "call", return_value=42)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_propagates_exit_code(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build.run_ralphex", return_value=42)
+    def test_propagates_exit_code(self, mock_run, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
         assert result == 42
 
@@ -617,18 +625,19 @@ class TestManifestCheck:
 
 
 class TestBuildConfigFlags:
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_worktree_from_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    """Option precedence (CLI > BuildConfig) flows through to run_ralphex as the
+    resolved `options` dict. Verified at the delegation seam; the bool/scalar flag
+    assembly itself is covered in tests/ralphex/test_run_ralphex.py."""
+
+    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    def test_worktree_from_config(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(worktree=True)
         _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
 
-        cmd = mock_call.call_args[0][0]
-        assert "--worktree" in cmd
+        assert mock_run.call_args.args[1]["worktree"] is True
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_cli_worktree_overrides_config(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    def test_cli_worktree_overrides_config(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(worktree=False)
         _run_build_in_tmp(
             tmp_path,
@@ -637,12 +646,11 @@ class TestBuildConfigFlags:
             cli_options={"worktree": True, "skip_manifest_check": True},
         )
 
-        cmd = mock_call.call_args[0][0]
-        assert "--worktree" in cmd
+        # CLI worktree=True overrides config=False via _resolve_options.
+        assert mock_run.call_args.args[1]["worktree"] is True
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_custom_prompts_dir(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    def test_custom_prompts_dir(self, mock_run, tmp_path, monkeypatch) -> None:
         custom_prompts = tmp_path / "custom" / "prompts"
         custom_prompts.mkdir(parents=True)
         (custom_prompts / "custom_task.txt").write_text("custom content")
