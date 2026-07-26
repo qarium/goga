@@ -52,6 +52,7 @@ docs/workflow/plan.md:
 docs/workflow/build.md:
   - goga/build
   - goga/commands/build
+  - goga/ralphex
 
 docs/workflow/change.md:
   - goga/connect
@@ -73,6 +74,7 @@ docs/cli/lint.md:
 docs/cli/build.md:
   - goga/commands/build
   - goga/build
+  - goga/ralphex
 
 docs/cli/contract.md:
   - goga/commands/contract
