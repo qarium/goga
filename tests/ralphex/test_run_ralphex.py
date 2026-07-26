@@ -66,6 +66,39 @@ class TestBuildCommand:
             ".ralphex/",
         ]
 
+    # The option -> flag mapping is a fixed hand-maintained table (the
+    # run_ralphex contract). These pin every literal so a typo in the table
+    # (or a key/flag desync) cannot silently drop a user-supplied option.
+    @pytest.mark.parametrize(
+        "key,flag",
+        [
+            ("worktree", "--worktree"),
+            ("skip_finalize", "--skip-finalize"),
+        ],
+    )
+    def test_bool_flag_mapping_is_exact(self, key: str, flag: str) -> None:
+        """Each bool option key maps to its exact ralphex flag literal."""
+        cmd = _build_command("plan.md", {key: True})
+
+        assert flag in cmd
+
+    @pytest.mark.parametrize(
+        "key,flag,value",
+        [
+            ("session_timeout", "--session-timeout", "30m"),
+            ("idle_timeout", "--idle-timeout", "15m"),
+            ("wait", "--wait", "60s"),
+            ("max_iterations", "--max-iterations", 10),
+            ("review_patience", "--review-patience", 3),
+        ],
+    )
+    def test_scalar_flag_mapping_is_exact(self, key: str, flag: str, value: object) -> None:
+        """Each scalar option key maps to its exact flag literal and value."""
+        cmd = _build_command("plan.md", {key: value})
+
+        assert flag in cmd
+        assert str(value) in cmd
+
 
 class TestRunRalphexLogic:
     def test_run_ralphex_dry_run_prints_command_and_returns_0(
@@ -76,8 +109,9 @@ class TestRunRalphexLogic:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "ralphex" in captured.err
-        assert "plan.md" in captured.err
+        # The full joined argv is printed (not a stub): plan, config-dir, and
+        # the resolved flag all appear.
+        assert "ralphex plan.md --config-dir .ralphex/ --worktree" in captured.err
 
     def test_run_ralphex_returns_0_on_success(self) -> None:
         """A successful (exit 0) ralphex invocation returns 0."""
@@ -105,3 +139,14 @@ class TestRunRalphexLogic:
         assert result == 1
         captured = capsys.readouterr()
         assert "ralphex" in captured.err
+
+    def test_run_ralphex_inherits_env_no_env_kwarg(self) -> None:
+        """run_ralphex invokes subprocess.call with the cmd only and never an env=
+        kwarg — it inherits os.environ so the host launcher's env-file delivers
+        the build env (replaces the deleted build-cell env-merge tests)."""
+        with mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call, \
+             mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"):
+            run_ralphex("plan.md", {}, False)
+
+        assert "env" not in mock_call.call_args.kwargs
+        assert mock_call.call_args.args[0][0] == "ralphex"

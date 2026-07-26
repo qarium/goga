@@ -101,7 +101,42 @@ class TestResolveOptions:
         assert resolved["worktree"] is False
         assert resolved["skip_finalize"] is False
         assert resolved["session_timeout"] is None
+        assert resolved["idle_timeout"] is None
+        assert resolved["wait"] is None
         assert resolved["max_iterations"] is None
+        assert resolved["review_patience"] is None
+
+    def test_resolve_options_skip_finalize_config_value_when_cli_absent(self) -> None:
+        # Mirror of the worktree case for skip_finalize (the second bool key):
+        # no CLI value -> fall back to BuildConfig.
+        resolved = _resolve_options(_make_config(skip_finalize=True), {})
+
+        assert resolved["skip_finalize"] is True
+
+    def test_resolve_options_round_trips_into_build_command(self) -> None:
+        # End-to-end pin: resolved options flow bit-identically through
+        # _build_command. Covers the split contract _resolve_options (build) ->
+        # _build_command (ralphex), including the ""/None scalar filter so the
+        # two halves cannot drift on what "omitted" means.
+        from goga.ralphex.run_ralphex import _build_command
+
+        config = _make_config(worktree=True, skip_finalize=True)
+        cli = {"session_timeout": "30m", "max_iterations": 10, "idle_timeout": "", "wait": None}
+        resolved = _resolve_options(config, cli)
+        cmd = _build_command("plan.md", resolved)
+
+        assert cmd == [
+            "ralphex",
+            "plan.md",
+            "--config-dir",
+            ".ralphex/",
+            "--worktree",
+            "--skip-finalize",
+            "--session-timeout",
+            "30m",
+            "--max-iterations",
+            "10",
+        ]
 
 
 class TestUnquoteGitPath:
@@ -354,11 +389,10 @@ class TestBuildDelegation:
 
     def test_build_returns_run_ralphex_exit_code(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.build.build.run_ralphex", return_value=42) as mock_run:
+        with mock.patch("goga.build.build.run_ralphex", return_value=42):
             result = build("plan.md", _make_config(), {"skip_manifest_check": True})
 
         assert result == 42
-        assert mock_run.return_value == 42
 
     def test_build_dry_run_delegates_with_dry_run_true(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
