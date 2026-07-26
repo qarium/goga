@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from ..afm import run_flow
+from .apply_skip_stages import apply_skip_stages
 from .compiler import compile_flow, translate_role
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
@@ -212,6 +213,17 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     # workflow-file resolves and exists, the parsed WorkflowDocument is forwarded
     # to compile_flow; structural workflow errors propagate from parse_workflow.
     workflow = _resolve_workflow(name)
+
+    # Step 6e: merge CLI skip directives (the comma-split ``GOGA_SKIP_STAGES``
+    # container env var) onto the resolved workflow without mutating it. An empty
+    # or unset var is a no-op (``apply_skip_stages`` returns the input unchanged);
+    # otherwise the merged document carries ``WorkflowStage(skip=True)`` entries
+    # that ``compile_flow`` (step 4skip) turns into stage removal + ``depends_on``
+    # reconnection. Name validation is deferred to ``compile_flow`` step 4pre, so
+    # an unknown name surfaces as a ``StructuralError`` there, not here.
+    raw = os.environ.get("GOGA_SKIP_STAGES", "")
+    skip_stages = [s for s in raw.split(",") if s]
+    workflow = apply_skip_stages(workflow, skip_stages)
 
     # The in-container project root is the single source of truth for the afm
     # ``root_dir`` directive emitted into the compiled flow-file. ``Path.cwd()``

@@ -443,6 +443,125 @@ class TestRunPipelineLogic:
             assert (prompts_dir / f"{stem}.md").read_text() != ""
 
 
+class TestRunPipelineSkipStages:
+    """Step 6e — read ``GOGA_SKIP_STAGES`` and merge skip directives onto the
+    resolved workflow via :func:`apply_skip_stages`, then forward the merged
+    document to ``compile_flow``.
+
+    Each test mocks ``compile_flow``/``run_flow`` (the real ``compile_flow``
+    end-to-end scenarios live in the integration tests) and isolates CWD so the
+    workflow-resolution path (``<cwd>/.goga/workflows/<name>.yml``) is hermetic.
+    Materialization falls back to the REAL package defaults (the resolver is NOT
+    patched here), so ``compile_flow`` returning ``roles=None`` is sufficient.
+    """
+
+    def test_run_pipeline_step6e_reads_skip_env_and_forwards(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GOGA_SKIP_STAGES=build,test → a merged skip-doc is forwarded to compile_flow.
+
+        With no workflow-file at ``<cwd>/.goga/workflows/deploy.yml``, step 6
+        resolves ``workflow=None``; step 6e then merges the skip directives into a
+        fresh document whose ``build``/``test`` stages carry ``skip=True``.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "build,test")
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        wf = mock_compile.call_args.kwargs["workflow"]
+        assert wf is not None
+        assert set(wf.stages.keys()) == {"build", "test"}
+        assert all(wf.stages[name].skip is True for name in wf.stages)
+
+    def test_run_pipeline_step6e_empty_env_is_noop(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unset/empty GOGA_SKIP_STAGES leaves the resolved workflow unchanged (None)."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GOGA_SKIP_STAGES", raising=False)
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        # Regression-safe: behaves exactly as before step 6e existed.
+        assert mock_compile.call_args.kwargs["workflow"] is None
+
+    def test_run_pipeline_skip_merges_onto_resolved_workflow(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Skip directives merge ONTO a basename-resolved workflow (AC4).
+
+        The workflow-file ``<cwd>/.goga/workflows/deploy.yml`` carries a ``build``
+        override (``agent: codex``); ``GOGA_SKIP_STAGES=review`` merges a skip
+        entry on top. The merged doc preserves the resolved ``build.agent`` and
+        carries a fresh ``review`` skip stage (skip wins only for skipped names).
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+        monkeypatch.delenv("GOGA_WORKFLOW_NAME", raising=False)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "review")
+
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "deploy.yml").write_text("stages:\n  build:\n    agent: codex\n")
+
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        wf = mock_compile.call_args.kwargs["workflow"]
+        assert wf is not None
+        # Resolved override preserved (the skip did not touch "build").
+        assert wf.stages["build"].agent == "codex"
+        assert wf.stages["build"].skip is False
+        # Merged skip directive applied only to "review".
+        assert wf.stages["review"].skip is True
+
+    def test_apply_skip_stages_trailing_comma_in_env(
+        self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A trailing comma in GOGA_SKIP_STAGES yields no empty-string stage (edge).
+
+        ``"build,"`` splits into ``["build", ""]``; the empty fragment is dropped so
+        the merged document carries only ``build`` and never an ``""`` key.
+        """
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("GOGA_SKIP_STAGES", "build,")
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        wf = mock_compile.call_args.kwargs["workflow"]
+        assert set(wf.stages.keys()) == {"build"}
+        assert "" not in wf.stages
+
+
 class TestRunPipelineMaterialization:
     """Step 6.5 — materialize the four agent prompt files into <AFM_DIR>/prompts/.
 
