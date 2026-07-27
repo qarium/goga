@@ -12,6 +12,7 @@ from goga.config import (
     ProjectConfig,
     TaskExecutorConfig,
 )
+from goga.config.project.config import DepConfig
 
 # --- Contract tests ---
 
@@ -525,3 +526,73 @@ class TestConfigCodemanifestField:
             codemanifest=cc,
         )
         assert cfg.codemanifest is cc
+
+
+# --- Task 1: DepConfig + ProjectConfig.usages ---
+
+
+class TestDepConfigAPIShape:
+    def test_has_git_field(self):
+        assert "git" in DepConfig.__dataclass_fields__
+
+    def test_has_ref_field(self):
+        assert "ref" in DepConfig.__dataclass_fields__
+
+    def test_git_type_is_str(self):
+        assert DepConfig.__dataclass_fields__["git"].type is str
+
+    def test_ref_type_is_optional_str(self):
+        ref_type = DepConfig.__dataclass_fields__["ref"].type
+        assert ref_type == str | None or types.UnionType in type(ref_type).__mro__
+
+    def test_ref_defaults_to_none(self):
+        assert DepConfig.__dataclass_fields__["ref"].default is None
+
+    def test_git_is_required(self):
+        """DepConfig without git raises TypeError (missing required argument)."""
+        with pytest.raises(TypeError, match="git"):
+            DepConfig(ref="main")  # type: ignore[call-arg]
+
+    def test_kw_only_enforced(self):
+        assert all(f.kw_only for f in dataclasses.fields(DepConfig))
+
+
+class TestDepConfigCreation:
+    def test_depcfg_is_frozen_kw_only(self):
+        """DepConfig stores fields, is frozen, and rejects positional args (kw_only)."""
+        cfg = DepConfig(git="https://x/r.git", ref="main")
+        assert cfg.git == "https://x/r.git"
+        assert cfg.ref == "main"
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            cfg.git = "y"  # type: ignore[misc]
+        with pytest.raises(TypeError):
+            DepConfig("https://x/r.git", "main")  # type: ignore[call-arg]
+
+    def test_depcfg_ref_defaults_to_none(self):
+        """ref omitted → None (clone default branch)."""
+        cfg = DepConfig(git="https://x/r.git")
+        assert cfg.ref is None
+
+
+class TestProjectConfigUsagesField:
+    def test_has_usages_field(self):
+        assert "usages" in ProjectConfig.__dataclass_fields__
+
+    def test_usages_defaults_to_none(self):
+        """usages omitted → None (section absent, no-op in sync)."""
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        assert cfg.usages is None
+
+    def test_usages_accepts_nested_depcfg_dict(self):
+        """usages can be set to dict[str, dict[str, DepConfig]]."""
+        cfg = ProjectConfig(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=None,
+            pipeline=None,
+            usages={"libs": {"click": DepConfig(git="https://x/click.git", ref="main")}},
+        )
+        assert cfg.usages == {"libs": {"click": DepConfig(git="https://x/click.git", ref="main")}}
+        assert cfg.usages["libs"]["click"].git == "https://x/click.git"
+        assert cfg.usages["libs"]["click"].ref == "main"

@@ -32,6 +32,18 @@ class CodemanifestConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
+class DepConfig:
+    """Value of a single <dep> declaration inside the usages section of .goga/config.yml.
+
+    Immutable value-object: structural validation (non-empty git) lives in the loader,
+    NOT here.
+    """
+
+    git: str
+    ref: str | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
 class BuildConfig:
     """Build pipeline settings including agent, worktree, and timeout options."""
 
@@ -62,3 +74,4 @@ class ProjectConfig:
     commands: dict = field(default_factory=dict)
     codemanifest: CodemanifestConfig | None = None
     tools: dict[str, str] | None = None
+    usages: dict[str, dict[str, DepConfig]] | None = None
