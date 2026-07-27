@@ -45,7 +45,11 @@ Annotations: |
        d. Output value:
           - For primitives (str, int, bool) — raw value via click.echo
           - For None — output "null"
-          - For complex types (dict, dataclass) — output via the `beautiful_yaml` practice
+          - For complex types (dict, dataclass) — output via the `beautiful_yaml`
+            practice, extended with a dataclass-aware yaml representer so that
+            dataclass instances nested inside dicts (e.g. a usages group or the
+            whole usages section) also render as YAML mappings instead of raising
+            RepresenterError
     3. If path not found — output error to stderr, exit 1
 
     Output format for multiple options:

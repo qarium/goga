@@ -1,0 +1,147 @@
+Imports:
+  - Types:
+      - load_project_config
+      - ProjectConfig
+      - DepConfig
+    From: goga/config
+
+Usages:
+  convention: .goga/usages/conventions.md
+  git: |
+    External git binary invoked via subprocess.run (check=True, capture_output=True).
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
+    subprocess call in tests per `convention`.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  The domain is config-driven: `sync` loads configuration itself via
+  `load_project_config` and reads `ProjectConfig`.usages ({group: {dep: DepConfig}} or
+  None). All git operations flow through `clone_repository` via the `git` practice;
+  mock subprocess calls in tests per `convention`. Use relative imports.
+
+---
+
+"sync(force: bool = False) -> exit_code: int":
+  location: sync.py
+  annotations: |
+    Config-driven synchronization of cell-level usages from declared git dependencies
+    into .goga/usages/<group>/<dep>/. Replaces the legacy ad-hoc goga sync.
+
+    `force`: True — clean .goga/usages/ (except cooks and root *.md) then re-sync all
+             declared deps; False (default) — incremental, skip deps whose target dir exists.
+    `exit_code`: 0 on success (incl. "nothing to sync"), 1 if any dep failed.
+
+    Algorithm:
+    1. Load configuration via `load_project_config` → ProjectConfig
+    2. If ProjectConfig.usages is None → nothing to sync, return 0
+    3. usages_root = .goga/usages (relative to CWD)
+    4. If `force` → `clean_usages_dir`(usages_root)
+    5. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order):
+       a. target = usages_root / group / dep
+       b. If (not force) and target.exists() → skip (incremental)
+       c. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
+          `deploy_usages`(repo, target); finally: remove the repo temp directory
+       d. On per-dep error → log ERROR, set exit_code = 1, continue (best-effort)
+    6. Return exit_code
+
+    Requirements:
+    - "synchronized" marker = existence of target dir; dep git/ref changes without force do NOT re-sync
+    - Clone into a temp dir removed in a finally block
+
+    Constraints:
+    - Never touch .goga/usages/cooks or root *.md (`clean_usages_dir` owns that)
+    - Do not re-sync an existing dep unless force
+    - Sources are git only (no local-path mode)
+
+"clean_usages_dir(usages_root: Path) -> removed: int":
+  location: clean.py
+  annotations: |
+    Destructive cleanup of .goga/usages/ for force: remove every subdirectory except
+    cooks; keep all files directly in usages_root.
+
+    `usages_root`: path to .goga/usages/ (relative to CWD)
+    `removed`: number of subdirectories removed
+
+    Algorithm:
+    0. If `usages_root` does not exist → create it (ensure .goga/usages/ exists) and
+       return 0 (nothing to clean)
+    1. For each entry in usages_root: skip if name equals cooks; if directory → remove it
+       and count; if file → leave untouched
+    2. Return removed count
+
+    Requirements:
+    - When `usages_root` does not exist, create it and return 0 (no-op clean) — keeps the
+      routine safe to call on a fresh project and preserves idempotence
+    - Preserve the cooks directory verbatim; preserve every file in usages_root root
+
+    Constraints:
+    - Do NOT remove cooks even with force
+    - Do NOT remove files in usages_root root (only subdirs, except cooks)
+    - Idempotent
+
+"clone_repository(git: str, ref: str | None) -> repo_path: Path":
+  location: clone.py
+  annotations: |
+    Clone a git repository into a fresh temp dir and return its path. Caller owns cleanup.
+
+    `git`: git repository URL (non-empty)
+    `ref`: optional git ref — branch, tag, or commit; None → default branch
+    `repo_path`: path to the cloned repo (temp dir; caller must remove it)
+
+    Algorithm:
+    1. Create a fresh temporary directory
+    2. Suppress interactive prompts per the `git` practice
+    3. Clone `git` into the temporary directory via the `git` practice
+    4. If `ref` is not None → check out `ref` inside the temporary directory (uniform for branch/tag/commit)
+    5. Return the temporary directory path
+
+    Requirements:
+    - Use the `git` practice for subprocess invocation
+
+    Constraints:
+    - Do not remove the temp dir here — caller removes it in finally
+    - Authentication via stock git; no token injection
+
+"deploy_usages(source_repo: Path, target_dir: Path) -> count: int":
+  location: deploy.py
+  annotations: |
+    Deploy cell-level usages from a cloned repo into a target dir: discover .usages
+    folders, lift their contents (drop the .usages name), apply the smoothing rule.
+
+    `source_repo`: path to the cloned repository root
+    `target_dir`: destination .goga/usages/<group>/<dep>/ (created if missing)
+    `count`: number of .usages folders deployed
+
+    Algorithm:
+    1. Recursively discover every directory named .usages under `source_repo`, skipping
+       .git/.hg/.svn; record each with its parent's relative path from source_repo root
+    2. Create `target_dir` if missing
+    3. Smoothing rule:
+       - Exactly one .usages → copy its contents (files + subdirs) directly into `target_dir`
+       - Multiple → for each .usages whose parent rel-path is <rel>: copy contents into
+         `target_dir`/<rel>/ (create intermediates; preserve non-cell dirs); <rel> empty
+         (.usages at repo root) → copy into `target_dir` root
+    4. Return count of deployed .usages folders
+
+    Requirements:
+    - Drop the .usages segment from every destination path
+    - Preserve full relative hierarchy for multi-cell repos incl. non-cell intermediates
+    - Skip .git/.hg/.svn during discovery and copying; copy directories via the standard library per `convention`
+
+    Constraints:
+    - Do NOT keep the .usages name in destination (legacy behavior removed)
+    - Do NOT delete `target_dir` before deploying (sync owns skip; clean owns removal)
+
+---
+
+Author: Goga
+CreatedAt: 27/07/26
+Description: |
+  Config-driven synchronization of cell-level usages from declared git dependencies
+  into .goga/usages/<group>/<dep>/. Replaces the legacy ad-hoc goga/sync domain.

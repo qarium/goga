@@ -18,8 +18,8 @@ Imports:
       - config
     From: goga/commands/config
   - Types:
-      - sync
-    From: goga/commands/sync
+      - usages
+    From: goga/commands/usages
   - Types:
       - tool
     From: goga/commands/tool
@@ -55,7 +55,7 @@ Annotations: |
 ->schema: {}
 ->contract: {}
 ->config: {}
-->sync: {}
+->usages: {}
 ->tool: {}
 ->init: {}
 ->pipeline: {}

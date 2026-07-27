@@ -1,0 +1,67 @@
+Imports:
+  - Types:
+      - sync AS sync_logic
+    Usages:
+      - sync-usage
+    From: goga/usages
+
+Usages:
+  click: .goga/usages/cooks/click.md
+  convention: .goga/usages/conventions.md
+  yaml: |
+    Import the yaml module to catch yaml.YAMLError raised by load_project_config
+    when converting config-load errors in the CLI wrapper.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+  Use the `click` practice to create the command group and subcommand.
+  The command delegates business logic through `sync_logic`; consult the `sync-usage`
+  practice from Imports for the sync contract (modes, on-disk result, exit codes).
+  Use the `yaml` practice to catch yaml.YAMLError when the CLI wrapper converts a
+  config-load error from `sync_logic` into a clean click.ClickException.
+
+---
+
+"usages()":
+  location: usages.py
+  annotations: |
+    The goga usages command group — a click.Group container for usages subcommands.
+    Exported via __all__ and registered in goga/cli.py. The sync subcommand is registered
+    on this group per the `click` practice.
+
+    Use the `click` practice for the group decorator (@click.group()).
+  methods:
+    "sync(force: bool = False) -> exit_code: int": |
+      Subcommand goga usages sync: synchronize cell-level usages from declared git
+      dependencies. Thin wrapper — delegates to `sync_logic`.
+
+      `force`: --force/-f flag (click is_flag, default False) — clean then re-sync all deps.
+      `exit_code`: propagated from `sync_logic` (0 success, 1 error).
+
+      CLI option:
+      - --force / -f: clean .goga/usages/ (except cooks and root *.md) then re-sync all
+
+      Algorithm:
+      1. Call `sync_logic`(`force`) per the `sync-usage` practice
+      2. If `sync_logic` propagates a config-load error (FileNotFoundError,
+         KeyError, ValueError, or yaml.YAMLError raised by load_project_config)
+         → raise click.ClickException(str(exc)) for a clean CLI error (exit 1),
+         per the `yaml` practice for the YAMLError catch. `sync_logic` itself
+         stays fail-loud at the config boundary; the CLI wrapper owns the UX
+         conversion (precedent: goga/commands/config).
+      3. Return exit_code via ctx.exit
+
+      Use the `click` practice for the subcommand and the --force/-f flag.
+
+---
+
+Author: Goga
+CreatedAt: 27/07/26
+Description: |
+  The goga usages command group with the sync subcommand — config-driven
+  synchronization of cell-level usages from declared git dependencies.

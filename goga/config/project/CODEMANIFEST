@@ -65,8 +65,19 @@ Annotations: |
        non-grammar strings pass through the loader verbatim. The loader is NOT
        the validation authority for the version grammar — that responsibility
        belongs to the consumer.
-    10. Construct and return a `ProjectConfig` from all assembled parts, including
-        dockerfile and tools
+    10. Extract the optional usages block. When the usages key is absent → set
+        usages to None. When the key is present but the value is not a mapping
+        → raise ValueError. When the value is a mapping → for each group
+        (str key → mapping) and each dep (str key → mapping):
+        - require dep.git (non-empty str) — KeyError when missing, ValueError
+          when invalid
+        - dep.ref optional (str or absent) → None when absent
+        - construct a `DepConfig`(git, ref) per dep, preserving group/dep as
+          dict keys
+        Build usages as dict[str, dict[str, DepConfig]]; empty mapping when
+        present-but-empty
+    11. Construct and return a `ProjectConfig` from all assembled parts, including
+        dockerfile, tools, and usages
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -88,6 +99,9 @@ Annotations: |
       load_project_config. The loader is NOT the validation authority; the consumer
       that owns the version grammar surfaces invalid values as ValueError at
       resolution time
+    - usages is optional; None when the key is absent; present-but-non-mapping
+      → ValueError; each dep requires a non-empty git (KeyError when missing,
+      ValueError when invalid); ref is optional and defaults to None
     - Values are exposed as-is without default merge — consumers apply their own defaults
 
     Constraints:
@@ -103,7 +117,7 @@ Annotations: |
     - Do NOT normalise YAML-null tools values — 'viewer:' (null) is a structural
       type error and raises ValueError; it is NOT silently coerced to 'latest'
 
-"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None)":
+"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_project_config.
@@ -122,6 +136,11 @@ Annotations: |
              the loader performs NO semantic validation — invalid values pass
              through verbatim and surface as ValueError at the consumer's
              resolution step
+    `usages`: optional usages-sync declarations from the `usages` section, as a
+              dict[str, dict[str, DepConfig]] or None; defaults to None at the
+              dataclass level (kw_only), matching commands/codemanifest/tools,
+              so existing ProjectConfig(...) call sites that omit usages= remain
+              valid
   properties:
     "lang -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
@@ -162,6 +181,13 @@ Annotations: |
       load_project_config and surface as ValueError at the consumer's resolution step.
       YAML-null values (e.g. 'viewer:') are rejected by the
       loader as a structural type error before reaching this field.
+    "usages -> dict[str, dict[str, DepConfig]] | None": |
+      Optional usages-sync declarations from the usages section of .goga/config.yml.
+      Structure: {group: {dep: DepConfig}}. None when the section is absent; empty dict
+      when present but empty. Dynamic <group>/<dep> names are dict keys (NOT dataclass
+      fields) so the goga config usages.<group>.<dep> dot-notation works.
+      Defaults to None at the dataclass level (kw_only) — matches commands/codemanifest/tools,
+      so existing ProjectConfig(...) call sites that omit usages= remain valid.
 
 "BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -298,6 +324,27 @@ Annotations: |
     "annotations -> str | None": |
       Freeform annotations — instructions for the AI agent.
       Optional — defaults to None.
+
+"DepConfig(git: str, ref: str | None)":
+  location: config.py
+  annotations: |
+    Value of a single <dep> declaration inside the usages section of .goga/config.yml.
+    Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`.
+
+    `git`: git repository URL (required, non-empty)
+    `ref`: optional git ref — branch, tag, or commit. None means "clone the default branch".
+
+    Requirements:
+    - git is required and must be a non-empty string
+    - ref is optional and defaults to None (explicit absence — clone default branch)
+
+    Constraints:
+    - Do not default git — empty/missing git is a structural error raised at load time
+  properties:
+    "git -> str": |
+      Git repository URL. Required, non-empty.
+    "ref -> str | None": |
+      Optional git ref (branch, tag, or commit hash). None means "clone the default branch".
 
 ---
 

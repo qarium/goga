@@ -6,7 +6,7 @@ Imports:
       - schema
       - contract
       - config
-      - sync
+      - usages
       - tool
       - init
       - pipeline
@@ -41,7 +41,7 @@ app():
     - `schema`
     - `contract`
     - `config`
-    - `sync`
+    - `usages`
     - `tool`
     - `init`
     - `pipeline`

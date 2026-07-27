@@ -6,6 +6,7 @@ Imports:
       - PipelineConfig
       - TaskExecutorConfig
       - CodemanifestConfig
+      - DepConfig
     From: goga/config/project
   - Types:
       - HomeConfig
@@ -37,6 +38,7 @@ Annotations: |
 ->PipelineConfig: {}
 ->TaskExecutorConfig: {}
 ->CodemanifestConfig: {}
+->DepConfig: {}
 ->HomeConfig: {}
 ->DockerArgsConfig: {}
 ->load_home_config: {}

@@ -136,6 +136,11 @@ tools:
   afm: 1.0.x            # → ~=1.0.0 (minor x-range, >=1.0.0,<1.1.0)
   ralphex: 1.x          # → ~=1.0   (major x-range, >=1.0.0,<2.0.0)
   go: 1.0.1             # → ==1.0.1 (concrete)
+usages:                       # usages-sync section (optional)
+  libs:                       # <group> — top-level dir under .goga/usages/
+    click:                    # <dep> — subdir under the group
+      git: https://github.com/pallets/click.git
+      ref: main               # optional: branch/tag/commit (absent → default branch)
 ```
 
 ### Required Fields
@@ -196,6 +201,9 @@ afm) that consume these fields.
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |
 | `tools`                     | mapping | None                   | goga-tool version declarations (stored verbatim, no semantic validation) |
+| `usages`                    | mapping | None                   | usages-sync section: `{group: {dep: {git, ref}}}` (None when absent) |
+| `usages.<group>.<dep>.git`  | str     | —                      | git URL (required, non-empty) |
+| `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
 
 ## Accessing Configuration Data
 
@@ -211,6 +219,7 @@ config.build  # BuildConfig | None — None when the `build` section is absent
 config.pipeline  # PipelineConfig | None — None when the `pipeline` section is absent
 config.commands  # dict — custom command hooks
 config.dockerfile  # str | None — path to a project Dockerfile
+config.usages  # dict[str, dict[str, DepConfig]] | None — usages-sync declarations (None when absent)
 
 # Section accessors require a None-guard in the consuming command. The loader
 # does not enforce presence of `pipeline` or `build`; the consuming command is
@@ -292,6 +301,35 @@ To declare "no specifier" for a tool, write `latest` explicitly:
 ```yaml
 tools:
   viewer: latest       # valid — resolves to "no specifier"
+```
+
+### `usages` accessor
+
+`config.usages` exposes the optional usages-sync declarations from the
+`usages` section of `.goga/config.yml`. Structure: `{group: {dep: DepConfig}}`,
+or `None` when the section is absent (an empty section yields `{}`).
+
+```python
+config.usages  # dict[str, dict[str, DepConfig]] | None
+config.usages["libs"]["click"].git   # str — git URL (required, non-empty)
+config.usages["libs"]["click"].ref   # str | None — optional git ref
+
+# When the `usages` section is absent, config.usages is None — `goga usages sync`
+# is a no-op (exit 0).
+```
+
+```yaml
+usages:
+  libs:
+    click:
+      git: https://github.com/pallets/click.git
+      ref: main
+```
+
+CLI dot-notation renders a single dep's `DepConfig` via `beautiful_yaml`:
+
+```bash
+goga config usages.libs.click   # → DepConfig(git=..., ref=...)
 ```
 
 ## Immutability
