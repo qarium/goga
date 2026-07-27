@@ -11,57 +11,42 @@ from goga.cli import app
 from goga.commands.build import build as build_cli
 from goga.commands.connect import connect as connect_cli
 from goga.commands.schema import schema as schema_cli
-from goga.commands.sync import sync as sync_cli
+from goga.commands.usages import usages as usages_cli
 
 from tests.conftest import cwd as _cwd
 
 # Mock-patching targets the implementation sub-modules where *_logic imports live,
 # not the package __init__.py which only re-exports the click command.
-_sync_mod = importlib.import_module("goga.commands.sync.sync")
+_usages_mod = importlib.import_module("goga.commands.usages.usages")
 _schema_mod = importlib.import_module("goga.commands.schema.schema")
 _build_mod = importlib.import_module("goga.commands.build.build")
 _connect_mod = importlib.import_module("goga.commands.connect.connect")
 _connect_impl = importlib.import_module("goga.connect.connect")
 
-# --- sync delegation ---
+# --- usages sync delegation ---
 
 
-class TestSyncDelegation:
-    def test_sync_delegates_to_sync_logic_with_args(self, tmp_path: Path) -> None:
-        source = tmp_path / "lib"
-        source.mkdir()
-        (source / ".usages").mkdir()
-        (source / ".usages" / "api.md").write_text("# API", encoding="utf-8")
-
-        with (
-            mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic,
-            _cwd(tmp_path),
-        ):
+class TestUsagesSyncDelegation:
+    def test_usages_sync_delegates_to_sync_logic(self) -> None:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
-            result = runner.invoke(sync_cli, [str(source), "--token", "ghp_x", "--branch", "main"])
+            result = runner.invoke(usages_cli, ["sync"])
 
-        mock_logic.assert_called_once_with(str(source), "ghp_x", "main")
+        mock_logic.assert_called_once_with(False)
         assert result.exit_code == 0
 
-    def test_sync_delegates_exit_code_1(self) -> None:
-        with mock.patch.object(_sync_mod, "sync_logic", return_value=1):
+    def test_usages_sync_delegates_exit_code_1(self) -> None:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=1):
             runner = CliRunner()
-            result = runner.invoke(sync_cli, ["/nonexistent"])
+            result = runner.invoke(usages_cli, ["sync"])
 
         assert result.exit_code == 1
 
-    def test_sync_delegates_with_none_defaults(self) -> None:
-        with mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic:
-            runner = CliRunner()
-            runner.invoke(sync_cli, ["https://github.com/user/repo"])
-
-        mock_logic.assert_called_once_with("https://github.com/user/repo", None, None)
-
-    def test_sync_cli_registered_in_app(self) -> None:
+    def test_usages_cli_registered_in_app(self) -> None:
         runner = CliRunner()
-        result = runner.invoke(app, ["sync", "--help"])
+        result = runner.invoke(app, ["usages", "--help"])
         assert result.exit_code == 0
-        assert "source" in result.output.lower()
+        assert "sync" in result.output.lower()
 
 
 # --- schema delegation ---
@@ -289,12 +274,12 @@ class TestInstallDelegation:
 
 
 class TestAllCommandsDelegationViaApp:
-    def test_sync_via_app_delegates(self, tmp_path: Path) -> None:
-        with mock.patch.object(_sync_mod, "sync_logic", return_value=0) as mock_logic:
+    def test_usages_sync_via_app_delegates(self, tmp_path: Path) -> None:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
-            result = runner.invoke(app, ["sync", "/some/path"])
+            result = runner.invoke(app, ["usages", "sync"])
 
-        mock_logic.assert_called_once_with("/some/path", None, None)
+        mock_logic.assert_called_once_with(False)
         assert result.exit_code == 0
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
