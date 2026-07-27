@@ -27,23 +27,6 @@ from goga.commands.upgrade import upgrade
 from goga.commands.install import install
 ```
 
-Or directly from the subcell implementation module:
-
-```python
-from goga.commands.lint.lint import lint
-from goga.commands.build.build import build
-from goga.commands.connect.connect import connect
-from goga.commands.schema.schema import schema
-from goga.commands.contract.contract import contract
-from goga.commands.config.config import config
-from goga.commands.sync.sync import sync
-from goga.commands.tool.tool import tool
-from goga.commands.init.init import init
-from goga.commands.pipeline.pipeline import pipeline
-from goga.commands.upgrade.upgrade import upgrade
-from goga.commands.install.install import install
-```
-
 ## Registration in click group
 
 ```python

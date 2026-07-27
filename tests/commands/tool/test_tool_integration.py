@@ -8,6 +8,14 @@ from click.testing import CliRunner
 from goga.ast import AST
 from goga.cli import app
 
+# Resolve the inner `tool.py` submodule via importlib. The facade `goga.commands.tool`
+# re-exports the click Command `tool`, which shadows the submodule attribute in the
+# package `__dict__`. On Python 3.10 `mock.patch("goga.commands.tool.tool.AST")` resolves
+# the dotted path through sequential `getattr`, finds the Command where it expects the
+# submodule, and raises `AttributeError`. Holding a direct reference to the module makes
+# `mock.patch.object` work uniformly across Python versions.
+tool_module = importlib.import_module("goga.commands.tool.tool")
+
 
 class TestToolRegisteredInApp:
     def test_tool_registered_in_app(self) -> None:
@@ -86,7 +94,7 @@ class TestNoAstInjectionThroughApp:
 
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.tool.tool.AST") as mock_ast,
+            mock.patch.object(tool_module, "AST") as mock_ast,
             mock.patch.object(importlib, "import_module", return_value=dummy),
         ):
             result = runner.invoke(app, ["tool", "min", "a"])

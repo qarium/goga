@@ -11,6 +11,14 @@ from click.testing import CliRunner
 from goga.ast import AST
 from goga.commands.tool import build_injections, tool
 
+# Resolve the inner `tool.py` submodule via importlib. The facade `goga.commands.tool`
+# re-exports the click Command `tool`, which shadows the submodule attribute in the
+# package `__dict__`. On Python 3.10 `mock.patch("goga.commands.tool.tool.AST")` resolves
+# the dotted path through sequential `getattr`, finds the Command where it expects the
+# submodule, and raises `AttributeError`. Holding a direct reference to the module makes
+# `mock.patch.object` work uniformly across Python versions.
+tool_module = importlib.import_module("goga.commands.tool.tool")
+
 
 class TestFacadeAccessible:
     def test_tool_facade_accessible(self) -> None:
@@ -140,7 +148,7 @@ class TestBuildInjectionsNegative:
 
         def f(argv, *, config): ...
 
-        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+        with mock.patch.object(tool_module, "AST") as mock_ast:
             result = build_injections(f)
 
         assert result == {}
@@ -157,7 +165,7 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.POSITIONAL_ONLY
 
-        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+        with mock.patch.object(tool_module, "AST") as mock_ast:
             result = build_injections(f)
 
         assert result == {}
@@ -170,7 +178,7 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_POSITIONAL
 
-        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+        with mock.patch.object(tool_module, "AST") as mock_ast:
             result = build_injections(f)
 
         assert result == {}
@@ -183,7 +191,7 @@ class TestBuildInjectionsEdge:
 
         assert inspect.signature(f).parameters["ast"].kind == inspect.Parameter.VAR_KEYWORD
 
-        with mock.patch("goga.commands.tool.tool.AST") as mock_ast:
+        with mock.patch.object(tool_module, "AST") as mock_ast:
             result = build_injections(f)
 
         assert result == {}
@@ -277,7 +285,7 @@ class TestToolAstInjection:
         argv = ["--flag", "value", "x"]
         runner = CliRunner()
         # AST patched as a no-op stub so no filesystem load occurs for either form.
-        with mock.patch("goga.commands.tool.tool.AST"):
+        with mock.patch.object(tool_module, "AST"):
             with mock.patch.object(importlib, "import_module", return_value=min_dummy):
                 runner.invoke(tool, ["min", *argv])
             with mock.patch.object(importlib, "import_module", return_value=ext_dummy):
@@ -320,7 +328,7 @@ class TestToolBackwardCompatibility:
 
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.tool.tool.AST") as mock_ast,
+            mock.patch.object(tool_module, "AST") as mock_ast,
             mock.patch.object(importlib, "import_module", return_value=dummy),
         ):
             result = runner.invoke(tool, ["notool", "arg1"])
@@ -386,7 +394,7 @@ class TestToolAstPassthrough:
 
         runner = CliRunner()
         with (
-            mock.patch("goga.commands.tool.tool.AST"),
+            mock.patch.object(tool_module, "AST"),
             mock.patch.object(importlib, "import_module", return_value=dummy),
         ):
             result = runner.invoke(tool, ["empty"])
