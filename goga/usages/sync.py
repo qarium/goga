@@ -55,10 +55,14 @@ def sync(force: bool = False) -> int:
             try:
                 repo = clone_repository(depcfg.git, depcfg.ref)
                 deploy_usages(repo, target)
-            except Exception:
+            except Exception as exc:
                 logger.error(
-                    "usages sync failed",
+                    "usages sync failed for %s/%s: %s",
+                    group,
+                    dep,
+                    exc,
                     extra={"group": group, "dep": dep},
+                    exc_info=True,
                 )
                 exit_code = 1
                 continue

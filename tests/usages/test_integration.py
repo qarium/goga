@@ -147,3 +147,6 @@ class TestSyncIntegration:
         # good dep synced on disk despite bad dep's clone failure
         assert (usages_root / "libs" / "good" / "g.md").read_text() == "good"
         assert not (usages_root / "libs" / "bad").exists()
+        # no clone temp dirs leak: the failed clone is self-cleaned and the
+        # successful clone is cleaned by sync's finally block
+        assert list((tmp_path / "clones").iterdir()) == []

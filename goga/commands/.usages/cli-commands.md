@@ -7,7 +7,7 @@ The `goga.commands` package is a facade that re-exports 12 CLI commands. Each co
 All commands are available from the facade in a single line:
 
 ```python
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, pipeline, upgrade, install
+from goga.commands import lint, build, connect, schema, contract, config, usages, tool, init, pipeline, upgrade, install
 ```
 
 Each command is available from its subcell (via `__init__.py` re-export):
@@ -19,7 +19,7 @@ from goga.commands.connect import connect
 from goga.commands.schema import schema
 from goga.commands.contract import contract
 from goga.commands.config import config
-from goga.commands.sync import sync
+from goga.commands.usages import usages
 from goga.commands.tool import tool
 from goga.commands.init import init
 from goga.commands.pipeline import pipeline
@@ -32,7 +32,7 @@ from goga.commands.install import install
 ```python
 import click
 
-from goga.commands import lint, build, connect, schema, contract, config, sync, tool, init, pipeline, upgrade, install
+from goga.commands import lint, build, connect, schema, contract, config, usages, tool, init, pipeline, upgrade, install
 
 
 @click.group()
@@ -46,7 +46,7 @@ app.add_command(connect)
 app.add_command(schema)
 app.add_command(contract)
 app.add_command(config)
-app.add_command(sync)
+app.add_command(usages)
 app.add_command(tool)
 app.add_command(init)
 app.add_command(pipeline)
@@ -77,7 +77,7 @@ def test_example():
 | `schema`    | `goga/commands/schema/`   | Project JSON schema                  |
 | `contract`  | `goga/commands/contract/` | Compare contract with implementation |
 | `config`    | `goga/commands/config/`   | Output configuration values          |
-| `sync`      | `goga/commands/sync/`     | Synchronize .usages/                 |
+| `usages`    | `goga/commands/usages/`   | Synchronize cell-level usages        |
 | `tool`      | `goga/commands/tool/`     | Run tool commands                    |
 | `init`      | `goga/commands/init/`     | Initialize goga project              |
 | `pipeline`  | `goga/commands/pipeline/` | Run a goga pipeline (or list them)   |

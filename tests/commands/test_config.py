@@ -264,6 +264,8 @@ class TestUsagesRendering:
         assert "git:" in result.output
         assert "ref: main" in result.output
         assert "!!python/object:" not in result.output
+        # None-valued fields are dropped: ``another`` has no ref → no ``ref: null``
+        assert "ref: null" not in result.output
 
     def test_config_usages_whole_section_renders_full_yaml(self, usages_config) -> None:
         result = _run_with_config(usages_config, ["usages"])
@@ -274,3 +276,5 @@ class TestUsagesRendering:
         assert "git:" in result.output
         assert "ref: main" in result.output
         assert "!!python/object:" not in result.output
+        # None-valued fields are dropped: ``another`` has no ref → no ``ref: null``
+        assert "ref: null" not in result.output

@@ -166,3 +166,36 @@ class TestSyncLogic:
 
         assert result == 1
         clone_mock.assert_called_once_with("https://x/click.git", "main")
+
+    def test_sync_deploy_failure_sets_exit_code_one_and_cleans_repo(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Clone succeeds but deploy fails → exit 1; cloned repo is cleaned up.
+
+        Exercises the path where ``repo`` is assigned (clone returned a real
+        path) and ``deploy_usages`` subsequently raises, so the ``finally``
+        block runs cleanup of a non-None repo.
+        """
+        _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        cloned_repo = tmp_path / "cloned"
+        cloned_repo.mkdir()
+
+        with (
+            mock.patch(
+                "goga.usages.sync.clone_repository",
+                return_value=cloned_repo,
+            ) as clone_mock,
+            mock.patch(
+                "goga.usages.sync.deploy_usages",
+                side_effect=OSError("deploy boom"),
+            ) as deploy_mock,
+        ):
+            result = sync()
+
+        assert result == 1
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        deploy_mock.assert_called_once()
+        # finally cleaned up the successfully cloned repo despite deploy failing
+        assert not cloned_repo.exists()

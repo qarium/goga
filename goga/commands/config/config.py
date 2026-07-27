@@ -86,7 +86,10 @@ def _output_value(value: object) -> None:
     elif isinstance(value, (bool, str, int)):
         click.echo(str(value))
     elif isinstance(value, dict) or is_dataclass(value):
-        data = asdict(value) if is_dataclass(value) else value
+        # Dataclass instances (top-level or nested) are converted to clean
+        # mappings by ``_DataclassDumper``, which also drops ``None`` fields.
+        # Plain dicts are filtered here so top-level ``None`` entries are dropped.
+        data = value
         if isinstance(data, dict):
             data = {k: v for k, v in data.items() if v is not None}
         yaml_str = yaml.dump(

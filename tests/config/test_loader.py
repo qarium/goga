@@ -2135,6 +2135,16 @@ class TestParseUsagesLogic:
         result = _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": None}}})
         assert result["libs"]["click"].ref is None
 
+    def test_parse_usages_non_string_group_key_raises_value_error(self):
+        """Non-string group name (int key) → ValueError."""
+        with pytest.raises(ValueError, match=r"'usages' must have string group names"):
+            _parse_usages({123: {"click": {"git": "https://x/click.git"}}})
+
+    def test_parse_usages_non_string_dep_key_raises_value_error(self):
+        """Non-string dep name (int key) → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs must have string dep names"):
+            _parse_usages({"libs": {123: {"git": "https://x/click.git"}}})
+
 
 # --- Integration tests: load_project_config with usages ---
 
@@ -2359,6 +2369,48 @@ usages:
 """,
         )
         with pytest.raises(ValueError, match=r"usages\.libs\.click\.ref must be a string"):
+            load_project_config()
+
+    def test_load_usages_non_string_group_key_raises_value_error(self, goga_project):
+        """Non-string group name (numeric key) → ValueError at load time."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  123:
+    click:
+      git: https://x/click.git
+""",
+        )
+        with pytest.raises(ValueError, match=r"'usages' must have string group names"):
+            load_project_config()
+
+    def test_load_usages_non_string_dep_key_raises_value_error(self, goga_project):
+        """Non-string dep name (numeric key) → ValueError at load time."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    123:
+      git: https://x/click.git
+""",
+        )
+        with pytest.raises(ValueError, match=r"usages\.libs must have string dep names"):
             load_project_config()
 
     def test_load_usages_alongside_tools(self, goga_project):

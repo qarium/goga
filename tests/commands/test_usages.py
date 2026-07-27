@@ -81,6 +81,16 @@ class TestLogic:
         assert result.exit_code != 0
         assert "bad yaml" in result.output
 
+    def test_cli_usages_sync_keyerror_converts_to_clickexception(self) -> None:
+        with mock.patch(_logic, side_effect=KeyError("language is required")):
+            runner = CliRunner()
+            result = runner.invoke(usages_cli, ["sync"])
+
+        assert result.exit_code != 0
+        assert "language is required" in result.output
+        # click.ClickException produces a clean message, not a raw traceback.
+        assert "Traceback" not in result.output
+
     def test_cli_usages_help_lists_sync(self) -> None:
         runner = CliRunner()
         result = runner.invoke(usages_cli, ["--help"])

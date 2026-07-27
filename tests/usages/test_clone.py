@@ -1,6 +1,7 @@
 # tests/usages/test_clone.py — contract and logic tests for clone_repository
 
 import inspect
+import subprocess
 from pathlib import Path
 from unittest import mock
 
@@ -85,7 +86,7 @@ class TestCloneRepositoryLogic:
         assert run_mock.call_args_list[0].kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
 
     def test_clone_repository_propagates_git_missing(self, tmp_path):
-        """FileNotFoundError (git binary missing) propagates; temp dir is not removed."""
+        """FileNotFoundError (git binary missing) propagates; temp dir is removed."""
         clone_target = tmp_path / "clone"
         clone_target.mkdir()
 
@@ -102,5 +103,27 @@ class TestCloneRepositoryLogic:
         ):
             clone_repository("https://x/r.git", "main")
 
-        # caller owns cleanup — temp dir still present after the failure
-        assert clone_target.exists()
+        # the temp dir this routine created is cleaned up on failure (no leak)
+        assert not clone_target.exists()
+
+    def test_clone_repository_propagates_called_process_error(self, tmp_path):
+        """CalledProcessError (git exits non-zero) propagates; temp dir is removed."""
+        clone_target = tmp_path / "clone"
+        clone_target.mkdir()
+
+        with (
+            mock.patch(
+                "goga.usages.clone.subprocess.run",
+                side_effect=subprocess.CalledProcessError(
+                    128, ["git", "clone", "https://x/r.git", str(clone_target)]
+                ),
+            ),
+            mock.patch(
+                "goga.usages.clone.tempfile.mkdtemp",
+                return_value=str(clone_target),
+            ),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            clone_repository("https://x/r.git", "main")
+
+        assert not clone_target.exists()

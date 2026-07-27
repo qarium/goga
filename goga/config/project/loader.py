@@ -140,6 +140,35 @@ def _parse_tools(data: dict) -> dict[str, str] | None:
     return dict(tools_data)
 
 
+def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
+    """Parse a single ``<dep>`` mapping into a ``DepConfig`` (structural validation).
+
+    Args:
+        group: The owning group name (for error messages).
+        dep: The dep name (for error messages).
+        dep_data: The already-parsed ``<dep>`` mapping.
+
+    Returns:
+        The validated ``DepConfig``.
+
+    Raises:
+        KeyError: When ``git`` is missing or YAML-null.
+        ValueError: When ``git`` is not a non-empty string, or ``ref`` is present
+            but not a string.
+    """
+    git = dep_data.get("git")
+    if git is None:
+        raise KeyError(f"usages.{group}.{dep}.git is required in .goga/config.yml")
+    if not isinstance(git, str) or not git.strip():
+        raise ValueError(
+            f"usages.{group}.{dep}.git must be a non-empty string in .goga/config.yml"
+        )
+    ref = dep_data.get("ref")
+    if ref is not None and not isinstance(ref, str):
+        raise ValueError(f"usages.{group}.{dep}.ref must be a string in .goga/config.yml")
+    return DepConfig(git=git.strip(), ref=ref)
+
+
 def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
     """Parse the optional usages section into a dict[group][dep] -> DepConfig.
 
@@ -148,11 +177,11 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
 
     Returns None when the section is absent or YAML-null. Returns an empty dict
     when the section is present but empty. Raises ValueError when the section,
-    or any group/dep value, is present but not a mapping, or when a dep's
-    `git`/`ref` has an invalid type. Raises KeyError when a dep's `git` is
-    missing (or YAML-null). Dynamic <group>/<dep> names are preserved as dict
-    keys — NOT dataclass fields — so dot-notation `usages.<group>.<dep>` works
-    downstream.
+    or any group/dep value, is present but not a mapping, when a group/dep key
+    is not a string, or when a dep's `git`/`ref` has an invalid type. Raises
+    KeyError when a dep's `git` is missing (or YAML-null). Dynamic
+    <group>/<dep> names are preserved as dict keys — NOT dataclass fields — so
+    dot-notation `usages.<group>.<dep>` works downstream.
     """
     if raw is None:
         return None
@@ -161,23 +190,19 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
 
     usages: dict[str, dict[str, DepConfig]] = {}
     for group, group_data in raw.items():
+        if not isinstance(group, str):
+            raise ValueError("'usages' must have string group names in .goga/config.yml")
         if not isinstance(group_data, dict):
             raise ValueError(f"usages.{group} must be a mapping in .goga/config.yml")
         deps: dict[str, DepConfig] = {}
         for dep, dep_data in group_data.items():
+            if not isinstance(dep, str):
+                raise ValueError(
+                    f"usages.{group} must have string dep names in .goga/config.yml"
+                )
             if not isinstance(dep_data, dict):
                 raise ValueError(f"usages.{group}.{dep} must be a mapping in .goga/config.yml")
-            git = dep_data.get("git")
-            if git is None:
-                raise KeyError(f"usages.{group}.{dep}.git is required in .goga/config.yml")
-            if not isinstance(git, str) or not git.strip():
-                raise ValueError(
-                    f"usages.{group}.{dep}.git must be a non-empty string in .goga/config.yml"
-                )
-            ref = dep_data.get("ref", None)
-            if ref is not None and not isinstance(ref, str):
-                raise ValueError(f"usages.{group}.{dep}.ref must be a string in .goga/config.yml")
-            deps[dep] = DepConfig(git=git.strip(), ref=ref)
+            deps[dep] = _parse_depcfg(group, dep, dep_data)
         usages[group] = deps
     return usages
 
