@@ -1,29 +1,26 @@
 # Functional Domains — goga facade
 
-The `goga` package is the root facade of the project. It re-exports the public surface (`AST`, `app`) and decomposes the system into eight top-level functional domain cells. Each domain owns an independent responsibility zone with a stable API boundary.
+The `goga` package is the root facade of the project. It re-exports the public surface (`AST`, `app`) and decomposes the system into top-level functional domain cells. Each domain owns an independent responsibility zone with a stable API boundary.
 
 This document is an orientation map for consumers of the `goga` facade — it lists the top-level domains, their cell paths, and a one-line responsibility statement per domain. It does not impose any obligation on the domain cells; for behavioral contracts, consult the CODEMANIFEST of each cell.
 
 ## Domain packages
 
-All eight domain packages are importable from the facade in a single line:
-
-```python
-from goga import ast, build, connect, contract, init, pipeline, runtime, schema
-```
-
-Each domain is also available directly from its subcell:
+Each domain is imported directly from its subpackage:
 
 ```python
 from goga.ast import AST
 from goga.build import build
 from goga.connect import connect
 from goga.contract import contract
-from goga.init import init
+from goga.init import InitLogic, Questionnaire
 from goga.pipeline import run_pipeline
 from goga.runtime import resolve_runtime_dir
 from goga.schema import schema
+from goga.usages import sync
 ```
+
+Note: `goga.ast` is the only domain re-exported at the facade level (`from goga import AST`). All other domains must be imported via their full subpackage path.
 
 ## Domain list
 
@@ -37,6 +34,7 @@ from goga.schema import schema
 | `pipeline` | `goga/pipeline/`    | End-to-end pipeline workflow — discovery, entity model, run coordination, in-container CLI  |
 | `runtime`  | `goga/runtime/`     | Pure leaf utilities for runtime-directory path composition (`~/.goga/runtime/...`)          |
 | `schema`   | `goga/schema/`      | Generate the CODEMANIFEST project JSON schema                                              |
+| `usages`   | `goga/usages/`      | Config-driven synchronization of cell-level usages from declared git dependencies           |
 
 ## Per-domain brief
 
@@ -64,6 +62,5 @@ Pure leaf utilities module for runtime-directory path composition. Owns the sing
 ### schema
 This manifest defines how the `schema` routine generates the CODEMANIFEST project JSON schema.
 
-## See also
-
-- `goga/commands/.usages/cli-commands.md` — the 12 CLI commands registered on the `app` click group.
+### usages
+Config-driven synchronization of cell-level usages from declared git dependencies into `.goga/usages/<group>/<dep>/`. Replaces the legacy ad-hoc `goga/sync` domain.
