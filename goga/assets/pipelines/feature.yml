@@ -97,5 +97,7 @@ description: "Feature development"
 - name: accept-result
   title: "Contracts & coverage audit"
   communication: true
+  prompt: |
+    Commit changes after fixes
   skills:
     - goga-accept

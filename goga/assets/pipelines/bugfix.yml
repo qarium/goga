@@ -16,5 +16,7 @@ description: "Bug fixing"
 - name: accept-result
   title: "Requirements & coverage audit"
   communication: true
+  prompt: |
+    Commit changes after fixes
   skills:
     - goga-accept
