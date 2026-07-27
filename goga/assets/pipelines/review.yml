@@ -91,6 +91,7 @@ description: Review changes
     - [ ] Annotations and inline usages does not declare changes and not reference previous functionality
     - [ ] Annotations use backticks for linking and not use "X from Imports" phrasing
     - [ ] Numbering Format: all nested sections, clauses, and sub-clauses use exclusively multilevel numerical numbering (e.g., 1.1, 1.2.1) rather than alphanumeric indexes (e.g., 1a, 1b)
+    - [ ] Annotations do not contain references to other cells
     - [ ] Footer Description briefly describes the responsibility zone
 
     ### Usages
