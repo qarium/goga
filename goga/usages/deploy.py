@@ -24,6 +24,13 @@ def deploy_usages(source_repo: Path, target_dir: Path) -> int:
     The target is NOT deleted beforehand (``sync`` owns the incremental skip and
     ``clean_usages_dir`` owns destructive removal).
 
+    Symlinks inside a ``.usages`` directory are copied verbatim
+    (``symlinks=True``): the source is a freshly cloned third-party repository,
+    and dereferencing its symlinks (``copytree``'s default) would copy the
+    *contents* of arbitrary local files/dirs the links point at into the synced
+    output — a local-file-disclosure / aggregation vector from untrusted remote
+    content. Copying the links themselves never reads those targets.
+
     Args:
         source_repo: Path to the cloned repository root.
         target_dir: Destination directory (created if missing).
@@ -51,13 +58,13 @@ def deploy_usages(source_repo: Path, target_dir: Path) -> int:
     count = 0
     if len(found) == 1:
         _, usages_dir = found[0]
-        shutil.copytree(usages_dir, target_dir, dirs_exist_ok=True)  # flatten to dep root
+        shutil.copytree(usages_dir, target_dir, dirs_exist_ok=True, symlinks=True)  # flatten to dep root
         count = 1
     else:
         for rel, usages_dir in found:
             dest = target_dir if rel == "" else target_dir / Path(rel)
             dest.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(usages_dir, dest, dirs_exist_ok=True)  # preserve hierarchy
+            shutil.copytree(usages_dir, dest, dirs_exist_ok=True, symlinks=True)  # preserve hierarchy
             count += 1
 
     # 4. return the number of deployed .usages folders.

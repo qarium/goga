@@ -118,3 +118,32 @@ class TestDeployUsagesLogic:
         assert result == 0
         assert target.exists()
         assert list(target.iterdir()) == []
+
+    def test_deploy_usages_copies_symlinks_verbatim_not_dereferenced(self, tmp_path):
+        """Symlinks inside .usages are copied as links, never dereferenced.
+
+        The cloned repo is untrusted third-party content; dereferencing a
+        symlink (e.g. one pointing at ``~/.ssh/id_rsa``) would copy the
+        *contents* of the link target into the synced output (local-file
+        disclosure). The link is preserved verbatim instead.
+        """
+        source_repo = tmp_path / "clone"
+        source_repo.mkdir()
+        (source_repo / ".usages").mkdir()
+        # Sensitive file OUTSIDE the deployed .usages tree.
+        secret = tmp_path / "secret.txt"
+        secret.write_text("TOPSECRET")
+        # Symlink inside .usages pointing at the out-of-tree file.
+        (source_repo / ".usages" / "leak").symlink_to(secret)
+
+        target = tmp_path / "target"
+
+        count = deploy_usages(source_repo, target)
+
+        assert count == 1
+        leaked = target / "leak"
+        # Copied verbatim as a symlink (not dereferenced into a regular file)...
+        assert leaked.is_symlink()
+        # ...still pointing at the original, out-of-tree target, whose contents
+        # were therefore never duplicated into the sync output.
+        assert leaked.readlink() == secret
