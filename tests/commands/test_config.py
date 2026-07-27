@@ -239,3 +239,38 @@ class TestEdgeCases:
         result = _run_with_config(full_config, ["language", "language"])
         assert result.exit_code == 0
         assert result.output == "# language\npython\n\n# language\npython\n"
+
+
+class TestUsagesRendering:
+    """Dataclass-aware YAML rendering for the usages section (Task 14).
+
+    Verifies that ``DepConfig`` instances nested inside dicts (group-level and
+    whole-section paths) render as clean YAML mappings instead of the default
+    ``!!python/object:`` tag / ``RepresenterError``.
+    """
+
+    def test_config_usages_dot_notation_renders_depcfg(self, usages_config) -> None:
+        result = _run_with_config(usages_config, ["usages.libs.click"])
+        assert result.exit_code == 0
+        assert "git: https://example.com/click.git" in result.output
+        assert "ref: main" in result.output
+        assert "!!python/object:" not in result.output
+
+    def test_config_usages_group_renders_full_yaml(self, usages_config) -> None:
+        result = _run_with_config(usages_config, ["usages.libs"])
+        assert result.exit_code == 0
+        assert "click:" in result.output
+        assert "another:" in result.output
+        assert "git:" in result.output
+        assert "ref: main" in result.output
+        assert "!!python/object:" not in result.output
+
+    def test_config_usages_whole_section_renders_full_yaml(self, usages_config) -> None:
+        result = _run_with_config(usages_config, ["usages"])
+        assert result.exit_code == 0
+        assert "libs:" in result.output
+        assert "click:" in result.output
+        assert "another:" in result.output
+        assert "git:" in result.output
+        assert "ref: main" in result.output
+        assert "!!python/object:" not in result.output

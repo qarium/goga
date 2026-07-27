@@ -11,6 +11,35 @@ _ALIAS_MAP: dict[str, str] = {"language": "lang"}
 _NOT_FOUND = object()
 
 
+class _DataclassDumper(yaml.Dumper):
+    """Scoped YAML dumper that renders dataclass instances as clean mappings.
+
+    Extends the `beautiful_yaml` practice with a dataclass-aware representer so
+    that dataclass instances nested inside dicts (e.g. a usages group or the
+    whole usages section, where values are ``DepConfig``) render as YAML
+    mappings instead of the default ``!!python/object:`` tag / a
+    ``RepresenterError``. The conversion is scoped to this subclass: nothing is
+    registered on the global ``yaml.Dumper``, so other ``yaml.dump`` calls are
+    unaffected.
+    """
+
+    def represent_data(self, data: object) -> object:
+        """Serialize ``data``, converting dataclass instances to mappings.
+
+        ``None``-valued fields are dropped to match the top-level dict filtering
+        in :func:`_output_value` and keep the rendered YAML free of noise.
+
+        Args:
+            data: The value being serialized.
+
+        Returns:
+            The YAML node representing ``data``.
+        """
+        if is_dataclass(data) and not isinstance(data, type):
+            data = {k: v for k, v in asdict(data).items() if v is not None}
+        return super().represent_data(data)
+
+
 def _resolve_option(config: object, option: str) -> object:
     """Traverse config by dot-notation path and return the resolved value.
 
@@ -62,6 +91,7 @@ def _output_value(value: object) -> None:
             data = {k: v for k, v in data.items() if v is not None}
         yaml_str = yaml.dump(
             data,
+            Dumper=_DataclassDumper,
             sort_keys=False,
             default_flow_style=False,
             allow_unicode=True,

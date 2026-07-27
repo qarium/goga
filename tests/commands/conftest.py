@@ -46,3 +46,27 @@ def full_config(tmp_path: Path) -> Path:
         "    API_KEY: sk-xxx\n"
     )
     return tmp_path
+
+
+@pytest.fixture
+def usages_config(tmp_path: Path) -> Path:
+    """Config with a usages section for dataclass-aware rendering tests.
+
+    Contains two deps under one group: ``click`` (git + ref) and ``another``
+    (git only, ref defaults to None) to exercise nested ``DepConfig`` rendering
+    on the leaf / group / whole-section levels.
+    """
+    goga_dir = tmp_path / ".goga"
+    goga_dir.mkdir()
+    config_file = goga_dir / "config.yml"
+    config_file.write_text(
+        "language: python\n"
+        "usages:\n"
+        "  libs:\n"
+        "    click:\n"
+        "      git: https://example.com/click.git\n"
+        "      ref: main\n"
+        "    another:\n"
+        "      git: https://example.com/another.git\n"
+    )
+    return tmp_path
