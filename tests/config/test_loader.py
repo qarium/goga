@@ -2145,6 +2145,33 @@ class TestParseUsagesLogic:
         with pytest.raises(ValueError, match=r"usages\.libs must have string dep names"):
             _parse_usages({"libs": {123: {"git": "https://x/click.git"}}})
 
+    @pytest.mark.parametrize("bad_group", ["..", ".", "", "a/b", "a\\b"])
+    def test_parse_usages_unsafe_group_segment_raises_value_error(self, bad_group):
+        """group key that could escape the target root (traversal/separator/empty) → ValueError."""
+        with pytest.raises(ValueError, match=r"'usages' group name must be a plain name"):
+            _parse_usages({bad_group: {"click": {"git": "https://x/click.git"}}})
+
+    @pytest.mark.parametrize("bad_dep", ["..", ".", "", "a/b", "a\\b"])
+    def test_parse_usages_unsafe_dep_segment_raises_value_error(self, bad_dep):
+        """dep key that could escape the target root (traversal/separator/empty) → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs dep name must be a plain name"):
+            _parse_usages({"libs": {bad_dep: {"git": "https://x/click.git"}}})
+
+    def test_parse_usages_dep_ref_empty_raises_value_error(self):
+        """ref: '' → ValueError at load time (not a cryptic ``git checkout ""`` failure)."""
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.ref must be a non-empty string"):
+            _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": ""}}})
+
+    def test_parse_usages_dep_ref_whitespace_only_raises_value_error(self):
+        """ref: '   ' → ValueError (stripped, then empty)."""
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.ref must be a non-empty string"):
+            _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": "   "}}})
+
+    def test_parse_usages_dep_ref_whitespace_stripped(self):
+        """ref with surrounding whitespace is stripped (mirrors git handling)."""
+        result = _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": "  main  "}}})
+        assert result["libs"]["click"].ref == "main"
+
 
 # --- Integration tests: load_project_config with usages ---
 
@@ -2304,6 +2331,27 @@ usages:
 """,
         )
         with pytest.raises(ValueError, match=r"usages\.libs\.click must be a mapping"):
+            load_project_config()
+
+    def test_load_usages_traversal_group_rejected(self, goga_project):
+        """usages group '..' (path traversal) → ValueError at load time (security)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  "..":
+    victim:
+      git: https://x/victim.git
+""",
+        )
+        with pytest.raises(ValueError, match=r"'usages' group name must be a plain name"):
             load_project_config()
 
     def test_load_usages_dep_git_missing_raises_keyerror(self, goga_project):

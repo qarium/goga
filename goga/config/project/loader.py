@@ -154,7 +154,7 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
     Raises:
         KeyError: When ``git`` is missing or YAML-null.
         ValueError: When ``git`` is not a non-empty string, or ``ref`` is present
-            but not a string.
+            but not a (non-empty) string.
     """
     git = dep_data.get("git")
     if git is None:
@@ -166,7 +166,41 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
     ref = dep_data.get("ref")
     if ref is not None and not isinstance(ref, str):
         raise ValueError(f"usages.{group}.{dep}.ref must be a string in .goga/config.yml")
+    if isinstance(ref, str):
+        # Mirror ``git``: strip whitespace and reject empty so a stray ``ref: ""``
+        # fails loudly here instead of producing a cryptic ``git checkout ""`` error.
+        ref = ref.strip()
+        if ref == "":
+            raise ValueError(
+                f"usages.{group}.{dep}.ref must be a non-empty string in .goga/config.yml"
+            )
     return DepConfig(git=git.strip(), ref=ref)
+
+
+def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
+    """Reject a ``<group>``/``<dep>`` key that is unsafe as a filesystem path segment.
+
+    Dynamic ``usages`` keys are used verbatim as path segments in ``sync``
+    (``.goga/usages/<group>/<dep>/``). A name that is empty, a traversal segment
+    (``.``/``..``), or contains a path separator (``/`` or ``\\``) could otherwise
+    direct deploys outside the target root (``shutil.copytree(..., dirs_exist_ok=True)``
+    overwrites colliding files), so such names are rejected at the config boundary.
+
+    Args:
+        name: The group or dep key string to validate.
+        group: The owning group name (for error context).
+        is_dep: True when ``name`` is a dep key, False when it is a group key.
+
+    Raises:
+        ValueError: When ``name`` is empty, a traversal segment, or contains a
+            path separator.
+    """
+    if name == "" or name in (".", "..") or "/" in name or "\\" in name:
+        kind = f"usages.{group} dep" if is_dep else "'usages' group"
+        raise ValueError(
+            f"{kind} name must be a plain name without '/' or '..' "
+            f"(got {name!r}) in .goga/config.yml"
+        )
 
 
 def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
@@ -192,6 +226,7 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
     for group, group_data in raw.items():
         if not isinstance(group, str):
             raise ValueError("'usages' must have string group names in .goga/config.yml")
+        _validate_usages_segment(group, group=group, is_dep=False)
         if not isinstance(group_data, dict):
             raise ValueError(f"usages.{group} must be a mapping in .goga/config.yml")
         deps: dict[str, DepConfig] = {}
@@ -200,6 +235,7 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
                 raise ValueError(
                     f"usages.{group} must have string dep names in .goga/config.yml"
                 )
+            _validate_usages_segment(dep, group=group, is_dep=True)
             if not isinstance(dep_data, dict):
                 raise ValueError(f"usages.{group}.{dep} must be a mapping in .goga/config.yml")
             deps[dep] = _parse_depcfg(group, dep, dep_data)
