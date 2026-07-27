@@ -15,6 +15,7 @@ from goga.config import (
     TaskExecutorConfig,
     PipelineConfig,
     CodemanifestConfig,
+    DepConfig,
     load_project_config,
 )
 ```

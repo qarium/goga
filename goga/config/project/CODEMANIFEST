@@ -72,6 +72,9 @@ Annotations: |
         - require dep.git (non-empty str) — KeyError when missing, ValueError
           when invalid
         - dep.ref optional (str or absent) → None when absent
+        - validate each <group>/<dep> key as a plain path segment: reject empty,
+          "." / "..", or any name containing "/" or "\" (ValueError) — these keys
+          become .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
         - construct a `DepConfig`(git, ref) per dep, preserving group/dep as
           dict keys
         Build usages as dict[str, dict[str, DepConfig]]; empty mapping when
@@ -102,6 +105,12 @@ Annotations: |
     - usages is optional; None when the key is absent; present-but-non-mapping
       → ValueError; each dep requires a non-empty git (KeyError when missing,
       ValueError when invalid); ref is optional and defaults to None
+    - usages <group>/<dep> keys are validated as filesystem path segments: a
+      name that is empty, a traversal segment (""/"."/".."), or contains a path
+      separator ("/" or "\") → ValueError. These keys flow verbatim into
+      .goga/usages/<group>/<dep>/ in the downstream usages-sync consumer, so
+      traversal names are rejected at the config boundary to keep deploys
+      inside the target root
     - Values are exposed as-is without default merge — consumers apply their own defaults
 
     Constraints:

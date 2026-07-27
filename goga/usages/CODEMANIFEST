@@ -105,7 +105,10 @@ Annotations: |
     - Use the `git` practice for subprocess invocation
 
     Constraints:
-    - Do not remove the temp dir here — caller removes it in finally
+    - On success, do NOT remove the temp dir here — the caller removes it in a
+      finally block (caller owns the returned path only on the success path)
+    - On failure (clone/checkout error), DO remove the temp dir here before
+      re-raising, so a failed clone never leaks a temp directory
     - Authentication via stock git; no token injection
 
 "deploy_usages(source_repo: Path, target_dir: Path) -> count: int":
@@ -133,6 +136,12 @@ Annotations: |
     - Drop the .usages segment from every destination path
     - Preserve full relative hierarchy for multi-cell repos incl. non-cell intermediates
     - Skip .git/.hg/.svn during discovery and copying; copy directories via the standard library per `convention`
+    - Copy symlinks verbatim (shutil.copytree symlinks=True) — do NOT dereference
+      them. The source is a freshly cloned third-party (untrusted) repository;
+      dereferencing its symlinks would copy the contents of arbitrary local
+      files/dirs the links point at into the synced output (local-file
+      disclosure / aggregation vector). Copying the links themselves never reads
+      those targets
 
     Constraints:
     - Do NOT keep the .usages name in destination (legacy behavior removed)
