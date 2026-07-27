@@ -6,6 +6,7 @@ from unittest import mock
 
 import click
 from click.testing import CliRunner
+from goga.cli import app
 from goga.commands.usages import usages as usages_cli
 
 # sync_logic is imported into the usages.py module as ``sync_logic``; patch it
@@ -85,3 +86,48 @@ class TestLogic:
         result = runner.invoke(usages_cli, ["--help"])
         assert result.exit_code == 0
         assert "sync" in result.output
+
+
+class TestAppIntegration:
+    """App-level integration: usages is registered on the root ``app`` and
+    delegates end-to-end through ``goga usages sync``."""
+
+    def test_app_usages_help_lists_sync(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["usages", "--help"])
+
+        assert result.exit_code == 0
+        assert "sync" in result.output
+
+    def test_app_usages_sync_help_shows_force(self) -> None:
+        runner = CliRunner()
+        result = runner.invoke(app, ["usages", "sync", "--help"])
+
+        assert result.exit_code == 0
+        assert "--force" in result.output
+
+    def test_app_usages_sync_delegates_to_sync_logic(self) -> None:
+        with mock.patch(_logic, return_value=0) as mock_logic:
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "sync"])
+
+        mock_logic.assert_called_once_with(False)
+        assert result.exit_code == 0
+
+    def test_app_usages_sync_force_delegates_true(self) -> None:
+        with mock.patch(_logic, return_value=0) as mock_logic:
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "sync", "--force"])
+
+        mock_logic.assert_called_once_with(True)
+        assert result.exit_code == 0
+
+    def test_app_usages_sync_config_error_converts_to_clickexception(self) -> None:
+        with mock.patch(_logic, side_effect=FileNotFoundError("no config")):
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "sync"])
+
+        assert result.exit_code != 0
+        assert "no config" in result.output
+        # click.ClickException produces a clean message, not a raw traceback.
+        assert "Traceback" not in result.output
