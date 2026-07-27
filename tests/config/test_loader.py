@@ -13,7 +13,13 @@ from goga.config import (
     TaskExecutorConfig,
     load_project_config,
 )
-from goga.config.project.loader import _parse_codemanifest, _parse_dockerfile, _parse_tools
+from goga.config.project.config import DepConfig
+from goga.config.project.loader import (
+    _parse_codemanifest,
+    _parse_dockerfile,
+    _parse_tools,
+    _parse_usages,
+)
 
 # --- Helpers ---
 
@@ -2025,3 +2031,370 @@ tools:
         assert config.tools == {"afm": "1.0.x"}
         assert config.codemanifest is not None
         assert config.codemanifest.annotations == "notes"
+
+
+# --- Contract tests for _parse_usages ---
+
+
+class TestParseUsagesContract:
+    def test_parse_usages_exists(self):
+        """_parse_usages is importable from goga.config.project.loader."""
+        assert callable(_parse_usages)
+
+    def test_parse_usages_signature(self):
+        """_parse_usages accepts a single `raw` parameter (the parsed usages node)."""
+        sig = inspect.signature(_parse_usages)
+        params = list(sig.parameters.keys())
+        assert params == ["raw"]
+
+    def test_parse_usages_return_annotation(self):
+        """_parse_usages returns dict[str, dict[str, DepConfig]] | None."""
+        ret = inspect.signature(_parse_usages).return_annotation
+        assert ret == dict[str, dict[str, DepConfig]] | None
+
+
+# --- Logic tests for _parse_usages (direct) ---
+
+
+class TestParseUsagesLogic:
+    def test_parse_usages_none_returns_none(self):
+        """Absent (None passed in) → None."""
+        assert _parse_usages(None) is None
+
+    def test_parse_usages_empty_mapping_returns_empty_dict(self):
+        """Present-but-empty → empty dict."""
+        assert _parse_usages({}) == {}
+
+    def test_parse_usages_builds_depcfg_dict_preserving_order(self):
+        """group→dep→DepConfig structure built; ref absent → None; order preserved."""
+        result = _parse_usages(
+            {
+                "libs": {
+                    "click": {"git": "https://x/click.git", "ref": "main"},
+                    "another": {"git": "https://x/another.git"},
+                }
+            }
+        )
+        assert isinstance(result, dict)
+        assert list(result.keys()) == ["libs"]
+        assert list(result["libs"].keys()) == ["click", "another"]
+        assert isinstance(result["libs"]["click"], DepConfig)
+        assert result["libs"]["click"].git == "https://x/click.git"
+        assert result["libs"]["click"].ref == "main"
+        assert result["libs"]["another"].git == "https://x/another.git"
+        assert result["libs"]["another"].ref is None
+
+    def test_parse_usages_strips_git_whitespace(self):
+        """git is stripped before constructing DepConfig."""
+        result = _parse_usages({"libs": {"click": {"git": "  https://x/click.git  "}}})
+        assert result["libs"]["click"].git == "https://x/click.git"
+
+    def test_parse_usages_non_mapping_raises_value_error(self):
+        """raw scalar (int) → ValueError."""
+        with pytest.raises(ValueError, match=r"'usages' must be a mapping"):
+            _parse_usages(5)
+
+    def test_parse_usages_non_mapping_list_raises_value_error(self):
+        """raw list → ValueError."""
+        with pytest.raises(ValueError, match=r"'usages' must be a mapping"):
+            _parse_usages(["a", "b"])
+
+    def test_parse_usages_group_non_mapping_raises_value_error(self):
+        """group value not a mapping → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs must be a mapping"):
+            _parse_usages({"libs": 5})
+
+    def test_parse_usages_dep_non_mapping_raises_value_error(self):
+        """dep value not a mapping → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs\.click must be a mapping"):
+            _parse_usages({"libs": {"click": 5}})
+
+    def test_parse_usages_dep_git_missing_raises_keyerror(self):
+        """dep without git → KeyError."""
+        with pytest.raises(KeyError, match=r"usages\.libs\.click\.git is required"):
+            _parse_usages({"libs": {"click": {"ref": "main"}}})
+
+    def test_parse_usages_dep_git_null_raises_keyerror(self):
+        """dep with git: null → KeyError (treated as missing)."""
+        with pytest.raises(KeyError, match=r"usages\.libs\.click\.git is required"):
+            _parse_usages({"libs": {"click": {"git": None}}})
+
+    @pytest.mark.parametrize("bad_git", ["", "   ", 5, True, 1.0, []])
+    def test_parse_usages_dep_git_invalid_raises_valueerror(self, bad_git):
+        """git empty / non-string → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.git must be a non-empty string"):
+            _parse_usages({"libs": {"click": {"git": bad_git}}})
+
+    def test_parse_usages_dep_ref_non_str_raises_value_error(self):
+        """ref present but non-string → ValueError."""
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.ref must be a string"):
+            _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": 5}}})
+
+    def test_parse_usages_dep_ref_null_treated_as_none(self):
+        """ref: null → None (clone default branch)."""
+        result = _parse_usages({"libs": {"click": {"git": "https://x/click.git", "ref": None}}})
+        assert result["libs"]["click"].ref is None
+
+
+# --- Integration tests: load_project_config with usages ---
+
+
+class TestLoadConfigUsages:
+    def test_load_usages_absent_returns_none(self, goga_project):
+        """Config without a usages section → config.usages is None."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_project_config()
+        assert config.usages is None
+
+    def test_load_usages_yaml_null_returns_none(self, goga_project):
+        """usages: (YAML-null) → config.usages is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+""",
+        )
+        config = load_project_config()
+        assert config.usages is None
+
+    def test_load_usages_present_but_empty_returns_empty_dict(self, goga_project):
+        """usages: {} → config.usages == {} (present-but-empty, distinct from None)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages: {}
+""",
+        )
+        config = load_project_config()
+        assert config.usages == {}
+
+    def test_load_usages_present_builds_depcfg_dict(self, goga_project):
+        """usages.libs.click (git+ref) and usages.libs.another (git only) → DepConfig dict."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      ref: main
+    another:
+      git: https://x/another.git
+""",
+        )
+        config = load_project_config()
+        assert config.usages is not None
+        assert list(config.usages.keys()) == ["libs"]
+        assert list(config.usages["libs"].keys()) == ["click", "another"]
+        assert isinstance(config.usages["libs"]["click"], DepConfig)
+        assert config.usages["libs"]["click"].git == "https://x/click.git"
+        assert config.usages["libs"]["click"].ref == "main"
+        assert config.usages["libs"]["another"].git == "https://x/another.git"
+        assert config.usages["libs"]["another"].ref is None
+
+    def test_load_usages_multiple_groups_preserve_structure(self, goga_project):
+        """Multiple groups → dict structure preserved with insertion order."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+  tools:
+    afm:
+      git: https://x/afm.git
+      ref: v1.0.0
+""",
+        )
+        config = load_project_config()
+        assert list(config.usages.keys()) == ["libs", "tools"]
+        assert config.usages["tools"]["afm"].ref == "v1.0.0"
+
+    def test_load_usages_non_mapping_raises_value_error(self, goga_project):
+        """usages: 5 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"'usages' must be a mapping"):
+            load_project_config()
+
+    def test_load_usages_group_non_mapping_raises_value_error(self, goga_project):
+        """usages.libs: 5 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"usages\.libs must be a mapping"):
+            load_project_config()
+
+    def test_load_usages_dep_non_mapping_raises_value_error(self, goga_project):
+        """usages.libs.click: 5 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"usages\.libs\.click must be a mapping"):
+            load_project_config()
+
+    def test_load_usages_dep_git_missing_raises_keyerror(self, goga_project):
+        """dep without git → KeyError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      ref: main
+""",
+        )
+        with pytest.raises(KeyError, match=r"usages\.libs\.click\.git is required"):
+            load_project_config()
+
+    @pytest.mark.parametrize("yaml_value", ['""', "5"])
+    def test_load_usages_dep_git_invalid_raises_valueerror(self, goga_project, yaml_value):
+        """git: "" and git: 5 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: {yaml_value}
+""",
+        )
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.git must be a non-empty string"):
+            load_project_config()
+
+    def test_load_usages_dep_ref_non_str_raises_value_error(self, goga_project):
+        """git valid, ref: 5 → ValueError."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      ref: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"usages\.libs\.click\.ref must be a string"):
+            load_project_config()
+
+    def test_load_usages_alongside_tools(self, goga_project):
+        """usages + tools both present — both parsed independently."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+tools:
+  afm: 1.0.x
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+""",
+        )
+        config = load_project_config()
+        assert config.tools == {"afm": "1.0.x"}
+        assert config.usages is not None
+        assert config.usages["libs"]["click"].git == "https://x/click.git"
+
+    def test_load_usages_backward_compatible_without_usages(self, goga_project):
+        """Existing config without usages → cfg.usages is None, other fields unchanged."""
+        _write_goga_yml(goga_project, HAPPY_YAML)
+        config = load_project_config()
+        assert config.usages is None
+        assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
+        assert config.pipeline.agent == "claude"
+        assert config.build.task_executor.agent == "claude"
+        assert config.build.task_executor.env == {"KEY": "value"}
+        assert config.build.worktree is True
+        assert config.commands == {"foo": "bar"}

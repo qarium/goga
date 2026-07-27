@@ -5,6 +5,7 @@ import yaml
 from .config import (
     BuildConfig,
     CodemanifestConfig,
+    DepConfig,
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
@@ -139,6 +140,48 @@ def _parse_tools(data: dict) -> dict[str, str] | None:
     return dict(tools_data)
 
 
+def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
+    """Parse the optional usages section into a dict[group][dep] -> DepConfig.
+
+    Mirrors the structural style of `_parse_tools`. The raw value is the already
+    parsed `usages` node from the config document (a mapping, or None).
+
+    Returns None when the section is absent or YAML-null. Returns an empty dict
+    when the section is present but empty. Raises ValueError when the section,
+    or any group/dep value, is present but not a mapping, or when a dep's
+    `git`/`ref` has an invalid type. Raises KeyError when a dep's `git` is
+    missing (or YAML-null). Dynamic <group>/<dep> names are preserved as dict
+    keys — NOT dataclass fields — so dot-notation `usages.<group>.<dep>` works
+    downstream.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("'usages' must be a mapping in .goga/config.yml")
+
+    usages: dict[str, dict[str, DepConfig]] = {}
+    for group, group_data in raw.items():
+        if not isinstance(group_data, dict):
+            raise ValueError(f"usages.{group} must be a mapping in .goga/config.yml")
+        deps: dict[str, DepConfig] = {}
+        for dep, dep_data in group_data.items():
+            if not isinstance(dep_data, dict):
+                raise ValueError(f"usages.{group}.{dep} must be a mapping in .goga/config.yml")
+            git = dep_data.get("git")
+            if git is None:
+                raise KeyError(f"usages.{group}.{dep}.git is required in .goga/config.yml")
+            if not isinstance(git, str) or not git.strip():
+                raise ValueError(
+                    f"usages.{group}.{dep}.git must be a non-empty string in .goga/config.yml"
+                )
+            ref = dep_data.get("ref", None)
+            if ref is not None and not isinstance(ref, str):
+                raise ValueError(f"usages.{group}.{dep}.ref must be a string in .goga/config.yml")
+            deps[dep] = DepConfig(git=git.strip(), ref=ref)
+        usages[group] = deps
+    return usages
+
+
 def _optional_mapping(data: dict, key: str) -> dict | None:
     """Extract an optional mapping section.
 
@@ -238,6 +281,7 @@ def load_project_config() -> ProjectConfig:
     commands = dict(commands)
 
     tools = _parse_tools(data)
+    usages = _parse_usages(data.get("usages"))
 
     return ProjectConfig(
         lang=lang,
@@ -248,4 +292,5 @@ def load_project_config() -> ProjectConfig:
         commands=commands,
         codemanifest=_parse_codemanifest(data),
         tools=tools,
+        usages=usages,
     )
