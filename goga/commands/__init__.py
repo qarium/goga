@@ -7,9 +7,9 @@ from .install import install
 from .lint import lint
 from .pipeline import pipeline
 from .schema import schema
-from .sync import sync
 from .tool import tool
 from .upgrade import upgrade
+from .usages import usages
 
 __all__ = [
     "build",
@@ -21,7 +21,7 @@ __all__ = [
     "lint",
     "pipeline",
     "schema",
-    "sync",
     "tool",
     "upgrade",
+    "usages",
 ]

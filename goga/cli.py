@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from .commands import build, config, connect, contract, init, install, lint, pipeline, schema, sync, tool, upgrade
+from .commands import build, config, connect, contract, init, install, lint, pipeline, schema, tool, upgrade, usages
 
 
 @click.group()
@@ -19,6 +19,6 @@ app.add_command(lint)
 app.add_command(schema)
 app.add_command(contract)
 app.add_command(pipeline)
-app.add_command(sync)
+app.add_command(usages)
 app.add_command(tool)
 app.add_command(upgrade)
