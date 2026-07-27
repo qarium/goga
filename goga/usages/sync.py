@@ -55,14 +55,17 @@ def sync(force: bool = False) -> int:
             try:
                 repo = clone_repository(depcfg.git, depcfg.ref)
                 deploy_usages(repo, target)
-            except Exception as exc:
+            except Exception:
+                # Log without the raw exception: a clone failure raises
+                # ``subprocess.CalledProcessError`` whose ``str()`` embeds the
+                # full git URL, which may contain embedded credentials (e.g.
+                # ``https://<token>@host/...``). Its ``stderr`` would be safe,
+                # but the exception text/traceback is not, so we omit it.
                 logger.error(
-                    "usages sync failed for %s/%s: %s",
+                    "usages sync failed for %s/%s",
                     group,
                     dep,
-                    exc,
                     extra={"group": group, "dep": dep},
-                    exc_info=True,
                 )
                 exit_code = 1
                 continue
