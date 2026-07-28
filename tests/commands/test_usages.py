@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from unittest import mock
 
 import click
@@ -9,9 +10,13 @@ from click.testing import CliRunner
 from goga.cli import app
 from goga.commands.usages import usages as usages_cli
 
-# sync_logic is imported into the usages.py module as ``sync_logic``; patch it
-# there so delegation tests do not touch the real domain orchestrator.
-_logic = "goga.commands.usages.usages.sync_logic"
+# The facade goga.commands.usages re-exports the click Group ``usages``, shadowing
+# the ``usages`` submodule in the package __dict__. On Python 3.10
+# ``mock.patch("goga.commands.usages.usages.sync_logic")`` resolves the dotted path
+# through sequential ``getattr``, finds the Group where it expects the submodule,
+# and raises ``AttributeError``. Holding a direct module reference makes
+# ``mock.patch.object`` work uniformly across Python versions.
+_usages_mod = importlib.import_module("goga.commands.usages.usages")
 
 
 class TestContract:
@@ -40,7 +45,7 @@ class TestLogic:
     """Logic-level tests for usages sync delegation."""
 
     def test_cli_usages_sync_delegates_and_propagates_exit(self) -> None:
-        with mock.patch(_logic, return_value=1) as mock_logic:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=1) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
@@ -48,7 +53,7 @@ class TestLogic:
         assert result.exit_code == 1
 
     def test_cli_usages_sync_long_force_flag_passes_true(self) -> None:
-        with mock.patch(_logic, return_value=0) as mock_logic:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync", "--force"])
 
@@ -56,7 +61,7 @@ class TestLogic:
         assert result.exit_code == 0
 
     def test_cli_usages_sync_short_force_flag_passes_true(self) -> None:
-        with mock.patch(_logic, return_value=0) as mock_logic:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync", "-f"])
 
@@ -64,7 +69,7 @@ class TestLogic:
         assert result.exit_code == 0
 
     def test_cli_usages_sync_config_error_converts_to_clickexception(self) -> None:
-        with mock.patch(_logic, side_effect=ValueError("boom")):
+        with mock.patch.object(_usages_mod, "sync_logic", side_effect=ValueError("boom")):
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
@@ -74,7 +79,7 @@ class TestLogic:
     def test_cli_usages_sync_yaml_error_converts_to_clickexception(self) -> None:
         import yaml as yaml_mod
 
-        with mock.patch(_logic, side_effect=yaml_mod.YAMLError("bad yaml")):
+        with mock.patch.object(_usages_mod, "sync_logic", side_effect=yaml_mod.YAMLError("bad yaml")):
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
@@ -82,7 +87,7 @@ class TestLogic:
         assert "bad yaml" in result.output
 
     def test_cli_usages_sync_keyerror_converts_to_clickexception(self) -> None:
-        with mock.patch(_logic, side_effect=KeyError("language is required")):
+        with mock.patch.object(_usages_mod, "sync_logic", side_effect=KeyError("language is required")):
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
@@ -117,7 +122,7 @@ class TestAppIntegration:
         assert "--force" in result.output
 
     def test_app_usages_sync_delegates_to_sync_logic(self) -> None:
-        with mock.patch(_logic, return_value=0) as mock_logic:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync"])
 
@@ -125,7 +130,7 @@ class TestAppIntegration:
         assert result.exit_code == 0
 
     def test_app_usages_sync_force_delegates_true(self) -> None:
-        with mock.patch(_logic, return_value=0) as mock_logic:
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync", "--force"])
 
@@ -133,7 +138,7 @@ class TestAppIntegration:
         assert result.exit_code == 0
 
     def test_app_usages_sync_config_error_converts_to_clickexception(self) -> None:
-        with mock.patch(_logic, side_effect=FileNotFoundError("no config")):
+        with mock.patch.object(_usages_mod, "sync_logic", side_effect=FileNotFoundError("no config")):
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync"])
 

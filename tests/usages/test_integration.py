@@ -1,10 +1,20 @@
 # tests/usages/test_integration.py — cross-entity integration tests for sync orchestration
 
+import importlib
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from goga.usages.sync import sync
+
+# Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
+# re-exports the ``sync`` function, which shadows the submodule attribute in the
+# package ``__dict__``. On Python 3.10
+# ``mock.patch("goga.usages.sync.clone_repository")`` resolves the dotted path
+# through sequential ``getattr``, finds the function where it expects the
+# submodule, and raises ``AttributeError``. Holding a direct reference to the
+# module makes ``mock.patch.object`` work uniformly across Python versions.
+_sync_mod = importlib.import_module("goga.usages.sync")
 
 _GOOD_AND_BAD_DEPS = (
     "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
@@ -79,8 +89,8 @@ class TestSyncIntegration:
 
         # second incremental sync: target now exists → clone/deploy not invoked
         with (
-            mock.patch("goga.usages.sync.clone_repository") as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
         ):
             result2 = sync()
 
@@ -99,9 +109,9 @@ class TestSyncIntegration:
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch("goga.usages.sync.clone_repository") as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
-            mock.patch("goga.usages.sync.clean_usages_dir") as clean_mock,
+            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
         ):
             result = sync()
 

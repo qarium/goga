@@ -1,5 +1,6 @@
 # tests/usages/test_sync.py — contract and logic tests for the sync orchestrator
 
+import importlib
 import inspect
 from pathlib import Path
 from unittest import mock
@@ -7,6 +8,15 @@ from unittest import mock
 import pytest
 from goga.usages import sync as facade_sync
 from goga.usages.sync import sync
+
+# Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
+# re-exports the ``sync`` function, which shadows the submodule attribute in the
+# package ``__dict__``. On Python 3.10
+# ``mock.patch("goga.usages.sync.clone_repository")`` resolves the dotted path
+# through sequential ``getattr``, finds the function where it expects the
+# submodule, and raises ``AttributeError``. Holding a direct reference to the
+# module makes ``mock.patch.object`` work uniformly across Python versions.
+_sync_mod = importlib.import_module("goga.usages.sync")
 
 # --- helpers ---
 
@@ -80,9 +90,9 @@ class TestSyncLogic:
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch("goga.usages.sync.clean_usages_dir") as clean_mock,
-            mock.patch("goga.usages.sync.clone_repository") as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "clean_usages_dir") as clean_mock,
+            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
         ):
             result = sync()
 
@@ -99,8 +109,8 @@ class TestSyncLogic:
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch("goga.usages.sync.clone_repository") as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
         ):
             result = sync()
 
@@ -125,11 +135,12 @@ class TestSyncLogic:
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone_repository",
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
                 return_value=fake_repo,
             ) as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
         ):
             result = sync(force=True)
 
@@ -152,8 +163,9 @@ class TestSyncLogic:
         _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)
 
-        with mock.patch(
-            "goga.usages.sync.clone_repository",
+        with mock.patch.object(
+            _sync_mod,
+            "clone_repository",
             side_effect=Exception("boom"),
         ) as clone_mock:
             result = sync()
@@ -177,12 +189,14 @@ class TestSyncLogic:
         cloned_repo.mkdir()
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone_repository",
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
                 return_value=cloned_repo,
             ) as clone_mock,
-            mock.patch(
-                "goga.usages.sync.deploy_usages",
+            mock.patch.object(
+                _sync_mod,
+                "deploy_usages",
                 side_effect=OSError("deploy boom"),
             ) as deploy_mock,
         ):
@@ -214,11 +228,12 @@ class TestSyncLogic:
         monkeypatch.chdir(tmp_path)
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone_repository",
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
                 return_value=fake_repo,
             ) as clone_mock,
-            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
         ):
             result = sync(force=True)
 
