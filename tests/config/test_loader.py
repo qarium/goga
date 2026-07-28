@@ -16,9 +16,11 @@ from goga.config import (
 from goga.config.project.config import DepConfig
 from goga.config.project.loader import (
     _parse_codemanifest,
+    _parse_depcfg,
     _parse_dockerfile,
     _parse_tools,
     _parse_usages,
+    _validate_usages_root,
 )
 
 # --- Helpers ---
@@ -2560,3 +2562,192 @@ class TestDepConfigRootLogic:
         dep = DepConfig(git="u", ref="m", root="docs")
         with pytest.raises(dataclasses.FrozenInstanceError):
             dep.root = None
+
+
+# --- Contract tests for _validate_usages_root ---
+
+
+class TestValidateUsagesRootContract:
+    def test_validate_usages_root_exists(self):
+        """_validate_usages_root is importable from goga.config.project.loader."""
+        assert callable(_validate_usages_root)
+
+    def test_validate_usages_root_signature(self):
+        """_validate_usages_root accepts a single `root` str parameter."""
+        sig = inspect.signature(_validate_usages_root)
+        params = list(sig.parameters.keys())
+        assert params == ["root"]
+
+    def test_validate_usages_root_return_annotation(self):
+        """_validate_usages_root returns None."""
+        ret = inspect.signature(_validate_usages_root).return_annotation
+        assert ret is None
+
+
+# --- Logic tests for _validate_usages_root ---
+
+
+class TestValidateUsagesRootLogic:
+    @pytest.mark.parametrize("root", ["docs/sub", "folder"])
+    def test_validate_usages_root_valid_does_not_raise(self, root):
+        """A valid relative (possibly multi-segment) root passes structural validation."""
+        _validate_usages_root(root)  # no exception raised
+
+    @pytest.mark.parametrize("root", ["..", "../x", "a/../b", "x/.."])
+    def test_validate_usages_root_traversal_raises(self, root):
+        """A root with a '..' segment (path escape) raises ValueError."""
+        with pytest.raises(ValueError, match=r"\.\."):
+            _validate_usages_root(root)
+
+    @pytest.mark.parametrize("root", ["/etc", "/abs/path", "//host/share", "//host"])
+    def test_validate_usages_root_absolute_raises(self, root):
+        """An absolute root (leading '/' or UNC '//host/share') raises ValueError."""
+        with pytest.raises(ValueError, match=r"relative path|absolute"):
+            _validate_usages_root(root)
+
+
+# --- Logic tests for _parse_depcfg root branch ---
+
+
+class TestParseDepcfgRoot:
+    """Direct _parse_depcfg exercise of the `root` field parsing/normalization.
+
+    These isolate the critical divergence from `ref`: an empty/separator-only
+    `root` normalizes to None (NOT a ValueError), whereas an empty `ref` raises.
+    """
+
+    def _depcfg(self, dep_data):
+        return _parse_depcfg("libs", "click", dep_data)
+
+    def test_parse_depcfg_root_absent_is_none(self):
+        """No root key → .root is None."""
+        dep = self._depcfg({"git": "https://x/click.git"})
+        assert dep.root is None
+
+    def test_parse_depcfg_root_valid_multi_segment(self):
+        """A valid multi-segment root is stored in canonical form."""
+        dep = self._depcfg({"git": "https://x/click.git", "root": "docs/sub"})
+        assert dep.root == "docs/sub"
+
+    @pytest.mark.parametrize("root", ["", "   ", "/", "  /  "])
+    def test_parse_depcfg_root_empty_or_separator_normalized_to_none(self, root):
+        """Empty/whitespace/separator-only root → None (NOT an error; diverges from ref)."""
+        dep = self._depcfg({"git": "https://x/click.git", "root": root})
+        assert dep.root is None
+
+    def test_parse_depcfg_root_trailing_separator_normalized(self):
+        """A trailing separator is insignificant — 'folder/' → 'folder'."""
+        dep = self._depcfg({"git": "https://x/click.git", "root": "folder/"})
+        assert dep.root == "folder"
+
+    def test_parse_depcfg_root_non_string_raises(self):
+        """root: 123 (non-string) → ValueError."""
+        with pytest.raises(ValueError, match=r"root must be a string"):
+            self._depcfg({"git": "https://x/click.git", "root": 123})
+
+    @pytest.mark.parametrize("root", ["..", "../x", "a/../b", "x/.."])
+    def test_parse_depcfg_root_traversal_raises(self, root):
+        """A traversal root raises ValueError (path escape)."""
+        with pytest.raises(ValueError, match=r"\.\."):
+            self._depcfg({"git": "https://x/click.git", "root": root})
+
+    @pytest.mark.parametrize("root", ["/etc", "//host/share"])
+    def test_parse_depcfg_root_absolute_raises(self, root):
+        """An absolute root raises ValueError."""
+        with pytest.raises(ValueError, match=r"relative path|absolute"):
+            self._depcfg({"git": "https://x/click.git", "root": root})
+
+    def test_parse_depcfg_root_empty_does_not_raise_unlike_ref(self):
+        """root: '' → None, while ref: '' → ValueError (the deliberate divergence)."""
+        assert self._depcfg({"git": "https://x/click.git", "root": ""}).root is None
+        with pytest.raises(ValueError, match=r"ref must be a non-empty string"):
+            self._depcfg({"git": "https://x/click.git", "ref": ""})
+
+
+# --- Integration tests: _parse_usages / load_project_config with root ---
+
+
+class TestLoadUsagesRoot:
+    def test_parse_usages_root_carried_into_depcfg(self):
+        """A usages dep declaring root builds a DepConfig carrying .root (direct parse)."""
+        result = _parse_usages({"libs": {"click": {"git": "https://x/c.git", "root": "docs/sub"}}})
+        assert result["libs"]["click"].root == "docs/sub"
+
+    def test_parse_usages_root_absent_defaults_none(self):
+        """A usages dep without root → .root is None (direct parse)."""
+        result = _parse_usages({"libs": {"click": {"git": "https://x/c.git"}}})
+        assert result["libs"]["click"].root is None
+
+    def test_parse_usages_root_empty_normalized_to_none(self):
+        """A usages dep with root: '' → .root is None (direct parse; not an error)."""
+        result = _parse_usages({"libs": {"click": {"git": "https://x/c.git", "root": ""}}})
+        assert result["libs"]["click"].root is None
+
+    def test_load_usages_with_root_end_to_end(self, goga_project):
+        """A usages dep declaring root: docs is parsed end-to-end into DepConfig.root."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      root: docs
+""",
+        )
+        config = load_project_config()
+        assert config.usages is not None
+        assert config.usages["libs"]["click"].root == "docs"
+
+    def test_load_usages_root_empty_normalized_to_none(self, goga_project):
+        """root: '' (empty) normalizes to None at the config boundary (not an error)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      root: ''
+""",
+        )
+        config = load_project_config()
+        assert config.usages is not None
+        assert config.usages["libs"]["click"].root is None
+
+    def test_load_usages_root_multi_segment_end_to_end(self, goga_project):
+        """A multi-segment root: docs/sub is parsed verbatim end-to-end."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      root: docs/sub
+""",
+        )
+        config = load_project_config()
+        assert config.usages is not None
+        assert config.usages["libs"]["click"].root == "docs/sub"

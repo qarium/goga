@@ -1,4 +1,4 @@
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import yaml
 
@@ -140,6 +140,74 @@ def _parse_tools(data: dict) -> dict[str, str] | None:
     return dict(tools_data)
 
 
+def _validate_usages_root(root: str) -> None:
+    """Reject a ``root`` value that is unsafe as a walk-origin subpath of the clone.
+
+    Structural path-safety only — this NEVER ``stat``/``exists``/``resolve`` the path
+    against the filesystem (the cloned repository is owned by the usages-sync deploy
+    consumer). A leading ``/`` or a UNC root (``//host/share``) is rejected as absolute
+    (an escape vector out of the clone root); a ``..`` segment is rejected as traversal.
+    On POSIX, a Windows drive-letter form (``C:/x``) normalizes to a relative path and
+    is NOT rejected — it is not an escape vector (design Remark 2).
+
+    Distinct from ``_validate_usages_segment`` (single-segment ``<group>``/``<dep>``
+    keys that reject any ``/``): ``root`` is a multi-segment subpath where ``/`` is the
+    segment separator, so the segment helper MUST NOT be reused here.
+
+    Args:
+        root: The already-stripped, backslash-normalized root string to validate — the
+            slash-containing original. A leading ``/`` is caught here BEFORE the caller
+            reconstructs the canonical form, which would silently drop it (design Remark 1).
+
+    Raises:
+        ValueError: When ``root`` is absolute (leading ``/`` or a UNC anchor) or
+            contains a ``..`` segment.
+    """
+    path = PurePath(root)
+    if path.is_absolute() or path.anchor != "":
+        raise ValueError("usages root must be a relative path (no absolute paths) in .goga/config.yml")
+    if ".." in path.parts:
+        raise ValueError("usages root must not contain '..' segments (path escape) in .goga/config.yml")
+
+
+def _parse_depcfg_root(group: str, dep: str, root) -> str | None:
+    """Normalize and structurally validate the optional usages dep ``root`` field.
+
+    Deliberate divergence from ``ref``: an empty/separator/whitespace-only ``root``
+    normalizes to None (≡ "no root" — walk from the clone root), NOT a ValueError,
+    whereas an empty ``ref`` raises. Backslashes are normalized to forward slashes so a
+    Windows-style ``root`` (``docs\\sub``) is treated as ``docs/sub``.
+
+    Validation runs on the slash-containing original BEFORE the canonical form is
+    reconstructed, so a leading ``/`` is caught as absolute rather than silently coerced
+    to a relative path (design Remark 1). The filesystem is never touched here — only
+    structural path safety is enforced at the config boundary; resolving a non-None
+    ``root`` against the cloned repository is the deploy consumer's responsibility.
+
+    Args:
+        group: The owning group name (for error messages).
+        dep: The dep name (for error messages).
+        root: The raw ``root`` value from the dep mapping (a ``str``, or None when absent).
+
+    Returns:
+        None when ``root`` is absent or empty/separator/whitespace-only; otherwise the
+        canonical forward-slash form with empty/trailing segments dropped.
+
+    Raises:
+        ValueError: When ``root`` is present but not a string, or is absolute / contains
+            a ``..`` segment.
+    """
+    if root is None:
+        return None
+    if not isinstance(root, str):
+        raise ValueError(f"usages.{group}.{dep}.root must be a string in .goga/config.yml")
+    stripped = root.strip().replace("\\", "/")
+    if stripped.strip("/") == "":
+        return None
+    _validate_usages_root(stripped)
+    return "/".join(segment for segment in stripped.split("/") if segment)
+
+
 def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
     """Parse a single ``<dep>`` mapping into a ``DepConfig`` (structural validation).
 
@@ -153,8 +221,10 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
 
     Raises:
         KeyError: When ``git`` is missing or YAML-null.
-        ValueError: When ``git`` is not a non-empty string, or ``ref`` is present
-            but not a (non-empty) string.
+        ValueError: When ``git`` is not a non-empty string; when ``ref`` is present
+            but not a (non-empty) string; or when ``root`` is present but not a string
+            or is structurally unsafe (absolute / contains a ``..`` segment). An empty
+            or separator/whitespace-only ``root`` is NOT an error — it normalizes to None.
     """
     git = dep_data.get("git")
     if git is None:
@@ -170,7 +240,10 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
         ref = ref.strip()
         if ref == "":
             raise ValueError(f"usages.{group}.{dep}.ref must be a non-empty string in .goga/config.yml")
-    return DepConfig(git=git.strip(), ref=ref)
+    # Note: empty/separator/whitespace-only ``root`` normalizes to None here (NOT a
+    # ValueError) — the deliberate divergence from ``ref`` above.
+    root = _parse_depcfg_root(group, dep, dep_data.get("root"))
+    return DepConfig(git=git.strip(), ref=ref, root=root)
 
 
 def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
