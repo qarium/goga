@@ -31,6 +31,10 @@ def _write_config(project_dir: Path, *, usages_block: str | None) -> None:
 
 _CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
+_DEP_BLOCK_WITH_ROOT = (
+    "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n      root: docs\n"
+)
+
 
 # --- contract tests ---
 
@@ -131,10 +135,12 @@ class TestSyncLogic:
 
         assert result == 0
         clone_mock.assert_called_once_with("https://x/click.git", "main")
-        # deploy received the clone path and the group/dep target
+        # deploy received the clone path, the group/dep target, and depcfg.root
+        # (None here — this dep declares no root → walk from clone root)
         deploy_mock.assert_called_once_with(
             fake_repo,
             Path(".goga/usages/libs/click"),
+            None,
         )
 
         # cooks preserved, stale removed (real clean_usages_dir ran)
@@ -184,6 +190,43 @@ class TestSyncLogic:
 
         assert result == 1
         clone_mock.assert_called_once_with("https://x/click.git", "main")
-        deploy_mock.assert_called_once()
+        # deploy was still called with depcfg.root threaded through (None here)
+        deploy_mock.assert_called_once_with(
+            cloned_repo,
+            Path(".goga/usages/libs/click"),
+            None,
+        )
         # finally cleaned up the successfully cloned repo despite deploy failing
         assert not cloned_repo.exists()
+
+    def test_sync_threads_root_to_deploy(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """A dep declaring ``root: docs`` threads it verbatim into deploy (3rd arg).
+
+        ``sync`` does not resolve or validate ``root`` — it passes ``depcfg.root``
+        straight through; ``deploy_usages`` owns resolution. Here the clone is
+        mocked and deploy is mocked, so we only assert the threaded value.
+        """
+        _write_config(tmp_path, usages_block=_DEP_BLOCK_WITH_ROOT)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch(
+                "goga.usages.sync.clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch("goga.usages.sync.deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True)
+
+        assert result == 0
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        # root="docs" threaded as the third positional argument, verbatim
+        deploy_mock.assert_called_once_with(
+            fake_repo,
+            Path(".goga/usages/libs/click"),
+            "docs",
+        )

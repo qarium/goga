@@ -54,7 +54,7 @@ def sync(force: bool = False) -> int:
             repo: Path | None = None
             try:
                 repo = clone_repository(depcfg.git, depcfg.ref)
-                deploy_usages(repo, target)
+                deploy_usages(repo, target, depcfg.root)
             except Exception:
                 # Log without the raw exception: a clone failure raises
                 # ``subprocess.CalledProcessError`` whose ``str()`` embeds the
