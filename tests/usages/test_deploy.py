@@ -294,3 +294,59 @@ class TestDeployUsagesNegative:
             deploy_usages(clone, target, str(outside))
 
         assert not target.exists()
+
+    def test_deploy_usages_symlink_source_escape_at_root_raises(self, tmp_path):
+        """A .usages entry that is itself a symlink out of the clone is rejected.
+
+        The origin check passes (root=None walks the clone root, which is
+        contained), but ``os.walk`` lists a symlink-to-dir named ``.usages`` in
+        dirnames (it just does not descend into it), and ``copytree(...,
+        symlinks=True)`` follows the symlink at its top src — ``symlinks=True``
+        only preserves links INSIDE the copied tree, not the src itself. A
+        ``.usages`` symlink to e.g. ``~/.ssh`` would otherwise have its contents
+        copied verbatim into the sync output (local-file disclosure). The
+        per-source containment check must reject it before the target is touched.
+        """
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        # External directory (outside the clone) with sensitive content that must
+        # never be aggregated into the deploy output.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "credentials.env").write_text("AWS_KEY=AKIAEXAMPLE")
+        # A .usages entry that is itself a symlink pointing outside the clone.
+        (clone / ".usages").symlink_to(outside)
+
+        target = tmp_path / "target"
+
+        with pytest.raises(ValueError, match=r"escapes"):
+            deploy_usages(clone, target, None)
+
+        # source verified before target.mkdir — target left untouched, and the
+        # out-of-clone contents were never copied.
+        assert not target.exists()
+
+    def test_deploy_usages_symlink_source_escape_nested_under_origin_raises(self, tmp_path):
+        """The per-source check also fires for a symlinked .usages nested under a contained origin.
+
+        root="folder" is a real contained directory, so the origin check passes.
+        A ``.usages`` symlink nested anywhere under it escapes the same way and
+        must be rejected — the disclosure vector is independent of where under
+        the origin the symlinked ``.usages`` sits.
+        """
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        (clone / "folder" / "sub").mkdir(parents=True)
+        # External directory outside the clone with sensitive content.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "credentials.env").write_text("AWS_KEY=AKIAEXAMPLE")
+        # A nested .usages that is itself a symlink pointing outside the clone.
+        (clone / "folder" / "sub" / ".usages").symlink_to(outside)
+
+        target = tmp_path / "target"
+
+        with pytest.raises(ValueError, match=r"escapes"):
+            deploy_usages(clone, target, "folder")
+
+        assert not target.exists()

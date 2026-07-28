@@ -47,7 +47,10 @@ def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) 
     ``root`` (or an absolute ``root`` from a loader-bypassing caller) that points
     outside the clone would be followed into host-local directories and its
     ``.usages`` aggregated. Any origin that resolves outside the clone is
-    rejected before the walk.
+    rejected before the walk. Every discovered ``.usages`` source is checked the
+    same way: a ``.usages`` entry that is itself a symlink to an out-of-clone
+    directory would be followed by ``copytree`` at its top ``src`` and would
+    otherwise be aggregated.
 
     Args:
         source_repo: Path to the cloned repository root.
@@ -66,9 +69,11 @@ def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) 
             not exist under ``source_repo``.
         NotADirectoryError: When the resolved origin exists but is not a
             directory (e.g. a regular file).
-        ValueError: When the resolved origin lies outside the cloned repository
-            (e.g. a symlink at ``root`` pointing out of the clone, or an
-            absolute ``root`` string) — an untrusted-clone disclosure guard.
+        ValueError: When the resolved origin, or any discovered ``.usages``
+            source, lies outside the cloned repository (e.g. a symlink at
+            ``root`` pointing out of the clone, an absolute ``root`` string, or
+            a ``.usages`` symlink to a host directory) — an untrusted-clone
+            disclosure guard.
     """
     # 1. resolve the walk origin relative to the clone, verifying it BEFORE the
     #    target is touched (a missing/file root raises instead of silently
@@ -92,6 +97,16 @@ def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) 
 
         if ".usages" in dirnames:
             usages_dir = Path(dirpath) / ".usages"
+            # os.walk(followlinks=False) does not descend into symlinked dirs,
+            # but it DOES list a symlink-to-dir named ".usages" here — and
+            # copytree follows the symlink at its top src (symlinks=True only
+            # governs links INSIDE the copied tree). Resolve each source and
+            # reject any that escape the clone, closing the same disclosure
+            # vector the origin check above defends: a ".usages" symlink to an
+            # out-of-clone host directory would otherwise have its contents
+            # copied verbatim into the sync output.
+            if not usages_dir.resolve(strict=True).is_relative_to(clone_root):
+                raise ValueError(f"usages source {usages_dir} escapes the cloned repository {source_repo}")
             rel = str(Path(dirpath).relative_to(origin))
             if rel == ".":  # normalize origin-root rel to ""
                 rel = ""
