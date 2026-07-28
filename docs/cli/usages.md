@@ -15,7 +15,7 @@ goga usages sync [--force]
 1. **Resolve** the dependency's git URL and optional ref (branch, tag, or commit) from `ProjectConfig.usages`.
 2. **Skip** the dep when its target directory already exists and `--force` was not passed (incremental mode).
 3. **Clone** the source repository into a fresh temp directory via stock `git` (no token injection).
-4. **Deploy** every `.usages/` folder found in the clone into `.goga/usages/<group>/<dep>/`, dropping the `.usages` segment from destination paths and applying the smoothing rule below.
+4. **Deploy** every `.usages/` folder found under the dep's optional `root` into `.goga/usages/<group>/<dep>/`, dropping the `.usages` segment from destination paths.
 5. **Clean up** the temp directory in a `finally` block (on success) or before re-raising (on failure, so a failed clone never leaks a temp directory).
 
 When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory except `cooks` is removed, root files are preserved, then every declared dep is re-synced from scratch.
@@ -24,12 +24,23 @@ When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory e
 
 When `.goga/config.yml` has no `usages:` section, `config.usages` is `None` and `goga usages sync` exits `0` immediately without touching git or the filesystem.
 
-### Smoothing rule
+### Root directive
 
-The deploy step normalizes the source layout into the target directory:
+Each dependency may declare an optional `root` — a subpath inside the cloned repository from which `.usages` folders are discovered and against which destination paths are computed. Absent `root` (or an empty-string `root: ""`) → deploy walks from the clone root.
 
-- **Exactly one `.usages/`** in the clone → copy its contents directly into `.goga/usages/<group>/<dep>/`.
-- **Multiple `.usages/`** (e.g. a multi-cell monorepo) → for each one whose parent relative path is `<rel>`, copy its contents into `.goga/usages/<group>/<dep>/<rel>/`, creating intermediate directories as needed. `.usages/` at the repo root maps to the target root.
+For every `.usages` folder found under `root`, its contents are copied to the path of its **parent relative to `root`**, with the `.usages` segment dropped. Intermediate non-cell directories are preserved verbatim, so placement is deterministic.
+
+With `root: folder` and target `.goga/usages/libs/click/`:
+
+- `folder/cell_1/cell_2/.usages` → `.goga/usages/libs/click/cell_1/cell_2/`
+- `folder/subfolder/cell_1/cell_2/.usages` → `.goga/usages/libs/click/subfolder/cell_1/cell_2/`
+- `folder/subfolder/cell_1/another_folder/cell_2/.usages` → `.goga/usages/libs/click/subfolder/cell_1/another_folder/cell_2/`
+
+A `.usages` folder sitting directly at `root` (empty relative path) copies into the dep's target root.
+
+`root` is structurally validated at config-load time: it must be relative (no leading `/` or UNC `//host/share`) and must not contain `..` segments. A `root` that does not resolve to an existing directory inside the clone (missing, or a file) fails the dep with an explicit error rather than producing an empty result.
+
+**Breaking change — no more smoothing.** A repository containing a single `.usages` folder is no longer flattened into the dep root automatically. It lands at its `root`-relative path — at the dep root only when it sits directly at `root`. If you relied on the previous single-`.usages` flattening, declare an explicit `root` or move the `.usages` folder to the repo root.
 
 ### Symlink handling
 
@@ -51,7 +62,7 @@ The deploy step normalizes the source layout into the target directory:
 
 ## Configuration
 
-Declare dependencies under the top-level `usages:` key in `.goga/config.yml`. The mapping is two levels deep: `<group>` → `<dep>` → `{ git, ref }`.
+Declare dependencies under the top-level `usages:` key in `.goga/config.yml`. The mapping is two levels deep: `<group>` → `<dep>` → `{ git, ref, root }`.
 
 ```yaml
 usages:
@@ -59,6 +70,7 @@ usages:
     click:
       git: https://github.com/pallets/click.git
       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
+      root: docs         # optional — subpath inside the repo to walk .usages from; omit for the clone root
     structlog:
       git: https://github.com/hynek/structlog.git
   internal:
@@ -84,6 +96,7 @@ After the next `goga usages sync`, the cloned `.usages/` content lands at:
 | `usages.<group>.<dep>` | mapping | Yes when `<group>` is present | Dependency entry. The key becomes a subdirectory under the group. |
 | `usages.<group>.<dep>.git` | string | Yes | Git URL of the source repository. Must be non-empty. |
 | `usages.<group>.<dep>.ref` | string | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. |
+| `usages.<group>.<dep>.root` | string | No | Subpath inside the clone to discover `.usages` folders from. Absent (or an empty string) → clone root. Must be relative; no `..` or absolute paths. |
 
 ### Path-segment validation
 
