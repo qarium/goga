@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+from goga.usages.status import UsageState, status
 from goga.usages.sync import sync
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
@@ -274,4 +275,118 @@ class TestSyncIntegrationRootFlow:
         # failed dep left no target behind (origin verified before target.mkdir)
         assert not (usages_root / "libs" / "click").exists()
         # both clone temp dirs cleaned (success via finally; failure via finally too)
+        assert list((tmp_path / "clones").iterdir()) == []
+
+
+# A single declared dep (click) used by the up_to_date / out_of_date scenarios.
+_CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
+
+_GOOD_AND_BAD_STATUS_DEPS = (
+    "usages:\n"
+    "  libs:\n"
+    "    good:\n"
+    "      git: https://x/good.git\n"
+    "    bad:\n"
+    "      git: https://x/bad.git\n"
+)
+
+
+class TestStatusIntegration:
+    """End-to-end status checks: real clone (mocked git) -> real deploy -> real
+    ``hash_tree`` -> compare, against an on-disk synced target.
+
+    Git is mocked (``patch_clone``); ``deploy_usages`` and ``hash_tree`` run for
+    real against the filesystem (shared ``make_repo``/``write_config``/
+    ``patch_clone`` fixtures). The on-disk target mirrors what ``sync`` produces:
+    ``deploy_usages`` drops the ``.usages`` segment, so a synced file sits at the
+    target root (not under a ``.usages/`` subdir).
+    """
+
+    def test_status_dep_up_to_date(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A synced tree matching the remote -> ``up_to_date``, exit 0."""
+        repo = make_repo("click", {".usages/click.md": "C1"})
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        target = tmp_path / ".goga" / "usages" / "libs" / "click"
+        target.mkdir(parents=True)
+        (target / "click.md").write_text("C1")  # matches the remote deployment
+
+        with patch_clone({"https://x/click.git": repo}):
+            report = status()
+
+        assert len(report.deps) == 1
+        assert report.deps[0].state is UsageState.up_to_date
+        assert report.exit_code == 0
+
+    def test_status_dep_out_of_date(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A synced tree differing from the remote -> ``out_of_date``, exit 1."""
+        repo = make_repo("click", {".usages/click.md": "C2"})
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        target = tmp_path / ".goga" / "usages" / "libs" / "click"
+        target.mkdir(parents=True)
+        (target / "click.md").write_text("C1")  # local C1 vs remote C2
+
+        with patch_clone({"https://x/click.git": repo}):
+            report = status()
+
+        assert report.deps[0].state is UsageState.out_of_date
+        assert report.exit_code == 1
+        # the differing root-level file rolls up to the root folder "" -> out_of_date
+        folders = {folder.path: folder.state for folder in report.deps[0].folders}
+        assert folders.get("") is UsageState.out_of_date
+
+    def test_status_clone_failure_yields_error_dep_best_effort(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A clone failure is best-effort: the bad dep -> ``error`` (credential-free,
+        no folders) while the good dep is still checked; exit 1; no clone temp dirs
+        leak.
+        """
+        good_repo = make_repo("good", {".usages/g.md": "good"})
+        write_config(_GOOD_AND_BAD_STATUS_DEPS)
+        monkeypatch.chdir(tmp_path)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        # both targets exist so compute_dep_status runs for both; the good dep's
+        # target matches its remote -> up_to_date.
+        good_target = usages_root / "libs" / "good"
+        good_target.mkdir(parents=True)
+        (good_target / "g.md").write_text("good")
+        (usages_root / "libs" / "bad").mkdir(parents=True)
+
+        with patch_clone({"https://x/good.git": good_repo}, failing={"https://x/bad.git"}):
+            report = status()
+
+        assert report.exit_code == 1
+        by_dep = {dep.dep: dep for dep in report.deps}
+        assert by_dep["good"].state is UsageState.up_to_date
+        assert by_dep["bad"].state is UsageState.error
+        assert by_dep["bad"].folders == []
+        assert by_dep["bad"].error == "failed to check usages status for libs/bad"
+        # credential-free: the failed git URL never leaks into the error message
+        assert "https://x/bad.git" not in by_dep["bad"].error
+        # no clone temp dirs leak: the failed clone self-cleans, the successful
+        # clone is cleaned by compute_dep_status's outer finally block
         assert list((tmp_path / "clones").iterdir()) == []

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands.usages import usages as usages_cli
 from goga.usages import DepStatus, FolderStatus, UsageState, UsageStatusReport
+from goga.usages import status as status_logic
 
 # The facade goga.commands.usages re-exports the click Group ``usages``, shadowing
 # the ``usages`` submodule in the package __dict__. On Python 3.10
@@ -367,3 +370,113 @@ class TestRenderStatusReport:
 
         # capsys is not a TTY, so click strips ANSI escape codes.
         assert "\x1b[" not in out
+
+
+class TestStatusAppIntegration:
+    """App-level integration for ``goga usages status``: real ``status_logic``
+    (config -> clone (mocked git) -> deploy -> hash_tree -> compare) driven
+    end-to-end through the click CLI, plus the help surface. Git is mocked
+    (``patch_clone``); ``deploy_usages`` and ``hash_tree`` run for real.
+    """
+
+    @staticmethod
+    def _scenario(
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+    ) -> tuple[Path, Path]:
+        """Build a two-group, two-dep project: ``libs/click`` matches its remote
+        (``up_to_date``, folder ``src``) and ``tools/cli`` drifts (``out_of_date``).
+
+        Groups are declared out of sorted order to exercise the renderer's sorting.
+        Returns the two fake-repo roots for ``patch_clone``.
+        """
+        click_repo = make_repo("click", {".usages/src/click.md": "C1"})
+        cli_repo = make_repo("cli", {".usages/cli.md": "D1"})
+        write_config(
+            "usages:\n"
+            "  tools:\n"
+            "    cli:\n"
+            "      git: https://x/cli.git\n"
+            "  libs:\n"
+            "    click:\n"
+            "      git: https://x/click.git\n",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        click_target = usages_root / "libs" / "click" / "src"
+        click_target.mkdir(parents=True)
+        (click_target / "click.md").write_text("C1")  # matches -> up_to_date
+        cli_target = usages_root / "tools" / "cli"
+        cli_target.mkdir(parents=True)
+        (cli_target / "cli.md").write_text("D2")  # differs -> out_of_date
+
+        return click_repo, cli_repo
+
+    def test_status_prints_sorted_groups_deps_no_color(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ) -> None:
+        """``goga usages status`` prints groups then deps sorted, propagates the
+        report exit code, and emits no ANSI codes (CliRunner is not a TTY)."""
+        click_repo, cli_repo = self._scenario(tmp_path, monkeypatch, make_repo, write_config)
+
+        runner = CliRunner()
+        with patch_clone({"https://x/click.git": click_repo, "https://x/cli.git": cli_repo}):
+            result = runner.invoke(app, ["usages", "status"])
+
+        assert result.exit_code == 1  # the cli dep is out_of_date
+        # groups sorted: libs before tools (declared in the opposite order)
+        assert result.output.index("libs") < result.output.index("tools")
+        # deps rendered with their display states
+        assert "click  up to date" in result.output
+        assert "cli  out of date" in result.output
+        # without --info, folders are not expanded
+        assert "    src" not in result.output
+        # CliRunner is not a TTY, so click strips ANSI escape codes
+        assert "\x1b[" not in result.output
+
+    def test_status_info_prints_folders_and_matches_exit_code(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ) -> None:
+        """``--info`` expands each dep into its folders (sorted by path); the CLI
+        exit code equals the report's derived exit code."""
+        click_repo, cli_repo = self._scenario(tmp_path, monkeypatch, make_repo, write_config)
+
+        runner = CliRunner()
+        with patch_clone({"https://x/click.git": click_repo, "https://x/cli.git": cli_repo}):
+            report = status_logic()
+            result = runner.invoke(app, ["usages", "status", "--info"])
+
+        assert result.exit_code == report.exit_code == 1
+        # --info expands the up_to_date click dep into its "src" folder
+        assert "    src up to date" in result.output
+
+    def test_app_usages_status_help_lists_options(self) -> None:
+        """``goga usages status --help`` lists all three options."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["usages", "status", "--help"])
+
+        assert result.exit_code == 0
+        assert "--info" in result.output
+        assert "--group" in result.output
+        assert "--dep" in result.output
+
+    def test_app_usages_help_lists_status(self) -> None:
+        """``goga usages --help`` lists the ``status`` subcommand."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["usages", "--help"])
+
+        assert result.exit_code == 0
+        assert "status" in result.output
