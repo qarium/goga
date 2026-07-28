@@ -46,13 +46,16 @@ Annotations: |
        5.1. target = usages_root / group / dep
        5.2. If (not force) and target.exists() → skip (incremental)
        5.3. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
-            `deploy_usages`(repo, target); finally: remove the repo temp directory
+            `deploy_usages`(repo, target, depcfg.root); finally: remove the repo temp directory
        5.4. On per-dep error → log ERROR, set exit_code = 1, continue (best-effort)
     6. Return exit_code
 
     Requirements:
     - "synchronized" marker = existence of target dir; dep git/ref changes without force do NOT re-sync
     - Clone into a temp dir removed in a finally block
+    - deploy receives the dep's optional root verbatim from `DepConfig` (None = walk from
+      repo root); `sync` does not resolve or validate root — `deploy_usages` does, against
+      the clone
 
     Constraints:
     - Never touch .goga/usages/cooks or root *.md (`clean_usages_dir` owns that)
@@ -111,41 +114,55 @@ Annotations: |
       re-raising, so a failed clone never leaks a temp directory
     - Authentication via stock git; no token injection
 
-"deploy_usages(source_repo: Path, target_dir: Path) -> count: int":
+"deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) -> count: int":
   location: deploy.py
   annotations: |
-    Deploy cell-level usages from a cloned repo into a target dir: discover .usages
-    folders, lift their contents (drop the .usages name), apply the smoothing rule.
+    Deploy cell-level usages from a cloned repo into a target dir: discover .usages folders
+    under the optional root, lift their contents (drop the .usages name), and copy each to its
+    path relative to the root. The smoothing rule is REMOVED — placement is deterministic.
 
     `source_repo`: path to the cloned repository root
     `target_dir`: destination .goga/usages/<group>/<dep>/ (created if missing)
+    `root`: optional subpath inside `source_repo` from which to walk .usages and against which
+            destination paths are computed; None (default) → walk from `source_repo` root
     `count`: number of .usages folders deployed
 
     Algorithm:
-    1. Recursively discover every directory named .usages under `source_repo`, skipping
-       .git/.hg/.svn; record each with its parent's relative path from source_repo root
-    2. Create `target_dir` if missing
-    3. Smoothing rule:
-       - Exactly one .usages → copy its contents (files + subdirs) directly into `target_dir`
-       - Multiple → for each .usages whose parent rel-path is <rel>: copy contents into
-         `target_dir`/<rel>/ (create intermediates; preserve non-cell dirs); <rel> empty
-         (.usages at repo root) → copy into `target_dir` root
-    4. Return count of deployed .usages folders
+    1. Compute the walk origin: root is None → origin = `source_repo`; otherwise →
+       origin = `source_repo` / `root`. Verify origin is an existing directory; if it is
+       missing or not a directory → raise an explicit error (walking a missing path or a file
+       yields no .usages — do not silently return 0)
+    2. Recursively discover every directory named .usages under origin, skipping
+       .git/.hg/.svn; record each with its parent's relative path from origin
+    3. Create `target_dir` if missing
+    4. For each discovered .usages whose parent rel-path from origin is <rel>: copy its
+       contents (files + subdirs) into `target_dir`/<rel>/ (create intermediates; preserve
+       non-cell directories); drop the .usages segment from every destination path; <rel>
+       empty (.usages directly in origin) → copy into `target_dir` root
+    5. Return count of deployed .usages folders
 
     Requirements:
+    - Destination path = the .usages parent path relative to the walk origin (root), with the
+      .usages segment dropped — verbatim copy, hierarchy preserved including non-cell
+      intermediates (root=folder: folder/cell_1/cell_2 → cell_1/cell_2;
+      folder/subfolder/cell_1/cell_2 → subfolder/cell_1/cell_2;
+      folder/subfolder/cell_1/another_folder/cell_2 → subfolder/cell_1/another_folder/cell_2)
+    - root default None → walk from `source_repo` root (back-compat origin)
     - Drop the .usages segment from every destination path
-    - Preserve full relative hierarchy for multi-cell repos incl. non-cell intermediates
-    - Skip .git/.hg/.svn during discovery and copying; copy directories via the standard library per `convention`
-    - Copy symlinks verbatim (shutil.copytree symlinks=True) — do NOT dereference
-      them. The source is a freshly cloned third-party (untrusted) repository;
-      dereferencing its symlinks would copy the contents of arbitrary local
-      files/dirs the links point at into the synced output (local-file
-      disclosure / aggregation vector). Copying the links themselves never reads
-      those targets
+    - Skip .git/.hg/.svn during discovery and copying; copy directories via the standard
+      library per `convention`
+    - Copy symlinks verbatim — do NOT dereference them. The source is a freshly cloned
+      third-party (untrusted) repository; dereferencing its symlinks would copy the contents
+      of arbitrary local files/dirs the links point at into the synced output (local-file
+      disclosure / aggregation vector). Copying the links themselves never reads those targets.
 
     Constraints:
+    - Do NOT apply the smoothing rule: a single .usages in the repo is no longer flattened
+      into the target root — it lands at its origin-relative path (root only if directly in
+      the walk origin)
     - Do NOT keep the .usages name in destination
     - Do NOT delete `target_dir` before deploying (sync owns skip; clean owns removal)
+    - Do NOT silently succeed when `root` resolves to a missing path or a file — raise
 
 ---
 

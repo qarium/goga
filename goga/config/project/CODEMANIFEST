@@ -19,6 +19,13 @@ Annotations: |
 
   Use the `yaml` practice for parsing .goga/config.yml via yaml.safe_load().
 
+  The cell enforces structural validation only: for the usages root directive,
+  path-safety (no "..", no absolute paths, non-string rejected) is enforced at this
+  config boundary; resolving root to an existing directory inside the clone is a
+  semantic check deferred to the usages-sync deploy consumer, consistent with this
+  cell's "structural validation only; semantic validation deferred to the owning
+  consumer" stance.
+
 ---
 
 "load_project_config() -> config: ProjectConfig":
@@ -66,19 +73,20 @@ Annotations: |
        the validation authority for the version grammar — that responsibility
        belongs to the consumer.
     10. Extract the optional usages block. When the usages key is absent → set
-        usages to None. When the key is present but the value is not a mapping
-        → raise ValueError. When the value is a mapping → for each group
-        (str key → mapping) and each dep (str key → mapping):
-        - require dep.git (non-empty str) — KeyError when missing, ValueError
-          when invalid
+        usages to None. When present but not a mapping → raise ValueError. When a mapping
+        → for each group (str key → mapping) and each dep (str key → mapping):
+        - require dep.git (non-empty str) — KeyError when missing, ValueError when invalid
         - dep.ref optional (str or absent) → None when absent
-        - validate each <group>/<dep> key as a plain path segment: reject empty,
-          "." / "..", or any name containing "/" or "\" (ValueError) — these keys
-          become .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
-        - construct a `DepConfig`(git, ref) per dep, preserving group/dep as
-          dict keys
-        Build usages as dict[str, dict[str, DepConfig]]; empty mapping when
-        present-but-empty
+        - dep.root optional (str or absent): when absent → None; when present and not a str
+          → raise ValueError; when present and empty/separator/whitespace-only → normalize
+          to None (≡ "no root", not an error); otherwise validate the root path structurally
+          — reject path-escape (".." as any segment) and absolute paths (leading "/" or a
+          UNC root "//host/share") with ValueError; a trailing separator is insignificant (normalized)
+        - validate each <group>/<dep> key as a plain path segment: reject empty, "." / "..",
+          or any name containing "/" or "\" (ValueError) — these keys become
+          .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
+        - construct a `DepConfig`(git, ref, root) per dep, preserving group/dep as dict keys
+        Build usages as dict[str, dict[str, DepConfig]]; empty mapping when present-but-empty
     11. Construct and return a `ProjectConfig` from all assembled parts, including
         dockerfile, tools, and usages
 
@@ -105,6 +113,9 @@ Annotations: |
     - usages is optional; None when the key is absent; present-but-non-mapping
       → ValueError; each dep requires a non-empty git (KeyError when missing,
       ValueError when invalid); ref is optional and defaults to None
+    - usages <dep>.root is optional; absent or empty/separator/whitespace-only → None
+      (≡ clone root); a non-string value → ValueError; a non-empty string is structurally
+      validated (no "..", no absolute path) at this boundary
     - usages <group>/<dep> keys are validated as filesystem path segments: a
       name that is empty, a traversal segment (""/"."/".."), or contains a path
       separator ("/" or "\") → ValueError. These keys flow verbatim into
@@ -125,6 +136,10 @@ Annotations: |
       is a string (structural type check)
     - Do NOT normalise YAML-null tools values — 'viewer:' (null) is a structural
       type error and raises ValueError; it is NOT silently coerced to 'latest'
+    - Do NOT resolve or stat root against the filesystem here — the cloned repository is
+      owned by the usages-sync consumer; only structural path safety is enforced at the
+      config boundary
+    - Do NOT treat empty-string root as an error — normalize it to None (clone root)
 
 "ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None)":
   location: config.py
@@ -334,7 +349,7 @@ Annotations: |
       Freeform annotations — instructions for the AI agent.
       Optional — defaults to None.
 
-"DepConfig(git: str, ref: str | None)":
+"DepConfig(git: str, ref: str | None, root: str | None = None)":
   location: config.py
   annotations: |
     Value of a single <dep> declaration inside the usages section of .goga/config.yml.
@@ -342,18 +357,33 @@ Annotations: |
 
     `git`: git repository URL (required, non-empty)
     `ref`: optional git ref — branch, tag, or commit. None means "clone the default branch".
+    `root`: optional subpath inside the cloned repository from which the usages-sync consumer
+            walks .usages folders. None means "root not declared" — walk from the cloned
+            repository root. The loader normalizes an explicit empty-string `root` to None
+            before construction, so this field never stores "".
 
     Requirements:
     - git is required and must be a non-empty string
     - ref is optional and defaults to None (explicit absence — clone default branch)
+    - root is optional and defaults to None (explicit absence — walk from clone root);
+      structural validity of a non-None root is enforced by `load_project_config`
 
     Constraints:
     - Do not default git — empty/missing git is a structural error raised at load time
+    - root is stored verbatim by the dataclass; normalization ("" → None) and path-safety
+      validation belong to `load_project_config`, not the dataclass
   properties:
     "git -> str": |
       Git repository URL. Required, non-empty.
     "ref -> str | None": |
       Optional git ref (branch, tag, or commit hash). None means "clone the default branch".
+    "root -> str | None": |
+      Optional subpath inside the cloned repository from which the usages-sync consumer begins
+      walking .usages folders. None means "root not declared" — the deploy consumer walks from
+      the cloned repository root (back-compat default). The loader normalizes an explicit
+      empty-string root input to None, so this field never holds "". Structural safety
+      (no "..", no absolute paths) is enforced by `load_project_config`; resolving a non-None
+      root to an existing directory inside the clone is the deploy consumer's responsibility.
 
 ---
 
