@@ -53,6 +53,13 @@ codemanifest:
 #   afm: 1.0.x            # → ~=1.0.0
 #   ralphex: 1.x          # → ~=1.0
 #   go: 1.0.1             # → ==1.0.1
+
+# usages: optional — git dependencies whose cell-level .usages/ are synced by `goga usages sync`
+# usages:
+#   libs:
+#     click:
+#       git: https://github.com/pallets/click.git
+#       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
 ```
 
 ## Fields reference
@@ -69,6 +76,7 @@ codemanifest:
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration |
 | `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
+| `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
 
 ### build
 
@@ -112,6 +120,19 @@ codemanifest:
 |-------|------|----------|-------------|
 | `usages` | mapping | No | Named practices available in CODEMANIFEST files. Format: `{name: path/to/file.md}`. Defaults to `{}` |
 | `annotations` | `string` | No | Free-text instructions for AI agents. Defaults to `None` |
+
+### usages
+
+Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](cli/usages.md).
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `usages.<group>` | mapping | Yes when `usages` present | Group bucket. The key becomes a top-level subdirectory of `.goga/usages/`. Validated as a path segment (no empty / `.` / `..` / `/` / `\`). |
+| `usages.<group>.<dep>` | mapping | Yes when `<group>` present | Dependency entry. The key becomes a subdirectory under the group. Same path-segment validation. |
+| `usages.<group>.<dep>.git` | `string` | Yes | Git URL of the source repository. Must be non-empty. |
+| `usages.<group>.<dep>.ref` | `string` | No | Git ref — branch, tag, or commit. `None` (omitted) clones the default branch. |
+
+When `usages` is absent, `config.usages` is `None` and `goga usages sync` exits `0` without invoking git. A present-but-non-mapping value raises `ValueError`.
 
 ## Pre-built Docker images
 

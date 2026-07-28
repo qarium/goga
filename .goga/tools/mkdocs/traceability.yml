@@ -101,6 +101,10 @@ docs/cli/install.md:
 docs/cli/upgrade.md:
   - goga/commands/upgrade
 
+docs/cli/usages.md:
+  - goga/commands/usages
+  - goga/usages
+
 docs/cli/pipeline.md:
   - goga/commands/pipeline
   - goga/pipeline

@@ -68,6 +68,7 @@ nav:
       - Schema: cli/schema.md
       - Connect: cli/connect.md
       - Upgrade: cli/upgrade.md
+      - Usages: cli/usages.md
       - Pipeline: cli/pipeline.md
       - Tool: cli/tool.md
   - Architecture:
