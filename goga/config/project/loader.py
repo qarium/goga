@@ -206,16 +206,20 @@ def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
 def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
     """Parse the optional usages section into a dict[group][dep] -> DepConfig.
 
-    Mirrors the structural style of `_parse_tools`. The raw value is the already
-    parsed `usages` node from the config document (a mapping, or None).
-
-    Returns None when the section is absent or YAML-null. Returns an empty dict
-    when the section is present but empty. Raises ValueError when the section,
-    or any group/dep value, is present but not a mapping, when a group/dep key
-    is not a string, or when a dep's `git`/`ref` has an invalid type. Raises
-    KeyError when a dep's `git` is missing (or YAML-null). Dynamic
+    Mirrors the structural style of `_parse_tools`. Raises ValueError when the
+    section, or any group/dep value, is present but not a mapping, when a
+    group/dep key is not a string, or when a dep's `git`/`ref` has an invalid
+    type. Raises KeyError when a dep's `git` is missing (or YAML-null). Dynamic
     <group>/<dep> names are preserved as dict keys — NOT dataclass fields — so
     dot-notation `usages.<group>.<dep>` works downstream.
+
+    Args:
+        raw: The already-parsed `usages` node from the config document (a
+            mapping, or None).
+
+    Returns:
+        None when the section is absent or YAML-null; an empty dict when the
+        section is present but empty; otherwise a dict[group][dep] -> DepConfig.
     """
     if raw is None:
         return None
