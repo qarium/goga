@@ -29,13 +29,7 @@ def _write_config(project_dir: Path, *, usages_block: str | None) -> None:
     (goga / "config.yml").write_text("\n".join(parts) + "\n")
 
 
-_CLICK_DEP_BLOCK = (
-    "usages:\n"
-    "  libs:\n"
-    "    click:\n"
-    "      git: https://x/click.git\n"
-    "      ref: main\n"
-)
+_CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
 
 # --- contract tests ---
@@ -93,9 +87,7 @@ class TestSyncLogic:
         clone_mock.assert_not_called()
         deploy_mock.assert_not_called()
 
-    def test_sync_incremental_skips_existing(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_incremental_skips_existing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Flow A: existing target dir → skip; clone/deploy not called."""
         _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
         # pre-create the target so incremental skips it
@@ -112,9 +104,7 @@ class TestSyncLogic:
         clone_mock.assert_not_called()
         deploy_mock.assert_not_called()
 
-    def test_sync_force_cleans_and_resyncs(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_force_cleans_and_resyncs(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Flow B: force cleans stale dirs (keeps cooks), then clone+deploy run."""
         _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
 
@@ -151,9 +141,7 @@ class TestSyncLogic:
         assert (usages_root / "cooks" / "k.md").read_text() == "cook"
         assert not (usages_root / "stale").exists()
 
-    def test_sync_per_dep_failure_sets_exit_code_one(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_per_dep_failure_sets_exit_code_one(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """Best-effort: a clone failure sets exit_code=1 without aborting."""
         _write_config(tmp_path, usages_block=_CLICK_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)

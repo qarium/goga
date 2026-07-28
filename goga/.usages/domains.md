@@ -63,4 +63,4 @@ Pure leaf utilities module for runtime-directory path composition. Owns the sing
 This manifest defines how the `schema` routine generates the CODEMANIFEST project JSON schema.
 
 ### usages
-Config-driven synchronization of cell-level usages from declared git dependencies into `.goga/usages/<group>/<dep>/`. Replaces the legacy ad-hoc `goga/sync` domain.
+Config-driven synchronization of cell-level usages from declared git dependencies into `.goga/usages/<group>/<dep>/`.

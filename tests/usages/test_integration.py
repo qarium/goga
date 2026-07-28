@@ -7,12 +7,7 @@ import pytest
 from goga.usages.sync import sync
 
 _GOOD_AND_BAD_DEPS = (
-    "usages:\n"
-    "  libs:\n"
-    "    good:\n"
-    "      git: https://x/good.git\n"
-    "    bad:\n"
-    "      git: https://x/bad.git\n"
+    "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
 )
 
 
@@ -31,11 +26,7 @@ class TestSyncIntegration:
             {".usages/click.md": "click", ".usages/sub/x.md": "x"},
         )
         write_config(
-            "usages:\n"
-            "  libs:\n"
-            "    click:\n"
-            "      git: https://x/click.git\n"
-            "      ref: main\n",
+            "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n",
         )
 
         usages_root = tmp_path / ".goga" / "usages"
@@ -72,10 +63,7 @@ class TestSyncIntegration:
         """Flow A: first sync deploys the dep; second sync is a no-op (target exists)."""
         repo = make_repo("another", {".usages/a.md": "a"})
         write_config(
-            "usages:\n"
-            "  libs:\n"
-            "    another:\n"
-            "      git: https://x/another.git\n",
+            "usages:\n  libs:\n    another:\n      git: https://x/another.git\n",
         )
         monkeypatch.chdir(tmp_path)
 

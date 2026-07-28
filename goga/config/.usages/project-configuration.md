@@ -312,8 +312,8 @@ or `None` when the section is absent (an empty section yields `{}`).
 
 ```python
 config.usages  # dict[str, dict[str, DepConfig]] | None
-config.usages["libs"]["click"].git   # str — git URL (required, non-empty)
-config.usages["libs"]["click"].ref   # str | None — optional git ref
+config.usages["libs"]["click"].git  # str — git URL (required, non-empty)
+config.usages["libs"]["click"].ref  # str | None — optional git ref
 
 # When the `usages` section is absent, config.usages is None — `goga usages sync`
 # is a no-op (exit 0).

@@ -21,7 +21,7 @@ Annotations: |
   - Understanding the general principles and rules of development and testing in the project
   Use the `click` practice to create the command group and subcommand.
   The command delegates business logic through `sync_logic`; consult the `sync-usage`
-  practice from Imports for the sync contract (modes, on-disk result, exit codes).
+  practice for the sync contract (modes, on-disk result, exit codes).
   Use the `yaml` practice to catch yaml.YAMLError when the CLI wrapper converts a
   config-load error from `sync_logic` into a clean click.ClickException.
 

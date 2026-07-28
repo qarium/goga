@@ -160,9 +160,7 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
     if git is None:
         raise KeyError(f"usages.{group}.{dep}.git is required in .goga/config.yml")
     if not isinstance(git, str) or not git.strip():
-        raise ValueError(
-            f"usages.{group}.{dep}.git must be a non-empty string in .goga/config.yml"
-        )
+        raise ValueError(f"usages.{group}.{dep}.git must be a non-empty string in .goga/config.yml")
     ref = dep_data.get("ref")
     if ref is not None and not isinstance(ref, str):
         raise ValueError(f"usages.{group}.{dep}.ref must be a string in .goga/config.yml")
@@ -171,9 +169,7 @@ def _parse_depcfg(group: str, dep: str, dep_data: dict) -> DepConfig:
         # fails loudly here instead of producing a cryptic ``git checkout ""`` error.
         ref = ref.strip()
         if ref == "":
-            raise ValueError(
-                f"usages.{group}.{dep}.ref must be a non-empty string in .goga/config.yml"
-            )
+            raise ValueError(f"usages.{group}.{dep}.ref must be a non-empty string in .goga/config.yml")
     return DepConfig(git=git.strip(), ref=ref)
 
 
@@ -197,10 +193,7 @@ def _validate_usages_segment(name: str, *, group: str, is_dep: bool) -> None:
     """
     if name == "" or name in (".", "..") or "/" in name or "\\" in name:
         kind = f"usages.{group} dep" if is_dep else "'usages' group"
-        raise ValueError(
-            f"{kind} name must be a plain name without '/' or '..' "
-            f"(got {name!r}) in .goga/config.yml"
-        )
+        raise ValueError(f"{kind} name must be a plain name without '/' or '..' (got {name!r}) in .goga/config.yml")
 
 
 def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
@@ -236,9 +229,7 @@ def _parse_usages(raw) -> dict[str, dict[str, DepConfig]] | None:
         deps: dict[str, DepConfig] = {}
         for dep, dep_data in group_data.items():
             if not isinstance(dep, str):
-                raise ValueError(
-                    f"usages.{group} must have string dep names in .goga/config.yml"
-                )
+                raise ValueError(f"usages.{group} must have string dep names in .goga/config.yml")
             _validate_usages_segment(dep, group=group, is_dep=True)
             if not isinstance(dep_data, dict):
                 raise ValueError(f"usages.{group}.{dep} must be a mapping in .goga/config.yml")

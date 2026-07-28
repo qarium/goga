@@ -31,7 +31,7 @@ Annotations: |
   location: sync.py
   annotations: |
     Config-driven synchronization of cell-level usages from declared git dependencies
-    into .goga/usages/<group>/<dep>/. Replaces the legacy ad-hoc goga sync.
+    into .goga/usages/<group>/<dep>/.
 
     `force`: True — clean .goga/usages/ (except cooks and root *.md) then re-sync all
              declared deps; False (default) — incremental, skip deps whose target dir exists.
@@ -43,11 +43,11 @@ Annotations: |
     3. usages_root = .goga/usages (relative to CWD)
     4. If `force` → `clean_usages_dir`(usages_root)
     5. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order):
-       a. target = usages_root / group / dep
-       b. If (not force) and target.exists() → skip (incremental)
-       c. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
-          `deploy_usages`(repo, target); finally: remove the repo temp directory
-       d. On per-dep error → log ERROR, set exit_code = 1, continue (best-effort)
+       5.1. target = usages_root / group / dep
+       5.2. If (not force) and target.exists() → skip (incremental)
+       5.3. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
+            `deploy_usages`(repo, target); finally: remove the repo temp directory
+       5.4. On per-dep error → log ERROR, set exit_code = 1, continue (best-effort)
     6. Return exit_code
 
     Requirements:
@@ -144,7 +144,7 @@ Annotations: |
       those targets
 
     Constraints:
-    - Do NOT keep the .usages name in destination (legacy behavior removed)
+    - Do NOT keep the .usages name in destination
     - Do NOT delete `target_dir` before deploying (sync owns skip; clean owns removal)
 
 ---
@@ -153,4 +153,4 @@ Author: Goga
 CreatedAt: 27/07/26
 Description: |
   Config-driven synchronization of cell-level usages from declared git dependencies
-  into .goga/usages/<group>/<dep>/. Replaces the legacy ad-hoc goga/sync domain.
+  into .goga/usages/<group>/<dep>/.

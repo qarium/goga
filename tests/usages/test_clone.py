@@ -114,9 +114,7 @@ class TestCloneRepositoryLogic:
         with (
             mock.patch(
                 "goga.usages.clone.subprocess.run",
-                side_effect=subprocess.CalledProcessError(
-                    128, ["git", "clone", "https://x/r.git", str(clone_target)]
-                ),
+                side_effect=subprocess.CalledProcessError(128, ["git", "clone", "https://x/r.git", str(clone_target)]),
             ),
             mock.patch(
                 "goga.usages.clone.tempfile.mkdtemp",
