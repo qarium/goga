@@ -244,3 +244,53 @@ class TestDeployUsagesNegative:
 
         with pytest.raises((FileNotFoundError, NotADirectoryError)):
             deploy_usages(clone, target, "folder")
+
+    def test_deploy_root_symlink_escape_raises(self, tmp_path):
+        """A symlink at root pointing outside the clone is rejected.
+
+        The cloned repo is untrusted third-party content. ``os.walk`` resolves
+        its top, so a symlink placed at the declared ``root`` would be followed
+        into host-local directories and their ``.usages`` aggregated into the
+        sync output — the same local-file disclosure the ``symlinks=True`` copy
+        avoids. The containment check must reject it before the target is
+        touched.
+        """
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        # External directory (outside the clone) with a .usages that must never
+        # be aggregated into the deploy output.
+        outside = tmp_path / "outside"
+        (outside / ".usages" / "leaked.md").mkdir(parents=True)
+        # A symlink at the declared root pointing outside the clone.
+        (clone / "folder").symlink_to(outside)
+
+        target = tmp_path / "target"
+
+        with pytest.raises(ValueError, match=r"escapes"):
+            deploy_usages(clone, target, "folder")
+
+        # origin verified before target.mkdir — target left untouched, and the
+        # out-of-clone .usages was never copied.
+        assert not target.exists()
+
+    def test_deploy_root_absolute_string_escape_raises(self, tmp_path):
+        """An absolute root string escapes via Path truediv and is rejected.
+
+        ``Path('/clone') / '/x'`` collapses to ``Path('/x')`` (the left operand
+        is discarded). The loader rejects absolute roots, but a loader-bypassing
+        caller must still be defended — the containment check rejects any origin
+        resolving outside the clone.
+        """
+        clone = tmp_path / "clone"
+        clone.mkdir()
+        # An existing directory outside the clone; its absolute path collapses
+        # the truediv and would otherwise be walked.
+        outside = tmp_path / "outside"
+        outside.mkdir()
+
+        target = tmp_path / "target"
+
+        with pytest.raises(ValueError, match=r"escapes"):
+            deploy_usages(clone, target, str(outside))
+
+        assert not target.exists()

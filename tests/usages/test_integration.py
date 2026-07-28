@@ -43,7 +43,8 @@ class TestSyncIntegration:
             result = sync(force=True)
 
         assert result == 0
-        # real deploy_usages flattened the single .usages into the target
+        # the .usages sits at the repo-root walk origin, so it copies into the
+        # target root (empty <rel>); no smoothing — nested .usages preserve hierarchy
         assert (usages_root / "libs" / "click" / "click.md").read_text() == "click"
         assert (usages_root / "libs" / "click" / "sub" / "x.md").read_text() == "x"
         assert not (usages_root / "libs" / "click" / ".usages").exists()

@@ -2657,6 +2657,25 @@ class TestParseDepcfgRoot:
         with pytest.raises(ValueError, match=r"relative path|absolute"):
             self._depcfg({"git": "https://x/click.git", "root": root})
 
+    @pytest.mark.parametrize(
+        ("raw", "expected"),
+        [("docs\\sub", "docs/sub"), ("folder\\deep\\path", "folder/deep/path")],
+    )
+    def test_parse_depcfg_root_backslash_normalized_to_forward_slash(self, raw, expected):
+        """A Windows-style backslash root is normalized to forward slashes (canonical form)."""
+        dep = self._depcfg({"git": "https://x/click.git", "root": raw})
+        assert dep.root == expected
+
+    @pytest.mark.parametrize("root", ["..\\x", "a\\..\\b", "x\\.."])
+    def test_parse_depcfg_root_backslash_traversal_raises(self, root):
+        """A backslash traversal root (``..\\\\x``) raises — only caught via the backslash normalization.
+
+        Without the ``replace('\\\\', '/')`` step this would slip past the ``..``
+        segment check, so the normalization is load-bearing for safety.
+        """
+        with pytest.raises(ValueError, match=r"\.\."):
+            self._depcfg({"git": "https://x/click.git", "root": root})
+
     def test_parse_depcfg_root_empty_does_not_raise_unlike_ref(self):
         """root: '' → None, while ref: '' → ValueError (the deliberate divergence)."""
         assert self._depcfg({"git": "https://x/click.git", "root": ""}).root is None
@@ -2751,3 +2770,37 @@ usages:
         config = load_project_config()
         assert config.usages is not None
         assert config.usages["libs"]["click"].root == "docs/sub"
+
+    @pytest.mark.parametrize(
+        ("root_yaml", "match"),
+        [
+            ("..", r"\.\."),
+            ("/etc", r"relative path|absolute"),
+            ("5", r"root must be a string"),
+        ],
+    )
+    def test_load_usages_invalid_root_raises_value_error(self, goga_project, root_yaml, match):
+        """An invalid root (traversal / absolute / non-string) fails end-to-end at load time.
+
+        Mirrors the existing ``ref`` error-path pattern (e.g. non-string ``ref``
+        raises through ``load_project_config``), which ``root`` previously lacked.
+        """
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+usages:
+  libs:
+    click:
+      git: https://x/click.git
+      root: {root_yaml}
+""",
+        )
+        with pytest.raises(ValueError, match=match):
+            load_project_config()

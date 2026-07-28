@@ -42,6 +42,13 @@ def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) 
     output — a local-file-disclosure / aggregation vector from untrusted remote
     content. Copying the links themselves never reads those targets.
 
+    The same disclosure class is defended at the *origin* boundary too:
+    ``os.walk`` always resolves its top, so a symlink placed at the declared
+    ``root`` (or an absolute ``root`` from a loader-bypassing caller) that points
+    outside the clone would be followed into host-local directories and its
+    ``.usages`` aggregated. Any origin that resolves outside the clone is
+    rejected before the walk.
+
     Args:
         source_repo: Path to the cloned repository root.
         target_dir: Destination directory (created if missing).
@@ -59,15 +66,24 @@ def deploy_usages(source_repo: Path, target_dir: Path, root: str | None = None) 
             not exist under ``source_repo``.
         NotADirectoryError: When the resolved origin exists but is not a
             directory (e.g. a regular file).
+        ValueError: When the resolved origin lies outside the cloned repository
+            (e.g. a symlink at ``root`` pointing out of the clone, or an
+            absolute ``root`` string) — an untrusted-clone disclosure guard.
     """
     # 1. resolve the walk origin relative to the clone, verifying it BEFORE the
     #    target is touched (a missing/file root raises instead of silently
-    #    deploying nothing).
-    origin = source_repo if root is None else source_repo / root
+    #    deploying nothing). The origin is then checked for clone containment:
+    #    os.walk resolves its top, so a symlink/absolute root that escapes the
+    #    untrusted clone would walk host-local dirs. Resolve the clone root once
+    #    and reject any origin that does not stay inside it.
+    clone_root = source_repo.resolve(strict=True)
+    origin = clone_root if root is None else clone_root / root
     if not origin.exists():
         raise FileNotFoundError(f"usages root {root!r} not found in {source_repo}")
     if not origin.is_dir():
         raise NotADirectoryError(f"usages root {root!r} in {source_repo} is not a directory")
+    if not origin.resolve(strict=True).is_relative_to(clone_root):
+        raise ValueError(f"usages root {root!r} escapes the cloned repository {source_repo}")
 
     # 2. discover every .usages directory, skipping VCS dirs.
     found: list[tuple[str, Path]] = []
