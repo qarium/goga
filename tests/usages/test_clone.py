@@ -6,14 +6,14 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from goga.usages.clone import clone_repository
+from goga.usages.sync.clone import clone_repository
 
 # --- Contract tests ---
 
 
 class TestCloneRepositoryContract:
     def test_importable_from_goga_usages_clone(self):
-        """clone_repository is importable from goga.usages.clone."""
+        """clone_repository is importable from goga.usages.sync.clone."""
         assert callable(clone_repository)
 
     def test_signature(self):
@@ -38,9 +38,9 @@ class TestCloneRepositoryLogic:
         clone_target = tmp_path / "clone"
 
         with (
-            mock.patch("goga.usages.clone.subprocess.run") as run_mock,
+            mock.patch("goga.usages.sync.clone.subprocess.run") as run_mock,
             mock.patch(
-                "goga.usages.clone.tempfile.mkdtemp",
+                "goga.usages.sync.clone.tempfile.mkdtemp",
                 return_value=str(clone_target),
             ) as mkdtemp_mock,
         ):
@@ -72,9 +72,9 @@ class TestCloneRepositoryLogic:
         clone_target = tmp_path / "clone"
 
         with (
-            mock.patch("goga.usages.clone.subprocess.run") as run_mock,
+            mock.patch("goga.usages.sync.clone.subprocess.run") as run_mock,
             mock.patch(
-                "goga.usages.clone.tempfile.mkdtemp",
+                "goga.usages.sync.clone.tempfile.mkdtemp",
                 return_value=str(clone_target),
             ),
         ):
@@ -92,11 +92,11 @@ class TestCloneRepositoryLogic:
 
         with (
             mock.patch(
-                "goga.usages.clone.subprocess.run",
+                "goga.usages.sync.clone.subprocess.run",
                 side_effect=FileNotFoundError,
             ),
             mock.patch(
-                "goga.usages.clone.tempfile.mkdtemp",
+                "goga.usages.sync.clone.tempfile.mkdtemp",
                 return_value=str(clone_target),
             ),
             pytest.raises(FileNotFoundError),
@@ -113,11 +113,11 @@ class TestCloneRepositoryLogic:
 
         with (
             mock.patch(
-                "goga.usages.clone.subprocess.run",
+                "goga.usages.sync.clone.subprocess.run",
                 side_effect=subprocess.CalledProcessError(128, ["git", "clone", "https://x/r.git", str(clone_target)]),
             ),
             mock.patch(
-                "goga.usages.clone.tempfile.mkdtemp",
+                "goga.usages.sync.clone.tempfile.mkdtemp",
                 return_value=str(clone_target),
             ),
             pytest.raises(subprocess.CalledProcessError),

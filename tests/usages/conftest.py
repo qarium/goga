@@ -66,7 +66,7 @@ def write_config(tmp_path: Path):
 def patch_clone(tmp_path: Path):
     """Factory: context manager mocking ``clone_repository``'s git subprocess.
 
-    Only the git boundary (``goga.usages.clone.subprocess.run`` and
+    Only the git boundary (``goga.usages.sync.clone.subprocess.run`` and
     ``tempfile.mkdtemp``) is mocked — ``clean_usages_dir`` and ``deploy_usages``
     run for real against the filesystem. ``sources`` maps each declared git URL
     to a local fake-repo path that is copied into the clone temp dir; URLs in
@@ -99,11 +99,11 @@ def patch_clone(tmp_path: Path):
 
         with (
             mock.patch(
-                "goga.usages.clone.subprocess.run",
+                "goga.usages.sync.clone.subprocess.run",
                 side_effect=run_side_effect,
             ),
             mock.patch(
-                "goga.usages.clone.tempfile.mkdtemp",
+                "goga.usages.sync.clone.tempfile.mkdtemp",
                 side_effect=mkdtemp_side_effect,
             ),
         ):

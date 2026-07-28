@@ -4,14 +4,14 @@ import inspect
 from pathlib import Path
 
 import pytest
-from goga.usages.deploy import deploy_usages
+from goga.usages.sync.deploy import deploy_usages
 
 # --- Contract tests ---
 
 
 class TestDeployUsagesContract:
     def test_importable_from_goga_usages_deploy(self):
-        """deploy_usages is importable from goga.usages.deploy."""
+        """deploy_usages is importable from goga.usages.sync.deploy."""
         assert callable(deploy_usages)
 
     def test_deploy_signature_has_root_param(self):

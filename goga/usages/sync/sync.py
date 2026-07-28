@@ -4,7 +4,7 @@ import logging
 import shutil
 from pathlib import Path
 
-from ..config import load_project_config
+from ...config import load_project_config
 from .clean import clean_usages_dir
 from .clone import clone_repository
 from .deploy import deploy_usages

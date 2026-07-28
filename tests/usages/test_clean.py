@@ -4,14 +4,14 @@ import inspect
 from pathlib import Path
 
 import pytest
-from goga.usages.clean import clean_usages_dir
+from goga.usages.sync.clean import clean_usages_dir
 
 # --- Contract tests ---
 
 
 class TestCleanUsagesDirContract:
     def test_importable_from_goga_usages_clean(self):
-        """clean_usages_dir is importable from goga.usages.clean."""
+        """clean_usages_dir is importable from goga.usages.sync.clean."""
         assert callable(clean_usages_dir)
 
     def test_signature(self):

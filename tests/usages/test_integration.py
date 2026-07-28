@@ -14,7 +14,7 @@ from goga.usages.sync import sync
 # through sequential ``getattr``, finds the function where it expects the
 # submodule, and raises ``AttributeError``. Holding a direct reference to the
 # module makes ``mock.patch.object`` work uniformly across Python versions.
-_sync_mod = importlib.import_module("goga.usages.sync")
+_sync_mod = importlib.import_module("goga.usages.sync.sync")
 
 _GOOD_AND_BAD_DEPS = (
     "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
