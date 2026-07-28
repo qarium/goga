@@ -32,7 +32,8 @@ codemanifest:
     - Understanding the general principles and rules of development and testing in the project
 
 usages:
-  github:
+  cooks:
     swax:
       git: https://github.com/qarium/swax.git
       ref: 0.0.x
+      root: swax
