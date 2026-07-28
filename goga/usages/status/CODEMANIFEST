@@ -1,0 +1,229 @@
+Imports:
+  - Types:
+      - clone_repository
+      - deploy_usages
+    From: goga/usages/sync
+  - Types:
+      - load_project_config
+      - ProjectConfig
+      - DepConfig
+    From: goga/config
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  The domain is config-driven: `status` loads configuration itself via
+  `load_project_config` and iterates the declared deps of `ProjectConfig`. It rebuilds the
+  expected tree from the remote via `clone_repository` and `deploy_usages`, and compares the
+  local and expected trees by content hashes (the hashlib module), not byte-by-byte. All data
+  models are frozen kw_only dataclasses per `convention`. Mock `clone_repository` at the
+  import point in tests per `convention`. Use relative imports.
+
+---
+
+"status(group: str | None = None, dep: str | None = None) -> report: UsageStatusReport":
+  location: status.py
+  annotations: |
+    Status check of already-synchronized cell-level usages against the current state of the
+    remote git repository, for every declared dep.
+
+    `group`: optional filter — limit the check to one group name; None (default) → all groups.
+    `dep`: optional filter — limit the check to one dep name; None (default) → all deps.
+      `dep` without `group` applies across every group.
+    `report`: aggregate status result over all checked deps.
+
+    Algorithm:
+    1. Load configuration via `load_project_config` → `ProjectConfig`
+    2. If the usages section of `ProjectConfig` is None or empty → return an empty
+       `UsageStatusReport`
+    3. For each group, dep, depcfg (`DepConfig`) declared in `ProjectConfig`, applying the
+       `group`/`dep` filters (a non-matching name is skipped, not an error):
+       3.1. If the dep's target directory is absent → build a `DepStatus` with state new
+       3.2. Otherwise → compute the dep's `DepStatus` via `compute_dep_status`
+       3.3. On a per-dep failure (clone/checkout/deploy) → log ERROR with a credential-free
+            message, build a `DepStatus` with state error, and continue (best-effort)
+    4. Assemble the collected `DepStatus` records into the `UsageStatusReport` and return it
+
+    Requirements:
+    - Iteration is strictly over the declared deps (config-driven) — no orphan detection
+    - Empty or absent usages section (None or {}) → empty report (exit 0)
+    - A non-matching filter value is skipped, never treated as an error
+
+    Constraints:
+    - Read-only: never modify .goga/usages/, cooks/, or root *.md
+    - git source only (no local-path mode)
+    - Do not print — rendering belongs to the command
+    - Log failures without exposing credentials embedded in git URLs
+
+"compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) -> dep_status: DepStatus":
+  location: compare.py
+  annotations: |
+    Compare one already-synchronized dep against its current remote state and return its
+    status with a per-folder breakdown.
+
+    `group`: group name (carried into the result)
+    `dep`: dep name (carried into the result)
+    `depcfg`: `DepConfig` (git/ref/root) declaring the remote source
+    `target`: local dep directory — must exist (the caller handles the absent case)
+    `dep_status`: `DepStatus` with state up to date / out of date and the per-folder statuses
+
+    Algorithm:
+    1. Rebuild the expected tree from the remote using `clone_repository` then `deploy_usages`
+       with the dep's root (carried by `depcfg`)
+    2. Build the content-hash map of the expected tree and of the local `target` via
+       `hash_tree`
+    3. Compare the two maps: equal → state up to date; any difference (changed / missing /
+       extra file) → state out of date
+    4. Derive a sorted per-folder status list (a folder is out of date if any file beneath it
+       differs/is missing/is extra; otherwise up to date)
+    5. Return the `DepStatus`
+
+    Requirements:
+    - The expected tree is rebuilt with the same root semantics as the dep declares
+    - Comparison is by content hash (hashlib), not byte-by-byte
+    - Per-folder status is a roll-up of the files within that folder
+
+    Constraints:
+    - Do NOT modify the local `target` (read-only)
+    - Propagate clone/checkout/deploy failures — the caller owns best-effort handling
+    - Clean up every temporary directory used for the rebuild
+
+"hash_tree(root: Path) -> hashes: dict[str, str]":
+  location: compare.py
+  annotations: |
+    Build a map of relative file path → content hash for a directory tree.
+
+    `root`: directory to walk
+    `hashes`: {relative posix path from `root`: content digest}
+
+    Algorithm:
+    1. Walk `root` recursively in deterministic order
+    2. For each regular file, compute its content hash (hashlib) and key it by the
+       relative posix path from `root`
+    3. For each symlink, do NOT follow it — hash the link's target path obtained via
+       readlink (the string), keyed by the symlink's relative posix path from `root`
+    4. Return the map
+
+    Requirements:
+    - Keys are relative posix paths from `root`
+    - Regular files are hashed by their content; symlinks are hashed by their readlink
+      target path (the string), never by the content of the target
+    - The hash uses a deterministic hashlib algorithm
+
+    Constraints:
+    - Read-only
+    - Deterministic iteration order
+    - Do NOT dereference symlinks — never read through a link. This matches the
+      verbatim-copy model of `deploy_usages` (the synced tree stores the link itself, so
+      its identity is its readlink target), avoids reading arbitrary local files the link
+      may point at (local-file disclosure vector), and is robust to dangling links
+
+"UsageStatusReport(deps: list[DepStatus])":
+  location: status.py
+  annotations: |
+    Aggregate status result over all checked deps; carries the derived exit code.
+
+    `deps`: per-dep status records, in iteration order
+
+    Requirements:
+    - The exit code is derived from deps — there is no separate exit-code field
+
+    Constraints:
+    - Frozen kw_only dataclass per `convention`
+    - exit_code is a computed @property, not a stored field
+  properties:
+    "deps -> list[DepStatus]": |
+      Per-dep status records, in iteration order.
+    "exit_code -> int": |
+      Derived exit code: 0 iff every dep has state up to date; 1 otherwise (covers new,
+      out of date, error). An empty deps list yields 0.
+
+"DepStatus(group: str, dep: str, state: UsageState, folders: list[FolderStatus], error: str | None = None)":
+  location: status.py
+  annotations: |
+    Status of one declared group/dep.
+
+    `group`: group name
+    `dep`: dep name
+    `state`: `UsageState` value
+    `folders`: per-folder statuses (empty for new/error)
+    `error`: credential-free message when state is error; None otherwise
+
+    Requirements:
+    - The state is one of new / up to date / out of date / error
+    - The folders list is empty for new/error and populated for up to date/out of date
+    - The error field is set only when state is error
+
+    Constraints:
+    - Frozen kw_only dataclass per `convention`
+    - The error field must not leak credentials embedded in git URLs
+  properties:
+    "group -> str": |
+      Group name.
+    "dep -> str": |
+      Dep name.
+    "state -> UsageState": |
+      Status value (new / up to date / out of date / error).
+    "folders -> list[FolderStatus]": |
+      Per-folder statuses; empty when state is new or error, populated when up to date
+      or out of date.
+    "error -> str | None": |
+      Credential-free message describing the failure when state is error; None otherwise.
+
+"FolderStatus(path: str, state: UsageState)":
+  location: status.py
+  annotations: |
+    Status of one folder (relative path within a dep), used to expand a dep under --info.
+
+    `path`: relative path of the folder within the dep
+    `state`: `UsageState` value (up to date / out of date)
+
+    Constraints:
+    - Frozen kw_only dataclass per `convention`
+  properties:
+    "path -> str": |
+      Relative path of the folder within the dep.
+    "state -> UsageState": |
+      Folder status (up to date / out of date).
+
+"UsageState()":
+  location: status.py
+  annotations: |
+    Fixed value set of a synchronization status. Each member maps to the display string the
+    renderer uses.
+
+    Members:
+    - new — declared dep whose target directory is absent (never synchronized)
+    - up to date — local tree matches the tree rebuilt from the remote
+    - out of date — local tree differs from the tree rebuilt from the remote
+    - error — the dep could not be checked (clone/checkout failure)
+
+    Requirements:
+    - Members map to the display strings used by the renderer
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum)
+  properties:
+    "new -> str": |
+      "new" — declared dep whose target directory is absent.
+    "up_to_date -> str": |
+      "up to date" — local tree matches the rebuilt-from-remote tree.
+    "out_of_date -> str": |
+      "out of date" — local tree differs from the rebuilt-from-remote tree.
+    "error -> str": |
+      "error" — the dep could not be checked (clone/checkout failure).
+
+---
+
+Author: Goga
+CreatedAt: 28/07/26
+Description: |
+  Status check of synchronized cell-level usages against the current remote git state.

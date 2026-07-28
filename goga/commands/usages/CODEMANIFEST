@@ -2,7 +2,16 @@ Imports:
   - Types:
       - sync AS sync_logic
     Usages:
-      - sync-usage
+      - sync-usages
+    From: goga/usages
+  - Types:
+      - status AS status_logic
+      - UsageStatusReport
+      - DepStatus
+      - FolderStatus
+      - UsageState
+    Usages:
+      - usages-status
     From: goga/usages
 
 Usages:
@@ -10,7 +19,7 @@ Usages:
   convention: .goga/usages/conventions.md
   yaml: |
     Import the yaml module to catch yaml.YAMLError raised by load_project_config
-    when converting config-load errors in the CLI wrapper.
+    when converting config-load errors in the CLI wrappers.
 
 Annotations: |
   The `convention` practice is used for:
@@ -19,11 +28,12 @@ Annotations: |
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
-  Use the `click` practice to create the command group and subcommand.
-  The command delegates business logic through `sync_logic`; consult the `sync-usage`
-  practice for the sync contract (modes, on-disk result, exit codes).
-  Use the `yaml` practice to catch yaml.YAMLError when the CLI wrapper converts a
-  config-load error from `sync_logic` into a clean click.ClickException.
+  Use the `click` practice to create the command group and subcommands.
+  The commands delegate business logic through `sync_logic` and `status_logic`; consult the
+  `sync-usages` and `usages-status` practices for their contracts (modes/statuses, on-disk
+  result, exit codes).
+  Use the `yaml` practice to catch yaml.YAMLError when the CLI wrappers convert a
+  config-load error from `sync_logic`/`status_logic` into a clean click.ClickException.
 
 ---
 
@@ -31,8 +41,8 @@ Annotations: |
   location: usages.py
   annotations: |
     The goga usages command group — a click.Group container for usages subcommands.
-    Exported via __all__ and registered in goga/cli.py. The sync subcommand is registered
-    on this group per the `click` practice.
+    Exported via __all__ and registered in goga/cli.py. The sync and status subcommands are
+    registered on this group per the `click` practice.
 
     Use the `click` practice for the group decorator (@click.group()).
   methods:
@@ -47,21 +57,67 @@ Annotations: |
       - --force / -f: clean .goga/usages/ (except cooks and root *.md) then re-sync all
 
       Algorithm:
-      1. Call `sync_logic`(`force`) per the `sync-usage` practice
-      2. If `sync_logic` propagates a config-load error (FileNotFoundError,
-         KeyError, ValueError, or yaml.YAMLError raised by load_project_config)
-         → raise click.ClickException(str(exc)) for a clean CLI error (exit 1),
-         per the `yaml` practice for the YAMLError catch. `sync_logic` itself
-         stays fail-loud at the config boundary; the CLI wrapper owns the UX
-         conversion (precedent: goga/commands/config).
+      1. Call `sync_logic`(`force`) per the `sync-usages` practice
+      2. If `sync_logic` propagates a config-load error (FileNotFoundError, KeyError,
+         ValueError, or yaml.YAMLError raised by load_project_config) → raise
+         click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
+         practice for the YAMLError catch
       3. Return exit_code via ctx.exit
 
       Use the `click` practice for the subcommand and the --force/-f flag.
+    "status(info: bool = False, group: str | None = None, dep: str | None = None) -> exit_code: int": |
+      Subcommand goga usages status: check synchronized cell-level usages against the current
+      remote git state. Thin wrapper — delegates to `status_logic` and renders the result.
+
+      `info`: --info/-i flag (click is_flag, default False) — expand each dep into its folders.
+      `group`: --group/-g option (default None) — limit the check to one group.
+      `dep`: --dep/-d option (default None) — limit the check to one dep name.
+      `exit_code`: propagated from the report produced by `status_logic` (0 success, 1 drift/error).
+
+      CLI options:
+      - --info / -i: expand each dep into a flat, sorted list of its folders with per-folder status
+      - --group / -g: limit the check to one group
+      - --dep / -d: limit the check to one dep name (across all groups when --group is absent)
+
+      Algorithm:
+      1. Call `status_logic`(`group`, `dep`) per the `usages-status` practice → UsageStatusReport
+      2. If `status_logic` propagates a config-load error (FileNotFoundError, KeyError,
+         ValueError, or yaml.YAMLError raised by load_project_config) → raise
+         click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
+         practice for the YAMLError catch
+      3. Render the report via `render_status_report`(report, `info`)
+      4. Return exit_code via ctx.exit
+
+      Use the `click` practice for the subcommand and the --info/-i, --group/-g, --dep/-d options.
+
+"render_status_report(report: UsageStatusReport, info: bool)":
+  location: usages.py
+  annotations: |
+    Render a status report as a colored tree, group → dep, with optional per-folder expansion.
+
+    `report`: the aggregate status result
+    `info`: when True, expand each dep into a sorted flat list of its folders with per-folder status
+
+    Algorithm:
+    1. Group `report`.deps by group; list the groups sorted
+    2. For each group, print the group header; for each dep print the dep name and its
+       `DepStatus`.state, colored by state via the `click` practice
+    3. When `info` is True, for each dep that carries folders, print each `FolderStatus`
+       (sorted by path) with its state, colored via the `click` practice
+    4. Apply color through the `click` practice, which disables color automatically outside a TTY
+
+    Requirements:
+    - Groups and the deps within each group are listed sorted
+    - The state → color mapping is consistent across `UsageState` values (new / out of date /
+      error are visually distinct from up to date)
+
+    Constraints:
+    - Read-only on the report — do not mutate it
+    - Do not compute statuses — render only what `report` already contains
 
 ---
 
 Author: Goga
 CreatedAt: 27/07/26
 Description: |
-  The goga usages command group with the sync subcommand — config-driven
-  synchronization of cell-level usages from declared git dependencies.
+  The goga usages command group with the sync and status subcommands.
