@@ -50,10 +50,10 @@ With `root: folder`:
 
 A `.usages` folder directly at the `root` copies into the dep root (empty relative path).
 
-**Breaking change from the previous smoothing rule:** a repository containing a single
-`.usages` folder is no longer flattened into the dep root automatically. It lands at its
-`root`-relative path — at the dep root only when it sits directly at the `root`. Declare an
-explicit `root` or adjust expectations accordingly.
+A repository containing a single `.usages` folder is placed at its `root`-relative path —
+at the dep root only when it sits directly at the `root`. Placement is deterministic: no
+flattening is applied. Declare an explicit `root` to control where a single `.usages`
+folder lands.
 
 VCS folders (`.git`/`.hg`/`.svn`) are excluded from discovery and copying. Symlinks are
 copied verbatim (not dereferenced).

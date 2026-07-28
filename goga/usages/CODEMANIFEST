@@ -119,7 +119,7 @@ Annotations: |
   annotations: |
     Deploy cell-level usages from a cloned repo into a target dir: discover .usages folders
     under the optional root, lift their contents (drop the .usages name), and copy each to its
-    path relative to the root. The smoothing rule is REMOVED — placement is deterministic.
+    path relative to the root. Placement is deterministic (no flattening).
 
     `source_repo`: path to the cloned repository root
     `target_dir`: destination .goga/usages/<group>/<dep>/ (created if missing)
@@ -157,9 +157,9 @@ Annotations: |
       disclosure / aggregation vector). Copying the links themselves never reads those targets.
 
     Constraints:
-    - Do NOT apply the smoothing rule: a single .usages in the repo is no longer flattened
-      into the target root — it lands at its origin-relative path (root only if directly in
-      the walk origin)
+    - Placement is deterministic: a single .usages in the repo lands at its origin-relative
+      path — at the target root only when it sits directly in the walk origin (no flattening
+      applied)
     - Do NOT keep the .usages name in destination
     - Do NOT delete `target_dir` before deploying (sync owns skip; clean owns removal)
     - Do NOT silently succeed when `root` resolves to a missing path or a file — raise

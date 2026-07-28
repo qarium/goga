@@ -40,8 +40,6 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 
 `root` is structurally validated at config-load time: it must be relative (no leading `/` or UNC `//host/share`) and must not contain `..` segments. A `root` that does not resolve to an existing directory inside the clone (missing, or a file) fails the dep with an explicit error rather than producing an empty result.
 
-**Breaking change — no more smoothing.** A repository containing a single `.usages` folder is no longer flattened into the dep root automatically. It lands at its `root`-relative path — at the dep root only when it sits directly at `root`. If you relied on the previous single-`.usages` flattening, declare an explicit `root` or move the `.usages` folder to the repo root.
-
 ### Symlink handling
 
 `.usages/` files inside a freshly cloned third-party repository are copied verbatim, including symlinks — symlinks are **not** dereferenced. Dereferencing untrusted symlinks would copy the contents of arbitrary local files or directories the links point at into `.goga/usages/`, which is a local-file disclosure and aggregation vector. Copying the link entries themselves never reads their targets.
