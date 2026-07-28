@@ -2498,3 +2498,65 @@ usages:
         assert config.build.task_executor.env == {"KEY": "value"}
         assert config.build.worktree is True
         assert config.commands == {"foo": "bar"}
+
+
+# --- Contract + logic tests for DepConfig.root ---
+
+
+class TestDepConfigRootContract:
+    def test_depcfg_root_param_in_signature_after_ref(self):
+        """DepConfig declares `root` after `ref`, in (git, ref, root) order."""
+        params = list(inspect.signature(DepConfig).parameters)
+        assert params == ["git", "ref", "root"]
+
+    def test_depcfg_root_default_is_none(self):
+        """`root` defaults to None (explicit absence — walk from clone root)."""
+        assert inspect.signature(DepConfig).parameters["root"].default is None
+
+    def test_depcfg_root_explicit_value_and_ref_unset(self):
+        """DepConfig(git=..., root="docs").root == "docs" and .ref is None."""
+        dep = DepConfig(git="u", root="docs")
+        assert dep.root == "docs"
+        assert dep.ref is None
+
+    def test_depcfg_back_compat_without_root(self):
+        """DepConfig(git=..., ref="m") remains valid and .root is None."""
+        dep = DepConfig(git="u", ref="m")
+        assert dep.root is None
+        assert dep.ref == "m"
+
+    def test_depcfg_frozen_root_immutable(self):
+        """DepConfig is frozen — assigning d.root raises FrozenInstanceError."""
+        dep = DepConfig(git="u", root="docs")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            dep.root = "other"
+
+
+class TestDepConfigRootLogic:
+    def test_depcfg_root_defaults_none_when_not_provided(self):
+        """Default value of `root` is None."""
+        assert DepConfig(git="u").root is None
+
+    def test_depcfg_root_none_explicit(self):
+        """Explicit root=None is accepted and stored verbatim."""
+        assert DepConfig(git="u", root=None).root is None
+
+    def test_depcfg_root_explicit_value_stored_verbatim(self):
+        """A non-None root is stored verbatim (no normalization here)."""
+        assert DepConfig(git="u", root="docs/sub").root == "docs/sub"
+
+    def test_depcfg_root_kw_only(self):
+        """root is kw_only — positional construction beyond git/ref is rejected."""
+        with pytest.raises(TypeError):
+            DepConfig("u", "m", "docs")  # type: ignore[misc]
+
+    def test_depcfg_back_compat_existing_call_sites(self):
+        """Existing DepConfig(git=..., ref=...) / DepConfig(git=...) forms stay valid."""
+        assert DepConfig(git="u", ref="m").root is None
+        assert DepConfig(git="u").root is None
+
+    def test_depcfg_root_frozen_independent_of_other_fields(self):
+        """Mutating root raises (frozen dataclass) regardless of other fields."""
+        dep = DepConfig(git="u", ref="m", root="docs")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            dep.root = None

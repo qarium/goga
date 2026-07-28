@@ -35,12 +35,15 @@ class CodemanifestConfig:
 class DepConfig:
     """Value of a single <dep> declaration inside the usages section of .goga/config.yml.
 
-    Immutable value-object: structural validation (non-empty git) lives in the loader,
-    NOT here.
+    Immutable value-object: structural validation (non-empty git, `root` normalization
+    and path-safety) lives in the loader, NOT here. The dataclass stores `root`
+    verbatim — normalization (`""` -> `None`) and `..`/absolute-path rejection are the
+    loader's responsibility, so this field never stores an empty string.
     """
 
     git: str
     ref: str | None = None
+    root: str | None = None
 
 
 @dataclass(kw_only=True, frozen=True)
