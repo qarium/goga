@@ -1,11 +1,17 @@
 # goga usages
 
-`goga usages` synchronizes cell-level usages — the `.usages/*.md` files authored inside a dependency's cells — from declared git dependencies into your project's `.goga/usages/` tree. It replaces the legacy ad-hoc `goga sync` command with a config-driven workflow: declare your dependencies once in `.goga/config.yml`, then run one command to materialize and refresh their usage files.
+`goga usages` manages cell-level usages — the `.usages/*.md` files authored inside a dependency's cells — declared as git dependencies in `.goga/config.yml`. It replaces the legacy ad-hoc `goga sync` command with a config-driven workflow. Two subcommands share one config:
+
+- `goga usages sync` materializes and refreshes usage files from each dep's remote into your project's `.goga/usages/` tree.
+- `goga usages status` checks the already-synchronized files against each dep's current remote git state and reports drift — without modifying anything.
+
+Declare your dependencies once in `.goga/config.yml`, then `sync` to materialize them and `status` to detect when they fall behind.
 
 ## Synopsis
 
 ```bash
 goga usages sync [--force]
+goga usages status [--info] [--group GROUP] [--dep DEP]
 ```
 
 ## What It Does
@@ -136,7 +142,108 @@ goga usages sync
 # → .goga/usages/libs/click/... populated
 ```
 
-## Exit Codes
+## status
+
+`goga usages status` checks already-synchronized cell-level usages against the current state of each dep's remote git repository and reports drift per dep. Where `sync` writes files, `status` only inspects them — it never modifies `.goga/usages/`.
+
+### Synopsis
+
+```bash
+goga usages status [--info] [--group GROUP] [--dep DEP]
+```
+
+### What It Does
+
+`goga usages status` reads the same top-level `usages:` section of `.goga/config.yml` as `sync` and, for each declared `<group>/<dep>` dependency (after applying the `--group`/`--dep` filters):
+
+1. **Detect `new`** — if `.goga/usages/<group>/<dep>/` does not exist, the dep is reported `new` (declared but never synchronized). No clone happens.
+2. **Rebuild the expected tree** — otherwise the remote is cloned at `git`/`ref` into a temp directory and the dep's `.usages/` content is re-deployed from its `root` into a *second* temp directory, mirroring `sync`'s deploy logic but writing only to temp space.
+3. **Compare by content hashes** — the local tree under `.goga/usages/<group>/<dep>/` and the rebuilt expected tree are each hashed (regular files by chunked content; symlinks by their readlink string, never followed). Equal hashes → `up to date`; any difference → `out of date`.
+4. **Best-effort on failure** — a clone/checkout/deploy failure for one dep is reported `error`; the remaining deps are still checked.
+
+Because there is no stored manifest, `out of date` reports only that the local tree differs from the remote-rebuilt tree — it cannot tell "upstream moved ahead" from "you edited it locally".
+
+### Statuses
+
+Each dep resolves to exactly one of:
+
+| State | Display string | Color | Meaning |
+|---|---|---|---|
+| `new` | `new` | yellow | Target `.goga/usages/<group>/<dep>/` is absent — declared but never synced. |
+| `up to date` | `up to date` | green | The local tree matches the rebuilt remote tree. |
+| `out of date` | `out of date` | red | The local tree differs from the rebuilt remote tree. |
+| `error` | `error` | bright red | The check failed (clone/checkout/deploy). The line appends a credential-free message. |
+
+Color is applied via `click.secho` and auto-disables outside a TTY (piped output, CI logs), so the same command stays readable in scripts.
+
+With `--info`, each dep is expanded into a flat, per-folder list. Each folder is independently `up to date` or `out of date` under a "sticky" rule: once a folder contains a differing, missing, or extra file it stays `out of date` even if a later file matches. `new` and `error` deps carry no folders.
+
+### Options
+
+| Option | Default | Description |
+|---|---|---|
+| `--info`, `-i` | off | Expand each dep into a sorted, per-folder list with its own status. |
+| `--group`, `-g` | all | Limit the check to deps under one group. |
+| `--dep`, `-d` | all | Limit the check to deps with one name (across all groups). |
+
+A non-matching `--group` or `--dep` yields an empty result, never an error.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| `0` | Every checked dep is `up to date`, or the `usages:` section is absent/empty, or the filters matched nothing. |
+| `1` | At least one checked dep is `new`, `out of date`, or `error`. |
+
+A failure to load `.goga/config.yml` (missing file, malformed YAML, schema violation) propagates as a `click.ClickException` with a clean message and exit code `1`, identical to `sync`.
+
+### Read-only
+
+`status` only ever reads `.goga/usages/`. It re-deploys the remote tree into ephemeral temp directories — never into `.goga/usages/`, `cooks/`, or any root `*.md` file. The two temp directories are cleaned up in nested `finally` blocks on both the success and failure paths, so a failed check leaves nothing behind.
+
+### Network cost
+
+Every dep that is not `new` is checked by cloning its remote at the declared `git`/`ref` — there is no caching and no reuse of `sync`'s clones. Use `--group`/`--dep` to check narrowly when you only care about one dependency.
+
+### Example
+
+Check every declared dep:
+
+```bash
+goga usages status
+```
+
+```
+libs
+  click  up to date
+  structlog  out of date
+internal
+  my-shared-cells  new
+```
+
+Expand into per-folder detail:
+
+```bash
+goga usages status --info
+```
+
+```
+libs
+  click  up to date
+    cell_1/cell_2  up to date
+  structlog  out of date
+    cell_1/cell_2  out of date
+internal
+  my-shared-cells  new
+```
+
+Check a single dep across all groups:
+
+```bash
+goga usages status --dep click
+```
+
+## Exit Codes (`sync`)
 
 | Code | Meaning |
 |---|---|
