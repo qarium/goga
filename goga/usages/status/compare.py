@@ -80,9 +80,7 @@ def _hash_readlink(entry: Path) -> str:
     return hashlib.sha256(str(entry.readlink()).encode("utf-8")).hexdigest()
 
 
-def _rollup_folders(
-    expected: dict[str, str], local: dict[str, str]
-) -> list[FolderStatus]:
+def _rollup_folders(expected: dict[str, str], local: dict[str, str]) -> list[FolderStatus]:
     """Collapse two ``hash_tree`` maps into per-folder :class:`FolderStatus`.
 
     Each hash-map key's immediate-parent folder becomes one entry. The roll-up
@@ -155,11 +153,7 @@ def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) ->
             deploy_usages(repo, expected, depcfg.root)
             expected_hashes = hash_tree(expected)
             local_hashes = hash_tree(target)
-            state = (
-                UsageState.up_to_date
-                if expected_hashes == local_hashes
-                else UsageState.out_of_date
-            )
+            state = UsageState.up_to_date if expected_hashes == local_hashes else UsageState.out_of_date
             folders = _rollup_folders(expected_hashes, local_hashes)
             return DepStatus(group=group, dep=dep, state=state, folders=folders)
         finally:
