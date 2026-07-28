@@ -8,7 +8,7 @@ deploy failures are best-effort (logged credential-free and recorded as an
 ``error`` dep) so one failing dep never aborts the rest. The check is read-only:
 it never writes to ``.goga/usages/``.
 
-The four data-model contract entities are re-exported here so they stay importable
+The data-model contract entities are re-exported here so they stay importable
 from their contract location ``status.py`` (they are defined in the internal
 :mod:`goga.usages.status.models` to break the ``status.py`` <-> ``compare.py``
 import cycle — see that module's docstring).
@@ -19,11 +19,13 @@ from pathlib import Path
 
 from ...config import DepConfig, load_project_config
 from .compare import compute_dep_status
-from .models import DepStatus, FolderStatus, UsageState, UsageStatusReport
+from .models import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, UsageStatusReport
 
 __all__ = [
     "DepStatus",
-    "FolderStatus",
+    "EntryChange",
+    "EntryKind",
+    "EntryStatus",
     "UsageState",
     "UsageStatusReport",
     "status",
@@ -101,7 +103,7 @@ def _check_dep(group_name: str, dep_name: str, depcfg: DepConfig) -> DepStatus:
                 group=group_name,
                 dep=dep_name,
                 state=UsageState.new,
-                folders=[],
+                entries=[],
             )
         return compute_dep_status(group_name, dep_name, depcfg, target)
     except Exception:
@@ -116,5 +118,5 @@ def _check_dep(group_name: str, dep_name: str, depcfg: DepConfig) -> DepStatus:
             dep=dep_name,
             state=UsageState.error,
             error=f"failed to check usages status for {group_name}/{dep_name}",
-            folders=[],
+            entries=[],
         )

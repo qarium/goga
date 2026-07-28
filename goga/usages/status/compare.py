@@ -3,7 +3,9 @@
 Read-only helpers with a git boundary only on :func:`compute_dep_status`:
 
 * :func:`hash_tree` builds a deterministic content-hash map of a directory tree.
-* :func:`_rollup_folders` collapses two hash maps into per-folder statuses.
+* :func:`_diff_entries` classifies every node (file and directory) of the two
+  hash maps into an :class:`EntryChange` verdict (``unchanged`` / ``modified``
+  / ``added`` / ``removed``).
 * :func:`compute_dep_status` rebuilds the expected usages tree from the remote and
   compares it to the synced target for one declared dep.
 
@@ -24,7 +26,7 @@ from pathlib import Path
 from ...config import DepConfig
 from ..sync.clone import clone_repository
 from ..sync.deploy import deploy_usages
-from .models import DepStatus, FolderStatus, UsageState
+from .models import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState
 
 _READ_CHUNK = 65536
 
@@ -80,38 +82,86 @@ def _hash_readlink(entry: Path) -> str:
     return hashlib.sha256(str(entry.readlink()).encode("utf-8")).hexdigest()
 
 
-def _rollup_folders(expected: dict[str, str], local: dict[str, str]) -> list[FolderStatus]:
-    """Collapse two ``hash_tree`` maps into per-folder :class:`FolderStatus`.
+def _aggregate_dir(changes: list[EntryChange]) -> EntryChange:
+    """Fold a directory's per-file verdicts into one :class:`EntryChange`.
 
-    Each hash-map key's immediate-parent folder becomes one entry. The roll-up
-    is *sticky*: a folder that has any differing, missing, or extra file is
-    permanently ``out_of_date`` — a later matching file in the same folder never
-    rolls it back, because the ``out_of_date`` assignment dominates the
-    ``up_to_date`` :func:`setdefault`. That dominance makes the fold order-
-    independent, so the iteration order of ``expected.keys() | local.keys()`` does
-    not affect the result. The returned list is sorted by folder path.
+    Aggregation rules:
+
+    * every file ``unchanged``  → ``unchanged``
+    * every file ``added``      → ``added`` (the directory is remote-only)
+    * every file ``removed``    → ``removed`` (the directory is local-only)
+    * otherwise (mixed)         → ``modified``
+
+    The fold is order-independent: only the *set* of member verdicts matters, so
+    the iteration order of the member files does not affect the result.
+
+    Args:
+        changes: Verdicts of every file beneath the directory (non-empty).
+
+    Returns:
+        The single aggregated :class:`EntryChange` for the directory.
+    """
+    unique = set(changes)
+    if unique == {EntryChange.added}:
+        return EntryChange.added
+    if unique == {EntryChange.removed}:
+        return EntryChange.removed
+    if unique == {EntryChange.unchanged}:
+        return EntryChange.unchanged
+    return EntryChange.modified
+
+
+def _diff_entries(expected: dict[str, str], local: dict[str, str]) -> list[EntryStatus]:
+    """Classify every node (file and directory) of ``expected | local`` into an entry.
+
+    Files are classified by membership and hash equality:
+
+    * in both, equal   → ``unchanged``
+    * in both, differ  → ``modified``
+    * expected only    → ``added``
+    * local only       → ``removed``
+
+    Directories are derived from the ancestor prefixes of every file path and
+    carry an aggregated verdict (:func:`_aggregate_dir`) over the files beneath
+    them — so a remote-only folder rolls up to ``added`` rather than collapsing
+    into ``out_of_date``. A directory that contains only matching files is
+    ``unchanged``; a mix of verdicts is ``modified``.
 
     Args:
         expected: Hash map of the rebuilt (remote) tree.
         local: Hash map of the on-disk (synced) tree.
 
     Returns:
-        A list of :class:`FolderStatus` sorted by path, one per folder touched by
-        either tree; ``""`` is the root-level folder.
+        A flat, path-sorted list of :class:`EntryStatus` covering every file and
+        every directory touched by either tree.
     """
-    folders: dict[str, UsageState] = {}
+    # 1. file-level verdicts (every hash key is a leaf: regular file or symlink).
+    file_change: dict[str, EntryChange] = {}
     for key in expected.keys() | local.keys():
-        parent = Path(key).parent
-        folder = "" if str(parent) == "." else str(parent)
-        ok = key in expected and key in local and expected[key] == local[key]
-        if not ok:
-            folders[folder] = UsageState.out_of_date
+        if key in expected and key in local:
+            change = EntryChange.unchanged if expected[key] == local[key] else EntryChange.modified
+        elif key in expected:
+            change = EntryChange.added
         else:
-            folders.setdefault(folder, UsageState.up_to_date)
-    return sorted(
-        (FolderStatus(path=path, state=state) for path, state in folders.items()),
-        key=lambda fs: fs.path,
-    )
+            change = EntryChange.removed
+        file_change[key] = change
+
+    # 2. directory nodes: every ancestor prefix of a file path, with its member
+    #    verdicts collected for aggregation.
+    dir_members: dict[str, list[EntryChange]] = {}
+    for key, change in file_change.items():
+        parts = Path(key).parts
+        for i in range(1, len(parts)):
+            ancestor = "/".join(parts[:i])
+            dir_members.setdefault(ancestor, []).append(change)
+
+    entries: list[EntryStatus] = [
+        EntryStatus(path=key, kind=EntryKind.file, change=change) for key, change in file_change.items()
+    ]
+    for path, members in dir_members.items():
+        entries.append(EntryStatus(path=path, kind=EntryKind.dir, change=_aggregate_dir(members)))
+    entries.sort(key=lambda entry: entry.path)
+    return entries
 
 
 def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) -> DepStatus:
@@ -121,8 +171,9 @@ def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) ->
     directory (``temp#1``) and its usages deployed into a *second* temp directory
     (``temp#2``) — never into the real ``.goga/usages/<group>/<dep>/``. Both rebuilt
     trees are hashed (:func:`hash_tree`) and compared: identical hash maps →
-    ``up_to_date``, otherwise ``out_of_date``. Per-folder statuses are rolled up
-    from the two maps.
+    ``up_to_date``, otherwise ``out_of_date``. Per-node entries (files and
+    directories, each with its own verdict) are derived from the two maps via
+    :func:`_diff_entries`.
 
     Both temp directories are removed in nested ``finally`` blocks — ``temp#2``
     (inner) then ``temp#1`` (outer) — so a clone, checkout, or deploy failure still
@@ -139,8 +190,8 @@ def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) ->
             (``.goga/usages/<group>/<dep>``).
 
     Returns:
-        ``DepStatus`` with state ``up_to_date`` or ``out_of_date`` and the rolled-up
-        per-folder statuses.
+        ``DepStatus`` with state ``up_to_date`` or ``out_of_date`` and the per-node
+        entry diff.
 
     Raises:
         Propagates any clone/checkout/deploy error (the caller owns best-effort
@@ -154,8 +205,8 @@ def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) ->
             expected_hashes = hash_tree(expected)
             local_hashes = hash_tree(target)
             state = UsageState.up_to_date if expected_hashes == local_hashes else UsageState.out_of_date
-            folders = _rollup_folders(expected_hashes, local_hashes)
-            return DepStatus(group=group, dep=dep, state=state, folders=folders)
+            entries = _diff_entries(expected_hashes, local_hashes)
+            return DepStatus(group=group, dep=dep, state=state, entries=entries)
         finally:
             shutil.rmtree(expected, ignore_errors=True)
     finally:

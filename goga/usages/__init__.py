@@ -1,6 +1,8 @@
 from .status import (
     DepStatus,
-    FolderStatus,
+    EntryChange,
+    EntryKind,
+    EntryStatus,
     UsageState,
     UsageStatusReport,
     status,
@@ -9,7 +11,9 @@ from .sync import sync
 
 __all__ = [
     "DepStatus",
-    "FolderStatus",
+    "EntryChange",
+    "EntryKind",
+    "EntryStatus",
     "UsageState",
     "UsageStatusReport",
     "status",

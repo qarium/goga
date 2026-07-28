@@ -10,7 +10,9 @@ from unittest import mock
 import pytest
 from goga.usages.status import (
     DepStatus,
-    FolderStatus,
+    EntryChange,
+    EntryKind,
+    EntryStatus,
     UsageState,
     UsageStatusReport,
     status,
@@ -30,9 +32,11 @@ _status_mod = importlib.import_module("goga.usages.status.status")
 
 class TestStatusModels:
     def test_models_importable_from_facade(self):
-        """The four model entities are importable from the status package facade."""
+        """The model entities are importable from the status package facade."""
         assert UsageState is status_models.UsageState
-        assert FolderStatus is status_models.FolderStatus
+        assert EntryChange is status_models.EntryChange
+        assert EntryKind is status_models.EntryKind
+        assert EntryStatus is status_models.EntryStatus
         assert DepStatus is status_models.DepStatus
         assert UsageStatusReport is status_models.UsageStatusReport
 
@@ -53,10 +57,20 @@ class TestStatusModels:
         assert UsageState.out_of_date.value == "out of date"
         assert UsageState.error.value == "error"
 
+    def test_entry_change_members(self):
+        """EntryChange is an enum with the four per-node diff verdicts."""
+        assert issubclass(EntryChange, Enum)
+        assert {m.name for m in EntryChange} == {"unchanged", "modified", "added", "removed"}
+
+    def test_entry_kind_members(self):
+        """EntryKind is an enum distinguishing files from directories."""
+        assert issubclass(EntryKind, Enum)
+        assert {m.name for m in EntryKind} == {"file", "dir"}
+
     def test_dataclasses_construct_kw_only(self):
-        """The three dataclasses accept keyword arguments only."""
-        folder = FolderStatus(path="docs", state=UsageState.up_to_date)
-        dep = DepStatus(group="libs", dep="click", state=UsageState.new, folders=[folder])
+        """The dataclasses accept keyword arguments only."""
+        entry = EntryStatus(path="docs/main.md", kind=EntryKind.file, change=EntryChange.modified)
+        dep = DepStatus(group="libs", dep="click", state=UsageState.new, entries=[entry])
         report = UsageStatusReport(deps=[dep])
         assert dep.error is None
         assert report.deps == [dep]
@@ -64,20 +78,20 @@ class TestStatusModels:
     def test_dataclasses_kw_only_rejects_positional(self):
         """kw_only dataclasses reject positional construction."""
         with pytest.raises(TypeError):
-            FolderStatus("docs", UsageState.up_to_date)
+            EntryStatus("docs/main.md", EntryKind.file, EntryChange.modified)
 
     def test_dataclasses_are_frozen(self):
         """Frozen dataclasses raise FrozenInstanceError on attribute mutation."""
-        folder = FolderStatus(path="docs", state=UsageState.up_to_date)
-        dep = DepStatus(group="libs", dep="click", state=UsageState.new, folders=[])
+        entry = EntryStatus(path="docs", kind=EntryKind.dir, change=EntryChange.added)
+        dep = DepStatus(group="libs", dep="click", state=UsageState.new, entries=[])
         with pytest.raises(dataclasses.FrozenInstanceError):
-            folder.path = "other"
+            entry.path = "other"
         with pytest.raises(dataclasses.FrozenInstanceError):
             dep.state = UsageState.error
 
     def test_dep_status_error_defaults_to_none(self):
         """DepStatus.error defaults to None when omitted."""
-        dep = DepStatus(group="libs", dep="click", state=UsageState.new, folders=[])
+        dep = DepStatus(group="libs", dep="click", state=UsageState.new, entries=[])
         assert dep.error is None
 
     def test_exit_code_is_property_not_field(self):
@@ -101,7 +115,7 @@ class TestStatusModels:
     )
     def test_exit_code_property_semantics(self, states, expected):
         """exit_code is 0 iff every dep is up_to_date; empty deps yields 0."""
-        deps = [DepStatus(group="g", dep=f"d{i}", state=state, folders=[]) for i, state in enumerate(states)]
+        deps = [DepStatus(group="g", dep=f"d{i}", state=state, entries=[]) for i, state in enumerate(states)]
         assert UsageStatusReport(deps=deps).exit_code == expected
 
 
@@ -170,7 +184,7 @@ class TestStatusLogic:
         assert dep_status.group == "libs"
         assert dep_status.dep == "click"
         assert dep_status.state is UsageState.new
-        assert dep_status.folders == []
+        assert dep_status.entries == []
         assert report.exit_code == 1
         compute_mock.assert_not_called()
 
@@ -214,7 +228,7 @@ class TestStatusLogic:
                 group=group_name,
                 dep=dep_name,
                 state=UsageState.up_to_date,
-                folders=[],
+                entries=[],
             )
 
         with mock.patch.object(_status_mod, "compute_dep_status", side_effect=fake_compute):
@@ -255,7 +269,7 @@ class TestStatusLogic:
                 group=group_name,
                 dep=dep_name,
                 state=UsageState.up_to_date,
-                folders=[],
+                entries=[],
             )
 
         with mock.patch.object(_status_mod, "compute_dep_status", side_effect=fake_compute):
@@ -266,7 +280,7 @@ class TestStatusLogic:
         assert by_dep["good"].state is UsageState.up_to_date
         assert by_dep["bad"].state is UsageState.error
         assert by_dep["bad"].error == "failed to check usages status for libs/bad"
-        assert by_dep["bad"].folders == []
+        assert by_dep["bad"].entries == []
         # credential-free: the raised message's secret/URL/traceback must NOT leak
         # into the static error string
         assert "secret" not in by_dep["bad"].error

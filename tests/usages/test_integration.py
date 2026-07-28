@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-from goga.usages.status import UsageState, status
+from goga.usages.status import EntryChange, UsageState, status
 from goga.usages.sync import sync
 
 # Resolve the inner ``sync.py`` submodule via importlib. The facade ``goga.usages``
@@ -348,9 +348,44 @@ class TestStatusIntegration:
 
         assert report.deps[0].state is UsageState.out_of_date
         assert report.exit_code == 1
-        # the differing root-level file rolls up to the root folder "" -> out_of_date
-        folders = {folder.path: folder.state for folder in report.deps[0].folders}
-        assert folders.get("") is UsageState.out_of_date
+        # the differing root-level file is classified modified (not collapsed into
+        # an out_of_date folder roll-up).
+        entries = {entry.path: entry for entry in report.deps[0].entries}
+        assert entries["click.md"].change is EntryChange.modified
+
+    def test_status_dep_remote_only_folder_is_added(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A folder present on the remote but absent locally is ``added`` (not
+        ``out_of_date``) — the regression this change fixes. The matching sibling
+        file stays ``unchanged``; the dep itself is ``out_of_date`` because the
+        trees differ.
+        """
+        repo = make_repo("click", {".usages/click.md": "C1", ".usages/new/x.md": "X1"})
+        write_config(_CLICK_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        target = tmp_path / ".goga" / "usages" / "libs" / "click"
+        target.mkdir(parents=True)
+        (target / "click.md").write_text("C1")  # matches; the `new/` folder is absent locally
+
+        with patch_clone({"https://x/click.git": repo}):
+            report = status()
+
+        assert report.deps[0].state is UsageState.out_of_date
+        assert report.exit_code == 1
+        entries = {entry.path: entry for entry in report.deps[0].entries}
+        # the remote-only folder rolls up to `added`, NOT out_of_date/modified
+        assert entries["new"].kind.value == "dir"
+        assert entries["new"].change is EntryChange.added
+        assert entries["new/x.md"].change is EntryChange.added
+        # the matching sibling file is unaffected
+        assert entries["click.md"].change is EntryChange.unchanged
 
     def test_status_clone_failure_yields_error_dep_best_effort(
         self,
@@ -361,7 +396,7 @@ class TestStatusIntegration:
         patch_clone,
     ):
         """A clone failure is best-effort: the bad dep -> ``error`` (credential-free,
-        no folders) while the good dep is still checked; exit 1; no clone temp dirs
+        no entries) while the good dep is still checked; exit 1; no clone temp dirs
         leak.
         """
         good_repo = make_repo("good", {".usages/g.md": "good"})
@@ -383,7 +418,7 @@ class TestStatusIntegration:
         by_dep = {dep.dep: dep for dep in report.deps}
         assert by_dep["good"].state is UsageState.up_to_date
         assert by_dep["bad"].state is UsageState.error
-        assert by_dep["bad"].folders == []
+        assert by_dep["bad"].entries == []
         assert by_dep["bad"].error == "failed to check usages status for libs/bad"
         # credential-free: the failed git URL never leaks into the error message
         assert "https://x/bad.git" not in by_dep["bad"].error

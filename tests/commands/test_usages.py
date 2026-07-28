@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 from goga.cli import app
 from goga.commands.usages import usages as usages_cli
-from goga.usages import DepStatus, FolderStatus, UsageState, UsageStatusReport
+from goga.usages import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState, UsageStatusReport
 from goga.usages import status as status_logic
 
 # The facade goga.commands.usages re-exports the click Group ``usages``, shadowing
@@ -156,7 +156,7 @@ def _report(exit_code_deps: list[DepStatus] | None = None) -> UsageStatusReport:
     """Build a UsageStatusReport (by default a single up_to_date dep → exit 0)."""
     if exit_code_deps is None:
         exit_code_deps = [
-            DepStatus(group="libs", dep="click", state=UsageState.up_to_date, folders=[])
+            DepStatus(group="libs", dep="click", state=UsageState.up_to_date, entries=[])
         ]
     return UsageStatusReport(deps=exit_code_deps)
 
@@ -205,7 +205,7 @@ class TestStatusLogic:
 
     def test_cli_usages_status_exit_code_propagates_drift(self) -> None:
         report = _report(
-            [DepStatus(group="libs", dep="click", state=UsageState.out_of_date, folders=[])]
+            [DepStatus(group="libs", dep="click", state=UsageState.out_of_date, entries=[])]
         )
         with mock.patch.object(_usages_mod, "status_logic", return_value=report):
             runner = CliRunner()
@@ -291,25 +291,29 @@ class TestRenderStatusReport:
 
     @staticmethod
     def _sample_report() -> UsageStatusReport:
-        # Declared out of order to exercise the renderer's sorting.
+        # Declared out of order to exercise the renderer's sorting. The ``click``
+        # dep carries a per-node entry tree (modified dir + unchanged sibling) so
+        # ``--info`` expansion is exercised.
         return UsageStatusReport(
             deps=[
                 DepStatus(
                     group="tools",
                     dep="broken",
                     state=UsageState.error,
-                    folders=[],
+                    entries=[],
                     error="failed to check usages status for tools/broken",
                 ),
-                DepStatus(group="tools", dep="cli", state=UsageState.new, folders=[]),
-                DepStatus(group="libs", dep="ansi", state=UsageState.out_of_date, folders=[]),
+                DepStatus(group="tools", dep="cli", state=UsageState.new, entries=[]),
+                DepStatus(group="libs", dep="ansi", state=UsageState.out_of_date, entries=[]),
                 DepStatus(
                     group="libs",
                     dep="click",
                     state=UsageState.up_to_date,
-                    folders=[
-                        FolderStatus(path="src", state=UsageState.up_to_date),
-                        FolderStatus(path="", state=UsageState.out_of_date),
+                    entries=[
+                        EntryStatus(path="README.md", kind=EntryKind.file, change=EntryChange.unchanged),
+                        EntryStatus(path="docs", kind=EntryKind.dir, change=EntryChange.modified),
+                        EntryStatus(path="docs/main.md", kind=EntryKind.file, change=EntryChange.modified),
+                        EntryStatus(path="docs/utils.md", kind=EntryKind.file, change=EntryChange.unchanged),
                     ],
                 ),
             ]
@@ -323,15 +327,28 @@ class TestRenderStatusReport:
         lines = [ln for ln in out.splitlines() if ln]
 
         # Groups sorted: libs before tools.
-        assert lines.index("libs") < lines.index("tools")
+        assert lines.index("libs/") < lines.index("tools/")
         # Within libs: ansi before click.
-        assert next(i for i, ln in enumerate(lines) if ln.startswith("  ansi ")) < next(
-            i for i, ln in enumerate(lines) if ln.startswith("  click ")
+        assert next(i for i, ln in enumerate(lines) if "[*] ansi/" in ln) < next(
+            i for i, ln in enumerate(lines) if "[ ] click/" in ln
         )
         # Within tools: broken before cli.
-        assert next(i for i, ln in enumerate(lines) if ln.startswith("  broken ")) < next(
-            i for i, ln in enumerate(lines) if ln.startswith("  cli ")
+        assert next(i for i, ln in enumerate(lines) if "[!] broken/" in ln) < next(
+            i for i, ln in enumerate(lines) if "[+] cli/" in ln
         )
+
+    def test_render_dep_markers_map_to_state(self, capsys) -> None:  # type: ignore[no-untyped-def]
+        """Each dep marker reflects its UsageState: new->[+], up_to_date->[ ],
+        out_of_date->[*], error->[!]."""
+        from goga.commands.usages.usages import render_status_report
+
+        render_status_report(self._sample_report(), info=False)
+        out = capsys.readouterr().out
+
+        assert "[+] cli/" in out  # new
+        assert "[ ] click/" in out  # up_to_date
+        assert "[*] ansi/" in out  # out_of_date
+        assert "[!] broken/" in out  # error
 
     def test_render_error_dep_appends_message(self, capsys) -> None:  # type: ignore[no-untyped-def]
         from goga.commands.usages.usages import render_status_report
@@ -341,28 +358,42 @@ class TestRenderStatusReport:
 
         assert "(failed to check usages status for tools/broken)" in out
 
-    def test_render_info_false_omits_folders(self, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_render_info_false_omits_entries(self, capsys) -> None:  # type: ignore[no-untyped-def]
         from goga.commands.usages.usages import render_status_report
 
         render_status_report(self._sample_report(), info=False)
         out = capsys.readouterr().out
 
-        # Folder content of the click dep is never printed when info is False.
-        assert "src up to date" not in out
+        # The click dep's entry tree is never printed when info is False.
+        assert "main.md" not in out
+        assert "docs/" not in out
 
-    def test_render_info_true_prints_folders_sorted(self, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_render_info_true_prints_entries_sorted(self, capsys) -> None:  # type: ignore[no-untyped-def]
         from goga.commands.usages.usages import render_status_report
 
         render_status_report(self._sample_report(), info=True)
         out = capsys.readouterr().out
         lines = [ln for ln in out.splitlines() if ln]
 
-        # The click dep line precedes its folder lines; folders are sorted by
-        # path (root-level "" before "src").
-        click_idx = next(i for i, ln in enumerate(lines) if ln.startswith("  click "))
-        root_folder_idx = next(i for i, ln in enumerate(lines) if "out of date" in ln and ln.startswith("    "))
-        src_folder_idx = next(i for i, ln in enumerate(lines) if ln.startswith("    src "))
-        assert click_idx < root_folder_idx < src_folder_idx
+        # The click dep line precedes its entry tree; children are sorted by name
+        # (README.md before docs), and within docs main.md before utils.md.
+        click_idx = next(i for i, ln in enumerate(lines) if "[ ] click/" in ln)
+        readme_idx = next(i for i, ln in enumerate(lines) if "[ ] README.md" in ln)
+        docs_idx = next(i for i, ln in enumerate(lines) if "[*] docs/" in ln)
+        main_idx = next(i for i, ln in enumerate(lines) if "[*] main.md" in ln)
+        utils_idx = next(i for i, ln in enumerate(lines) if "[ ] utils.md" in ln)
+        assert click_idx < readme_idx < docs_idx < main_idx < utils_idx
+
+    def test_render_dirs_carry_trailing_slash(self, capsys) -> None:  # type: ignore[no-untyped-def]
+        from goga.commands.usages.usages import render_status_report
+
+        render_status_report(self._sample_report(), info=True)
+        out = capsys.readouterr().out
+
+        # Directories render with a trailing slash; files do not.
+        assert "[*] docs/" in out
+        assert "main.md" in out
+        assert "main.md/" not in out
 
     def test_render_no_color_codes_outside_tty(self, capsys) -> None:  # type: ignore[no-untyped-def]
         from goga.commands.usages.usages import render_status_report
@@ -370,44 +401,29 @@ class TestRenderStatusReport:
         render_status_report(self._sample_report(), info=True)
         out = capsys.readouterr().out
 
-        # capsys is not a TTY, so click strips ANSI escape codes.
+        # capsys is not a TTY, so color is disabled and no ANSI escape codes leak.
         assert "\x1b[" not in out
 
-    def test_render_state_color_mapping(self) -> None:
-        """The documented state -> foreground color is applied per dep line.
+    def test_marker_color_map_contract(self) -> None:
+        """Only the changed markers carry a foreground color; ``[ ]`` is absent."""
+        assert _usages_mod._MARKER_COLOR == {
+            "[*]": "yellow",  # modified / out of date
+            "[+]": "green",  # added / new
+            "[-]": "red",  # removed
+            "[!]": "magenta",  # error
+        }
+        assert "[ ]" not in _usages_mod._MARKER_COLOR
 
-        Locks ``_STATE_COLOR`` (a documented part of the status contract: new ->
-        yellow, up_to_date -> green, out_of_date -> red, error -> bright_red) and
-        confirms each dep renders with that exact ``fg`` (capsys is not a TTY, so
-        click strips the escape sequence and the value is only observable here).
-        """
-        assert {
-            UsageState.new: "yellow",
-            UsageState.up_to_date: "green",
-            UsageState.out_of_date: "red",
-            UsageState.error: "bright_red",
-        } == _usages_mod._STATE_COLOR
+    def test_style_colors_only_changed_markers(self) -> None:
+        """_style colors [*]/[+]/[-]/[!] when color is on, never [ ]."""
+        from goga.commands.usages.usages import _style
 
-        report = UsageStatusReport(
-            deps=[
-                DepStatus(group="g", dep="a", state=UsageState.new, folders=[]),
-                DepStatus(group="g", dep="b", state=UsageState.up_to_date, folders=[]),
-                DepStatus(group="g", dep="c", state=UsageState.out_of_date, folders=[]),
-                DepStatus(
-                    group="g",
-                    dep="d",
-                    state=UsageState.error,
-                    error="failed to check usages status for g/d",
-                    folders=[],
-                ),
-            ]
-        )
-        with mock.patch.object(_usages_mod.click, "secho") as secho_mock:
-            _usages_mod.render_status_report(report, info=False)
-
-        # one secho call per dep (sorted a..d), each carrying its state's fg
-        fgs = [call.kwargs.get("fg") for call in secho_mock.call_args_list]
-        assert fgs == ["yellow", "green", "red", "bright_red"]
+        for marker in ("[*]", "[+]", "[-]", "[!]"):
+            assert _style(marker, True) != marker  # ANSI-wrapped
+        assert _style("[ ]", True) == "[ ]"  # unchanged stays plain
+        # color off -> every marker is plain
+        for marker in ("[*]", "[+]", "[-]", "[!]", "[ ]"):
+            assert _style(marker, False) == marker
 
 
 class TestStatusAppIntegration:
@@ -471,16 +487,16 @@ class TestStatusAppIntegration:
 
         assert result.exit_code == 1  # the cli dep is out_of_date
         # groups sorted: libs before tools (declared in the opposite order)
-        assert result.output.index("libs") < result.output.index("tools")
-        # deps rendered with their display states
-        assert "click  up to date" in result.output
-        assert "cli  out of date" in result.output
-        # without --info, folders are not expanded
-        assert "    src" not in result.output
-        # CliRunner is not a TTY, so click strips ANSI escape codes
+        assert result.output.index("libs/") < result.output.index("tools/")
+        # deps rendered as tree nodes with markers mapped from their state
+        assert "[ ] click/" in result.output  # up_to_date
+        assert "[*] cli/" in result.output  # out_of_date
+        # without --info, the per-node entry tree is not expanded
+        assert "src/" not in result.output
+        # CliRunner is not a TTY, so color is disabled and no ANSI codes leak
         assert "\x1b[" not in result.output
 
-    def test_status_info_prints_folders_and_matches_exit_code(
+    def test_status_info_prints_entries_and_matches_exit_code(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -488,7 +504,7 @@ class TestStatusAppIntegration:
         write_config,
         patch_clone,
     ) -> None:
-        """``--info`` expands each dep into its folders (sorted by path); the CLI
+        """``--info`` expands each dep into its per-node entry tree (sorted); the CLI
         exit code equals the report's derived exit code."""
         click_repo, cli_repo = self._scenario(tmp_path, monkeypatch, make_repo, write_config)
 
@@ -498,8 +514,9 @@ class TestStatusAppIntegration:
             result = runner.invoke(app, ["usages", "status", "--info"])
 
         assert result.exit_code == report.exit_code == 1
-        # --info expands the up_to_date click dep into its "src" folder
-        assert "    src up to date" in result.output
+        # --info expands the up_to_date click dep into its "src" folder tree
+        assert "[ ] src/" in result.output
+        assert "[ ] click.md" in result.output
 
     def test_app_usages_status_help_lists_options(self) -> None:
         """``goga usages status --help`` lists all three options."""

@@ -1,13 +1,24 @@
 """Data-model entities for the cell-level usages status domain.
 
-The four contract entities (`UsageState`, `FolderStatus`, `DepStatus`,
-`UsageStatusReport`) are defined in this internal module — NOT in `status.py` —
-to break the `status.py` <-> `compare.py` import cycle: `status()` calls
-`compute_dep_status` (compare.py) while `compute_dep_status` constructs these
-models. ``status.py`` re-exports every name from here so the entities stay
+The contract entities (`UsageState`, `EntryChange`, `EntryKind`, `EntryStatus`,
+`DepStatus`, `UsageStatusReport`) are defined in this internal module — NOT in
+`status.py` — to break the `status.py` <-> `compare.py` import cycle: `status()`
+calls `compute_dep_status` (compare.py) while `compute_dep_status` constructs
+these models. ``status.py`` re-exports every name from here so the entities stay
 importable from their contract location ``status.py``. This module is a pure
 stdlib leaf (no inbound intra-cell imports), so importing it from either side
 introduces no cycle.
+
+Two status vocabularies coexist:
+
+* :class:`UsageState` is the **dep-level** summary (one value per dep):
+  ``new`` / ``up_to_date`` / ``out_of_date`` / ``error``. It stays a fixed
+  four-member set; the renderer maps it onto a tree marker.
+* :class:`EntryChange` is the **per-node** diff verdict (one value per file or
+  directory within a dep): ``unchanged`` / ``modified`` / ``added`` / ``removed``.
+  It distinguishes, for example, a remote-only folder (``added``) from a
+  differing file (``modified``) — the distinction the roll-up model collapsed
+  into a single ``out_of_date``.
 """
 
 from __future__ import annotations
@@ -17,7 +28,7 @@ from enum import Enum
 
 
 class UsageState(Enum):
-    """Fixed value set of a cell-level usages synchronization status.
+    """Fixed value set of a cell-level usages synchronization status (dep-level).
 
     Each member's ``value`` is the display string the renderer prints.
     """
@@ -28,18 +39,49 @@ class UsageState(Enum):
     error = "error"
 
 
+class EntryChange(Enum):
+    """Per-node (file or directory) diff verdict between expected and local trees.
+
+    Members:
+
+    * ``unchanged`` — present in both trees with identical content.
+    * ``modified`` — present in both trees but the content differs.
+    * ``added`` — present only in the expected (remote-rebuilt) tree.
+    * ``removed`` — present only in the local (synced) tree.
+    """
+
+    unchanged = "unchanged"
+    modified = "modified"
+    added = "added"
+    removed = "removed"
+
+
+class EntryKind(Enum):
+    """Whether a status entry is a file or a directory (drives the trailing ``/``)."""
+
+    file = "file"
+    dir = "dir"
+
+
 @dataclass(frozen=True, kw_only=True)
-class FolderStatus:
-    """Status of one folder within a dep, used to expand a dep under ``--info``.
+class EntryStatus:
+    """Status of one node (file or directory) within a dep.
+
+    Directories are derived from the ancestor prefixes of every file path and
+    carry an aggregated verdict over the files beneath them; files carry their
+    own verdict. The flat, path-sorted list of entries is the renderer's source
+    of truth for drawing the per-dep tree under ``--info``.
 
     Attributes:
-        path: Relative path of the folder within the dep (``""`` for root-level
-            files).
-        state: Folder status, restricted to ``up_to_date`` / ``out_of_date``.
+        path: Relative posix path of the node within the dep (``""`` is never
+            used — the dep root itself is the ``DepStatus``, not an entry).
+        kind: ``EntryKind.file`` or ``EntryKind.dir``.
+        change: Per-node verdict.
     """
 
     path: str
-    state: UsageState
+    kind: EntryKind
+    change: EntryChange
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -49,9 +91,11 @@ class DepStatus:
     Attributes:
         group: Group name.
         dep: Dep name.
-        state: Status value (``new`` / ``up_to_date`` / ``out_of_date`` / ``error``).
-        folders: Per-folder statuses; empty when ``state`` is ``new`` or
-            ``error``, populated when ``up_to_date`` or ``out_of_date``.
+        state: Dep-level status value (``new`` / ``up_to_date`` / ``out_of_date``
+            / ``error``).
+        entries: Per-node diff tree (files and directories) sorted by path; empty
+            when ``state`` is ``new`` or ``error``, populated when ``up_to_date``
+            or ``out_of_date``.
         error: Credential-free message describing the failure when ``state`` is
             ``error``; ``None`` otherwise.
     """
@@ -59,7 +103,7 @@ class DepStatus:
     group: str
     dep: str
     state: UsageState
-    folders: list[FolderStatus]
+    entries: list[EntryStatus]
     error: str | None = None
 
 

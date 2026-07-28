@@ -10,8 +10,8 @@ from unittest import mock
 
 import pytest
 from goga.config import DepConfig
-from goga.usages.status import DepStatus, FolderStatus, UsageState
-from goga.usages.status.compare import _rollup_folders, compute_dep_status, hash_tree
+from goga.usages.status import DepStatus, EntryChange, EntryKind, EntryStatus, UsageState
+from goga.usages.status.compare import _aggregate_dir, _diff_entries, compute_dep_status, hash_tree
 
 # Resolve the inner ``compare.py`` submodule via importlib so ``mock.patch.object``
 # patches the lookup site ``compute_dep_status`` uses for ``clone_repository`` /
@@ -102,99 +102,156 @@ class TestHashTree:
         assert "linkdir/x.md" not in hashes
 
 
-# --- logic tests: _rollup_folders ---
+# --- logic tests: _aggregate_dir ---
 
 
-class TestRollupFolders:
-    def test_rollup_all_matching_root_folder_is_up_to_date(self):
-        """A root-level folder where every file matches is up_to_date."""
+class TestAggregateDir:
+    def test_aggregate_all_unchanged(self):
+        """Every member unchanged -> unchanged."""
+        assert _aggregate_dir([EntryChange.unchanged, EntryChange.unchanged]) is EntryChange.unchanged
+
+    def test_aggregate_all_added(self):
+        """Every member added -> added (remote-only directory)."""
+        assert _aggregate_dir([EntryChange.added, EntryChange.added]) is EntryChange.added
+
+    def test_aggregate_all_removed(self):
+        """Every member removed -> removed (local-only directory)."""
+        assert _aggregate_dir([EntryChange.removed]) is EntryChange.removed
+
+    def test_aggregate_mixed_is_modified(self):
+        """Any mix of verdicts -> modified."""
+        assert _aggregate_dir([EntryChange.unchanged, EntryChange.added]) is EntryChange.modified
+        assert _aggregate_dir([EntryChange.added, EntryChange.removed]) is EntryChange.modified
+        assert _aggregate_dir([EntryChange.modified, EntryChange.unchanged]) is EntryChange.modified
+
+    @pytest.mark.parametrize(
+        "order",
+        list(itertools.permutations([EntryChange.added, EntryChange.removed, EntryChange.unchanged])),
+    )
+    def test_aggregate_is_order_independent(self, order):
+        """Only the set of verdicts matters, not their order."""
+        assert _aggregate_dir(list(order)) is EntryChange.modified
+
+
+# --- logic tests: _diff_entries ---
+
+
+class TestDiffEntries:
+    def test_diff_all_matching_files_are_unchanged(self):
+        """Files present in both with equal hashes are unchanged; root files add no dir entry."""
         expected = {"a.md": "h1", "b.md": "h2"}
         local = {"a.md": "h1", "b.md": "h2"}
-        assert _rollup_folders(expected, local) == [
-            FolderStatus(path="", state=UsageState.up_to_date),
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="a.md", kind=EntryKind.file, change=EntryChange.unchanged),
+            EntryStatus(path="b.md", kind=EntryKind.file, change=EntryChange.unchanged),
         ]
 
-    def test_rollup_differing_file_marks_root_folder_out_of_date(self):
-        """A differing file marks its folder out_of_date."""
-        expected = {"a.md": "h1", "b.md": "h2"}
-        local = {"a.md": "h1", "b.md": "hX"}
-        assert _rollup_folders(expected, local) == [
-            FolderStatus(path="", state=UsageState.out_of_date),
+    def test_diff_differing_file_is_modified(self):
+        """A file present in both with differing hashes is modified."""
+        expected = {"a.md": "h1"}
+        local = {"a.md": "hX"}
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="a.md", kind=EntryKind.file, change=EntryChange.modified),
         ]
 
-    def test_rollup_mixed_files_in_one_folder_is_sticky_out_of_date(self):
-        """A matching file does not roll a differing folder back to up_to_date (sticky)."""
-        # a.md matches; b.md differs — the folder is still out_of_date.
-        expected = {"a.md": "h1", "b.md": "h2"}
-        local = {"a.md": "h1", "b.md": "hX"}
-        result = _rollup_folders(expected, local)
-        assert result == [FolderStatus(path="", state=UsageState.out_of_date)]
-
-    def test_rollup_missing_file_marks_folder_out_of_date(self):
-        """A file present in expected but absent locally marks its folder out_of_date."""
+    def test_diff_expected_only_file_is_added(self):
+        """A file present in expected but absent locally is added (the bug root cause)."""
         expected = {"a.md": "h1"}
         local: dict[str, str] = {}
-        assert _rollup_folders(expected, local) == [
-            FolderStatus(path="", state=UsageState.out_of_date),
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="a.md", kind=EntryKind.file, change=EntryChange.added),
         ]
 
-    def test_rollup_extra_file_marks_folder_out_of_date(self):
-        """A file present locally but absent from expected marks its folder out_of_date."""
+    def test_diff_local_only_file_is_removed(self):
+        """A file present locally but absent from expected is removed."""
         expected: dict[str, str] = {}
         local = {"a.md": "h1"}
-        assert _rollup_folders(expected, local) == [
-            FolderStatus(path="", state=UsageState.out_of_date),
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="a.md", kind=EntryKind.file, change=EntryChange.removed),
         ]
 
-    def test_rollup_multiple_folders_sorted_and_independent(self):
-        """Folders are sorted by path and assessed independently."""
+    def test_diff_remote_only_folder_is_added_not_out_of_date(self):
+        """A folder present only in expected rolls up to added, not modified/out_of_date."""
+        expected = {"new/x.md": "h1"}
+        local: dict[str, str] = {}
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="new", kind=EntryKind.dir, change=EntryChange.added),
+            EntryStatus(path="new/x.md", kind=EntryKind.file, change=EntryChange.added),
+        ]
+
+    def test_diff_local_only_folder_is_removed(self):
+        """A folder present only in local rolls up to removed."""
+        expected: dict[str, str] = {}
+        local = {"gone/y.md": "h1"}
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="gone", kind=EntryKind.dir, change=EntryChange.removed),
+            EntryStatus(path="gone/y.md", kind=EntryKind.file, change=EntryChange.removed),
+        ]
+
+    def test_diff_mixed_folder_is_modified(self):
+        """A folder with a mix of verdicts rolls up to modified."""
+        # docs/a.md unchanged, docs/b.md differs -> docs is modified.
+        expected = {"docs/a.md": "h1", "docs/b.md": "h2"}
+        local = {"docs/a.md": "h1", "docs/b.md": "hX"}
+        result = _diff_entries(expected, local)
+        by_path = {e.path: e for e in result}
+        assert by_path["docs"].kind is EntryKind.dir
+        assert by_path["docs"].change is EntryChange.modified
+        assert by_path["docs/a.md"].change is EntryChange.unchanged
+        assert by_path["docs/b.md"].change is EntryChange.modified
+
+    def test_diff_all_matching_nested_folder_is_unchanged(self):
+        """A nested folder whose every file matches rolls up to unchanged."""
+        expected = {"docs/d.md": "h2"}
+        local = {"docs/d.md": "h2"}
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="docs", kind=EntryKind.dir, change=EntryChange.unchanged),
+            EntryStatus(path="docs/d.md", kind=EntryKind.file, change=EntryChange.unchanged),
+        ]
+
+    def test_diff_multiple_folders_independent(self):
+        """Sibling folders are aggregated independently and sorted by path."""
         expected = {"a.md": "h1", "docs/d.md": "h2"}
         local = {"a.md": "hX", "docs/d.md": "h2"}
-        assert _rollup_folders(expected, local) == [
-            FolderStatus(path="", state=UsageState.out_of_date),
-            FolderStatus(path="docs", state=UsageState.up_to_date),
+        assert _diff_entries(expected, local) == [
+            EntryStatus(path="a.md", kind=EntryKind.file, change=EntryChange.modified),
+            EntryStatus(path="docs", kind=EntryKind.dir, change=EntryChange.unchanged),
+            EntryStatus(path="docs/d.md", kind=EntryKind.file, change=EntryChange.unchanged),
         ]
 
-    def test_rollup_returns_list_of_folder_status(self):
-        """The result is a list of FolderStatus with the restricted folder states."""
-        result = _rollup_folders({"a.md": "h"}, {"a.md": "h"})
+    def test_diff_returns_list_of_entry_status(self):
+        """The result is a list of EntryStatus with valid kinds and changes."""
+        result = _diff_entries({"a.md": "h"}, {"a.md": "h"})
         assert isinstance(result, list)
-        assert all(isinstance(fs, FolderStatus) for fs in result)
-        assert all(
-            fs.state in (UsageState.up_to_date, UsageState.out_of_date)
-            for fs in result
-        )
+        assert all(isinstance(e, EntryStatus) for e in result)
+        assert all(e.kind in (EntryKind.file, EntryKind.dir) for e in result)
+        assert all(e.change in tuple(EntryChange) for e in result)
 
-    @pytest.mark.parametrize("swap", [False, True])
-    def test_rollup_is_order_independent(self, swap):
-        """The sticky fold is commutative: any key iteration order yields the same result."""
-        expected = {"a.md": "h1", "b.md": "h2", "docs/c.md": "h3", "docs/d.md": "h4"}
-        local = {"a.md": "h1", "b.md": "hX", "docs/c.md": "h3"}
-        # local-first vs expected-first changes the set union's operand order; the
-        # sticky out_of_date assignment makes the fold order-independent regardless.
-        (left, right) = (local, expected) if swap else (expected, local)
-        keys = list(left.keys() | right.keys())
+    def test_diff_is_sorted_by_path(self):
+        """Entries are sorted by path (files and dirs interleaved)."""
+        result = _diff_entries({"z.md": "h", "a/b.md": "h"}, {"z.md": "h", "a/b.md": "h"})
+        assert [e.path for e in result] == ["a", "a/b.md", "z.md"]
 
-        def fold(order):
-            folders: dict[str, UsageState] = {}
-            for key in order:
-                parent = Path(key).parent
-                folder = "" if str(parent) == "." else str(parent)
-                ok = (
-                    key in expected
-                    and key in local
-                    and expected[key] == local[key]
-                )
-                if not ok:
-                    folders[folder] = UsageState.out_of_date
-                else:
-                    folders.setdefault(folder, UsageState.up_to_date)
-            return tuple(sorted(folders.items()))
-
-        outcomes = {fold(list(p)) for p in itertools.permutations(keys)}
-        assert len(outcomes) == 1  # every permutation agrees
-        actual = [(fs.path, fs.state) for fs in _rollup_folders(expected, local)]
-        assert actual == list(fold(keys))
+    def test_diff_role_swap_mirrors_added_and_removed(self):
+        """Swapping expected/local mirrors the diff: ``added`` <-> ``removed`` while
+        ``modified``/``unchanged`` stay. The set-based classification is otherwise
+        deterministic in the input dict ordering (the final sort is by path)."""
+        expected = {"a.md": "h1", "b.md": "h2", "docs/c.md": "h3"}
+        local = {"a.md": "h1", "b.md": "hX", "gone/y.md": "h9"}
+        forward = {e.path: e.change for e in _diff_entries(expected, local)}
+        mirror = {e.path: e.change for e in _diff_entries(local, expected)}
+        # unchanged and modified are role-symmetric
+        assert forward["a.md"] is mirror["a.md"] is EntryChange.unchanged
+        assert forward["b.md"] is mirror["b.md"] is EntryChange.modified
+        # added <-> removed (expected-only docs/c.md; local-only gone/)
+        assert forward["docs/c.md"] is EntryChange.added
+        assert mirror["docs/c.md"] is EntryChange.removed
+        assert forward["docs"] is EntryChange.added
+        assert mirror["docs"] is EntryChange.removed
+        assert forward["gone/y.md"] is EntryChange.removed
+        assert mirror["gone/y.md"] is EntryChange.added
+        assert forward["gone"] is EntryChange.removed
+        assert mirror["gone"] is EntryChange.added
 
 
 # --- helpers for compute_dep_status logic tests ---
@@ -262,17 +319,17 @@ class TestComputeDepStatusLogic:
         assert result.state is UsageState.up_to_date
         assert result.group == "libs"
         assert result.dep == "click"
-        assert result.folders == [FolderStatus(path="", state=UsageState.up_to_date)]
+        assert result.entries == [EntryStatus(path="click.md", kind=EntryKind.file, change=EntryChange.unchanged)]
 
     def test_compute_dep_status_out_of_date(self, tmp_path):
-        """Differing local tree → state is out_of_date; folders reflect the differing file."""
+        """Differing local tree → state is out_of_date; entries mark the differing file modified."""
         fake_repo = _make_fake_clone(tmp_path / "clone", {".usages/click.md": "REMOTE"})
         target = _make_target(tmp_path, {"click.md": "LOCAL"})
         depcfg = DepConfig(git="https://x/click.git")
         with mock.patch.object(_compare_mod, "clone_repository", return_value=fake_repo):
             result = compute_dep_status("libs", "click", depcfg, target)
         assert result.state is UsageState.out_of_date
-        assert result.folders == [FolderStatus(path="", state=UsageState.out_of_date)]
+        assert result.entries == [EntryStatus(path="click.md", kind=EntryKind.file, change=EntryChange.modified)]
 
     def test_compute_dep_status_cleans_both_temp_dirs(self, tmp_path, monkeypatch):
         """Both temp#1 (clone) and temp#2 (expected) are cleaned on success AND on deploy failure."""

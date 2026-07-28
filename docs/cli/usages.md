@@ -165,24 +165,35 @@ Because there is no stored manifest, `out of date` reports only that the local t
 
 ### Statuses
 
-Each dep resolves to exactly one of:
+Output is a `group/ → dep/` ASCII tree. Every node carries a bracketed marker; directories render with a trailing `/`.
 
-| State | Display string | Color | Meaning |
-|---|---|---|---|
-| `new` | `new` | yellow | Target `.goga/usages/<group>/<dep>/` is absent — declared but never synced. |
-| `up to date` | `up to date` | green | The local tree matches the rebuilt remote tree. |
-| `out of date` | `out of date` | red | The local tree differs from the rebuilt remote tree. |
-| `error` | `error` | bright red | The check failed (clone/checkout/deploy). The line appends a credential-free message. |
+Each **dep** resolves to exactly one state, shown as a marker on the dep node:
 
-Color is applied via `click.secho` and auto-disables outside a TTY (piped output, CI logs), so the same command stays readable in scripts.
+| State | Marker | Meaning |
+|---|---|---|
+| `new` | `[+]` | Target `.goga/usages/<group>/<dep>/` is absent — declared but never synced. |
+| `up to date` | `[ ]` | The local tree matches the rebuilt remote tree. |
+| `out of date` | `[*]` | The local tree differs from the rebuilt remote tree. |
+| `error` | `[!]` | The check failed (clone/checkout/deploy). The line appends a credential-free message. |
 
-With `--info`, each dep is expanded into a flat, per-folder list. Each folder is independently `up to date` or `out of date` under a "sticky" rule: once a folder contains a differing, missing, or extra file it stays `out of date` even if a later file matches. `new` and `error` deps carry no folders.
+With `--info`, each dep is expanded into its **per-node file/folder tree**. Every node (file or directory) carries its own verdict:
+
+| Verdict | Marker | Meaning |
+|---|---|---|
+| unchanged | `[ ]` | Present in both trees with identical content. |
+| modified | `[*]` | Present in both trees but the content differs. |
+| added | `[+]` | Present only in the remote-rebuilt tree (a remote-only folder rolls up to `added`, not `out of date`). |
+| removed | `[-]` | Present only in the local (synced) tree. |
+
+A directory's verdict is the aggregation of the files beneath it: all unchanged → `[ ]`; all added → `[+]`; all removed → `[-]`; any mix → `[*]`. `new` and `error` deps carry no entries.
+
+Color is applied **only** to the changed markers (`[*]`, `[+]`, `[-]`, `[!]`) — never to `[ ]` or the tree skeleton — and auto-disables outside a TTY (piped output, CI logs), so the same command stays readable in scripts.
 
 ### Options
 
 | Option | Default | Description |
 |---|---|---|
-| `--info`, `-i` | off | Expand each dep into a sorted, per-folder list with its own status. |
+| `--info`, `-i` | off | Expand each dep into its per-node file/folder tree with per-node status markers. |
 | `--group`, `-g` | all | Limit the check to deps under one group. |
 | `--dep`, `-d` | all | Limit the check to deps with one name (across all groups). |
 
@@ -214,27 +225,31 @@ goga usages status
 ```
 
 ```
-libs
-  click  up to date
-  structlog  out of date
-internal
-  my-shared-cells  new
+libs/
+├── [ ] click/
+└── [*] structlog/
+internal/
+└── [+] my-shared-cells/
 ```
 
-Expand into per-folder detail:
+Expand into per-node detail:
 
 ```bash
 goga usages status --info
 ```
 
 ```
-libs
-  click  up to date
-    cell_1/cell_2  up to date
-  structlog  out of date
-    cell_1/cell_2  out of date
-internal
-  my-shared-cells  new
+libs/
+├── [ ] click/
+│   └── [ ] cell_1/
+│       └── [ ] cell_2/
+├── [*] structlog/
+│   ├── [*] cell_1/
+│   │   └── [*] cell_2/
+│   └── [+] new-folder/
+│       └── [+] guide.md
+internal/
+└── [+] my-shared-cells/
 ```
 
 Check a single dep across all groups:
