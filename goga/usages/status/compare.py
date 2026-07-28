@@ -65,6 +65,7 @@ def hash_tree(root: Path) -> dict[str, str]:
             entry = Path(dirpath) / name
             if entry.is_symlink():
                 hashes[entry.relative_to(root).as_posix()] = _hash_readlink(entry)
+
     return hashes
 
 
@@ -74,6 +75,7 @@ def _hash_file(entry: Path) -> str:
     with entry.open("rb") as handle:
         for chunk in iter(lambda: handle.read(_READ_CHUNK), b""):
             digest.update(chunk)
+
     return digest.hexdigest()
 
 
@@ -160,6 +162,7 @@ def _diff_entries(expected: dict[str, str], local: dict[str, str]) -> list[Entry
     ]
     for path, members in dir_members.items():
         entries.append(EntryStatus(path=path, kind=EntryKind.dir, change=_aggregate_dir(members)))
+
     entries.sort(key=lambda entry: entry.path)
     return entries
 
@@ -194,18 +197,24 @@ def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) ->
         entry diff.
 
     Raises:
-        Propagates any clone/checkout/deploy error (the caller owns best-effort
-        handling); both temp directories are cleaned first.
+        Exception: Propagates any clone/checkout/deploy failure from
+            ``clone_repository``/``deploy_usages`` (e.g.
+            ``subprocess.CalledProcessError``, ``FileNotFoundError``,
+            ``NotADirectoryError``, ``ValueError``); both temp directories are
+            cleaned first. The caller owns best-effort handling.
     """
     repo = clone_repository(depcfg.git, depcfg.ref)  # temp#1, before the outer try
     try:
         expected = Path(tempfile.mkdtemp())  # temp#2
         try:
             deploy_usages(repo, expected, depcfg.root)
+
             expected_hashes = hash_tree(expected)
             local_hashes = hash_tree(target)
+
             state = UsageState.up_to_date if expected_hashes == local_hashes else UsageState.out_of_date
             entries = _diff_entries(expected_hashes, local_hashes)
+
             return DepStatus(group=group, dep=dep, state=state, entries=entries)
         finally:
             shutil.rmtree(expected, ignore_errors=True)

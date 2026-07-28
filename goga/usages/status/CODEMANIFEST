@@ -186,7 +186,7 @@ Annotations: |
   annotations: |
     Per-node (file or directory) diff verdict between the expected (remote-rebuilt) and
     local (synced) trees. Distinguishes a remote-only folder (added) from a differing file
-    (modified) — the distinction a single out-of-date roll-up collapsed.
+    (modified).
 
     Members:
     - unchanged — present in both trees with identical content

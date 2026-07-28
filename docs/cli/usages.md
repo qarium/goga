@@ -245,11 +245,11 @@ libs/
 ├── [ ] click/
 │   └── [ ] cell_1/
 │       └── [ ] cell_2/
-├── [*] structlog/
-│   ├── [*] cell_1/
-│   │   └── [*] cell_2/
-│   └── [+] new-folder/
-│       └── [+] guide.md
+└── [*] structlog/
+    ├── [*] cell_1/
+    │   └── [*] cell_2/
+    └── [+] new-folder/
+        └── [+] guide.md
 ```
 
 Check a single dep across all groups:
