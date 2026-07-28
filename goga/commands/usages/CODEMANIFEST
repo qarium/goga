@@ -8,7 +8,9 @@ Imports:
       - status AS status_logic
       - UsageStatusReport
       - DepStatus
-      - FolderStatus
+      - EntryStatus
+      - EntryChange
+      - EntryKind
       - UsageState
     Usages:
       - usages-status
@@ -69,13 +71,14 @@ Annotations: |
       Subcommand goga usages status: check synchronized cell-level usages against the current
       remote git state. Thin wrapper — delegates to `status_logic` and renders the result.
 
-      `info`: --info/-i flag (click is_flag, default False) — expand each dep into its folders.
+      `info`: --info/-i flag (click is_flag, default False) — expand each dep into its per-node
+        file/folder entry tree with per-node status markers.
       `group`: --group/-g option (default None) — limit the check to one group.
       `dep`: --dep/-d option (default None) — limit the check to one dep name.
       `exit_code`: propagated from the report produced by `status_logic` (0 success, 1 drift/error).
 
       CLI options:
-      - --info / -i: expand each dep into a flat, sorted list of its folders with per-folder status
+      - --info / -i: expand each dep into its per-node file/folder entry tree with per-node status markers
       - --group / -g: limit the check to one group
       - --dep / -d: limit the check to one dep name (across all groups when --group is absent)
 
@@ -93,23 +96,31 @@ Annotations: |
 "render_status_report(report: UsageStatusReport, info: bool)":
   location: usages.py
   annotations: |
-    Render a status report as a colored tree, group → dep, with optional per-folder expansion.
+    Render a status report as a colored group → dep ASCII tree, with optional per-node
+    entry expansion under --info.
 
     `report`: the aggregate status result
-    `info`: when True, expand each dep into a sorted flat list of its folders with per-folder status
+    `info`: when True, expand each dep into its per-node file/folder entry tree, each node
+      carrying its own status marker
 
     Algorithm:
     1. Group `report`.deps by group; list the groups sorted
-    2. For each group, print the group header; for each dep print the dep name and its
-       `DepStatus`.state, colored by state via the `click` practice
-    3. When `info` is True, for each dep that carries folders, print each `FolderStatus`
-       (sorted by path) with its state, colored via the `click` practice
-    4. Apply color through the `click` practice, which disables color automatically outside a TTY
+    2. For each group, print the group header (group name with a trailing slash); within the
+       group, list the deps sorted by name, each rendered as a tree node carrying a bracketed
+       status marker derived from its `DepStatus`.state — [ ] for unchanged/up to date, [*] for
+       modified/out of date, [+] for new, [!] for error (an error dep additionally appends its
+       credential-free message) — colored via the `click` practice
+    3. When `info` is True, for each dep that carries entries, fold its flat `EntryStatus` list
+       into a nested file/folder tree and print each node with its `EntryChange` marker — [ ]
+       unchanged, [*] modified, [+] added, [-] removed; nodes whose `EntryKind` is a directory
+       render with a trailing slash — sorted, colored via the `click` practice
+    4. Apply color only to the changed markers ([*], [+], [-], [!]) — never to [ ] or the tree
+       skeleton — and auto-disable color outside a TTY via the `click` practice
 
     Requirements:
     - Groups and the deps within each group are listed sorted
-    - The state → color mapping is consistent across `UsageState` values (new / out of date /
-      error are visually distinct from up to date)
+    - The dep state → marker mapping is consistent across `UsageState` values (new / out of
+      date / error are visually distinct from up to date)
 
     Constraints:
     - Read-only on the report — do not mutate it

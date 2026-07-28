@@ -6,7 +6,9 @@ Imports:
       - status
       - UsageStatusReport
       - DepStatus
-      - FolderStatus
+      - EntryStatus
+      - EntryChange
+      - EntryKind
       - UsageState
     From: goga/usages/status
 
@@ -31,7 +33,9 @@ Annotations: |
 ->status: {}
 ->UsageStatusReport: {}
 ->DepStatus: {}
-->FolderStatus: {}
+->EntryStatus: {}
+->EntryChange: {}
+->EntryKind: {}
 ->UsageState: {}
 
 ---

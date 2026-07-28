@@ -56,12 +56,20 @@ remote-rebuilt tree; it cannot distinguish "upstream moved ahead" from "locally 
 - `exit_code` — `0` iff every dep is `up to date`; `1` otherwise (covers `new`, `out of date`,
   `error`). An empty report yields `0`.
 
-Each `DepStatus` exposes `group`, `dep`, `state` (`UsageState`), `folders`
-(`list[FolderStatus]`), and `error` (a credential-free message, set only for `error`).
-`folders` is empty for `new`/`error` and populated for `up to date`/`out of date`.
+Each `DepStatus` exposes `group`, `dep`, `state` (`UsageState`), `entries`
+(`list[EntryStatus]`), and `error` (a credential-free message, set only for `error`).
+`entries` is empty for `new`/`error` and populated for `up to date`/`out of date`.
 
-Each `FolderStatus` exposes `path` (relative path within the dep) and `state`
-(`up to date` / `out of date`).
+Each `EntryStatus` exposes `path` (relative posix path of the node within the dep), `kind`
+(`EntryKind` — `file` or `dir`), and `change` (`EntryChange`). `EntryChange` is the per-node
+diff verdict: `unchanged` (in both trees, identical), `modified` (in both, differs), `added`
+(remote-only), or `removed` (local-only). Directory nodes are derived from file-path ancestor
+prefixes and carry an aggregated verdict over the files beneath them: all `unchanged` →
+`unchanged`; all `added` → `added`; all `removed` → `removed`; any mix → `modified`.
+
+Two status vocabularies coexist: `UsageState` is the dep-level summary (one value per dep:
+`new` / `up to date` / `out of date` / `error`); `EntryChange` is the per-node diff verdict
+within a dep. The renderer maps both onto the tree markers under `--info`.
 
 ## Exit codes
 
