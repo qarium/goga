@@ -138,3 +138,129 @@ class TestSyncIntegration:
         # no clone temp dirs leak: the failed clone is self-cleaned and the
         # successful clone is cleaned by sync's finally block
         assert list((tmp_path / "clones").iterdir()) == []
+
+
+class TestSyncIntegrationRootFlow:
+    """End-to-end verification that a declared usages dep ``root`` flows from
+    ``.goga/config.yml`` through ``load_project_config`` → ``DepConfig.root`` →
+    ``sync`` → ``deploy_usages`` and lands at deterministic origin-relative paths.
+
+    Git is mocked (``patch_clone``); ``clean_usages_dir`` and ``deploy_usages``
+    run for real against the filesystem (shared ``make_repo``/``write_config``/
+    ``patch_clone`` fixtures in ``conftest.py``).
+    """
+
+    def test_root_subpath_honored_end_to_end(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A dep declaring ``root: folder`` walks only from ``clone/folder`` and lands
+        at the three AC-mappings' origin-relative paths (``.usages`` segment dropped);
+        the out-of-root sibling is never deployed; ``sync`` returns ``0``.
+        """
+        repo = make_repo(
+            "click",
+            {
+                "folder/cell_1/cell_2/.usages/a.md": "a",
+                "folder/subfolder/cell_1/cell_2/.usages/b.md": "b",
+                "folder/subfolder/cell_1/another_folder/cell_2/.usages/c.md": "c",
+                # out-of-root: under OTHER/, not folder/ — excluded by root
+                "OTHER/.usages/ignore.md": "ignore",
+            },
+        )
+        write_config(
+            "usages:\n  libs:\n    click:\n      git: https://x/c.git\n      root: folder\n",
+        )
+
+        usages_root = tmp_path / ".goga" / "usages"
+        click = usages_root / "libs" / "click"
+
+        monkeypatch.chdir(tmp_path)
+
+        with patch_clone({"https://x/c.git": repo}):
+            result = sync(force=True)
+
+        assert result == 0
+        # the three AC-mappings (origin = clone/folder, .usages segment dropped):
+        assert (click / "cell_1" / "cell_2" / "a.md").read_text() == "a"
+        assert (click / "subfolder" / "cell_1" / "cell_2" / "b.md").read_text() == "b"
+        assert (click / "subfolder" / "cell_1" / "another_folder" / "cell_2" / "c.md").read_text() == "c"
+        # out-of-root sibling never deployed; .usages segment never appears in dest
+        assert not (click / "ignore.md").exists()
+        assert not (click / ".usages").exists()
+
+    def test_no_root_deploys_from_repo_root(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """Back-compat: a dep without ``root:`` walks from the clone root (mirrors
+        ``test_deploy_root_none_walks_from_repo_root`` through the real ``sync``).
+        """
+        repo = make_repo(
+            "another",
+            {
+                ".usages/r.md": "r",
+                "src/c/.usages/x.md": "x",
+            },
+        )
+        write_config(
+            "usages:\n  libs:\n    another:\n      git: https://x/another.git\n",
+        )
+
+        usages_root = tmp_path / ".goga" / "usages"
+        monkeypatch.chdir(tmp_path)
+
+        with patch_clone({"https://x/another.git": repo}):
+            result = sync(force=True)
+
+        assert result == 0
+        # repo-root .usages → target root; nested .usages preserves src/c
+        assert (usages_root / "libs" / "another" / "r.md").read_text() == "r"
+        assert (usages_root / "libs" / "another" / "src" / "c" / "x.md").read_text() == "x"
+
+    def test_missing_root_is_best_effort_exit_one_other_deps_run(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A dep whose ``root`` resolves to a missing path under the clone makes
+        ``deploy_usages`` raise; best-effort ``sync`` logs the per-dep failure,
+        sets ``exit_code=1``, and still syncs the other dep. No clone temp dirs leak.
+        """
+        good_repo = make_repo("good", {".usages/g.md": "good"})
+        # repo exists but has no `nope/` subdir → deploy_usages(root="nope") raises
+        bad_repo = make_repo("bad", {".usages/other.md": "other"})
+        write_config(
+            "usages:\n"
+            "  libs:\n"
+            "    good:\n"
+            "      git: https://x/good.git\n"
+            "    click:\n"
+            "      git: https://x/c.git\n"
+            "      root: nope\n",
+        )
+
+        usages_root = tmp_path / ".goga" / "usages"
+        monkeypatch.chdir(tmp_path)
+
+        with patch_clone({"https://x/good.git": good_repo, "https://x/c.git": bad_repo}):
+            result = sync()
+
+        assert result == 1
+        # other dep still synced (best-effort continuation)
+        assert (usages_root / "libs" / "good" / "g.md").read_text() == "good"
+        # failed dep left no target behind (origin verified before target.mkdir)
+        assert not (usages_root / "libs" / "click").exists()
+        # both clone temp dirs cleaned (success via finally; failure via finally too)
+        assert list((tmp_path / "clones").iterdir()) == []
