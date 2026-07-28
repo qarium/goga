@@ -390,3 +390,46 @@ class TestStatusIntegration:
         # no clone temp dirs leak: the failed clone self-cleans, the successful
         # clone is cleaned by compute_dep_status's outer finally block
         assert list((tmp_path / "clones").iterdir()) == []
+
+    def test_status_dep_with_root_honored_up_to_date(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ):
+        """A dep declaring ``root: folder`` rebuilds its expected tree only from
+        ``clone/folder`` — mirroring what ``sync`` deployed — so a target matching
+        that in-root deployment is ``up_to_date``; the out-of-root sibling never
+        affects the comparison. Regression guard: if ``depcfg.root`` were ever
+        dropped from the status rebuild, the expected tree would gain the
+        ``folder/`` prefix plus the out-of-root files, flipping this to
+        ``out_of_date``.
+        """
+        repo = make_repo(
+            "click",
+            {
+                "folder/cell_1/cell_2/.usages/a.md": "a",
+                "folder/subfolder/.usages/b.md": "b",
+                # out-of-root: under OTHER/, excluded by root
+                "OTHER/.usages/ignore.md": "ignore",
+            },
+        )
+        write_config(
+            "usages:\n  libs:\n    click:\n      git: https://x/c.git\n      root: folder\n",
+        )
+        monkeypatch.chdir(tmp_path)
+
+        target = tmp_path / ".goga" / "usages" / "libs" / "click"
+        # mirror what sync(force=True) deploys from clone/folder (.usages dropped)
+        (target / "cell_1" / "cell_2").mkdir(parents=True)
+        (target / "cell_1" / "cell_2" / "a.md").write_text("a")
+        (target / "subfolder").mkdir(parents=True)
+        (target / "subfolder" / "b.md").write_text("b")
+
+        with patch_clone({"https://x/c.git": repo}):
+            report = status()
+
+        assert report.deps[0].state is UsageState.up_to_date
+        assert report.exit_code == 0

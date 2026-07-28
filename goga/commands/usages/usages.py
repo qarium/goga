@@ -12,7 +12,7 @@ from __future__ import annotations
 import click
 import yaml
 
-from ...usages import UsageState
+from ...usages import DepStatus, UsageState, UsageStatusReport
 from ...usages import status as status_logic
 from ...usages import sync as sync_logic
 
@@ -96,7 +96,7 @@ def status(ctx: click.Context, info: bool, group: str | None, dep: str | None) -
     ctx.exit(report.exit_code)
 
 
-def render_status_report(report: object, info: bool) -> None:
+def render_status_report(report: UsageStatusReport, info: bool) -> None:
     """Render a status report as a colored group -> dep tree.
 
     Groups are listed sorted; within each group the deps are listed sorted by
@@ -114,9 +114,9 @@ def render_status_report(report: object, info: bool) -> None:
     Raises:
         click.ClickException: Never raised here; rendering is best-effort.
     """
-    by_group: dict[str, list[object]] = {}
-    for dep in report.deps:  # type: ignore[attr-defined]
-        by_group.setdefault(dep.group, []).append(dep)  # type: ignore[attr-defined]
+    by_group: dict[str, list[DepStatus]] = {}
+    for dep in report.deps:
+        by_group.setdefault(dep.group, []).append(dep)
 
     for group_name in sorted(by_group):
         click.echo(group_name)

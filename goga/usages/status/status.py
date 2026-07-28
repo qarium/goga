@@ -17,7 +17,7 @@ import cycle — see that module's docstring).
 import logging
 from pathlib import Path
 
-from ...config import load_project_config
+from ...config import DepConfig, load_project_config
 from .compare import compute_dep_status
 from .models import DepStatus, FolderStatus, UsageState, UsageStatusReport
 
@@ -74,7 +74,7 @@ def status(group: str | None = None, dep: str | None = None) -> UsageStatusRepor
     return UsageStatusReport(deps=collected)
 
 
-def _check_dep(group_name: str, dep_name: str, depcfg: object) -> DepStatus:
+def _check_dep(group_name: str, dep_name: str, depcfg: DepConfig) -> DepStatus:
     """Compute the status of one declared dep, isolating its failure mode.
 
     A missing on-disk target is ``new`` (the dep has never been synced). An existing

@@ -213,7 +213,9 @@ class TestStatusLogic:
 
         assert result.exit_code == 1
 
-    def test_cli_usages_status_info_flag_passes_true(self) -> None:
+    def test_info_flag_leaves_group_dep_as_none(self) -> None:
+        """``--info``/``-i`` only feeds the renderer; group/dep stay at their
+        None defaults (the flag is not forwarded to ``status_logic``)."""
         with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
             runner = CliRunner()
             runner.invoke(usages_cli, ["status", "--info"])
@@ -370,6 +372,42 @@ class TestRenderStatusReport:
 
         # capsys is not a TTY, so click strips ANSI escape codes.
         assert "\x1b[" not in out
+
+    def test_render_state_color_mapping(self) -> None:
+        """The documented state -> foreground color is applied per dep line.
+
+        Locks ``_STATE_COLOR`` (a documented part of the status contract: new ->
+        yellow, up_to_date -> green, out_of_date -> red, error -> bright_red) and
+        confirms each dep renders with that exact ``fg`` (capsys is not a TTY, so
+        click strips the escape sequence and the value is only observable here).
+        """
+        assert {
+            UsageState.new: "yellow",
+            UsageState.up_to_date: "green",
+            UsageState.out_of_date: "red",
+            UsageState.error: "bright_red",
+        } == _usages_mod._STATE_COLOR
+
+        report = UsageStatusReport(
+            deps=[
+                DepStatus(group="g", dep="a", state=UsageState.new, folders=[]),
+                DepStatus(group="g", dep="b", state=UsageState.up_to_date, folders=[]),
+                DepStatus(group="g", dep="c", state=UsageState.out_of_date, folders=[]),
+                DepStatus(
+                    group="g",
+                    dep="d",
+                    state=UsageState.error,
+                    error="failed to check usages status for g/d",
+                    folders=[],
+                ),
+            ]
+        )
+        with mock.patch.object(_usages_mod.click, "secho") as secho_mock:
+            _usages_mod.render_status_report(report, info=False)
+
+        # one secho call per dep (sorted a..d), each carrying its state's fg
+        fgs = [call.kwargs.get("fg") for call in secho_mock.call_args_list]
+        assert fgs == ["yellow", "green", "red", "bright_red"]
 
 
 class TestStatusAppIntegration:
