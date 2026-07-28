@@ -1,13 +1,22 @@
 # tests/usages/test_compare.py — contract and logic tests for compare.py primitives
 
 import hashlib
+import importlib
 import inspect
 import itertools
+import tempfile
 from pathlib import Path
+from unittest import mock
 
 import pytest
-from goga.usages.status import FolderStatus, UsageState
-from goga.usages.status.compare import _rollup_folders, hash_tree
+from goga.config import DepConfig
+from goga.usages.status import DepStatus, FolderStatus, UsageState
+from goga.usages.status.compare import _rollup_folders, compute_dep_status, hash_tree
+
+# Resolve the inner ``compare.py`` submodule via importlib so ``mock.patch.object``
+# patches the lookup site ``compute_dep_status`` uses for ``clone_repository`` /
+# ``deploy_usages`` (the names imported into compare.py's own namespace).
+_compare_mod = importlib.import_module("goga.usages.status.compare")
 
 # --- contract tests: hash_tree ---
 
@@ -186,3 +195,119 @@ class TestRollupFolders:
         assert len(outcomes) == 1  # every permutation agrees
         actual = [(fs.path, fs.state) for fs in _rollup_folders(expected, local)]
         assert actual == list(fold(keys))
+
+
+# --- helpers for compute_dep_status logic tests ---
+
+
+def _make_fake_clone(root: Path, files: dict[str, str]) -> Path:
+    """Build a throwaway fake clone under ``root`` with the given repo-relative files.
+
+    Mirrors the ``make_repo`` fixture but is a self-contained throwaway (it is the
+    path ``compute_dep_status`` will ``rmtree`` as ``temp#1``).
+    """
+    root.mkdir(parents=True)
+    for rel, content in files.items():
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    return root
+
+
+def _make_target(parent: Path, files: dict[str, str]) -> Path:
+    """Build the on-disk synced target tree under ``parent/target``."""
+    target = parent / "target"
+    target.mkdir(parents=True)
+    for rel, content in files.items():
+        path = target / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+    return target
+
+
+# --- contract tests: compute_dep_status ---
+
+
+class TestComputeDepStatus:
+    def test_compute_dep_status_importable(self):
+        """compute_dep_status is importable from goga.usages.status.compare."""
+        from goga.usages.status import compare as compare_mod
+
+        assert hasattr(compare_mod, "compute_dep_status")
+        assert compare_mod.compute_dep_status is compute_dep_status
+
+    def test_compute_dep_status_signature(self):
+        """Signature is (group: str, dep: str, depcfg: DepConfig, target: Path) -> DepStatus."""
+        sig = inspect.signature(compute_dep_status)
+        params = list(sig.parameters)
+        assert params == ["group", "dep", "depcfg", "target"]
+        assert sig.parameters["group"].annotation is str
+        assert sig.parameters["dep"].annotation is str
+        assert sig.parameters["depcfg"].annotation is DepConfig
+        assert sig.parameters["target"].annotation is Path
+        assert sig.return_annotation is DepStatus
+
+
+# --- logic tests: compute_dep_status ---
+
+
+class TestComputeDepStatusLogic:
+    def test_compute_dep_status_up_to_date(self, tmp_path):
+        """Identical rebuilt-expected and local trees → state is up_to_date."""
+        fake_repo = _make_fake_clone(tmp_path / "clone", {".usages/click.md": "C1"})
+        target = _make_target(tmp_path, {"click.md": "C1"})
+        depcfg = DepConfig(git="https://x/click.git", ref="main")
+        with mock.patch.object(_compare_mod, "clone_repository", return_value=fake_repo):
+            result = compute_dep_status("libs", "click", depcfg, target)
+        assert result.state is UsageState.up_to_date
+        assert result.group == "libs"
+        assert result.dep == "click"
+        assert result.folders == [FolderStatus(path="", state=UsageState.up_to_date)]
+
+    def test_compute_dep_status_out_of_date(self, tmp_path):
+        """Differing local tree → state is out_of_date; folders reflect the differing file."""
+        fake_repo = _make_fake_clone(tmp_path / "clone", {".usages/click.md": "REMOTE"})
+        target = _make_target(tmp_path, {"click.md": "LOCAL"})
+        depcfg = DepConfig(git="https://x/click.git")
+        with mock.patch.object(_compare_mod, "clone_repository", return_value=fake_repo):
+            result = compute_dep_status("libs", "click", depcfg, target)
+        assert result.state is UsageState.out_of_date
+        assert result.folders == [FolderStatus(path="", state=UsageState.out_of_date)]
+
+    def test_compute_dep_status_cleans_both_temp_dirs(self, tmp_path, monkeypatch):
+        """Both temp#1 (clone) and temp#2 (expected) are cleaned on success AND on deploy failure."""
+        # Spy on tempfile.mkdtemp to capture temp#2's path (the only mkdtemp call in
+        # the compare path — clone_repository is mocked, deploy_usages uses mkdir).
+        created_expected: list[Path] = []
+        real_mkdtemp = tempfile.mkdtemp
+
+        def spy_mkdtemp(*args, **kwargs):
+            created = Path(real_mkdtemp(*args, **kwargs))
+            created_expected.append(created)
+            return created
+
+        monkeypatch.setattr(tempfile, "mkdtemp", spy_mkdtemp)
+        depcfg = DepConfig(git="https://x/click.git")
+        target = _make_target(tmp_path, {"click.md": "C1"})
+
+        # --- success path: clone + deploy succeed → both temps cleaned ---
+        ok_repo = _make_fake_clone(tmp_path / "ok", {".usages/click.md": "C1"})
+        with mock.patch.object(_compare_mod, "clone_repository", return_value=ok_repo):
+            result = compute_dep_status("libs", "click", depcfg, target)
+        assert result.state is UsageState.up_to_date
+        assert len(created_expected) == 1  # temp#2 was created...
+        assert not ok_repo.exists()  # temp#1 cleaned
+        assert not created_expected[0].exists()  # ...temp#2 cleaned
+
+        # --- deploy-failure path: deploy_usages raises → both temps STILL cleaned ---
+        created_expected.clear()
+        fail_repo = _make_fake_clone(tmp_path / "fail", {".usages/click.md": "C1"})
+        with (
+            mock.patch.object(_compare_mod, "clone_repository", return_value=fail_repo),
+            mock.patch.object(_compare_mod, "deploy_usages", side_effect=OSError("boom")),
+            pytest.raises(OSError, match="boom"),
+        ):
+            compute_dep_status("libs", "click", depcfg, target)
+        assert len(created_expected) == 1  # temp#2 was created before deploy raised...
+        assert not fail_repo.exists()  # temp#1 cleaned
+        assert not created_expected[0].exists()  # ...temp#2 cleaned

@@ -1,9 +1,11 @@
 """Compare primitives for the cell-level usages status domain.
 
-Two pure, read-only helpers with no git dependency:
+Read-only helpers with a git boundary only on :func:`compute_dep_status`:
 
 * :func:`hash_tree` builds a deterministic content-hash map of a directory tree.
 * :func:`_rollup_folders` collapses two hash maps into per-folder statuses.
+* :func:`compute_dep_status` rebuilds the expected usages tree from the remote and
+  compares it to the synced target for one declared dep.
 
 ``hash_tree`` mirrors :func:`goga.usages.sync.deploy.deploy_usages`'s verbatim-copy
 model: symlinks are hashed by their *readlink target string*, never by the content
@@ -15,9 +17,14 @@ at directories are hashed the same way and are never descended into
 
 import hashlib
 import os
+import shutil
+import tempfile
 from pathlib import Path
 
-from .models import FolderStatus, UsageState
+from ...config import DepConfig
+from ..sync.clone import clone_repository
+from ..sync.deploy import deploy_usages
+from .models import DepStatus, FolderStatus, UsageState
 
 _READ_CHUNK = 65536
 
@@ -107,3 +114,55 @@ def _rollup_folders(
         (FolderStatus(path=path, state=state) for path, state in folders.items()),
         key=lambda fs: fs.path,
     )
+
+
+def compute_dep_status(group: str, dep: str, depcfg: DepConfig, target: Path) -> DepStatus:
+    """Rebuild the expected usages tree from the remote and compare it to ``target``.
+
+    Read-only with respect to ``target``: the remote is cloned into a first temp
+    directory (``temp#1``) and its usages deployed into a *second* temp directory
+    (``temp#2``) — never into the real ``.goga/usages/<group>/<dep>/``. Both rebuilt
+    trees are hashed (:func:`hash_tree`) and compared: identical hash maps →
+    ``up_to_date``, otherwise ``out_of_date``. Per-folder statuses are rolled up
+    from the two maps.
+
+    Both temp directories are removed in nested ``finally`` blocks — ``temp#2``
+    (inner) then ``temp#1`` (outer) — so a clone, checkout, or deploy failure still
+    cleans up everything before the exception propagates. ``clone_repository`` is
+    invoked *before* the outer ``try`` and self-cleans ``temp#1`` on its own
+    failure, so ``repo`` is always bound when the outer ``finally`` runs (an
+    ``UnboundLocalError`` here would mask the original clone failure).
+
+    Args:
+        group: Group name of the dep.
+        dep: Dep name.
+        depcfg: Declared git dependency (URL/ref/root).
+        target: On-disk synced tree to compare against
+            (``.goga/usages/<group>/<dep>``).
+
+    Returns:
+        ``DepStatus`` with state ``up_to_date`` or ``out_of_date`` and the rolled-up
+        per-folder statuses.
+
+    Raises:
+        Propagates any clone/checkout/deploy error (the caller owns best-effort
+        handling); both temp directories are cleaned first.
+    """
+    repo = clone_repository(depcfg.git, depcfg.ref)  # temp#1, before the outer try
+    try:
+        expected = Path(tempfile.mkdtemp())  # temp#2
+        try:
+            deploy_usages(repo, expected, depcfg.root)
+            expected_hashes = hash_tree(expected)
+            local_hashes = hash_tree(target)
+            state = (
+                UsageState.up_to_date
+                if expected_hashes == local_hashes
+                else UsageState.out_of_date
+            )
+            folders = _rollup_folders(expected_hashes, local_hashes)
+            return DepStatus(group=group, dep=dep, state=state, folders=folders)
+        finally:
+            shutil.rmtree(expected, ignore_errors=True)
+    finally:
+        shutil.rmtree(repo, ignore_errors=True)
