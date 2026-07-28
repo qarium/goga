@@ -199,7 +199,7 @@ Color is applied **only** to the changed markers (`[*]`, `[+]`, `[-]`, `[!]`) �
 
 A non-matching `--group` or `--dep` yields an empty result, never an error.
 
-### Exit codes
+### Exit Codes
 
 | Code | Meaning |
 |---|---|
@@ -216,7 +216,7 @@ A failure to load `.goga/config.yml` (missing file, malformed YAML, schema viola
 
 Every dep that is not `new` is checked by cloning its remote at the declared `git`/`ref` — there is no caching and no reuse of `sync`'s clones. Use `--group`/`--dep` to check narrowly when you only care about one dependency.
 
-### Example
+### Examples
 
 Check every declared dep:
 
@@ -225,11 +225,11 @@ goga usages status
 ```
 
 ```
+internal/
+└── [+] my-shared-cells/
 libs/
 ├── [ ] click/
 └── [*] structlog/
-internal/
-└── [+] my-shared-cells/
 ```
 
 Expand into per-node detail:
@@ -239,6 +239,8 @@ goga usages status --info
 ```
 
 ```
+internal/
+└── [+] my-shared-cells/
 libs/
 ├── [ ] click/
 │   └── [ ] cell_1/
@@ -248,8 +250,6 @@ libs/
 │   │   └── [*] cell_2/
 │   └── [+] new-folder/
 │       └── [+] guide.md
-internal/
-└── [+] my-shared-cells/
 ```
 
 Check a single dep across all groups:

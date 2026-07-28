@@ -155,9 +155,7 @@ class TestAppIntegration:
 def _report(exit_code_deps: list[DepStatus] | None = None) -> UsageStatusReport:
     """Build a UsageStatusReport (by default a single up_to_date dep → exit 0)."""
     if exit_code_deps is None:
-        exit_code_deps = [
-            DepStatus(group="libs", dep="click", state=UsageState.up_to_date, entries=[])
-        ]
+        exit_code_deps = [DepStatus(group="libs", dep="click", state=UsageState.up_to_date, entries=[])]
     return UsageStatusReport(deps=exit_code_deps)
 
 
@@ -204,9 +202,7 @@ class TestStatusLogic:
         assert result.exit_code == 0
 
     def test_cli_usages_status_exit_code_propagates_drift(self) -> None:
-        report = _report(
-            [DepStatus(group="libs", dep="click", state=UsageState.out_of_date, entries=[])]
-        )
+        report = _report([DepStatus(group="libs", dep="click", state=UsageState.out_of_date, entries=[])])
         with mock.patch.object(_usages_mod, "status_logic", return_value=report):
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["status"])

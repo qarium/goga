@@ -124,10 +124,9 @@ Annotations: |
     Constraints:
     - Read-only
     - Deterministic iteration order
-    - Do NOT dereference symlinks — never read through a link. This matches the
-      verbatim-copy model of `deploy_usages` (the synced tree stores the link itself, so
-      its identity is its readlink target), avoids reading arbitrary local files the link
-      may point at (local-file disclosure vector), and is robust to dangling links
+    - Do NOT dereference symlinks — never read through a link. Hash the readlink target
+      (the string); this is robust to dangling links and avoids reading arbitrary local
+      files the link may point at (local-file disclosure vector)
 
 "UsageStatusReport(deps: list[DepStatus])":
   location: status.py

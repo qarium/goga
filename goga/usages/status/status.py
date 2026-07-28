@@ -64,6 +64,11 @@ def status(group: str | None = None, dep: str | None = None) -> UsageStatusRepor
     if not config.usages:
         return UsageStatusReport(deps=[])
 
+    logger.info(
+        "usages status started",
+        extra={"group": group, "dep": dep},
+    )
+
     collected: list[DepStatus] = []
     for group_name, deps in config.usages.items():
         if group is not None and group_name != group:
@@ -72,6 +77,11 @@ def status(group: str | None = None, dep: str | None = None) -> UsageStatusRepor
             if dep is not None and dep_name != dep:
                 continue
             collected.append(_check_dep(group_name, dep_name, depcfg))
+
+    logger.info(
+        "usages status completed",
+        extra={"deps": len(collected)},
+    )
 
     return UsageStatusReport(deps=collected)
 
@@ -108,9 +118,7 @@ def _check_dep(group_name: str, dep_name: str, depcfg: DepConfig) -> DepStatus:
         return compute_dep_status(group_name, dep_name, depcfg, target)
     except Exception:
         logger.error(
-            "usages status failed for %s/%s",
-            group_name,
-            dep_name,
+            "usages status dep failed",
             extra={"group": group_name, "dep": dep_name},
         )
         return DepStatus(

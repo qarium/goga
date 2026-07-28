@@ -46,7 +46,7 @@ _DEP_CHANGE: dict[UsageState, EntryChange] = {
 }
 
 
-@dataclass
+@dataclass(kw_only=True)
 class _Node:
     """One node of the rendered entry tree (a file or a directory)."""
 

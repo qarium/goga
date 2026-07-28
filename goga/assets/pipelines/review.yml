@@ -2,7 +2,7 @@ name: GogaReview
 description: Review changes
 ---
 
-- name: discovery-scope
+discovery-scope:
   title: Define the scope of changes
   communication: true
   prompt: |
@@ -20,12 +20,14 @@ description: Review changes
     Constraints:
     - Do not decide on the default branch when it is ambiguous (main, master, etc...)
 
-- name: code-review
+code-review:
   title: Verify source code
   communication: true
   roles:
     - planner
     - executor
+  depends_on:
+    - discovery-scope
   prompt: |
     Detect deviations from the conventions in the change scope and fix them.
   
@@ -44,7 +46,7 @@ description: Review changes
 
     User approve is **REQUIRED** for every finding.
 
-- name: contracts-review
+contracts-review:
   title: Verify codemanifest and usage files
   communication: true
   roles:
@@ -53,6 +55,8 @@ description: Review changes
   skills:
     - goga-cell
     - goga-cookbook
+  depends_on:
+    - discovery-scope
   prompt: |
     # Specs review
 
@@ -104,12 +108,14 @@ description: Review changes
 
     [ ] Liner `goga lint` without errors
 
-- name: documentation-review
+documentation-review:
   title: Verify documentation files
   communication: true
   roles:
     - planner
     - executor
+  depends_on:
+    - discovery-scope
   prompt: |
     # Technical Documentation Quality Assurance Checklist
 
@@ -155,12 +161,16 @@ description: Review changes
     - [ ] **Capitalization rules:** List items start with a capital or lowercase letter according to a single global rule.
     - [ ] **Admonition styling:** Critical notes, warnings, and cautions are explicitly wrapped in standard markup blocks (e.g., Markdown admonitions).
 
-- name: testing
+testing:
   title: Check and fix lint/format/tests
   communication: true
   roles:
     - planner
     - executor
+  depends_on:
+    - code-review
+    - contracts-review
+    - documentation-review
   prompt: |
     Run lint, format, and tests in accordance with the convention `.goga/usages/conventions.md`.
 
@@ -171,7 +181,9 @@ description: Review changes
     Constraints:
     - Do not ignore any error; the branch must remain green on CI
 
-- name: commit-changes
+commit-changes:
   title: Commit changes after review
+  depends_on:
+    - testing
   prompt: |
     Commit all added and modified files

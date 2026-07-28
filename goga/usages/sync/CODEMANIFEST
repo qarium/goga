@@ -147,7 +147,7 @@ Annotations: |
       intermediates (root=folder: folder/cell_1/cell_2 → cell_1/cell_2;
       folder/subfolder/cell_1/cell_2 → subfolder/cell_1/cell_2;
       folder/subfolder/cell_1/another_folder/cell_2 → subfolder/cell_1/another_folder/cell_2)
-    - root default None → walk from `source_repo` root (back-compat origin)
+    - root default None → walk from `source_repo` root (the repo-wide default origin)
     - Drop the .usages segment from every destination path
     - Skip .git/.hg/.svn during discovery and copying; copy directories via the standard
       library per `convention`

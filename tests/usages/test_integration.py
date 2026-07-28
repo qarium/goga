@@ -282,12 +282,7 @@ class TestSyncIntegrationRootFlow:
 _CLICK_DEP_BLOCK = "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n"
 
 _GOOD_AND_BAD_STATUS_DEPS = (
-    "usages:\n"
-    "  libs:\n"
-    "    good:\n"
-    "      git: https://x/good.git\n"
-    "    bad:\n"
-    "      git: https://x/bad.git\n"
+    "usages:\n  libs:\n    good:\n      git: https://x/good.git\n    bad:\n      git: https://x/bad.git\n"
 )
 
 
