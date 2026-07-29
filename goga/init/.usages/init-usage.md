@@ -89,6 +89,21 @@ Run an interactive user survey and generate project files.
     - Collect values for each proposed key
     - Then optionally collect arbitrary key-value pairs
 
+### Per-field survey methods
+
+`Questionnaire` exposes each survey step as a public method; `ask_goga_config()` calls them in order and assembles the results into `GogaConfigAnswers`:
+
+- `ask_language() -> str`
+- `ask_base_convention() -> (codemanifest_usages, codemanifest_annotations)` — pre-fill pair for the two codemanifest fields
+- `ask_codemanifest_usages(prefill: dict | None = None) -> dict | None`
+- `ask_codemanifest_annotations(prefill: str | None = None) -> str | None`
+- `ask_agent() -> str`
+- `ask_image(language: str) -> str`
+- `ask_dockerfile_path() -> str | None`
+- `ask_env(agent: str) -> dict | None`
+- `ask_pipeline_agent(agent: str) -> str` (defaults to `agent`)
+- `ask_pipeline_env(pipeline_agent: str) -> dict | None`
+
 ## Generated .goga/config.yml structure
 
 ```yaml

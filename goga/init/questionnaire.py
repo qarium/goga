@@ -96,32 +96,85 @@ class Questionnaire:
         config = self.ask_goga_config()
         return InitAnswers(goga_config=config)
 
-    def ask_goga_config(self) -> GogaConfigAnswers:  # noqa: C901, PLR0912, PLR0915
+    def ask_goga_config(self) -> GogaConfigAnswers:
         """Run questionnaire for .goga/config.yml creation.
+
+        Orchestrates the per-field ask_* survey methods in order and assembles
+        the results into a GogaConfigAnswers.
 
         Returns:
             GogaConfigAnswers with all collected goga config fields.
         """
         click.echo("Collecting .goga/config.yml settings...\n")
 
-        # 1. Language
+        language = self.ask_language()
+
+        usages_prefill, annotations_prefill = self.ask_base_convention()
+        codemanifest_usages = self.ask_codemanifest_usages(usages_prefill)
+        codemanifest_annotations = self.ask_codemanifest_annotations(annotations_prefill)
+
+        agent = self.ask_agent()
+        image = self.ask_image(language)
+        dockerfile_path = self.ask_dockerfile_path()
+        env = self.ask_env(agent)
+        pipeline_agent = self.ask_pipeline_agent(agent)
+        pipeline_env = self.ask_pipeline_env(pipeline_agent)
+
+        return GogaConfigAnswers(
+            language=language,
+            agent=agent,
+            image=image,
+            pipeline_agent=pipeline_agent,
+            pipeline_env=pipeline_env,
+            env=env,
+            dockerfile_path=dockerfile_path,
+            codemanifest_usages=codemanifest_usages,
+            codemanifest_annotations=codemanifest_annotations,
+        )
+
+    def ask_language(self) -> str:
+        """Survey the primary programming language.
+
+        Returns:
+            One of python, golang, kotlin, swift, javascript.
+        """
         click.echo("--- Project Language ---")
         click.echo("Select the primary programming language for your project.")
-        language: str = click.prompt(
+        return click.prompt(
             "Language",
             type=click.Choice(_LANGUAGES),
         )
 
-        # 2. Convention download
-        codemanifest_usages: dict | None = None
-        codemanifest_annotations: str | None = None
+    def ask_base_convention(self) -> tuple[dict | None, str | None]:
+        """Offer to download the base convention for the selected language.
+
+        Acceptance pre-fills both codemanifest fields:
+        - codemanifest_usages with {"conventions": ".goga/usages/conventions.md"}
+        - codemanifest_annotations with the conventions directive text.
+
+        Returns:
+            (codemanifest_usages, codemanifest_annotations) pre-fill pair;
+            (None, None) when the user declines.
+        """
         click.echo("\n--- Base Convention ---")
         click.echo("Download the default code conventions for your language?")
         if click.confirm("Download base convention"):
-            codemanifest_usages = {"conventions": ".goga/usages/conventions.md"}
-            codemanifest_annotations = "Use `conventions` for code writing rules and testing."
+            return (
+                {"conventions": ".goga/usages/conventions.md"},
+                "Use `conventions` for code writing rules and testing.",
+            )
+        return None, None
 
-        # 3. Additional codemanifest usages
+    def ask_codemanifest_usages(self, prefill: dict | None = None) -> dict | None:
+        """Collect optional additional codemanifest usages onto `prefill`.
+
+        Args:
+            prefill: existing usages (e.g. the base convention entry) to extend.
+
+        Returns:
+            Merged usages dict, or None when neither prefill nor input exists.
+        """
+        codemanifest_usages = prefill
         click.echo("\n--- Codemanifest Usages ---")
         click.echo("Add additional codemanifest usages (code practices documentation).")
         if click.confirm("Add codemanifest usages?", default=False):
@@ -136,8 +189,18 @@ class Questionnaire:
                     codemanifest_usages[name] = path
                 if not click.confirm("Add another codemanifest usage?", default=False):
                     break
+        return codemanifest_usages
 
-        # 4. Additional codemanifest annotations
+    def ask_codemanifest_annotations(self, prefill: str | None = None) -> str | None:
+        """Collect optional custom codemanifest annotations appended to `prefill`.
+
+        Args:
+            prefill: existing annotations text to append to.
+
+        Returns:
+            Merged annotations string, or None when neither exists.
+        """
+        codemanifest_annotations = prefill
         click.echo("\n--- Codemanifest Annotations ---")
         click.echo("Add custom codemanifest annotations (global directives for AI agent).")
         if click.confirm("Add codemanifest annotations?", default=False):
@@ -146,16 +209,31 @@ class Questionnaire:
                 codemanifest_annotations = codemanifest_annotations + "\n" + custom
             else:
                 codemanifest_annotations = custom
+        return codemanifest_annotations
 
-        # 5. Agent
+    def ask_agent(self) -> str:
+        """Survey the AI agent that builds the implementation.
+
+        Returns:
+            One of claude, codex.
+        """
         click.echo("\n--- AI Agent ---")
         click.echo("Select the AI agent that will build implementation.")
-        agent: str = click.prompt(
+        return click.prompt(
             "Agent",
             type=click.Choice(["claude", "codex"]),
         )
 
-        # 6. Docker image
+    def ask_image(self, language: str) -> str:
+        """Survey the Docker image, hinting language-specific defaults.
+
+        Args:
+            language: the selected project language (drives the hint list).
+
+        Returns:
+            Docker image name. Defaults to the last hint when hints exist;
+            accepts free-form input.
+        """
         click.echo("\n--- Docker Image ---")
         click.echo("Select the Docker image for the build implementation.")
         images = _IMAGE_MAP.get(language)
@@ -163,44 +241,57 @@ class Questionnaire:
             click.echo("Available images:")
             for img in images:
                 click.echo(f"  - {img}")
-            image: str = click.prompt("Docker image", default=images[-1])
-        else:
-            image = click.prompt("Docker image")
+            return click.prompt("Docker image", default=images[-1])
+        return click.prompt("Docker image")
 
-        # 7. Custom Dockerfile
+    def ask_dockerfile_path(self) -> str | None:
+        """Optionally survey a custom Dockerfile path.
+
+        Returns:
+            Dockerfile path (default ".goga/Dockerfile"), or None to skip.
+        """
         click.echo("\n--- Custom Dockerfile ---")
         click.echo("Create a custom Dockerfile for the build implementation?")
-        dockerfile_path: str | None = None
         if click.confirm("Create Dockerfile?", default=False):
-            dockerfile_path = click.prompt("Dockerfile path", default=".goga/Dockerfile")
+            return click.prompt("Dockerfile path", default=".goga/Dockerfile")
+        return None
 
-        # 8. Environment variables (task_executor)
+    def ask_env(self, agent: str) -> dict | None:
+        """Survey build task_executor environment variables for `agent`.
+
+        Args:
+            agent: the selected build agent (drives suggested env keys).
+
+        Returns:
+            Env dict collected via `_collect_agent_env`, or None.
+        """
         click.echo("\n--- Environment Variables ---")
         click.echo("Configure environment variables for the build implementation.")
-        env: dict | None = _collect_agent_env(agent)
+        return _collect_agent_env(agent)
 
-        # 9. Pipeline agent (defaults to the build agent from step 5)
+    def ask_pipeline_agent(self, agent: str) -> str:
+        """Survey the pipeline agent, defaulting to the build `agent`.
+
+        Returns:
+            One of claude, codex (default = the build agent).
+        """
         click.echo("\n--- Pipeline Agent ---")
         click.echo("Select the AI agent that will run pipelines (afm client.command).")
-        pipeline_agent: str = click.prompt(
+        return click.prompt(
             "Pipeline agent",
             type=click.Choice(["claude", "codex"]),
             default=agent,
         )
 
-        # 10. Pipeline environment variables
+    def ask_pipeline_env(self, pipeline_agent: str) -> dict | None:
+        """Survey pipeline environment variables for `pipeline_agent`.
+
+        Args:
+            pipeline_agent: the selected pipeline agent (drives suggested env keys).
+
+        Returns:
+            Env dict collected via `_collect_agent_env`, or None.
+        """
         click.echo("\n--- Pipeline Environment Variables ---")
         click.echo("Configure environment variables for the pipeline implementation.")
-        pipeline_env: dict | None = _collect_agent_env(pipeline_agent)
-
-        return GogaConfigAnswers(
-            language=language,
-            agent=agent,
-            image=image,
-            pipeline_agent=pipeline_agent,
-            pipeline_env=pipeline_env,
-            env=env,
-            dockerfile_path=dockerfile_path,
-            codemanifest_usages=codemanifest_usages,
-            codemanifest_annotations=codemanifest_annotations,
-        )
+        return _collect_agent_env(pipeline_agent)

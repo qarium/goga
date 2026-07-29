@@ -95,6 +95,8 @@ Annotations: |
     Use `image_defaults` to list available Docker images for the chosen language.
     Use `lang_conventions` to offer downloading the base convention after language selection.
     Use `agent_env_defaults` to prompt for env keys after agent selection.
+
+    The survey is decomposed into per-field ask_* methods; ask_goga_config orchestrates them.
   methods:
     "ask() -> answers:InitAnswers": |
       Display the header "=== Goga Project Initialization ===" and wizard description.
@@ -102,29 +104,42 @@ Annotations: |
     "ask_goga_config() -> config:GogaConfigAnswers": |
       Survey for .goga/config.yml.
       Display "Collecting .goga/config.yml settings...".
-      Each step includes a section header (---) and explanatory text.
-      Survey steps:
-      1. language — select from (python, golang, kotlin, swift, javascript).
-      2. convention — offer to download the base convention via `lang_conventions`.
-         On acceptance: add {"conventions": ".goga/usages/conventions.md"} to codemanifest_usages
-         and set codemanifest_annotations.
-      3. codemanifest_usages — optional; appended to pre-filled conventions.
-      4. codemanifest_annotations — optional; appended to pre-filled values.
-      5. agent — select from (claude, codex).
-      6. image — display hints from `image_defaults`, default to the last entry; accept free-form input.
-         Captures the top-level image field (NOT build.image).
-      7. dockerfile — optional; prompt to create a custom Dockerfile.
-         On acceptance: request path (default ".goga/Dockerfile").
-      8. env — first propose env keys from `agent_env_defaults` for the selected agent.
-         Drives build.task_executor.env.
-         Collect values for each proposed key.
-         Then optionally collect arbitrary key-value pairs.
-      9. pipeline_agent — select from (claude, codex); default = agent from step 5.
-         Drives pipeline.agent.
-      10. pipeline_env — propose env keys from `agent_env_defaults` for pipeline_agent (from step 9).
-          Drives pipeline.env.
-          Collect values for each proposed key.
-          Then optionally collect arbitrary key-value pairs.
+      Orchestrate the per-field ask_* methods in survey order and assemble GogaConfigAnswers:
+      ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
+      → ask_agent → ask_image → ask_dockerfile_path → ask_env → ask_pipeline_agent → ask_pipeline_env.
+      Each per-field method emits a section header (---) and explanatory text.
+    "ask_language() -> language: str": |
+      Select from (python, golang, kotlin, swift, javascript).
+    "ask_base_convention() -> prefill: tuple[dict | None, str | None]": |
+      Offer to download the base convention via `lang_conventions` for the selected language.
+      On acceptance: return ({"conventions": ".goga/usages/conventions.md"}, conventions directive text),
+      pre-filling codemanifest_usages and codemanifest_annotations.
+      On decline: return (None, None).
+    "ask_codemanifest_usages(prefill: dict | None = None) -> codemanifest_usages: dict | None": |
+      Optional additional usages appended onto `prefill` (the base convention usages).
+      Collect name→path pairs in a loop; duplicate names are skipped.
+      Returns None when neither prefill nor input exists.
+    "ask_codemanifest_annotations(prefill: str | None = None) -> codemanifest_annotations: str | None": |
+      Optional custom annotations appended to `prefill` (the base convention annotations).
+      Returns None when neither prefill nor input exists.
+    "ask_agent() -> agent: str": |
+      Select from (claude, codex). Used as build.task_executor.agent.
+    "ask_image(language: str) -> image: str": |
+      Display hints from `image_defaults` for `language`; default to the last entry; accept free-form input.
+      Captures the top-level image field (NOT build.image).
+    "ask_dockerfile_path() -> dockerfile_path: str | None": |
+      Optional; prompt to create a custom Dockerfile.
+      On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
+    "ask_env(agent: str) -> env: dict | None": |
+      Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
+      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env.
+      Returns None when nothing is collected.
+    "ask_pipeline_agent(agent: str) -> pipeline_agent: str": |
+      Select from (claude, codex); default = `agent`. Drives pipeline.agent.
+    "ask_pipeline_env(pipeline_agent: str) -> pipeline_env: dict | None": |
+      Propose env keys from `agent_env_defaults` for `pipeline_agent`; collect values for each,
+      then optionally collect arbitrary key-value pairs. Drives pipeline.env.
+      Returns None when nothing is collected.
 
 "FileGenerator()":
   location: generator.py
