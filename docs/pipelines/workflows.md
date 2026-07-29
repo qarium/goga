@@ -64,7 +64,7 @@ fields:
 
 | Field   | Type     | Default | Description                                                                                              |
 |---------|----------|---------|----------------------------------------------------------------------------------------------------------|
-| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
+| `agent` | string   | —       | CLI agent name (e.g. `codex`, `claude`, `cursor`, `opencode`, `qwen`). Selects which agent runs this stage. See [Workflow `agent` — choosing the CLI agent](#workflow-agent-choosing-the-cli-agent). |
 | `prompt`| string   | —       | Per-stage context prompt. Lower precedence than the stage's own `prompt` — closer to a section description than to a direct instruction. See [Workflow `prompt` — context, not command](#workflow-prompt-context-not-command). |
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
@@ -112,7 +112,7 @@ CLI agent to the pipeline runner in a uniform invocation shape, so the
 pipeline itself does not care which concrete CLI is underneath.
 
 The canonical baseline wrappers shipped with the image — `claude`, `codex`,
-`cursor`, `opencode` — and their per-agent environment variables are
+`cursor`, `opencode`, `qwen` — and their per-agent environment variables are
 documented in [Agents](../configuration/agents.md) under
 the Configuration reference. This page keeps the workflow-scoped agent
 semantics (per-stage override, inline-extend agent); the wrapper set

@@ -103,7 +103,7 @@ codemanifest:
 
 | Field   | Type     | Required  | Description                                                                                                             |
 |---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
-| `agent` | `string` | Yes       | AI executor that runs the build inside the container. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
+| `agent` | `string` | Yes       | AI executor that runs the build inside the container. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
 | `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
 
 ### pipeline
