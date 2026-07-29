@@ -99,11 +99,11 @@ Annotations: |
   methods:
     "build(extra_args: list[str] | None = None, ...params: dict[str, str | bool | list[str]]) -> none: None": |
       Run docker build for this builder's image/dockerfile/context, with extra
-      CLI options passed as `params` and raw extra tokens passed as `extra_args`.
+      CLI options passed as `...params` and raw extra tokens passed as `extra_args`.
       Build failure is FATAL — it propagates as a raised exception so the caller
       exits non-zero (exit 1).
 
-      `params`: additional docker build CLI options, translated to flags by the
+      `...params`: additional docker build CLI options, translated to flags by the
                 shared rule in the cell Annotations (e.g. add_host → --add-host,
                 pull=True → --pull). The `...params` form is the DSL
                 arbitrary-arguments notation.
@@ -112,7 +112,7 @@ Annotations: |
                     conflicts). Defaults to [].
 
       Algorithm:
-      1. Translate `params` into docker flags per the shared param→flag rule
+      1. Translate `...params` into docker flags per the shared param→flag rule
       2. Run docker build <params-flags> <extra_args> -f <dockerfile> -t <image>
          <context>, streaming docker output to the host stdout/stderr
       3. On non-zero docker exit: raise (fatal) — do NOT swallow
@@ -126,7 +126,7 @@ Annotations: |
         params flags and -f
 
       Constraints:
-      - Do not add cache / multi-stage / platform flags unless supplied via `params`
+      - Do not add cache / multi-stage / platform flags unless supplied via `...params`
       - Do not push the built image to a registry
 
 "docker_pull(image: str) -> ok: bool":
@@ -278,7 +278,7 @@ Annotations: |
       `extra_args`: raw extra docker tokens appended verbatim AFTER the translated
                     params flags and BEFORE the image (structural-only; docker
                     surfaces conflicts). Defaults to [].
-      `params`: docker run CLI options, translated to flags by the SAME rule as
+      `...params`: docker run CLI options, translated to flags by the SAME rule as
                 the `DockerBuilder` build method. The caller passes the pre-refactor
                 options: name, rm, v (mounts), p (port publish), add_host,
                 env_file, entrypoint. The name param is REQUIRED and SPECIAL — it is
@@ -290,7 +290,7 @@ Annotations: |
       `exit_code`: the container exit code
 
       Algorithm:
-      1. Translate `params` into docker flags per the shared param→flag rule;
+      1. Translate `...params` into docker flags per the shared param→flag rule;
          the name param must be present
       2. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
       3. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
@@ -310,7 +310,7 @@ Annotations: |
 
       Constraints:
       - Do NOT resolve proxy / hosts / credential mounts / runtime-dir / env-file
-        here — the caller resolves them and passes them as `params` (the runner is
+        here — the caller resolves them and passes them as `...params` (the runner is
         a thin executor, like build)
       - Do NOT delete env-file / tmpfile or remove .ralphex here — host-side
         cleanup is the CALLER's job in its own finally (it is not a docker flag,

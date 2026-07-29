@@ -105,7 +105,7 @@ Annotations: |
 
     `purpose`: runtime namespace segment — e.g. "builds" or "pipelines". Becomes
                the directory immediately under ~/.goga/runtime/.
-    `suffix_parts`: zero or more trailing path segments appended after the branch
+    `...suffix_parts`: zero or more trailing path segments appended after the branch
                     directory. Empty (the default) yields the branch-level
                     directory itself. A single suffix is used by pipeline
                     (pipeline_name); multiple suffixes are reserved for future
@@ -127,8 +127,8 @@ Annotations: |
     - Return value is an absolute path
     - Pure with respect to the filesystem — does not create the directory
       (creation is the caller's responsibility)
-    - Empty `suffix_parts` yields the branch-level directory
-    - Multiple `suffix_parts` are joined in order with the OS separator
+    - Empty `...suffix_parts` yields the branch-level directory
+    - Multiple `...suffix_parts` are joined in order with the OS separator
 
     Constraints:
     - Do not create the directory here — the caller handles creation
