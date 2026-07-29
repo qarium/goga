@@ -8,7 +8,7 @@ Produce a detailed design document based on CODEMANIFEST changes introduced by `
 /goga:design <function-name>
 ```
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-design`.
+Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-design` (Codex: `$goga-design`). See [Workflow](index.md).
 
 ## Output artifact
 

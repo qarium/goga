@@ -25,7 +25,9 @@ A full-fledged **Specification-Driven Development (SDD)** framework built on the
 
 Code and contracts drift apart. Comments rot, types lie, and architecture lives only in someone's head — invisible to the agent that needs to extend it.
 
-Goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source. An agent workflow carries a feature from a one-line proposal all the way to acceptance — without losing the thread.
+Goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source.
+
+Goga is also an **execution engine, not just a format**. A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — propose, review, brainstorm, apply, design, plan, build, change, accept — inside an isolated container, with agent credentials forwarded automatically. No manual orchestration between stages; the pipeline runs the whole cycle for you.
 
 The result: a project that humans and AI agents can navigate, change, and reason about at the same level of abstraction.
 
@@ -55,16 +57,44 @@ Initialize a project — the interactive wizard sets up `.goga/config.yml`, lang
 goga init
 ```
 
-From there, open your agent in the project directory and describe what you want to build:
+### Ship a feature in one command
+
+Goga ships ready-to-use pipelines that run the full feature cycle inside an isolated container. After `goga init`, from inside your agent:
+
+```bash
+goga pipeline feature
+```
+
+The `feature` pipeline walks the whole SDD lifecycle stage by stage:
+
+```
+propose → task-review → brainstorm → architecture-review → apply-architecture →
+code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result
+```
+
+Three more pipelines cover the remaining lifecycles:
+
+```bash
+goga pipeline bugfix     # root-cause analysis and defect resolution
+goga pipeline patch      # refactoring or minimal change with a plan
+goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
+```
+
+A pipeline-file answers **what** the pipeline does. An optional [workflow](pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](pipelines/index.md) for the full functional model.
+
+### Drive the cycle by hand
+
+If you want explicit control over each step instead of running the whole cycle automatically, open your agent in the project directory and describe what you want to build:
 
 ```text
 /goga:propose <what you want to create>
 ```
 
-The example above uses Claude Code style. For other agents, invoke the skill directly: `goga-propose`.
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the manual cycle and its shortcut paths.
 
 ## Next steps
 
+- [Pipelines](pipelines/index.md) — Run the agent-driven cycle automatically with `goga pipeline`
 - [Getting Started](getting-started.md) — Initialize your first goga project
 - [Workflow](workflow/index.md) — The agent-driven feature development cycle
 - [Cell](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference

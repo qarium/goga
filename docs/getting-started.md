@@ -60,7 +60,7 @@ The wizard will prompt you for:
 
 ## Develop your first feature
 
-Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan.
+Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
 
 The full cycle:
 
@@ -74,19 +74,39 @@ propose → review(task)
                   → accept
 ```
 
-Start by formulating the task:
+### Automated cycle
+
+The fastest path. Goga ships ready-to-use pipelines that run the full cycle inside an isolated container, with agent credentials forwarded automatically. Run the `feature` pipeline from your agent:
+
+```bash
+goga pipeline feature
+```
+
+The pipeline walks all eleven stages — propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result — and pauses at every `communication` stage to ask for your input before moving on. Three more shipped pipelines cover other lifecycles:
+
+```bash
+goga pipeline bugfix     # root-cause analysis and defect resolution
+goga pipeline patch      # refactoring or minimal change with a plan
+goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
+```
+
+See [Pipelines](pipelines/index.md) for the full functional model, and [Shipped Pipelines](pipelines/shipped.md) for the per-pipeline walkthrough.
+
+### Manual cycle
+
+If you want explicit control over each step instead of running the whole cycle automatically, formulate the task by hand:
 
 ```text
 /goga:propose <what you want to build>
 ```
 
-The example above uses Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-propose`.
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
 
 The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step, including two shortcut paths for smaller changes.
 
 ## View
 
-After the first task has produced cells on disk — for example, once you have run `/goga:apply` and the cell structure exists — you can visualize the project to inspect the result.
+After the first task has produced cells on disk — for example, once you have run `goga-apply` (or `/goga:apply` in a command-capable agent — see [above](#manual-cycle)) and the cell structure exists — you can visualize the project to inspect the result.
 
 Get a textual hierarchy of all cells:
 

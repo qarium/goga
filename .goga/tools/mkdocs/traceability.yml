@@ -6,10 +6,15 @@ README.md:
 
 docs/index.md:
   - goga
+  - goga/pipeline
+  - goga/commands/pipeline
+  - goga/docker
 
 docs/getting-started.md:
   - goga/init
   - goga/config
+  - goga/pipeline
+  - goga/commands/pipeline
 
 docs/cell/index.md:
   - goga

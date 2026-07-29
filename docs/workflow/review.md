@@ -9,7 +9,7 @@ A dispatcher that routes the request to a specialized review skill based on the 
 /goga:review               # interactive: choose a type
 ```
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-review`.
+Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-review` (Codex: `$goga-review`). See [Workflow](index.md).
 
 ## Dispatch logic
 
@@ -114,8 +114,8 @@ Reviews a cell across three dimensions and proposes remediation per dimension.
 |---|---|
 | 1. Load context | Load `goga-lang-disp`, `goga-cell`, `goga-cookbook`; read CODEMANIFEST and source files; enumerate cell files; read `.usages/*.md`; verify facade. |
 | 2. Run tools | `goga lint` (fix syntax before analysis), `goga schema` (for context). |
-| 3. Analysis 1 — Code vs Requirements | Compare signatures, methods, properties, location validity, behavioral conformance, import utilization. Proposed action: `/goga:design` in **brainstorm** mode. |
-| 4. Analysis 2 — Requirements vs Code/Usages | Find undocumented entities, inaccurate descriptions, poor annotation authoring (purpose statement, parameter descriptions, `Algorithm:`/`Requirements:` sections). Proposed action: edit CODEMANIFEST, then `/goga:design` in **changes** mode. |
+| 3. Analysis 1 — Code vs Requirements | Compare signatures, methods, properties, location validity, behavioral conformance, import utilization. Proposed action: `goga-design` (`/goga:design`) in **brainstorm** mode. |
+| 4. Analysis 2 — Requirements vs Code/Usages | Find undocumented entities, inaccurate descriptions, poor annotation authoring (purpose statement, parameter descriptions, `Algorithm:`/`Requirements:` sections). Proposed action: edit CODEMANIFEST, then `goga-design` (`/goga:design`) in **changes** mode. |
 | 5. Analysis 3 — Usages | Verify existence, annotation references, adequacy, categorization. Proposed action: create or update `.usages/*.md` directly. |
 | 6. Execute approved actions | For each approved action, execute the proposed remediation; run `goga lint` after all actions and fix any errors. |
 

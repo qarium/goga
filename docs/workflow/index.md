@@ -6,7 +6,7 @@ Goga organizes feature development as a sequence of agent commands, separated by
 
 Goga supports three working modes. The choice depends on how deeply the change affects contracts.
 
-> Command examples in this section use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-<command>` (for example, `goga-propose`, `goga-change`).
+> Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
 
 | Path | When to use | Length |
 |---|---|---|

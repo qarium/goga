@@ -49,7 +49,7 @@ goga tool <name> [args...]
 
 **Via agent skill:**
 
-Invoke the `/goga:tool <name>` command in your agent session. The dispatcher routes the request to the matching skill.
+Invoke the `/goga:tool <name>` command in your agent session. The dispatcher routes the request to the matching skill. The slash-command form works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`); in Codex and cursor, invoke the dispatcher skill directly — `goga-tool` (Codex: `$goga-tool`).
 
 ## Tool structure
 
@@ -98,7 +98,7 @@ Each skill directory inside `skills/` has a base name. When `goga connect` insta
 | `mkdocs-discovery/SKILL.md`| `goga-tool-mkdocs-discovery`             |
 | `mkdocs-writer/SKILL.md`   | `goga-tool-mkdocs-writer`                |
 
-The skill whose directory name matches the tool name becomes the entry point — the dispatcher invoked by `/goga:tool <name>`.
+The skill whose directory name matches the tool name becomes the entry point — the dispatcher invoked by `/goga:tool <name>` (or `goga-tool` / `$goga-tool` in agents without slash-command support).
 
 ### Naming rules
 

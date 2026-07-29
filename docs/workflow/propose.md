@@ -8,7 +8,7 @@ Transform a free-form user request into a structured task definition. The skill 
 /goga:propose <description>
 ```
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-propose`.
+Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-propose` (Codex: `$goga-propose`). See [Workflow](index.md).
 
 ## Output artifact
 

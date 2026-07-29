@@ -12,7 +12,7 @@ Final acceptance orchestrator. Verifies that completed work satisfies its contra
 
 When provided, `<target>` is a **functionality description or path** — free-text that the scope resolver matches to cells in the project schema. For example, `auth`, `goga/ast/nodes`, or a short phrase describing the feature.
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-accept`.
+Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-accept` (Codex: `$goga-accept`). See [Workflow](index.md).
 
 ## Output artifact
 

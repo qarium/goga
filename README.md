@@ -66,31 +66,33 @@ goga init
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
-**3. Formulate the first feature** — describe what you want to create:
+**3. Ship the first feature** — run the full SDD lifecycle in one command inside an isolated container, with agent credentials forwarded automatically:
+
+```bash
+goga pipeline feature
+```
+
+The `feature` pipeline walks all eleven stages — propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result — pausing at every `communication` stage to ask for your input. Three more shipped pipelines cover other lifecycles:
+
+```bash
+goga pipeline bugfix       # root-cause analysis and defect resolution
+goga pipeline patch        # refactoring or minimal change with a plan
+goga pipeline review       # scoped review of code, contracts, docs, then lint/format/tests
+```
+
+Each pipeline is a flat YAML file; layer project-specific overrides on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file.
+
+**4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running the whole cycle automatically, formulate the task and step through each command manually:
 
 ```text
 /goga:propose <what you want to create>
 ```
 
-The example above uses Claude Code style. For other agents, invoke the skill directly: `goga-propose`.
-
-**4. Run the workflow** — each subsequent command takes the previous artifact as input and produces the next one:
-
 ```
 propose → brainstorm → apply → design → plan → goga build → change → accept
 ```
 
-Reviews are optional at every stage. For smaller changes, use one of the shortcut paths described in the [Workflow](https://qarium.github.io/goga/workflow/) section.
-
-To run the whole cycle stage-by-stage inside the goga container, use one of the shipped [pipelines](https://qarium.github.io/goga/pipelines/):
-
-```bash
-goga pipeline feature      # end-to-end feature lifecycle
-goga pipeline bugfix       # root-cause analysis for a defect
-goga pipeline patch        # refactoring or minimal change with a plan
-```
-
-Each pipeline is a flat YAML file; layer project-specific overrides on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file.
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/cli/connect/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Reviews are optional at every stage. For smaller changes, use one of the shortcut paths described in the [Workflow](https://qarium.github.io/goga/workflow/) section.
 
 **5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture:
 
@@ -176,13 +178,14 @@ Description: |
 
 A **pipeline** is a named YAML file describing a sequence of stages an AI agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
-Three definitions ship with goga:
+Four definitions ship with goga:
 
 | Pipeline  | Purpose                                              |
 |-----------|------------------------------------------------------|
 | `feature` | End-to-end feature implementation lifecycle          |
 | `bugfix`  | Root-cause analysis and resolution for a defect      |
 | `patch`   | Refactoring or minimal change with a formalized plan |
+| `review`  | Scoped review of code, contracts, docs, then lint/format/tests |
 
 ```bash
 goga pipeline feature
@@ -200,7 +203,7 @@ Read the full functional model in the [Pipelines](https://qarium.github.io/goga/
 - **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
 - **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
 - **CLI toolkit** — init, lint, build, schema, connect, install, upgrade, contract extraction, and pipeline commands
-- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships three ready-to-use definitions — `feature`, `bugfix`, `patch` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt/skills overrides, loop-expansion, stage skipping via `skip`, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`)
+- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships four ready-to-use definitions — `feature`, `bugfix`, `patch`, `review` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt/skills overrides, loop-expansion, stage skipping via `skip`, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`)
 - **Docker builds & pipelines** — Execute build plans via ralphex and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `roles` overrides that customize the three authorable agent prompts (planner/executor/reviewer, mapping to the planning/implementation/review stems) per pipeline-file — the `summary` prompt is always the shipped default, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation

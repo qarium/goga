@@ -8,7 +8,7 @@ Materialize an architecture plan into the cells file structure. Reads `docs/arch
 /goga:apply <topic>
 ```
 
-Examples in this document use Claude Code style (`/goga:<command>`). For other agents, invoke the skill directly: `goga-apply`.
+Examples use the slash-command form `/goga:<command>`, which works in agents that consume the goga command bundle (`claude`, `opencode`, `qwen`). Codex and cursor do not register commands — invoke the skill directly: `goga-apply` (Codex: `$goga-apply`). See [Workflow](index.md).
 
 ## Output artifacts
 
