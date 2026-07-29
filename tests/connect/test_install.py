@@ -30,37 +30,6 @@ def _make_config(agent: str = "claude") -> list[str]:
     return [agent]
 
 
-def _create_agent_resources(target: Path) -> Path:
-    """Create a minimal goga/assets/ source tree (goga-* prefixed skills)."""
-    source = target / "goga" / "assets"
-    (source / "commands").mkdir(parents=True)
-    (source / "commands" / "build.md").write_text("# build command")
-    (source / "commands" / "install.md").write_text("# install command")
-    (source / "skills" / "goga-cell").mkdir(parents=True)
-    (source / "skills" / "goga-cell" / "SKILL.md").write_text("# cell skill")
-    (source / "skills" / "goga-review").mkdir(parents=True)
-    (source / "skills" / "goga-review" / "SKILL.md").write_text("# review skill")
-    return source
-
-
-def _mock_requests_response(content: bytes = b"# DSL spec") -> mock.MagicMock:
-    mock_response = mock.MagicMock()
-    mock_response.content = content
-    mock_response.status_code = 200
-    mock_response.raise_for_status = mock.MagicMock()
-    return mock_response
-
-
-def _connect_ctx(tmp_path: Path, source: Path, home: Path, agents: list[str], **kwargs):
-    """Run connect() with the standard mocks (source, home, requests)."""
-    with (
-        mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
-        mock.patch.object(_install_mod.Path, "home", return_value=home),
-        mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
-    ):
-        return connect(agents=agents, **kwargs)
-
-
 # --- Helper tests ---
 
 
@@ -97,11 +66,11 @@ class TestGetSourceDir:
 
 
 class TestDownloadDslSpec:
-    def test_downloads_and_writes(self, tmp_path: Path) -> None:
+    def test_downloads_and_writes(self, tmp_path: Path, mock_requests_response) -> None:
         dsl_dir = tmp_path / "skills" / "goga-cell"
         dsl_dir.mkdir(parents=True)
 
-        with mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response(b"dsl content")):
+        with mock.patch.object(_install_mod.requests, "get", return_value=mock_requests_response(b"dsl content")):
             _download_dsl_spec(tmp_path)
 
         assert (dsl_dir / "dsl.md").read_bytes() == b"dsl content"
@@ -213,37 +182,25 @@ class TestConnectAgentDiagnostic:
     processed at any moment.
     """
 
-    def test_single_agent_emits_connecting_line(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_single_agent_emits_connecting_line(
+        self, tmp_path: Path, agent_resources: Path, connect_ctx, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
-            mock.patch.object(_install_mod.Path, "home", return_value=home),
-            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
-        ):
-            result = connect(agents=["claude"])
+        result = connect_ctx(agent_resources, home, ["claude"])
 
         assert result == 0
         captured = capsys.readouterr()
         assert "Connecting agent: claude" in captured.err
 
     def test_multi_agent_emits_line_per_agent_in_order(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+        self, tmp_path: Path, agent_resources: Path, connect_ctx, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
         home = tmp_path / "home"
         home.mkdir()
 
-        with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
-            mock.patch.object(_install_mod.Path, "home", return_value=home),
-            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
-        ):
-            result = connect(agents=["claude", "codex", "cursor"])
+        result = connect_ctx(agent_resources, home, ["claude", "codex", "cursor"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -280,26 +237,22 @@ class TestConnectSignatureContract:
         assert hints["force_overwrite"] is bool
         assert hints["return"] is int
 
-    def test_force_overwrite_accepts_false_and_true(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_force_overwrite_accepts_false_and_true(self, tmp_path: Path, agent_resources: Path, connect_ctx) -> None:
         home = tmp_path / "home"
         home.mkdir()
         for value in (False, True):
-            assert _connect_ctx(tmp_path, source, home, ["claude"], force_overwrite=value) == 0
+            assert connect_ctx(agent_resources, home, ["claude"], force_overwrite=value) == 0
 
 
 # --- Contract tests for the centralized + symlink model ---
 
 
 class TestConnectCentralInstall:
-    def test_connect_creates_central_goga_home(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_creates_central_goga_home(self, tmp_path: Path, agent_resources: Path, connect_ctx) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+        assert connect_ctx(agent_resources, home, ["claude"]) == 0
 
         goga_home = home / ".goga"
         assert (goga_home / "skills").is_dir()
@@ -308,13 +261,13 @@ class TestConnectCentralInstall:
         assert (goga_home / "skills" / "goga-cell").is_dir()
         assert not (goga_home / "skills" / "goga-cell").is_symlink()
 
-    def test_connect_creates_agent_symlinks_not_copies(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_creates_agent_symlinks_not_copies(
+        self, tmp_path: Path, agent_resources: Path, connect_ctx
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+        assert connect_ctx(agent_resources, home, ["claude"]) == 0
 
         claude = home / ".claude"
         skill_link = claude / "skills" / "goga-cell"
@@ -325,25 +278,21 @@ class TestConnectCentralInstall:
         assert cmd_link.is_symlink()
         assert cmd_link.resolve() == (home / ".goga" / "commands")
 
-    def test_non_claude_agent_has_no_commands_symlink(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_non_claude_agent_has_no_commands_symlink(self, tmp_path: Path, agent_resources: Path, connect_ctx) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        assert _connect_ctx(tmp_path, source, home, ["codex"]) == 0
+        assert connect_ctx(agent_resources, home, ["codex"]) == 0
 
         codex = home / ".codex"
         assert (codex / "skills" / "goga-cell").is_symlink()
         assert not (codex / "commands").exists()
 
-    def test_connect_writes_registry_atomically(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_writes_registry_atomically(self, tmp_path: Path, agent_resources: Path, connect_ctx) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        assert _connect_ctx(tmp_path, source, home, ["claude"], force_overwrite=False) == 0
+        assert connect_ctx(agent_resources, home, ["claude"], force_overwrite=False) == 0
 
         registry = yaml.safe_load((home / ".goga" / "connect.yml").read_text())
         assert registry == {"agents": {"claude": {"force_overwrite": False}}}
@@ -356,13 +305,13 @@ class TestConnectCentralInstall:
 
 
 class TestConnectLogicPositive:
-    def test_connect_single_agent_creates_symlinks_and_registry(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_single_agent_creates_symlinks_and_registry(
+        self, tmp_path: Path, agent_resources: Path, connect_ctx
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        result = _connect_ctx(tmp_path, source, home, ["claude"])
+        result = connect_ctx(agent_resources, home, ["claude"])
 
         assert result == 0
         claude = home / ".claude"
@@ -372,9 +321,9 @@ class TestConnectLogicPositive:
         assert (claude / "commands" / "goga" / "build.md").is_file()
         assert (claude / "skills" / "goga-cell" / "dsl.md").read_bytes() == b"# DSL spec"
 
-    def test_connect_preserves_other_agents_in_registry(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_preserves_other_agents_in_registry(
+        self, tmp_path: Path, agent_resources: Path, connect_ctx
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
         goga_home = home / ".goga"
@@ -387,7 +336,7 @@ class TestConnectLogicPositive:
         }
         (goga_home / "connect.yml").write_text(yaml.dump(pre_registry))
 
-        assert _connect_ctx(tmp_path, source, home, ["cursor"]) == 0
+        assert connect_ctx(agent_resources, home, ["cursor"]) == 0
 
         registry = yaml.safe_load((goga_home / "connect.yml").read_text())
         assert set(registry["agents"].keys()) == {"claude", "codex", "cursor"}
@@ -418,13 +367,11 @@ class TestConnectLogicNegative:
             result = connect(agents=["claude"])
         assert result == 1
 
-    def test_connect_download_failure_returns_error(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_download_failure_returns_error(self, tmp_path: Path, agent_resources: Path) -> None:
         home = tmp_path / "home"
         home.mkdir()
         with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=agent_resources),
             mock.patch.object(_install_mod.Path, "home", return_value=home),
             mock.patch.object(
                 _install_mod.requests,
@@ -437,9 +384,9 @@ class TestConnectLogicNegative:
 
 
 class TestConnectLogicEdge:
-    def test_connect_purges_stale_symlinks_and_real_dirs(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_purges_stale_symlinks_and_real_dirs(
+        self, tmp_path: Path, agent_resources: Path, connect_ctx
+    ) -> None:
         home = tmp_path / "home"
         skills = home / ".claude" / "skills"
         skills.mkdir(parents=True)
@@ -447,7 +394,7 @@ class TestConnectLogicEdge:
         (skills / "goga-cell").mkdir()
         (skills / "goga-old-skill").symlink_to("/nonexistent")
 
-        result = _connect_ctx(tmp_path, source, home, ["claude"])
+        result = connect_ctx(agent_resources, home, ["claude"])
 
         assert result == 0
         assert not (skills / "goga-old-skill").is_symlink()
@@ -455,23 +402,23 @@ class TestConnectLogicEdge:
         assert (skills / "goga-cell").is_symlink()
         assert (skills / "goga-cell" / "SKILL.md").is_file()
 
-    def test_connect_propagates_install_pipelines_failure(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_propagates_install_pipelines_failure(
+        self, tmp_path: Path, agent_resources: Path, mock_requests_response
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
         with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=agent_resources),
             mock.patch.object(_install_mod.Path, "home", return_value=home),
-            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+            mock.patch.object(_install_mod.requests, "get", return_value=mock_requests_response()),
             mock.patch.object(_install_mod, "install_pipelines", return_value=1),
         ):
             result = connect(agents=["claude"])
         assert result == 1
 
-    def test_connect_symlink_oserror_continues_other_agents(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_symlink_oserror_continues_other_agents(
+        self, tmp_path: Path, agent_resources: Path, mock_requests_response
+    ) -> None:
         home = tmp_path / "home"
         home.mkdir()
         real_symlink_to = Path.symlink_to
@@ -482,9 +429,9 @@ class TestConnectLogicEdge:
             return real_symlink_to(self, target, *args, **kwargs)
 
         with (
-            mock.patch.object(_install_mod, "_get_source_dir", return_value=source),
+            mock.patch.object(_install_mod, "_get_source_dir", return_value=agent_resources),
             mock.patch.object(_install_mod.Path, "home", return_value=home),
-            mock.patch.object(_install_mod.requests, "get", return_value=_mock_requests_response()),
+            mock.patch.object(_install_mod.requests, "get", return_value=mock_requests_response()),
             mock.patch.object(Path, "symlink_to", flaky_symlink_to),
         ):
             result = connect(agents=["claude", "codex"])
@@ -493,14 +440,12 @@ class TestConnectLogicEdge:
         assert result == 0
         assert (home / ".codex" / "skills" / "goga-cell").is_symlink()
 
-    def test_connect_idempotent_double_run(self, tmp_path: Path) -> None:
-        _create_agent_resources(tmp_path)
-        source = tmp_path / "goga" / "assets"
+    def test_connect_idempotent_double_run(self, tmp_path: Path, agent_resources: Path, connect_ctx) -> None:
         home = tmp_path / "home"
         home.mkdir()
 
-        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
-        assert _connect_ctx(tmp_path, source, home, ["claude"]) == 0
+        assert connect_ctx(agent_resources, home, ["claude"]) == 0
+        assert connect_ctx(agent_resources, home, ["claude"]) == 0
 
         skill_link = home / ".claude" / "skills" / "goga-cell"
         assert skill_link.is_symlink()

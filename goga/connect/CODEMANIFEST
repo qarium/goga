@@ -55,53 +55,53 @@ Annotations: |
     1. Validate that `agents` is non-empty; otherwise exit with code 1
     2. Resolve ~/.goga/ as the central installation root; create it if missing
     3. Install central assets into ~/.goga/{skills,commands,pipelines}:
-       a. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
-       b. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude, opencode, qwen)
-       c. Copy goga/assets/skills/* → ~/.goga/skills/
-       d. Fetch the DSL specification:
+       3.1. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
+       3.2. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by agents that consume commands — claude, opencode, qwen)
+       3.3. Copy goga/assets/skills/* → ~/.goga/skills/
+       3.4. Fetch the DSL specification:
           - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
           - HTTP GET via `requests`
           - Write response to ~/.goga/skills/goga-cell/dsl.md
           - On network failure, exit with code 1
-       e. Install skills from goga_tool_* packages:
+       3.5. Install skills from goga_tool_* packages:
           - Discover via importlib.metadata.packages_distributions()
           - For each goga_tool_<tool_name>: validate <package>/skills/<tool_name>/SKILL.md exists;
             copy <package>/skills/* into ~/.goga/skills/ with goga-tool- prefix
           - Conflict resolution: skip-with-warning when force_overwrite=False, overwrite when True
     4. For each agent in `agents`:
-       a. Emit a diagnostic line "Connecting agent: <name>" to sys.stderr so the
+       4.1. Emit a diagnostic line "Connecting agent: <name>" to sys.stderr so the
           user can tell which agent is being processed (used by both direct
           connect and the re-sync loop in `resync_registered_agents`)
-       b. Resolve the agent's target directory:
+       4.2. Resolve the agent's target directory:
           - claude → ~/.claude/
           - codex → ~/.codex/
           - cursor → ~/.cursor/
           - opencode → ~/.config/opencode/
           - qwen → ~/.qwen/
-       c. Pattern-matching purge of stale installations at symlink targets:
+       4.3. Pattern-matching purge of stale installations at symlink targets:
           - Scan ~/.<agent>/skills/ for entries matching goga-* naming pattern
             (both real directories AND stale symlinks); delete all matches
           - For claude, opencode, and qwen: also scan and delete ~/.<agent>/commands/goga if it exists
             as a real directory or stale symlink
-       d. Create symlinks (after purge in 4c, targets are clean):
+       4.4. Create symlinks (after purge in 4.3, targets are clean):
           - For each ~/.goga/skills/goga-* entry: create symlink
             ~/.<agent>/skills/<basename> → ~/.goga/skills/<basename>
           - For claude, opencode, and qwen: also create ~/.<agent>/commands/goga → ~/.goga/commands
-       e. On symlink creation failure (existing real dir not purged, Windows privilege error):
+       4.5. On symlink creation failure (existing real dir not purged, Windows privilege error):
           - Emit clear message to stderr, do not corrupt existing state, continue with other agents
     5. Install pipelines by calling `install_pipelines` with target ~/.goga/pipelines/ and force_overwrite propagated
        (executed once after all agents; pipelines are shared)
     6. Update ~/.goga/connect.yml registry via the `beautiful_yaml` and `connect_yml_schema` practices:
-       a. Read existing connect.yml if present; otherwise start with empty dict
-       b. For each agent in `agents`: set/replace entry {<agent>: {force_overwrite: <force_overwrite value>}}
-       c. Preserve entries for agents not in the current call
-       d. Write atomically (tmp file + rename)
+       6.1. Read existing connect.yml if present; otherwise start with empty dict
+       6.2. For each agent in `agents`: set/replace entry {<agent>: {force_overwrite: <force_overwrite value>}}
+       6.3. Preserve entries for agents not in the current call
+       6.4. Write atomically (tmp file + rename)
     7. Return 0 if all agents processed and install_pipelines succeeded; otherwise 1
        (the exit_code of `install_pipelines` MUST be propagated: if install_pipelines returns 1, connect returns 1)
 
     Requirements:
-    - Fully recreate central goga directories at step 3a (delete + copy)
-    - Create symlinks at step 4c (not copies); purging at 4b is mandatory
+    - Fully recreate central goga directories at step 3.1 (delete + copy)
+    - Create symlinks at step 4.4 (not copies); purging at 4.3 is mandatory
     - Pattern-matching purge principle (preserved from copy-based model): before creating symlinks,
       scan each ~/.<agent>/skills/ for entries matching the goga-* naming pattern (both real directories
       AND stale symlinks) and delete all matches; for claude, opencode, and qwen, also match ~/.<agent>/commands/goga.

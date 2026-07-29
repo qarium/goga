@@ -144,15 +144,15 @@ def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tu
     central_skills = goga_home / "skills"
     central_commands = goga_home / "commands"
 
-    # 3a — purge central goga-* skills and commands (fully recreate).
+    # 3.1 — purge central goga-* skills and commands (fully recreate).
     _cleanup_goga_skills(goga_home)
     shutil.rmtree(central_commands, ignore_errors=True)
 
-    # 3b — copy commands centrally (only symlinked by AGENTS_WITH_COMMANDS).
+    # 3.2 — copy commands centrally (only symlinked by agents that consume commands).
     shutil.copytree(source / "commands", central_commands)
     commands = sorted(p.stem for p in central_commands.glob("*.md"))
 
-    # 3c — copy each source skill centrally.
+    # 3.3 — copy each source skill centrally.
     central_skills.mkdir(parents=True, exist_ok=True)
     skills: list[str] = []
     for entry in (source / "skills").iterdir():
@@ -163,10 +163,10 @@ def _install_central(goga_home: Path, source: Path, force_overwrite: bool) -> tu
         shutil.copytree(entry, dest)
         skills.append(entry.name)
 
-    # 3d — download DSL spec into the central goga-cell skill.
+    # 3.4 — download DSL spec into the central goga-cell skill.
     _download_dsl_spec(goga_home)
 
-    # 3e — install tool skills centrally.
+    # 3.5 — install tool skills centrally.
     skills.extend(_install_tool_skills(goga_home, force_overwrite))
 
     return commands, sorted(skills)
@@ -176,7 +176,7 @@ def _safe_symlink(link: Path, real_target: Path) -> None:
     """Create symlink ``link`` → ``real_target``.
 
     An existing symlink at ``link`` is removed first. ``OSError`` from the
-    symlink creation is caught and logged (per CODEMANIFEST step 4d) so the
+    symlink creation is caught and logged (per CODEMANIFEST step 4.5) so the
     remaining symlinks/agents still proceed without crashing.
     """
     if link.is_symlink():
@@ -207,19 +207,19 @@ def _create_agent_symlinks(agent: str, target: Path, goga_home: Path) -> None:
 
     target.mkdir(parents=True, exist_ok=True)
 
-    # 4b — pattern-matching purge of stale goga-* skills (dirs + symlinks).
+    # 4.3 — pattern-matching purge of stale goga-* skills (dirs + symlinks).
     _cleanup_goga_skills(target)
     if agent in AGENTS_WITH_COMMANDS:
         _purge_commands_goga(target)
 
-    # 4c — symlink every central goga-* skill into the agent dir.
+    # 4.4 — symlink every central goga-* skill into the agent dir.
     target_skills = target / "skills"
     target_skills.mkdir(parents=True, exist_ok=True)
     for entry in central_skills.iterdir():
         if entry.name.startswith("goga-") and entry.is_dir():
             _safe_symlink(target_skills / entry.name, entry)
 
-    # 4c — for claude, symlink commands/goga into the central commands dir.
+    # 4.4 — for claude, symlink commands/goga into the central commands dir.
     if agent in AGENTS_WITH_COMMANDS:
         target_commands = target / "commands"
         target_commands.mkdir(parents=True, exist_ok=True)
