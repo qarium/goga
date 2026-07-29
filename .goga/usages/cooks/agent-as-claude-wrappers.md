@@ -44,13 +44,14 @@ The canonical baseline set is:
 | `codex`    | `codex-as-claude.sh`        |
 | `cursor`   | `cursor-as-claude.sh`       |
 | `opencode` | `opencode-as-claude.sh`     |
+| `qwen`     | `qwen-as-claude.sh`         |
 
 Any other `<agent>` value is permitted as long as the corresponding
 `/home/goga/bin/<agent>-as-claude.sh` file exists in the image; absence of
 the file is surfaced by the downstream tool that tries to invoke it, not by
 any wrapper-resolution layer.
 
-## Two wrapper classes
+## Wrapper classes
 
 ### Invocation-shape wrapper — `claude-as-claude.sh`
 
@@ -138,6 +139,24 @@ The three variables above are forwarded into the container through the
 normal env layering (`home.env` → project `pipeline.env` /
 `build.task_executor.env` → CLI `-e` / `extra_env`), with the same formula
 documented under the Home configuration section of `docs/configuration/index.md`.
+
+### HTTP-streaming wrapper — `qwen-as-claude.sh`
+
+`qwen-as-claude.sh` is the first wrapper that speaks HTTP directly. Unlike codex/opencode (which translate a CLI's stdout) and cursor (which polls an async run-based API), qwen issues a single streaming `POST` to an OpenAI Chat Completions-compatible endpoint and re-emits each SSE `delta.content` chunk as a `content_block_delta` event.
+
+The wrapper reads the prompt only from stdin (as cursor does) and ignores all CLI flags. The request body is built with `jq -nc --arg` (no manual JSON concatenation), and every emitted event uses `jq -cn --arg` for the text payload — JSON safety is structural, not by convention.
+
+Env vars are `OPENAI_*`, not `QWEN_*`. The wrapper name is just a goga label; the protocol is OpenAI, so one script serves Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, and local vLLM/ollama:
+
+| Variable          | Required | Default                     | Purpose                                                                                                                                  |
+|-------------------|----------|-----------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `OPENAI_MODEL`    | yes      | —                           | Sent as `model` in the request body. No default — server choice would be unpredictable.                                                  |
+| `OPENAI_BASE_URL` | no       | `https://api.openai.com/v1` | Base URL of any OpenAI-compatible endpoint.                                                                                              |
+| `OPENAI_API_KEY`  | no       | *(unset)*                   | `Authorization: Bearer <key>`. Omitted when empty — covers local no-auth servers (vLLM/ollama).                                          |
+
+The wrapper emits no `<<<RALPHEX:...>>>` adapter preamble (unlike gemini/codex): the HTTP endpoint has no multi-agent surface, so signals pass through as plain text inside `text_delta`. Each chunk is forwarded without appending `\n` — OpenAI streaming deltas already carry correct separators, so an extra `\n` would duplicate newlines.
+
+A `curl -m 1500` backstop (25 min) sits below the 30-min executor idle timeout, matching cursor's deadline. On curl failure the wrapper emits one assistant envelope carrying the error text plus `result: success`, so the executor finishes cleanly (same pattern as `cursor-as-claude.sh:99-104`).
 
 ## Runtime dependency — `jq`
 

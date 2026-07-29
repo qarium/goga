@@ -31,7 +31,7 @@ RUN apt-get update && \
 
 COPY --from=ralphex-source /srv/ralphex /srv/ralphex
 COPY --from=afm-source /usr/local/bin/afm /srv/afm
-RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.144.4 opencode-ai@1.17.13
+RUN npm install -g @anthropic-ai/claude-code@2.1.209 @openai/codex@0.144.4 opencode-ai@1.17.13 @qwen-code/qwen-code@0.21.1
 RUN chmod +x /srv/ralphex /srv/afm
 
 COPY --from=builder /usr/local/lib/python3.12/site-packages /opt/goga/lib/python3.12/site-packages
@@ -48,6 +48,7 @@ COPY --from=ralphex-source /ralphex/scripts/codex-as-claude/codex-as-claude.sh /
 COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
 COPY scripts/cursor-as-claude.sh /home/goga/bin/cursor-as-claude.sh
+COPY scripts/qwen-as-claude.sh /home/goga/bin/qwen-as-claude.sh
 RUN chmod +x /home/goga/bin/*.sh
 
 ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
