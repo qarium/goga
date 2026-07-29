@@ -25,7 +25,7 @@ exit_code = connect(agents=["claude"], force_overwrite=True)
 
 ## Parameters
 
-- `agents` — list of target AI agents (required, non-empty). Supported: "claude", "codex", "cursor", "opencode"
+- `agents` — list of target AI agents (required, non-empty). Supported: "claude", "codex", "cursor", "opencode", "qwen"
 - `force_overwrite` — allow overwriting existing skills from tool packages. Defaults to False.
   Persisted per-agent in `~/.goga/connect.yml`.
 
@@ -82,7 +82,7 @@ a silent no-op (return 0, no banner).
 | Directory               | Contents                                                 |
 |-------------------------|----------------------------------------------------------|
 | `~/.goga/skills/`       | All goga skills (goga-cell, goga-ast, ...) + goga-tool-* |
-| `~/.goga/commands/`     | goga commands (claude-only consumers via symlink)        |
+| `~/.goga/commands/`     | goga commands (claude/opencode/qwen consume them via symlink) |
 | `~/.goga/pipelines/`    | Pipeline `*.yml` files (populated by `install_pipelines`)|
 | `~/.goga/connect.yml`   | Registry of connected agents + per-agent force_overwrite |
 

@@ -60,7 +60,7 @@ WORKDIR /workspace
 
 USER goga
 
-RUN goga connect claude codex opencode
+RUN goga connect claude codex opencode qwen
 
 ENTRYPOINT ["goga"]
 CMD ["goga"]

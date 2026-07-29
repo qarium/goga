@@ -16,6 +16,7 @@ def connect(ctx: click.Context, agents: tuple[str, ...], force_overwrite: bool) 
     Usage:
       goga connect claude
       goga connect codex
+      goga connect qwen
       goga connect claude codex cursor
 
     \b

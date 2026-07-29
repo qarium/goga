@@ -8,7 +8,7 @@ Usages:
     Format:
     ```yaml
     agents:
-      <agent_name>:              # one of: claude, codex, cursor, opencode
+      <agent_name>:              # one of: claude, codex, cursor, opencode, qwen
         force_overwrite: <bool>  # per-agent; persisted by connect(), read by upgrade()/install() via resync_registered_agents
     ```
 
@@ -47,7 +47,7 @@ Annotations: |
     from each agent directory into ~/.goga/, install pipeline files into ~/.goga/pipelines/,
     and persist a per-agent connection record in ~/.goga/connect.yml.
 
-    `agents`: list of target AI agents (required, non-empty). Supported: claude, codex, cursor, opencode
+    `agents`: list of target AI agents (required, non-empty). Supported: claude, codex, cursor, opencode, qwen
     `force_overwrite`: allow overwriting existing skills. Defaults to False. Persisted per-agent in connect.yml.
     `exit_code`: return code (0 success, 1 error)
 
@@ -56,7 +56,7 @@ Annotations: |
     2. Resolve ~/.goga/ as the central installation root; create it if missing
     3. Install central assets into ~/.goga/{skills,commands,pipelines}:
        a. Purge existing ~/.goga/skills/goga-*, ~/.goga/commands/goga (if present)
-       b. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude, opencode)
+       b. Copy goga/assets/commands/* → ~/.goga/commands/ (only used by AGENTS_WITH_COMMANDS — claude, opencode, qwen)
        c. Copy goga/assets/skills/* → ~/.goga/skills/
        d. Fetch the DSL specification:
           - URL: https://raw.githubusercontent.com/qarium/codemanifest/refs/heads/0.0.x/specs/en.md
@@ -77,15 +77,16 @@ Annotations: |
           - codex → ~/.codex/
           - cursor → ~/.cursor/
           - opencode → ~/.config/opencode/
+          - qwen → ~/.qwen/
        c. Pattern-matching purge of stale installations at symlink targets:
           - Scan ~/.<agent>/skills/ for entries matching goga-* naming pattern
             (both real directories AND stale symlinks); delete all matches
-          - For claude and opencode: also scan and delete ~/.<agent>/commands/goga if it exists
+          - For claude, opencode, and qwen: also scan and delete ~/.<agent>/commands/goga if it exists
             as a real directory or stale symlink
        d. Create symlinks (after purge in 4c, targets are clean):
           - For each ~/.goga/skills/goga-* entry: create symlink
             ~/.<agent>/skills/<basename> → ~/.goga/skills/<basename>
-          - For claude and opencode: also create ~/.<agent>/commands/goga → ~/.goga/commands
+          - For claude, opencode, and qwen: also create ~/.<agent>/commands/goga → ~/.goga/commands
        e. On symlink creation failure (existing real dir not purged, Windows privilege error):
           - Emit clear message to stderr, do not corrupt existing state, continue with other agents
     5. Install pipelines by calling `install_pipelines` with target ~/.goga/pipelines/ and force_overwrite propagated
@@ -103,7 +104,7 @@ Annotations: |
     - Create symlinks at step 4c (not copies); purging at 4b is mandatory
     - Pattern-matching purge principle (preserved from copy-based model): before creating symlinks,
       scan each ~/.<agent>/skills/ for entries matching the goga-* naming pattern (both real directories
-      AND stale symlinks) and delete all matches; for claude and opencode, also match ~/.<agent>/commands/goga.
+      AND stale symlinks) and delete all matches; for claude, opencode, and qwen, also match ~/.<agent>/commands/goga.
       This guarantees idempotent re-creation of symlinks without leftover state.
     - Detect existing real directories at symlink targets and refuse to overwrite without purge
     - Do not modify content belonging to other extensions

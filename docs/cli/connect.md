@@ -16,7 +16,7 @@ goga connect AGENTS... [--force-overwrite]
 
 | Argument | Required | Description |
 |---|---|---|
-| `AGENTS` | yes | One or more target AI agent names. Currently supported: `claude`, `codex`, `cursor`, `opencode`. |
+| `AGENTS` | yes | One or more target AI agent names. Currently supported: `claude`, `codex`, `cursor`, `opencode`, `qwen`. |
 
 ## Options
 
@@ -31,7 +31,7 @@ goga connect AGENTS... [--force-overwrite]
 1. **Central install** -- Recreates `~/.goga/skills/` (purging old `goga-*` entries) and `~/.goga/commands/`, then copies goga commands and skills into the central store.
 2. **Download DSL spec** -- Fetches the CODEMANIFEST DSL specification from GitHub and writes it to `~/.goga/skills/goga-cell/dsl.md`.
 3. **Discover tool packages** -- Scans installed Python packages with the `goga_tool_*` prefix via `importlib.metadata` and installs any that contain a valid `skills/<name>/SKILL.md` structure into `~/.goga/skills/`.
-4. **Agent symlinks** -- For each specified agent, purges stale `goga-*` real directories and broken symlinks under the agent's skills directory, then symlinks every `~/.goga/skills/goga-*` entry into `~/.<agent>/skills/`. Agents with command support (currently `claude` and `opencode`) also get `~/.<agent>/commands/goga` symlinked to `~/.goga/commands/`.
+4. **Agent symlinks** -- For each specified agent, purges stale `goga-*` real directories and broken symlinks under the agent's skills directory, then symlinks every `~/.goga/skills/goga-*` entry into `~/.<agent>/skills/`. Agents with command support (currently `claude`, `opencode`, and `qwen`) also get `~/.<agent>/commands/goga` symlinked to `~/.goga/commands/`.
 5. **Install pipelines** -- Installs pipeline `*.yml` files into `~/.goga/pipelines/`. A failure here aborts the connect.
 6. **Update registry** -- Atomically updates `~/.goga/connect.yml`, recording each agent with its `force_overwrite` value. Entries for agents not in the current call are preserved.
 
@@ -42,7 +42,7 @@ goga connect AGENTS... [--force-overwrite]
 | Directory | Contents |
 |---|---|
 | `~/.goga/skills/` | All goga skills (`goga-cell`, ...) plus `goga-tool-*` skills |
-| `~/.goga/commands/` | goga commands (claude and opencode consume them via symlink) |
+| `~/.goga/commands/` | goga commands (claude, opencode, and qwen consume them via symlink) |
 | `~/.goga/pipelines/` | Pipeline `*.yml` files |
 | `~/.goga/connect.yml` | Registry of connected agents and per-agent `force_overwrite` |
 
@@ -54,6 +54,7 @@ goga connect AGENTS... [--force-overwrite]
 | `codex` | `~/.codex/` | (none) |
 | `cursor` | `~/.cursor/` | (none) |
 | `opencode` | `~/.config/opencode/` | `~/.config/opencode/commands/goga` -> `~/.goga/commands` |
+| `qwen` | `~/.qwen/` | `~/.qwen/commands/goga` -> `~/.goga/commands` |
 
 ## Examples
 
@@ -69,10 +70,10 @@ Force overwrite of existing tool skills:
 goga connect claude --force-overwrite
 ```
 
-Connect multiple agents (opencode also receives the commands symlink):
+Connect multiple agents (opencode and qwen also receive the commands symlink):
 
 ```bash
-goga connect claude codex opencode
+goga connect claude codex opencode qwen
 ```
 
 ## Exit Codes

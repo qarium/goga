@@ -77,6 +77,10 @@ class TestResolveTargetDir:
         result = _resolve_target_dir("cursor")
         assert result == Path.home() / ".cursor"
 
+    def test_qwen_maps_to_home_qwen(self) -> None:
+        result = _resolve_target_dir("qwen")
+        assert result == Path.home() / ".qwen"
+
     def test_unsupported_agent_raises(self) -> None:
         with pytest.raises(ValueError, match="Unsupported agent"):
             _resolve_target_dir("unknown_agent")
@@ -696,3 +700,6 @@ class TestAgentsWithCommands:
 
     def test_cursor_not_in_agents_with_commands(self) -> None:
         assert "cursor" not in AGENTS_WITH_COMMANDS
+
+    def test_qwen_in_agents_with_commands(self) -> None:
+        assert "qwen" in AGENTS_WITH_COMMANDS
