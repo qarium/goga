@@ -71,22 +71,6 @@ Env variables are forwarded into the container through the standard env layering
 
 Unlike claude/codex/opencode, the cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
 
-### qwen
-
-The `qwen` wrapper is a thin invocation-shape delegate over the `qwen` CLI (the `@qwen-code/qwen-code` npm package shipped in the goga image). It is the same shape as `claude-as-claude.sh`: the wrapper forwards the prompt and env to `qwen`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes, the `<execute>` protocol the system prompt expects — runs inside `qwen`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
-
-Because `qwen` speaks the OpenAI Chat Completions protocol, one wrapper serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the wrapper name is just a goga label; the protocol is OpenAI.
-
-| Variable          | Required | Default                     | Purpose                                                                                                                                                        |
-|-------------------|----------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `OPENAI_MODEL`    | yes      | —                           | Passed to `qwen --model`. No default — a server-side default would be unpredictable. Wrapper exits non-zero when unset.                                        |
-| `OPENAI_BASE_URL` | no       | qwen-code default           | Passed to `qwen --openai-base-url` only when set.                                                                                                              |
-| `OPENAI_API_KEY`  | no       | *(unset)*                   | Passed to `qwen --openai-api-key` only when set. Work without it.                                                                                              |
-
-Qwen wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
-
-The wrapper invokes `qwen --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin.
-
 ### opencode
 
 | Variable            | Required | Default          | Purpose                                                                                                                       |
@@ -98,6 +82,22 @@ The wrapper invokes `qwen --yolo` so every tool call auto-approves (otherwise th
 | `OPENCODE_VERBOSE`  | no       | `0`              | Set to `1` to include tool execution events in output.                                                                        |
 
 Variant precedence: `OPENCODE_VARIANT` > `OPENCODE_EFFORT` > `OPENCODE_REASONING`. The first set value wins; the rest are ignored.
+
+### qwen
+
+The `qwen` wrapper is a thin invocation-shape delegate over the `qwen` CLI (the `@qwen-code/qwen-code` npm package shipped in the goga image). It is the same shape as `claude-as-claude.sh`: the wrapper forwards the prompt and env to `qwen`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes, the `<execute>` protocol the system prompt expects — runs inside `qwen`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
+
+Because `qwen` speaks the OpenAI Chat Completions protocol, one wrapper serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the wrapper name is just a goga label; the protocol is OpenAI.
+
+| Variable          | Required | Default                     | Purpose                                                                                                                                                        |
+|-------------------|----------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `OPENAI_MODEL`    | yes      | —                           | Passed to `qwen --model`. No default — a server-side default would be unpredictable. Wrapper exits non-zero when unset.                                        |
+| `OPENAI_BASE_URL` | no       | qwen-code default           | Passed to `qwen --openai-base-url` only when set.                                                                                                              |
+| `OPENAI_API_KEY`  | no       | *(unset)*                   | Passed to `qwen --openai-api-key` only when set. The wrapper works without it.                                                                                 |
+
+The `qwen` wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
+
+The wrapper invokes `qwen --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin.
 
 ## Custom agents
 
