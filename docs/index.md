@@ -16,7 +16,8 @@ A full-fledged **Specification-Driven Development (SDD)** framework built on the
     <img src="assets/brands/claude.svg" alt="Claude" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
     <img src="assets/brands/openai.svg" alt="Codex" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
     <img src="assets/brands/opencode.svg" alt="OpenCode" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
-    <img src="assets/brands/cursor.svg" alt="Cursor" width="36" height="36">
+    <img src="assets/brands/cursor.svg" alt="Cursor" width="36" height="36">&nbsp;&nbsp;&nbsp;&nbsp;
+    <img src="assets/brands/qwen.svg" alt="Qwen" width="36" height="36">
   </p>
 </div>
 
