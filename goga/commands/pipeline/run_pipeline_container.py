@@ -154,7 +154,9 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     The overlay carries five static launcher-side fields:
 
     - ``client.command: <wrapper_path>`` — the resolved absolute in-container
-      wrapper path afm will drive as the agent client.
+      wrapper path afm will drive as the agent client. ``client`` is a nested
+      YAML map (``client:`` + ``  command: <wrapper_path>``), NOT a flat
+      dotted-key, because afm reads it as a YAML map (same as ``proxy``).
     - ``theme: goga`` — the dashboard theme applied by afm.
     - ``open_browser: false`` — the dashboard is reached via the
       host-printed ``http://localhost:<port>`` URL; afm must not attempt to
@@ -184,7 +186,8 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     fd, path = tempfile.mkstemp(prefix="goga-afm-config-")
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
-        f.write(f"client.command: {wrapper_path}\n")
+        f.write("client:\n")
+        f.write(f"  command: {wrapper_path}\n")
         f.write("theme: goga\n")
         f.write("open_browser: false\n")
         f.write("proxy:\n")

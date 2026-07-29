@@ -111,7 +111,8 @@ class TestWriteAfmConfigTmpfile:
         path = _write_afm_config_tmpfile("/home/goga/bin/codex-as-claude.sh")
         try:
             assert path.read_text() == (
-                "client.command: /home/goga/bin/codex-as-claude.sh\n"
+                "client:\n"
+                "  command: /home/goga/bin/codex-as-claude.sh\n"
                 "theme: goga\n"
                 "open_browser: false\n"
                 "proxy:\n"
@@ -159,7 +160,8 @@ class TestResolvedWrapperAfmConfig:
 
         assert result == 0
         assert captured["afm_content"] == (
-            "client.command: /home/goga/bin/codex-as-claude.sh\n"
+            "client:\n"
+            "  command: /home/goga/bin/codex-as-claude.sh\n"
             "theme: goga\n"
             "open_browser: false\n"
             "proxy:\n"
@@ -196,7 +198,8 @@ class TestResolvedWrapperAfmConfig:
             rpc("deploy", config, ())
 
         assert captured["afm_content"] == (
-            f"client.command: /home/goga/bin/{agent}-as-claude.sh\n"
+            "client:\n"
+            f"  command: /home/goga/bin/{agent}-as-claude.sh\n"
             "theme: goga\n"
             "open_browser: false\n"
             "proxy:\n"

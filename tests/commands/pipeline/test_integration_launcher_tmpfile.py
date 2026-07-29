@@ -164,11 +164,12 @@ class TestIntegrationLauncherTmpfile:
         parsed = yaml.safe_load(captured_afm.read_text())
         # exactly five top-level keys (proxy is nested under its own key)
         assert len(parsed) == 5
-        assert parsed["client.command"] == "/home/goga/bin/claude-as-claude.sh"
+        assert parsed["client"]["command"] == "/home/goga/bin/claude-as-claude.sh"
         assert parsed["theme"] == "goga"
         assert parsed["open_browser"] is False
         # proxy is a nested map, not a flat dotted-key
         assert parsed["proxy"] == {"enabled": False}
+        assert "client.command" not in parsed  # anti-regression
         assert "proxy.enabled" not in parsed  # anti-regression
         assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
 

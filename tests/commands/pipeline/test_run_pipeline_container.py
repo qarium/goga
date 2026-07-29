@@ -266,7 +266,7 @@ class TestAfmConfigTmpfile:
             afm_path.unlink(missing_ok=True)
 
         assert content == (
-            f"client.command: {wrapper_path}\ntheme: goga\nopen_browser: false\n"
+            f"client:\n  command: {wrapper_path}\ntheme: goga\nopen_browser: false\n"
             "proxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
         )
         assert mode == 0o600
@@ -292,13 +292,14 @@ class TestAfmConfigTmpfile:
             afm_path.unlink(missing_ok=True)
 
         parsed = yaml.safe_load(content)
-        assert parsed["client.command"] == "/home/goga/bin/codex-as-claude.sh"
+        assert parsed["client"] == {"command": "/home/goga/bin/codex-as-claude.sh"}
         assert parsed["theme"] == "goga"
         assert parsed["open_browser"] is False
         assert parsed["prompts_dir"] == "/home/goga/pipeline/prompts"
         # proxy is a nested map, not a flat dotted-key
         assert parsed["proxy"] == {"enabled": False}
         # anti-regression: a flat dotted-key must not appear as a top-level key
+        assert "client.command" not in parsed
         assert "proxy.enabled" not in parsed
         assert mode == 0o600
 

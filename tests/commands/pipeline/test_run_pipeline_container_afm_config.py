@@ -148,7 +148,7 @@ class TestAfmConfigFiveFieldContent:
 
         assert result == 0
         parsed = yaml.safe_load(captured_afm.read_text())
-        assert parsed["client.command"] == "/home/goga/bin/claude-as-claude.sh"
+        assert parsed["client"]["command"] == "/home/goga/bin/claude-as-claude.sh"
         assert parsed["theme"] == "goga"
         assert parsed["open_browser"] is False
         assert parsed["proxy"]["enabled"] is False
