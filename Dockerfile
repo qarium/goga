@@ -47,7 +47,8 @@ RUN useradd -m -s /bin/bash goga && \
 COPY --from=ralphex-source /ralphex/scripts/codex-as-claude/codex-as-claude.sh /home/goga/bin/codex-as-claude.sh
 COPY --from=ralphex-source /ralphex/scripts/opencode/opencode-as-claude.sh /home/goga/bin/opencode-as-claude.sh
 COPY scripts/claude-as-claude.sh /home/goga/bin/claude-as-claude.sh
-RUN chmod +x /home/goga/bin/codex-as-claude.sh /home/goga/bin/opencode-as-claude.sh /home/goga/bin/claude-as-claude.sh
+COPY scripts/cursor-as-claude.sh /home/goga/bin/cursor-as-claude.sh
+RUN chmod +x /home/goga/bin/*.sh
 
 ENV PATH="/opt/goga/bin:/srv:/home/goga/bin:${PATH}"
 ENV GOGA_DOCKER=1
