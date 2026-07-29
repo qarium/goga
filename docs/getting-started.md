@@ -105,6 +105,6 @@ The graph shows cells, their imports, and the connections between them — usefu
 ## Next steps
 
 - [Workflow](workflow/index.md) -- The agent-driven feature development cycle
-- [Configuration](configuration.md) -- Full config reference for `.goga/config.yml`
+- [Configuration](configuration/index.md) -- Full config reference for `.goga/config.yml`
 - [Cell](cell/index.md) -- Cell structure, usages, and CODEMANIFEST DSL reference
 - [CLI Reference](cli/index.md) -- All available commands and options

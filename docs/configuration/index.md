@@ -77,7 +77,7 @@ codemanifest:
 | `commands` | mapping | No | Reserved for future prompt customization. Defaults to `{}` |
 | `codemanifest` | mapping | No | Global codemanifest configuration |
 | `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
-| `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](cli/usages.md) and checked for drift against the remote by [`goga usages status`](cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref, root }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
+| `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](../cli/usages.md) and checked for drift against the remote by [`goga usages status`](../cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref, root }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
 
 ### build
 
@@ -101,16 +101,16 @@ codemanifest:
 
 ### build.task_executor
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `agent` | `string` | Yes | AI executor. Supported values: `claude`, `codex`, `copilot`, `gemini`, or `custom:/path/to/script` |
-| `env` | mapping | No | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}` |
+| Field   | Type     | Required  | Description                                                                                                             |
+|---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
+| `agent` | `string` | Yes       | AI executor that runs the build inside the container. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
+| `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
 
 ### pipeline
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `agent` | `string` | Yes | afm client command agent for `goga pipeline` (e.g. `claude`, `codex`) |
+| `agent` | `string` | Yes | AI agent that runs the pipeline stages inside the container. Same resolution mechanic and baseline set as `build.task_executor.agent` — see [Agents](./agents.md). |
 | `env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the pipeline container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
@@ -124,7 +124,7 @@ codemanifest:
 
 ### usages
 
-Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](cli/usages.md) and checked for drift against the remote by [`goga usages status`](cli/usages.md).
+Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](../cli/usages.md) and checked for drift against the remote by [`goga usages status`](../cli/usages.md).
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|

@@ -20,8 +20,14 @@ docs/cell/codemanifest.md:
 docs/cell/usages.md:
   - goga
 
-docs/configuration.md:
+docs/configuration/index.md:
   - goga/config
+  - goga/docker
+
+docs/configuration/agents.md:
+  - goga/config
+  - goga/agents/wrapper
+  - goga/docker
 
 docs/tools.md:
   - goga/connect

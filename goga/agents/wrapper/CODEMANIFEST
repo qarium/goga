@@ -26,7 +26,7 @@ Annotations: |
     *-as-claude.sh wrapper, per the `agent-wrappers` practice.
 
     `agent`: agent name as declared in the consumer's configuration
-             (e.g. "claude", "codex", "opencode").
+             (e.g. "claude", "codex", "cursor", "opencode").
              Forwarded as-is — no validation, no normalization.
     `wrapper_path`: absolute path to the wrapper script under the in-container
                     wrappers directory (e.g. "/home/goga/bin/codex-as-claude.sh").

@@ -18,6 +18,7 @@ from goga.agents import resolve_wrapper_path
 path = resolve_wrapper_path(agent)
 # 'codex' -> '/home/goga/bin/codex-as-claude.sh'
 # 'claude' -> '/home/goga/bin/claude-as-claude.sh'
+# 'cursor' -> '/home/goga/bin/cursor-as-claude.sh'
 # 'opencode' -> '/home/goga/bin/opencode-as-claude.sh'
 ```
 

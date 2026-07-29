@@ -12,7 +12,7 @@ def resolve_wrapper_path(agent: str) -> str:
 
     Args:
         agent: Agent name as declared in the consumer's configuration (e.g.
-            "claude", "codex", "opencode"). Forwarded as-is.
+            "claude", "codex", "cursor", "opencode"). Forwarded as-is.
 
     Returns:
         The absolute in-container path of the wrapper script, e.g.

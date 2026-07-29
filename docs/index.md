@@ -67,6 +67,6 @@ The example above uses Claude Code style. For other agents, invoke the skill dir
 - [Getting Started](getting-started.md) — Initialize your first goga project
 - [Workflow](workflow/index.md) — The agent-driven feature development cycle
 - [Cell](cell/index.md) — Cell structure, usages, and CODEMANIFEST DSL reference
-- [Configuration](configuration.md) — Configure `.goga/config.yml`
+- [Configuration](configuration/index.md) — Configure `.goga/config.yml`
 - [CLI Reference](cli/index.md) — Full command reference
 - [Languages](languages/index.md) — Contract extraction per language

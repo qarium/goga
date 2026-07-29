@@ -52,7 +52,9 @@ nav:
       - Workflows: pipelines/workflows.md
       - Shipped Pipelines: pipelines/shipped.md
   - Tools: tools.md
-  - Configuration: configuration.md
+  - Configuration:
+      - configuration/index.md
+      - Agents: configuration/agents.md
   - Cell:
       - cell/index.md
       - CODEMANIFEST: cell/codemanifest.md
