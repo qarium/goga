@@ -35,9 +35,9 @@ The image ships five baseline wrappers:
 | `codex`       | `codex-as-claude.sh`     | Format-converter (jq)               |
 | `cursor`      | `cursor-as-claude.sh`    | Async-run (Cloud Agents API)        |
 | `opencode`    | `opencode-as-claude.sh`  | Format-converter (jq)               |
-| `qwen`        | `qwen-as-claude.sh`      | Format-converter (HTTP streaming)   |
+| `qwen`        | `qwen-as-claude.sh`      | Invocation-shape (qwen CLI)         |
 
-The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim, format-converter wrappers translate the agent's JSONL into stream-json via `jq`, async-run wrappers (cursor) poll an asynchronous run-based API until completion, and HTTP-streaming wrappers (qwen) speak the OpenAI Chat Completions protocol over HTTP, re-emitting SSE `delta.content` chunks as `content_block_delta` events.
+The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, format-converter wrappers translate the agent's JSONL into stream-json via `jq`, and async-run wrappers (cursor) poll an asynchronous run-based API until completion.
 
 ## Environment variables per agent
 
@@ -73,19 +73,19 @@ Unlike claude/codex/opencode, the cursor wrapper is **env-based, not credential-
 
 ### qwen
 
-The `qwen` wrapper speaks the OpenAI Chat Completions protocol over HTTP — any server that exposes `${BASE}/chat/completions` works: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. A single streaming `POST` is issued; each SSE `choices[0].delta.content` chunk is re-emitted as a `content_block_delta` event, and the terminal `result` event is emitted after `data: [DONE]`.
+The `qwen` wrapper is a thin invocation-shape delegate over the `qwen` CLI (the `@qwen-code/qwen-code` npm package shipped in the goga image). It is the same shape as `claude-as-claude.sh`: the wrapper forwards the prompt and env to `qwen`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes, the `<execute>` protocol the system prompt expects — runs inside `qwen`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
 
-Unlike the other baseline wrappers, the env vars are named `OPENAI_*`, not `QWEN_*` — the wrapper name is just a label for goga; the protocol is OpenAI. The practical effect is that one script serves any OpenAI-compatible server.
+Because `qwen` speaks the OpenAI Chat Completions protocol, one wrapper serves any OpenAI-compatible endpoint: Qwen Cloud, DeepSeek, OpenRouter, OpenAI direct, or a local vLLM/ollama instance. The env vars are named `OPENAI_*`, not `QWEN_*` — the wrapper name is just a goga label; the protocol is OpenAI.
 
-| Variable          | Required | Default                     | Purpose                                                                                                                                  |
-|-------------------|----------|-----------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `OPENAI_MODEL`    | yes      | —                           | Model name sent as `model` in the request body. No default — a server-side default would be unpredictable. Wrapper exits non-zero when unset. |
-| `OPENAI_BASE_URL` | no       | `https://api.openai.com/v1` | Base URL of any OpenAI-compatible endpoint. Override for a proxy, self-hosted gateway, or local server (`http://host.docker.internal:11434/v1` for ollama). |
-| `OPENAI_API_KEY`  | no       | *(unset)*                   | Sent as `Authorization: Bearer <key>`. Omitted entirely when empty — local no-auth servers (vLLM/ollama) work without it. |
+| Variable          | Required | Default                     | Purpose                                                                                                                                                        |
+|-------------------|----------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `OPENAI_MODEL`    | yes      | —                           | Passed to `qwen --model`. No default — a server-side default would be unpredictable. Wrapper exits non-zero when unset.                                        |
+| `OPENAI_BASE_URL` | no       | qwen-code default           | Passed to `qwen --openai-base-url` only when set.                                                                                                              |
+| `OPENAI_API_KEY`  | no       | *(unset)*                   | Passed to `qwen --openai-api-key` only when set. Work without it.                                                                                              |
 
-Like `cursor`, the qwen wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
+Qwen wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
 
-A backstop `curl -m 1500` (25 minutes) caps each request below the 30-minute ralphex executor idle timeout, matching `cursor`'s deadline. CLI flags passed by goga (`--model`, `--effort`, `--dangerously-skip-permissions`, `--output-format`, `--verbose`) are ignored; the prompt is read only from stdin.
+The wrapper invokes `qwen --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin.
 
 ### opencode
 
