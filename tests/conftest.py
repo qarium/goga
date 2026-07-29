@@ -1,3 +1,4 @@
+import importlib
 import itertools
 import os
 import shutil
@@ -106,6 +107,13 @@ def patch_clone(tmp_path: Path):
     """
 
     counter = itertools.count()
+    # Resolve the clone submodule directly: the ``goga.usages`` facade re-exports
+    # the ``sync`` function, shadowing the ``goga.usages.sync`` submodule in the
+    # package ``__dict__``. On Python 3.10 a dotted ``mock.patch`` target like
+    # ``goga.usages.sync.clone.subprocess.run`` resolves via sequential getattr,
+    # hits the function where it expects the submodule, and raises AttributeError.
+    # A direct module reference makes ``mock.patch.object`` work uniformly.
+    clone_mod = importlib.import_module("goga.usages.sync.clone")
 
     @contextmanager
     def _patch(
@@ -130,12 +138,14 @@ def patch_clone(tmp_path: Path):
             # checkout command: no-op in the mock
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone.subprocess.run",
+            mock.patch.object(
+                clone_mod.subprocess,
+                "run",
                 side_effect=run_side_effect,
             ),
-            mock.patch(
-                "goga.usages.sync.clone.tempfile.mkdtemp",
+            mock.patch.object(
+                clone_mod.tempfile,
+                "mkdtemp",
                 side_effect=mkdtemp_side_effect,
             ),
         ):

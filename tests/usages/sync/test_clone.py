@@ -1,5 +1,6 @@
 # tests/usages/test_clone.py — contract and logic tests for clone_repository
 
+import importlib
 import inspect
 import subprocess
 from pathlib import Path
@@ -7,6 +8,14 @@ from unittest import mock
 
 import pytest
 from goga.usages.sync.clone import clone_repository
+
+# Resolve the clone submodule directly. The facade ``goga.usages`` re-exports the
+# ``sync`` function, which shadows the ``goga.usages.sync`` submodule in the
+# package ``__dict__``; on Python 3.10 a dotted ``mock.patch`` target like
+# ``goga.usages.sync.clone.subprocess.run`` resolves via sequential getattr and
+# raises ``AttributeError``. A direct module reference makes ``mock.patch.object``
+# work uniformly across Python versions.
+_clone_mod = importlib.import_module("goga.usages.sync.clone")
 
 # --- Contract tests ---
 
@@ -38,9 +47,10 @@ class TestCloneRepositoryLogic:
         clone_target = tmp_path / "clone"
 
         with (
-            mock.patch("goga.usages.sync.clone.subprocess.run") as run_mock,
-            mock.patch(
-                "goga.usages.sync.clone.tempfile.mkdtemp",
+            mock.patch.object(_clone_mod.subprocess, "run") as run_mock,
+            mock.patch.object(
+                _clone_mod.tempfile,
+                "mkdtemp",
                 return_value=str(clone_target),
             ) as mkdtemp_mock,
         ):
@@ -72,9 +82,10 @@ class TestCloneRepositoryLogic:
         clone_target = tmp_path / "clone"
 
         with (
-            mock.patch("goga.usages.sync.clone.subprocess.run") as run_mock,
-            mock.patch(
-                "goga.usages.sync.clone.tempfile.mkdtemp",
+            mock.patch.object(_clone_mod.subprocess, "run") as run_mock,
+            mock.patch.object(
+                _clone_mod.tempfile,
+                "mkdtemp",
                 return_value=str(clone_target),
             ),
         ):
@@ -91,12 +102,14 @@ class TestCloneRepositoryLogic:
         clone_target.mkdir()
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone.subprocess.run",
+            mock.patch.object(
+                _clone_mod.subprocess,
+                "run",
                 side_effect=FileNotFoundError,
             ),
-            mock.patch(
-                "goga.usages.sync.clone.tempfile.mkdtemp",
+            mock.patch.object(
+                _clone_mod.tempfile,
+                "mkdtemp",
                 return_value=str(clone_target),
             ),
             pytest.raises(FileNotFoundError),
@@ -112,12 +125,14 @@ class TestCloneRepositoryLogic:
         clone_target.mkdir()
 
         with (
-            mock.patch(
-                "goga.usages.sync.clone.subprocess.run",
+            mock.patch.object(
+                _clone_mod.subprocess,
+                "run",
                 side_effect=subprocess.CalledProcessError(128, ["git", "clone", "https://x/r.git", str(clone_target)]),
             ),
-            mock.patch(
-                "goga.usages.sync.clone.tempfile.mkdtemp",
+            mock.patch.object(
+                _clone_mod.tempfile,
+                "mkdtemp",
                 return_value=str(clone_target),
             ),
             pytest.raises(subprocess.CalledProcessError),
