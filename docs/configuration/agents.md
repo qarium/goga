@@ -63,7 +63,7 @@ Env variables are forwarded into the container through the standard env layering
 
 ### cursor
 
-The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent` CLI (installed in the goga image via `curl https://cursor.com/install -fsS | bash`). It is the same shape as `qwen-as-claude.sh`: the wrapper forwards the prompt and env to `cursor-agent`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes — runs inside `cursor-agent`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
+The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent` CLI. It is the same shape as `qwen-as-claude.sh`: the wrapper forwards the prompt and env to `cursor-agent`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes — runs inside `cursor-agent`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
 
 | Variable          | Required | Default                    | Purpose                                                                                                                                                   |
 |-------------------|----------|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
@@ -72,7 +72,7 @@ The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent`
 
 The cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
 
-The wrapper invokes `cursor-agent -p --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin and forwarded to `cursor-agent` as a positional argument after `--` (cursor-agent does not read stdin itself, and `--` guards against prompts that start with `-` being misparsed as flags).
+The wrapper invokes `cursor-agent -p --yolo` so every tool call auto-approves. Without `--yolo`, the stage hangs on an interactive approval prompt that no one is there to answer. The `--output-format text` flag makes the final aggregated answer land on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin and forwarded to `cursor-agent` as a positional argument after `--`; `cursor-agent` does not read stdin itself, and `--` guards against prompts that start with `-` being misparsed as flags.
 
 ### opencode
 
