@@ -101,42 +101,40 @@ the normal env layering (`home.env` → project `pipeline.env` /
 | `CODEX_SANDBOX`  | no       | `danger-full-access`    | Sandbox mode. `danger-full-access` disables codex sandboxing so the agent can run builds and modify the workspace without restrictions. |
 | `CODEX_VERBOSE`  | no       | `0`                     | Set to `1` to include command execution output in the codex response — useful for debugging pipeline/build failures.                     |
 
-### Async-run wrapper — `cursor-as-claude.sh`
+### Invocation-shape wrapper over the cursor-agent CLI — `cursor-as-claude.sh`
 
-`cursor-as-claude.sh` adapts the Cursor **Cloud Agents API** to the claude
-stream-json format. Unlike the codex/opencode format-converters, the
-Cursor API is asynchronous and run-based — there is no synchronous
-`/chat/completions` endpoint. The wrapper:
+`cursor-as-claude.sh` is a thin invocation-shape delegate over the
+`cursor-agent` CLI (installed in the goga image via
+`curl https://cursor.com/install -fsS | bash`). It mirrors
+`qwen-as-claude.sh`'s shape: the wrapper forwards the prompt + env to
+`cursor-agent`, captures the final aggregated answer, and emits one
+`assistant` envelope + a `result: success` event. The agent loop — tool
+use, multi-turn, file writes — runs inside `cursor-agent`, exactly as it
+runs inside the `claude` binary for `claude-as-claude.sh`.
 
-1. creates a no-repo Cloud Agent via `POST /v1/agents` with the prompt
-   read from stdin (Cloud VM startup may take minutes — create timeout
-   300s);
-2. polls the run until it reaches a terminal status
-   (`FINISHED`/`ERROR`/`CANCELLED`/`EXPIRED`) with a 25-minute backstop
-   deadline (below the 30-minute executor idle timeout);
-3. emits an assistant envelope carrying the final text, followed by a
-   success `result` event — even on non-`FINISHED` outcomes, so the
-   problem description is visible to the user and the executor finishes
-   cleanly;
-4. archives the agent best-effort (`POST /v1/agents/<id>/archive`) so a
-   no-repo single-use agent does not clutter the account.
+The wrapper does no HTTP itself. `cursor-agent` owns the Cursor Cloud
+transport and reads `CURSOR_API_KEY` natively from the environment (there
+is no `--api-key` flag on the CLI). The wrapper invokes
+`cursor-agent -p --yolo` so every tool call auto-approves (otherwise the
+stage hangs on an interactive approval prompt that no one is there to
+answer in pipeline mode) and `--output-format text` so the final
+aggregated answer lands on stdout, where the wrapper re-envelopes it.
+The prompt is read only from stdin and forwarded to `cursor-agent` as a
+positional argument after `--` (`cursor-agent` does not read stdin itself,
+and `--` guards against prompts that start with `-` being misparsed as
+flags).
 
-All CLI flags passed by the caller (`--model`, `--effort`,
-`--dangerously-skip-permissions`, etc.) are ignored — the wrapper reads
-the prompt only from stdin, matching how `claude` consumes a piped prompt.
+The wrapper is configured through two environment variables:
 
-The wrapper is configured through three environment variables:
+| Variable         | Required | Default                   | Purpose                                                                                                                |
+|------------------|----------|---------------------------|------------------------------------------------------------------------------------------------------------------------|
+| `CURSOR_API_KEY` | yes      | —                         | Authorization token. `cursor-agent` reads `CURSOR_API_KEY` natively from the environment. The wrapper exits with an error when this is unset. |
+| `CURSOR_MODEL`   | no       | *(unset — Cursor default)*| `cursor-agent --model` selector. An empty value or `"auto"` omits the `--model` flag; any other value is forwarded as `--model`. |
 
-| Variable          | Required | Default                          | Purpose                                                                                                   |
-|-------------------|----------|----------------------------------|-----------------------------------------------------------------------------------------------------------|
-| `CURSOR_API_KEY`  | yes      | —                                | Bearer authorization token for `api.cursor.com`. The wrapper exits with an error when this is unset.      |
-| `CURSOR_BASE_URL` | no       | `https://api.cursor.com/v1`      | Base URL of the Cursor Cloud Agents API. Override for a proxy or a self-hosted gateway.                   |
-| `CURSOR_MODEL`    | no       | *(unset — Cursor default)*       | `model.id` selector. An empty value or `"auto"` omits the `model` field from the create request, letting Cursor pick its default. Any other value is forwarded as `model.id`. |
-
-Unlike claude/codex/opencode, the cursor wrapper is **env-based, not
+Like `qwen-as-claude.sh`, the cursor wrapper is **env-based, not
 credential-file-based** — there is no host credential file to bind-mount.
-The three variables above are forwarded into the container through the
-normal env layering (`home.env` → project `pipeline.env` /
+Both variables are forwarded into the container through the normal env
+layering (`home.env` → project `pipeline.env` /
 `build.task_executor.env` → CLI `-e` / `extra_env`), with the same formula
 documented under the Home configuration section of `docs/configuration/index.md`.
 

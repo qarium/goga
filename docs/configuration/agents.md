@@ -22,7 +22,7 @@ Edge cases:
 | `agent: "CodEx"` (case mismatch)                                                   | Resolves to `/home/goga/bin/CodEx-as-claude.sh`. Case-sensitive filesystem → file not found.                                            | Runtime error inside the container. goga does no case folding.                                                                   |
 | Wrapper file missing in image (custom Dockerfile forgot `COPY`)                    | Path resolves but the file is absent.                                                                                                   | Runtime error inside the container. No upfront validation by goga.                                                               |
 | Wrapper present but not executable (forgot `chmod +x`)                             | Permission denied.                                                                                                                      | Runtime error inside the container.                                                                                              |
-| `cursor` configured via credential mount instead of env                            | No host credential file exists for cursor — credential mount is silently skipped.                                                       | Wrapper exits with error (`CURSOR_API_KEY is not set`). See [cursor](#cursor).                                                    |
+| `cursor` configured without `CURSOR_API_KEY`                                       | The wrapper is env-based, not credential-file-based — there is no credential mount to fall back on.                                     | Wrapper exits with error (`CURSOR_API_KEY is required`). See [cursor](#cursor).                                                    |
 | `workflow.stages.<name>.agent: <unknown>`                                          | Wrapper path is composed verbatim; no validation against a known agent set.                                                             | Runtime error inside the container. See [workflows](../pipelines/workflows.md#workflow-agent-choosing-the-cli-agent).                |
 
 ## Baseline wrappers
@@ -33,11 +33,11 @@ The image ships five baseline wrappers:
 |---------------|--------------------------|-------------------------------------|
 | `claude`      | `claude-as-claude.sh`    | Invocation-shape                    |
 | `codex`       | `codex-as-claude.sh`     | Format-converter (jq)               |
-| `cursor`      | `cursor-as-claude.sh`    | Async-run (Cloud Agents API)        |
+| `cursor`      | `cursor-as-claude.sh`    | Invocation-shape (cursor-agent CLI) |
 | `opencode`    | `opencode-as-claude.sh`  | Format-converter (jq)               |
 | `qwen`        | `qwen-as-claude.sh`      | Invocation-shape (qwen CLI)         |
 
-The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, format-converter wrappers translate the agent's JSONL into stream-json via `jq`, and async-run wrappers (cursor) poll an asynchronous run-based API until completion.
+The wrapper class describes how each wrapper produces the Claude Code stream-json output: invocation-shape wrappers forward arguments nearly verbatim to an underlying CLI binary that owns its own agent loop, and format-converter wrappers translate the agent's JSONL into stream-json via `jq`.
 
 ## Environment variables per agent
 
@@ -63,13 +63,16 @@ Env variables are forwarded into the container through the standard env layering
 
 ### cursor
 
-| Variable          | Required | Default                     | Purpose                                                                                                                                                   |
-|-------------------|----------|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `CURSOR_API_KEY`  | yes      | —                           | Bearer authorization token for `api.cursor.com`. The wrapper exits with an error when unset.                                                              |
-| `CURSOR_BASE_URL` | no       | `https://api.cursor.com/v1` | Base URL of the Cursor Cloud Agents API. Override for a proxy or a self-hosted gateway.                                                                   |
-| `CURSOR_MODEL`    | no       | *(unset — Cursor default)*  | `model.id` selector. Empty value or `"auto"` omits the `model` field from the create request; any other value is forwarded as `model.id`.                 |
+The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent` CLI (installed in the goga image via `curl https://cursor.com/install -fsS | bash`). It is the same shape as `qwen-as-claude.sh`: the wrapper forwards the prompt and env to `cursor-agent`, captures the final aggregated answer, and emits it as one `assistant` envelope + a `result: success` event. The agent loop itself — tool use, multi-turn, file writes — runs inside `cursor-agent`, exactly as it runs inside the `claude` binary for `claude-as-claude.sh`.
 
-Unlike claude/codex/opencode, the cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. All three variables are forwarded exclusively through the env layering.
+| Variable          | Required | Default                    | Purpose                                                                                                                                                   |
+|-------------------|----------|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `CURSOR_API_KEY`  | yes      | —                          | Authorization token. `cursor-agent` reads `CURSOR_API_KEY` natively from the environment (no `--api-key` flag exists). The wrapper exits with an error when unset. |
+| `CURSOR_MODEL`    | no       | *(unset — Cursor default)* | `cursor-agent --model` selector. Empty value or `"auto"` omits the `--model` flag; any other value is forwarded as `--model`.                              |
+
+Like `qwen-as-claude.sh`, the cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
+
+The wrapper invokes `cursor-agent -p --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin and forwarded to `cursor-agent` as a positional argument after `--` (cursor-agent does not read stdin itself, and `--` guards against prompts that start with `-` being misparsed as flags).
 
 ### opencode
 
@@ -121,7 +124,7 @@ RUN chmod +x /home/goga/bin/myname-as-claude.sh
 2. ignore or carefully parse CLI flags that goga passes through (`--model`, `--effort`, `--dangerously-skip-permissions`, etc.);
 3. emit Claude Code stream-json on stdout: an `assistant` envelope followed by a `result` event.
 
-The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the cursor wrapper is a full async-run adapter with polling. Use them as reference shapes when designing your own.
+The simplest baseline wrapper (`claude-as-claude.sh`) is a near-no-op that just forwards arguments; the `qwen`/`cursor` wrappers are invocation-shape delegates around an underlying agent CLI that owns its own agent loop; the `codex`/`opencode` wrappers are format-converters that translate JSONL into stream-json via `jq`. Use them as reference shapes when designing your own.
 
 If `agent: myname` is set but the wrapper is not `COPY`'d into the image or is not executable, the container fails at runtime (file not found / permission denied). goga does not validate this up front.
 
