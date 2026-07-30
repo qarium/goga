@@ -70,7 +70,7 @@ The `cursor` wrapper is a thin invocation-shape delegate over the `cursor-agent`
 | `CURSOR_API_KEY`  | yes      | —                          | Authorization token. `cursor-agent` reads `CURSOR_API_KEY` natively from the environment (no `--api-key` flag exists). The wrapper exits with an error when unset. |
 | `CURSOR_MODEL`    | no       | *(unset — Cursor default)* | `cursor-agent --model` selector. Empty value or `"auto"` omits the `--model` flag; any other value is forwarded as `--model`.                              |
 
-Like `qwen-as-claude.sh`, the cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
+The cursor wrapper is **env-based, not credential-file-based** — there is no host credential file to bind-mount. Both variables are forwarded exclusively through the env layering.
 
 The wrapper invokes `cursor-agent -p --yolo` so every tool call auto-approves (otherwise the stage hangs on an interactive approval prompt that no one is there to answer) and `--output-format text` so the final aggregated answer lands on stdout, where the wrapper re-envelopes it. The prompt is read only from stdin and forwarded to `cursor-agent` as a positional argument after `--` (cursor-agent does not read stdin itself, and `--` guards against prompts that start with `-` being misparsed as flags).
 
