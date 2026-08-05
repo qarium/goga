@@ -25,8 +25,17 @@ def _copy_internal_pipelines(pipelines_dir: Path) -> None:
 def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
     """Copy flat ``*.yml`` pipelines from ``goga_tool_*`` packages into ``pipelines_dir``.
 
-    On name conflicts with the internal source, the tool pipeline is skipped with a
-    warning unless ``force_overwrite`` is set, mirroring the tool-skill installer.
+    Each tool pipeline is namespaced under its tool so the pipeline is addressable
+    as ``goga pipeline <tool>:<name>``: the file for
+    ``goga_tool_<tool>/pipelines/<name>.yml`` is installed as ``<tool>:<name>.yml``.
+    This eliminates name collisions both between a tool pipeline and an
+    internal-source pipeline (which stays un-prefixed) and between two tools that
+    ship the same pipeline name.
+
+    A residual conflict can only occur when a namespaced destination already exists
+    (e.g. a tool literally ships a ``<tool>:<name>.yml`` file that collides with
+    another). Such a residual conflict is skipped with a warning unless
+    ``force_overwrite`` is set, mirroring the tool-skill installer.
     """
     pkg_map = importlib.metadata.packages_distributions()
     for top_level_name in sorted(pkg_map):
@@ -41,12 +50,13 @@ def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
         if spec is None or spec.origin is None:
             continue
 
+        tool_name = top_level_name.removeprefix("goga_tool_")
         pkg_pipelines = Path(spec.origin).parent / "pipelines"
         if not pkg_pipelines.is_dir():
             continue
 
         for yml_path in sorted(pkg_pipelines.glob("*.yml")):
-            dest = pipelines_dir / yml_path.name
+            dest = pipelines_dir / f"{tool_name}:{yml_path.name}"
             if dest.exists() and not force_overwrite:
                 print(
                     f"Warning: pipeline {dest.name} already exists, skipping",
@@ -62,17 +72,20 @@ def install_pipelines(pipelines_dir: Path, force_overwrite: bool = False) -> int
     The target directory is fully recreated (deleted then created). Flat
     ``*.yml`` files are copied first from the internal ``goga/assets/pipelines/``
     source, then from each installed ``goga_tool_*`` package's ``pipelines/``
-    directory.
+    directory. Each tool pipeline is namespaced under its tool — installed as
+    ``<tool>:<name>.yml`` and addressable as ``goga pipeline <tool>:<name>`` — so a
+    tool pipeline can no longer collide with an internal-source pipeline (which
+    stays un-prefixed) or with another tool's same-named pipeline.
 
-    Conflict resolution mirrors the existing tool-skill installer: when a pipeline
-    name exists in both the internal source and a ``goga_tool_*`` package, the
-    tool's pipeline is skipped with a warning unless ``force_overwrite`` is set,
-    in which case the tool's pipeline overwrites the internal one.
+    Residual conflict resolution mirrors the existing tool-skill installer: when a
+    namespaced destination already exists (the only way a collision can still occur
+    after namespacing), the tool's pipeline is skipped with a warning unless
+    ``force_overwrite`` is set, in which case the tool's pipeline overwrites it.
 
     Args:
         pipelines_dir: target pipelines directory (typically ``~/.goga/pipelines/``).
-        force_overwrite: when ``True``, let ``goga_tool_*`` packages overwrite
-            internal-source pipelines on name conflicts.
+        force_overwrite: when ``True``, let a ``goga_tool_*`` pipeline overwrite an
+            existing file on a residual namespaced conflict.
 
     Returns:
         ``0`` on success, ``1`` on ``OSError``/``shutil.Error``.

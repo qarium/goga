@@ -124,3 +124,26 @@ class TestListPipelinesLogic:
         entries = list_pipelines(project_dir, user_dir)
 
         assert [entry.name for entry in entries] == ["deploy"]
+
+    def test_list_pipelines_discovers_namespaced_tool_pipeline(self, tmp_path) -> None:
+        """A ``<tool>:<name>.yml`` file (how ``install_pipelines`` ships a tool
+        pipeline) is discovered under the stem ``<tool>:<name>``.
+
+        This is the resolution-side half of tool-pipeline namespacing: the colon is
+        not a path separator, so the entry validates and the pipeline is addressable
+        as ``goga pipeline <tool>:<name>``. A tool pipeline and a same-named
+        internal pipeline coexist as distinct entries.
+        """
+        user_dir = tmp_path / "user_pipelines"
+        user_dir.mkdir()
+        (user_dir / "deploy.yml").write_text("internal")
+        (user_dir / "acme:deploy.yml").write_text("tool")
+
+        entries = list_pipelines(tmp_path / "project_pipelines", user_dir)
+
+        by_name = {entry.name: entry for entry in entries}
+        assert "deploy" in by_name
+        assert "acme:deploy" in by_name
+        # Both resolve back to distinct files on disk.
+        assert (user_dir / f"{by_name['deploy'].name}.yml").read_text() == "internal"
+        assert (user_dir / f"{by_name['acme:deploy'].name}.yml").read_text() == "tool"

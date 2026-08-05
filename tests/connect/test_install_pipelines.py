@@ -1,6 +1,7 @@
 """Tests for ``install_pipelines``: recreating ``~/.goga/pipelines/`` from the internal
-goga source and from ``goga_tool_*`` packages, with the
-``force_overwrite`` conflict policy."""
+goga source and from ``goga_tool_*`` packages. Tool pipelines are namespaced under
+their tool (``<tool>:<name>.yml``); ``force_overwrite`` governs residual namespaced
+conflicts."""
 
 from __future__ import annotations
 
@@ -122,8 +123,9 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert not (pipelines_dir / "stale_pipeline.yml").exists()
 
-    def test_install_pipelines_internal_wins_on_conflict_by_default(self, tmp_path: Path, monkeypatch) -> None:
-        """By default the internal-source pipeline wins on a name conflict."""
+    def test_install_pipelines_tool_and_internal_same_name_coexist(self, tmp_path: Path, monkeypatch) -> None:
+        """Namespacing lets a tool pipeline and an internal pipeline with the same
+        base name coexist — no conflict, no skip."""
         pipelines_dir = tmp_path / "pipelines_target"
         internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
@@ -137,13 +139,45 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir, force_overwrite=False)
 
         assert exit_code == 0
+        # Internal pipeline stays un-prefixed; tool pipeline is namespaced under its tool.
         assert (pipelines_dir / "conflict.yml").read_text() == "internal"
+        assert (pipelines_dir / "X:conflict.yml").read_text() == "tool"
 
-    def test_install_pipelines_tools_overwrite_on_conflict_with_force(self, tmp_path: Path, monkeypatch) -> None:
-        """With force_overwrite the tool pipeline wins on a name conflict."""
+    def test_install_pipelines_namespaced_conflict_skipped_by_default(
+        self, tmp_path: Path, monkeypatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A residual namespaced conflict (a destination ``<tool>:<name>.yml`` that
+        already exists) is skipped with a warning unless ``force_overwrite`` is set.
+
+        Here the internal source ships a colon-prefixed ``X:unique.yml`` so the
+        tool ``goga_tool_X`` pipeline ``unique.yml`` lands on the same namespaced
+        path — the only way a collision can still occur after tool namespacing.
+        """
         pipelines_dir = tmp_path / "pipelines_target"
-        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
-        spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"X:unique.yml": "internal"})
+        spec = _make_tool_spec(tmp_path, "goga_tool_X", {"unique.yml": "tool"})
+        _patch_discovery(
+            monkeypatch,
+            internal_pipelines,
+            packages={"goga_tool_X": ["goga_tool_X"]},
+            specs={"goga_tool_X": spec},
+        )
+
+        exit_code = install_pipelines(pipelines_dir, force_overwrite=False)
+
+        assert exit_code == 0
+        # Existing namespaced pipeline is preserved; the tool's file is skipped.
+        assert (pipelines_dir / "X:unique.yml").read_text() == "internal"
+        captured = capsys.readouterr()
+        assert "X:unique.yml" in captured.err
+        assert "already exists" in captured.err
+
+    def test_install_pipelines_namespaced_conflict_overwritten_with_force(self, tmp_path: Path, monkeypatch) -> None:
+        """With ``force_overwrite`` a residual namespaced conflict lets the tool
+        pipeline overwrite the existing file."""
+        pipelines_dir = tmp_path / "pipelines_target"
+        internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"X:unique.yml": "internal"})
+        spec = _make_tool_spec(tmp_path, "goga_tool_X", {"unique.yml": "tool"})
         _patch_discovery(
             monkeypatch,
             internal_pipelines,
@@ -154,7 +188,7 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir, force_overwrite=True)
 
         assert exit_code == 0
-        assert (pipelines_dir / "conflict.yml").read_text() == "tool"
+        assert (pipelines_dir / "X:unique.yml").read_text() == "tool"
 
     def test_install_pipelines_copies_internal_pipelines(self, tmp_path: Path, monkeypatch) -> None:
         """Internal-source pipelines are copied into the recreated directory."""
@@ -171,8 +205,8 @@ class TestInstallPipelinesLogic:
         assert (pipelines_dir / "deploy.yml").read_text() == "internal deploy"
         assert (pipelines_dir / "build.yml").read_text() == "internal build"
 
-    def test_install_pipelines_copies_tool_pipelines_when_no_conflict(self, tmp_path: Path, monkeypatch) -> None:
-        """A tool pipeline with a unique name is copied without a warning."""
+    def test_install_pipelines_copies_tool_pipelines_namespaced(self, tmp_path: Path, monkeypatch) -> None:
+        """A tool pipeline is copied namespaced as ``<tool>:<name>.yml``."""
         pipelines_dir = tmp_path / "pipelines_target"
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"unique.yml": "tool unique"})
         _patch_discovery(
@@ -185,7 +219,45 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir)
 
         assert exit_code == 0
-        assert (pipelines_dir / "unique.yml").read_text() == "tool unique"
+        assert (pipelines_dir / "X:unique.yml").read_text() == "tool unique"
+        # The un-prefixed name must NOT exist (the whole point of namespacing).
+        assert not (pipelines_dir / "unique.yml").exists()
+
+    def test_install_pipelines_namespaces_multisegment_tool_name(self, tmp_path: Path, monkeypatch) -> None:
+        """A multi-segment tool name (``goga_tool_my_tool``) keeps its underscores in
+        the ``my_tool:<name>.yml`` prefix."""
+        pipelines_dir = tmp_path / "pipelines_target"
+        spec = _make_tool_spec(tmp_path, "goga_tool_my_tool", {"foo.yml": "tool foo"})
+        _patch_discovery(
+            monkeypatch,
+            tmp_path / "does_not_exist",
+            packages={"goga_tool_my_tool": ["goga_tool_my_tool"]},
+            specs={"goga_tool_my_tool": spec},
+        )
+
+        exit_code = install_pipelines(pipelines_dir)
+
+        assert exit_code == 0
+        assert (pipelines_dir / "my_tool:foo.yml").read_text() == "tool foo"
+
+    def test_install_pipelines_two_tools_same_pipeline_name_no_collision(self, tmp_path: Path, monkeypatch) -> None:
+        """Two tools shipping the same pipeline name install side by side under their
+        own prefixes — the headline benefit of namespacing."""
+        pipelines_dir = tmp_path / "pipelines_target"
+        spec_a = _make_tool_spec(tmp_path, "goga_tool_a", {"deploy.yml": "from a"})
+        spec_b = _make_tool_spec(tmp_path, "goga_tool_b", {"deploy.yml": "from b"})
+        _patch_discovery(
+            monkeypatch,
+            tmp_path / "does_not_exist",
+            packages={"goga_tool_a": ["goga_tool_a"], "goga_tool_b": ["goga_tool_b"]},
+            specs={"goga_tool_a": spec_a, "goga_tool_b": spec_b},
+        )
+
+        exit_code = install_pipelines(pipelines_dir)
+
+        assert exit_code == 0
+        assert (pipelines_dir / "a:deploy.yml").read_text() == "from a"
+        assert (pipelines_dir / "b:deploy.yml").read_text() == "from b"
 
     def test_install_pipelines_skips_package_without_pipelines_dir(self, tmp_path: Path, monkeypatch) -> None:
         """A goga_tool_* package without a pipelines/ directory is skipped silently."""
@@ -203,10 +275,11 @@ class TestInstallPipelinesLogic:
         assert exit_code == 0
         assert list(pipelines_dir.glob("*.yml")) == []
 
-    def test_install_pipelines_warns_on_skipped_conflict(
+    def test_install_pipelines_no_warning_when_namespacing_resolves_base_name(
         self, tmp_path: Path, monkeypatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """A skipped conflict logs a warning to stderr."""
+        """A tool pipeline whose base name matches an internal pipeline is NOT a
+        conflict after namespacing — no warning is emitted."""
         pipelines_dir = tmp_path / "pipelines_target"
         internal_pipelines = _make_internal_pipelines(tmp_path / "internal", {"conflict.yml": "internal"})
         spec = _make_tool_spec(tmp_path, "goga_tool_X", {"conflict.yml": "tool"})
@@ -220,8 +293,7 @@ class TestInstallPipelinesLogic:
         install_pipelines(pipelines_dir, force_overwrite=False)
 
         captured = capsys.readouterr()
-        assert "conflict.yml" in captured.err
-        assert "already exists" in captured.err
+        assert "already exists" not in captured.err
 
     def test_install_pipelines_returns_nonzero_on_copy_error(self, tmp_path: Path, monkeypatch) -> None:
         """An OSError during copying makes install_pipelines return 1 with a message."""

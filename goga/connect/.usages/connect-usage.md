@@ -111,7 +111,11 @@ re-sync the connected agents after a package change, using the per-agent
 - Discovers `goga_tool_*` packages and copies their skills into `~/.goga/skills/`.
 - Purges stale `goga-*` entries under each `~/.<agent>/skills/`.
 - Creates symlinks from agent directories into `~/.goga/`.
-- Calls `install_pipelines` to populate `~/.goga/pipelines/`.
+- Calls `install_pipelines` to populate `~/.goga/pipelines/`. Tool pipelines install
+  namespaced as `<tool>:<name>.yml`, so they are run as `goga pipeline <tool>:<name>`
+  (e.g. `goga pipeline acme:deploy`); internal goga pipelines stay un-prefixed
+  (e.g. `goga pipeline feature`). Namespacing prevents collisions between tools and
+  with internal pipelines.
 - Writes `~/.goga/connect.yml` (single writer).
 
 ## Preconditions

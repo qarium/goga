@@ -133,18 +133,24 @@ Annotations: |
     Recreate the user-level pipelines directory and populate it with flat *.yml files
     from the goga repository and from installed goga_tool_* packages.
 
-    Conflict resolution between internal source and goga_tool_* packages mirrors the
-    same `force_overwrite` semantics used for skill installation in the existing
-    tool-skill installer (private helper _install_tool_skills in connect.py):
+    Tool-pipeline namespacing: every pipeline from a goga_tool_* package is installed under
+    its tool prefix so it is addressable as goga pipeline <tool>:<name> — the file for
+    goga_tool_<tool>/pipelines/<name>.yml is written as <tool>:<name>.yml. Internal-source
+    pipelines (goga/assets/pipelines/) are installed UN-prefixed. This eliminates name
+    collisions both between a tool pipeline and an internal-source pipeline and between two
+    tools that ship the same pipeline name.
 
-    - force_overwrite=False (default): when a pipeline name exists in both the internal source
-      (goga/assets/pipelines/) and a goga_tool_* package, the tool's pipeline is SKIPPED (a warning is logged
-      to stderr, the existing internal-source pipeline is preserved).
-    - force_overwrite=True: when a pipeline name exists in both, the tool's pipeline OVERWRITES the
-      internal-source pipeline.
+    Residual conflict resolution: after namespacing a tool pipeline can only collide with an
+    existing file when its namespaced destination <tool>:<name>.yml already exists. Such a
+    residual conflict is resolved with the same `force_overwrite` semantics used for skill
+    installation in the existing tool-skill installer (private helper _install_tool_skills in connect.py):
+
+    - force_overwrite=False (default): the tool's pipeline is SKIPPED (a warning is logged to stderr,
+      the existing file is preserved).
+    - force_overwrite=True: the tool's pipeline OVERWRITES the existing file.
 
     `pipelines_dir`: target directory (typically ~/.goga/pipelines/)
-    `force_overwrite`: when True, let goga_tool_* packages overwrite internal-source pipelines on name conflicts
+    `force_overwrite`: when True, let a tool pipeline overwrite an existing file on a residual namespaced conflict
     `exit_code`: 0 on success, 1 on error
 
     Algorithm:
@@ -155,12 +161,13 @@ Annotations: |
     4. Discover installed Python packages with the goga_tool_ prefix
        via importlib.metadata.packages_distributions()
     5. For each discovered package goga_tool_<tool_name>:
-       - Resolve the package path
-       - If <package>/pipelines/ exists, for each flat *.yml file in it:
-         - If <pipelines_dir>/<name>.yml already exists (conflict with internal source):
+       - Resolve the package path and derive tool_name (drop the goga_tool_ prefix)
+       - If <package>/pipelines/ exists, for each flat *.yml file <name>.yml in it:
+         - Namespace the destination as <pipelines_dir>/<tool_name>:<name>.yml
+         - If that destination already exists (residual namespaced conflict):
            - If force_overwrite=False: log warning to stderr and skip this file
-           - If force_overwrite=True: overwrite <pipelines_dir>/<name>.yml with the tool's file
-         - Otherwise: copy the tool's file to <pipelines_dir>/<name>.yml
+           - If force_overwrite=True: overwrite the destination with the tool's file
+         - Otherwise: copy the tool's file to <pipelines_dir>/<tool_name>:<name>.yml
     6. Return 0 on success, 1 on error (e.g., OSError/shutil.Error during copy or rmtree)
 
     Requirements:
@@ -168,7 +175,9 @@ Annotations: |
     - Scan only the top level of each source — do not descend into subdirectories
     - Apply the `convention` practice for filesystem and package-discovery code
     - Skip missing source directories silently (a package without pipelines/ is not an error)
-    - Conflict resolution MUST mirror the existing tool-skill installer semantics
+    - Namespace every goga_tool_* pipeline under its tool as <tool>:<name>.yml
+      (internal-source pipelines stay un-prefixed)
+    - Residual namespaced conflict resolution MUST mirror the existing tool-skill installer semantics
       (private helper _install_tool_skills in connect.py):
       skip-with-warning when force_overwrite=False, overwrite when force_overwrite=True
     - Route all output (warnings) through sys.stderr (per cell global annotation)
