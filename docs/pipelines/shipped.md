@@ -28,7 +28,9 @@ Two sources feed `~/.goga/pipelines/`, applied in this order:
    `goga_tool_*` prefix is scanned for a `pipelines/` directory. Each
    flat `*.yml` file `<name>.yml` in that directory is copied into
    `~/.goga/pipelines/` **namespaced as `<tool>:<name>.yml`**, where
-   `<tool>` is the package name with the `goga_tool_` prefix dropped.
+   `<tool>` is the package name with the `goga_tool_` prefix dropped and
+   underscores normalized to hyphens (so `goga_tool_hello_world` becomes
+   `hello-world`).
 
 Namespacing makes every tool pipeline addressable as
 `goga pipeline <tool>:<name>` (e.g. `goga pipeline acme:deploy`), while

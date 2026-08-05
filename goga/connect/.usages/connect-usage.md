@@ -114,7 +114,11 @@ re-sync the connected agents after a package change, using the per-agent
 - Calls `install_pipelines` to populate `~/.goga/pipelines/`. Tool pipelines install
   namespaced as `<tool>:<name>.yml`, so they are run as `goga pipeline <tool>:<name>`
   (e.g. `goga pipeline acme:deploy`); internal goga pipelines stay un-prefixed
-  (e.g. `goga pipeline feature`). Namespacing prevents collisions between tools and
+  (e.g. `goga pipeline feature`). The `<tool>` prefix is normalized to the canonical
+  hyphenated tool name — for a multi-word tool whose package is `goga-tool-hello-world`
+  (top-level module `goga_tool_hello_world`), the pipeline lands at
+  `hello-world:<name>.yml` and is run as `goga pipeline hello-world:<name>` (underscores
+  are replaced with hyphens). Namespacing prevents collisions between tools and
   with internal pipelines.
 - Writes `~/.goga/connect.yml` (single writer).
 

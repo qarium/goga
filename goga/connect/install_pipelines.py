@@ -32,6 +32,13 @@ def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
     internal-source pipeline (which stays un-prefixed) and between two tools that
     ship the same pipeline name.
 
+    The tool prefix is normalized to the canonical hyphenated tool name: the
+    underscored Python top-level module name (``goga_tool_hello_world``) yields the
+    user-facing tool identifier ``hello-world``, so the pipeline lands at
+    ``hello-world:<name>.yml`` and is run as ``goga pipeline hello-world:<name>``.
+    The on-disk package layout keeps its underscores; only the namespace prefix is
+    normalized.
+
     A residual conflict can only occur when a namespaced destination already exists
     (e.g. a tool literally ships a ``<tool>:<name>.yml`` file that collides with
     another). Such a residual conflict is skipped with a warning unless
@@ -50,7 +57,12 @@ def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
         if spec is None or spec.origin is None:
             continue
 
-        tool_name = top_level_name.removeprefix("goga_tool_")
+        # Normalize the underscored Python top-level name to the canonical
+        # hyphenated tool identifier (goga_tool_hello_world -> hello-world) so the
+        # pipeline prefix matches the package name and is addressable as
+        # `goga pipeline hello-world:<name>`. The on-disk package layout keeps its
+        # underscores; only the user-facing namespace prefix is normalized.
+        tool_name = top_level_name.removeprefix("goga_tool_").replace("_", "-")
         pkg_pipelines = Path(spec.origin).parent / "pipelines"
         if not pkg_pipelines.is_dir():
             continue
@@ -75,7 +87,10 @@ def install_pipelines(pipelines_dir: Path, force_overwrite: bool = False) -> int
     directory. Each tool pipeline is namespaced under its tool — installed as
     ``<tool>:<name>.yml`` and addressable as ``goga pipeline <tool>:<name>`` — so a
     tool pipeline can no longer collide with an internal-source pipeline (which
-    stays un-prefixed) or with another tool's same-named pipeline.
+    stays un-prefixed) or with another tool's same-named pipeline. The tool prefix
+    is normalized to the canonical hyphenated tool name: the underscored top-level
+    module name (e.g. ``goga_tool_hello_world``) becomes the user-facing identifier
+    ``hello-world``, so the pipeline is run as ``goga pipeline hello-world:<name>``.
 
     Residual conflict resolution mirrors the existing tool-skill installer: when a
     namespaced destination already exists (the only way a collision can still occur

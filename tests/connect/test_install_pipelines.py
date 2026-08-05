@@ -224,21 +224,24 @@ class TestInstallPipelinesLogic:
         assert not (pipelines_dir / "unique.yml").exists()
 
     def test_install_pipelines_namespaces_multisegment_tool_name(self, tmp_path: Path, monkeypatch) -> None:
-        """A multi-segment tool name (``goga_tool_my_tool``) keeps its underscores in
-        the ``my_tool:<name>.yml`` prefix."""
+        """A multi-segment tool name (``goga_tool_my_tool``) is normalized to hyphens in
+        the ``my-tool:<name>.yml`` prefix, matching the canonical hyphenated tool/package
+        name (``goga-tool-my-tool``)."""
         pipelines_dir = tmp_path / "pipelines_target"
         spec = _make_tool_spec(tmp_path, "goga_tool_my_tool", {"foo.yml": "tool foo"})
         _patch_discovery(
             monkeypatch,
             tmp_path / "does_not_exist",
-            packages={"goga_tool_my_tool": ["goga_tool_my_tool"]},
+            packages={"goga_tool_my_tool": ["goga-tool-my-tool"]},
             specs={"goga_tool_my_tool": spec},
         )
 
         exit_code = install_pipelines(pipelines_dir)
 
         assert exit_code == 0
-        assert (pipelines_dir / "my_tool:foo.yml").read_text() == "tool foo"
+        assert (pipelines_dir / "my-tool:foo.yml").read_text() == "tool foo"
+        # The underscored prefix must NOT exist (normalization replaces _ with -).
+        assert not (pipelines_dir / "my_tool:foo.yml").exists()
 
     def test_install_pipelines_two_tools_same_pipeline_name_no_collision(self, tmp_path: Path, monkeypatch) -> None:
         """Two tools shipping the same pipeline name install side by side under their

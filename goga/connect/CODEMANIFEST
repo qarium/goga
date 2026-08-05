@@ -135,7 +135,10 @@ Annotations: |
 
     Tool-pipeline namespacing: every pipeline from a goga_tool_* package is installed under
     its tool prefix so it is addressable as goga pipeline <tool>:<name> — the file for
-    goga_tool_<tool>/pipelines/<name>.yml is written as <tool>:<name>.yml. Internal-source
+    goga_tool_<tool>/pipelines/<name>.yml is written as <tool>:<name>.yml. The tool prefix
+    is normalized to the canonical hyphenated tool name: the underscored Python top-level
+    module name (e.g. goga_tool_hello_world) becomes the user-facing tool identifier
+    hello-world, so the pipeline is run as goga pipeline hello-world:<name>. Internal-source
     pipelines (goga/assets/pipelines/) are installed UN-prefixed. This eliminates name
     collisions both between a tool pipeline and an internal-source pipeline and between two
     tools that ship the same pipeline name.
@@ -161,7 +164,9 @@ Annotations: |
     4. Discover installed Python packages with the goga_tool_ prefix
        via importlib.metadata.packages_distributions()
     5. For each discovered package goga_tool_<tool_name>:
-       - Resolve the package path and derive tool_name (drop the goga_tool_ prefix)
+       - Resolve the package path and derive tool_name by dropping the goga_tool_ prefix
+         and normalizing underscores to hyphens (goga_tool_hello_world -> hello-world),
+         so the namespace prefix matches the canonical hyphenated tool/package name
        - If <package>/pipelines/ exists, for each flat *.yml file <name>.yml in it:
          - Namespace the destination as <pipelines_dir>/<tool_name>:<name>.yml
          - If that destination already exists (residual namespaced conflict):
@@ -177,6 +182,10 @@ Annotations: |
     - Skip missing source directories silently (a package without pipelines/ is not an error)
     - Namespace every goga_tool_* pipeline under its tool as <tool>:<name>.yml
       (internal-source pipelines stay un-prefixed)
+    - Normalize the tool namespace prefix to the canonical hyphenated tool name by
+      replacing underscores with hyphens in the name derived from the top-level module
+      name (goga_tool_hello_world -> hello-world); the on-disk package layout is located
+      by the underscored module name, but only the user-facing namespace prefix is normalized
     - Residual namespaced conflict resolution MUST mirror the existing tool-skill installer semantics
       (private helper _install_tool_skills in connect.py):
       skip-with-warning when force_overwrite=False, overwrite when force_overwrite=True

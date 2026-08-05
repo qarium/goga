@@ -75,8 +75,9 @@ A valid tool must:
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
 `<tool>:<name>.yml`** (where `<tool>` is the package name with the
-`goga_tool_` prefix dropped), next to the un-prefixed internal-source
-pipelines. Namespacing structurally prevents collisions with internal
+`goga_tool_` prefix dropped and underscores normalized to hyphens, so
+`goga_tool_hello_world` becomes `hello-world`), next to the un-prefixed
+internal-source pipelines. Namespacing structurally prevents collisions with internal
 pipelines and between two tools shipping the same name; only a residual
 conflict on the namespaced destination is possible, resolved with the
 same `--force-overwrite` semantics used for tool-skill installation. See
