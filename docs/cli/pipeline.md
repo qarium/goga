@@ -60,6 +60,13 @@ Project pipelines are annotated with `(project)`; user pipelines are printed bar
 
 Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/`, and runs that via `afm run`. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; otherwise the launcher prints no status line.
 
+Pipelines installed from `goga_tool_*` packages are namespaced as `<tool>:<name>.yml` and addressed as `goga pipeline <tool>:<name>` — the colon is part of the bare filename stem, not a separator. Internal pipelines stay un-prefixed.
+
+```bash
+goga pipeline feature
+goga pipeline acme:deploy
+```
+
 ```bash
 goga pipeline deploy --workflow feature-phases
 ```

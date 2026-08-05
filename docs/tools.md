@@ -27,7 +27,7 @@ goga connect <agent>
 
 If you have already connected an agent, `goga install` automatically re-syncs every connected agent after a successful pip, so the new tool's skills and pipelines appear immediately — no separate `goga connect` call is needed. `goga connect` is only required the first time (or to connect a new agent); pass `goga install --no-connect` to opt out of activation.
 
-`goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. If the package ships any pipeline `*.yml` files under `pipelines/`, those are installed into `~/.goga/pipelines/` in the same step — see [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the conflict-resolution rules. The tool becomes available both as an agent skill and as a CLI command.
+`goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. If the package ships any pipeline `*.yml` files under `pipelines/`, those are installed into `~/.goga/pipelines/` in the same step, **namespaced as `<tool>:<name>.yml`** so they are addressable as `goga pipeline <tool>:<name>` (internal pipelines stay un-prefixed) — see [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the namespacing and residual-conflict rules. The tool becomes available both as an agent skill and as a CLI command.
 
 ## Built-in tools
 
@@ -62,7 +62,7 @@ goga_tool_<name>/
 │   └── <skill>/
 │       └── SKILL.md   # Agent skill definition
 └── pipelines/         # Optional — flat *.yml pipeline files
-    └── <name>.yml     # Installed into ~/.goga/pipelines/ by goga connect
+    └── <name>.yml     # Installed by goga connect as <tool>:<name>.yml
 ```
 
 A valid tool must:
@@ -73,9 +73,13 @@ A valid tool must:
 - Expose a `main(argv: list[str])` function for CLI execution
 
 A `pipelines/` directory is **optional**. When present, `goga connect`
-copies its flat `*.yml` files into `~/.goga/pipelines/` next to the
-shipped pipelines, with the same conflict-resolution rules used for
-tool-skill installation. See
+copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
+`<tool>:<name>.yml`** (where `<tool>` is the package name with the
+`goga_tool_` prefix dropped), next to the un-prefixed internal-source
+pipelines. Namespacing structurally prevents collisions with internal
+pipelines and between two tools shipping the same name; only a residual
+conflict on the namespaced destination is possible, resolved with the
+same `--force-overwrite` semantics used for tool-skill installation. See
 [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the full
 installation algorithm.
 

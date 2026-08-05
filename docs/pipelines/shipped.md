@@ -22,29 +22,41 @@ skills use.
 Two sources feed `~/.goga/pipelines/`, applied in this order:
 
 1. **Internal source** — flat `*.yml` files from `goga/assets/pipelines/`
-   shipped with the goga package. These are always installed first and
-   establish the base.
+   shipped with the goga package. These are always installed first, are
+   written **un-prefixed** (e.g. `feature.yml`), and establish the base.
 2. **Tool packages** — every installed Python package with the
    `goga_tool_*` prefix is scanned for a `pipelines/` directory. Each
-   flat `*.yml` file in that directory is copied into
-   `~/.goga/pipelines/`.
+   flat `*.yml` file `<name>.yml` in that directory is copied into
+   `~/.goga/pipelines/` **namespaced as `<tool>:<name>.yml`**, where
+   `<tool>` is the package name with the `goga_tool_` prefix dropped.
 
-This is symmetric with how skills spread: tool packages ship both
-`skills/<name>/SKILL.md` and `pipelines/<name>.yml` next to each other,
-and a single `goga connect` run installs both.
+Namespacing makes every tool pipeline addressable as
+`goga pipeline <tool>:<name>` (e.g. `goga pipeline acme:deploy`), while
+internal pipelines stay un-prefixed and are addressed as
+`goga pipeline <name>` (e.g. `goga pipeline feature`). This structurally
+prevents collisions both between a tool pipeline and an internal-source
+pipeline and between two tools that ship the same pipeline name.
 
-### Conflict resolution
+This diverges from how skills spread: tool skills are installed under a
+`goga-tool-` prefix into `~/.goga/skills/`, while tool pipelines are
+namespaced by tool into `~/.goga/pipelines/`. The discovery mechanism is
+shared, but the destination layout differs.
 
-A name conflict — the same `<name>.yml` exists in both the internal
-source and a tool package — is resolved by the `--force-overwrite` flag
-passed to `goga connect`:
+### Residual conflict resolution
 
-| `--force-overwrite` | Behaviour on name conflict                                       |
+After namespacing, a tool pipeline can only collide with an existing
+file when its namespaced destination `<tool>:<name>.yml` already exists
+— for example, when the same tool is reinstalled over a hand-placed
+file with that exact namespaced stem. Such a residual conflict is
+resolved by the `--force-overwrite` flag passed to `goga connect`:
+
+| `--force-overwrite` | Behaviour on residual namespaced conflict                        |
 |---------------------|------------------------------------------------------------------|
-| `false` (default)   | The tool's pipeline is skipped; the internal-source pipeline wins. A warning is logged to stderr. |
-| `true`              | The tool's pipeline overwrites the internal-source pipeline.     |
+| `false` (default)   | The tool's pipeline is skipped; the existing file wins. A warning is logged to stderr. |
+| `true`              | The tool's pipeline overwrites the existing file at `<tool>:<name>.yml`. |
 
-This mirrors the conflict semantics used for tool-skill installation.
+This mirrors the residual-conflict semantics used for tool-skill
+installation.
 
 ### Idempotency
 
@@ -183,9 +195,10 @@ reference.
 To distribute a pipeline **across projects** alongside other goga
 tooling, ship it inside a `goga_tool_*` package under
 `<package>/pipelines/<name>.yml`. A `goga connect` run will then pick it
-up automatically — the same mechanism that installs tool skills. Do not
-place hand-edited pipelines directly into `~/.goga/pipelines/`, because
-`goga connect` recreates that directory on every run.
+up automatically and install it as `<tool>:<name>.yml` — the same
+discovery mechanism that installs tool skills. Do not place hand-edited
+pipelines directly into `~/.goga/pipelines/`, because `goga connect`
+recreates that directory on every run.
 
 ## See also
 
@@ -193,7 +206,6 @@ place hand-edited pipelines directly into `~/.goga/pipelines/`, because
   forking a pipeline.
 - [Workflows](workflows.md) — layer project-specific behavior on top of a
   shipped pipeline without forking it.
-- [`goga connect` CLI reference](../cli/connect.md) — full pipeline
-  installation algorithm and conflict-resolution semantics.
 - [`goga connect` CLI reference](../cli/connect.md) — install shipped
-  pipelines into the user pipeline directory.
+  pipelines into the user pipeline directory, namespacing rules, and
+  residual conflict-resolution semantics.

@@ -48,12 +48,14 @@ Pipelines are flat top-level `*.yml` files resolved from two directories:
 | Source   | Directory                | Origin                                                  |
 |----------|--------------------------|---------------------------------------------------------|
 | project  | `<cwd>/.goga/pipelines/` | Checked into / authored for the current project         |
-| user     | `~/.goga/pipelines/`     | Populated by `goga connect` from goga assets + `goga_tool_*` packages |
+| user     | `~/.goga/pipelines/`     | Populated by `goga connect`: internal goga assets un-prefixed (`<name>.yml`), tool packages namespaced as `<tool>:<name>.yml` |
 
 Only top-level files are scanned — subdirectories are ignored, and `.yaml`
 files are excluded. When a name exists in both sources, the project source
-wins. See [Shipped Pipelines](shipped.md) for the full installation
-algorithm.
+wins. The namespaced form `<tool>:<name>.yml` is just a filename stem
+containing a colon, so it is resolved like any other bare name — the
+discovery scan picks it up verbatim. See
+[Shipped Pipelines](shipped.md) for the full installation algorithm.
 
 ## Compilation overview
 
