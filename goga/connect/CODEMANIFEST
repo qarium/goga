@@ -139,9 +139,9 @@ Annotations: |
     is normalized to the canonical hyphenated tool name: the underscored Python top-level
     module name (e.g. goga_tool_hello_world) becomes the user-facing tool identifier
     hello-world, so the pipeline is run as goga pipeline hello-world:<name>. Internal-source
-    pipelines (goga/assets/pipelines/) are installed UN-prefixed. This eliminates name
-    collisions both between a tool pipeline and an internal-source pipeline and between two
-    tools that ship the same pipeline name.
+    pipelines (goga/assets/pipelines/) are installed UN-prefixed. A tool pipeline occupies
+    a <tool>:-prefixed stem, distinct from the un-prefixed internal-source stems and from
+    other tools' <tool>: stems, so the internal and tool sources coexist as separate files.
 
     Residual conflict resolution: after namespacing a tool pipeline can only collide with an
     existing file when its namespaced destination <tool>:<name>.yml already exists. Such a

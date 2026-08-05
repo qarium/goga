@@ -69,6 +69,7 @@ def _copy_tool_pipelines(pipelines_dir: Path, force_overwrite: bool) -> None:
 
         for yml_path in sorted(pkg_pipelines.glob("*.yml")):
             dest = pipelines_dir / f"{tool_name}:{yml_path.name}"
+
             if dest.exists() and not force_overwrite:
                 print(
                     f"Warning: pipeline {dest.name} already exists, skipping",

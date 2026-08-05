@@ -48,8 +48,9 @@ shared, but the destination layout differs.
 
 After namespacing, a tool pipeline can only collide with an existing
 file when its namespaced destination `<tool>:<name>.yml` already exists
-— for example, when the same tool is reinstalled over a hand-placed
-file with that exact namespaced stem. Such a residual conflict is
+— for example, when the internal goga source already provides a pipeline
+at that exact namespaced stem, or when another tool resolves to the same
+namespace. Such a residual conflict is
 resolved by the `--force-overwrite` flag passed to `goga connect`:
 
 | `--force-overwrite` | Behaviour on residual namespaced conflict                        |

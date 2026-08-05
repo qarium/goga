@@ -118,8 +118,8 @@ re-sync the connected agents after a package change, using the per-agent
   hyphenated tool name — for a multi-word tool whose package is `goga-tool-hello-world`
   (top-level module `goga_tool_hello_world`), the pipeline lands at
   `hello-world:<name>.yml` and is run as `goga pipeline hello-world:<name>` (underscores
-  are replaced with hyphens). Namespacing prevents collisions between tools and
-  with internal pipelines.
+  are replaced with hyphens). Each tool pipeline occupies its own `<tool>:` stem, distinct
+  from the un-prefixed internal pipelines and from other tools' stems.
 - Writes `~/.goga/connect.yml` (single writer).
 
 ## Preconditions
