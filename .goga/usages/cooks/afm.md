@@ -52,6 +52,7 @@ Optional `run` flags:
 - `--idle-timeout duration` — agent idle timeout
 - `--max-parallel int` — maximum number of parallel stages (0 = no limit)
 - `--port int` — dashboard port (0 = use the value from `config.yaml`)
+- `--require-approval` — run in approval-required mode (each stage awaits explicit approval before executing)
 
 ### Key command — `list`
 
@@ -99,6 +100,19 @@ afm honors a per-stage `command:` field inside each stage of a flow-file. When a
 The override is per-stage only; stages without `command:` keep using the global `client.command`. This lets a single flow route different stages to different agents (planning with claude, review with codex, etc.) without modifying the launcher-side config.yaml.
 
 The goga host-side launcher still writes the global `client.command` tmpfile — it serves as the default for every stage that does not override. Per-stage overrides are authored by the goga workflow layer (not the launcher): they appear in the serialized flow-file as a stage field.
+
+## Per-stage auto-approval and script directives (flow-file)
+
+afm honors the following additional per-stage keys inside each stage of a flow-file:
+
+| Key | Type | Purpose |
+|-----|------|---------|
+| `auto_approve` | bool | When true, afm auto-approves the stage plan (no manual `afm approve` step). Authored by the goga workflow layer from an `approve: auto` directive. |
+| `script_before` | str | Shell script run before the stage's agent invocation. |
+| `script` | str | Shell script run as the stage's action (mutually exclusive with the stage's `prompt`/`skills`). |
+| `script_after` | str | Shell script run after the stage's agent invocation. |
+
+These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive and translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`.
 
 ## Integration pattern — running afm in a container
 

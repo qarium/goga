@@ -1,236 +1,28 @@
-# Run Pipeline — goga/pipeline
+# run_pipeline — in-container run coordination
 
-## Overview
+`run_pipeline` resolves a pipeline name to a file, resolves an optional workflow,
+compiles the pipeline-file to an afm flow-file via `compile_flow`, materializes
+the four agent prompt files, then launches afm via `run_flow`.
 
-`run_pipeline` resolves a pipeline name to an absolute file path across two
-source directories, optionally resolves and parses a workflow-file per the
-workflow environment contract, compiles the file (optionally extended by
-the workflow) from goga DSL into an afm flow-file at runtime, materializes
-the four agent prompt files (defaults plus inline overrides) into the
-runtime prompts directory, then launches afm to run the compiled flow. Use
-this routine to launch a pipeline by name. The `port` argument is forwarded
-to the afm dashboard.
+## Signature
 
-## Usage
+run_pipeline(name, project_dir, user_dir, port, parallel=None) -> exit_code
 
-### Without a workflow
+## parallel (NEW)
 
-```python
-from pathlib import Path
-from goga.pipeline import run_pipeline
+parallel (int | None) optionally caps concurrently executing stages. It is
+forwarded to run_flow as its max_parallel argument (None ⇒ run_flow omits
+--max-parallel ⇒ afm unbounded). Read from the in-container --parallel flag by
+pipeline_cli; the host launcher forwards it through the docker run args.
+Discovery mode does not run afm, so it is a no-op there.
 
-project_dir = Path("/workspace/.goga/pipelines")
-user_dir = Path("/home/goga/.goga/pipelines")
-port = 50321
+The threading chain (host → container):
 
-exit_code = run_pipeline("deploy", project_dir, user_dir, port)
-```
+    goga pipeline NAME -p N   (Click -p/--parallel)
+      → docker run … -m goga.pipeline run NAME --port PORT --parallel N
+        → pipeline_cli: args.parallel = N
+          → run_pipeline(…, parallel=N)
+            → run_flow(…, max_parallel=N)
+              → afm run --port PORT --max-parallel N <flow>
 
-### With a workflow (auto-match basename fallback)
-
-When the host-side launcher does NOT pass any `--workflow` / `--no-workflow`
-flag, `run_pipeline` checks for `/workspace/.goga/workflows/<name>.yml`
-(where `<name>` matches the pipeline name). If present, it is applied
-silently.
-
-### With a workflow (explicit override via env)
-
-When the host-side launcher passes `--workflow custom`, it sets
-`GOGA_WORKFLOW_NAME=custom` in the container env-file. `run_pipeline`
-resolves `/workspace/.goga/workflows/custom.yml` and applies it.
-
-```python
-# Inside the container, with GOGA_WORKFLOW_NAME=custom in the environment:
-from pathlib import Path
-from goga.pipeline import run_pipeline
-
-# The host-side launcher already validated /workspace/.goga/workflows/custom.yml
-# exists before launching the container; run_pipeline re-resolves the path
-# in-container and parses it.
-exit_code = run_pipeline("deploy", Path("/workspace/.goga/pipelines"), Path("/home/goga/.goga/pipelines"), 50321)
-```
-
-### With workflow disabled
-
-When the host-side launcher passes `--no-workflow`, it sets
-`GOGA_WORKFLOW_DISABLED=1` in the container env-file. `run_pipeline` skips
-workflow resolution entirely.
-
-## Parameters
-
-- `name: str` — pipeline name without extension (the `.yml` suffix is added
-  internally during path resolution).
-- `project_dir: Path` — project pipelines directory (absolute; same meaning
-  as in `list_pipelines`).
-- `user_dir: Path` — user pipelines directory (absolute; same meaning as in
-  `list_pipelines`).
-- `port: int` — TCP port forwarded to the afm dashboard. Allocated by the
-  caller; `run_pipeline` does not allocate ports.
-
-## Workflow environment contract
-
-`run_pipeline` reads these environment variables in the following precedence:
-
-1. `GOGA_WORKFLOW_DISABLED` — when set to `"1"`, workflow = None (forced
-   disable). Takes precedence over `GOGA_WORKFLOW_NAME` even when both are
-   set.
-2. `GOGA_WORKFLOW_NAME` — when set (and `GOGA_WORKFLOW_DISABLED != "1"`),
-   the workflow-file path resolves to
-   `Path.cwd() / ".goga" / "workflows" / "{GOGA_WORKFLOW_NAME}.yml"`
-   (= `/workspace/.goga/workflows/<wf-name>.yml` inside the container). The
-   path is CWD-based, NOT `project_dir.parent`-based: `project_dir` itself
-   is `/workspace/.goga/pipelines`, so `project_dir.parent` is
-   `/workspace/.goga` and a parent-based composition would produce a double
-   `.goga`. Workflows are project-only by design. The host-side launcher
-   validates file existence BEFORE launching the container when this env var
-   is set via the `--workflow` flag; if the file is missing inside the
-   container, `run_pipeline` treats it as a silent miss (workflow = None) —
-   this is a defensive fallback, not an error.
-3. Otherwise (neither env var set) — the workflow-file path resolves to
-   `Path.cwd() / ".goga" / "workflows" / "<name>.yml"` (basename fallback —
-   same name as the pipeline; `Path.cwd()` = `/workspace` in-container).
-   When that file does not exist, workflow = None (silent miss, NOT an
-   error — workflow is opt-in).
-4. `GOGA_SKIP_STAGES` — when set to a comma-separated list of stage names,
-   `run_pipeline` applies them as in-memory skip directives via
-   `apply_skip_stages` BEFORE `compile_flow`. Each named stage is removed
-   from the compiled flow (the compiler reconnects dependents' `depends_on`).
-   Unset/empty = no skip. The skip merges onto any resolved workflow
-   (explicit `--workflow`, basename auto-match, or none) and is NOT mutually
-   exclusive with `--workflow`; it also applies when workflow resolution is
-   disabled (`--no-workflow`) — `apply_skip_stages` constructs a workflow
-   document carrying only the skip entries. Unknown stage names are a
-   structural error raised in-container by the compiler (non-zero exit).
-
-When a resolved workflow-file exists, `run_pipeline` calls `parse_workflow`
-to obtain a `WorkflowDocument`, which is forwarded to `compile_flow` as the
-optional `workflow` argument. Structural errors from `parse_workflow`
-propagate unchanged with their readable messages.
-
-## Skipping stages (run mode, host → container)
-
-Exclude individual stages from the compiled pipeline — they are removed and
-their dependents' `depends_on` are transparently reconnected by the compiler.
-
-```bash
-# Host side:
-goga pipeline deploy --skip build --skip test
-# short form: -s build --skip test
-# Inside the container, GOGA_SKIP_STAGES=build,test is set in the env-file;
-# run_pipeline merges WorkflowStage(skip=True) for build and test onto the
-# resolved workflow, and compile_flow removes them (reconnecting dependents).
-```
-
-Skip merges onto any resolved workflow — including an explicit one:
-
-```bash
-goga pipeline deploy --workflow custom --skip review
-```
-
-Discovery mode (no name) ignores `--skip` (like `--clean`).
-
-## Project name prefix
-
-`run_pipeline` derives the project name in-container via `resolve_project_name`
-(basename of `git config --get remote.origin.url`, trailing `.git` stripped)
-and forwards it to `compile_flow` as the `project_name` argument. The compiled
-flow-file `description:` then becomes `[<project-name>] <header.description>`
-when the name is known, and the header description unchanged when it is `None`.
-
-- **Tolerant**: any failure (not a git repo, no origin remote, missing git
-  binary, subprocess error) yields `None` — never raises. Absence of a remote
-  is normal; the flow description then carries no prefix.
-- **In-container, mirrors `root_dir`**: derived from the in-container project
-  root (`/workspace`), not read from project config. Two independent prefix
-  channels — `root_dir:` (a top-level directive) and `[<project-name>]`
-  (prepended to `description:`).
-
-## Return Values
-
-| Exit code | Condition                                                      |
-|-----------|----------------------------------------------------------------|
-| 0         | afm ran the compiled pipeline successfully                     |
-| non-zero  | pipeline not found in either source                            |
-| non-zero  | structural DSL error — an exception with a readable message propagates out of `run_pipeline` (missing `---` separator, missing header fields, legacy `agents` key in header, unknown role in header.roles, non-str role value, body neither list nor dict, empty body) |
-| non-zero  | structural workflow error — an exception with a readable message propagates out of `run_pipeline` when a resolved workflow-file fails `parse_workflow` (unknown keys, non-str/non-int values, `loop < 1`) |
-| non-zero  | materialization error — a default prompt file is missing from the installed package AND no inline override is supplied for that key (readable message, no partial prompts/ directory) |
-| 127       | `afm` not in `$PATH` inside the container (propagated)         |
-| non-zero  | afm itself returned a non-zero exit code (propagated)          |
-
-## Side Effects
-
-`run_pipeline` writes the compiled flow-file to the runtime directory (the
-directory pointed to by AFM_DIR). The compiled flow-file carries a top-level
-`root_dir:` directive populated from the in-container project root
-(`Path.cwd()` resolves to `/workspace` inside the goga container — the single
-source of truth mirroring the host-side mount decision). When a workflow is
-applied, the flow-file additionally reflects the workflow-applied extensions:
-top-level `prompt:` directive (when present), per-stage `command:` and
-`description:` fields, loop-expanded stages with rewritten depends_on. It
-materializes exactly four agent prompt files into `<AFM_DIR>/prompts/` — one
-per fixed agent key. For each key, the file is either a copy of the
-corresponding default prompt from the installed goga package
-(`goga/assets/afm/prompts/<key>.md`) or, when an inline override is
-present in the pipeline-file header's `roles:` block (one of
-planner/executor/reviewer), the inline prompt text (full file
-replacement, no merge). Finally, `run_pipeline` launches afm
-as a subprocess and inherits all its side effects, as defined by the
-compiled flow-file itself.
-
-A repeat call with the same pipeline name overwrites both the compiled
-flow-file and the four prompt files. Both the compiler and the prompt
-materialization are deterministic, so the content is identical across
-runs.
-
-## Preconditions
-
-- `project_dir` and `user_dir` must already be absolute when passed in.
-- `port` must be allocated by the caller and free at bind time.
-- The pipeline name must exist in one of the two source directories (after
-  project-priority resolution).
-- AFM_DIR must be set in the container environment.
-- The input pipeline file must be a goga DSL file: a header (`name`,
-  `description`, optional `roles` block) followed by a `---` separator,
-  then a body (YAML list for phases, YAML dict for stages). Already-afm-format
-  files are not supported and will raise a structural error.
-- The installed goga package must contain `goga/assets/afm/prompts/` with the
-  four default files (`planning.md`, `implementation.md`, `review.md`,
-  `summary.md`). A missing default for a key without an inline override is a
-  fatal materialization error before `run_flow` is invoked.
-- When `GOGA_WORKFLOW_NAME` is set, the resolved workflow-file
-  (`/workspace/.goga/workflows/<name>.yml`) is expected to exist — the
-  host-side launcher validates this before launch. A missing file is a
-  silent miss inside the container (defensive fallback, not an error).
-
-## Anti-patterns
-
-- Do not pass a bare pipeline name to afm — `run_pipeline` resolves the
-  path, compiles, and passes the absolute compiled flow-file path.
-- Do not allocate a port inside `run_pipeline` — `port` is a required
-  argument supplied by the caller.
-- Do not pass `port=0` — afm needs a concrete port to bind its dashboard.
-- Do not pass a relative `project_dir` or `user_dir`.
-- Do not expect `run_pipeline` to handle an already-afm-format file as
-  input — only goga DSL files are supported; everything else raises a
-  structural error.
-- Do not re-invoke `parse_dsl` to read inline prompt overrides — read them
-  from the `PipelineDocument` returned by `compile_flow`.
-- Do not expect partial prompt materialization on failure — when a default
-  is missing and no override is supplied for a key, `run_pipeline` raises
-  before any prompt file is written for that or subsequent keys.
-- Do not expect inline prompt overrides to be merged or concatenated with
-  the default prompt — overrides are full file replacements.
-- Do not parse the workflow-file on the host — workflow resolution happens
-  inside the container only; the host-side launcher performs explicit
-  `--workflow` existence validation before launch.
-- Do not expect a missing workflow-file (basename fallback miss) to be an
-  error — it is opt-in; `run_pipeline` silently sets `workflow = None`.
-- Do not expect `GOGA_WORKFLOW_NAME` and `GOGA_WORKFLOW_DISABLED=1` to both
-  apply — `GOGA_WORKFLOW_DISABLED=1` always wins.
-- Do not mutate the `WorkflowDocument` returned by `parse_workflow` —
-  forward it as-is to `compile_flow`.
-- Do not delete skipped stages or rewrite depends_on in `run_pipeline` —
-  `compile_flow` does both; `run_pipeline` only prepares the workflow via
-  `apply_skip_stages`.
-- Do not write or generate a workflow-file for skip — the merge is in-memory
-  only.
+Absent flag ⇒ parallel=None ⇒ no --max-parallel ⇒ afm unbounded (backward compatible).

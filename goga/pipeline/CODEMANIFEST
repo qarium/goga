@@ -29,7 +29,7 @@ Usages:
   conventions: .goga/usages/conventions.md
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
-    Two subcommands: list (no args) and run NAME --port PORT.
+    Two subcommands: list (no args) and run NAME --port PORT [--parallel N].
   cli_entrypoint: |
     The in-container CLI is launched through the package runpy entrypoint
     (python -m goga.pipeline). The package __main__ module MUST stay a thin
@@ -233,7 +233,7 @@ Annotations: |
     - When a name exists in both sources, the project source wins (no duplicate
       entries)
 
-"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> exit_code: int":
+"run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
@@ -252,6 +252,11 @@ Annotations: |
     `user_dir`: user-level pipelines directory (same meaning as in `list_pipelines`)
     `port`: TCP port forwarded to afm run --port via `run_flow`
             (allocated by the host-side caller)
+    `parallel`: optional cap on concurrently executing stages, forwarded to
+                `run_flow` as its max_parallel argument. When None (default) —
+                afm runs unbounded (run_flow omits --max-parallel). Read from
+                the in-container CLI --parallel flag by `pipeline_cli`; run
+                mode only.
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
                  binary, afm failure, structural DSL error, workflow parse
                  error, materialization error). 127 means afm is not on PATH
@@ -348,7 +353,8 @@ Annotations: |
           four files (planning.md, implementation.md, review.md,
           summary.md)
     9. Launch afm via `run_flow` (per the `run-flow` practice) with the
-       compiled flow-file path and `port`
+       compiled flow-file path, `port`, AND max_parallel=`parallel` (None ⇒
+       run_flow omits --max-parallel)
     10. Return the exit code returned by `run_flow`
 
     Apply `conventions` for error-handling style and docstring formatting.
@@ -366,6 +372,8 @@ Annotations: |
     - Always pass the absolute compiled flow path to `run_flow` — never the
       bare name or the DSL path
     - Always forward `port` to `run_flow` — never omit it
+    - Forward `parallel` to `run_flow` as its max_parallel argument — None
+      propagates (no --max-parallel flag)
     - Read AFM_DIR directly from the process environment
     - Resolve AFM_DIR to an absolute path (via pathlib.Path.resolve) before
       composing flow_path (so a relative env value still yields an absolute
@@ -442,6 +450,8 @@ Annotations: |
     - Do not invoke afm directly outside `run_flow`
     - Do not invoke the compiler outside `compile_flow`
     - Do not allocate the port — the caller allocates it
+    - Do not default `parallel` — None ⇒ unbounded; the caller (pipeline_cli)
+      decides based on --parallel presence
     - Do not copy pipeline files into any project-level directory
     - Do not modify or parse pipeline-file contents directly — that is
       `compile_flow`'s job
@@ -582,8 +592,9 @@ Annotations: |
     Algorithm:
     1. Build an argparse parser with two subcommands: list and run
        - list takes no positional arguments
-       - run takes a required name positional argument
-         and a required --port PORT integer option
+       - run takes a required name positional argument,
+         a required --port PORT integer option, AND an optional
+         --parallel N integer option (None when absent)
     2. Parse argv; on argparse error — exit code 2 (argparse default)
     3. Resolve the project pipelines directory (project working directory's
        .goga/pipelines/) and the user pipelines directory (user home's
@@ -592,9 +603,10 @@ Annotations: |
        - list → call `list_pipelines`(project_dir, user_dir), print
          "Available pipelines:" header followed by one entry per line
          (project source suffixed with " (project)"), return 0
-       - run NAME --port PORT → call `run_pipeline`(NAME, project_dir,
-         user_dir, PORT) and return its exit code (delegates name resolution,
-         compilation, and the .yml extension to `run_pipeline`)
+       - run NAME --port PORT [--parallel N] → call `run_pipeline`(NAME,
+         project_dir, user_dir, PORT, parallel=args.parallel) and return its
+         exit code (args.parallel is None when --parallel is absent; delegates
+         name resolution, compilation, and the .yml extension to `run_pipeline`)
     5. Return the resulting exit code
 
     Apply the `conventions` practice for docstring style and intra-package imports.
@@ -605,6 +617,8 @@ Annotations: |
 
     Requirements:
     - run subcommand must accept --port PORT as an integer (required)
+    - run subcommand accepts an optional --parallel N integer (None when
+      absent)
     - list subcommand takes no arguments
     - Echo the header BEFORE the list in list mode (predictable UX)
 

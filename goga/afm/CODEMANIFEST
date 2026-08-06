@@ -24,50 +24,57 @@ Annotations: |
 
 ---
 
-"run_flow(flow_path: Path, port: int) -> exit_code: int":
+"run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> exit_code: int":
   location: run_flow.py
   annotations: |
     Launch the external `afm` binary to run the pipeline file at the given
-    absolute path and bind its dashboard to the given `port`. This is the
-    goga-side entry point to afm; it performs no discovery, path resolution,
-    or port allocation.
+    absolute path and bind its dashboard to the given `port`. Optionally cap the
+    number of concurrently executing stages. This is the goga-side entry point
+    to afm; it performs no discovery, path resolution, or port allocation.
 
-    `flow_path`: absolute path to the pipeline file (typically resolved by the
-                 caller in goga/pipeline via run_pipeline). The path is
-                 passed verbatim to "afm run" as the positional argument.
-    `port`: TCP port forwarded to "afm run --port". The caller allocates the
-            port (goga/commands/pipeline); `run_flow` only passes it through.
-    `exit_code`: 0 on success, 127 when the afm binary is missing from PATH,
-    126 when afm is present but not executable (other OSError), otherwise
-    afm's own exit code
+    `flow_path`: absolute path to the pipeline file (passed verbatim to
+                 "afm run" as the positional argument)
+    `port`: TCP port forwarded to "afm run --port" (allocated by the caller)
+    `max_parallel`: optional cap on concurrently executing stages, forwarded to
+                    afm as "--max-parallel <max_parallel>" ONLY when not None.
+                    When None — the "--max-parallel" flag is OMITTED and afm
+                    applies its own default (backward compatible). Decided by
+                    the caller; `run_flow` only passes it through.
+    `exit_code`: 0 on success, 127 when afm is missing from PATH, 126 when afm
+                 is present but not executable (other OSError), otherwise afm's
+                 own exit code
 
     Algorithm:
-    1. Receive `flow_path` (absolute, as resolved by the caller) and `port`
-       (an integer allocated by the caller)
-    2. Invoke "afm run" via the `afm` practice with --port <port> and the
-       absolute `flow_path` as positional argument; resolve afm through PATH
-    3. On binary-not-found (FileNotFoundError, per the `afm` practice) —
-       return `exit_code` 127 with a clear message
-    4. On other OSError (binary present but not executable, permission
-       denied, etc.) — return `exit_code` 126 with a clear message
+    1. Receive `flow_path` (absolute), `port` (integer), and the optional
+       `max_parallel`
+    2. Invoke "afm run" via the `afm` practice with --port <port>, the absolute
+       `flow_path` as positional argument, and — when `max_parallel` is not None
+       — the --max-parallel <max_parallel> flag; resolve afm through PATH
+    3. On binary-not-found (FileNotFoundError, per the `afm` practice) — return
+       `exit_code` 127 with a clear message
+    4. On other OSError (present but not executable, permission denied, etc.) —
+       return `exit_code` 126 with a clear message
     5. Return afm's exit code as `exit_code`
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
 
     Requirements:
-    - Always pass `flow_path` to "afm run" as the positional argument — never
-      a bare name
-    - Always forward `port` to afm via the --port flag — never omit the flag
+    - Always pass `flow_path` to "afm run" as the positional argument — never a
+      bare name
+    - Always forward `port` to afm via the --port flag — never omit it
+    - Forward `max_parallel` via --max-parallel ONLY when it is not None — None
+      means "do not limit" and MUST omit the flag (never substitute a default
+      such as 0); backward compatible
     - Invoke afm through PATH — do not hard-code /srv/afm
     - Apply the `afm` practice's error-handling rules verbatim
     - Accept absolute paths only; do not resolve or construct paths internally
 
     Constraints:
-    - Do not resolve names to paths — path resolution is the caller's
-      responsibility (run_pipeline in goga/pipeline)
-    - Do not allocate the port — the caller allocates it and passes it in
-    - Do not discover pipeline files — discovery lives in goga/pipeline's
-      list_pipelines
+    - Do not resolve names to paths — the caller's responsibility
+    - Do not allocate the port — the caller allocates it
+    - Do not decide or default `max_parallel` — the caller decides; None ⇒ omit
+      the flag, never infer a value
+    - Do not discover pipeline files — discovery lives in goga/pipeline
     - Do not hard-code the afm binary path — rely on PATH inside the container
     - Do not modify or parse pipeline-file contents
 

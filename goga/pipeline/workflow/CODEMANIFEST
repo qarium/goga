@@ -36,168 +36,130 @@ Annotations: |
 
   Use `convention` for code style, dataclass usage, and test layout.
 
+  approve is a declarative auto-approval instruction (value "auto" only,
+  validated structurally). This cell extracts it into `WorkflowStage` /
+  `WorkflowExtendStage`; the compiler (goga/pipeline/compiler) consumes it to
+  suppress a stage's interactive flag and/or emit auto_approve: true. This
+  cell performs NO approval logic — the import graph stays one-directional.
+
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False)":
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
     which agent, which prompt, how many loop iterations, which skills to merge,
-    and whether to SKIP (delete) the stage. Constructed by
-    `parse_workflow` from one entry of the workflow-file stages map;
-    carried verbatim inside `WorkflowDocument`.
+    whether to SKIP (delete) the stage, and an optional auto-approval directive.
+    Constructed by `parse_workflow` from one entry of the workflow-file stages
+    map; carried verbatim inside `WorkflowDocument`.
 
-    `agent`: agent name (e.g. "codex", "claude") consumed by the compiler to
-             compose the per-stage command wrapper path
-             (/home/goga/bin/AGENT-as-claude.sh), or None when not specified
+    `agent`: agent name consumed by the compiler to compose the per-stage command
+             wrapper path, or None when not specified
     `prompt`: per-stage prompt text consumed by the compiler as the stage
               description field, or None when not specified
-    `loop`: positive integer (>= 1) instructing the compiler to expand the
-            stage into N copies with ids NAME-1..N, or None when not
-            specified (equivalent to loop=1 — no expansion)
+    `loop`: positive integer (>= 1) instructing the compiler to expand the stage
+            into N copies, or None when not specified
     `skills`: list of skill names the compiler merges with the stage's
-              pipeline-file skills (pipeline first, then these, deduplicated
-              by value), or None when not specified (no merge — the
-              pipeline-file skills pass through unchanged)
-    `skip`: bool flag instructing the compiler to DELETE the corresponding
-            stage from the compiled flow-file. False (default, key absent, or
-            skip: false) means the stage is NOT skipped; True (skip: true)
-            means the compiler removes the stage entirely and transparently
-            reconnects its dependents' depends_on. Defaults to False per
-            `convention` — None is reserved for fields with a meaningful
-            absence, and for skip absent is equivalent to False
+              pipeline-file skills, or None when not specified
+    `skip`: bool flag instructing the compiler to DELETE the stage. False by
+            default (key absent / skip: false). True (skip: true) removes the
+            stage and transparently reconnects dependents' depends_on
+    `approve`: optional auto-approval directive consumed by the compiler. The
+               only accepted value is "auto" (validated by `parse_workflow`; any
+               other value is a structural error). When "auto", the compiler
+               suppresses the stage's interactive flag (when the stage body has
+               communication: true) and/or emits auto_approve: true (when the
+               stage body's roles contain planner). This cell does NOT act on
+               `approve` — it is declarative; the compiler applies it. None when
+               not specified.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - All four fields default to None — workflow-files may omit any field;
-      the parser produces None for missing fields
-    - `skip` defaults to False (NOT None) — a missing `skip` key and an
-      explicit skip: false are equivalent (both = do not skip)
-    - Field order is fixed: agent, prompt, loop, skills, skip — matches the
-      canonical order of the per-stage keys in the workflow-file
+    - All fields default to None; `skip` defaults to False (NOT None)
+    - Field order is fixed: agent, prompt, loop, skills, skip, approve — matches
+      the canonical order of the per-stage keys in the workflow-file
+    - `approve` accepts ONLY "auto"; any other value is rejected by
+      `parse_workflow` as a structural error before this dataclass is built
 
     Constraints:
-    - Do not validate loop >= 1 here — `parse_workflow` enforces it during
-      parsing and raises a structural error before this dataclass is built
-    - Do not validate that skills is a list[str] here — `parse_workflow`
-      enforces it during parsing and raises a structural error before this
-      dataclass is built
-    - Do not validate that skip is a bool here — `parse_workflow` enforces it
-      during parsing and raises a structural error before this dataclass is built
-    - Do not resolve `agent` to a wrapper path here — the compiler performs
-      that composition when applying the instruction
-    - Do not merge `skills` with anything here — the compiler performs the
-      merge with the pipeline-file skills when applying the instruction
-    - Do not DELETE the stage or RECONNECT dependents' depends_on here —
-      `skip` is a declarative instruction; the compiler performs the actual
-      removal and depends_on reconnection when applying the workflow
-    - Do not validate `prompt` contents — pass through verbatim to the consumer
+    - Do not validate loop >= 1 / skills list[str] / skip bool here — `parse_workflow`
+      enforces these during parsing
+    - Do not resolve agent to a wrapper path, merge skills, DELETE the stage, or
+      RECONNECT dependents here — all the compiler's job
+    - Do not act on `approve` here — it is declarative; the compiler performs the
+      interactive-suppress / auto_approve logic when applying the workflow
   properties:
     "agent -> str | None": |
-      Agent name consumed by the compiler to compose the per-stage command
-      wrapper path, or None when not specified.
+      Agent name consumed by the compiler to compose the wrapper path, or None.
     "prompt -> str | None": |
-      Per-stage prompt text consumed by the compiler as the stage description
-      field, or None when not specified.
+      Per-stage prompt text consumed by the compiler as the stage description.
     "loop -> int | None": |
-      Positive iteration count (>= 1) instructing the compiler to expand the
-      stage into N copies, or None when not specified (no expansion).
+      Positive iteration count (>= 1) for loop-expansion, or None.
     "skills -> list[str] | None": |
-      Skill names the compiler merges with the stage's pipeline-file skills
-      (pipeline first, then these, deduplicated by value), or None when not
-      specified (no merge).
+      Skill names merged with the stage's pipeline-file skills, or None.
     "skip -> bool": |
-      Flag instructing the compiler to delete the corresponding stage from the
-      compiled flow-file. False (default / key absent / skip: false) = not
-      skipped; True (skip: true) = compiler removes the stage entirely and
-      transparently reconnects its dependents' depends_on.
+      Flag instructing the compiler to delete the stage and reconnect dependents.
+    "approve -> str | None": |
+      Optional auto-approval directive ("auto" only). Declarative — extracted
+      here, consumed by the compiler to suppress interactive / emit auto_approve.
+      None when not specified.
 
-"WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, body: dict[str, Any])":
+"WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, approve: str | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
   annotations: |
-    Data model of a single extend-entry in a workflow-file — a new stage to be
-    embedded into a target pipeline, carrying positioning instructions
-    (`before`/`after`) and the verbatim stage body. Constructed by
-    `parse_workflow` from one entry of the workflow-file extend map; carried
-    verbatim inside `WorkflowDocument` (its extend field). Consumed by the
-    compiler, which embeds the stage and derives depends_on from the
-    positioning — this cell performs NO embedding and NO depends_on derivation.
+    Data model of a single extend-entry — a new stage to be embedded into a
+    target pipeline, carrying positioning instructions and the verbatim stage
+    body. Constructed by `parse_workflow`; carried verbatim inside
+    `WorkflowDocument`. The compiler embeds the stage and derives depends_on —
+    this cell performs NO embedding and NO depends_on derivation.
 
-    `before`: list of stage names the new stage precedes (the compiler adds
-              this stage to the depends_on of each named stage), or None when
-              not specified
-    `after`: list of stage names the new stage follows (the compiler adds each
-             named stage to this stage's depends_on), or None when not specified
-    `agent`: agent name (e.g. "codex", "claude") the compiler composes into
-             the new stage's command wrapper path, exactly as a stages-block
-             `agent` override does — or None when not specified. Acts as a
-             DEFAULT override; an explicit stages-block entry for the same
-             name wins (per-field)
-    `loop`: positive integer (>= 1) instructing the compiler to expand the new
-            stage into N copies with ids NAME-1..N, exactly as a stages-block
-            `loop` override does — or None when not specified (no expansion).
-            Acts as a DEFAULT override; an explicit stages-block entry for
-            the same name wins (per-field)
-    `body`: verbatim copy of the stage body (title, prompt, skills, roles,
-            communication, and any other stage field) EXCLUDING before, after,
-            agent, loop, and depends_on. Open-ended — this cell does not know
-            the stage field schema
+    `before`: list of stage names the new stage precedes, or None
+    `after`: list of stage names the new stage follows, or None
+    `agent`: agent name composed into the new stage's wrapper path (default
+             override; a stages-block entry for the same name wins), or None
+    `loop`: positive integer (>= 1) for loop-expansion (default override), or None
+    `approve`: optional auto-approval directive (value "auto" only, validated by
+               `parse_workflow`), EXTRACTED from the extend-entry into the model
+               — exactly like agent/loop. Acts as a DEFAULT override; the
+               compiler consumes it against the extend-stage body. None when not
+               specified.
+    `body`: verbatim copy of the stage body EXCLUDING before, after, agent, loop,
+            approve, and depends_on. Open-ended — this cell does not know the
+            stage field schema.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - `before` and `after` default to None — an extend-entry may omit either;
-      `parse_workflow` enforces that at least one is present before this
-      dataclass is built
-    - `agent` and `loop` default to None — an extend-entry may omit either
-    - `body` is required (no default) — every extend-stage carries stage content
-    - Field order is fixed: before, after, agent, loop, body
+    - `before`/`after` default to None; `agent`/`loop`/`approve` default to None;
+      `body` is required (no default)
+    - Field order is fixed: before, after, agent, loop, approve, body
+    - `approve` is EXTRACTED from the extend-entry (excluded from body) — like
+      agent/loop; it never leaks into body as a stray stage field
+    - `approve` accepts ONLY "auto"
 
     Constraints:
-    - Do not validate "at least one of before/after" here — `parse_workflow`
-      enforces it during parsing
-    - Do not validate that body excludes depends_on here — `parse_workflow`
-      rejects depends_on in an extend-entry before this dataclass is built
-    - Do not validate that body excludes agent/loop here — `parse_workflow`
-      extracts agent/loop from the entry before this dataclass is built, so
-      they never leak into body as stray stage fields
-    - Do not validate loop >= 1 here — `parse_workflow` enforces it during
-      parsing and raises a structural error before this dataclass is built
-    - Do not embed the stage or derive depends_on here — the compiler performs both
-    - Do not compose the agent into a wrapper path, expand the loop, or apply
-      the per-field priority vs a stages-block entry here — all of that is
-      the compiler's responsibility
-    - Do not validate before/after names against any pipeline — the compiler
-      matches and silently ignores unknown names with a warning
-    - Do not accept skip in an extend-entry — `parse_workflow` raises a
-      structural error "skip is forbidden in workflow.extend.<name>" before
-      this dataclass is built. skip is defined only for existing pipeline
-      stages (via the stages block); an extend-entry is a positional new stage
-      (before/after + body) and carries no skip semantics. No skip field is
-      added to this dataclass.
+    - Do not embed the stage or derive depends_on here — the compiler does both
+    - Do not act on `approve` here — declarative; the compiler applies it
   properties:
     "before -> list[str] | None": |
-      List of stage names the new stage precedes (compiler adds this stage to
-      their depends_on), or None when not specified.
+      Stage names the new stage precedes, or None.
     "after -> list[str] | None": |
-      List of stage names the new stage follows (compiler adds them to this
-      stage's depends_on), or None when not specified.
+      Stage names the new stage follows, or None.
     "agent -> str | None": |
-      Agent name the compiler composes into the new stage's command wrapper
-      path (default override; a stages-block entry for the same name wins),
-      or None when not specified.
+      Agent name composed into the new stage's wrapper path (default override).
     "loop -> int | None": |
-      Positive iteration count (>= 1) instructing the compiler to expand the
-      new stage into N copies (default override; a stages-block entry for
-      the same name wins), or None when not specified (no expansion).
+      Positive iteration count for loop-expansion (default override), or None.
+    "approve -> str | None": |
+      Optional auto-approval directive ("auto" only), extracted inline from the
+      extend-entry. Default override; the compiler consumes it. None when absent.
     "body -> dict[str, Any]": |
-      Verbatim stage body excluding before, after, agent, loop, and depends_on.
-      Open-ended.
+      Verbatim stage body excluding before, after, agent, loop, approve, and
+      depends_on. Open-ended.
 
 "WorkflowDocument(prompt: str | None = None, stages: dict[str, WorkflowStage] | None = None, extend: dict[str, WorkflowExtendStage] | None = None)":
   location: workflow_document.py
@@ -299,8 +261,8 @@ Annotations: |
        a. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
        b. Validate the key set of the stage value against agent, prompt,
-          loop, skills, skip: an unknown key raises "unknown key in
-          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills, skip"
+          loop, skills, skip, approve: an unknown key raises "unknown key in
+          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills, skip, approve"
        c. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
        d. prompt (when present) must be a str; otherwise raise
@@ -312,8 +274,11 @@ Annotations: |
           "non-list-of-str skills in workflow.stages.NAME"
        g. skip (when present) must be a bool; otherwise raise a structural
           error "non-bool value in workflow.stages.NAME.skip"
-       h. Build a `WorkflowStage` from the validated values (agent, prompt,
-          loop, skills, skip)
+       h. approve (when present) must be a str and equal "auto"; otherwise
+          raise "non-str value in workflow.stages.NAME.approve" (non-str) or
+          "approve must be 'auto' in workflow.stages.NAME" (str != "auto")
+       i. Build a `WorkflowStage` from the validated values (agent, prompt,
+          loop, skills, skip, approve)
     6b. For each entry of extend (when present), identified by stage name
         and entry value:
         a. If the entry value is not a dict — raise a structural error
@@ -331,16 +296,19 @@ Annotations: |
         f. loop (when present) must be an int and >= 1; otherwise raise
            "non-int value in workflow.extend.NAME.loop" (non-int) or
            "loop must be >= 1 in workflow.extend.NAME" (int < 1)
-        g. If neither before nor after is present — raise a structural error
+        g. approve (when present) must be a str and equal "auto"; otherwise
+           raise "non-str value in workflow.extend.NAME.approve" (non-str) or
+           "approve must be 'auto' in workflow.extend.NAME" (str != "auto")
+        h. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
-        h. Other keys of the entry value are NOT validated (open-ended:
+        i. Other keys of the entry value are NOT validated (open-ended:
            title, prompt, skills, roles, communication, and any other stage
            field) and pass through verbatim
-        i. Build a `WorkflowExtendStage` from the validated before/after,
-           agent/loop, and the REMAINING entry value (excluding before,
-           after, agent, loop, and depends_on) as body — agent/loop are
-           extracted into the model, not carried in body, so they never
-           reach the flow-file as stray stage fields
+        j. Build a `WorkflowExtendStage` from the validated before/after,
+           agent/loop/approve, and the REMAINING entry value (excluding before,
+           after, agent, loop, approve, and depends_on) as body — agent/loop/
+           approve are extracted into the model, not carried in body, so they
+           never reach the flow-file as stray stage fields
     7. If prompt is None AND stages is empty (no entries) AND extend is empty
        (no entries) — raise a structural error "empty workflow — provide at
        least prompt, one stage, or one extend entry"
@@ -358,7 +326,7 @@ Annotations: |
       before/after names pass through; the compiler decides whether to apply
       or ignore (silently with a warning)
     - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop, skills, skip are accepted
+      loop, skills, skip, approve are accepted
     - skip (when present) must be a bool; a non-bool value is a structural
       error
     - skip is forbidden in an extend-entry — a structural error (skip is
@@ -367,12 +335,16 @@ Annotations: |
       a structural error
     - loop must be an int >= 1; zero, negative values, and non-int types
       are structural errors
-    - An extend-entry's inline agent (when present) must be a str, and its
-      inline loop (when present) must be an int >= 1 — same type rules as the
-      stages block; non-conforming values are structural errors
-    - Inline agent/loop of an extend-entry are EXTRACTED into the model and
-      excluded from the verbatim body (like before/after) — they do not pass
-      through as stage fields
+    - approve (stages-block entry AND inline extend) must be a str equal to
+      "auto"; any other value or a non-str is a structural error
+    - An extend-entry's inline agent (when present) must be a str, its
+      inline loop (when present) must be an int >= 1, and its inline
+      approve (when present) must be a str equal to "auto" — same
+      type/value rules as the stages block; non-conforming values are
+      structural errors
+    - Inline agent/loop/approve of an extend-entry are EXTRACTED into the
+      model and excluded from the verbatim body (like before/after) — they
+      do not pass through as stage fields
     - Stage-name keys are NOT validated against any pipeline IN THIS CELL
       — unknown stage names pass through; the compiler raises a structural
       error on names absent from both the pipeline and the extend-stages
@@ -403,6 +375,10 @@ Annotations: |
     - Do not DELETE a stage or RECONNECT dependents when skip is True —
       skip is a declarative instruction; the compiler performs the removal
       and reconnection
+    - Do not act on approve here — it is declarative; the compiler applies
+      the interactive-suppress / auto_approve logic
+    - Do not let an inline extend approve reach the extend-stage body —
+      it is extracted into the model (like agent/loop)
     - Do not skip structural validation on missing files — OSError
       propagates unchanged (consistent with the compiler behavior)
     - Do not accept YAML files whose root is not a mapping — that is a
