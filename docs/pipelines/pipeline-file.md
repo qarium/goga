@@ -131,6 +131,9 @@ assigned semantics:
 | `communication` | bool             | false                       | Whether the stage prompts for user input. Authors as `communication`; compiles to the afm `interactive` key. Authoring `interactive` directly is a structural error. |
 | `prompt`      | string           | —                           | Stage-level prompt text; emitted as the compiled `prompt` field.             |
 | `skills`      | list of strings  | —                           | Skills the agent must apply at this stage.                                   |
+| `before_script` | string         | —                           | Shell script run before the stage; compiles to the afm `script_before` field. See [Script directives](#script-directives). |
+| `script`      | string           | —                           | Shell script run as the stage body; compiles to the afm `script` field. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
+| `after_script`  | string         | —                           | Shell script run after the stage; compiles to the afm `script_after` field. See [Script directives](#script-directives). |
 | `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
 
@@ -139,6 +142,41 @@ assigned semantics:
 The body step carries a `title` field that becomes the compiled stage's
 display name. Use a short human-readable phrase — it is what end users see
 in stage listings.
+
+### Script directives
+
+A stage may carry shell scripts to run at fixed points relative to the
+agent's work. The three authoring fields are translated into the matching afm
+output keys at compile time:
+
+| Author as       | Compiles to      | When it runs                    |
+|-----------------|------------------|---------------------------------|
+| `before_script` | `script_before`  | Before the stage's agent work.  |
+| `script`        | `script`         | As the stage body itself.       |
+| `after_script`  | `script_after`   | After the stage's agent work.   |
+
+The authoring keys are consumed and never appear in the compiled flow-file —
+only the translated `script_*` keys do. A multi-line script serializes as a
+YAML block-literal (`script: |`); a single-line script stays a plain scalar.
+
+`script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
+either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
+(`script`), not both. Authoring `script` together with `prompt` and/or
+`skills` is a structural error. `before_script` and `after_script` are
+compatible with both `script` and `prompt`/`skills` — they bracket the stage
+regardless of how its body is defined.
+
+```yaml
+deploy:
+  title: Deploy
+  before_script: |
+    set -e
+    echo "building..."
+  script: |
+    make build
+    make deploy
+  after_script: echo "done"
+```
 
 ## Shipped pipelines
 
@@ -374,6 +412,7 @@ workflow-agent semantics.
 | Non-mapping `roles` block in header                      | `non-mapping roles block in header`                             |
 | Non-string value in header `roles.<key>`                 | `non-str value in header.roles.<key>`                           |
 | Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
+| `script` authored together with `prompt` and/or `skills` | `script is mutually exclusive with prompt/skills in stage <NAME>` |
 | Body shape is neither list nor dict                      | `unsupported body format`                                       |
 | Body has zero steps                                      | `empty body`                                                    |
 

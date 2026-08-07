@@ -1520,6 +1520,88 @@ class TestCompileFlowReconstructionHelpers:
 
         assert _effective_overrides(WorkflowDocument(prompt="P")) == {}
 
+    def test_effective_overrides_inline_seed_carries_approve(self) -> None:
+        """An extend-only entry seeds an effective stage carrying its inline ``approve``."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(
+            extend={"extra": WorkflowExtendStage(after=["deploy"], approve="auto", body={"title": "E"})},
+        )
+
+        effective = _effective_overrides(workflow)
+
+        assert effective["extra"].approve == "auto"
+
+    def test_effective_overrides_stages_block_carries_approve(self) -> None:
+        """A stages-only entry passes its ``approve`` through verbatim."""
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        effective = _effective_overrides(workflow)
+
+        assert effective["deploy"].approve == "auto"
+
+    def test_effective_overrides_approve_stages_wins_per_field(self) -> None:
+        """``approve`` overlays per-field like ``agent``/``loop``: stages wins, inline falls back.
+
+        ``stages.approve`` non-``None`` WINS over an inline ``extend.approve``
+        (so a ``"auto"`` stages entry with a ``None`` inline resolves to ``"auto"``,
+        not ``None``); a ``None`` ``stages.approve`` falls back to the inline value.
+        A regression that used ``base.approve`` (extend) instead of ``stg.approve``
+        would turn the first case into ``None``.
+        """
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        stages_wins = WorkflowDocument(
+            stages={"extra": WorkflowStage(approve="auto")},
+            extend={"extra": WorkflowExtendStage(after=["deploy"], body={"title": "E"})},
+        )
+        inline_fallback = WorkflowDocument(
+            stages={"extra": WorkflowStage()},
+            extend={"extra": WorkflowExtendStage(after=["deploy"], approve="auto", body={"title": "E"})},
+        )
+        neither = WorkflowDocument(
+            stages={"extra": WorkflowStage()},
+            extend={"extra": WorkflowExtendStage(after=["deploy"], body={"title": "E"})},
+        )
+
+        assert _effective_overrides(stages_wins)["extra"].approve == "auto"
+        assert _effective_overrides(inline_fallback)["extra"].approve == "auto"
+        assert _effective_overrides(neither)["extra"].approve is None
+
+    def test_canonical_fields_does_not_mutate_caller_body(self) -> None:
+        """``_canonical_fields`` never mutates its ``body`` argument.
+
+        The approve sentinel is READ (``.get``), not popped, and every
+        transformation rebuilds a fresh dict — so the caller's body is left
+        untouched on every path. On the non-workflow path ``body`` is the shared
+        dict mirrored into ``PipelineDocument.body``; non-mutation keeps that
+        mirror faithful to the authored source.
+        """
+        from goga.pipeline.compiler.compile_flow import _APPROVE_SENTINEL, _canonical_fields
+
+        body = {
+            _APPROVE_SENTINEL: "auto",
+            "communication": True,
+            "roles": ["planner", "executor"],
+            "prompt": "do it",
+        }
+
+        fields = _canonical_fields(body, "deploy")
+
+        # The caller's body is untouched — the sentinel and every authored key remain.
+        assert body == {
+            _APPROVE_SENTINEL: "auto",
+            "communication": True,
+            "roles": ["planner", "executor"],
+            "prompt": "do it",
+        }
+        # …while the output consumed the directive and excluded the sentinel.
+        assert "_approve_directive" not in fields
+        assert fields["auto_approve"] is True
+        assert "interactive" not in fields  # communication:true suppressed under approve:auto
+
 
 class TestCompileFlowStrictValidateStageNames:
     """Step 4pre — strict validation of ``workflow.stages`` names.
@@ -2479,6 +2561,80 @@ class TestCompileFlowApproveEffects:
         # … while the extend-seeded ``approve: auto`` still fired the effects.
         assert "interactive" not in extra.fields
         assert extra.fields["auto_approve"] is True
+
+    def test_compile_approve_auto_emits_auto_approve_without_communication(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """``auto_approve`` fires with ``planner`` in roles even with no ``communication`` key.
+
+        The two approve effects are independent: effect (2) (``auto_approve``) must
+        NOT be gated on the presence or truth of ``communication``. With no
+        ``communication`` key there is no ``interactive`` slot to suppress, and
+        ``auto_approve: true`` is emitted on its own — pinning the independence
+        against a regression like ``approve == "auto" and has_planner and
+        "communication" in body``.
+        """
+        pipeline_path = self._write_deploy_stage(tmp_path, "  roles:\n    - planner\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["auto_approve"] is True
+        assert "interactive" not in fields  # no communication key authored
+
+    def test_compile_approve_auto_effects_independent_with_communication_false(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """``communication: false`` + ``planner`` ⇒ ``interactive: false`` AND ``auto_approve: true``.
+
+        Pins the independence of the two effects AND their canonical coexistence:
+        suppression fires only on ``communication is True``, so ``False`` still
+        renames to ``interactive: false`` (NOT suppressed); ``auto_approve`` fires
+        independently on ``planner``. ``interactive`` precedes ``auto_approve`` in
+        the canonical field order.
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: false\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["interactive"] is False
+        assert fields["auto_approve"] is True
+        keys = list(fields)
+        assert keys.index("interactive") < keys.index("auto_approve")
+
+    def test_compile_approve_sentinel_does_not_leak_into_pipeline_doc_body(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """The approve sentinel never reaches ``PipelineDocument.body``.
+
+        ``_apply_per_stage_overrides`` writes the sentinel into a deep-copied
+        working step, so the ORIGINAL parsed body — mirrored verbatim into
+        ``PipelineDocument.body`` — never carries it. Pinned explicitly per the
+        plan's completion criteria (the ``fields``/``text`` checks guard the
+        flow-file; this guards the parsed-document mirror).
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto", loop=2)})
+
+        pipeline_doc, _ = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        for step in pipeline_doc.body.steps:
+            assert "_approve_directive" not in step.body
 
 
 class TestApproveScriptsRoundTrip:

@@ -3,8 +3,9 @@
 A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
 top-level prompt, override the agent or prompt of specific stages, expand
-a stage into N chained copies via `loop`, **skip (delete) a stage**, and
-**declaratively add new stages** to the pipeline via `extend`.
+a stage into N chained copies via `loop`, **skip (delete) a stage**,
+declare per-stage **auto-approval** via `approve`, and **declaratively add
+new stages** to the pipeline via `extend`.
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
 match any pipeline step or extend-stage is a compile error. Workflows that
@@ -35,6 +36,7 @@ stages:
       Additional per-stage instruction.
     loop: 2                   # optional iteration count (>= 1)
     skills: [web-search]      # optional skills merged with the pipeline stage's skills
+    approve: auto             # optional auto-approval directive (the only value is 'auto')
 
 extend:
   <new-stage-name>:
@@ -59,7 +61,7 @@ Unknown top-level keys are rejected with
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to five
+Each entry under `stages` is keyed by stage name and accepts up to six
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -69,12 +71,13 @@ fields:
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
+| `approve` | string | —     | Auto-approval directive. The only accepted value is `auto`; any other value (or a non-string) is a structural error. When `auto`, the compiler applies two INDEPENDENT effects to the stage body (see [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)): (1) if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip` are valid. An unknown key
+- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve` are valid. An unknown key
   is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip`.
+  agent, prompt, loop, skills, skip, approve`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -83,6 +86,10 @@ Rules:
   `non-bool value in workflow.stages.<NAME>.skip`. `skip` is allowed only in
   the `stages` block — it is a structural error under `extend` (see
   [Skipping a stage](#skipping-a-stage)).
+- `approve` (when present) must be the string `auto`. A non-string value
+  raises `non-str value in workflow.stages.<NAME>.approve`; any other string
+  raises `approve must be 'auto' in workflow.stages.<NAME>` (see
+  [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)).
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
@@ -200,6 +207,45 @@ stages:
     skip: true
 ```
 
+### Auto-approval (`approve: auto`)
+
+A `stages` (or `extend`) entry may set `approve: auto` to drive the afm
+auto-approval behavior for that stage at compile time. The value is strictly
+`auto` — it is a declarative directive, not a free-form flag, so any other
+string (or a non-string) is a structural error.
+
+When the effective `approve` for a stage is `auto`, the compiler applies two
+**independent** effects to the stage body:
+
+1. **`interactive` suppression** — if the stage body has `communication: true`,
+   the stage's `interactive` afm output is SUPPRESSED (the key is omitted
+   entirely, NOT emitted as `interactive: false`). This makes an otherwise
+   user-prompting stage run non-interactively. `communication: false` (or no
+   `communication` key) is unaffected — suppression fires only when
+   `communication is True`.
+2. **`auto_approve` emission** — if the stage body's raw `roles` list contains
+   `planner`, the stage emits `auto_approve: true` (the afm per-stage
+   auto-approval key, in the canonical slot right after `interactive`). The
+   match is against the authored role alias `planner`, captured before the
+   compiler translates it to the afm stem `planning`.
+
+The two effects are independent: each fires on its own trigger. A stage with
+`communication: true` and no `planner` gets only the suppression; a stage with
+`planner` in `roles` and no `communication` gets only `auto_approve`. With
+neither trigger, `approve: auto` is a no-op on the body (the directive still
+threads through; it just has nothing to act on).
+
+```yaml
+stages:
+  deploy:
+    approve: auto
+```
+
+Under `extend`, `approve` is an inline default override exactly like inline
+`agent`/`loop` (see [Inline agent, loop, and approve overrides](#inline-agent-loop-and-approve-overrides)):
+it is extracted from the entry (never reaches the body), and a `stages` entry
+naming the same stage wins per-field.
+
 ## Extending the pipeline with new stages
 
 The `stages` block only overrides stages that already exist in the target
@@ -219,21 +265,21 @@ extend:
       Bootstrap the environment before the pipeline runs.
 ```
 
-Positioning (`before` / `after`), default overrides (`agent` / `loop`), and the
-stage body are separate concerns:
+Positioning (`before` / `after`), default overrides (`agent` / `loop` /
+`approve`), and the stage body are separate concerns:
 
 - `before` and `after` are **lists of existing stage names**. The new stage is
   declared to run before the `before` names and after the `after` names. At
   least one of the two must be present — an entry with neither is rejected.
-- `agent` and `loop` are optional **default overrides** extracted from the
-  entry (see [Inline agent and loop overrides](#inline-agent-and-loop-overrides)).
+- `agent`, `loop`, and `approve` are optional **default overrides** extracted
+  from the entry (see [Inline agent, loop, and approve overrides](#inline-agent-loop-and-approve-overrides)).
 - Everything else in the entry (`title`, `prompt`, `skills`, `roles`,
   `communication`, or any other stage field) is the **verbatim body** of the new
   stage. It is carried through unchanged and embedded as an ordinary stage in
-  the compiled output. `before`, `after`, `agent`, `loop`, and `depends_on` are
-  never part of the body — `agent`/`loop` are extracted as override fields, and
-  `depends_on` is forbidden here (positioning is declared structurally, not as
-  a dependency edge).
+  the compiled output. `before`, `after`, `agent`, `loop`, `approve`, and
+  `depends_on` are never part of the body — `agent`/`loop`/`approve` are
+  extracted as override fields, and `depends_on` is forbidden here (positioning
+  is declared structurally, not as a dependency edge).
 - The `title` field, when omitted, falls back to the entry key — so a stage
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
@@ -260,13 +306,13 @@ body format of the target pipeline:
   `after` position wins. Every `before`/`after` target is guaranteed to exist
   by Pass 0a0-pre (see [How the compiler applies a workflow](#how-the-compiler-applies-a-workflow)).
 
-### Inline agent and loop overrides
+### Inline agent, loop, and approve overrides
 
-Alongside positioning, an extend entry may carry inline `agent` and `loop`
-fields. They are extracted from the body exactly like `before`/`after` — they
-never reach the compiled stage as separate fields — and act as **default
-overrides** for the new stage, mirroring what a `stages` entry provides for an
-existing stage:
+Alongside positioning, an extend entry may carry inline `agent`, `loop`, and
+`approve` fields. They are extracted from the body exactly like
+`before`/`after` — they never reach the compiled stage as separate fields — and
+act as **default overrides** for the new stage, mirroring what a `stages` entry
+provides for an existing stage:
 
 - `agent` (a string) is composed into the stage's `command` wrapper path by
   the same template as a `stages`-block `agent`
@@ -275,13 +321,17 @@ existing stage:
   `<name>-1..N` chained copies by the same rules as a `stages`-block `loop`,
   including the external `before`/`after` reference rewrite to the last
   expanded id.
+- `approve` (the string `auto`) drives the stage's auto-approval effects, same
+  as a `stages`-block `approve` (see
+  [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)).
 
-An inline `agent`/`loop` is a **default**: if a `stages` entry also names the
-same stage, the `stages` value wins **per field** — an unset `stages` field
-falls back to the inline one. This lets `extend` declare a sensible default
-that a `stages` override can selectively tighten. An inline `agent: null` or
-`loop: null` is a structural type error, not an absence — omit the key to
-express absence (symmetric with the per-stage `agent`/`loop`).
+An inline `agent`/`loop`/`approve` is a **default**: if a `stages` entry also
+names the same stage, the `stages` value wins **per field** — an unset `stages`
+field falls back to the inline one. This lets `extend` declare a sensible
+default that a `stages` override can selectively tighten. An inline
+`agent: null`, `loop: null`, or `approve: null` is a structural type error, not
+an absence — omit the key to express absence (symmetric with the per-stage
+`agent`/`loop`/`approve`).
 
 ### Examples
 
@@ -341,11 +391,15 @@ extend:
   list with non-string elements is rejected with `non-list-of-str before in
   workflow.extend.<NAME>` / `non-list-of-str after in workflow.extend.<NAME>`.
 - An inline `agent` (when present) must be a string; an inline `loop` (when
-  present) must be an int `>= 1` — the same type rules as the `stages` block.
-  A non-string `agent` raises `non-str value in workflow.extend.<NAME>.agent`;
-  a non-int or `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop`
-  / `loop must be >= 1 in workflow.extend.<NAME>`. Inline `agent`/`loop` are
-  default overrides — a `stages` entry for the same name wins per field.
+  present) must be an int `>= 1`; an inline `approve` (when present) must be the
+  string `auto` — the same type rules as the `stages` block. A non-string
+  `agent` raises `non-str value in workflow.extend.<NAME>.agent`; a non-int or
+  `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop` /
+  `loop must be >= 1 in workflow.extend.<NAME>`; a non-string `approve` raises
+  `non-str value in workflow.extend.<NAME>.approve`, and any other string
+  raises `approve must be 'auto' in workflow.extend.<NAME>`. Inline
+  `agent`/`loop`/`approve` are default overrides — a `stages` entry for the
+  same name wins per field.
 - An extend entry that names a `before`/`after` target that does not exist in
   the pipeline (and is not another extend-stage) is a **dangling reference** —
   a structural error raised by Pass 0a0-pre (`unknown stage name in
@@ -388,11 +442,11 @@ originals, so Passes 1–3 below apply to them by the same generic rules.
 
 Before Pass 1, the compiler resolves one **effective override map** keyed by
 stage name, computed once and shared by Passes 1 and 2: each `extend` entry
-seeds a default override from its inline `agent`/`loop`, and each `stages`
-entry then overlays per-field, winning whenever its field is not `None` (the
-inline value is the fallback). A name that appears only in `stages` is used
-verbatim; a name that appears only in `extend` carries just its inline
-`agent`/`loop`.
+seeds a default override from its inline `agent`/`loop`/`approve`, and each
+`stages` entry then overlays per-field, winning whenever its field is not
+`None` (the inline value is the fallback). A name that appears only in `stages`
+is used verbatim; a name that appears only in `extend` carries just its inline
+`agent`/`loop`/`approve`.
 
 ### Pass 0.5 — Strict validation of stage names
 
@@ -443,6 +497,11 @@ For each `(stage_name, effective_stage)` pair in the effective override map:
    - When `effective_stage.skills` is not None — merge the workflow skills
      with the stage's existing `skills` (pipeline-first, deduplicated). See
      [Skills merge](#skills-merge).
+   - The effective `approve` directive is threaded into the step body under
+     an internal sentinel key (whether `"auto"` or `None`); it is read and
+     consumed during canonical field assembly (Pass 4) to drive the two
+     `approve: auto` effects and never reaches the output. See
+     [Auto-approval (`approve: auto`)](#auto-approval-approve-auto).
 
 ### Skills merge
 
@@ -650,14 +709,18 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `agent` in an extend entry not a string                  | `non-str value in workflow.extend.<NAME>.agent`                             |
 | Inline `loop` in an extend entry not an int                     | `non-int value in workflow.extend.<NAME>.loop`                              |
 | Inline `loop` in an extend entry is an int but `< 1`            | `loop must be >= 1 in workflow.extend.<NAME>`                               |
+| Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
+| Inline `approve` in an extend entry not the string `auto`       | `approve must be 'auto' in workflow.extend.<NAME>`                          |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
 | `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
 | `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
 | `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
+| `approve` present but not a string                              | `non-str value in workflow.stages.<NAME>.approve`                           |
+| `approve` present but not the string `auto`                     | `approve must be 'auto' in workflow.stages.<NAME>`                          |
 | `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
 | Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
 | Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |

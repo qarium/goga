@@ -104,12 +104,13 @@ _CANONICAL_KEY_ORDER = [
 # Sentinel key threaded by ``_apply_per_stage_overrides`` into a reconstructed
 # step body to carry the effective ``approve`` directive through loop-expansion
 # (it survives ``copy.deepcopy`` in ``_expand_loops``/``_make_expanded_copy``)
-# into ``_canonical_fields``, where it is popped and consumed to drive the two
-# ``approve: auto`` effects (interactive suppression + ``auto_approve`` emission).
-# The sentinel is output-only plumbing — it is popped in ``_canonical_fields``
-# step 3, so it NEVER reaches ``FlowStage.fields``; reconstruction operates on a
-# deep copy of the ORIGINAL body, so the sentinel NEVER reaches
-# ``PipelineDocument.body`` (the non-workflow path carries no sentinel at all).
+# into ``_canonical_fields``, where it is READ (not popped) and consumed to drive
+# the two ``approve: auto`` effects (interactive suppression + ``auto_approve``
+# emission). The sentinel is output-only plumbing — it is EXCLUDED from the
+# fresh dict ``_canonical_fields`` builds, so it NEVER reaches
+# ``FlowStage.fields``. ``_canonical_fields`` never mutates its ``body`` argument
+# (it reads the sentinel and rebuilds a new dict), so on the non-workflow path —
+# where ``body`` is the caller's shared dict — nothing is mutated either.
 _APPROVE_SENTINEL = "_approve_directive"
 
 # In-container wrapper path template consumed by afm >= 0.4.15 as the per-stage
@@ -242,7 +243,7 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     is the output-only afm field.
 
     The ``_APPROVE_SENTINEL`` key (if present — threaded by
-    ``_apply_per_stage_overrides`` only on the workflow path) is popped and
+    ``_apply_per_stage_overrides`` only on the workflow path) is read and
     consumed as the effective ``approve`` directive; it never reaches the output.
     The raw ``roles`` list is captured BEFORE translation so the ``auto_approve``
     effect matches the authored role (``planner``), not the translated stem
@@ -270,13 +271,13 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     output either (renamed to ``interactive`` or suppressed). Each value is
     deep-copied so the returned dict shares no structure with the parsed body.
 
-    The sentinel ``pop`` mutates ``body`` only when a sentinel is present — which
-    happens exclusively on the workflow path, where ``body`` is a deep copy of
-    the ORIGINAL step (the reconstruction in ``_reconstruct_body`` deep-copies
-    before any override/loop-expansion, so the ORIGINAL parsed body — mirrored
-    verbatim into ``PipelineDocument`` — is never touched). On the non-workflow
-    path no sentinel is present, so the ``pop`` is a no-op and the caller's body
-    is left untouched.
+    This function NEVER mutates its ``body`` argument. The approve sentinel is
+    read (``.get``) rather than popped, and every transformation rebuilds a
+    fresh dict — so the caller's body is left untouched on every path. This
+    matters on the non-workflow path, where ``body`` is the caller's shared dict
+    (the same objects mirrored into ``PipelineDocument``): because nothing is
+    mutated, ``PipelineDocument.body`` always reflects the authored source
+    verbatim, whether or not a workflow is applied.
 
     Args:
         body: The step body dict produced by ``parse_dsl`` (workflow path: a
@@ -300,21 +301,26 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     if "interactive" in body:
         raise StructuralError("interactive key is forbidden in stage body; use communication")
 
-    # Pop the approve sentinel (output-only plumbing) before any transformation.
-    # Present only when a workflow threaded an effective approve directive; a
-    # no-op (returns None) on the non-workflow path, which carries no sentinel.
-    effective_approve = body.pop(_APPROVE_SENTINEL, None)
+    # Read the approve sentinel (output-only plumbing) WITHOUT mutating ``body``
+    # — reading (not popping) keeps this function non-mutating on every path.
+    # The sentinel is threaded in by ``_apply_per_stage_overrides`` on the
+    # workflow path (where ``body`` is a deep copy); it is dropped from the fresh
+    # dict built below so it never reaches the output. Absent ⇒ ``None`` (the
+    # non-workflow path carries no sentinel).
+    effective_approve = body.get(_APPROVE_SENTINEL)
 
     # Capture the raw roles list BEFORE translation — the auto_approve effect
     # matches the authored role "planner", not its translated stem "planning".
     raw_roles = body.get("roles")
 
     # Translate the authoring script directives into their output keys (the
-    # authoring keys are consumed, never passed through as unknown keys). A fresh
-    # dict is built rather than mutating ``body`` in place.
+    # authoring keys are consumed, never passed through as unknown keys) and drop
+    # the approve sentinel so it never reaches the output. A fresh dict is built
+    # rather than mutating ``body`` in place.
     body = {
         ("script_before" if key == "before_script" else "script_after" if key == "after_script" else key): value
         for key, value in body.items()
+        if key != _APPROVE_SENTINEL
     }
 
     # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
@@ -463,7 +469,7 @@ def _apply_per_stage_overrides(
     ``skills`` via ``_merge_skills`` (pipeline-first dedup). The effective
     ``approve`` directive (whether ``"auto"`` or ``None``) is always threaded
     into the step body under the ``_APPROVE_SENTINEL`` key — it survives
-    ``copy.deepcopy`` in loop-expansion and is popped/consumed in
+    ``copy.deepcopy`` in loop-expansion and is read/consumed in
     ``_canonical_fields`` to drive the two ``approve: auto`` effects; writing
     ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel as no
     directive). ``effective`` already folds the inline-extend default together
@@ -499,7 +505,7 @@ def _apply_per_stage_overrides(
         # Thread the effective approve directive into the step body under the
         # sentinel key. Writing ``None`` is harmless and keeps the contract
         # simple (the sentinel always reflects the resolved directive). It never
-        # reaches the output — popped in ``_canonical_fields`` step 3.
+        # reaches the output — read and dropped in ``_canonical_fields``.
         step.body[_APPROVE_SENTINEL] = stage.approve
 
 
