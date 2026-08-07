@@ -48,11 +48,29 @@ def _make_config():
 
 class TestRunPipelineContainerWorkflowSignature:
     def test_signature_has_workflow_and_no_workflow_as_final_params(self) -> None:
-        """``workflow`` then ``no_workflow`` then ``skip`` are the final three signature parameters."""
+        """``workflow`` then ``no_workflow`` then ``skip`` then ``parallel`` are the final four params."""
         params = list(inspect.signature(rpc).parameters)
-        assert params[-3] == "workflow"
-        assert params[-2] == "no_workflow"
-        assert params[-1] == "skip"
+        assert params[-4] == "workflow"
+        assert params[-3] == "no_workflow"
+        assert params[-2] == "skip"
+        assert params[-1] == "parallel"
+
+
+class TestRunPipelineContainerParallelSignature:
+    def test_parallel_is_final_param_default_none(self) -> None:
+        """``parallel`` is the final signature parameter and defaults to ``None``."""
+        param = inspect.signature(rpc).parameters["parallel"]
+        assert param.default is None
+        type_hints = typing.get_type_hints(rpc)
+        assert type_hints["parallel"] == int | None
+
+    def test_run_named_accepts_parallel(self) -> None:
+        """The internal ``_run_named`` helper accepts a ``parallel`` parameter."""
+        _run_named = _rpc_mod._run_named
+        params = list(inspect.signature(_run_named).parameters)
+        assert "parallel" in params
+        parallel_param = inspect.signature(_run_named).parameters["parallel"]
+        assert parallel_param.default is None
 
     def test_workflow_param_is_optional_str(self) -> None:
         """``workflow`` is typed ``str | None`` and defaults to ``None``."""

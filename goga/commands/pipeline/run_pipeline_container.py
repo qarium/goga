@@ -475,6 +475,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
     workflow: str | None,
     no_workflow: bool,
     skip: tuple[str, ...] = (),
+    parallel: int | None = None,
 ) -> int:
     """Launch the container in run mode (``-m goga.pipeline run <name> --port``).
 
@@ -527,6 +528,13 @@ def _run_named(  # noqa: PLR0913, PLR0917
             ``GOGA_SKIP_STAGES=<comma-joined>`` so the in-container
             ``run_pipeline`` routine applies ``apply_skip_stages`` over the
             resolved workflow. Omitted from the env-file when empty.
+        parallel: optional int capping concurrently executing stages. When not
+            None, appended to the in-container run argv as
+            ``--parallel <parallel>`` (after ``--port``, before the container
+            launch) so the in-container ``pipeline_cli`` forwards it to afm's
+            ``--max-parallel``. When None (default), the flag is omitted — afm
+            runs unbounded (backward compatible). Distinct from the Docker
+            ``-p <port>:<port>`` port-publish token.
 
     Returns:
         The container's exit code.
@@ -590,6 +598,13 @@ def _run_named(  # noqa: PLR0913, PLR0917
         # its port); params = the docker-run options the runner translates to
         # flags via the shared param→flag rule.
         args = ["-m", "goga.pipeline", "run", name, "--port", str(port)]
+        # --parallel <parallel> is appended to the in-container run argv ONLY when
+        # not None (backward compatible — absent ⇒ no flag ⇒ afm unbounded). It is
+        # appended after --port and before the container launch; the in-container
+        # pipeline_cli forwards it to afm's --max-parallel. Distinct from the
+        # Docker -p <port>:<port> port-publish token (params["p"] below).
+        if parallel is not None:
+            args += ["--parallel", str(parallel)]
         params = {
             "name": container_name,
             "rm": True,
@@ -651,6 +666,7 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     workflow: str | None = None,
     no_workflow: bool = False,
     skip: tuple[str, ...] = (),
+    parallel: int | None = None,
 ) -> int:
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
@@ -665,10 +681,10 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     ``--update``) in the build branch only.
 
     Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
-    ``extra_env``, ``proxy``, ``clean``, ``workflow``, ``no_workflow``, and
-    ``skip`` — it honours only ``hosts`` (``--add-host`` flags) and ``update``
-    (conditional image pull); no env-file is written and no afm state directory
-    is involved.
+    ``extra_env``, ``proxy``, ``clean``, ``workflow``, ``no_workflow``,
+    ``skip``, and ``parallel`` — it honours only ``hosts`` (``--add-host`` flags)
+    and ``update`` (conditional image pull); no env-file is written and no afm
+    state directory is involved.
 
     Run mode (``name`` provided) allocates a free port, writes a private
     afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
@@ -732,6 +748,14 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
             over the resolved workflow; the host does NOT validate the names
             (validation is in-container). Omitted from the env-file when empty.
             Ignored in discovery mode.
+        parallel: optional int (None when absent) capping concurrently executing
+            stages, forwarded from the ``-p/--parallel`` CLI option. In run mode,
+            appended to the in-container run argv as ``--parallel <parallel>``
+            ONLY when not None (the in-container ``pipeline_cli`` forwards it to
+            afm's ``--max-parallel``); omitted when None so afm runs unbounded
+            (backward compatible). Not defaulted — None ⇒ unbounded. Ignored in
+            discovery mode (no afm). Distinct from the Docker
+            ``-p <port>:<port>`` port-publish token.
 
     Returns:
         The container's exit code.
@@ -778,4 +802,5 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         workflow,
         no_workflow,
         skip,
+        parallel,
     )

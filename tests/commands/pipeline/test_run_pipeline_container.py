@@ -43,7 +43,7 @@ class TestRunPipelineContainerContract:
         assert run_pipeline_container is rpc
 
     def test_signature_name_config_extra_env(self) -> None:
-        """Signature is (name, config, extra_env, proxy, hosts, clean, update, workflow, no_workflow, skip)."""
+        """Signature exposes name/config/extra_env/proxy/hosts/clean/update/workflow/no_workflow/skip/parallel."""
         import inspect
 
         params = list(inspect.signature(rpc).parameters)
@@ -58,6 +58,7 @@ class TestRunPipelineContainerContract:
             "workflow",
             "no_workflow",
             "skip",
+            "parallel",
         ]
 
     def test_extra_env_has_empty_tuple_default(self) -> None:
@@ -483,6 +484,87 @@ class TestPipelineEnvFile:
             )
 
         assert captured["extra_env"] == ("ANTHROPIC_API_KEY=sk-xxx", "MODEL=claude-sonnet-4-6")
+
+
+# --- parallel cap (run mode only) ---
+
+
+class TestPipelineRunParallel:
+    """Run mode threads the optional ``parallel`` cap into the in-container argv.
+
+    ``parallel`` (int | None) is appended to the in-container run argv as
+    ``--parallel <N>`` ONLY in run mode and ONLY when not None. Discovery mode
+    never receives it; the Docker ``-p <port>:<port>`` port-publish token stays
+    isolated from it.
+    """
+
+    def _capture_docker(self, monkeypatch) -> dict[str, object]:
+        """Replace ``DockerRunner.run`` with a recorder of (args, params).
+
+        Returns the dict populated with the captured in-container ``args`` list
+        and the docker-run ``params`` dict (minus the separate ``extra_args``
+        keyword). The recorded ``args`` are the post-image command — exactly the
+        ``-m goga.pipeline run|list ...`` in-container argv.
+        """
+        captured: dict[str, object] = {"args": None, "params": None}
+
+        def _record(_self, args, extra_args=None, **params):
+            captured["args"] = list(args)
+            captured["params"] = {k: v for k, v in params.items() if k != "extra_args"}
+            return 0
+
+        monkeypatch.setattr(_rpc_mod.DockerRunner, "run", _record)
+        return captured
+
+    def test_run_pipeline_container_run_appends_parallel(self, tmp_path: Path, monkeypatch) -> None:
+        """Run mode appends ``--parallel <N>`` after ``--port`` (params["p"] isolated)."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        captured = self._capture_docker(monkeypatch)
+
+        with mock.patch.object(subprocess, "run"):
+            result = run_pipeline_container("deploy", config, parallel=4)
+
+        assert result == 0
+        args = captured["args"]
+        assert "--parallel" in args
+        # --parallel follows the port value (appended after --port, before launch)
+        assert args.index("--parallel") > args.index("50321")
+        assert args[args.index("--parallel") + 1] == "4"
+        # the Docker -p <port>:<port> port-publish token is isolated from parallel
+        assert captured["params"]["p"] == "50321:50321"
+
+    def test_run_pipeline_container_discovery_omits_parallel(self, tmp_path: Path, monkeypatch) -> None:
+        """Discovery mode ignores ``parallel`` — never writes ``--parallel``."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.chdir(tmp_path)
+        captured = self._capture_docker(monkeypatch)
+
+        with mock.patch.object(subprocess, "run"):
+            result = run_pipeline_container(None, config, parallel=4)
+
+        assert result == 0
+        assert captured["args"] == ["-m", "goga.pipeline", "list"]
+        assert "--parallel" not in captured["args"]
+
+    def test_pipeline_container_parallel_none_omitted_in_run(self, tmp_path: Path, monkeypatch) -> None:
+        """``parallel=None`` (default) omits ``--parallel`` entirely (backward compat)."""
+        config = _make_config()
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+        captured = self._capture_docker(monkeypatch)
+
+        with mock.patch.object(subprocess, "run"):
+            result = run_pipeline_container("deploy", config, parallel=None)
+
+        assert result == 0
+        assert "--parallel" not in captured["args"]
 
 
 # --- cleanup on setup failure ---
