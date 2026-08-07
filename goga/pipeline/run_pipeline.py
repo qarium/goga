@@ -127,9 +127,7 @@ def resolve_project_name() -> str | None:
     return name or None
 
 
-def run_pipeline(
-    name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None
-) -> int:
+def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the

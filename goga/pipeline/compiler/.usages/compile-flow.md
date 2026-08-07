@@ -62,8 +62,8 @@ and/or skills is rejected at compile time — "script is mutually exclusive with
 prompt/skills in stage <name>". before_script/after_script are compatible
 with prompt/skills/script (no error).
 
-## Backward compatibility
+## Key presence
 
 Stages without approve, without script directives, and without
-communication/roles changes compile byte-identically to before. The new keys
-appear only when their source directive is present.
+communication/roles changes produce no auto_approve / script_* keys — those
+keys appear only when their source directive is present.

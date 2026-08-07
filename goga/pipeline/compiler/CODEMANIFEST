@@ -754,10 +754,7 @@ Annotations: |
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve as a plain bool
        scalar; script_before / script / script_after as plain scalars when
-       single-line and block-literal scalars when multi-line (forced via a
-       marker-class representer that mirrors the top-level prompt — the
-       `beautiful_yaml` defaults render multi-line strings single-quoted,
-       not block)
+       single-line and block-literal scalars when multi-line
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -1108,9 +1105,9 @@ Annotations: |
            when the effective approve directive drives the communication
            effect ("auto"/"plan") AND the body has communication: true —
            SUPPRESS (emit no interactive key). communication: false ⇒
-           interactive: false as usual. The existing "interactive key is
-           forbidden in stage body; use communication" error (an authoring
-           interactive key) is unchanged
+           interactive: false as usual. The "interactive key is
+           forbidden in stage body; use communication" error applies to an
+           authoring interactive key
          * auto_approve: the effective approve directive drives the roles
            effect ("auto"/"dialog") AND the body roles (the raw list,
            before `translate_role`) contains literal "planner" — emit
@@ -1134,7 +1131,6 @@ Annotations: |
          interactive key (pipeline-file stage OR embedded extend-stage) is a
          structural error "interactive key is forbidden in stage body; use
          communication". The output canonical key order keeps interactive
-         (afm contract stable)
     6. Build `FlowDocument`:
        - prompt = `workflow` prompt when `workflow` is not None, else None
        - root_dir = the `root_dir` parameter passed by the caller (forwarded
@@ -1307,9 +1303,9 @@ Annotations: |
     - script together with prompt and/or skills is a structural error
       "script is mutually exclusive with prompt/skills in stage <name>";
       before_script/after_script are compatible (no error)
-    - The new keys (auto_approve, script_before / script / script_after)
-      appear only when their source directive is present; flow-files without
-      the new directives compile byte-identically to before
+    - auto_approve, script_before, script, and script_after appear only when
+      their source directive is present; flow-files without those directives
+      carry none of these keys
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is

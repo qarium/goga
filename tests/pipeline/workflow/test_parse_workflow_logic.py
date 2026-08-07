@@ -276,11 +276,7 @@ class TestParseWorkflowPositive:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    approve: auto\n"
-            "    prompt: do extra\n",
+            "extend:\n  extra:\n    after: [deploy]\n    approve: auto\n    prompt: do extra\n",
         )
 
         document = parse_workflow(workflow_path)
@@ -297,11 +293,7 @@ class TestParseWorkflowPositive:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    approve: plan\n"
-            "    prompt: do extra\n",
+            "extend:\n  extra:\n    after: [deploy]\n    approve: plan\n    prompt: do extra\n",
         )
 
         document = parse_workflow(workflow_path)
@@ -316,11 +308,7 @@ class TestParseWorkflowPositive:
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    approve: dialog\n"
-            "    prompt: do extra\n",
+            "extend:\n  extra:\n    after: [deploy]\n    approve: dialog\n    prompt: do extra\n",
         )
 
         document = parse_workflow(workflow_path)
@@ -655,7 +643,7 @@ class TestParseWorkflowNegative:
         """An extend entry with ``approve`` but no before/after surfaces the at-least-one error.
 
         The at-least-one-of-before/after check stays the LAST structural check
-        (contract step 6b g): a valid inline ``approve: auto`` passes its check,
+        (contract step 6.2.9): a valid inline ``approve: auto`` passes its check,
         so the positional ``requires at least one of before/after`` error wins.
         """
         workflow_path = _write(
@@ -838,8 +826,8 @@ class TestParseWorkflowNegative:
 
         An extend entry with NEITHER ``before`` nor ``after`` AND a bad inline
         ``agent``/``loop`` carries two structural defects. The CODEMANIFEST
-        algorithm (step 6b) validates ``agent``/``loop`` (e/f) BEFORE the
-        at-least-one-of-before/after check (g), so the more specific type error
+        algorithm (step 6.2) validates ``agent``/``loop`` (6.2.6/6.2.7) BEFORE the
+        at-least-one-of-before/after check (6.2.9), so the more specific type error
         must win over ``extend entry NAME requires at least one of before/after``.
         """
         workflow_path = _write(

@@ -97,11 +97,7 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     for key, value in stage.fields.items():
         if key == "agents" and isinstance(value, list):
             stage_repr[key] = _FlowAgents(value)
-        elif (
-            key in ("script_before", "script", "script_after")
-            and isinstance(value, str)
-            and "\n" in value
-        ):
+        elif key in ("script_before", "script", "script_after") and isinstance(value, str) and "\n" in value:
             stage_repr[key] = _BlockLiteralScript(value)
         else:
             stage_repr[key] = value

@@ -18,7 +18,7 @@ run_flow(flow_path: Path, port: int, max_parallel: int | None = None) -> exit_co
 - `max_parallel` — optional cap on the number of concurrently executing stages.
   When not None, forwarded as `afm run --max-parallel <max_parallel>`. When None
   (default), the `--max-parallel` flag is OMITTED and afm applies its own
-  default — backward compatible. Decided by the caller; `run_flow` only forwards
+  default. Decided by the caller; `run_flow` only forwards
   it.
 
 ## Returns

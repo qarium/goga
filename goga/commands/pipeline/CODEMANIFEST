@@ -630,9 +630,9 @@ Annotations: |
     - This cell does not surface any dashboard URL line — stdout carries at
       most the workflow log line (step 10) and the docker output stream
     - Append --parallel <parallel> to the in-container run argv ONLY when
-      `parallel` is not None (backward compatible — absent ⇒ no flag ⇒ afm
-      unbounded); the Docker -p <port>:<port> port-publish token is UNCHANGED
-      and distinct from the Click -p/--parallel option
+      `parallel` is not None (absent ⇒ no flag ⇒ afm unbounded); the Docker
+      -p <port>:<port> port-publish token is distinct from the Click
+      -p/--parallel option
 
     Constraints:
     - Refresh an EXISTING image only when `update` is True via `docker_update` —

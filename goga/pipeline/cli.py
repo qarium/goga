@@ -70,8 +70,7 @@ def pipeline_cli(argv: list[str]) -> int:
         "--parallel",
         type=int,
         default=None,
-        help="cap concurrently executing stages (threads to afm --max-parallel); "
-        "omitted ⇒ afm runs unbounded.",
+        help="cap concurrently executing stages (threads to afm --max-parallel); omitted ⇒ afm runs unbounded.",
     )
 
     args = parser.parse_args(argv)

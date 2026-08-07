@@ -15,7 +15,7 @@ When NAME is omitted → discovery mode. When provided → run mode.
 
 | Option | Type | Effect |
 |--------|------|--------|
-| -p / --parallel N | int (optional, NEW) | max concurrently executing stages; forwarded as the in-container --parallel, which threads to afm run --max-parallel N. Absent ⇒ afm unbounded. Run mode only (no-op in discovery). |
+| -p / --parallel N | int (optional) | max concurrently executing stages; forwarded as the in-container --parallel, which threads to afm run --max-parallel N. Absent ⇒ afm unbounded. Run mode only (no-op in discovery). |
 | -s / --skip NAME | repeatable | exclude a stage (run mode only) |
 | --workflow NAME | str | apply an explicit workflow |
 | --no-workflow | flag | disable workflow resolution |
@@ -36,4 +36,4 @@ never authors the docker -p.
         → pipeline_cli → run_pipeline(parallel=N) → run_flow(max_parallel=N)
           → afm run --port PORT --max-parallel N <flow>
 
-Absent ⇒ parallel=None ⇒ no in-container --parallel ⇒ afm unbounded (backward compatible).
+Absent ⇒ parallel=None ⇒ no in-container --parallel ⇒ afm unbounded.

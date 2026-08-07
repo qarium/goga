@@ -401,8 +401,8 @@ extend:
   list with non-string elements is rejected with `non-list-of-str before in
   workflow.extend.<NAME>` / `non-list-of-str after in workflow.extend.<NAME>`.
 - An inline `agent` (when present) must be a string; an inline `loop` (when
-  present) must be an int `>= 1`; an inline `approve` (when present) must be the
-  string `auto` — the same type rules as the `stages` block. A non-string
+  present) must be an int `>= 1`; an inline `approve` (when present) must be one of
+  `auto`/`plan`/`dialog` — the same type rules as the `stages` block. A non-string
   `agent` raises `non-str value in workflow.extend.<NAME>.agent`; a non-int or
   `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop` /
   `loop must be >= 1 in workflow.extend.<NAME>`; a non-string `approve` raises

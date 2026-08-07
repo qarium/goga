@@ -14,7 +14,7 @@ run NAME --port PORT [--parallel N]
 
 - NAME (positional, required) — pipeline name without extension.
 - --port PORT (int, required) — dashboard port, allocated by the host launcher.
-- --parallel N (int, NEW, optional) — max concurrently executing stages.
+- --parallel N (int, optional) — max concurrently executing stages.
   Forwarded through run_pipeline → run_flow → afm run --max-parallel N.
   Absent ⇒ no limit (afm runs unbounded). Run mode only.
 

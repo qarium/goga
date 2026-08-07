@@ -37,7 +37,7 @@ structural error raised at parse time:
 - stages-block: "approve must be one of: auto, plan, dialog in workflow.stages.<name>"
 - extend-entry: "approve must be one of: auto, plan, dialog in workflow.extend.<name>"
 
-This cell does NOT act on `approve`. The compiler (goga/pipeline/compiler)
+This cell does NOT act on `approve`. The compiler
 consumes it and applies two INDEPENDENT effects, each value driving a subset:
 for a stage with `approve: "auto"` the stage body's `communication: true` is
 suppressed (no `interactive: true`) AND its `roles` containing `planner` emits

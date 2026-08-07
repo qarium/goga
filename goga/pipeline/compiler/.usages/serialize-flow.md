@@ -18,11 +18,10 @@ assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
 - skills, depends_on, top-level prompt: block-style
 - auto_approve: plain bool scalar
 - script_before/script/script_after: plain scalars when single-line;
-  block-literal scalars when multi-line (forced via a marker class — the
-  dumper default renders multi-line strings single-quoted, not block)
+  block-literal scalars when multi-line
 - empty list values (e.g. explicit empty depends_on) written explicitly
 
-## Backward compatibility
+## Key presence
 
-Flow-files whose stages carry none of the new keys serialize byte-identically to
-before — the new keys are simply absent.
+Stages without auto_approve / script_before / script / script_after serialize
+without those keys — each appears only when its source directive is present.

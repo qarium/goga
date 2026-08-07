@@ -75,9 +75,7 @@ class TestWorkflowExtendStageContract:
 
     def test_workflow_extend_stage_constructible_kw_only(self) -> None:
         """All six fields are accepted as keyword-only arguments."""
-        ext = WorkflowExtendStage(
-            before=["a"], after=["b"], agent="codex", loop=2, approve="auto", body={"title": "T"}
-        )
+        ext = WorkflowExtendStage(before=["a"], after=["b"], agent="codex", loop=2, approve="auto", body={"title": "T"})
 
         assert ext.before == ["a"]
         assert ext.after == ["b"]

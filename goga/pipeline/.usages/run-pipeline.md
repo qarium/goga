@@ -8,7 +8,7 @@ the four agent prompt files, then launches afm via `run_flow`.
 
 run_pipeline(name, project_dir, user_dir, port, parallel=None) -> exit_code
 
-## parallel (NEW)
+## parallel
 
 parallel (int | None) optionally caps concurrently executing stages. It is
 forwarded to run_flow as its max_parallel argument (None ⇒ run_flow omits
@@ -25,4 +25,4 @@ The threading chain (host → container):
             → run_flow(…, max_parallel=N)
               → afm run --port PORT --max-parallel N <flow>
 
-Absent flag ⇒ parallel=None ⇒ no --max-parallel ⇒ afm unbounded (backward compatible).
+Absent flag ⇒ parallel=None ⇒ no --max-parallel ⇒ afm unbounded.

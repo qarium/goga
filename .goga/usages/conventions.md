@@ -227,7 +227,7 @@ RULES:
 
 1. Each test directory MUST contain an `__init__.py`
 2. Place local fixtures in `tests/<package>/conftest.py`, shared fixtures in `tests/conftest.py`
-3. Place integration tests covering multiple packages directly in `tests/` (e.g., `tests/test_integration.py`)
+3. Place integration tests covering multiple packages in `tests/integration/` (e.g., `tests/integration/test_<scenario>.py`)
 
 ## Naming
 

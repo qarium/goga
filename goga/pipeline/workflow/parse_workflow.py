@@ -346,7 +346,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     ``loop`` and ``approve`` are removed from the body before construction
     (``depends_on`` and ``skip`` never reach it: they are rejected outright).
 
-    The structural checks run in the CODEMANIFEST order (step 6b):
+    The structural checks run in the CODEMANIFEST order (step 6.2):
     non-mapping → ``depends_on`` → ``skip`` → ``before`` → ``after`` →
     ``agent`` → ``loop`` → ``approve`` → at-least-one-of-before/after. The
     at-least-one check runs LAST so an entry carrying BOTH a positioning defect
@@ -405,7 +405,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     if "approve" in value:
         approve = _validate_approve(f"workflow.extend.{name}", value["approve"])
 
-    # At-least-one is the LAST structural check (contract step 6b g): a
+    # At-least-one is the LAST structural check (contract step 6.2.9): a
     # multi-defect entry (no positioning AND a bad inline agent/loop/approve)
     # must surface the more specific type error raised above, not this
     # positional one.
@@ -519,8 +519,6 @@ def _validate_approve(scope: str, field_value: Any) -> str:
         raise WorkflowSyntaxError(f"non-str value in {scope}.approve")
 
     if field_value not in _APPROVE_DIRECTIVES:
-        raise WorkflowSyntaxError(
-            f"approve must be one of: {', '.join(_APPROVE_DIRECTIVES)} in {scope}"
-        )
+        raise WorkflowSyntaxError(f"approve must be one of: {', '.join(_APPROVE_DIRECTIVES)} in {scope}")
 
     return field_value

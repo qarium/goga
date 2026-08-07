@@ -104,9 +104,7 @@ class TestParallelHostCliToContainerArgv:
     ``-p <port>:<port>`` port-publish token stays isolated from it.
     """
 
-    def _invoke_host(
-        self, tmp_path: Path, args: list[str], monkeypatch
-    ) -> tuple[int, dict[str, object]]:
+    def _invoke_host(self, tmp_path: Path, args: list[str], monkeypatch) -> tuple[int, dict[str, object]]:
         """Invoke the host ``goga pipeline`` command and return (exit_code, docker_capture)."""
         config = _make_config()
         monkeypatch.chdir(tmp_path)

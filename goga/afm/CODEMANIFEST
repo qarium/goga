@@ -38,7 +38,7 @@ Annotations: |
     `max_parallel`: optional cap on concurrently executing stages, forwarded to
                     afm as "--max-parallel <max_parallel>" ONLY when not None.
                     When None — the "--max-parallel" flag is OMITTED and afm
-                    applies its own default (backward compatible). Decided by
+                    applies its own default. Decided by
                     the caller; `run_flow` only passes it through.
     `exit_code`: 0 on success, 127 when afm is missing from PATH, 126 when afm
                  is present but not executable (other OSError), otherwise afm's
@@ -64,7 +64,7 @@ Annotations: |
     - Always forward `port` to afm via the --port flag — never omit it
     - Forward `max_parallel` via --max-parallel ONLY when it is not None — None
       means "do not limit" and MUST omit the flag (never substitute a default
-      such as 0); backward compatible
+      such as 0)
     - Invoke afm through PATH — do not hard-code /srv/afm
     - Apply the `afm` practice's error-handling rules verbatim
     - Accept absolute paths only; do not resolve or construct paths internally
@@ -74,7 +74,7 @@ Annotations: |
     - Do not allocate the port — the caller allocates it
     - Do not decide or default `max_parallel` — the caller decides; None ⇒ omit
       the flag, never infer a value
-    - Do not discover pipeline files — discovery lives in goga/pipeline
+    - Do not discover pipeline files — discovery is the caller's concern
     - Do not hard-code the afm binary path — rely on PATH inside the container
     - Do not modify or parse pipeline-file contents
 
