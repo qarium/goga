@@ -74,9 +74,14 @@ When a workflow is in scope, the compiler reconstructs the parsed body
 **before** building the output stages: `extend` entries inject new stages
 positioned via `before`/`after`, per-stage `agent` overrides choose which
 CLI agent runs the stage, per-stage `prompt` overrides layer additional
-context alongside the stage's own prompt, `skip: true` removes the stage and reconnects its dependents' `depends_on`, and `loop: N` expands the stage
-into N chained copies. See [Workflows](workflows.md) for the full
-semantics.
+context alongside the stage's own prompt, `skip: true` removes the stage and reconnects its dependents' `depends_on`, `loop: N` expands the stage
+into N chained copies, and per-stage `approve: auto|plan|dialog` drives
+the afm auto-approval effects (interactive suppression and/or
+`auto_approve` emission). The pipeline-file itself can also carry
+`before_script` / `script` / `after_script` shell directives on any stage
+— compiled to the afm `script_*` keys. See [Workflows](workflows.md) and
+[Pipeline File — Script directives](pipeline-file.md#script-directives)
+for the full semantics.
 
 ## Where to next
 

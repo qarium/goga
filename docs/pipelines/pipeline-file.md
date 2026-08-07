@@ -156,8 +156,10 @@ output keys at compile time:
 | `after_script`  | `script_after`   | After the stage's agent work.   |
 
 The authoring keys are consumed and never appear in the compiled flow-file —
-only the translated `script_*` keys do. A multi-line script serializes as a
-YAML block-literal (`script: |`); a single-line script stays a plain scalar.
+only the translated `script_*` keys do. A multi-line `script_before`,
+`script`, or `script_after` serializes as a YAML block-literal
+(e.g. `script: |`); a single-line value stays a plain scalar. The rule is
+uniform across all three slots.
 
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
@@ -189,7 +191,7 @@ to use them as templates.
 
 The pipeline-file carries `roles` in **two distinct places**, and they
 serve different purposes. A third `agent` concept exists in
-[workflow-files](workflows.md#workflow-agent--choosing-the-cli-agent) and
+[workflow-files](workflows.md#workflow-agent-choosing-the-cli-agent) and
 is intentionally different — see the comparison at the end of this
 section.
 

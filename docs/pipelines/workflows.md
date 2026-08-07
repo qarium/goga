@@ -294,9 +294,14 @@ Positioning (`before` / `after`), default overrides (`agent` / `loop` /
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
 
-Unlike `stages` entries, extend-stage names are **not** matched against the
-pipeline and silently skipped. The new stage is always inserted; if a name
-collides with an existing stage, the duplicate is surfaced downstream by afm.
+Extend-stage names are **first-class members** of the workflow's name set:
+they are valid targets for `stages` entries and for other extend-entries'
+`before`/`after` refs (cross-references between extend-stages resolve). The
+new stage is always inserted; if a name collides with an existing stage, the
+duplicate is surfaced downstream by afm. Dangling `before`/`after` refs —
+names in neither the original pipeline body nor any extend-stage — are
+**structural errors** raised before the embed (see
+[How the compiler applies a workflow — Pass 0a0-pre](#pass-0a0-pre-strict-validation-of-extend-refs)).
 
 ### Positioning semantics by body format
 
