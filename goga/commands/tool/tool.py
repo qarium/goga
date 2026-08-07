@@ -89,13 +89,8 @@ def build_injections(main: Callable) -> dict[str, object]:
 def tool(ctx: click.Context, name: str) -> None:
     """Run an external tool package by name.
 
-    Imports the package `goga_tool_<name>` and invokes its `main` entrypoint
-    with the remaining CLI arguments.
-
-    Args:
-        ctx: Click execution context used to forward extra args and exit codes.
-        name: Identifier of the tool package to run (without the `goga_tool_`
-            prefix).
+    Runs the installed ``goga_tool_<name>`` package, forwarding any remaining
+    arguments to it. Use the tool name without the ``goga_tool_`` prefix.
     """
     package_name = f"goga_tool_{name}"
     try:

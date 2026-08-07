@@ -30,17 +30,6 @@ def schema(
       dependencies  - dict grouping imports by normalized from_path,
                       each value has "types" and "usages" lists
       children      - nested child cells (same structure, recursively)
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        cells: Zero or more cell paths to filter output (variadic).
-        max_depth: Maximum nesting depth of children. None means unlimited.
-        depends_on: Repeatable list of cell paths used to filter cells by
-            their dependencies.
-
-    Raises:
-        click.ClickException: When schema construction fails. Exit code 1 is
-            used when AST parsing errors are found.
     """
     try:
         result = schema_logic(list(cells), max_depth, list(depends_on))

@@ -90,72 +90,14 @@ def pipeline(  # noqa: PLR0913, PLR0917
 ) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
-    Both modes launch the goga Docker container and delegate to
-    ``run_pipeline_container`` — discovery and run are in-container only. The host
-    never reads pipeline files directly.
+    Both modes launch the goga Docker container and delegate execution there —
+    the host never reads pipeline files directly.
 
-    Without ``name`` (discovery mode): the container prints the
-    ``Available pipelines:`` header followed by one pipeline per line.
+    Without ``name`` (discovery mode): prints the ``Available pipelines:`` header
+    followed by one pipeline per line.
 
-    With ``name`` (run mode): the container runs the named pipeline via the
-    external ``afm`` binary. The container's exit code is propagated via
-    ``ctx.exit``.
-
-    Args:
-        ctx: Click execution context used to propagate the exit code.
-        name: pipeline name without extension (e.g. ``"deploy"``). When ``None``
-            selects discovery mode.
-        extra_env: additional ``KEY=VALUE`` strings forwarded into the container
-            env-file in run mode (e.g. an agent authorization token). Ineffective
-            in discovery mode, which never writes an env-file.
-        proxy: optional HTTP/HTTPS proxy URL from ``--proxy``. When None, falls
-            back to ``config.pipeline.proxy``. The resolved value (CLI wins over
-            config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in the container
-            env-file.
-        add_host: raw ``HOST:IP`` strings from the repeatable ``--add-host``
-            option (empty tuple when absent). Merged on top of
-            ``config.pipeline.hosts``; CLI wins on key conflict. Forwarded to
-            ``run_pipeline_container`` as a resolved hosts dict.
-        clean: flag from ``--clean``. Run mode only — when True,
-            ``run_pipeline_container`` wipes the persistent afm state directory
-            before launch. Ignored in discovery mode.
-        update: flag from ``--update/-u``. When True, pull the image before
-            launching the container. Available in both modes.
-        workflow: optional workflow name from ``--workflow NAME`` (without the
-            ``.yml`` extension). When provided, an explicit workflow is requested
-            — the launcher validates that ``<cwd>/.goga/workflows/<workflow>.yml``
-            exists BEFORE launching the container (clean ``ClickException``,
-            exit 1 on a missing file). Mutually exclusive with ``no_workflow``.
-        no_workflow: flag from ``--no-workflow``. When True, the launcher forces
-            the in-container pipeline to skip workflow resolution entirely (writes
-            ``GOGA_WORKFLOW_DISABLED=1`` into the env-file). Mutually exclusive
-            with ``workflow``. Performs NO host-side validation — it is a pure
-            flag forwarded into the container.
-        skip: raw stage names from the repeatable ``-s/--skip`` option (empty
-            tuple when absent). Run mode only — when non-empty, each name is
-            joined comma-separated into the container env-file as
-            ``GOGA_SKIP_STAGES`` so the in-container ``run_pipeline`` routine
-            applies ``apply_skip_stages`` over the resolved workflow. The host
-            performs NO name validation (unknown names surface in-container as a
-            ``StructuralError``); ``--skip`` is a no-op in discovery mode, which
-            never writes an env-file.
-        parallel: optional int (None when absent) from ``-p/--parallel N`` capping
-            concurrently executing stages. Run mode only — when not None it is
-            forwarded to ``run_pipeline_container``, which appends
-            ``--parallel <N>`` to the in-container run argv so the in-container
-            ``pipeline_cli`` threads it to afm's ``--max-parallel``. When None
-            (default) the flag is omitted so afm runs unbounded (backward
-            compatible). Not defaulted — None ⇒ unbounded. A no-op in discovery
-            mode (no afm). The ``-p`` short alias is a separate namespace from
-            the Docker ``-p <port>:<port>`` port-publish token (the latter is
-            assembled inside ``run_pipeline_container``, never from Click).
-
-    Raises:
-        click.ClickException: When ``.goga/config.yml`` cannot be loaded, when
-            the ``pipeline`` section is absent (the section is required to run a
-            pipeline), when ``--workflow`` and ``--no-workflow`` are both set
-            (mutually exclusive), or when an explicit ``--workflow NAME`` names a
-            file that does not exist at ``<cwd>/.goga/workflows/<name>.yml``.
+    With ``name`` (run mode): runs the named pipeline inside the container and
+    propagates its exit code.
     """
     try:
         config = load_project_config()

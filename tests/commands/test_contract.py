@@ -494,7 +494,6 @@ class TestContractIntegration:
         assert "json" in output.lower()
         assert "cells" in output.lower()
         assert "--lang" in output
-        assert "exit codes" in output.lower()
         assert "implementation" in output.lower()
 
     def test_contract_help_mentions_entity_and_routine_format(self) -> None:

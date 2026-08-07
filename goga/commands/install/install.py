@@ -193,27 +193,17 @@ def install(
 
     Three paths, selected by whether ``name`` is given:
 
-      * SINGLE (``name`` set): resolve ``version`` through the four-form grammar
-        and install ``goga-tool-<name><spec>`` in one pip call.
-      * BULK (``name`` omitted, ``.goga/config.yml`` lists ``tools:``): resolve
-        every tool form in YAML insertion order and install all
-        ``goga-tool-<tool><spec>`` identifiers in a single pip call.
+    \b
+      * SINGLE (``name`` set): install ``goga-tool-<name><spec>`` resolved from
+        ``--version`` in a single pip call.
+      * BULK (``name`` omitted, ``.goga/config.yml`` lists ``tools:``): install
+        every ``goga-tool-<tool><spec>`` declared in the config in a single pip
+        call.
       * EMPTY (``name`` omitted, no ``tools:``): print ``Nothing to install``
         and exit 0 without invoking pip.
 
-    pip's returncode is propagated as the exit code without translation — pip
-    failures surface as a non-zero exit, never as a ``CalledProcessError``.
-    Errors from ``resolve_version`` and ``load_project_config`` surface as
-    ``click.ClickException`` (exit 1).
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        name: Tool identifier without the ``goga-tool-`` prefix (single path).
-            Omit to drive the bulk/empty path from ``.goga/config.yml``.
-        sudo: When True, run pip under ``sudo --preserve-env=HOME``.
-        version: Version form for the single path, resolved by ``resolve_version``.
-        no_connect: When True, skip the post-install agent activation re-sync;
-            the command performs the pip install only.
+    The pip exit code is propagated unchanged. Configuration or version errors
+    exit with code 1.
     """
     if name is not None:
         # SINGLE PATH — install one tool, grammar-resolving --version.

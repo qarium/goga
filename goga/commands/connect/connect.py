@@ -13,25 +13,11 @@ def connect(ctx: click.Context, agents: tuple[str, ...], force_overwrite: bool) 
     """Connect goga skills and commands to one or more AI agent configurations.
 
     \b
-    Usage:
+    Examples:
       goga connect claude
       goga connect codex
       goga connect qwen
       goga connect claude codex cursor
-
-    \b
-    Arguments:
-      agents          - one or more target AI agent names (required)
-
-    \b
-    Options:
-      --force-overwrite - overwrite existing tool skills without prompting
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        agents: One or more target AI agent names to connect to.
-        force_overwrite: When True, overwrite existing tool skills without
-            prompting the user.
     """
     exit_code = connect_logic(list(agents), force_overwrite=force_overwrite)
     ctx.exit(exit_code)

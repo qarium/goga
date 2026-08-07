@@ -111,13 +111,8 @@ def _output_value(value: object) -> None:
 def config(ctx: click.Context, options: tuple[str, ...]) -> None:
     """Read and output configuration options from .goga/config.yml.
 
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        options: One or more dot-notation option paths to resolve and print.
-
-    Raises:
-        click.ClickException: When the configuration file cannot be loaded or
-            parsed.
+    Each positional argument is a dot-notation option path (e.g. ``build.proxy``)
+    resolved against the project config and printed to stdout.
     """
     try:
         cfg = load_project_config()

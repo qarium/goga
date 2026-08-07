@@ -70,17 +70,6 @@ def sync(ctx: click.Context, force: bool) -> None:
     Reads the ``usages`` section of ``.goga/config.yml`` and, for each declared
     ``<group>/<dep>`` git dependency, clones the repository and deploys its
     cell-level usages into ``.goga/usages/<group>/<dep>/``.
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        force: When set, clear ``.goga/usages/`` (except ``cooks`` and root
-            files) and re-sync every dep; otherwise sync incrementally, skipping
-            deps whose target directory already exists.
-
-    Raises:
-        click.ClickException: When the configuration file cannot be loaded or
-            parsed (FileNotFoundError, KeyError, ValueError, yaml.YAMLError
-            propagated from ``sync_logic``).
     """
     try:
         exit_code = sync_logic(force)
@@ -103,18 +92,6 @@ def status(ctx: click.Context, info: bool, group: str | None, dep: str | None) -
     under ``.goga/usages/<group>/<dep>/`` against the current remote state and
     reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per
     dep. The check is read-only: it never modifies ``.goga/usages/``.
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        info: When set, expand each dep into its per-node file/folder tree with
-            per-node status markers.
-        group: When set, limit the check to deps under this group.
-        dep: When set, limit the check to deps with this name.
-
-    Raises:
-        click.ClickException: When the configuration file cannot be loaded or
-            parsed (FileNotFoundError, KeyError, ValueError, yaml.YAMLError
-            propagated from ``status_logic``).
     """
     try:
         report = status_logic(group, dep)

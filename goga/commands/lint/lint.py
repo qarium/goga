@@ -17,10 +17,6 @@ def lint(ctx: click.Context, path: str) -> None:
 
     Loads the AST for the target path, prints each validation error with its
     source location, and emits a cell/error count summary.
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        path: Project path to lint. Defaults to the current directory.
     """
     os.chdir(path)
 

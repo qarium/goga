@@ -153,15 +153,6 @@ def contract(ctx: click.Context, cells: tuple[str, ...], lang: str | None) -> No
           methods          - dict of {name: {codemanifest, implementation}}
         <RoutineName>      - routine with:
           signature        - {codemanifest, implementation} pair
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        cells: One or more cell paths to compare (variadic).
-        lang: Implementation language. Defaults to the value of
-            `config.lang` in `.goga/config.yml`.
-
-    Raises:
-        click.ClickException: When the configuration cannot be loaded.
     """
     try:
         config = load_project_config()

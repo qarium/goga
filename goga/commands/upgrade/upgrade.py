@@ -116,24 +116,15 @@ def _upgrade(use_sudo: bool = False, target_user: str | None = None, include_too
 
 @click.command()
 @click.option("--sudo", is_flag=True, default=False, help="Run pip under sudo with --preserve-env=HOME")
-@click.option("--user", default=None, help="Re-sync this user's ~/.goga via pwd.getpwnam")
+@click.option("--user", default=None, help="Re-sync this user's ~/.goga directory")
 @click.option("--tools", is_flag=True, default=False, help="Also upgrade installed goga_tool_* packages")
 @click.pass_context
 def upgrade(ctx: click.Context, sudo: bool, user: str | None, tools: bool) -> None:
     """Upgrade goga (and optionally goga_tool_* packages) then re-sync agents.
 
     Runs ``pip install goga -U`` on the current interpreter, then re-syncs every
-    agent recorded in ``~/.goga/connect.yml`` by delegating to the shared
-    :func:`resync_registered_agents` routine, which re-applies each agent's
-    persisted ``force_overwrite`` setting. Use ``--user`` to re-sync another
-    user's goga installation and ``--sudo`` for system-Python installs requiring
-    root.
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        sudo: When True, run pip under ``sudo --preserve-env=HOME``.
-        user: When set, resolve ``~/.goga`` for this username via
-            :func:`pwd.getpwnam`.
-        tools: When True, also upgrade discovered ``goga_tool_*`` packages.
+    agent recorded in ``~/.goga/connect.yml`` with its persisted settings. Use
+    ``--user`` to re-sync another user's goga installation and ``--sudo`` for
+    system-Python installs requiring root.
     """
     ctx.exit(_upgrade(use_sudo=sudo, target_user=user, include_tools=tools))

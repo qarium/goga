@@ -203,7 +203,7 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
 @click.command()
 @click.argument("plan")
 @click.option("--dry-run", is_flag=True, help="Show command without executing")
-@click.option("--worktree", is_flag=True, help="Enable ralphex worktree mode")
+@click.option("--worktree", is_flag=True, help="Enable ralph-loop worktree mode")
 @click.option("--skip-finalize", is_flag=True, help="Skip finalization")
 @click.option("--skip-manifest-check", is_flag=True, help="Skip CODEMANIFEST uncommitted check")
 @click.option("--session-timeout", type=str, default=None, help="Session timeout")
@@ -225,7 +225,7 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     "clean",
     is_flag=True,
     default=False,
-    help="Wipe the persistent ralphex runtime host directory before launch",
+    help="Wipe the persistent ralph-loop runtime host directory before launch",
 )
 @click.option(
     "--update",
@@ -254,46 +254,13 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     update: bool,
     clean: bool,
 ) -> None:
-    """Build code via ralphex by launching goga.build inside a Docker container.
+    """Build code via a ralph-loop by launching goga.build inside a Docker container.
 
-    Home (machine-wide) config from ``~/.goga/config.yml`` is loaded up front:
-    ``home.env`` is the lowest-priority container env layer (project task_executor
-    env and CLI ``-e`` win on key conflict), ``home.docker.run`` is forwarded to
-    every ``docker run`` as a separate ``extra_args`` keyword, and
-    ``home.docker.build`` is forwarded to image build
-    (``docker_build_if_not_exist`` / ``docker_update`` build branch only). An
-    absent home file yields an empty ``HomeConfig`` — no effect.
-
-    Args:
-        ctx: Click execution context used to control process exit codes.
-        plan: Plan identifier forwarded to the in-container `goga.build` module.
-        dry_run: When True, assemble the command but do not execute it.
-        worktree: Enable ralphex worktree mode inside the container.
-        skip_finalize: Skip the ralphex finalization step.
-        skip_manifest_check: Skip the CODEMANIFEST uncommitted-files check.
-        session_timeout: Optional session timeout forwarded to the build.
-        idle_timeout: Optional idle timeout forwarded to the build.
-        wait: Optional wait time forwarded to the build.
-        max_iterations: Optional iteration cap forwarded to the build.
-        review_patience: Optional review patience forwarded to the build.
-        extra_env: Additional KEY=VALUE environment variables for the container.
-        proxy: Optional HTTP/HTTPS proxy URL from ``--proxy``. When None, falls
-            back to ``config.build.proxy``. The resolved value (CLI wins over
-            config) drives HTTP_PROXY/HTTPS_PROXY/NO_PROXY in the env-file.
-        add_host: Raw ``HOST:IP`` strings from the repeatable ``--add-host``
-            option. Merged on top of ``config.build.hosts``; CLI wins on key
-            conflict. Each entry becomes a docker run ``--add-host`` flag.
-        update: When True, refresh the image before launch via ``docker_update``
-            (build when a project Dockerfile is declared, else pull). When False
-            (default), skip the refresh and use the locally available image.
-        clean: When True, wipe and recreate the persistent ralphex runtime host
-            directory via ``clean_build_runtime_dir`` before ``docker run``.
-            When False (default), keep the existing directory as-is so ralphex
-            progress files survive across runs of the same project+branch.
-
-    Raises:
-        click.ClickException: When docker is missing, configuration cannot be
-            loaded, or the build image is not configured.
+    Home (machine-wide) config from ``~/.goga/config.yml`` is applied up front:
+    ``home.env`` is the lowest-priority container environment layer (project env
+    and CLI ``-e`` win on conflict), ``home.docker.run`` is forwarded to every
+    ``docker run``, and ``home.docker.build`` is forwarded to image builds. An
+    absent home file is ignored.
     """
     if not _check_docker():
         raise click.ClickException("docker not found in PATH")
