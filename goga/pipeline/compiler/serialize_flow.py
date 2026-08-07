@@ -8,10 +8,15 @@ flow-file format. It performs no file I/O and no reordering.
 The non-standard rules are isolated behind marker subclasses and their custom
 representers on ``_CanonicalDumper``: flow-style for ``agents``
 (``_FlowAgents``) while ``skills`` and ``depends_on`` stay block-style, and
-block-literal scalar style for the top-level ``prompt`` (``_BlockLiteralPrompt``).
-``serialize_flow`` wraps any ``agents`` list value in ``_FlowAgents`` and any
-non-``None`` top-level prompt in ``_BlockLiteralPrompt`` before passing the
-document to ``yaml.dump``, so the rules never leak into the rest of the pipeline.
+block-literal scalar style for the top-level ``prompt`` (``_BlockLiteralPrompt``)
+and for multi-line ``script_before``/``script``/``script_after`` stage fields
+(``_BlockLiteralScript``). ``serialize_flow`` wraps any ``agents`` list value in
+``_FlowAgents``, any non-``None`` top-level prompt in ``_BlockLiteralPrompt``, and
+any multi-line ``script_*`` string value in ``_BlockLiteralScript`` before passing
+the document to ``yaml.dump``, so the rules never leak into the rest of the
+pipeline. The default ``beautiful_yaml`` parameters render a multi-line string
+single-quoted, so the block-literal marker is mandatory for multi-line scripts;
+single-line scripts and the boolean ``auto_approve`` field stay plain scalars.
 """
 
 from __future__ import annotations
@@ -48,6 +53,17 @@ def _represent_block_literal_prompt(dumper: yaml.Dumper, data: _BlockLiteralProm
     return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
 
 
+class _BlockLiteralScript(str):
+    """Marker class — string that must serialize in block-literal scalar style."""
+
+    pass
+
+
+def _represent_block_literal_script(dumper: yaml.Dumper, data: _BlockLiteralScript) -> yaml.Node:
+    """Force block-literal scalar output for a multi-line ``script_*`` value."""
+    return dumper.represent_scalar("tag:yaml.org,2002:str", data, style="|")
+
+
 class _CanonicalDumper(yaml.SafeDumper):
     """``SafeDumper`` subclass carrying the marker-class representers."""
 
@@ -56,14 +72,19 @@ class _CanonicalDumper(yaml.SafeDumper):
 
 _CanonicalDumper.add_representer(_FlowAgents, _represent_flow_agents)
 _CanonicalDumper.add_representer(_BlockLiteralPrompt, _represent_block_literal_prompt)
+_CanonicalDumper.add_representer(_BlockLiteralScript, _represent_block_literal_script)
 
 
 def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     """Build the per-stage dict in fixed order (id, name, canonical fields, depends_on).
 
     ``agents`` list values are wrapped in ``_FlowAgents`` so they serialize in
-    flow-style. ``depends_on`` is emitted only when not ``None`` (distinguishing
-    absent from explicit empty).
+    flow-style. Multi-line ``script_before``/``script``/``script_after`` string
+    values are wrapped in ``_BlockLiteralScript`` so they serialize in block-literal
+    scalar style (the default parameters render a multi-line string single-quoted);
+    single-line scripts and the boolean ``auto_approve`` stay plain scalars.
+    ``depends_on`` is emitted only when not ``None`` (distinguishing absent from
+    explicit empty).
 
     Args:
         stage: One ``FlowStage`` of the document.
@@ -76,6 +97,12 @@ def _build_stage_repr(stage: FlowStage) -> dict[str, object]:
     for key, value in stage.fields.items():
         if key == "agents" and isinstance(value, list):
             stage_repr[key] = _FlowAgents(value)
+        elif (
+            key in ("script_before", "script", "script_after")
+            and isinstance(value, str)
+            and "\n" in value
+        ):
+            stage_repr[key] = _BlockLiteralScript(value)
         else:
             stage_repr[key] = value
 
@@ -96,8 +123,11 @@ def serialize_flow(doc: FlowDocument) -> str:
     Each stage is emitted as ``id``, ``name``, then the stage's
     ``fields`` verbatim (preserving their canonical order), then ``depends_on``
     only when it is not ``None``. ``agents`` lists serialize in flow-style;
-    ``skills`` and ``depends_on`` serialize in block-style. The output ends with
-    exactly one trailing newline.
+    ``skills`` and ``depends_on`` serialize in block-style. Multi-line
+    ``script_before``/``script``/``script_after`` string values serialize in
+    block-literal scalar style; single-line scripts and the boolean
+    ``auto_approve`` serialize as plain scalars. The output ends with exactly one
+    trailing newline.
 
     The serializer does not reorder, validate, or otherwise transform the input —
     a document with out-of-order ``fields`` produces out-of-order output.
