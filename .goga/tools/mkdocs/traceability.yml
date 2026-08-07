@@ -3,6 +3,10 @@
 
 README.md:
   - goga
+  - goga/commands/install
+  - goga/commands/tool
+  - goga/connect
+  - goga/pipeline
 
 docs/index.md:
   - goga
