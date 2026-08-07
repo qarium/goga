@@ -36,7 +36,8 @@ def pipeline_cli(argv: list[str]) -> int:
 
     Args:
         argv: argument list, typically the process argv minus the program name
-            (e.g. ``["list"]`` or ``["run", "deploy", "--port", "50321"]``).
+            (e.g. ``["list"]`` or ``["run", "deploy", "--port", "50321"]``,
+            optionally followed by ``--parallel N`` for the run command).
 
     Returns:
         ``0`` on success; ``2`` on an argparse error (missing subcommand,
@@ -65,6 +66,13 @@ def pipeline_cli(argv: list[str]) -> int:
         required=True,
         help="TCP port forwarded to `afm run --port` (allocated by the host launcher).",
     )
+    run_parser.add_argument(
+        "--parallel",
+        type=int,
+        default=None,
+        help="cap concurrently executing stages (threads to afm --max-parallel); "
+        "omitted ⇒ afm runs unbounded.",
+    )
 
     args = parser.parse_args(argv)
 
@@ -80,7 +88,7 @@ def pipeline_cli(argv: list[str]) -> int:
         return 0
 
     try:
-        return run_pipeline(args.name, project_dir, user_dir, args.port)
+        return run_pipeline(args.name, project_dir, user_dir, args.port, parallel=args.parallel)
     except StructuralError as exc:
         print(f"Error: pipeline '{args.name}' is malformed: {exc}", file=sys.stderr)
         return 1

@@ -29,6 +29,41 @@ class TestPipelineCliContract:
         assert "argv" in signature.parameters
         assert signature.return_annotation in (int, "int")
 
+    def test_run_subparser_accepts_parallel_option(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The `run` subparser accepts an optional `--parallel N` (int) flag.
+
+        Before the option exists argparse rejects `--parallel` as an unknown
+        argument (SystemExit code 2); after wiring it in the CLI accepts it and
+        returns 0.
+        """
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(_cli_module, "run_pipeline", return_value=0):
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "--parallel", "4"])
+
+        assert exit_code == 0
+
+    def test_parallel_option_optional_threads_none_when_absent(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`--parallel` is optional: its absence threads `parallel=None` to run_pipeline."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(_cli_module, "run_pipeline", return_value=0) as mock_run_pipeline:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 0
+        assert "parallel" in mock_run_pipeline.call_args.kwargs
+        assert mock_run_pipeline.call_args.kwargs["parallel"] is None
+
 
 class TestPipelineCliLogic:
     def test_pipeline_cli_list_prints_header_and_entries(
@@ -87,7 +122,7 @@ class TestPipelineCliLogic:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """run forwards NAME, the resolved dirs, and PORT to run_pipeline."""
+        """run forwards NAME, the resolved dirs, and PORT to run_pipeline (parallel defaults None)."""
         project_root = tmp_path / "project"
         project_root.mkdir()
         user_root = tmp_path / "user"
@@ -106,7 +141,47 @@ class TestPipelineCliLogic:
         assert exit_code == 0
         project_dir = project_root / ".goga" / "pipelines"
         user_dir = user_root / ".goga" / "pipelines"
-        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321)
+        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=None)
+
+    def test_pipeline_cli_passes_parallel_to_run_pipeline(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """`run ... --parallel N` threads parallel=N through to run_pipeline."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            return_value=0,
+        ) as mock_run_pipeline:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "--parallel", "4"])
+
+        assert exit_code == 0
+        project_dir = tmp_path / ".goga" / "pipelines"
+        user_dir = tmp_path / ".goga" / "pipelines"
+        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=4)
+
+    def test_pipeline_cli_parallel_defaults_none(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Absence of --parallel threads parallel=None (omitted downstream as a flag)."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            return_value=0,
+        ) as mock_run_pipeline:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 0
+        assert mock_run_pipeline.call_args.kwargs["parallel"] is None
 
     def test_pipeline_cli_run_without_port_exits_with_2(
         self,
