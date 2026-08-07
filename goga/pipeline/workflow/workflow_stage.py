@@ -14,11 +14,13 @@ slot); ``loop`` is a count (the compiler expands it); ``skills`` is a list of
 skill names (the compiler merges them with the stage's pipeline-file skills);
 ``skip`` is a bool flag (the compiler deletes the corresponding stage and
 transparently reconnects its dependents' ``depends_on``); ``approve`` is an
-optional auto-approval directive (the compiler suppresses the stage's
-``interactive`` flag and/or emits ``auto_approve: true`` when ``"auto"``).
+optional auto-approval directive — one of ``"auto"``/``"plan"``/``"dialog"``
+(the compiler suppresses the stage's ``interactive`` flag and/or emits
+``auto_approve: true``, each value driving a subset of these two effects).
 No validation lives here either: ``parse_workflow`` enforces every invariant
-(key set, field types, ``loop >= 1``, ``skip`` is a bool, ``approve`` is
-``"auto"``) and raises a structural error before this dataclass is built.
+(key set, field types, ``loop >= 1``, ``skip`` is a bool, ``approve`` is one
+of ``"auto"``/``"plan"``/``"dialog"``) and raises a structural error before
+this dataclass is built.
 
 Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
 ``approve`` — to match the canonical order of the per-stage keys in the
