@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from goga.pipeline.workflow import (
     WorkflowDocument,
     WorkflowExtendStage,
+    WorkflowSyntaxError,
     parse_workflow,
 )
 
@@ -119,3 +121,49 @@ class TestParseWorkflowContract:
         assert warmup.loop == 3
         assert "agent" not in warmup.body
         assert "loop" not in warmup.body
+
+    def test_parse_workflow_approve_is_accepted_stage_key(self, tmp_path: Path) -> None:
+        """``approve`` is part of the accepted per-stage key set (contract surface).
+
+        Pins the contract: ``approve`` is a valid per-stage key (6th key, after
+        ``skip``), so a stage carrying ``approve: auto`` parses successfully and
+        surfaces on the ``WorkflowStage`` model. The full valid-keys enumeration,
+        the ``"auto"``-only check, and the extend inline extraction are pinned in
+        the logic test module.
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  propose:\n    approve: auto\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert isinstance(document, WorkflowDocument)
+        assert document.stages["propose"].approve == "auto"
+
+    def test_parse_workflow_stage_keys_includes_approve(self) -> None:
+        """The internal ``_STAGE_KEYS`` tuple includes ``approve`` (contract surface).
+
+        Pins the contract: ``_STAGE_KEYS`` is the single source of the accepted
+        per-stage key set and of the unknown-key ``valid keys`` message fragment,
+        so it must carry ``approve`` (after ``skip``).
+        """
+        from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
+
+        assert "approve" in _STAGE_KEYS
+        # Fixed canonical order: agent, prompt, loop, skills, skip, approve.
+        assert _STAGE_KEYS == ("agent", "prompt", "loop", "skills", "skip", "approve")
+
+    def test_parse_workflow_unknown_stage_key_message_lists_approve(self, tmp_path: Path) -> None:
+        """The unknown per-stage key error message lists ``approve`` in the valid-keys fragment.
+
+        Pins the contract: the ``valid keys`` fragment of the unknown-key message
+        is generated from ``_STAGE_KEYS`` and therefore includes ``approve``.
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  propose:\n    bad: value\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        message = str(exc_info.value)
+        assert "unknown key in workflow.stages.propose: bad" in message
+        assert "valid keys: agent, prompt, loop, skills, skip, approve" in message

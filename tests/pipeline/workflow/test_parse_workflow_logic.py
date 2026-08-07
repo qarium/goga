@@ -146,6 +146,46 @@ class TestParseWorkflowPositive:
         assert propose.agent == "codex"
         assert propose.skills == ["web-search"]
 
+    def test_parse_workflow_approve_auto_stages(self, tmp_path: Path) -> None:
+        """``approve: auto`` on a stages entry flows through to WorkflowStage.approve."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    approve: auto\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        deploy = document.stages["deploy"]
+        assert deploy.approve == "auto"
+        # approve is independent of the other fields; they stay None.
+        assert deploy.agent is None
+        assert deploy.loop is None
+        assert deploy.skip is False
+
+    def test_parse_workflow_approve_auto_stages_coexists_with_other_fields(self, tmp_path: Path) -> None:
+        """``approve`` coexists with ``agent``/``loop``/``skills``/``skip`` in one entry."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n"
+            "  deploy:\n"
+            "    agent: codex\n"
+            "    loop: 2\n"
+            "    skills: [goga-deploy]\n"
+            "    skip: false\n"
+            "    approve: auto\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        deploy = document.stages["deploy"]
+        assert deploy.approve == "auto"
+        assert deploy.agent == "codex"
+        assert deploy.loop == 2
+        assert deploy.skills == ["goga-deploy"]
+        assert deploy.skip is False
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -200,6 +240,52 @@ class TestParseWorkflowPositive:
         assert warmup.body == {"title": "Warmup", "prompt": "Bootstrap"}
         assert "agent" not in warmup.body
         assert "loop" not in warmup.body
+
+    def test_parse_workflow_approve_auto_extend_extracted(self, tmp_path: Path) -> None:
+        """An extend entry's inline ``approve`` is extracted into the model, not the body."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n"
+            "  extra:\n"
+            "    after: [deploy]\n"
+            "    approve: auto\n"
+            "    prompt: do extra\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        extra = document.extend["extra"]
+        assert extra.approve == "auto"
+        # Inline approve is extracted out of the body — it must not leak into it
+        # (the compiler applies it, the flow-file never sees it as a body key).
+        assert extra.body == {"prompt": "do extra"}
+        assert "approve" not in extra.body
+
+    def test_parse_workflow_approve_auto_extend_alongside_agent_loop(self, tmp_path: Path) -> None:
+        """An extend entry carries inline ``agent``/``loop``/``approve`` together."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n"
+            "  extra:\n"
+            "    before: [propose]\n"
+            "    agent: codex\n"
+            "    loop: 3\n"
+            "    approve: auto\n"
+            "    title: Extra\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        extra = document.extend["extra"]
+        assert extra.agent == "codex"
+        assert extra.loop == 3
+        assert extra.approve == "auto"
+        assert extra.body == {"title": "Extra"}
+        assert "agent" not in extra.body
+        assert "loop" not in extra.body
+        assert "approve" not in extra.body
 
     def test_parse_workflow_extend_only_is_valid_not_empty(self, tmp_path: Path) -> None:
         """A workflow-file with only an extend block is valid (not an empty workflow)."""
@@ -327,10 +413,10 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        # The full valid-keys list now includes ``skip`` (5th key); the substring
-        # ``agent, prompt, loop, skills`` alone would pass even without ``skip``,
-        # so assert the full trailing fragment.
-        assert "valid keys: agent, prompt, loop, skills, skip" in message
+        # The full valid-keys list now includes ``skip`` (5th) and ``approve``
+        # (6th); the substring ``agent, prompt, loop, skills`` alone would pass
+        # even without them, so assert the full trailing fragment.
+        assert "valid keys: agent, prompt, loop, skills, skip, approve" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
@@ -426,6 +512,103 @@ class TestParseWorkflowNegative:
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"skip is forbidden in workflow\.extend\.x"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_non_auto_rejected(self, tmp_path: Path) -> None:
+        """An ``approve`` value other than ``"auto"`` is rejected (stages entry).
+
+        ``"manual"`` parses as a str (passes the type check) but fails the
+        ``"auto"``-only constraint, surfacing the ``approve must be 'auto'``
+        message naming the stage.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    approve: manual\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"approve must be 'auto' in workflow\.stages\.deploy"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_non_auto_rejected_extend(self, tmp_path: Path) -> None:
+        """An extend inline ``approve`` other than ``"auto"`` is rejected."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    after: [deploy]\n    approve: manual\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"approve must be 'auto' in workflow\.extend\.x"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_non_str_rejected(self, tmp_path: Path) -> None:
+        """A non-str ``approve`` (int) is rejected as a structural type error (stages entry)."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    approve: 5\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.deploy\.approve"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_null_rejected_extend(self, tmp_path: Path) -> None:
+        """An explicit ``null`` extend ``approve`` is a non-str, rejected (symmetric with inline agent).
+
+        Presence of the key forces a type check (no ``is not None`` guard), so an
+        explicit ``null`` is rejected rather than treated as absence. Absence is
+        expressed by omitting the key.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    after: [deploy]\n    approve: ~\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.extend\.x\.approve"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_null_rejected_stages(self, tmp_path: Path) -> None:
+        """An explicit ``null`` stages ``approve`` is a non-str, rejected."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    approve: ~\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-str value in workflow\.stages\.deploy\.approve"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_in_extend_unknown_position(self, tmp_path: Path) -> None:
+        """An extend entry with ``approve`` but no before/after surfaces the at-least-one error.
+
+        The at-least-one-of-before/after check stays the LAST structural check
+        (contract step 6b g): a valid inline ``approve: auto`` passes its check,
+        so the positional ``requires at least one of before/after`` error wins.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    approve: auto\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"extend entry x requires at least one of before/after"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_approve_extend_multi_defect_surfaces_approve_error_first(self, tmp_path: Path) -> None:
+        """A multi-defect entry surfaces the approve type error, not the positional one.
+
+        An extend entry with NEITHER ``before``/``after`` AND a bad inline
+        ``approve`` carries two structural defects; the ``approve`` check runs
+        before the at-least-one check, so the more specific type error wins.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  x:\n    title: Just a body\n    approve: manual\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"approve must be 'auto' in workflow\.extend\.x"):
             parse_workflow(workflow_path)
 
     def test_parse_workflow_rejects_empty_workflow(self, tmp_path: Path) -> None:
