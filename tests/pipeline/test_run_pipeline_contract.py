@@ -46,16 +46,21 @@ def _write_pipeline(directory: Path, name: str = "deploy") -> None:
 class TestRunPipelineWorkflowContract:
     """Contract: run_pipeline forwards a ``workflow=`` kwarg to compile_flow.
 
-    The public signature is unchanged (``name, project_dir, user_dir, port``) —
-    the workflow is environment-driven, not a parameter. compile_flow always
+    The public signature is ``(name, project_dir, user_dir, port, parallel)``
+    — the workflow is environment-driven, not a parameter, and ``parallel`` is
+    an optional concurrency cap threaded to ``run_flow``. compile_flow always
     receives a ``workflow`` keyword argument (``None`` when nothing resolved, or
     a ``WorkflowDocument`` when a workflow-file resolved).
     """
 
-    def test_run_pipeline_signature_unchanged(self) -> None:
-        """run_pipeline still exposes the (name, project_dir, user_dir, port) signature."""
+    def test_run_pipeline_signature_has_optional_parallel(self) -> None:
+        """run_pipeline exposes the (name, project_dir, user_dir, port, parallel) signature.
+
+        ``parallel`` is an optional keyword (default ``None``) threaded to
+        ``run_flow(max_parallel=parallel)``; it does not change compilation.
+        """
         parameters = list(inspect.signature(run_pipeline).parameters)
-        assert parameters == ["name", "project_dir", "user_dir", "port"]
+        assert parameters == ["name", "project_dir", "user_dir", "port", "parallel"]
 
     def test_run_pipeline_forwards_none_workflow_when_no_env(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

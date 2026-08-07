@@ -127,7 +127,9 @@ def resolve_project_name() -> str | None:
     return name or None
 
 
-def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int:
+def run_pipeline(
+    name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None
+) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the
@@ -139,9 +141,16 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     parsed workflow when one resolved), materializes the four agent prompt files
     into ``<AFM_DIR>/prompts/`` (step 8), then launches ``afm`` via
     :func:`goga.afm.run_flow` with the compiled flow-file path (not the DSL
-    path) and the caller-allocated ``port``. The ``afm`` binary's exit code is
-    propagated; a missing pipeline returns a non-zero code without invoking the
-    compiler or the binary.
+    path), the caller-allocated ``port``, and an optional concurrency cap. The
+    ``afm`` binary's exit code is propagated; a missing pipeline returns a
+    non-zero code without invoking the compiler or the binary.
+
+    ``parallel`` is forwarded as ``run_flow(..., max_parallel=parallel)`` so a
+    non-``None`` cap materializes as ``afm run --max-parallel <N>`` (the
+    host-side ``-p/--parallel`` option threads through to it). It is
+    compilation-orthogonal: steps 1-8 do not consume it, and ``None`` (the
+    default) reaches ``run_flow`` as ``max_parallel=None`` so the flag is
+    omitted (backward compatible).
 
     Step 8 materializes the four afm prompt files
     (``planning``, ``implementation``, ``review``, ``summary``) into
@@ -166,6 +175,11 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
             ``~/.goga/pipelines/``).
         port: TCP port forwarded to ``afm run --port``. Allocated by the caller
             (typically :func:`goga.commands.pipeline.run_pipeline_container`).
+        parallel: optional cap on concurrently executing stages, forwarded to
+            :func:`goga.afm.run_flow` as ``max_parallel=parallel`` (so afm
+            receives ``--max-parallel <parallel>``). ``None`` (the default) is
+            forwarded unchanged and the flag is omitted — compilation never
+            depends on it.
 
     Returns:
         ``0`` on success; ``1`` when the named pipeline is missing; ``127``
@@ -292,4 +306,4 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int) -> int
     if materialized != expected:
         raise RuntimeError(f"prompt materialization incomplete: expected {expected}, got {materialized}")
 
-    return run_flow(flow_path, port)
+    return run_flow(flow_path, port, max_parallel=parallel)

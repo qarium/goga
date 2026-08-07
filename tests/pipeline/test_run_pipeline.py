@@ -82,11 +82,11 @@ class TestRunPipelineContract:
         assert run_pipeline is not None
 
     def test_run_pipeline_signature_matches_contract(self) -> None:
-        """run_pipeline exposes the (name, project_dir, user_dir, port) signature."""
+        """run_pipeline exposes the (name, project_dir, user_dir, port, parallel) signature."""
         signature = inspect.signature(run_pipeline)
         parameters = list(signature.parameters)
 
-        assert parameters == ["name", "project_dir", "user_dir", "port"]
+        assert parameters == ["name", "project_dir", "user_dir", "port", "parallel"]
 
     def test_run_pipeline_returns_zero_on_success(self, tmp_path: Path, afm_dir: Path) -> None:
         """run_pipeline returns 0 on a successful compile + afm invocation."""
@@ -114,7 +114,7 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
 
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
 
     def test_run_pipeline_resolves_user_source_when_only_in_user_dir(
         self, tmp_path: Path, afm_dir: Path, monkeypatch: pytest.MonkeyPatch
@@ -147,7 +147,7 @@ class TestRunPipelineLogic:
             root_dir=str(Path.cwd().resolve()),
             project_name="widget",
         )
-        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321)
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
 
     def test_run_pipeline_returns_nonzero_when_name_not_found(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -220,7 +220,37 @@ class TestRunPipelineLogic:
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 8080)
 
-        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080)
+        assert mock_run_flow.call_args == call(afm_dir / "flow.yml", 8080, max_parallel=None)
+
+    def test_run_pipeline_threads_parallel_to_run_flow(self, tmp_path: Path, afm_dir: Path) -> None:
+        """parallel=4 reaches run_flow as max_parallel=4 (host -p/--parallel → afm --max-parallel)."""
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321, parallel=4)
+
+        # max_parallel=4 threads straight through to run_flow — afm then receives
+        # ``--max-parallel 4``. ``parallel`` is compilation-orthogonal, so
+        # compile_flow is unaffected (the mock still returns the canned docs).
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=4)
+
+    def test_run_pipeline_parallel_none_default(self, tmp_path: Path, afm_dir: Path) -> None:
+        """Omitting parallel threads max_parallel=None to run_flow (flag omitted downstream)."""
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0) as mock_run_flow,
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user_pipelines", 50321)
+
+        # None reaches run_flow verbatim ⇒ run_flow omits --max-parallel (backward compat).
+        mock_run_flow.assert_called_once_with(afm_dir / "flow.yml", 50321, max_parallel=None)
 
     def test_run_pipeline_afm_dir_not_set_raises_runtime_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -397,7 +427,7 @@ class TestRunPipelineLogic:
         assert loaded["stages"][1]["depends_on"] == ["build"]
 
         # run_flow received the compiled flow path (not the DSL path) and the port.
-        mock_run_flow.assert_called_once_with(flow_path, 50321)
+        mock_run_flow.assert_called_once_with(flow_path, 50321, max_parallel=None)
 
     def test_run_pipeline_threads_real_role_override_through_full_chain(self, tmp_path: Path, afm_dir: Path) -> None:
         """A real ``roles`` header block threads verbatim through the whole chain.
@@ -992,7 +1022,7 @@ class TestRunPipelineMaterialization:
 
         prompts_seen: dict[str, object] = {}
 
-        def _run_flow_expects_prompts(_flow_path: object, _port: object) -> int:
+        def _run_flow_expects_prompts(_flow_path: object, _port: object, **_kwargs: object) -> int:
             prompts_dir = afm_dir / "prompts"
             prompts_seen["files"] = sorted(p.name for p in prompts_dir.iterdir())
             prompts_seen["planning"] = (prompts_dir / "planning.md").read_text()
