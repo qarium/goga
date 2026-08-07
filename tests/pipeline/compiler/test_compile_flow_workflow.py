@@ -2637,6 +2637,117 @@ class TestCompileFlowApproveEffects:
             assert "_approve_directive" not in step.body
 
 
+class TestApprovePlanDialogEffects:
+    """The two approve effects routed per-directive for ``plan`` and ``dialog``.
+
+    ``auto`` drives BOTH effects (pinned by ``TestApproveAutoEffects``). The two
+    new directives each drive exactly ONE effect:
+
+      * ``plan``   → communication effect ONLY (suppress ``interactive`` when
+        ``communication: true``); the roles effect does NOT fire (no
+        ``auto_approve`` even with ``planner`` in roles).
+      * ``dialog`` → roles effect ONLY (emit ``auto_approve: true`` when
+        ``planner`` in roles); the communication effect does NOT fire
+        (``communication: true`` still renames to ``interactive: true``).
+    """
+
+    @staticmethod
+    def _write_deploy_stage(tmp_path: Path, body_extra: str = "") -> Path:
+        """Write a single ``deploy`` STAGES stage and return its path."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\ndeploy:\n  title: Deploy\n" + body_extra,
+        )
+        return pipeline_path
+
+    def test_plan_suppresses_interactive_when_communication_true(self, tmp_path: Path) -> None:
+        """``approve: plan`` + ``communication: true`` ⇒ ``interactive`` suppressed."""
+        pipeline_path = self._write_deploy_stage(tmp_path, "  communication: true\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="plan")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert "interactive" not in fields
+        assert "_approve_directive" not in fields
+
+    def test_plan_does_not_emit_auto_approve_with_planner(self, tmp_path: Path) -> None:
+        """``approve: plan`` does NOT drive the roles effect — no ``auto_approve``.
+
+        Pins that ``plan`` is absent from ``_APPROVE_EMIT_AUTO_APPROVE``: even with
+        ``planner`` in roles, ``auto_approve`` is not emitted.
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="plan")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        # communication effect fired (suppressed) …
+        assert "interactive" not in fields
+        # … but the roles effect did NOT (no auto_approve).
+        assert "auto_approve" not in fields
+
+    def test_dialog_emits_auto_approve_when_planner_in_roles(self, tmp_path: Path) -> None:
+        """``approve: dialog`` + ``planner`` in roles ⇒ ``auto_approve: true``."""
+        pipeline_path = self._write_deploy_stage(tmp_path, "  roles:\n    - planner\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="dialog")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["auto_approve"] is True
+        assert "_approve_directive" not in fields
+
+    def test_dialog_does_not_suppress_interactive_when_communication_true(self, tmp_path: Path) -> None:
+        """``approve: dialog`` does NOT drive the communication effect — ``interactive`` kept.
+
+        Pins that ``dialog`` is absent from ``_APPROVE_SUPPRESS_INTERACTIVE``:
+        ``communication: true`` still renames to ``interactive: true`` (NOT
+        suppressed), even with ``planner`` in roles.
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="dialog")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        # roles effect fired (auto_approve) …
+        assert fields["auto_approve"] is True
+        # … but the communication effect did NOT (interactive kept, not suppressed).
+        assert fields["interactive"] is True
+        keys = list(fields)
+        assert keys.index("interactive") < keys.index("auto_approve")
+
+    def test_plan_dialog_route_uniformly_across_loop_copies(self, tmp_path: Path) -> None:
+        """The per-directive routing fires uniformly on every loop-expanded copy."""
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="plan", loop=2)})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert [stage.id for stage in flow_doc.stages] == ["deploy-1", "deploy-2"]
+        for stage in flow_doc.stages:
+            # plan ⇒ communication effect only.
+            assert "interactive" not in stage.fields
+            assert "auto_approve" not in stage.fields
+            assert "_approve_directive" not in stage.fields
+
+
 class TestApproveScriptsRoundTrip:
     """Flow B integration: ``approve: auto`` + script directives compile→serialize round-trip.
 

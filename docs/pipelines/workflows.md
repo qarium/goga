@@ -36,7 +36,7 @@ stages:
       Additional per-stage instruction.
     loop: 2                   # optional iteration count (>= 1)
     skills: [web-search]      # optional skills merged with the pipeline stage's skills
-    approve: auto             # optional auto-approval directive (the only value is 'auto')
+    approve: auto             # optional auto-approval directive: auto | plan | dialog
 
 extend:
   <new-stage-name>:
@@ -71,7 +71,7 @@ fields:
 | `loop`  | int      | —       | Positive iteration count (`>= 1`). When `>= 2`, the stage is expanded into N chained copies.           |
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
-| `approve` | string | —     | Auto-approval directive. The only accepted value is `auto`; any other value (or a non-string) is a structural error. When `auto`, the compiler applies two INDEPENDENT effects to the stage body (see [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)): (1) if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
+| `approve` | string | —     | Auto-approval directive. Accepted values are `auto`, `plan`, and `dialog`; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)): (1) **communication effect** — if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) **roles effect** — if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. `auto` drives BOTH effects; `plan` drives only the communication effect; `dialog` drives only the roles effect. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
 
 Rules:
 
@@ -86,10 +86,11 @@ Rules:
   `non-bool value in workflow.stages.<NAME>.skip`. `skip` is allowed only in
   the `stages` block — it is a structural error under `extend` (see
   [Skipping a stage](#skipping-a-stage)).
-- `approve` (when present) must be the string `auto`. A non-string value
-  raises `non-str value in workflow.stages.<NAME>.approve`; any other string
-  raises `approve must be 'auto' in workflow.stages.<NAME>` (see
-  [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)).
+- `approve` (when present) must be one of the strings `auto`, `plan`, or
+  `dialog`. A non-string value raises `non-str value in
+  workflow.stages.<NAME>.approve`; any other string raises `approve must be
+  one of: auto, plan, dialog in workflow.stages.<NAME>` (see
+  [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)).
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
@@ -207,38 +208,47 @@ stages:
     skip: true
 ```
 
-### Auto-approval (`approve: auto`)
+### Auto-approval (`approve: auto`, `plan`, `dialog`)
 
-A `stages` (or `extend`) entry may set `approve: auto` to drive the afm
-auto-approval behavior for that stage at compile time. The value is strictly
-`auto` — it is a declarative directive, not a free-form flag, so any other
-string (or a non-string) is a structural error.
+A `stages` (or `extend`) entry may set an `approve` directive to drive the afm
+auto-approval behavior for that stage at compile time. The directive is one of
+three values — `auto`, `plan`, or `dialog` — chosen from a closed set, not a
+free-form flag, so any other string (or a non-string) is a structural error.
 
-When the effective `approve` for a stage is `auto`, the compiler applies two
-**independent** effects to the stage body:
+The compiler applies two **independent** effects to the stage body, and each
+directive drives a subset of them:
 
-1. **`interactive` suppression** — if the stage body has `communication: true`,
-   the stage's `interactive` afm output is SUPPRESSED (the key is omitted
-   entirely, NOT emitted as `interactive: false`). This makes an otherwise
-   user-prompting stage run non-interactively. `communication: false` (or no
-   `communication` key) is unaffected — suppression fires only when
-   `communication is True`.
-2. **`auto_approve` emission** — if the stage body's raw `roles` list contains
-   `planner`, the stage emits `auto_approve: true` (the afm per-stage
-   auto-approval key, in the canonical slot right after `interactive`). The
-   match is against the authored role alias `planner`, captured before the
-   compiler translates it to the afm stem `planning`.
+1. **`interactive` suppression** (the **communication effect**) — if the stage
+   body has `communication: true`, the stage's `interactive` afm output is
+   SUPPRESSED (the key is omitted entirely, NOT emitted as `interactive:
+   false`). This makes an otherwise user-prompting stage run non-interactively.
+   `communication: false` (or no `communication` key) is unaffected —
+   suppression fires only when `communication is True`.
+2. **`auto_approve` emission** (the **roles effect**) — if the stage body's raw
+   `roles` list contains `planner`, the stage emits `auto_approve: true` (the
+   afm per-stage auto-approval key, in the canonical slot right after
+   `interactive`). The match is against the authored role alias `planner`,
+   captured before the compiler translates it to the afm stem `planning`.
 
-The two effects are independent: each fires on its own trigger. A stage with
-`communication: true` and no `planner` gets only the suppression; a stage with
-`planner` in `roles` and no `communication` gets only `auto_approve`. With
-neither trigger, `approve: auto` is a no-op on the body (the directive still
-threads through; it just has nothing to act on).
+| `approve`   | communication effect (suppress `interactive`) | roles effect (emit `auto_approve`) |
+|-------------|:----------------------------------------------:|:----------------------------------:|
+| *(absent)*  | —                                              | —                                  |
+| `auto`      | ✓                                              | ✓                                  |
+| `plan`      | ✓                                              | —                                  |
+| `dialog`    | —                                              | ✓                                  |
+
+So `auto` is the full directive (both effects, as before); `plan` keeps the
+communication effect but turns the roles effect OFF (a `planner` stage does NOT
+emit `auto_approve`); `dialog` keeps the roles effect but turns the
+communication effect OFF (`communication: true` still becomes `interactive:
+true`). The two effects are independent: each fires on its own trigger AND its
+own directive subset. With neither trigger present, the directive is a no-op on
+the body (it still threads through; it just has nothing to act on).
 
 ```yaml
 stages:
   deploy:
-    approve: auto
+    approve: auto      # or plan, or dialog
 ```
 
 Under `extend`, `approve` is an inline default override exactly like inline
@@ -321,9 +331,9 @@ provides for an existing stage:
   `<name>-1..N` chained copies by the same rules as a `stages`-block `loop`,
   including the external `before`/`after` reference rewrite to the last
   expanded id.
-- `approve` (the string `auto`) drives the stage's auto-approval effects, same
-  as a `stages`-block `approve` (see
-  [Auto-approval (`approve: auto`)](#auto-approval-approve-auto)).
+- `approve` (one of `auto`/`plan`/`dialog`) drives the stage's auto-approval
+  effects, same as a `stages`-block `approve` (see
+  [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)).
 
 An inline `agent`/`loop`/`approve` is a **default**: if a `stages` entry also
 names the same stage, the `stages` value wins **per field** — an unset `stages`
@@ -397,7 +407,7 @@ extend:
   `< 1` `loop` raises `non-int value in workflow.extend.<NAME>.loop` /
   `loop must be >= 1 in workflow.extend.<NAME>`; a non-string `approve` raises
   `non-str value in workflow.extend.<NAME>.approve`, and any other string
-  raises `approve must be 'auto' in workflow.extend.<NAME>`. Inline
+  raises `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>`. Inline
   `agent`/`loop`/`approve` are default overrides — a `stages` entry for the
   same name wins per field.
 - An extend entry that names a `before`/`after` target that does not exist in
@@ -498,10 +508,11 @@ For each `(stage_name, effective_stage)` pair in the effective override map:
      with the stage's existing `skills` (pipeline-first, deduplicated). See
      [Skills merge](#skills-merge).
    - The effective `approve` directive is threaded into the step body under
-     an internal sentinel key (whether `"auto"` or `None`); it is read and
-     consumed during canonical field assembly (Pass 4) to drive the two
-     `approve: auto` effects and never reaches the output. See
-     [Auto-approval (`approve: auto`)](#auto-approval-approve-auto).
+     an internal sentinel key (one of `auto`/`plan`/`dialog`, or `None`); it is
+     read and consumed during canonical field assembly (Pass 4) to drive the two
+     approve effects (each on its own directive subset) and never reaches the
+     output. See
+     [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog).
 
 ### Skills merge
 
@@ -710,7 +721,7 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `loop` in an extend entry not an int                     | `non-int value in workflow.extend.<NAME>.loop`                              |
 | Inline `loop` in an extend entry is an int but `< 1`            | `loop must be >= 1 in workflow.extend.<NAME>`                               |
 | Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
-| Inline `approve` in an extend entry not the string `auto`       | `approve must be 'auto' in workflow.extend.<NAME>`                          |
+| Inline `approve` in an extend entry not one of `auto`/`plan`/`dialog` | `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>` |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
 | Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
@@ -720,7 +731,7 @@ untouched — `extend` layers new stages on top at run time.
 | `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
 | `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
 | `approve` present but not a string                              | `non-str value in workflow.stages.<NAME>.approve`                           |
-| `approve` present but not the string `auto`                     | `approve must be 'auto' in workflow.stages.<NAME>`                          |
+| `approve` present but not one of `auto`/`plan`/`dialog`         | `approve must be one of: auto, plan, dialog in workflow.stages.<NAME>`      |
 | `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
 | Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
 | Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |

@@ -82,7 +82,8 @@ logger = logging.getLogger(__name__)
 # ``supervisor`` and ``supervisor_prompt`` sit between ``agents`` and ``skills``
 # so the supervisor block reads as a continuation of the agents block.
 # ``auto_approve`` (bool) sits right after ``interactive`` and is present only
-# when ``approve: auto`` + planner-in-roles fired (workflow-driven). The author
+# when an approve directive driving the roles effect (``auto``/``dialog``) +
+# planner-in-roles fired (workflow-driven). The author
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
 # they appear only when authored, so flow-files without them compile byte-identically.
@@ -105,13 +106,25 @@ _CANONICAL_KEY_ORDER = [
 # step body to carry the effective ``approve`` directive through loop-expansion
 # (it survives ``copy.deepcopy`` in ``_expand_loops``/``_make_expanded_copy``)
 # into ``_canonical_fields``, where it is READ (not popped) and consumed to drive
-# the two ``approve: auto`` effects (interactive suppression + ``auto_approve``
-# emission). The sentinel is output-only plumbing — it is EXCLUDED from the
+# the two approve effects (interactive suppression + ``auto_approve`` emission,
+# each on its own directive subset — see ``_APPROVE_SUPPRESS_INTERACTIVE`` /
+# ``_APPROVE_EMIT_AUTO_APPROVE``). The sentinel is output-only plumbing — it is
+# EXCLUDED from the
 # fresh dict ``_canonical_fields`` builds, so it NEVER reaches
 # ``FlowStage.fields``. ``_canonical_fields`` never mutates its ``body`` argument
 # (it reads the sentinel and rebuilds a new dict), so on the non-workflow path —
 # where ``body`` is the caller's shared dict — nothing is mutated either.
 _APPROVE_SENTINEL = "_approve_directive"
+
+# The two INDEPENDENT ``approve`` effects each fire on their own trigger and on
+# their own subset of the accepted directives (``auto``/``plan``/``dialog``).
+# ``auto`` fires BOTH; ``plan`` fires only interactive suppression (the
+# communication effect) and ``dialog`` fires only ``auto_approve`` (the roles
+# effect). ``None`` (no directive) fires neither. The accepted value set is
+# owned by ``goga/pipeline/workflow/parse_workflow.py`` (``_APPROVE_DIRECTIVES``);
+# these two tuples select which directives drive each effect here.
+_APPROVE_SUPPRESS_INTERACTIVE: tuple[str, ...] = ("auto", "plan")
+_APPROVE_EMIT_AUTO_APPROVE: tuple[str, ...] = ("auto", "dialog")
 
 # In-container wrapper path template consumed by afm >= 0.4.15 as the per-stage
 # ``command:`` override. Composed directly from the ``WorkflowStage`` agent name
@@ -255,13 +268,15 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     stage {stage_name}")``; ``before_script``/``after_script`` are compatible.
 
     The authoring ``communication`` field is then translated into the output
-    ``interactive`` slot — EXCEPT under ``approve: auto`` + ``communication: true``,
-    where it is SUPPRESSED (omitted, not ``interactive: false``). ``communication:
-    false`` (or no ``approve: auto``) renames to ``interactive: false`` as usual.
-    The ``roles`` field is then translated to ``agents`` (or the single default
-    ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source body
-    lacks a usable ``roles`` value. Under ``approve: auto`` + ``planner`` in the
-    raw ``roles``, ``auto_approve: true`` is emitted (canonical slot right after
+    ``interactive`` slot — EXCEPT under an approve directive driving the
+    communication effect (``auto``/``plan``) + ``communication: true``, where it
+    is SUPPRESSED (omitted, not ``interactive: false``). ``communication: false``
+    (or no communication-effect directive) renames to ``interactive: false`` as
+    usual. The ``roles`` field is then translated to ``agents`` (or the single
+    default ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source
+    body lacks a usable ``roles`` value. Under an approve directive driving the
+    roles effect (``auto``/``dialog``) + ``planner`` in the raw ``roles``,
+    ``auto_approve: true`` is emitted (canonical slot right after
     ``interactive``). Known keys (``interactive``, ``auto_approve``, ``command``,
     ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
     ``skills``, ``script_before``, ``script``, ``script_after``) are emitted in
@@ -333,11 +348,12 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     if "communication" in body:
         # Translate the authoring ``communication`` key into the output
         # ``interactive`` slot BEFORE ``_inject_defaults`` / reordering, so the
-        # canonical slot is ``interactive`` (afm-stable). Under ``approve: auto``
-        # + ``communication: true`` the key is SUPPRESSED (omitted) instead —
+        # canonical slot is ``interactive`` (afm-stable). Under an approve
+        # directive that drives the communication effect (``auto``/``plan``) +
+        # ``communication: true`` the key is SUPPRESSED (omitted) instead —
         # suppress means omission, NOT ``interactive: false``. A fresh dict is
         # built rather than mutating ``body`` in place.
-        suppress = effective_approve == "auto" and body["communication"] is True
+        suppress = effective_approve in _APPROVE_SUPPRESS_INTERACTIVE and body["communication"] is True
         if suppress:
             body = {key: value for key, value in body.items() if key != "communication"}
         else:
@@ -345,11 +361,12 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
 
     source = _inject_defaults(body)
 
-    # ``approve: auto`` + ``planner`` in the raw roles ⇒ emit ``auto_approve:
-    # true`` (canonical slot right after ``interactive``). The two approve
-    # effects are independent: each fires on its own trigger.
+    # An approve directive that drives the roles effect (``auto``/``dialog``) +
+    # ``planner`` in the raw roles ⇒ emit ``auto_approve: true`` (canonical slot
+    # right after ``interactive``). The two approve effects are independent:
+    # each fires on its own trigger and its own directive subset.
     has_planner = isinstance(raw_roles, list) and "planner" in raw_roles
-    if effective_approve == "auto" and has_planner:
+    if effective_approve in _APPROVE_EMIT_AUTO_APPROVE and has_planner:
         source["auto_approve"] = True
 
     ordered: dict[str, Any] = {}
@@ -467,12 +484,13 @@ def _apply_per_stage_overrides(
     non-``None`` ``prompt`` copies its text into the step body's ``description``
     slot, and a non-``None`` ``skills`` merges with the step body's existing
     ``skills`` via ``_merge_skills`` (pipeline-first dedup). The effective
-    ``approve`` directive (whether ``"auto"`` or ``None``) is always threaded
-    into the step body under the ``_APPROVE_SENTINEL`` key — it survives
-    ``copy.deepcopy`` in loop-expansion and is read/consumed in
-    ``_canonical_fields`` to drive the two ``approve: auto`` effects; writing
-    ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel as no
-    directive). ``effective`` already folds the inline-extend default together
+    ``approve`` directive (one of ``auto``/``plan``/``dialog``, or ``None``) is
+    always threaded into the step body under the ``_APPROVE_SENTINEL`` key — it
+    survives ``copy.deepcopy`` in loop-expansion and is read/consumed in
+    ``_canonical_fields`` to drive the two approve effects (interactive
+    suppression and ``auto_approve`` emission, each on its own directive subset);
+    writing ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel
+    as no directive). ``effective`` already folds the inline-extend default together
     with the explicit stages-block, so inline ``agent``/``loop``/``approve``
     apply even without a stages-block, and an explicit stages-block wins
     per-field. Operates on the supplied (already deep-copied) working sequence so

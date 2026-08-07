@@ -58,14 +58,22 @@ class WorkflowStage:
             (``skip: true``) means the compiler removes it. Defaults to
             ``False`` — for ``skip`` absence is equivalent to ``False``.
         approve: Optional auto-approval directive consumed by the compiler
-            when the stage runs. The only accepted value is ``"auto"`` (any
-            other value is rejected by ``parse_workflow`` before this dataclass
-            is built); ``None`` (the default) means no directive. When
-            ``"auto"``, the compiler suppresses the stage's ``interactive``
-            flag (when the stage body has ``communication: true``) and/or
-            emits ``auto_approve: true`` (when the stage body's ``roles``
-            contain ``planner``). This cell does not act on ``approve`` — it
-            is declarative.
+            when the stage runs. Accepted values are ``"auto"``, ``"plan"``,
+            and ``"dialog"`` (any other value is rejected by ``parse_workflow``
+            before this dataclass is built); ``None`` (the default) means no
+            directive. The compiler applies two INDEPENDENT effects, each on
+            its own trigger, and each value drives a subset of them:
+
+              * ``"auto"``   → both effects.
+              * ``"plan"``   → interactive suppression only (communication
+                effect): the stage's ``interactive`` flag is suppressed (omitted)
+                when the body has ``communication: true``. The roles effect
+                (``auto_approve``) does NOT fire.
+              * ``"dialog"`` → roles effect only: ``auto_approve: true`` is
+                emitted when the body's ``roles`` contain ``planner``. The
+                communication effect does NOT fire.
+
+            This cell does not act on ``approve`` — it is declarative.
     """
 
     agent: str | None = None

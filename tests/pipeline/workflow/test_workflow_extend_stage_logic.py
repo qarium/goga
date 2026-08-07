@@ -78,6 +78,18 @@ class TestWorkflowExtendStageLogic:
 
         assert ext.approve == "auto"
 
+    def test_approve_accepts_plan(self) -> None:
+        """approve stores ``"plan"`` verbatim (validation lives in parse_workflow)."""
+        ext = WorkflowExtendStage(after=["x"], approve="plan", body={})
+
+        assert ext.approve == "plan"
+
+    def test_approve_accepts_dialog(self) -> None:
+        """approve stores ``"dialog"`` verbatim (validation lives in parse_workflow)."""
+        ext = WorkflowExtendStage(after=["x"], approve="dialog", body={})
+
+        assert ext.approve == "dialog"
+
     def test_approve_field_order_before_body(self) -> None:
         """approve sits after loop and before body in the fixed field order."""
         from dataclasses import fields

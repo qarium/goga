@@ -47,6 +47,17 @@ _STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve")
 # rejected outright).
 _EXTEND_BODY_EXCLUDED = ("before", "after", "agent", "loop", "approve")
 
+# Accepted values for the ``approve`` directive (per-stage AND inline extend),
+# in their canonical order. ``_validate_approve`` rejects any other string with
+# a message listing these values verbatim. The two INDEPENDENT effects each
+# value drives (interactive suppression / ``auto_approve`` emission) are applied
+# by the compiler — see ``goga/pipeline/compiler/compile_flow.py``.
+#
+#   "auto"   → both effects (interactive suppression + auto_approve)
+#   "plan"   → interactive suppression ONLY (communication preserved, roles off)
+#   "dialog" → auto_approve ONLY (roles preserved, communication off)
+_APPROVE_DIRECTIVES = ("auto", "plan", "dialog")
+
 
 class WorkflowSyntaxError(ValueError):
     """Raised when a workflow-file is structurally malformed.
@@ -72,7 +83,8 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     type-check each present field, validate each extend-entry's positioning
     (``before``/``after`` as ``list[str]``, ``depends_on`` forbidden, ``skip``
     forbidden, at least one of ``before``/``after`` required) and any inline
-    ``agent`` (str) / ``loop`` (int >= 1) / ``approve`` (``"auto"``), enforce
+    ``agent`` (str) / ``loop`` (int >= 1) / ``approve`` (one of ``auto``/
+    ``plan``/``dialog``), enforce
     ``loop >= 1``, build one ``WorkflowStage`` per ``stages`` entry and one
     ``WorkflowExtendStage`` per ``extend`` entry, and return the aggregated
     ``WorkflowDocument``. No content validation beyond the structural schema; no
@@ -95,7 +107,8 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
             is malformed (non-mapping value, ``depends_on`` present, ``skip``
             present, ``before``/``after`` not a ``list[str]``, an inline
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
-            not ``"auto"``, neither ``before`` nor ``after``), ``loop`` is
+            not one of ``auto``/``plan``/``dialog``, neither ``before`` nor
+            ``after``), ``loop`` is
             below one, or the workflow provides neither a top-level prompt, any
             stage entry, nor any extend entry.
     """
@@ -200,7 +213,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve`` (unknown
     key → structural error); each present field is then type-checked, ``loop``
     must be an ``int >= 1``, ``skills`` must be a ``list[str]``, ``skip`` must be
-    a ``bool``, and ``approve`` must be the ``"auto"`` directive. Absent fields
+    a ``bool``, and ``approve`` must be one of ``auto``/``plan``/``dialog``. Absent fields
     stay ``None`` on the built ``WorkflowStage`` (``skip`` stays ``False`` — its
     default — since absence is equivalent to ``False``).
 
@@ -216,7 +229,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             per-stage key is present, ``agent``/``prompt`` is not a str,
             ``loop`` is not an ``int >= 1``, ``skills`` is not a
             ``list[str]``, ``skip`` is not a ``bool``, or ``approve`` is not
-            the ``"auto"`` directive.
+            one of ``auto``/``plan``/``dialog``.
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping stage {name} in workflow.stages")
@@ -251,7 +264,7 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
     Dispatches by ``key`` over the ``_STAGE_KEYS`` set, enforcing each field's
     type (``agent``/``prompt`` str, ``loop`` int >= 1, ``skills`` list[str],
-    ``skip`` bool, ``approve`` the ``"auto"`` directive). An unknown key raises
+    ``skip`` bool, ``approve`` one of ``auto``/``plan``/``dialog``). An unknown key raises
     the unknown-key structural error with the full valid-set fragment
     (``_STAGE_KEYS`` is the single source of that fragment). Returns the
     validated value unchanged (only ``loop`` is normalized via
@@ -264,14 +277,14 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
     Returns:
         The validated field value (``agent``/``prompt`` str, ``loop`` int,
-        ``skills`` list[str], ``skip`` bool, or ``approve`` str equal to
-        ``"auto"``).
+        ``skills`` list[str], ``skip`` bool, or ``approve`` str equal to one of
+        ``auto``/``plan``/``dialog``).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
             field value has the wrong type (non-str agent/prompt, non-int/<1
             loop, non-list[str] skills, non-bool skip, or an ``approve`` that
-            is not a str equal to ``"auto"``).
+            is not a str equal to ``auto``/``plan``/``dialog``).
     """
     if key == "agent":
         return _validate_str_field(f"workflow.stages.{name}", "agent", field_value)
@@ -326,7 +339,8 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     inline ``agent`` (when present) must be a ``str``; an inline ``loop`` (when
     present) must be an ``int >= 1`` (``bool`` rejected first, symmetric with
     the per-stage ``loop`` check); an inline ``approve`` (when present) must be
-    the ``"auto"`` directive (validated exactly like the per-stage ``approve``);
+    one of ``auto``/``plan``/``dialog`` (validated exactly like the per-stage
+    ``approve``);
     at least one of ``before``/``after`` must be present. Every other key passes
     through verbatim as the stage body. ``before``, ``after``, ``agent``,
     ``loop`` and ``approve`` are removed from the body before construction
@@ -352,8 +366,8 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
             ``depends_on`` key, it contains a ``skip`` key, ``before`` is not a
             ``list[str]``, ``after`` is not a ``list[str]``, an inline
             ``agent`` is not a ``str``, an inline ``loop`` is not an
-            ``int >= 1``, an inline ``approve`` is not a str equal to
-            ``"auto"``, or neither ``before`` nor ``after`` is present
+            ``int >= 1``, an inline ``approve`` is not a str equal to one of
+            ``auto``/``plan``/``dialog``, or neither ``before`` nor ``after`` is present
             (checked in that order).
     """
     if not isinstance(value, dict):
@@ -480,30 +494,33 @@ def _validate_str_field(scope: str, field_name: str, field_value: Any) -> str:
 
 
 def _validate_approve(scope: str, field_value: Any) -> str:
-    """Validate an ``approve`` field value (the ``"auto"`` directive) and return it.
+    """Validate an ``approve`` field value and return it.
 
     Shared by the per-stage ``approve`` (``_validate_stage_field``) and the
     inline extend ``approve`` (``_build_extend_stage``). A non-``str`` value is
-    rejected first (``bool`` is not a ``str``), then any ``str`` other than
-    ``"auto"`` is rejected — ``"auto"`` is the only accepted directive.
-    ``scope`` is the dotted location up to but excluding ``approve`` (e.g.
-    ``"workflow.stages.deploy"``), used verbatim in both messages.
+    rejected first (``bool`` is not a ``str``), then any ``str`` other than the
+    accepted directives — ``"auto"``, ``"plan"``, ``"dialog"`` (see
+    ``_APPROVE_DIRECTIVES``) — is rejected. ``scope`` is the dotted location up
+    to but excluding ``approve`` (e.g. ``"workflow.stages.deploy"``), used
+    verbatim in both messages.
 
     Args:
         scope: The dotted location (without the trailing ``.approve``).
         field_value: The raw ``approve`` value to validate.
 
     Returns:
-        The validated directive ``"auto"``.
+        The validated directive (one of ``_APPROVE_DIRECTIVES``).
 
     Raises:
         WorkflowSyntaxError: If ``field_value`` is not a ``str``, or is a
-            ``str`` other than ``"auto"``.
+            ``str`` other than ``"auto"``/``"plan"``/``"dialog"``.
     """
     if not isinstance(field_value, str):
         raise WorkflowSyntaxError(f"non-str value in {scope}.approve")
 
-    if field_value != "auto":
-        raise WorkflowSyntaxError(f"approve must be 'auto' in {scope}")
+    if field_value not in _APPROVE_DIRECTIVES:
+        raise WorkflowSyntaxError(
+            f"approve must be one of: {', '.join(_APPROVE_DIRECTIVES)} in {scope}"
+        )
 
     return field_value

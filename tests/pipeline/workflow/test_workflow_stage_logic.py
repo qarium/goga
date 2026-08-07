@@ -129,6 +129,14 @@ class TestWorkflowStageLogic:
         """approve stores ``"auto"`` verbatim (validation lives in parse_workflow)."""
         assert WorkflowStage(approve="auto").approve == "auto"
 
+    def test_workflow_stage_approve_accepts_plan(self) -> None:
+        """approve stores ``"plan"`` verbatim (validation lives in parse_workflow)."""
+        assert WorkflowStage(approve="plan").approve == "plan"
+
+    def test_workflow_stage_approve_accepts_dialog(self) -> None:
+        """approve stores ``"dialog"`` verbatim (validation lives in parse_workflow)."""
+        assert WorkflowStage(approve="dialog").approve == "dialog"
+
     def test_approve_field_order_sixth_final(self) -> None:
         """approve is the 6th and final field, after skip."""
         names = [field.name for field in fields(WorkflowStage)]

@@ -57,11 +57,12 @@ class WorkflowExtendStage:
             expand the new stage into N copies — a DEFAULT override, so an
             explicit ``stages``-block entry for the same name wins (per-field)
             — or ``None`` when not specified (no expansion).
-        approve: Optional auto-approval directive (value ``"auto"`` only,
-            validated by ``parse_workflow``), extracted from the extend-entry
-            into the model — exactly like ``agent``/``loop``. Acts as a DEFAULT
-            override (an explicit ``stages``-block entry for the same name wins
-            per-field); ``None`` (the default) means no directive.
+        approve: Optional auto-approval directive (one of ``"auto"``/
+            ``"plan"``/``"dialog"``, validated by ``parse_workflow``), extracted
+            from the extend-entry into the model — exactly like
+            ``agent``/``loop``. Acts as a DEFAULT override (an explicit
+            ``stages``-block entry for the same name wins per-field); ``None``
+            (the default) means no directive.
         body: Verbatim copy of the stage body (``title``, ``prompt``,
             ``skills``, ``roles``, ``communication``, and any other stage field)
             excluding ``before``, ``after``, ``agent``, ``loop``, ``approve``,

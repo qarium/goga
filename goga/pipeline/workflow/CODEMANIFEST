@@ -36,11 +36,13 @@ Annotations: |
 
   Use `convention` for code style, dataclass usage, and test layout.
 
-  approve is a declarative auto-approval instruction (value "auto" only,
-  validated structurally). This cell extracts it into `WorkflowStage` /
-  `WorkflowExtendStage`; the compiler (goga/pipeline/compiler) consumes it to
-  suppress a stage's interactive flag and/or emit auto_approve: true. This
-  cell performs NO approval logic — the import graph stays one-directional.
+  approve is a declarative auto-approval instruction (one of the values
+  "auto"/"plan"/"dialog", validated structurally). This cell extracts it into
+  `WorkflowStage` / `WorkflowExtendStage`; the compiler
+  (goga/pipeline/compiler) consumes it to suppress a stage's interactive flag
+  and/or emit auto_approve: true (each value drives a subset of these two
+  effects). This cell performs NO approval logic — the import graph stays
+  one-directional.
 
 ---
 
@@ -64,14 +66,17 @@ Annotations: |
     `skip`: bool flag instructing the compiler to DELETE the stage. False by
             default (key absent / skip: false). True (skip: true) removes the
             stage and transparently reconnects dependents' depends_on
-    `approve`: optional auto-approval directive consumed by the compiler. The
-               only accepted value is "auto" (validated by `parse_workflow`; any
-               other value is a structural error). When "auto", the compiler
-               suppresses the stage's interactive flag (when the stage body has
-               communication: true) and/or emits auto_approve: true (when the
-               stage body's roles contain planner). This cell does NOT act on
-               `approve` — it is declarative; the compiler applies it. None when
-               not specified.
+    `approve`: optional auto-approval directive consumed by the compiler.
+               Accepted values are "auto", "plan", and "dialog" (validated by
+               `parse_workflow`; any other value is a structural error). The
+               compiler applies two INDEPENDENT effects, and each value drives a
+               subset of them: "auto" drives BOTH (suppress the stage's
+               interactive flag when the stage body has communication: true, AND
+               emit auto_approve: true when the stage body's roles contain
+               planner); "plan" drives ONLY the interactive-suppression effect;
+               "dialog" drives ONLY the auto_approve effect. This cell does NOT
+               act on `approve` — it is declarative; the compiler applies it.
+               None when not specified.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -81,8 +86,8 @@ Annotations: |
     - All fields default to None; `skip` defaults to False (NOT None)
     - Field order is fixed: agent, prompt, loop, skills, skip, approve — matches
       the canonical order of the per-stage keys in the workflow-file
-    - `approve` accepts ONLY "auto"; any other value is rejected by
-      `parse_workflow` as a structural error before this dataclass is built
+    - `approve` accepts ONLY "auto"/"plan"/"dialog"; any other value is rejected
+      by `parse_workflow` as a structural error before this dataclass is built
 
     Constraints:
     - Do not validate loop >= 1 / skills list[str] / skip bool here — `parse_workflow`
@@ -103,9 +108,10 @@ Annotations: |
     "skip -> bool": |
       Flag instructing the compiler to delete the stage and reconnect dependents.
     "approve -> str | None": |
-      Optional auto-approval directive ("auto" only). Declarative — extracted
-      here, consumed by the compiler to suppress interactive / emit auto_approve.
-      None when not specified.
+      Optional auto-approval directive (one of "auto"/"plan"/"dialog").
+      Declarative — extracted here, consumed by the compiler to suppress
+      interactive / emit auto_approve (each value drives a subset of the two
+      effects). None when not specified.
 
 "WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, approve: str | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
@@ -121,10 +127,11 @@ Annotations: |
     `agent`: agent name composed into the new stage's wrapper path (default
              override; a stages-block entry for the same name wins), or None
     `loop`: positive integer (>= 1) for loop-expansion (default override), or None
-    `approve`: optional auto-approval directive (value "auto" only, validated by
-               `parse_workflow`), EXTRACTED from the extend-entry into the model
-               — exactly like agent/loop. Acts as a DEFAULT override; the
-               compiler consumes it against the extend-stage body. None when not
+    `approve`: optional auto-approval directive (one of "auto"/"plan"/"dialog",
+               validated by `parse_workflow`), EXTRACTED from the extend-entry
+               into the model — exactly like agent/loop. Acts as a DEFAULT
+               override; the compiler consumes it against the extend-stage body
+               (each value drives a subset of the two effects). None when not
                specified.
     `body`: verbatim copy of the stage body EXCLUDING before, after, agent, loop,
             approve, and depends_on. Open-ended — this cell does not know the
@@ -140,7 +147,7 @@ Annotations: |
     - Field order is fixed: before, after, agent, loop, approve, body
     - `approve` is EXTRACTED from the extend-entry (excluded from body) — like
       agent/loop; it never leaks into body as a stray stage field
-    - `approve` accepts ONLY "auto"
+    - `approve` accepts ONLY "auto"/"plan"/"dialog"
 
     Constraints:
     - Do not embed the stage or derive depends_on here — the compiler does both
@@ -155,8 +162,9 @@ Annotations: |
     "loop -> int | None": |
       Positive iteration count for loop-expansion (default override), or None.
     "approve -> str | None": |
-      Optional auto-approval directive ("auto" only), extracted inline from the
-      extend-entry. Default override; the compiler consumes it. None when absent.
+      Optional auto-approval directive (one of "auto"/"plan"/"dialog"), extracted
+      inline from the extend-entry. Default override; the compiler consumes it
+      (each value drives a subset of the two effects). None when absent.
     "body -> dict[str, Any]": |
       Verbatim stage body excluding before, after, agent, loop, approve, and
       depends_on. Open-ended.
@@ -274,9 +282,10 @@ Annotations: |
           "non-list-of-str skills in workflow.stages.NAME"
        g. skip (when present) must be a bool; otherwise raise a structural
           error "non-bool value in workflow.stages.NAME.skip"
-       h. approve (when present) must be a str and equal "auto"; otherwise
-          raise "non-str value in workflow.stages.NAME.approve" (non-str) or
-          "approve must be 'auto' in workflow.stages.NAME" (str != "auto")
+       h. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+          otherwise raise "non-str value in workflow.stages.NAME.approve"
+          (non-str) or "approve must be one of: auto, plan, dialog in
+          workflow.stages.NAME" (str outside the set)
        i. Build a `WorkflowStage` from the validated values (agent, prompt,
           loop, skills, skip, approve)
     6b. For each entry of extend (when present), identified by stage name
@@ -296,9 +305,10 @@ Annotations: |
         f. loop (when present) must be an int and >= 1; otherwise raise
            "non-int value in workflow.extend.NAME.loop" (non-int) or
            "loop must be >= 1 in workflow.extend.NAME" (int < 1)
-        g. approve (when present) must be a str and equal "auto"; otherwise
-           raise "non-str value in workflow.extend.NAME.approve" (non-str) or
-           "approve must be 'auto' in workflow.extend.NAME" (str != "auto")
+        g. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+           otherwise raise "non-str value in workflow.extend.NAME.approve"
+           (non-str) or "approve must be one of: auto, plan, dialog in
+           workflow.extend.NAME" (str outside the set)
         h. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
         i. Other keys of the entry value are NOT validated (open-ended:
@@ -335,12 +345,12 @@ Annotations: |
       a structural error
     - loop must be an int >= 1; zero, negative values, and non-int types
       are structural errors
-    - approve (stages-block entry AND inline extend) must be a str equal to
-      "auto"; any other value or a non-str is a structural error
+    - approve (stages-block entry AND inline extend) must be a str and one of
+      "auto"/"plan"/"dialog"; any other value or a non-str is a structural error
     - An extend-entry's inline agent (when present) must be a str, its
       inline loop (when present) must be an int >= 1, and its inline
-      approve (when present) must be a str equal to "auto" — same
-      type/value rules as the stages block; non-conforming values are
+      approve (when present) must be a str and one of "auto"/"plan"/"dialog" —
+      same type/value rules as the stages block; non-conforming values are
       structural errors
     - Inline agent/loop/approve of an extend-entry are EXTRACTED into the
       model and excluded from the verbatim body (like before/after) — they

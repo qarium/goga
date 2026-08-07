@@ -215,13 +215,17 @@ Annotations: |
   through verbatim as the new stage's skills (a new stage has no pipeline
   skills to merge with).
 
-  approve: auto translation: for a stage whose effective approve is "auto",
-  the compiler reads the trigger fields from that stage's body (pipeline-file
-  body for an existing stage; the extend-stage body for an extend-stage) and
-  applies two INDEPENDENT effects — communication: true ⇒ SUPPRESS interactive
-  (no interactive key), and roles containing planner ⇒ emit auto_approve:
-  true. Both fire together when both triggers are present; baseline no-op when
-  neither; uniform across every loop-expanded copy.
+  approve translation: for a stage whose effective approve is one of
+  "auto"/"plan"/"dialog", the compiler reads the trigger fields from that
+  stage's body (pipeline-file body for an existing stage; the extend-stage body
+  for an extend-stage) and applies up to two INDEPENDENT effects —
+  communication: true ⇒ SUPPRESS interactive (no interactive key), and roles
+  containing planner ⇒ emit auto_approve: true. Each value drives a subset of
+  the two effects: "auto" drives BOTH; "plan" drives ONLY the interactive
+  suppression (communication effect); "dialog" drives ONLY the auto_approve
+  emission (roles effect). Each effect fires on its own trigger; baseline
+  no-op when neither trigger (or neither directive subset) applies; uniform
+  across every loop-expanded copy.
 
   Stage script directives: before_script, script, after_script are string
   stage-body directives translated to script_before, script, script_after (the
@@ -563,8 +567,9 @@ Annotations: |
       Extra fields in canonical key order: interactive, auto_approve, command,
       prompt, description, agents, supervisor, supervisor_prompt, skills,
       script_before, script, script_after, then alphabetically-sorted unknown
-      keys. auto_approve (bool) is present only when approve: "auto" +
-      planner-in-roles fired; script_before/script/script_after (str) are present
+      keys. auto_approve (bool) is present only when the effective approve
+      directive drives the roles effect ("auto"/"dialog") + planner-in-roles
+      fired; script_before/script/script_after (str) are present
       only when the corresponding stage directive was authored. Insertion order
       IS the output order — the serializer iterates as-is. command/description
       from WorkflowStage; agents default-injected to ["auto"]; supervisor/
@@ -1100,26 +1105,29 @@ Annotations: |
          (threaded in at step 4a), read the trigger fields from THAT STAGE'S
          body and apply two INDEPENDENT effects:
          * interactive translation: communication → interactive, EXCEPT
-           when effective approve is "auto" AND the body has
-           communication: true — SUPPRESS (emit no interactive key).
-           communication: false ⇒ interactive: false as usual. The
-           existing "interactive key is forbidden in stage body; use
-           communication" error (an authoring interactive key) is
-           unchanged
-         * auto_approve: effective approve "auto" AND the body roles
-           (the raw list, before `translate_role`) contains literal
-           "planner" — emit auto_approve: true (canonical slot next to
-           interactive). Otherwise absent
-         Both effects fire together when both triggers are present;
-         baseline no-op when effective approve is not "auto"; uniform
-         across every loop-expanded copy
+           when the effective approve directive drives the communication
+           effect ("auto"/"plan") AND the body has communication: true —
+           SUPPRESS (emit no interactive key). communication: false ⇒
+           interactive: false as usual. The existing "interactive key is
+           forbidden in stage body; use communication" error (an authoring
+           interactive key) is unchanged
+         * auto_approve: the effective approve directive drives the roles
+           effect ("auto"/"dialog") AND the body roles (the raw list,
+           before `translate_role`) contains literal "planner" — emit
+           auto_approve: true (canonical slot next to interactive).
+           Otherwise absent
+         The two effects are independent — each fires on its own trigger
+         AND its own directive subset; baseline no-op when the effective
+         approve is None or neither trigger applies; uniform across every
+         loop-expanded copy
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, command,
          prompt, description, agents, supervisor, supervisor_prompt, skills,
          script_before, script, script_after, then alphabetically-sorted
          unknown keys), copying from the (defaults-injected) step body.
-         auto_approve (bool) is present only when approve: "auto" +
-         planner-in-roles fired; script_before / script / script_after
+         auto_approve (bool) is present only when the effective approve
+         directive drives the roles effect ("auto"/"dialog") + planner-in-roles
+         fired; script_before / script / script_after
          (str) are present only when the corresponding stage directive was
          authored. Stage-body field translation: the input communication key
          maps to the output interactive key in its canonical slot; an input
@@ -1289,10 +1297,13 @@ Annotations: |
       (the run_pipeline routine in goga/pipeline) resolves it in-container via
       resolve_project_name.
     - approve effects read triggers from the stage's own body and the
-      directive from the workflow (effective approve); suppress = omission
-      (not interactive:false) for approve:auto + communication:true;
-      auto_approve only when approve:auto + planner-in-roles; baseline no-op
-      for a stage without approve:auto; uniform across loop copies
+      directive from the workflow (effective approve, one of
+      auto/plan/dialog); each value drives a subset of the two effects —
+      suppress = omission (not interactive:false) for a communication-effect
+      directive (auto/plan) + communication:true; auto_approve only for a
+      roles-effect directive (auto/dialog) + planner-in-roles; baseline no-op
+      when effective approve is None or neither trigger applies; uniform
+      across loop copies
     - script together with prompt and/or skills is a structural error
       "script is mutually exclusive with prompt/skills in stage <name>";
       before_script/after_script are compatible (no error)
@@ -1366,9 +1377,11 @@ Annotations: |
     - Do not perform any approve action for a stage without a workflow entry
       (effective approve is None) — approve is workflow-driven, never inferred
       from the body
-    - Do not emit interactive: true for approve:auto + communication:true
-      — suppress means omission, not interactive:false
-    - Do not emit auto_approve unless approve:auto AND planner-in-roles
+    - Do not emit interactive: true for a communication-effect directive
+      (auto/plan) + communication:true — suppress means omission, not
+      interactive:false
+    - Do not emit auto_approve unless a roles-effect directive (auto/dialog)
+      AND planner-in-roles
     - Do not let authoring script keys (before_script / script / after_script)
       pass through to output as unknown keys — they are consumed and
       translated to script_before / script / script_after
