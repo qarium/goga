@@ -765,7 +765,7 @@ Annotations: |
     - Output is canonical afm flow-file YAML: optional prompt (first,
       when present), optional root_dir (second, when supplied), then
       fixed top-level key order (name, description, stages), canonical
-      per-stage key order (extended to include auto_approve, command,
+      per-stage key order (including auto_approve, command,
       description, and script_before/script/script_after), flow-style for
       agents, block-style for skills and depends_on, auto_approve as a
       plain bool scalar, single trailing newline
@@ -1381,7 +1381,7 @@ Annotations: |
     - Do not let authoring script keys (before_script / script / after_script)
       pass through to output as unknown keys — they are consumed and
       translated to script_before / script / script_after
-    - Canonical key order is fixed at `FlowStage` assembly — the extended
+    - Canonical key order is fixed at `FlowStage` assembly — the full
       order (interactive, auto_approve, command, prompt, description, agents,
       supervisor, supervisor_prompt, skills, script_before, script,
       script_after, then alphabetically-sorted unknown keys)
