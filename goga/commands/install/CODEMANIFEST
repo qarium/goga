@@ -164,7 +164,8 @@ Annotations: |
 
     Apply `click` for the command shape, the optional positional argument, the
     flags, the option, ctx.pass_context, ctx.exit, click.echo for the empty-path
-    message, and exit-code propagation. Apply `convention` for docstring style,
+    message, and exit-code propagation. Apply `convention` for the CLI command
+    docstring rule (--help rendered verbatim by Click; omit Args/Returns/Raises),
     import discipline, and structured logging. Apply `project-configuration` for
     load_project_config() semantics and the no-validation contract on cfg.tools.
 

@@ -18,7 +18,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 
 | Argument | Type | Description |
 |----------|------|-------------|
-| `plan` | str | Path to the plan for ralphex |
+| `plan` | str | Path to the plan for the ralph-loop |
 
 ## Options
 
@@ -36,7 +36,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
-| `-c` / `--clean` | flag | false | Wipe the persistent ralphex runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralphex state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
+| `-c` / `--clean` | flag | false | Wipe the persistent ralph-loop runtime directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default is no wipe — ralph-loop state (progress files, config, prompts, agents) survives across runs of the same project on the same branch, useful for resuming interrupted builds |
 | `--update` / `-u` | flag | false | Force-refresh the image before launch (build when `dockerfile` is declared in `.goga/config.yml`, else pull). Default is no refresh. Note: the first time a `dockerfile`-declared image is built, the command auto-builds it even WITHOUT `--update` (first-run safety net) — `--update` is only needed to force a RE-build of an already-present image |
 
 ## Exit code

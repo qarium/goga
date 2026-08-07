@@ -130,11 +130,13 @@ Annotations: |
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
     - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.build.proxy
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.build.hosts
-    - -c / --clean (flag) — wipe the persistent ralphex runtime host directory before launch; short alias of --clean
+    - -c / --clean (flag) — wipe the persistent ralph-loop runtime host directory before launch; short alias of --clean
     - --update / -u (flag) — pull the image before launching the container
 
     Apply the `click` practice for the command surface and option declarations.
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `conventions` CLI command docstring rule for the command's --help
+    text (rendered verbatim by Click; omit Args/Returns/Raises) and intra-package
+    imports.
     Apply the `build-usage` practice for the in-container build invocation contract.
     Apply the `resolve-credential-mounts` practice for the credential-mount
     consumer pattern.

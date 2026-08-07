@@ -61,8 +61,10 @@ Annotations: |
     Apply the `click` practice for command registration, the three options (--sudo/--user/--tools),
     and exit-code propagation via ctx.exit(code).
 
-    Apply the `convention` practice for docstring style, intra-package imports, and structured logging
-    (INFO for upgrade start/finish, WARNING for sudo usage, ERROR for pip or re-sync failures).
+    Apply the `convention` practice for the CLI command docstring rule (--help
+    rendered verbatim by Click; omit Args/Returns/Raises), intra-package imports,
+    and structured logging (INFO for upgrade start/finish, WARNING for sudo usage,
+    ERROR for pip or re-sync failures).
 
     Requirements:
     - Always invoke pip via the python -m pip form (never the bare pip executable)

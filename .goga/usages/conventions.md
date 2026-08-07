@@ -192,6 +192,27 @@ Docstring rules:
 - Include `Returns` section when the function returns a value
 - Include `Raises` section when the function raises exceptions beyond built-in types
 
+## CLI Command Docstrings
+
+A Click command callback's docstring is rendered **verbatim** as that command's
+`--help` text, so it is **user-facing help**, not API documentation. The
+Google-style `Args`/`Returns`/`Raises` sections above do **not** apply to command
+callbacks:
+
+- Omit the `Args` section — Click auto-generates the `Options`/`Arguments` block
+  from the decorators, so a hand-written `Args` block only duplicates it
+- Omit the `Returns` section — Click controls the exit code; the callback has no
+  user-facing return value
+- Omit the `Raises` section — it would expose internal exception types (e.g.
+  `click.ClickException`) to end users
+- Keep the concise summary line (first line) — Click uses it in the command listing
+- Use the `\f` (form feed) marker to hide any developer-facing note from `--help`:
+  text after `\f` stays in the docstring but Click does not render it
+
+The general Google-style docstring rules (including `Args`/`Returns`/`Raises`)
+still apply unchanged to **every other public function** in a command module —
+helper routines, logic functions, and entities.
+
 ## Dependencies
 
 All third-party libraries **MUST** be added to `pyproject.toml`. Specify a minimum version for every dependency.

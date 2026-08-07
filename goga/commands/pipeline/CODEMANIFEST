@@ -201,7 +201,9 @@ Annotations: |
     the repeatable short/long env option bound to `extra_env` for
     environment passthrough into the container, and the new mutually-exclusive
     --workflow / --no-workflow options.
-    Apply the `conventions` practice for docstring style and intra-package imports.
+    Apply the `conventions` CLI command docstring rule for the command's --help
+    text (rendered verbatim by Click; omit Args/Returns/Raises) and intra-package
+    imports.
     Apply the `resolve-credential-mounts` practice for the credential-mount
     consumer pattern.
     Apply the `docker-auth-mounts` practice for the read-only mount rule.
