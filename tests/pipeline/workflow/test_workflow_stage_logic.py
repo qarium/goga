@@ -113,11 +113,28 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(agent="codex").skip is False
         assert WorkflowStage(skip=True).skip is True
 
-    def test_skip_field_order_fifth(self) -> None:
-        """skip is the 5th and final field, after agent/prompt/loop/skills."""
+    def test_field_order_fixed_canonical(self) -> None:
+        """Field order is fixed: agent, prompt, loop, skills, skip, approve."""
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names == ["agent", "prompt", "loop", "skills", "skip"]
+        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve"]
+
+    def test_workflow_stage_approve_defaults_none(self) -> None:
+        """Omitting ``approve`` yields None — no auto-approval directive."""
+        assert WorkflowStage().approve is None
+        assert WorkflowStage(agent="codex").approve is None
+        assert WorkflowStage(skip=True).approve is None
+
+    def test_workflow_stage_approve_accepts_auto(self) -> None:
+        """approve stores ``"auto"`` verbatim (validation lives in parse_workflow)."""
+        assert WorkflowStage(approve="auto").approve == "auto"
+
+    def test_approve_field_order_sixth_final(self) -> None:
+        """approve is the 6th and final field, after skip."""
+        names = [field.name for field in fields(WorkflowStage)]
+
+        assert names.index("skip") == 4
+        assert names.index("approve") == 5
 
     def test_skip_accepts_true_and_false(self) -> None:
         """skip=True and skip=False round-trip verbatim."""

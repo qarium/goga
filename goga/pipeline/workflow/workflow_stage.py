@@ -3,7 +3,7 @@
 A workflow-file's ``stages`` map carries one entry per pipeline stage the
 workflow wants to override. ``WorkflowStage`` is the parsed representation of a
 single such entry: which agent to run, which per-stage prompt to merge, how
-many loop iterations to expand the stage into, and which skills to merge into
+many loop iterations to expand the stage into, which skills to merge into
 the stage. It is constructed by ``parse_workflow`` and carried verbatim inside
 ``WorkflowDocument``.
 
@@ -13,13 +13,16 @@ path); ``prompt`` is verbatim text (the compiler places it in the description
 slot); ``loop`` is a count (the compiler expands it); ``skills`` is a list of
 skill names (the compiler merges them with the stage's pipeline-file skills);
 ``skip`` is a bool flag (the compiler deletes the corresponding stage and
-transparently reconnects its dependents' ``depends_on``).
+transparently reconnects its dependents' ``depends_on``); ``approve`` is an
+optional auto-approval directive (the compiler suppresses the stage's
+``interactive`` flag and/or emits ``auto_approve: true`` when ``"auto"``).
 No validation lives here either: ``parse_workflow`` enforces every invariant
-(key set, field types, ``loop >= 1``, ``skip`` is a bool) and raises a
-structural error before this dataclass is built.
+(key set, field types, ``loop >= 1``, ``skip`` is a bool, ``approve`` is
+``"auto"``) and raises a structural error before this dataclass is built.
 
-Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip`` —
-to match the canonical order of the per-stage keys in the workflow-file.
+Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
+``approve`` — to match the canonical order of the per-stage keys in the
+workflow-file.
 """
 
 from __future__ import annotations
@@ -31,11 +34,12 @@ from dataclasses import dataclass
 class WorkflowStage:
     """A single per-stage override instruction from a workflow-file.
 
-    The four fields ``agent``, ``prompt``, ``loop``, and ``skills`` default to
-    ``None`` — a workflow-file may omit any of them, and ``parse_workflow``
-    produces ``None`` for missing fields; ``skip`` defaults to ``False``. Field
-    order is fixed (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``) to
-    match the canonical order of the per-stage keys in the workflow-file.
+    The five fields ``agent``, ``prompt``, ``loop``, ``skills``, and ``approve``
+    default to ``None`` — a workflow-file may omit any of them, and
+    ``parse_workflow`` produces ``None`` for missing fields; ``skip`` defaults
+    to ``False``. Field order is fixed (``agent``, ``prompt``, ``loop``,
+    ``skills``, ``skip``, ``approve``) to match the canonical order of the
+    per-stage keys in the workflow-file.
 
     Args:
         agent: Agent name consumed by the compiler to compose the per-stage
@@ -53,6 +57,15 @@ class WorkflowStage:
             ``skip: false``) means the stage is NOT skipped; ``True``
             (``skip: true``) means the compiler removes it. Defaults to
             ``False`` — for ``skip`` absence is equivalent to ``False``.
+        approve: Optional auto-approval directive consumed by the compiler
+            when the stage runs. The only accepted value is ``"auto"`` (any
+            other value is rejected by ``parse_workflow`` before this dataclass
+            is built); ``None`` (the default) means no directive. When
+            ``"auto"``, the compiler suppresses the stage's ``interactive``
+            flag (when the stage body has ``communication: true``) and/or
+            emits ``auto_approve: true`` (when the stage body's ``roles``
+            contain ``planner``). This cell does not act on ``approve`` — it
+            is declarative.
     """
 
     agent: str | None = None
@@ -60,3 +73,4 @@ class WorkflowStage:
     loop: int | None = None
     skills: list[str] | None = None
     skip: bool = False
+    approve: str | None = None

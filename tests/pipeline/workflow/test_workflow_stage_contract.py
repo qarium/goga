@@ -1,9 +1,9 @@
 """Contract tests for the ``WorkflowStage`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the four declared properties, the all-``None``
-defaults, and kw_only construction. These tests pin the contract surface —
-behavior lives in the logic test module.
+importability from the facade, the five declared properties, the all-``None``
+defaults (``skip`` defaults to ``False``), and kw_only construction. These tests
+pin the contract surface — behavior lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -51,6 +51,11 @@ class TestWorkflowStageContract:
         assert hasattr(WorkflowStage(), "skip")
         assert WorkflowStage(skip=True).skip is True
 
+    def test_workflow_stage_has_approve_property(self) -> None:
+        """WorkflowStage exposes an ``approve`` property defaulting to None."""
+        assert hasattr(WorkflowStage(), "approve")
+        assert WorkflowStage(approve="auto").approve == "auto"
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -59,15 +64,17 @@ class TestWorkflowStageContract:
         assert stage.prompt is None
         assert stage.loop is None
         assert stage.skills is None
+        assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all five fields as keyword-only arguments."""
+        """WorkflowStage accepts all six fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
             prompt="text",
             loop=2,
             skills=["web-search", "goga-propose"],
             skip=True,
+            approve="auto",
         )
 
         assert stage.agent == "codex"
@@ -75,3 +82,4 @@ class TestWorkflowStageContract:
         assert stage.loop == 2
         assert stage.skills == ["web-search", "goga-propose"]
         assert stage.skip is True
+        assert stage.approve == "auto"

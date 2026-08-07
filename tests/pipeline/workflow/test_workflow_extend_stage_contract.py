@@ -1,11 +1,11 @@
 """Contract tests for the ``WorkflowExtendStage`` dataclass.
 
 Verifies the public API declared by the workflow-cell CODEMANIFEST:
-importability from the facade, the five declared properties
-(``before``/``after``/``agent``/``loop`` defaulting to ``None``, required
-``body``), kw_only construction, and the field-order / required-argument
-invariants. These tests pin the contract surface — behavior lives in the
-logic test module.
+importability from the facade, the six declared properties
+(``before``/``after``/``agent``/``loop``/``approve`` defaulting to ``None``,
+required ``body``), kw_only construction, and the field-order /
+required-argument invariants. These tests pin the contract surface — behavior
+lives in the logic test module.
 """
 
 from __future__ import annotations
@@ -49,6 +49,13 @@ class TestWorkflowExtendStageContract:
         assert hasattr(ext, "loop")
         assert ext.loop == 3
 
+    def test_workflow_extend_stage_has_approve_property(self) -> None:
+        """WorkflowExtendStage exposes an ``approve`` property defaulting to None."""
+        ext = WorkflowExtendStage(after=["x"], approve="auto", body={"title": "T"})
+
+        assert hasattr(ext, "approve")
+        assert ext.approve == "auto"
+
     def test_workflow_extend_stage_has_body_property(self) -> None:
         """WorkflowExtendStage exposes a ``body`` property."""
         ext = WorkflowExtendStage(body={"title": "T"})
@@ -56,23 +63,27 @@ class TestWorkflowExtendStageContract:
         assert hasattr(ext, "body")
         assert ext.body == {"title": "T"}
 
-    def test_workflow_extend_stage_before_after_agent_loop_default_none(self) -> None:
-        """``before``/``after``/``agent``/``loop`` default to None when omitted."""
+    def test_workflow_extend_stage_before_after_agent_loop_approve_default_none(self) -> None:
+        """``before``/``after``/``agent``/``loop``/``approve`` default to None when omitted."""
         ext = WorkflowExtendStage(body={})
 
         assert ext.before is None
         assert ext.after is None
         assert ext.agent is None
         assert ext.loop is None
+        assert ext.approve is None
 
     def test_workflow_extend_stage_constructible_kw_only(self) -> None:
-        """All five fields are accepted as keyword-only arguments."""
-        ext = WorkflowExtendStage(before=["a"], after=["b"], agent="codex", loop=2, body={"title": "T"})
+        """All six fields are accepted as keyword-only arguments."""
+        ext = WorkflowExtendStage(
+            before=["a"], after=["b"], agent="codex", loop=2, approve="auto", body={"title": "T"}
+        )
 
         assert ext.before == ["a"]
         assert ext.after == ["b"]
         assert ext.agent == "codex"
         assert ext.loop == 2
+        assert ext.approve == "auto"
         assert ext.body == {"title": "T"}
 
     def test_workflow_extend_stage_body_required(self) -> None:

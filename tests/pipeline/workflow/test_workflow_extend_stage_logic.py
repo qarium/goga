@@ -2,11 +2,11 @@
 
 Covers construction behavior beyond the contract surface: partial
 construction (one of ``before``/``after`` set, the other ``None``), the
-``agent``/``loop`` default-override fields (``None`` or a value), verbatim
-storage of nested ``body`` values, the ``body`` excluding
-``before``/``after``/``agent``/``loop``/``depends_on``, and round-trip equality
-of identical constructions. The data Entity carries no behavior — these tests
-pin its construction semantics.
+``agent``/``loop``/``approve`` default-override fields (``None`` or a value),
+verbatim storage of nested ``body`` values, the ``body`` excluding
+``before``/``after``/``agent``/``loop``/``approve``/``depends_on``, and
+round-trip equality of identical constructions. The data Entity carries no
+behavior — these tests pin its construction semantics.
 """
 
 from __future__ import annotations
@@ -66,6 +66,26 @@ class TestWorkflowExtendStageLogic:
 
         assert ext.loop is None
 
+    def test_approve_defaults_to_none_when_omitted(self) -> None:
+        """Omitting ``approve`` yields None — no auto-approval directive."""
+        ext = WorkflowExtendStage(after=["x"], body={})
+
+        assert ext.approve is None
+
+    def test_approve_accepts_auto(self) -> None:
+        """approve stores ``"auto"`` verbatim (validation lives in parse_workflow)."""
+        ext = WorkflowExtendStage(after=["x"], approve="auto", body={})
+
+        assert ext.approve == "auto"
+
+    def test_approve_field_order_before_body(self) -> None:
+        """approve sits after loop and before body in the fixed field order."""
+        from dataclasses import fields
+
+        names = [field.name for field in fields(WorkflowExtendStage)]
+
+        assert names == ["before", "after", "agent", "loop", "approve", "body"]
+
     def test_loop_accepts_boundary_one(self) -> None:
         """loop == 1 (the minimum) is accepted by the dataclass itself."""
         ext = WorkflowExtendStage(after=["x"], loop=1, body={})
@@ -79,19 +99,20 @@ class TestWorkflowExtendStageLogic:
         assert ext.body == {"custom": {"deep": 1}, "list": [1, 2, 3]}
 
     def test_body_excludes_positioning_and_override_keys(self) -> None:
-        """``body`` carries only verbatim stage content — no before/after/agent/loop/depends_on.
+        """``body`` carries only verbatim stage content — no before/after/agent/loop/approve/depends_on.
 
         These keys never reach ``body``: ``parse_workflow`` extracts
-        ``before``/``after``/``agent``/``loop`` into named fields and rejects
-        ``depends_on`` before the dataclass is built. The model itself stores
-        whatever it is given, so this test pins that ``body`` can be supplied
-        independently of the four named override/positioning fields.
+        ``before``/``after``/``agent``/``loop``/``approve`` into named fields and
+        rejects ``depends_on`` before the dataclass is built. The model itself
+        stores whatever it is given, so this test pins that ``body`` can be
+        supplied independently of the five named override/positioning fields.
         """
         ext = WorkflowExtendStage(
             before=["a"],
             after=["b"],
             agent="codex",
             loop=2,
+            approve="auto",
             body={"title": "T", "prompt": "go", "skills": ["web-search"]},
         )
 
@@ -100,6 +121,7 @@ class TestWorkflowExtendStageLogic:
         assert "after" not in ext.body
         assert "agent" not in ext.body
         assert "loop" not in ext.body
+        assert "approve" not in ext.body
         assert "depends_on" not in ext.body
 
     def test_body_keeps_supplied_identity(self) -> None:
