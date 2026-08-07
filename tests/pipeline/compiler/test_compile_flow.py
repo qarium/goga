@@ -144,6 +144,33 @@ class TestCompileFlowContract:
         assert "_canonical_fields" not in facade_all
         assert "_CANONICAL_KEY_ORDER" not in facade_all
 
+    def test_canonical_fields_signature_has_stage_name(self) -> None:
+        """``_canonical_fields`` takes ``(body, stage_name)`` for the mutual-exclusion message."""
+        import inspect
+
+        from goga.pipeline.compiler.compile_flow import _canonical_fields
+
+        parameters = list(inspect.signature(_canonical_fields).parameters)
+
+        assert parameters == ["body", "stage_name"]
+
+    def test_canonical_key_order_includes_approve_and_script_slots(self) -> None:
+        """The extended canonical order slots ``auto_approve`` and the script_* keys."""
+        from goga.pipeline.compiler.compile_flow import _CANONICAL_KEY_ORDER
+
+        # ``auto_approve`` immediately follows ``interactive``; the script_* trio
+        # trails ``skills`` in authored order (before/script/after).
+        assert "auto_approve" in _CANONICAL_KEY_ORDER
+        assert _CANONICAL_KEY_ORDER.index("auto_approve") == _CANONICAL_KEY_ORDER.index("interactive") + 1
+        assert _CANONICAL_KEY_ORDER[-3:] == ["script_before", "script", "script_after"]
+        assert _CANONICAL_KEY_ORDER.index("skills") < _CANONICAL_KEY_ORDER.index("script_before")
+
+    def test_approve_sentinel_constant_exists(self) -> None:
+        """The ``_APPROVE_SENTINEL`` constant (approve directive plumbing) exists."""
+        from goga.pipeline.compiler.compile_flow import _APPROVE_SENTINEL
+
+        assert _APPROVE_SENTINEL == "_approve_directive"
+
     def test_compile_flow_and_structural_error_importable_from_facade(self) -> None:
         """``compile_flow`` and ``StructuralError`` are both importable from the facade.
 
@@ -322,7 +349,7 @@ class TestCompileFlowLogic:
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
         source_body = {"roles": ["planner"], "nested": {"k": 1}}
-        fields = _canonical_fields(source_body)
+        fields = _canonical_fields(source_body, "deploy")
 
         # Canonical order is established (``agents`` is a known output key) and the
         # input ``roles`` was translated to the output ``agents`` via translate_role.
@@ -568,7 +595,7 @@ class TestCompileFlowCommunicationTranslation:
         """
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
-        result = _canonical_fields({"communication": True, "prompt": "p"})
+        result = _canonical_fields({"communication": True, "prompt": "p"}, "deploy")
 
         # ``interactive`` present (translated), ``communication`` absent.
         assert result["interactive"] is True
@@ -590,7 +617,7 @@ class TestCompileFlowCommunicationTranslation:
             StructuralError,
             match="interactive key is forbidden in stage body; use communication",
         ):
-            _canonical_fields({"interactive": True})
+            _canonical_fields({"interactive": True}, "deploy")
 
     def test_compile_flow_translates_stage_communication_to_output_interactive(self, tmp_path: Path) -> None:
         """A stage body ``communication: true`` compiles to ``interactive: true``.
@@ -633,3 +660,144 @@ class TestCompileFlowCommunicationTranslation:
             match="interactive key is forbidden in stage body; use communication",
         ):
             compile_flow(pipeline_path, flow_path)
+
+
+class TestCompileFlowScriptDirectives:
+    """Stage script directives ``before_script``/``script``/``after_script``.
+
+    The authoring keys are consumed and translated to the output
+    ``script_before``/``script``/``script_after`` keys (never passed through as
+    unknown keys). ``script`` is mutually exclusive with ``prompt``/``skills``
+    (a ``StructuralError`` naming the stage); ``before_script``/``after_script``
+    are compatible with ``script``/``prompt``/``skills``.
+    """
+
+    def test_compile_script_directives_translated(self, tmp_path: Path) -> None:
+        """``before_script``/``script``/``after_script`` translate to ``script_*``.
+
+        The authoring keys are absent from the output; the output keys appear in
+        authored order ``script_before`` before ``script`` before ``script_after``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n"
+            "a:\n"
+            "  title: A\n"
+            "  before_script: prep\n"
+            "  script: run\n"
+            "  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+        text = flow_path.read_text()
+
+        fields = flow_doc.stages[0].fields
+        # Authoring keys consumed; output keys present in authored order.
+        assert fields["script_before"] == "prep"
+        assert fields["script"] == "run"
+        assert fields["script_after"] == "cleanup"
+        keys = list(fields)
+        assert keys.index("script_before") < keys.index("script") < keys.index("script_after")
+        # The authoring keys never reach the output (not even as unknown keys).
+        assert "before_script" not in fields
+        assert "after_script" not in fields
+        assert "before_script" not in text
+        assert "after_script" not in text
+
+    def test_compile_script_mutually_exclusive_with_prompt(self, tmp_path: Path) -> None:
+        """``script`` + ``prompt`` raises ``StructuralError`` naming the stage."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n  prompt: do it\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match=r"script is mutually exclusive with prompt/skills in stage a",
+        ):
+            compile_flow(pipeline_path, flow_path)
+
+    def test_compile_script_mutually_exclusive_with_skills(self, tmp_path: Path) -> None:
+        """``script`` + ``skills`` raises ``StructuralError`` naming the stage (symmetric)."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n  skills:\n    - web\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(
+            StructuralError,
+            match=r"script is mutually exclusive with prompt/skills in stage a",
+        ):
+            compile_flow(pipeline_path, flow_path)
+
+    def test_compile_script_compatible_with_before_after(self, tmp_path: Path) -> None:
+        """``script`` + ``before_script``/``after_script`` (no prompt/skills) compiles.
+
+        The three authoring keys translate to ``script_before``/``script``/
+        ``script_after`` with no error — ``before_script``/``after_script`` are
+        compatible with ``script``.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\n"
+            "a:\n"
+            "  title: A\n"
+            "  before_script: prep\n"
+            "  script: run\n"
+            "  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["script_before"] == "prep"
+        assert fields["script"] == "run"
+        assert fields["script_after"] == "cleanup"
+
+    def test_compile_no_approve_baseline_byte_identical(self, tmp_path: Path) -> None:
+        """A pipeline-file without approve/script directives compiles byte-identically.
+
+        Backward-compat gate: the extended ``_CANONICAL_KEY_ORDER`` and the
+        ``_canonical_fields`` rewrite must leave flow-files without the new
+        directives byte-identical to the pre-change baseline — no ``auto_approve``,
+        no ``script_*``, no ``_approve_directive`` sentinel, and the canonical
+        ordering of the pre-existing fields unchanged.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: D\n---\n\n"
+            "a:\n"
+            "  title: A\n"
+            "  communication: true\n"
+            "  roles:\n"
+            "    - planner\n"
+            "  prompt: p\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path)
+
+        text = flow_path.read_text()
+        # No new directives authored ⇒ none of the new keys appear.
+        assert "auto_approve" not in text
+        assert "script_before" not in text
+        assert "script_after" not in text
+        assert "_approve_directive" not in text
+        # ``script:`` only matches the standalone key (no authored script here).
+        assert "script:" not in text
+        # Byte-exact baseline pinned: interactive (translated) → prompt → agents,
+        # agents in flow-style, single trailing newline.
+        assert text == (
+            "name: T\n"
+            "description: D\n"
+            "stages:\n"
+            "- id: a\n"
+            "  name: A\n"
+            "  interactive: true\n"
+            "  prompt: p\n"
+            "  agents: [planning]\n"
+        )

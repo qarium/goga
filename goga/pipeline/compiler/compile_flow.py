@@ -81,8 +81,14 @@ logger = logging.getLogger(__name__)
 # (workflow branch); when absent they are simply skipped by the loop below.
 # ``supervisor`` and ``supervisor_prompt`` sit between ``agents`` and ``skills``
 # so the supervisor block reads as a continuation of the agents block.
+# ``auto_approve`` (bool) sits right after ``interactive`` and is present only
+# when ``approve: auto`` + planner-in-roles fired (workflow-driven). The author
+# script directives (``before_script``/``script``/``after_script``) are translated
+# to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
+# they appear only when authored, so flow-files without them compile byte-identically.
 _CANONICAL_KEY_ORDER = [
     "interactive",
+    "auto_approve",
     "command",
     "prompt",
     "description",
@@ -90,7 +96,21 @@ _CANONICAL_KEY_ORDER = [
     "supervisor",
     "supervisor_prompt",
     "skills",
+    "script_before",
+    "script",
+    "script_after",
 ]
+
+# Sentinel key threaded by ``_apply_per_stage_overrides`` into a reconstructed
+# step body to carry the effective ``approve`` directive through loop-expansion
+# (it survives ``copy.deepcopy`` in ``_expand_loops``/``_make_expanded_copy``)
+# into ``_canonical_fields``, where it is popped and consumed to drive the two
+# ``approve: auto`` effects (interactive suppression + ``auto_approve`` emission).
+# The sentinel is output-only plumbing — it is popped in ``_canonical_fields``
+# step 3, so it NEVER reaches ``FlowStage.fields``; reconstruction operates on a
+# deep copy of the ORIGINAL body, so the sentinel NEVER reaches
+# ``PipelineDocument.body`` (the non-workflow path carries no sentinel at all).
+_APPROVE_SENTINEL = "_approve_directive"
 
 # In-container wrapper path template consumed by afm >= 0.4.15 as the per-stage
 # ``command:`` override. Composed directly from the ``WorkflowStage`` agent name
@@ -210,7 +230,7 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
+def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
     A legacy ``agents`` key in the step body is rejected up front with
@@ -219,24 +239,50 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
     Likewise, an authoring ``interactive`` key is rejected with
     ``StructuralError("interactive key is forbidden in stage body; use
     communication")`` — the authoring-side field is ``communication``; ``interactive``
-    is the output-only afm field. The authoring ``communication`` field is then
-    translated into the output ``interactive`` slot (renamed before
-    ``_inject_defaults`` / reordering so the canonical slot is ``interactive``).
+    is the output-only afm field.
+
+    The ``_APPROVE_SENTINEL`` key (if present — threaded by
+    ``_apply_per_stage_overrides`` only on the workflow path) is popped and
+    consumed as the effective ``approve`` directive; it never reaches the output.
+    The raw ``roles`` list is captured BEFORE translation so the ``auto_approve``
+    effect matches the authored role (``planner``), not the translated stem
+    (``planning``). The author script directives ``before_script``/``script``/
+    ``after_script`` are translated to the output ``script_before``/``script``/
+    ``script_after`` keys (consumed, not passed through as unknown keys). A body
+    carrying ``script`` together with ``prompt`` and/or ``skills`` is rejected
+    with ``StructuralError("script is mutually exclusive with prompt/skills in
+    stage {stage_name}")``; ``before_script``/``after_script`` are compatible.
+
+    The authoring ``communication`` field is then translated into the output
+    ``interactive`` slot — EXCEPT under ``approve: auto`` + ``communication: true``,
+    where it is SUPPRESSED (omitted, not ``interactive: false``). ``communication:
+    false`` (or no ``approve: auto``) renames to ``interactive: false`` as usual.
     The ``roles`` field is then translated to ``agents`` (or the single default
     ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source body
-    lacks a usable ``roles`` value. Known keys (``interactive``, ``command``,
-    ``prompt``, ``description``, ``agents``, ``supervisor``,
-    ``supervisor_prompt``, ``skills``) are emitted in that fixed order; any
-    remaining keys are appended alphabetically. The input-only ``roles`` key
-    never reaches the output (dropped in ``_inject_defaults``); the input-only
-    ``communication`` key never reaches the output either (renamed to ``interactive``).
-    ``supervisor``/``supervisor_prompt`` are authored-only — they appear in the
-    output only when the source body carries them. Each value is deep-copied so
-    the returned dict shares no structure with the parsed body — isolating the
-    compiler's output from caller mutation.
+    lacks a usable ``roles`` value. Under ``approve: auto`` + ``planner`` in the
+    raw ``roles``, ``auto_approve: true`` is emitted (canonical slot right after
+    ``interactive``). Known keys (``interactive``, ``auto_approve``, ``command``,
+    ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+    ``skills``, ``script_before``, ``script``, ``script_after``) are emitted in
+    that fixed order; any remaining keys are appended alphabetically. The
+    input-only ``roles`` key never reaches the output (dropped in
+    ``_inject_defaults``); the input-only ``communication`` key never reaches the
+    output either (renamed to ``interactive`` or suppressed). Each value is
+    deep-copied so the returned dict shares no structure with the parsed body.
+
+    The sentinel ``pop`` mutates ``body`` only when a sentinel is present — which
+    happens exclusively on the workflow path, where ``body`` is a deep copy of
+    the ORIGINAL step (the reconstruction in ``_reconstruct_body`` deep-copies
+    before any override/loop-expansion, so the ORIGINAL parsed body — mirrored
+    verbatim into ``PipelineDocument`` — is never touched). On the non-workflow
+    path no sentinel is present, so the ``pop`` is a no-op and the caller's body
+    is left untouched.
 
     Args:
-        body: The step body dict produced by ``parse_dsl``.
+        body: The step body dict produced by ``parse_dsl`` (workflow path: a
+            reconstructed deep copy carrying the ``_APPROVE_SENTINEL``).
+        stage_name: The stage id (used in the mutual-exclusion error message —
+            for loop-expanded copies this is ``NAME-i``).
 
     Returns:
         A new dict in canonical key order with deep-copied values.
@@ -245,20 +291,61 @@ def _canonical_fields(body: dict[str, Any]) -> dict[str, Any]:
         StructuralError: If ``body`` carries the legacy ``agents`` key — the
             authoring-side field is ``roles``; ``agents`` is output-only. Or if
             ``body`` carries an authoring ``interactive`` key — the authoring-side
-            field is ``communication``; ``interactive`` is output-only.
+            field is ``communication``; ``interactive`` is output-only. Or if
+            ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
+            — they are mutually exclusive.
     """
     if "agents" in body:
         raise StructuralError("agents key is forbidden in stage body; use roles")
     if "interactive" in body:
         raise StructuralError("interactive key is forbidden in stage body; use communication")
+
+    # Pop the approve sentinel (output-only plumbing) before any transformation.
+    # Present only when a workflow threaded an effective approve directive; a
+    # no-op (returns None) on the non-workflow path, which carries no sentinel.
+    effective_approve = body.pop(_APPROVE_SENTINEL, None)
+
+    # Capture the raw roles list BEFORE translation — the auto_approve effect
+    # matches the authored role "planner", not its translated stem "planning".
+    raw_roles = body.get("roles")
+
+    # Translate the authoring script directives into their output keys (the
+    # authoring keys are consumed, never passed through as unknown keys). A fresh
+    # dict is built rather than mutating ``body`` in place.
+    body = {
+        ("script_before" if key == "before_script" else "script_after" if key == "after_script" else key): value
+        for key, value in body.items()
+    }
+
+    # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
+    # ``before_script``/``after_script`` are compatible (checked against the
+    # translated ``script`` key, so it fires whether ``script`` was authored
+    # directly or — it cannot be — derived).
+    if "script" in body and ("prompt" in body or "skills" in body):
+        raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+
     if "communication" in body:
         # Translate the authoring ``communication`` key into the output
         # ``interactive`` slot BEFORE ``_inject_defaults`` / reordering, so the
-        # canonical slot is ``interactive`` (afm-stable). A fresh dict is built
-        # rather than mutating ``body`` in place — the parsed body is the
-        # caller's, mirrored verbatim into ``PipelineDocument``.
-        body = {("interactive" if key == "communication" else key): value for key, value in body.items()}
+        # canonical slot is ``interactive`` (afm-stable). Under ``approve: auto``
+        # + ``communication: true`` the key is SUPPRESSED (omitted) instead —
+        # suppress means omission, NOT ``interactive: false``. A fresh dict is
+        # built rather than mutating ``body`` in place.
+        suppress = effective_approve == "auto" and body["communication"] is True
+        if suppress:
+            body = {key: value for key, value in body.items() if key != "communication"}
+        else:
+            body = {("interactive" if key == "communication" else key): value for key, value in body.items()}
+
     source = _inject_defaults(body)
+
+    # ``approve: auto`` + ``planner`` in the raw roles ⇒ emit ``auto_approve:
+    # true`` (canonical slot right after ``interactive``). The two approve
+    # effects are independent: each fires on its own trigger.
+    has_planner = isinstance(raw_roles, list) and "planner" in raw_roles
+    if effective_approve == "auto" and has_planner:
+        source["auto_approve"] = True
+
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:
         if key in source:
@@ -274,27 +361,27 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
 
     Computed ONCE per reconstruction and threaded into ``_apply_per_stage_overrides``
     and ``_expand_loops`` so the per-field merge lives in exactly one place. The
-    inline ``agent``/``loop`` carried by ``workflow.extend`` seed the default
-    override (an extend-stage with no matching stages-block still gets its inline
-    agent/loop applied); an explicit ``workflow.stages`` entry then overlays
-    per-field and WINS whenever its field is not ``None`` (the inline value is the
-    fallback only). ``prompt``/``skills`` have no inline equivalent, so a
-    stages-block entry's own values always pass straight through, and a name with
-    only an extend entry carries ``prompt``/``skills`` as ``None``.
+    inline ``agent``/``loop``/``approve`` carried by ``workflow.extend`` seed the
+    default override (an extend-stage with no matching stages-block still gets its
+    inline agent/loop/approve applied); an explicit ``workflow.stages`` entry then
+    overlays per-field and WINS whenever its field is not ``None`` (the inline
+    value is the fallback only). ``prompt``/``skills`` have no inline equivalent,
+    so a stages-block entry's own values always pass straight through, and a name
+    with only an extend entry carries ``prompt``/``skills`` as ``None``.
 
     Args:
         workflow: The declarative workflow instructions.
 
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
-        entries carry only ``agent``/``loop``; stages-block entries carry their
-        full ``WorkflowStage``; merged entries combine them per-field.
+        entries carry only ``agent``/``loop``/``approve``; stages-block entries
+        carry their full ``WorkflowStage``; merged entries combine them per-field.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
-        # Inline extend carries agent/loop only — no prompt/skills override.
-        effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop)
+        # Inline extend carries agent/loop/approve only — no prompt/skills override.
+        effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
         base = effective.get(name)
@@ -308,6 +395,7 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             prompt=stg.prompt,
             loop=stg.loop if stg.loop is not None else base.loop,
             skills=stg.skills,
+            approve=stg.approve if stg.approve is not None else base.approve,
         )
 
     return effective
@@ -361,7 +449,7 @@ def _apply_per_stage_overrides(
     steps: list[PhaseStep | StageStep],
     effective: dict[str, WorkflowStage],
 ) -> None:
-    """Inject per-stage agent/prompt/skills overrides into the matching step bodies.
+    """Inject per-stage agent/prompt/skills/approve overrides into the matching step bodies.
 
     For each ``(name, WorkflowStage)`` in ``effective``: the step with a matching
     name/id is found in ``steps`` (mutated in place); when no step matches the
@@ -372,11 +460,17 @@ def _apply_per_stage_overrides(
     in-container wrapper path into the step body's ``command`` slot, a
     non-``None`` ``prompt`` copies its text into the step body's ``description``
     slot, and a non-``None`` ``skills`` merges with the step body's existing
-    ``skills`` via ``_merge_skills`` (pipeline-first dedup). ``effective`` already
-    folds the inline-extend default together with the explicit stages-block, so
-    inline ``agent``/``loop`` apply even without a stages-block, and an explicit
-    stages-block wins per-field. Operates on the supplied (already deep-copied)
-    working sequence so the ORIGINAL parsed body stays untouched.
+    ``skills`` via ``_merge_skills`` (pipeline-first dedup). The effective
+    ``approve`` directive (whether ``"auto"`` or ``None``) is always threaded
+    into the step body under the ``_APPROVE_SENTINEL`` key — it survives
+    ``copy.deepcopy`` in loop-expansion and is popped/consumed in
+    ``_canonical_fields`` to drive the two ``approve: auto`` effects; writing
+    ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel as no
+    directive). ``effective`` already folds the inline-extend default together
+    with the explicit stages-block, so inline ``agent``/``loop``/``approve``
+    apply even without a stages-block, and an explicit stages-block wins
+    per-field. Operates on the supplied (already deep-copied) working sequence so
+    the ORIGINAL parsed body stays untouched.
 
     Args:
         steps: The working (deep-copied) step sequence to mutate in place.
@@ -401,6 +495,12 @@ def _apply_per_stage_overrides(
             merged = _merge_skills(step.body.get("skills"), stage.skills)
             if merged is not None:
                 step.body["skills"] = merged
+
+        # Thread the effective approve directive into the step body under the
+        # sentinel key. Writing ``None`` is harmless and keeps the contract
+        # simple (the sentinel always reflects the resolved directive). It never
+        # reaches the output — popped in ``_canonical_fields`` step 3.
+        step.body[_APPROVE_SENTINEL] = stage.approve
 
 
 def _make_expanded_copy(
@@ -1165,7 +1265,7 @@ def compile_flow(
     if fmt is BodyFormat.PHASES:
         for i, step in enumerate(reconstructed):
             depends_on = [reconstructed[i - 1].name] if i > 0 else None
-            fields = _canonical_fields(step.body)
+            fields = _canonical_fields(step.body, step.name)
             stages.append(
                 FlowStage(
                     id=step.name,
@@ -1176,7 +1276,7 @@ def compile_flow(
             )
     elif fmt is BodyFormat.STAGES:
         for step in reconstructed:
-            fields = _canonical_fields(step.body)
+            fields = _canonical_fields(step.body, step.name)
             stages.append(
                 FlowStage(
                     id=step.name,

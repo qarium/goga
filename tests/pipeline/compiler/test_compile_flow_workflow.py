@@ -2313,3 +2313,169 @@ class TestCompileFlowSkipLoopExpansionInteraction:
         # D's authored dep on C reconnects to B (4skip), then 4c rewrites it to
         # the last loop-expanded copy b-2.
         assert d["depends_on"] == ["b-2"]
+
+
+class TestCompileFlowApproveEffects:
+    """The two independent ``approve: auto`` effects over a stage body.
+
+    For a stage whose effective ``approve`` is ``"auto"`` (threaded from the
+    workflow into the body via the ``_approve_directive`` sentinel):
+    (1) ``communication: true`` ⇒ SUPPRESS ``interactive`` (omit, not ``false``);
+    (2) raw ``roles`` containing ``planner`` ⇒ emit ``auto_approve: true``.
+    Both fire together when both triggers are present; baseline no-op otherwise;
+    uniform across loop-expanded copies; the sentinel never leaks into output.
+    """
+
+    @staticmethod
+    def _write_deploy_stage(tmp_path: Path, body_extra: str = "") -> Path:
+        """Write a single ``deploy`` STAGES stage and return its path."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\ndeploy:\n  title: Deploy\n" + body_extra,
+        )
+        return pipeline_path
+
+    def test_compile_approve_auto_suppresses_interactive_when_communication_true(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """``approve: auto`` + ``communication: true`` ⇒ no ``interactive`` key.
+
+        Suppression means omission (not ``interactive: false``).
+        """
+        pipeline_path = self._write_deploy_stage(tmp_path, "  communication: true\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert "interactive" not in fields
+        # The sentinel never reaches the output.
+        assert "_approve_directive" not in fields
+
+    def test_compile_approve_auto_keeps_interactive_false(self, tmp_path: Path) -> None:
+        """``approve: auto`` + ``communication: false`` ⇒ ``interactive: false``.
+
+        Suppression fires only when ``communication`` is ``True``; ``False``
+        still renames into the ``interactive`` slot as usual.
+        """
+        pipeline_path = self._write_deploy_stage(tmp_path, "  communication: false\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["interactive"] is False
+
+    def test_compile_approve_auto_emits_auto_approve_when_planner_in_roles(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        """``approve: auto`` + ``planner`` in roles + ``communication: true`` ⇒ both effects.
+
+        ``interactive`` suppressed; ``auto_approve: true`` emitted as the first
+        canonical key (the ``interactive`` slot is empty).
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n    - executor\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["auto_approve"] is True
+        assert "interactive" not in fields
+        # ``interactive`` suppressed ⇒ ``auto_approve`` is the first canonical key.
+        assert next(iter(fields)) == "auto_approve"
+
+    def test_compile_approve_auto_no_planner_no_auto_approve(self, tmp_path: Path) -> None:
+        """``approve: auto`` without ``planner`` in roles ⇒ no ``auto_approve``."""
+        pipeline_path = self._write_deploy_stage(tmp_path, "  roles:\n    - executor\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        fields = flow_doc.stages[0].fields
+        assert "auto_approve" not in fields
+
+    def test_compile_approve_auto_uniform_across_loop_copies(self, tmp_path: Path) -> None:
+        """The approve directive fires uniformly on every loop-expanded copy.
+
+        The ``_approve_directive`` sentinel survives ``copy.deepcopy`` in
+        ``_expand_loops``/``_make_expanded_copy`` and is consumed per copy.
+        """
+        pipeline_path = self._write_deploy_stage(
+            tmp_path,
+            "  communication: true\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto", loop=3)})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        assert [stage.id for stage in flow_doc.stages] == ["deploy-1", "deploy-2", "deploy-3"]
+        for stage in flow_doc.stages:
+            assert "interactive" not in stage.fields
+            assert stage.fields["auto_approve"] is True
+            assert "_approve_directive" not in stage.fields
+
+    def test_compile_approve_extend_stage_body_source(self, tmp_path: Path) -> None:
+        """An extend-stage carrying inline ``approve: auto`` fires effects from its own body.
+
+        The extend-stage body is the source of the trigger fields (``communication``
+        and ``roles``); the inline ``approve`` directive threads through the
+        effective map into the embedded step's sentinel.
+        """
+        pipeline_path = self._write_deploy_stage(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            extend={
+                "extra": WorkflowExtendStage(
+                    after=["deploy"],
+                    approve="auto",
+                    body={"title": "Extra", "communication": True, "roles": ["planner"]},
+                ),
+            },
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        extra = next(stage for stage in flow_doc.stages if stage.id == "extra")
+        assert "interactive" not in extra.fields
+        assert extra.fields["auto_approve"] is True
+        assert "_approve_directive" not in extra.fields
+
+    def test_effective_approve_stages_overrides_extend(self, tmp_path: Path) -> None:
+        """A stages-block entry without ``approve`` falls back to the extend inline ``approve``.
+
+        ``stages.extra`` (prompt-only, no approve) overlays the extend-seeded
+        effective map; the per-field overlay keeps ``approve = stages.approve(None)
+        ?? extend.approve("auto") ⇒ "auto"``, so the effects still fire.
+        """
+        pipeline_path = self._write_deploy_stage(tmp_path)
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(
+            stages={"extra": WorkflowStage(prompt="override")},
+            extend={
+                "extra": WorkflowExtendStage(
+                    after=["deploy"],
+                    approve="auto",
+                    body={"title": "Extra", "communication": True, "roles": ["planner"]},
+                ),
+            },
+        )
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        extra = next(stage for stage in flow_doc.stages if stage.id == "extra")
+        # The stages-block prompt threaded into the description slot …
+        assert extra.fields["description"] == "override"
+        # … while the extend-seeded ``approve: auto`` still fired the effects.
+        assert "interactive" not in extra.fields
+        assert extra.fields["auto_approve"] is True
