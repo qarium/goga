@@ -2479,3 +2479,139 @@ class TestCompileFlowApproveEffects:
         # … while the extend-seeded ``approve: auto`` still fired the effects.
         assert "interactive" not in extra.fields
         assert extra.fields["auto_approve"] is True
+
+
+class TestApproveScriptsRoundTrip:
+    """Flow B integration: ``approve: auto`` + script directives compile→serialize round-trip.
+
+    Stitches the Task 4 compiler effects (interactive suppression, ``auto_approve``
+    emission, script-directive translation, mutual-exclusion ordering) with the
+    Task 5 serializer (block-literal multi-line ``script_*``, plain ``auto_approve``)
+    by reading the written flow-file off disk and asserting the canonical
+    artifact that afm consumes. The backward-compat gate pins the exact bytes of a
+    directive-free pipeline so the extended ``_CANONICAL_KEY_ORDER`` /
+    ``_canonical_fields`` rewrite leaves prior flow-files untouched.
+    """
+
+    def test_approve_auto_plus_scripts_compile_serialize_round_trip(self, tmp_path: Path) -> None:
+        """``approve: auto`` + scripts compile and serialize to the canonical flow-file.
+
+        A pipeline stage authored with ``roles:[planner], communication:true,
+        before_script/script/after_script`` (script multi-line) under a workflow
+        ``stages.deploy.approve: auto`` compiles so that: ``interactive`` is
+        suppressed (approve:auto + communication:true); ``auto_approve: true`` is
+        emitted as a plain bool (planner in raw roles); the script directives
+        translate to ``script_before``/``script``/``script_after`` with the
+        multi-line ``script`` rendered block-literal (``|``, not quoted); and the
+        authoring ``before_script``/``after_script`` keys never reach the output.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: D\n"
+            "---\n"
+            "\n"
+            "deploy:\n"
+            "  title: Deploy\n"
+            "  communication: true\n"
+            "  roles:\n"
+            "    - planner\n"
+            "    - executor\n"
+            "  before_script: prep\n"
+            '  script: "set -e\\necho hi\\nmake build"\n'
+            "  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+        workflow = WorkflowDocument(stages={"deploy": WorkflowStage(approve="auto")})
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+        text = flow_path.read_text()
+        fields = flow_doc.stages[0].fields
+
+        # (1) ``interactive`` suppressed under approve:auto + communication:true.
+        assert "interactive" not in fields
+        assert "interactive" not in text
+        # (2) ``auto_approve: true`` emitted as a plain bool (planner in roles).
+        assert fields["auto_approve"] is True
+        assert "auto_approve: true" in text
+        assert "auto_approve: |" not in text
+        assert "auto_approve: 'true'" not in text
+        # (3) Script directives translated and present in authored order.
+        assert fields["script_before"] == "prep"
+        assert fields["script"] == "set -e\necho hi\nmake build"
+        assert fields["script_after"] == "cleanup"
+        keys = list(fields)
+        assert keys.index("script_before") < keys.index("script") < keys.index("script_after")
+        # (4) Multi-line ``script`` renders block-literal, NOT single-quoted.
+        assert "script: |" in text
+        assert "script: '" not in text
+        # Single-line before/after render plain (no block header, no quoting).
+        assert "script_before: prep" in text
+        assert "script_after: cleanup" in text
+        # (5) Authoring keys never reach the output (consumed, not passed through).
+        assert "before_script" not in fields
+        assert "after_script" not in fields
+        assert "before_script" not in text
+        assert "after_script" not in text
+        # The sentinel approve directive never leaks into the flow-file.
+        assert "_approve_directive" not in text
+        # Round-trip: the multi-line script parses back to the exact field value.
+        loaded = yaml.safe_load(text)
+        assert loaded["stages"][0]["script"] == fields["script"]
+
+    def test_baseline_flow_file_byte_identical(self, tmp_path: Path) -> None:
+        """A directive-free pipeline (no workflow) compiles byte-identical to baseline.
+
+        Backward-compat gate at the integration level: a two-stage pipeline
+        without ``approve``/``script_*`` directives and with no workflow compiles
+        to a byte-exact pinned flow-file — no ``auto_approve``, no ``script_*``,
+        no ``_approve_directive`` sentinel, and the canonical ordering of the
+        pre-existing fields unchanged.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\n"
+            "description: D\n"
+            "---\n"
+            "\n"
+            "a:\n"
+            "  title: A\n"
+            "  communication: true\n"
+            "  roles:\n"
+            "    - planner\n"
+            "  prompt: p\n"
+            "b:\n"
+            "  title: B\n"
+            "  depends_on: [a]\n"
+            "  prompt: q\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        compile_flow(pipeline_path, flow_path, workflow=None, root_dir=None)
+
+        text = flow_path.read_text()
+        # No new directives authored ⇒ none of the new keys appear.
+        assert "auto_approve" not in text
+        assert "script_before" not in text
+        assert "script_after" not in text
+        # ``script:`` matches the standalone key only (no authored script here).
+        assert "script:" not in text
+        assert "_approve_directive" not in text
+        # Byte-exact baseline pinned: canonical order preserved, flow-style agents,
+        # single trailing newline.
+        assert text == (
+            "name: T\n"
+            "description: D\n"
+            "stages:\n"
+            "- id: a\n"
+            "  name: A\n"
+            "  interactive: true\n"
+            "  prompt: p\n"
+            "  agents: [planning]\n"
+            "- id: b\n"
+            "  name: B\n"
+            "  prompt: q\n"
+            "  agents: [auto]\n"
+            "  depends_on:\n"
+            "  - a\n"
+        )
