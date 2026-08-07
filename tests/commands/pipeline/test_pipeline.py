@@ -119,6 +119,7 @@ class TestPipelineLogic:
             workflow=None,
             no_workflow=False,
             skip=(),
+            parallel=None,
         )
 
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
@@ -143,6 +144,7 @@ class TestPipelineLogic:
             workflow=None,
             no_workflow=False,
             skip=(),
+            parallel=None,
         )
 
     def test_pipeline_passes_extra_env_to_run_pipeline_container(self) -> None:
@@ -170,6 +172,7 @@ class TestPipelineLogic:
             workflow=None,
             no_workflow=False,
             skip=(),
+            parallel=None,
         )
 
     def test_pipeline_accepts_long_env_option(self) -> None:
@@ -194,6 +197,7 @@ class TestPipelineLogic:
             workflow=None,
             no_workflow=False,
             skip=(),
+            parallel=None,
         )
 
     def test_pipeline_accepts_skip_and_clean_short_aliases(self) -> None:
@@ -212,6 +216,33 @@ class TestPipelineLogic:
         assert result.exit_code == 0
         assert mock_rpc.call_args.kwargs["skip"] == ("build", "test")
         assert mock_rpc.call_args.kwargs["clean"] is True
+
+    def test_pipeline_click_parallel_option_threads_through(self) -> None:
+        """`-p N` and `--parallel N` both forward parallel=<N> to run_pipeline_container."""
+        config = _make_config()
+        runner = CliRunner()
+        for argv in (["deploy", "-p", "4"], ["deploy", "--parallel", "4"]):
+            with (
+                mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+                mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+            ):
+                result = runner.invoke(pipeline, argv)
+
+            assert result.exit_code == 0, f"failed for {argv}: {result.output}"
+            assert mock_rpc.call_args.kwargs["parallel"] == 4
+
+    def test_pipeline_click_parallel_defaults_none(self) -> None:
+        """`goga pipeline NAME` without `-p` forwards parallel=None (unbounded)."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 0
+        assert mock_rpc.call_args.kwargs["parallel"] is None
 
     def test_pipeline_discovery_forces_empty_skip(self) -> None:
         """In discovery mode (no name) --skip is a no-op: skip forced to ()."""

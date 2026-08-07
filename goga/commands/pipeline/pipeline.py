@@ -66,6 +66,14 @@ from .run_pipeline_container import run_pipeline_container
     multiple=True,
     help="Exclude a stage from the compiled pipeline (run mode only; repeatable); forwarded as GOGA_SKIP_STAGES",
 )
+@click.option(
+    "-p",
+    "--parallel",
+    "parallel",
+    type=int,
+    default=None,
+    help="cap concurrently executing stages (run mode only; threads to afm --max-parallel)",
+)
 @click.pass_context
 def pipeline(  # noqa: PLR0913, PLR0917
     ctx: click.Context,
@@ -78,6 +86,7 @@ def pipeline(  # noqa: PLR0913, PLR0917
     workflow: str | None,
     no_workflow: bool,
     skip: tuple[str, ...],
+    parallel: int | None,
 ) -> None:
     """Run a goga pipeline by name, or list available pipelines when no name is given.
 
@@ -130,6 +139,16 @@ def pipeline(  # noqa: PLR0913, PLR0917
             performs NO name validation (unknown names surface in-container as a
             ``StructuralError``); ``--skip`` is a no-op in discovery mode, which
             never writes an env-file.
+        parallel: optional int (None when absent) from ``-p/--parallel N`` capping
+            concurrently executing stages. Run mode only — when not None it is
+            forwarded to ``run_pipeline_container``, which appends
+            ``--parallel <N>`` to the in-container run argv so the in-container
+            ``pipeline_cli`` threads it to afm's ``--max-parallel``. When None
+            (default) the flag is omitted so afm runs unbounded (backward
+            compatible). Not defaulted — None ⇒ unbounded. A no-op in discovery
+            mode (no afm). The ``-p`` short alias is a separate namespace from
+            the Docker ``-p <port>:<port>`` port-publish token (the latter is
+            assembled inside ``run_pipeline_container``, never from Click).
 
     Raises:
         click.ClickException: When ``.goga/config.yml`` cannot be loaded, when
@@ -212,5 +231,6 @@ def pipeline(  # noqa: PLR0913, PLR0917
         workflow=workflow,
         no_workflow=no_workflow,
         skip=skip if name is not None else (),
+        parallel=parallel,
     )
     ctx.exit(exit_code)

@@ -170,3 +170,64 @@ class TestPipelineWorkflowFlagSurface:
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["no_workflow"] is True
         assert mock_run.call_args.kwargs["workflow"] is None
+
+
+# --- -p/--parallel flag contract ---
+
+
+class TestPipelineParallelFlagContract:
+    def test_pipeline_has_parallel_option(self) -> None:
+        """The pipeline command registers a ``--parallel`` click Option."""
+        param_names = [p.name for p in pipeline.params]
+        assert "parallel" in param_names
+
+    def test_pipeline_parallel_option_is_int_and_defaults_none(self) -> None:
+        """``--parallel`` is a non-flag int option defaulting to None (unbounded)."""
+        parallel_param = next(p for p in pipeline.params if p.name == "parallel")
+        assert isinstance(parallel_param, click.Option)
+        assert parallel_param.is_flag is False
+        assert parallel_param.default is None
+        # type=int ⇒ Click materialises an int param type so ``-p foo`` is rejected.
+        assert parallel_param.type.name == "integer"
+
+    def test_pipeline_parallel_option_has_short_and_long_flags(self) -> None:
+        """The registered forms are ``-p`` (short alias) and ``--parallel`` (long)."""
+        parallel_param = next(p for p in pipeline.params if p.name == "parallel")
+        assert "-p" in parallel_param.opts
+        assert "--parallel" in parallel_param.opts
+
+
+class TestPipelineCallbackParallelSignature:
+    def test_pipeline_callback_has_parallel_parameter(self) -> None:
+        """The decorated callback exposes a `parallel` parameter."""
+        parameters = pipeline_cmd.callback.__annotations__
+        assert "parallel" in parameters
+
+    def test_pipeline_callback_parallel_annotation_is_optional_int(self) -> None:
+        """The ``parallel`` callback parameter is typed ``int | None``."""
+        hints = typing.get_type_hints(pipeline_cmd.callback)
+        assert hints["parallel"] == int | None
+
+
+class TestPipelineParallelFlagSurface:
+    def test_help_lists_parallel_flag(self) -> None:
+        """``--help`` advertises both ``-p`` and ``--parallel``."""
+        runner = CliRunner()
+        result = runner.invoke(pipeline, ["--help"])
+        assert result.exit_code == 0
+        assert "-p" in result.output
+        assert "--parallel" in result.output
+
+    def test_pipeline_accepts_parallel_flag_via_clirunner(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``--parallel N`` parses cleanly and forwards parallel=<N>."""
+        _write_config(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy", "--parallel", "4"])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["parallel"] == 4
