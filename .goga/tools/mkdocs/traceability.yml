@@ -7,6 +7,9 @@ README.md:
   - goga/commands/tool
   - goga/connect
   - goga/pipeline
+  - goga/build
+  - goga/commands/build
+  - goga/ralphex
 
 docs/index.md:
   - goga

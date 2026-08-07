@@ -193,7 +193,31 @@ goga pipeline feature
 
 A pipeline-file answers **what** the pipeline does. A [workflow](https://qarium.github.io/goga/pipelines/workflows/) file layers **how the same pipeline should behave in this project** — per-stage CLI agent, additional prompt context, skills overrides, loop expansion, stage skipping via `skip`, per-stage auto-approval via `approve`, and new stages via `extend` — without forking the base file.
 
+A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. Cap how many stages may run in parallel with `goga pipeline <name> -p N` (subject to the pipeline's dependency rules).
+
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
+
+## Build
+
+A plan describes **what** to implement; `goga build` is the bridge that materializes the code. It hands the plan to a ralph-loop running inside an isolated Docker container — the loop reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
+
+```bash
+goga build docs/plans/<topic>.md
+```
+
+The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. Credential files for `claude`, `codex`, and `opencode` are detected on the host and bind-mounted read-only into the container automatically (no flag), so the agent executing the plan runs with your live credentials.
+
+Customize the run with the usual flags:
+
+```bash
+goga build plan.md --update               # refresh the image first (build from config dockerfile, else pull)
+goga build plan.md --clean                # wipe persistent loop state for a fresh run
+goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
+```
+
+A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
+
+See [`goga build`](https://qarium.github.io/goga/cli/build/) for the full CLI reference, configuration, and exit codes.
 
 ## Tools
 
@@ -324,7 +348,7 @@ Read the full Tools model in the [Tools](https://qarium.github.io/goga/tools/) s
 - **CLI toolkit** — init, lint, build, schema, connect, install, upgrade, contract extraction, and pipeline commands
 - **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships four ready-to-use definitions — `feature`, `bugfix`, `patch`, `review` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt/skills overrides, loop-expansion, stage skipping via `skip`, per-stage auto-approval via `approve`, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`); cap concurrency with `goga pipeline <name> -p N` (the maximum number of stages that may run in parallel, subject to the pipeline's dependency rules)
 - **Tools** — Extensible tool packages distributed as `goga-tool-*` Python modules that ship agent skills, an optional CLI entry point (`main(argv)`, with an opt-in `ast` injection of the project AST), and optional pipeline-files; install with `goga install <tool> [--version <form>]` (single) or `goga install` (bulk from the `tools:` section of `.goga/config.yml`, one pip call; empty section is a no-op), version forms `1.0.x` / `1.x` / `1.0.1` / `latest` resolve to PEP 440 specifiers, post-install activation re-syncs every connected agent unless `--no-connect` is set; skills install under a `goga-tool-<skill>` prefix into `~/.goga/skills/` (the skill whose directory matches the tool name becomes the `/goga:tool <name>` dispatcher), tool pipelines are namespaced on install as `<tool>:<name>.yml` into `~/.goga/pipelines/` so they are addressable as `goga pipeline <tool>:<name>` and never collide with internal pipelines
-- **Docker builds & pipelines** — Execute build plans via ralphex and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `roles` overrides that customize the three authorable agent prompts (planner/executor/reviewer, mapping to the planning/implementation/review stems) per pipeline-file — the `summary` prompt is always the shipped default, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
+- **Docker builds & pipelines** — Execute build plans via a ralph-loop and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `roles` overrides that customize the three authorable agent prompts (planner/executor/reviewer, mapping to the planning/implementation/review stems) per pipeline-file — the `summary` prompt is always the shipped default, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation
 
