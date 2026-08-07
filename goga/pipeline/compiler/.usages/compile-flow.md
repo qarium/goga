@@ -18,22 +18,39 @@ Authoring key → output key (the authoring key is consumed, not passed through)
 - after_script → script_after
 - roles → agents (via translate_role; default ["auto"] when absent/empty)
 
-## approve: auto (workflow directive)
+## approve (workflow directive: auto | plan | dialog)
 
-`approve` is a per-stage / extend-entry workflow field (value "auto" only). For a
-stage whose effective `approve` is "auto", the compiler reads the trigger fields
-from THAT STAGE'S BODY (pipeline-file body for an existing stage; the
-extend-stage body for an extend-stage) and applies two INDEPENDENT effects:
+`approve` is a per-stage / extend-entry workflow field — a declarative directive
+with three accepted values: `auto`, `plan`, `dialog` (any other value, or a
+non-str, is rejected by `parse_workflow` before compilation). For a stage whose
+effective `approve` is set, the compiler reads the trigger fields from THAT
+STAGE'S BODY (pipeline-file body for an existing stage; the extend-stage body for
+an extend-stage) and applies up to two INDEPENDENT effects, each fired by its own
+body trigger AND driven by its own subset of directives:
 
-| Trigger (in stage body) | Effect (when approve == "auto") |
-|-------------------------|---------------------------------|
-| communication: true | SUPPRESS interactive — the communication→interactive translation is skipped (no interactive key). communication: false is unaffected (→ interactive: false). |
-| roles contains planner | EMIT auto_approve: true (canonical slot next to interactive). |
+| Effect | Body trigger | Directives that drive it |
+|--------|--------------|--------------------------|
+| SUPPRESS interactive | communication: true (the communication→interactive translation is skipped; no interactive key; communication: false is unaffected → interactive: false) | auto, plan |
+| EMIT auto_approve: true | roles contains planner (canonical slot next to interactive) | auto, dialog |
 
-Both fire together when both triggers are present. approve: "auto" with neither
-trigger is a no-op. Effects apply uniformly to every loop-expanded copy. The
-directive is read from the workflow; the triggers from the body — the compiler
-joins them. PipelineDocument is unaffected (output-side only).
+Directive → effects matrix:
+
+| `approve`  | suppress interactive | emit auto_approve |
+|------------|:--------------------:|:-----------------:|
+| (absent)   | —                    | —                 |
+| `auto`     | ✓                    | ✓                 |
+| `plan`     | ✓                    | —                 |
+| `dialog`   | —                    | ✓                 |
+
+So `auto` drives BOTH effects; `plan` drives only the interactive suppression
+(the communication effect — a `planner` stage does NOT emit `auto_approve`);
+`dialog` drives only the `auto_approve` emission (the roles effect —
+`communication: true` still becomes `interactive: true`). Each effect fires on
+its own trigger AND its own directive subset; an effective `approve` whose subset
+is empty, or whose trigger is absent, is a no-op. Effects apply uniformly to
+every loop-expanded copy. The directive is read from the workflow; the triggers
+from the body — the compiler joins them. PipelineDocument is unaffected
+(output-side only).
 
 ## Stage script directives
 
