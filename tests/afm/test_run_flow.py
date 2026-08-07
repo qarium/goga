@@ -24,11 +24,30 @@ class TestRunFlowContract:
         assert run_flow is not None
 
     def test_run_flow_signature_matches_contract(self) -> None:
-        """run_flow exposes the (flow_path, port) signature."""
+        """run_flow exposes the (flow_path, port, max_parallel) signature."""
         signature = inspect.signature(run_flow)
         parameters = list(signature.parameters)
 
-        assert parameters == ["flow_path", "port"]
+        assert parameters == ["flow_path", "port", "max_parallel"]
+
+    def test_run_flow_max_parallel_inserted_after_port_before_path(self, tmp_path: Path) -> None:
+        """max_parallel materializes as `--max-parallel <N>` after --port, before the path."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            run_flow(flow_path, 50321, max_parallel=4)
+
+        called_args = mock_subprocess.call_args.args[0]
+        # --max-parallel sits immediately after --port <port>, before the positional path.
+        port_index = called_args.index("--port")
+        assert called_args[port_index + 2] == "--max-parallel"
+        assert called_args[port_index + 3] == "4"
+        assert called_args[-1] == str(flow_path)
 
     def test_run_flow_returns_int(self, tmp_path: Path) -> None:
         """run_flow returns 0 on a successful (exit 0) afm invocation."""
@@ -61,6 +80,48 @@ class TestRunFlowLogic:
         assert exit_code == 0
         mock_subprocess.assert_called_once()
         called_args = mock_subprocess.call_args.args[0]
+        assert called_args == ["afm", "run", "--port", "50321", str(flow_path)]
+
+    def test_run_flow_passes_max_parallel_flag_when_set(self, tmp_path: Path) -> None:
+        """max_parallel=4 materializes as `--max-parallel 4` between --port and the path."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow(flow_path, 50321, max_parallel=4)
+
+        assert exit_code == 0
+        mock_subprocess.assert_called_once()
+        called_args = mock_subprocess.call_args.args[0]
+        assert called_args == [
+            "afm",
+            "run",
+            "--port",
+            "50321",
+            "--max-parallel",
+            "4",
+            str(flow_path),
+        ]
+
+    def test_run_flow_omits_max_parallel_flag_when_none(self, tmp_path: Path) -> None:
+        """default max_parallel=None omits --max-parallel entirely (backward compat)."""
+        flow_path = tmp_path / "deploy.yml"
+        flow_path.write_text("flow")
+
+        with mock.patch.object(
+            _run_flow_module.subprocess,
+            "run",
+            return_value=MagicMock(returncode=0),
+        ) as mock_subprocess:
+            exit_code = run_flow(flow_path, 50321)
+
+        assert exit_code == 0
+        called_args = mock_subprocess.call_args.args[0]
+        assert "--max-parallel" not in called_args
         assert called_args == ["afm", "run", "--port", "50321", str(flow_path)]
 
     def test_run_flow_returns_127_when_afm_missing(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
