@@ -34,6 +34,9 @@ goga install foo
 # Install a specific concrete version, then activate
 goga install foo --version 1.0.1
 
+# Short alias form — identical to the line above
+goga install foo -v 1.0.1
+
 # Install within a minor x-range (>=1.0.0, <1.1.0)
 goga install foo --version 1.0.x
 
@@ -91,7 +94,7 @@ Neither pip nor activation is invoked.
 |---|---|---|---|
 | `name` (positional, optional) | string | None | Tool name without the goga-tool- / goga_tool_ prefix. When absent, bulk/empty mode runs from `config.tools`. |
 | `--sudo` | flag | False | Run pip under `sudo --preserve-env=HOME` (Unix-only). Applies to pip only; activation never uses sudo. |
-| `--version <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. |
+| `--version <form>`, `-v <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. Both forms are aliases on the same option — `-v 1.0.x` is identical to `--version 1.0.x`. |
 | `--no-connect` | flag | False | Skip post-install activation. When set, the command performs the install only and the exit code is pip's. |
 
 ## Post-install Activation

@@ -353,6 +353,18 @@ class TestInstallWiringInvariants:
         assert _pkgs_from_argv(argv) == ["goga-tool-afm~=1.0.0"]
         assert "goga-tool-afm==2.0" not in argv
 
+    def test_install_short_alias_v_resolves_version_in_single_path(self) -> None:
+        # The short alias ``-v`` is registered alongside ``--version`` on the
+        # same Click Option, so single path must resolve the form via
+        # resolve_version exactly as the long form does.
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "foo", "-v", "1.0.x"])
+        assert result.exit_code == 0
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-foo~=1.0.0"]
+
 
 class TestInstallActivation:
     """Post-install activation wiring — ``--no-connect`` flag + ACTIVATION step.

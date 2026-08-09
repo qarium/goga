@@ -125,7 +125,10 @@ Annotations: |
     `version`: optional version-form string in the four-form grammar. Used by
       the single path only (ignored in the bulk path). Resolved by
       resolve_version; operator-prefixed or malformed forms raise ValueError
-      at resolution time.
+      at resolution time. The CLI flag binding the callback's `version`
+      parameter MUST expose both forms: the primary long form --version and
+      the secondary short alias -v — Click receives them on a single Option
+      so both deserialise into the same parameter.
     `no_connect`: when True, skip the post-install activation re-sync — the
       command performs the pip install only. Defaults to False (re-sync enabled).
 
@@ -178,6 +181,9 @@ Annotations: |
       without invoking pip and without activation
     - The --version option is used by the single path only; the bulk path
       MUST NOT consult it
+    - The version flag MUST be registered with both the long form --version
+      and the short alias -v on the same Click Option (Click secondary
+      flag); both forms bind the callback's `version` parameter identically
     - --sudo MUST apply sudo with HOME preservation to the (single) pip argv in
       both single and bulk modes; activation never runs under sudo
     - Activation MUST run only when pip succeeded (exit 0) in single or bulk
