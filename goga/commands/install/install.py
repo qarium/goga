@@ -63,13 +63,17 @@ def resolve_version(form: str | None) -> str | None:
     # 1. None / "latest" → no specifier; pip selects the newest under -U.
     if form is None or form == "latest":
         return None
+
     # 2. Operator-prefixed forms are rejected — this routine owns the operator.
     if form.startswith(("==", ">=", "<=", "~=", "!=", "<", ">", "===")):
         raise ValueError("operator-prefixed forms are rejected")
+
     segments = form.split(".")
+
     # 3. Major x-range "N.x": exactly one dot, last segment "x", major numeric.
     if len(segments) == _XRANGE_MAJOR_SEGMENTS and segments[1] == "x" and segments[0].isdigit() and segments[0] != "":
         return f"~={segments[0]}.0"
+
     # 4. Minor x-range "N.M.x": exactly two dots, last segment "x", both numeric.
     if (
         len(segments) == _XRANGE_MINOR_SEGMENTS
@@ -78,11 +82,13 @@ def resolve_version(form: str | None) -> str | None:
         and segments[1].isdigit()
     ):
         return f"~={segments[0]}.{segments[1]}.0"
+
     # 5. Concrete "N(.M)?(.K)?": 1-3 numeric segments, no trailing "x".
     if _CONCRETE_MIN_SEGMENTS <= len(segments) <= _CONCRETE_MAX_SEGMENTS and all(
         s.isdigit() and s != "" for s in segments
     ):
         return f"=={form}"
+
     # 6. Anything else is malformed.
     raise ValueError("malformed version form")
 
@@ -96,8 +102,10 @@ def _pip_argv(pkgs: list[str], sudo: bool) -> list[str]:
     tool discovery still reads the caller's home directory.
     """
     argv: list[str] = [sys.executable, "-m", "pip", "install", *pkgs, "-U"]
+
     if sudo:
         argv = ["sudo", "--preserve-env=HOME", *argv]
+
     return argv
 
 
@@ -112,8 +120,10 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     since there is no returncode to propagate.
     """
     logger.info("install start")
+
     if sudo:
         logger.warning("running pip under sudo")
+
     try:
         result = subprocess.run(argv, check=False)
     except OSError as exc:
@@ -125,10 +135,12 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
         # sudo, not pip, is what's absent.
         target = exc.filename or argv[0]
         raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
+
     if result.returncode == 0:
         logger.info("install complete")
     else:
         logger.error("pip failed with exit code %s", result.returncode)
+
     return result.returncode
 
 
@@ -163,6 +175,7 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
     """
     if no_connect or pip_rc != 0:
         return pip_rc
+
     return resync_registered_agents(Path.home() / ".goga")
 
 
@@ -170,7 +183,7 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
 @click.argument("name", required=False)
 @click.option("--sudo", is_flag=True, default=False, help="Run pip under sudo with --preserve-env=HOME")
 @click.option(
-    "--version",
+    "--version", "-v",
     default=None,
     help="Version form for the tool (single-path only); resolved into a pip specifier",
 )
@@ -211,6 +224,7 @@ def install(
             pkg = _resolve_pkg(name, version)
         except ValueError as exc:
             raise click.ClickException(f"invalid --version value {version!r}: {exc}") from exc
+
         pip_rc = _run_pip(_pip_argv([pkg], sudo), sudo)
         ctx.exit(_after_pip(pip_rc, no_connect))
 
@@ -234,5 +248,6 @@ def install(
             pkgs.append(_resolve_pkg(tool_name, form))
         except ValueError as exc:
             raise click.ClickException(f"invalid version for tool {tool_name!r}: {exc}") from exc
+
     pip_rc = _run_pip(_pip_argv(pkgs, sudo), sudo)
     ctx.exit(_after_pip(pip_rc, no_connect))
