@@ -49,11 +49,12 @@ def _flatten_tree(tree: list[DocumentRoot]) -> list[DocumentRoot]:
 class AST:
     """Facade for loading and validating a CODEMANIFEST AST tree."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str, ignore: list[str] | None = None) -> None:
         self._path = path
         self._tree: list[DocumentRoot] = []
         self._errors: list[ASTRuleError | DocumentRuleError] = []
         self._index: dict[str, DocumentRoot] = {}
+        self._ignore = ignore
 
     @property
     def path(self) -> str:
@@ -77,13 +78,27 @@ class AST:
         self._index = {}
         self._path = os.path.normpath(os.path.relpath(self._path))
 
+        # Normalized ignore set: built once so trailing separators are
+        # insignificant (normpath(".venv/") == ".venv") and glob characters
+        # are not interpreted. An empty/None ignore leaves traversal
+        # unfiltered (backward compatible for schema/review/contract).
+        ignore_set = {os.path.normpath(x) for x in self._ignore} if self._ignore else set()
+
         # Map from directory path to its DocumentRoot (for parent-child wiring)
         loaded: dict[str, DocumentRoot] = {}
 
         # Walk directories top-down so parents are loaded before children
         for dirpath, dirnames, filenames in os.walk(self._path):
             # Skip .project test fixture directories (exact match, not substring)
-            dirnames[:] = [d for d in dirnames if d != ".project"]
+            # and any directory whose normalized relative path matches ignore_set.
+            # The in-place dirnames[:] mutation prunes descent (topdown walk), so
+            # ignored directories (and their descendants) are never loaded.
+            dirnames[:] = [
+                d
+                for d in dirnames
+                if d != ".project"
+                and os.path.normpath(os.path.relpath(str(Path(dirpath) / d), self._path)) not in ignore_set
+            ]
             if "CODEMANIFEST" not in filenames:
                 continue
 
