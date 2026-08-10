@@ -27,7 +27,7 @@ An open platform for building AI-SDLC. Declare the development process as pipeli
 
 AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
 
-**Languages & Agents**
+**Languages**
 
 <table>
   <tr>
@@ -36,7 +36,13 @@ AI development without a framework collapses into uncoordinated agent runs — t
     <td align="center"><sub>Kotlin</sub><br><img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40"></td>
     <td align="center"><sub>Swift</sub><br><img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40"></td>
     <td align="center"><sub>Go</sub><br><img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40"></td>
-    <td width="48"></td>
+  </tr>
+</table>
+
+**Agents**
+
+<table>
+  <tr>
     <td align="center"><sub>Claude</sub><br><img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40"></td>
     <td align="center"><sub>Codex</sub><br><img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40"></td>
     <td align="center"><sub>OpenCode</sub><br><img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40"></td>
