@@ -66,6 +66,18 @@ class BuildConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
+class LintConfig:
+    """Immutable value-object for the optional `lint` section of `.goga/config.yml`.
+
+    Stores `ignore` verbatim — including trailing separators and glob characters —
+    with no normalization. Structural validation (mapping/list/element checks) belongs
+    to the loader (`load_project_config` / `_parse_lint`), not here.
+    """
+
+    ignore: list[str]
+
+
+@dataclass(kw_only=True, frozen=True)
 class ProjectConfig:
     """Root project configuration loaded from .goga/config.yml."""
 
@@ -78,3 +90,4 @@ class ProjectConfig:
     codemanifest: CodemanifestConfig | None = None
     tools: dict[str, str] | None = None
     usages: dict[str, dict[str, DepConfig]] | None = None
+    lint: LintConfig | None = None

@@ -345,8 +345,8 @@ goga config usages.libs.click   # → DepConfig(git=..., ref=...)
 `config.lint` exposes the optional linter section.
 
 ```python
-config.lint          # LintConfig | None — None when the `lint` section is absent
-config.lint.ignore   # list[str] — exact relative paths; empty when ignore is absent/empty
+config.lint  # LintConfig | None — None when the `lint` section is absent
+config.lint.ignore  # list[str] — exact relative paths; empty when ignore is absent/empty
 ```
 
 ```yaml

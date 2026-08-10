@@ -8,6 +8,7 @@ import pytest
 from goga.config import (
     BuildConfig,
     CodemanifestConfig,
+    LintConfig,
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
@@ -596,3 +597,71 @@ class TestProjectConfigUsagesField:
         assert cfg.usages == {"libs": {"click": DepConfig(git="https://x/click.git", ref="main")}}
         assert cfg.usages["libs"]["click"].git == "https://x/click.git"
         assert cfg.usages["libs"]["click"].ref == "main"
+
+
+# --- Plan task: LintConfig + ProjectConfig.lint ---
+
+
+class TestLintConfigFacadeAndShape:
+    def test_facade_exports_lintconfig(self):
+        """LintConfig is importable from goga.config, present in __all__, and stores ignore."""
+        from goga.config import LintConfig as FacadeLintConfig
+
+        assert hasattr(goga_config_mod, "LintConfig")
+        assert "LintConfig" in goga_config_mod.__all__
+        assert FacadeLintConfig(ignore=["x"]).ignore == ["x"]
+        assert FacadeLintConfig is LintConfig
+
+    def test_lintconfig_ignore_has_no_default(self):
+        """ignore is a required field (no default) — the [] default is created by the loader."""
+        field_obj = LintConfig.__dataclass_fields__["ignore"]
+        assert field_obj.default is dataclasses.MISSING
+        assert field_obj.default_factory is dataclasses.MISSING
+
+    def test_lintconfig_kw_only_enforced(self):
+        assert all(f.kw_only for f in dataclasses.fields(LintConfig))
+
+    def test_projectconfig_has_lint_field_default_none(self):
+        """ProjectConfig.lint defaults to None and is the last kw_only field."""
+        cfg = ProjectConfig(lang="python", image=None, dockerfile=None, build=None, pipeline=None)
+        assert cfg.lint is None
+        assert "lint" in ProjectConfig.__dataclass_fields__
+
+        field_names = list(ProjectConfig.__dataclass_fields__.keys())
+        assert field_names[-1] == "lint"
+
+    def test_projectconfig_lint_accepts_lintconfig(self):
+        te = TaskExecutorConfig(agent="claude")
+        bc = BuildConfig(task_executor=te)
+        pc = PipelineConfig(agent="claude")
+        lc = LintConfig(ignore=[".venv/"])
+        cfg = ProjectConfig(
+            lang="python",
+            image=None,
+            dockerfile=None,
+            build=bc,
+            pipeline=pc,
+            lint=lc,
+        )
+        assert cfg.lint is lc
+        assert cfg.lint.ignore == [".venv/"]
+
+
+class TestLintConfigCreation:
+    def test_lintconfig_stores_ignore_verbatim(self):
+        """Trailing slash and glob characters are preserved verbatim (no normalization)."""
+        cfg = LintConfig(ignore=[".venv/", "*"])
+        assert cfg.ignore == [".venv/", "*"]
+
+    def test_lintconfig_empty_ignore_list(self):
+        cfg = LintConfig(ignore=[])
+        assert cfg.ignore == []
+
+    def test_lintconfig_is_frozen(self):
+        cfg = LintConfig(ignore=[".venv/"])
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            cfg.ignore = []  # type: ignore[misc]
+
+    def test_lintconfig_rejects_positional_args(self):
+        with pytest.raises(TypeError):
+            LintConfig([".venv/"])  # type: ignore[call-arg]
