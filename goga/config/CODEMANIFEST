@@ -7,6 +7,7 @@ Imports:
       - TaskExecutorConfig
       - CodemanifestConfig
       - DepConfig
+      - LintConfig
     From: goga/config/project
   - Types:
       - HomeConfig
@@ -39,6 +40,7 @@ Annotations: |
 ->TaskExecutorConfig: {}
 ->CodemanifestConfig: {}
 ->DepConfig: {}
+->LintConfig: {}
 ->HomeConfig: {}
 ->DockerArgsConfig: {}
 ->load_home_config: {}

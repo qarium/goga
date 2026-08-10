@@ -76,6 +76,37 @@ goga install --no-connect
 Bulk mode issues **exactly one** `pip install` call whose argv contains every
 resolved `goga-tool-<name><spec>` in YAML order, followed by one activation pass.
 
+### Local mode
+
+Install a goga-tool from a local source directory instead of PyPI:
+
+```bash
+# Install the package located at ./my-tool, then activate
+goga install --local ./my-tool
+
+# Short alias form — identical
+goga install -l ./my-tool
+
+# Local install only, no activation
+goga install --local ./my-tool --no-connect
+
+# Local install under sudo (system-Python); activation runs without sudo
+goga install --local ./my-tool --sudo
+```
+
+Local mode issues exactly one `pip install <path> -U` against the current
+interpreter, then activates every agent in ~/.goga/connect.yml by the same rules
+as single/bulk mode (suppressed by `--no-connect`). Pip's return code is
+translated unchanged — a missing or non-installable path surfaces as pip's own
+non-zero exit code.
+
+Constraints:
+- `name` and `--local` are mutually exclusive (`goga install foo --local ./x`
+  exits 1).
+- `--version` is rejected in local mode (`goga install --local ./x -v 1.0.1`
+  exits 1) — versions apply to PyPI packages only.
+- Editable installs (`-e`) are not performed.
+
 ### Empty mode
 
 When the `tools` section is absent or empty in `.goga/config.yml`:
@@ -95,6 +126,7 @@ Neither pip nor activation is invoked.
 | `name` (positional, optional) | string | None | Tool name without the goga-tool- / goga_tool_ prefix. When absent, bulk/empty mode runs from `config.tools`. |
 | `--sudo` | flag | False | Run pip under `sudo --preserve-env=HOME` (Unix-only). Applies to pip only; activation never uses sudo. |
 | `--version <form>`, `-v <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. Both forms are aliases on the same option — `-v 1.0.x` is identical to `--version 1.0.x`. |
+| `--local <path>`, `-l <path>` | string | None | Path to a pip-installable local directory. When set (and `name` is absent), installs from the local path instead of PyPI. Mutually exclusive with `name`; `--version` is rejected in this mode. `-l ./my-tool` is identical to `--local ./my-tool`. |
 | `--no-connect` | flag | False | Skip post-install activation. When set, the command performs the install only and the exit code is pip's. |
 
 ## Post-install Activation
@@ -139,6 +171,7 @@ from goga.commands.install.install import install, resolve_version
 | non-zero (pip) | pip failed — its returncode propagated verbatim; activation is not run |
 | non-zero (activation) | pip succeeded but activation failed for one or more agents — the first non-zero per-agent failure is returned |
 | 1 (`ClickException`) | `resolve_version` rejected a form, or `load_project_config` failed in bulk/empty mode |
+| 1 (ClickException) | `name` + `--local` combined, or `--version` supplied in local mode |
 
 With `--no-connect`, the exit code is always pip's (install-only semantics).
 

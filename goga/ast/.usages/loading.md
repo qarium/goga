@@ -16,6 +16,23 @@ After `load()` completes, two properties are available:
 - `ast.tree` — list of root documents (`DocumentRoot`), each potentially containing nested `children`
 - `ast.errors` — list of validation errors (`DocumentRuleError` | `ASTRuleError`)
 
+## Ignoring directories
+
+Pass the optional `ignore` argument to skip directories by exact relative path
+during traversal (used by `goga lint` to honor the `lint.ignore` config section).
+Glob patterns are not supported; matching is a strict relative-path equality and
+is additive to the built-in `.project` skip.
+
+```python
+from goga.ast import AST
+
+ast = AST("path/to/project", ignore=[".venv/", "build/dist"])
+ast.load()
+```
+
+When `ignore` is omitted (or None), traversal is unfiltered — the default for
+all consumers that do not opt in (e.g. `goga schema`, `goga review`).
+
 ## Document lookup by path
 
 ```python

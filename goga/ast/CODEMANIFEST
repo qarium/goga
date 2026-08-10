@@ -86,12 +86,15 @@ Annotations: |
 
 ---
 
-"AST(path: str)":
+"AST(path: str, ignore: list[str] | None = None)":
   location: ast.py
   annotations: |
     The `AST` class recursively loads the tree of CODEMANIFEST documents.
 
     `path`: the root path from which the document tree is loaded.
+    `ignore`: optional list of exact relative paths (relative to `path`) whose
+      matching directories are skipped during traversal; None (default) disables
+      filtering and preserves the existing traversal behavior for all consumers.
   properties:
     tree -> list[DocumentRoot]: |
       The document tree of the project.
@@ -103,7 +106,14 @@ Annotations: |
       Loads the document tree starting at the specified path.
 
       Algorithm:
-      - Recursively traverse each subdirectory starting from the specified path
+      - Recursively traverse each subdirectory starting from the specified path;
+        BEFORE descending into a subdirectory, skip it when its normalized
+        relative path (relative to path; trailing separator insignificant)
+        exactly matches one of the normalized entries in ignore. This skip is
+        additive to the existing skip of the .project directory. Glob patterns
+        (**, *, ?) are not interpreted — matching is a strict relative-path
+        equality. When ignore is None or empty, no directory is skipped on
+        this account (existing behavior).
       - When a CODEMANIFEST file is found at the directory root:
         - Create the document via practice `factory`
         - Append as a top-level vertex if at the root of the hierarchy
@@ -147,6 +157,17 @@ Annotations: |
       - `ImportTypeExists`
       - `ImportsHasNotCyclicalDeps`
       - `EmbeddedTypeHasLowLevel`
+
+      Requirements:
+      - ignore matching uses normalized relative paths from the traversal root;
+        trailing separators are insignificant (.venv/ matches .venv)
+      - Glob characters in ignore entries are NOT interpreted — they are
+        treated literally and therefore never match a real directory path
+
+      Constraints:
+      - Do NOT apply ignore matching to files — only directories are skipped
+      - Do NOT change traversal for consumers that pass ignore=None (default)
+      - Do NOT bypass the existing .project skip — ignore is additive to it
 
     "document(path: str) -> found_document:DocumentRoot": |
       Resolves and returns the document at the given path.

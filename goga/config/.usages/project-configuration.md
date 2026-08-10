@@ -16,6 +16,7 @@ from goga.config import (
     PipelineConfig,
     CodemanifestConfig,
     DepConfig,
+    LintConfig,
     load_project_config,
 )
 ```
@@ -142,6 +143,10 @@ usages:                       # usages-sync section (optional)
     click:                    # <dep> — subdir under the group
       git: https://github.com/pallets/click.git
       ref: main               # optional: branch/tag/commit (absent → default branch)
+lint:                          # optional linter section
+  ignore:                      # list of exact relative paths to exclude
+    - .venv/                   # glob (**, *, ?) is NOT supported
+    - build/dist
 ```
 
 ### Required Fields
@@ -205,6 +210,8 @@ afm) that consume these fields.
 | `usages`                    | mapping | None                   | usages-sync section: `{group: {dep: {git, ref}}}` (None when absent) |
 | `usages.<group>.<dep>.git`  | str     | —                      | git URL (required, non-empty) |
 | `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
+| `lint`        | mapping | None | Linter section (optional); when absent, config.lint is None |
+| `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by `goga lint`. Glob is not supported |
 
 ## Accessing Configuration Data
 
@@ -332,6 +339,31 @@ CLI dot-notation renders a single dep's `DepConfig` via `beautiful_yaml`:
 ```bash
 goga config usages.libs.click   # → DepConfig(git=..., ref=...)
 ```
+
+### `lint` accessor
+
+`config.lint` exposes the optional linter section.
+
+```python
+config.lint          # LintConfig | None — None when the `lint` section is absent
+config.lint.ignore   # list[str] — exact relative paths; empty when ignore is absent/empty
+```
+
+```yaml
+lint:
+  ignore:
+    - .venv/
+    - build/dist
+```
+
+- `ignore` entries are exact paths relative to the `goga lint` invocation cwd
+  (after `os.chdir(path)` — relative to the traversal root). Matching is strict:
+  trailing slash is insignificant (`.venv/` == `.venv`); glob patterns
+  (`**`, `*`, `?`) are NOT supported and are not applied.
+- The loader performs only structural validation (list of strings); path
+  semantics (glob/normalization/existence) are the consumer's responsibility.
+- Absence of the `lint` section ⇒ `config.lint is None` ⇒ lint behavior is
+  unchanged (backward compatible).
 
 ## Immutability
 

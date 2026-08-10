@@ -26,6 +26,11 @@ Annotations: |
   cell's "structural validation only; semantic validation deferred to the owning
   consumer" stance.
 
+  The cell enforces structural validation only. The optional lint section
+  follows the same stance: the loader enforces that lint.ignore is a list of
+  strings; glob interpretation, path normalization, and existence are deferred
+  to the owning consumer (the lint command / AST).
+
 ---
 
 "load_project_config() -> config: ProjectConfig":
@@ -60,19 +65,26 @@ Annotations: |
        empty dict), plus the remaining optional build fields
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
-    8. Extract the optional commands mapping (defaults to empty)
-    9. Extract the optional tools mapping via the `yaml` practice. When the key
-       is absent or YAML-null → set tools to None. When the key is present but
-       the value is not a mapping → raise ValueError. When the value is a
-       mapping → validate structurally that every key is a string and every
-       value is a string (raise ValueError on non-string keys or values —
-       YAML-null values like 'viewer:' are rejected). Perform NO semantic
-       validation of value contents: operator-prefixed forms ('==1.0',
-       '>=1.0'), malformed forms ('1.x.0', '1.0.0a1'), and any other
-       non-grammar strings pass through the loader verbatim. The loader is NOT
-       the validation authority for the version grammar — that responsibility
-       belongs to the consumer.
-    10. Extract the optional usages block. When the usages key is absent → set
+    8. Extract the optional lint block. When the lint key is absent or
+       YAML-null → lint=None. When present but not a mapping → raise
+       ValueError. When a mapping → extract the optional ignore:
+       absent/YAML-null/empty → empty list; present → must be a list whose every
+       element is a string (otherwise ValueError). Perform NO semantic validation
+       of path contents (glob, existence, normalization) — only the structural
+       "list of strings" check. Construct a `LintConfig` from the resolved ignore list.
+    9. Extract the optional commands mapping (defaults to empty)
+    10. Extract the optional tools mapping via the `yaml` practice. When the key
+        is absent or YAML-null → set tools to None. When the key is present but
+        the value is not a mapping → raise ValueError. When the value is a
+        mapping → validate structurally that every key is a string and every
+        value is a string (raise ValueError on non-string keys or values —
+        YAML-null values like 'viewer:' are rejected). Perform NO semantic
+        validation of value contents: operator-prefixed forms ('==1.0',
+        '>=1.0'), malformed forms ('1.x.0', '1.0.0a1'), and any other
+        non-grammar strings pass through the loader verbatim. The loader is NOT
+        the validation authority for the version grammar — that responsibility
+        belongs to the consumer.
+    11. Extract the optional usages block. When the usages key is absent → set
         usages to None. When present but not a mapping → raise ValueError. When a mapping
         → for each group (str key → mapping) and each dep (str key → mapping):
         - require dep.git (non-empty str) — KeyError when missing, ValueError when invalid
@@ -87,8 +99,8 @@ Annotations: |
           .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
         - construct a `DepConfig`(git, ref, root) per dep, preserving group/dep as dict keys
         Build usages as dict[str, dict[str, DepConfig]]; empty mapping when present-but-empty
-    11. Construct and return a `ProjectConfig` from all assembled parts, including
-        dockerfile, tools, and usages
+    12. Construct and return a `ProjectConfig` from all assembled parts, including
+        dockerfile, tools, usages, and lint
 
     Requirements:
     - Top-level image is the Docker image (None is valid — consumers raise
@@ -122,6 +134,10 @@ Annotations: |
       .goga/usages/<group>/<dep>/ in the downstream usages-sync consumer, so
       traversal names are rejected at the config boundary to keep deploys
       inside the target root
+    - lint is optional (None when absent/YAML-null; present-but-non-mapping
+      → ValueError); lint.ignore is optional (absent/YAML-null/empty →
+      empty list; present-but-non-list or a non-string element → ValueError);
+      no semantic validation of ignore contents at the loader level
     - Values are exposed as-is without default merge — consumers apply their own defaults
 
     Constraints:
@@ -140,8 +156,14 @@ Annotations: |
       owned by the usages-sync consumer; only structural path safety is enforced at the
       config boundary
     - Do NOT treat empty-string root as an error — normalize it to None (clone root)
+    - Do NOT validate ignore path semantics at the loader level — glob,
+      traversal, and normalization belong to the consumer; the loader enforces
+      only the structural type (list of strings)
+    - Do NOT reject glob characters in ignore entries — they are stored
+      verbatim; the consumer (lint/AST) documents them as unsupported
+    - The final `ProjectConfig` assembly MUST include lint
 
-"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None)":
+"ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None)":
   location: config.py
   annotations: |
     Root project configuration object. Constructed by load_project_config.
@@ -165,6 +187,9 @@ Annotations: |
               dataclass level (kw_only), matching commands/codemanifest/tools,
               so existing ProjectConfig(...) call sites that omit usages= remain
               valid
+    `lint`: optional lint configuration; instance of `LintConfig` or None when
+            the lint section is absent; defaults to None (kw_only) — existing
+            call sites that omit lint= remain valid
   properties:
     "lang -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
@@ -212,6 +237,11 @@ Annotations: |
       fields) so the goga config usages.<group>.<dep> dot-notation works.
       Defaults to None at the dataclass level (kw_only) — matches commands/codemanifest/tools,
       so existing ProjectConfig(...) call sites that omit usages= remain valid.
+    "lint -> LintConfig | None": |
+      Optional lint configuration from .goga/config.yml. Instance of
+      `LintConfig`, or None when the lint section is absent. Defaults to None
+      (kw_only) so existing ProjectConfig(...) call sites that omit lint= remain
+      valid (backward compatible).
 
 "BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -349,6 +379,31 @@ Annotations: |
       Freeform annotations — instructions for the AI agent.
       Optional — defaults to None.
 
+"LintConfig(ignore: list[str])":
+  location: config.py
+  annotations: |
+    Configuration of the optional lint section of .goga/config.yml: the list
+    of relative paths excluded from AST traversal during goga lint. Immutable
+    frozen dataclass (frozen=True, kw_only=True), per `convention`.
+
+    `ignore`: list of exact relative paths (e.g. .venv/, build/dist)
+              excluded from traversal.
+
+    Requirements:
+    - `ignore` is stored verbatim; defaults to an empty list when lint.ignore
+      is absent/YAML-null/empty
+    - Structural validation (list of strings) is performed in
+      `load_project_config`; LintConfig does not validate contents
+
+    Constraints:
+    - Do not normalize or semantically validate paths at the dataclass level —
+      structural validity (list of str) belongs to `load_project_config`,
+      semantics to the consumer
+  properties:
+    "ignore -> list[str]": |
+      List of exact relative paths excluded from AST traversal during
+      goga lint. Empty list when lint.ignore is absent/empty.
+
 "DepConfig(git: str, ref: str | None, root: str | None = None)":
   location: config.py
   annotations: |
@@ -392,5 +447,5 @@ CreatedAt: 24/07/26
 
 Description: |
   Project configuration model + loader for .goga/config.yml. Structural
-  validation only; semantic validation of version-grammar values deferred to
-  the owning consumer.
+  validation only; semantic validation of version-grammar values and of the
+  `lint.ignore` paths is deferred to the owning consumer.
