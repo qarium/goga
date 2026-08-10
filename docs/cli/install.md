@@ -2,7 +2,7 @@
 
 `goga install` adds goga-tool packages into the **current runtime interpreter** — the exact Python that runs goga. It targets the running interpreter's pip directly, so the install lands in the correct environment regardless of how goga was deployed (pipx venv, system Python, or any other).
 
-After a successful pip in single or bulk mode, the command **activates** every agent already recorded in `~/.goga/connect.yml` (re-syncing each with its persisted `force_overwrite`) so the freshly installed tool's skills and pipelines appear in `~/.goga/` and in each connected agent's symlink tree. Pass `--no-connect` to skip activation and perform the install only (useful in CI/Docker where a transient activation failure must not fail the install). To execute an installed tool without going through an agent, run the dedicated tool-runner command.
+After a successful pip in single, local, or bulk mode, the command **activates** every agent already recorded in `~/.goga/connect.yml` (re-syncing each with its persisted `force_overwrite`) so the freshly installed tool's skills and pipelines appear in `~/.goga/` and in each connected agent's symlink tree. Pass `--no-connect` to skip activation and perform the install only (useful in CI/Docker where a transient activation failure must not fail the install). To execute an installed tool without going through an agent, run the dedicated tool-runner command.
 
 ## Modes
 

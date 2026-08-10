@@ -19,7 +19,7 @@ After `load()` completes, two properties are available:
 ## Ignoring directories
 
 Pass the optional `ignore` argument to skip directories by exact relative path
-during traversal (used by `goga lint` to honor the `lint.ignore` config section).
+during traversal (consumers use it to honor a configured ignore list).
 Glob patterns are not supported; matching is a strict relative-path equality and
 is additive to the built-in `.project` skip.
 
@@ -31,7 +31,7 @@ ast.load()
 ```
 
 When `ignore` is omitted (or None), traversal is unfiltered — the default for
-all consumers that do not opt in (e.g. `goga schema`, `goga review`).
+all consumers that do not opt in.
 
 ## Document lookup by path
 

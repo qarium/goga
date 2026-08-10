@@ -22,6 +22,7 @@ def lint(ctx: click.Context, path: str) -> None:
     os.chdir(path)
 
     ignore: list[str] | None = None
+
     try:
         cfg = load_project_config()
         ignore = None if cfg.lint is None else cfg.lint.ignore

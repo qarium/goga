@@ -502,7 +502,7 @@ stages:
     approve: auto
 ```
 
-These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `propose → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflow](https://qarium.github.io/goga/workflow/) section of the docs.
+These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `propose → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflow](https://qarium.github.io/goga/pipelines/workflows/) section of the docs.
 
 ## Build
 

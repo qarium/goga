@@ -29,7 +29,7 @@ Annotations: |
   The cell enforces structural validation only. The optional lint section
   follows the same stance: the loader enforces that lint.ignore is a list of
   strings; glob interpretation, path normalization, and existence are deferred
-  to the owning consumer (the lint command / AST).
+  to the owning consumer.
 
 ---
 
@@ -188,8 +188,8 @@ Annotations: |
               so existing ProjectConfig(...) call sites that omit usages= remain
               valid
     `lint`: optional lint configuration; instance of `LintConfig` or None when
-            the lint section is absent; defaults to None (kw_only) — existing
-            call sites that omit lint= remain valid
+            the lint section is absent; defaults to None (kw_only); callers may
+            omit lint=
   properties:
     "lang -> str": |
       Project language. Sourced from the root language directive in .goga/config.yml.
@@ -240,8 +240,7 @@ Annotations: |
     "lint -> LintConfig | None": |
       Optional lint configuration from .goga/config.yml. Instance of
       `LintConfig`, or None when the lint section is absent. Defaults to None
-      (kw_only) so existing ProjectConfig(...) call sites that omit lint= remain
-      valid (backward compatible).
+      (kw_only) so ProjectConfig(...) callers may omit lint=.
 
 "BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py

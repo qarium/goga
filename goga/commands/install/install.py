@@ -155,7 +155,7 @@ def _resolve_pkg(name: str, form: str | None) -> str:
 
 
 def _after_pip(pip_rc: int, no_connect: bool) -> int:
-    """Decide the final exit code after pip (Algorithm step 3 — ACTIVATION).
+    """Decide the final exit code after pip (Algorithm step 4 — ACTIVATION).
 
     Activation (the post-install agent re-sync) runs only when pip succeeded
     (``pip_rc == 0``) and the caller did not opt out with ``no_connect``. When

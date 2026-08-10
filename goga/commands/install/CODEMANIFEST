@@ -138,55 +138,54 @@ Annotations: |
 
     Algorithm:
     0. VALIDATIONS (first, before any path):
-       a. If `name` is not None AND `local` is not None -> raise a user-facing
-          ClickException (mutual exclusion: a PyPI tool name and a local source
-          path cannot be combined); exit non-zero.
-       b. If `local` is not None AND `version` is not None -> raise a user-facing
-          ClickException (--version applies to the SINGLE path only and is
-          meaningless for a local source); exit non-zero.
+       0.1. If `name` is not None AND `local` is not None -> raise a user-facing
+            ClickException (mutual exclusion: a PyPI tool name and a local source
+            path cannot be combined); exit non-zero.
+       0.2. If `local` is not None AND `version` is not None -> raise a user-facing
+            ClickException (--version applies to the SINGLE path only and is
+            meaningless for a local source); exit non-zero.
     1. If `name` is not None → SINGLE PATH:
-       a. Resolve `version` via resolve_version; on rejection, surface a
-          user-facing CLI exception with a non-zero exit
-       b. Compose the package identifier from `name` and the resolved specifier
-          (empty when resolve_version returned None)
-       c. Issue one pip install invocation against the current interpreter with
-          the composed identifier and an upgrade request; apply sudo with HOME
-          preservation when `sudo` is set
-       d. Propagate pip's outcome as the pip exit code
-    1b. Else if `local` is not None -> LOCAL PATH:
-        a. Issue one pip install invocation against the current interpreter with
-           the local directory path as the install target and an upgrade request;
-           apply sudo with HOME preservation when `sudo` is set. Do NOT validate
-           path existence at the CLI layer — pip owns that error and its return
-           code is translated unchanged.
-        b. Propagate pip's outcome as the pip exit code.
-    2. If `name` is None → BULK / EMPTY PATH:
-       a. Load configuration via `load_project_config`; the result is a `ProjectConfig` instance.
-          Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
-          MUST be wrapped into a user-facing ClickException (non-zero exit) —
-          never let a raw loader exception surface as a traceback.
-       b. Read the tools mapping from cfg.tools (treat None as empty)
-       c. If the mapping is empty → EMPTY PATH: print "Nothing to install" to
-          stdout and exit 0 without invoking pip and without activation
-       d. Else → BULK PATH: for each (tool_name, form) preserving insertion
-          order, resolve the form via resolve_version (surface rejection as a
-          user-facing CLI exception), compose the identifier, collect it; issue
-          exactly one pip install invocation with every collected identifier
-          and an upgrade request; apply sudo with HOME preservation when `sudo`
-          is set; propagate pip's outcome as the pip exit code
-    3. ACTIVATION (single, local, and bulk paths only, after pip):
-       (existing behavior, unchanged; LOCAL participates by the same rules as
-       single/bulk)
-       a. If `no_connect` is True → keep the pip exit code and stop
-       b. If the pip exit code is non-zero → keep the pip exit code and stop
-       c. Otherwise call `resync_registered_agents` with the current user's goga
-          home (~/.goga); the routine reads ~/.goga/connect.yml and re-activates
-          every recorded agent
-       d. The final exit code becomes the re-sync outcome (0 on full success or
-          a missing/empty registry; otherwise the first non-zero per-agent failure)
+       1.1. Resolve `version` via resolve_version; on rejection, surface a
+            user-facing CLI exception with a non-zero exit
+       1.2. Compose the package identifier from `name` and the resolved specifier
+            (empty when resolve_version returned None)
+       1.3. Issue one pip install invocation against the current interpreter with
+            the composed identifier and an upgrade request; apply sudo with HOME
+            preservation when `sudo` is set
+       1.4. Propagate pip's outcome as the pip exit code
+    2. Else if `local` is not None -> LOCAL PATH:
+       2.1. Issue one pip install invocation against the current interpreter with
+            the local directory path as the install target and an upgrade request;
+            apply sudo with HOME preservation when `sudo` is set. Do NOT validate
+            path existence at the CLI layer — pip owns that error and its return
+            code is translated unchanged.
+       2.2. Propagate pip's outcome as the pip exit code.
+    3. If `name` is None → BULK / EMPTY PATH:
+       3.1. Load configuration via `load_project_config`; the result is a `ProjectConfig` instance.
+            Loader exceptions (OSError, KeyError, ValueError, yaml.YAMLError)
+            MUST be wrapped into a user-facing ClickException (non-zero exit) —
+            never let a raw loader exception surface as a traceback.
+       3.2. Read the tools mapping from cfg.tools (treat None as empty)
+       3.3. If the mapping is empty → EMPTY PATH: print "Nothing to install" to
+            stdout and exit 0 without invoking pip and without activation
+       3.4. Else → BULK PATH: for each (tool_name, form) preserving insertion
+            order, resolve the form via resolve_version (surface rejection as a
+            user-facing CLI exception), compose the identifier, collect it; issue
+            exactly one pip install invocation with every collected identifier
+            and an upgrade request; apply sudo with HOME preservation when `sudo`
+            is set; propagate pip's outcome as the pip exit code
+    4. ACTIVATION (single, local, and bulk paths only, after pip):
+       (LOCAL participates by the same rules as single/bulk)
+       4.1. If `no_connect` is True → keep the pip exit code and stop
+       4.2. If the pip exit code is non-zero → keep the pip exit code and stop
+       4.3. Otherwise call `resync_registered_agents` with the current user's goga
+            home (~/.goga); the routine reads ~/.goga/connect.yml and re-activates
+            every recorded agent
+       4.4. The final exit code becomes the re-sync outcome (0 on full success or
+            a missing/empty registry; otherwise the first non-zero per-agent failure)
 
     Apply `click` for the command shape, the optional positional argument, the
-    flags, the options (including the new --local/-l secondary short alias on a
+    flags, the options (including the --local/-l secondary short alias on a
     single Option, like --version/-v), the mutex/version ClickException,
     ctx.pass_context, ctx.exit, click.echo for the empty-path message, and
     exit-code propagation. Apply `convention` for the CLI command docstring rule
@@ -274,6 +273,6 @@ Description: |
   (one named tool with an optional four-form version), bulk-path install (every tool
   declared in config.tools in a single pip invocation), empty-path no-op
   (Nothing to install), and local-path install (one pip-installable local directory
-  via the new --local/-l option). The four-form version grammar is owned by
+  via the --local/-l option). The four-form version grammar is owned by
   resolve_version; the --no-connect flag suppresses post-install activation; --version
   applies to the single path only and is rejected in local mode.

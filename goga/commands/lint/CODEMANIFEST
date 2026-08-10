@@ -80,8 +80,8 @@ Annotations: |
     - Render [rule_name] in red
     - Append the summary after all errors, preceded by a blank line
     - Exit with code 1 on errors, 0 otherwise
-    - Absence of .goga/config.yml OR of the lint section MUST NOT change lint
-      behavior — ignore is None in both cases (backward compatible)
+    - When .goga/config.yml or the lint section is absent, ignore is None in
+      both cases (no directories excluded)
     - ANY loader exception (OSError, KeyError, ValueError, yaml.YAMLError) on
       a present-but-invalid config MUST be treated as ignore=None — lint MUST
       NOT fail or change its exit code due to config;

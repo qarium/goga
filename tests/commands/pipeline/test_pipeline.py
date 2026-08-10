@@ -289,9 +289,7 @@ class TestPipelineLogic:
         assert kwargs_long is True
         assert kwargs_long == kwargs_short_c
 
-    def test_pipeline_workflow_short_alias_equivalent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_workflow_short_alias_equivalent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """`-w` and `--workflow` produce the same workflow=<name> dispatch value."""
         config = _make_config()
         workflows_dir = tmp_path / ".goga" / "workflows"

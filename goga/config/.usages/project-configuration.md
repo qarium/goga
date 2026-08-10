@@ -362,8 +362,8 @@ lint:
   (`**`, `*`, `?`) are NOT supported and are not applied.
 - The loader performs only structural validation (list of strings); path
   semantics (glob/normalization/existence) are the consumer's responsibility.
-- Absence of the `lint` section ⇒ `config.lint is None` ⇒ lint behavior is
-  unchanged (backward compatible).
+- Absence of the `lint` section ⇒ `config.lint is None` ⇒ no directories are
+  excluded from validation.
 
 ## Immutability
 
