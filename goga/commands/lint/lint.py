@@ -7,6 +7,7 @@ import yaml
 
 from ...ast import AST
 from ...ast.ast import _flatten_tree
+from ...config import load_project_config
 
 
 @click.command()
@@ -20,7 +21,14 @@ def lint(ctx: click.Context, path: str) -> None:
     """
     os.chdir(path)
 
-    ast_obj = AST(".")
+    ignore: list[str] | None = None
+    try:
+        cfg = load_project_config()
+        ignore = None if cfg.lint is None else cfg.lint.ignore
+    except (OSError, KeyError, ValueError, yaml.YAMLError):
+        ignore = None
+
+    ast_obj = AST(".", ignore=ignore)
     ast_obj.load()
 
     for error in ast_obj.errors:

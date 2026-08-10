@@ -72,6 +72,15 @@ def _write_codemanifest(directory, content: str) -> None:
     (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
 
 
+MINIMAL_VALID_CODEMANIFEST = 'Usages: {}\nAnnotations: ""\n'
+
+
+def _write_goga_config(directory, content: str) -> None:
+    goga_dir = directory / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text(content, encoding="utf-8")
+
+
 def _setup_valid_project(tmp_path) -> str:
     project_dir = tmp_path / "valid_project"
     project_dir.mkdir()
@@ -95,6 +104,20 @@ class TestFacadeAvailability:
 
     def test_lint_is_click_command(self) -> None:
         assert isinstance(lint_cmd, click.Command)
+
+    def test_lint_imports_load_project_config(self) -> None:
+        """lint imports load_project_config from goga.config (NEW lint -> config edge).
+
+        The module is fetched via sys.modules because the package ``__init__``
+        re-exports ``lint`` (the function), shadowing the submodule name.
+        """
+        import sys
+
+        from goga.config import load_project_config
+
+        lint_module = sys.modules["goga.commands.lint.lint"]
+        assert hasattr(lint_module, "load_project_config")
+        assert lint_module.load_project_config is load_project_config
 
 
 class TestApiShape:
@@ -287,3 +310,43 @@ class TestExitCodes:
         result = _run_lint(project_dir)
 
         assert result.exit_code == 0
+
+
+class TestIgnoreDerivation:
+    def test_lint_derives_ignore_from_config(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 0
+        assert ".venv" not in result.output
+
+    def test_lint_runs_unfiltered_when_config_absent(self, tmp_path) -> None:
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 1
+        assert "FileNotFoundError" not in result.output
+
+    def test_lint_unfiltered_when_lint_section_absent(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\n")
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 1
+        assert "FileNotFoundError" not in result.output
+
+    def test_lint_treats_invalid_config_as_unfiltered(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python: [unclosed")
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code in (0, 1)
+        assert "YAMLError" not in result.output
