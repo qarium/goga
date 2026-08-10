@@ -183,7 +183,8 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
 @click.argument("name", required=False)
 @click.option("--sudo", is_flag=True, default=False, help="Run pip under sudo with --preserve-env=HOME")
 @click.option(
-    "--version", "-v",
+    "--version",
+    "-v",
     default=None,
     help="Version form for the tool (single-path only); resolved into a pip specifier",
 )
