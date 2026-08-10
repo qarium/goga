@@ -189,6 +189,13 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
     help="Version form for the tool (single-path only); resolved into a pip specifier",
 )
 @click.option(
+    "--local",
+    "-l",
+    "local",
+    default=None,
+    help="Path to a pip-installable local directory (local mode); mutually exclusive with name; --version is rejected",
+)
+@click.option(
     "--no-connect",
     "no_connect",
     is_flag=True,
@@ -196,20 +203,23 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
     help="Skip post-install agent activation (install-only)",
 )
 @click.pass_context
-def install(
+def install(  # noqa: PLR0913, PLR0917 — Click callback arity is contract-mandated
     ctx: click.Context,
     name: str | None,
     sudo: bool,
     version: str | None,
+    local: str | None,
     no_connect: bool = False,
 ) -> None:
     """Install goga-tool packages into the current interpreter via pip.
 
-    Three paths, selected by whether ``name`` is given:
+    Four paths, selected by whether ``name`` or ``--local`` is given:
 
     \b
       * SINGLE (``name`` set): install ``goga-tool-<name><spec>`` resolved from
         ``--version`` in a single pip call.
+      * LOCAL (``--local <path>`` set): pip-install a local directory; mutually
+        exclusive with ``name``, and ``--version`` is rejected.
       * BULK (``name`` omitted, ``.goga/config.yml`` lists ``tools:``): install
         every ``goga-tool-<tool><spec>`` declared in the config in a single pip
         call.
@@ -219,6 +229,12 @@ def install(
     The pip exit code is propagated unchanged. Configuration or version errors
     exit with code 1.
     """
+    # 0. VALIDATIONS — mutexes fire only when BOTH are set.
+    if name is not None and local is not None:
+        raise click.ClickException("name and --local are mutually exclusive")
+    if local is not None and version is not None:
+        raise click.ClickException("--version is not supported with --local")
+
     if name is not None:
         # SINGLE PATH — install one tool, grammar-resolving --version.
         try:
@@ -227,6 +243,12 @@ def install(
             raise click.ClickException(f"invalid --version value {version!r}: {exc}") from exc
 
         pip_rc = _run_pip(_pip_argv([pkg], sudo), sudo)
+        ctx.exit(_after_pip(pip_rc, no_connect))
+
+    if local is not None:
+        # LOCAL PATH — pip-install a local directory. pip owns the missing-path
+        # error (no CLI-level existence check), and -U is always requested (never -e).
+        pip_rc = _run_pip(_pip_argv([local], sudo), sudo)
         ctx.exit(_after_pip(pip_rc, no_connect))
 
     # BULK / EMPTY PATH — driven by .goga/config.yml.
