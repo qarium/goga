@@ -94,7 +94,7 @@ Local mode issues a single `pip install <path> -U` (never `-e`/editable) so the 
 |---|---|---|---|
 | `name` (positional, optional) | string | None | Tool name without the `goga-tool-` prefix. When absent, bulk/empty mode runs from `.goga/config.yml`. |
 | `--sudo` | flag | False | Run pip under `sudo --preserve-env=HOME` (Unix-only). Applies to pip only; activation never uses sudo. Applies to both single and bulk modes. |
-| `--version <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. |
+| `--version <form>`, `-v <form>` | string | None | Version form in the four-form grammar. Used by single mode only; ignored in bulk mode. Both forms are aliases on the same option — `-v 1.0.x` is identical to `--version 1.0.x`. |
 | `--local <path>`, `-l <path>` | string | None | Path to a pip-installable local directory (local mode). Mutually exclusive with `name`; `--version` is rejected in local mode. |
 | `--no-connect` | flag | False | Skip post-install agent activation. When set, the command performs the install only and the exit code is pip's. |
 
