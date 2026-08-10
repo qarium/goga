@@ -61,6 +61,12 @@ codemanifest:
 #       git: https://github.com/pallets/click.git
 #       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
 #       root: docs         # optional — subpath inside the repo to walk .usages from; omit for the clone root
+
+# lint: optional — directories ignored by `goga lint` (exact relative paths, no glob)
+# lint:
+#   ignore:
+#     - .venv/
+#     - build/dist
 ```
 
 ## Fields reference
@@ -78,6 +84,7 @@ codemanifest:
 | `codemanifest` | mapping | No | Global codemanifest configuration |
 | `tools` | mapping | No | goga-tool version declarations consumed by `goga install` in bulk mode. Keys are tool names (without the `goga-tool-` prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (`1.0.x`, `1.x`, `1.0.1`, `latest`) is validated by `goga install`, not the loader. Defaults to `None` (absent); an empty mapping is `{}`. YAML-null values (`viewer:`) are rejected |
 | `usages` | mapping | No | Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages/<group>/<dep>/` by [`goga usages sync`](../cli/usages.md) and checked for drift against the remote by [`goga usages status`](../cli/usages.md). Two-level mapping: `<group>` → `<dep>` → `{ git, ref, root }`. Defaults to `None` (absent), which makes `goga usages sync` a no-op (exit 0); an empty mapping is `{}`. `<group>` and `<dep>` keys are validated as filesystem path segments — empty, `.` / `..`, or any name containing `/` or `\` raise `ValueError` |
+| `lint` | mapping | No | Optional linter section consumed by [`goga lint`](../cli/lint.md). Currently holds `ignore`, a list of directory relative paths to prune from lint traversal. Defaults to `None` (absent); an empty mapping is equivalent to no ignore list. Structural type errors (non-mapping `lint`, non-list `lint.ignore`, or a non-string element) raise `ValueError` |
 
 ### build
 
@@ -135,6 +142,16 @@ Git dependencies whose cell-level `.usages/` files are synced into `.goga/usages
 | `usages.<group>.<dep>.root` | `string` | No | Subpath inside the clone to discover `.usages` folders from. Absent (or an empty string) → clone root. Must be relative; no `..` or absolute paths (leading `/` or UNC `//host/share`). |
 
 When `usages` is absent, `config.usages` is `None` and `goga usages sync` exits `0` without invoking git. A present-but-non-mapping value raises `ValueError`.
+
+### lint
+
+Optional section consumed by [`goga lint`](../cli/lint.md) to prune directories from validation.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `lint.ignore` | list of strings | No | Directory relative paths to skip during lint traversal, stored verbatim. A directory matches when its exact normalized relative path equals an entry; glob patterns are not interpreted and a trailing separator is insignificant. Defaults to `[]` when `lint` is present but `ignore` is absent |
+
+When `lint` is absent, `config.lint` is `None` and `goga lint` lints every directory. A present-but-non-mapping `lint`, a non-list `lint.ignore`, or a non-string element raises `ValueError`. The `lint` command derives `ignore` **tolerantly** — any loader error falls back to no filtering rather than failing the lint run.
 
 ## Pre-built Docker images
 

@@ -8,6 +8,7 @@ built-in ``.project`` skip, and backward-compatible default of ``None``.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -39,13 +40,7 @@ def _has_doc(ast_obj: AST, path: Path) -> bool:
 
 def _doc_paths(ast_obj: AST) -> list[str]:
     """Return normalized paths of every loaded document (flattened tree)."""
-    return [os_normpath(d.path) for d in _flatten_tree(ast_obj.tree)]
-
-
-def os_normpath(path: str) -> str:
-    import os
-
-    return os.path.normpath(path)
+    return [os.path.normpath(d.path) for d in _flatten_tree(ast_obj.tree)]
 
 
 # ---------------------------------------------------------------------------
@@ -150,6 +145,26 @@ class TestAstIgnorePruning:
 
         assert not _has_doc(ast_obj, top_venv)
         assert _has_doc(ast_obj, nested_venv)
+
+    def test_ast_ignore_multisegment_relative_path_prunes(self, tmp_path: Path) -> None:
+        """A multi-segment ignore entry prunes the matching nested directory.
+
+        ``ignore=["sub/dep"]`` prunes ``sub/dep`` while leaving the sibling
+        ``sub/keep`` loaded. The matching expression compares the full
+        normalized relative path, so this would break if matching degraded to
+        a basename check — the single-segment tests above cannot detect that.
+        """
+        _make_cell(tmp_path)
+        nested = tmp_path / "sub" / "dep"
+        sibling = tmp_path / "sub" / "keep"
+        _make_cell(nested)
+        _make_cell(sibling)
+
+        ast_obj = AST(str(tmp_path), ignore=["sub/dep"])
+        ast_obj.load()
+
+        assert not _has_doc(ast_obj, nested)
+        assert _has_doc(ast_obj, sibling)
 
     def test_ast_ignore_is_additive_to_project_skip(self, tmp_path: Path) -> None:
         _make_cell(tmp_path)

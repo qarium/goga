@@ -260,6 +260,9 @@ goga install <tool-name> --version 1.0.x
 
 # Install every tool declared under tools: in .goga/config.yml in one pip call
 goga install
+
+# Install a tool from a local source directory (no PyPI lookup)
+goga install --local <path>
 ```
 
 After installing, connect the tool to your agent (only required the first time, or to connect a new agent — `goga install` re-syncs already-connected agents automatically):
@@ -270,7 +273,7 @@ goga connect <agent>
 
 Pass `goga install --no-connect` to opt out of post-install activation (CI/Docker escape-hatch). Pass `goga install --sudo` for system-Python installs requiring root.
 
-See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty semantics.
+See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty/local semantics.
 
 ### Using a tool
 

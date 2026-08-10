@@ -332,7 +332,12 @@ class TestIgnoreDerivation:
         result = _run_lint(str(tmp_path))
 
         assert result.exit_code == 1
-        assert "FileNotFoundError" not in result.output
+        # The missing-config FileNotFoundError must be swallowed by the tolerant
+        # try/except: lint runs to its summary and exits cleanly via ctx.exit
+        # (SystemExit). If the exception escaped, CliRunner would record the
+        # FileNotFoundError as result.exception and print no summary.
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
 
     def test_lint_unfiltered_when_lint_section_absent(self, tmp_path) -> None:
         _write_goga_config(tmp_path, "language: python\n")
@@ -340,8 +345,12 @@ class TestIgnoreDerivation:
 
         result = _run_lint(str(tmp_path))
 
+        # Config parses (lint section absent -> cfg.lint is None -> ignore=None
+        # direct assignment), so lint runs unfiltered to its summary and exits
+        # cleanly via ctx.exit (SystemExit).
         assert result.exit_code == 1
-        assert "FileNotFoundError" not in result.output
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
 
     def test_lint_treats_invalid_config_as_unfiltered(self, tmp_path) -> None:
         _write_goga_config(tmp_path, "language: python: [unclosed")
@@ -349,8 +358,13 @@ class TestIgnoreDerivation:
 
         result = _run_lint(str(tmp_path))
 
-        assert result.exit_code in (0, 1)
-        assert "YAMLError" not in result.output
+        # The yaml.YAMLError must be swallowed by the tolerant try/except: lint
+        # runs unfiltered, the invalid root CODEMANIFEST yields its errors, and
+        # the command exits cleanly via ctx.exit (SystemExit) — never surfacing
+        # the YAMLError. Exit code is 1 because the root cell has 2 errors.
+        assert result.exit_code == 1
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
 
 
 class TestCliAppIntegration:
