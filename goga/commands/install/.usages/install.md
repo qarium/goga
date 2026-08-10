@@ -18,7 +18,7 @@ The command operates in four modes:
 - **Local mode** (`goga install --local <path>` / `-l <path>`): pip-install a
   local directory; mutually exclusive with `name` and `--version`.
 
-After a successful pip in single and bulk mode, the command runs a post-install
+After a successful pip in single, local, and bulk mode, the command runs a post-install
 activation: it re-syncs every agent recorded in `~/.goga/connect.yml` (using each
 agent's persisted `force_overwrite`) so the new tool's skills and pipelines are
 linked into place. Pass `--no-connect` to skip activation — the command performs
@@ -133,7 +133,7 @@ Neither pip nor activation is invoked.
 
 ## Post-install Activation
 
-When pip succeeds in single or bulk mode and `--no-connect` is not set, the
+When pip succeeds in single, local, or bulk mode and `--no-connect` is not set, the
 command activates every agent listed in `~/.goga/connect.yml`, each with its own
 recorded `force_overwrite`. Activation is a local operation on `$HOME` and never
 runs under `--sudo`. A missing or empty registry is a no-op that returns 0: the
