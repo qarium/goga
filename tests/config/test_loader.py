@@ -8,6 +8,7 @@ import pytest
 import yaml
 from goga.config import (
     CodemanifestConfig,
+    LintConfig,
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
@@ -18,6 +19,7 @@ from goga.config.project.loader import (
     _parse_codemanifest,
     _parse_depcfg,
     _parse_dockerfile,
+    _parse_lint,
     _parse_tools,
     _parse_usages,
     _validate_usages_root,
@@ -2804,3 +2806,272 @@ usages:
         )
         with pytest.raises(ValueError, match=match):
             load_project_config()
+
+
+# --- Contract tests for _parse_lint ---
+
+
+class TestParseLintContract:
+    def test_parse_lint_exists(self):
+        """_parse_lint is importable from goga.config.project.loader."""
+        assert callable(_parse_lint)
+
+    def test_parse_lint_signature(self):
+        """_parse_lint accepts a single dict parameter (parity with _parse_codemanifest)."""
+        sig = inspect.signature(_parse_lint)
+        params = list(sig.parameters.keys())
+        assert params == ["data"]
+
+    def test_parse_lint_return_annotation(self):
+        """_parse_lint returns LintConfig | None."""
+        ret = inspect.signature(_parse_lint).return_annotation
+        assert ret == LintConfig | None
+
+    def test_projectconfig_has_lint_field(self):
+        """ProjectConfig declares a `lint` field."""
+        field_names = {f.name for f in dataclasses.fields(ProjectConfig)}
+        assert "lint" in field_names
+
+    def test_projectconfig_lint_is_last_field(self):
+        """lint is the last declared field of ProjectConfig (backward-compatible append)."""
+        field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
+        assert field_names[-1] == "lint"
+
+    def test_projectconfig_lint_annotation_optional_lintconfig(self):
+        """lint field type is LintConfig | None."""
+        lint_field = {f.name: f for f in dataclasses.fields(ProjectConfig)}["lint"]
+        assert lint_field.type == LintConfig | None
+
+    def test_projectconfig_lint_defaults_none(self):
+        """lint defaults to None (backward compatible — section absent)."""
+        assert {f.name: f for f in dataclasses.fields(ProjectConfig)}["lint"].default is None
+
+
+# --- Logic tests for _parse_lint (direct) ---
+
+
+class TestParseLintPositive:
+    def test_parse_lint_without_section_returns_none(self):
+        """No lint section → returns None."""
+        assert _parse_lint({"language": "python"}) is None
+
+    def test_parse_lint_null_section_returns_none(self):
+        """lint: null → returns None."""
+        assert _parse_lint({"lint": None}) is None
+
+    def test_parse_lint_builds_lintconfig_with_ignore(self):
+        """lint.ignore list is stored verbatim (incl. trailing slash)."""
+        result = _parse_lint({"lint": {"ignore": [".venv/", "build/dist"]}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == [".venv/", "build/dist"]
+
+    def test_parse_lint_ignore_absent_defaults_empty(self):
+        """lint: {} (no ignore key) → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_ignore_null_defaults_empty(self):
+        """lint: { ignore: null } → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {"ignore": None}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_empty_ignore_section(self):
+        """lint: { ignore: [] } → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {"ignore": []}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_stores_verbatim_no_normalization(self):
+        """Trailing slash and glob characters are preserved verbatim (no normalization)."""
+        result = _parse_lint({"lint": {"ignore": [".venv/", "*"]}})
+        assert result.ignore == [".venv/", "*"]
+
+    def test_parse_lint_returns_plain_list_copy(self):
+        """The returned ignore list is a copy — not the original list object."""
+        original = [".venv/"]
+        result = _parse_lint({"lint": {"ignore": original}})
+        assert result.ignore == original
+        assert result.ignore is not original
+
+
+class TestParseLintNegative:
+    def test_parse_lint_rejects_non_mapping_section_string(self):
+        """lint: not-a-mapping → ValueError."""
+        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
+            _parse_lint({"lint": "not-a-mapping"})
+
+    def test_parse_lint_rejects_int_section(self):
+        """lint: 5 → ValueError."""
+        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
+            _parse_lint({"lint": 5})
+
+    def test_parse_lint_rejects_list_section(self):
+        """lint: [a, b] → ValueError."""
+        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
+            _parse_lint({"lint": ["a", "b"]})
+
+    def test_parse_lint_rejects_non_list_ignore(self):
+        """lint: { ignore: not-a-list } → ValueError."""
+        with pytest.raises(ValueError, match=r"lint\.ignore must be a list"):
+            _parse_lint({"lint": {"ignore": "not-a-list"}})
+
+    def test_parse_lint_rejects_non_string_element(self):
+        """lint: { ignore: ['.venv/', 5] } → ValueError."""
+        with pytest.raises(ValueError, match=r"only strings"):
+            _parse_lint({"lint": {"ignore": [".venv/", 5]}})
+
+    def test_parse_lint_rejects_bool_element(self):
+        """lint: { ignore: [true] } → ValueError."""
+        with pytest.raises(ValueError, match=r"only strings"):
+            _parse_lint({"lint": {"ignore": [True]}})
+
+
+# --- Integration tests: load_project_config with lint ---
+
+
+class TestLoadConfigLint:
+    def test_load_config_returns_lint_accessor(self, goga_project):
+        """Minimal valid config exposes the cfg.lint accessor — initially None."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_returns_none_when_section_absent(self, goga_project):
+        """Config with only language → cfg.lint is None."""
+        _write_goga_yml(goga_project, "language: python\n")
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_builds_lintconfig_with_ignore(self, goga_project):
+        """lint.ignore list is parsed verbatim into cfg.lint.ignore (incl. trailing slash)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore:
+    - .venv/
+    - build/dist
+""",
+        )
+        config = load_project_config()
+        assert config.lint is not None
+        assert isinstance(config.lint, LintConfig)
+        assert config.lint.ignore == [".venv/", "build/dist"]
+
+    def test_parse_lint_empty_ignore_section(self, goga_project):
+        """lint: { ignore: [] } → cfg.lint is present with ignore == []."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore: []
+""",
+        )
+        config = load_project_config()
+        assert config.lint is not None
+        assert config.lint.ignore == []
+
+    def test_parse_lint_rejects_non_mapping_section(self, goga_project):
+        """lint: not-a-mapping → ValueError match 'lint.*mapping'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint: not-a-mapping
+""",
+        )
+        with pytest.raises(ValueError, match=r"lint.*mapping"):
+            load_project_config()
+
+    def test_parse_lint_rejects_non_list_ignore(self, goga_project):
+        """lint: { ignore: not-a-list } → ValueError match 'lint.ignore.*list'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore: not-a-list
+""",
+        )
+        with pytest.raises(ValueError, match=r"lint\.ignore.*list"):
+            load_project_config()
+
+    def test_parse_lint_rejects_non_string_element(self, goga_project):
+        """lint: { ignore: ['.venv/', 5] } → ValueError match 'only strings'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore:
+    - .venv/
+    - 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"only strings"):
+            load_project_config()
+
+    def test_parse_lint_null_section_returns_none(self, goga_project):
+        """lint: null → cfg.lint is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint: null
+""",
+        )
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_backward_compatible_without_section(self, goga_project):
+        """Existing config without lint → cfg.lint is None, other fields unchanged."""
+        _write_goga_yml(goga_project, HAPPY_YAML)
+        config = load_project_config()
+        assert config.lint is None
+        assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
+        assert config.pipeline.agent == "claude"
+        assert config.build.task_executor.agent == "claude"
+        assert config.build.task_executor.env == {"KEY": "value"}
+        assert config.build.worktree is True
+        assert config.commands == {"foo": "bar"}

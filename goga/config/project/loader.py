@@ -6,6 +6,7 @@ from .config import (
     BuildConfig,
     CodemanifestConfig,
     DepConfig,
+    LintConfig,
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
@@ -114,6 +115,48 @@ def _parse_codemanifest(data: dict) -> CodemanifestConfig | None:
         raise ValueError("codemanifest.annotations must be a string")
 
     return CodemanifestConfig(usages=dict(usages), annotations=annotations)
+
+
+def _parse_lint(data: dict) -> LintConfig | None:
+    """Parse the optional ``lint`` section into a ``LintConfig`` value-object.
+
+    Structural-only parse mirroring the style of ``_parse_codemanifest``.
+    Returns ``None`` when the section is absent or YAML-null; raises
+    ``ValueError`` when the section is present but not a mapping, when
+    ``lint.ignore`` is present but not a list, or when any ``lint.ignore``
+    element is not a string. Path semantics (normalization, globbing) are NOT
+    validated here — that responsibility belongs to the AST consumer; the
+    ``ignore`` list is stored verbatim.
+
+    Args:
+        data: The already-parsed ``.goga/config.yml`` document.
+
+    Returns:
+        A ``LintConfig`` storing ``ignore`` verbatim (``[]`` when ``lint.ignore``
+        is absent or YAML-null), or ``None`` when the ``lint`` section is absent.
+
+    Raises:
+        ValueError: When ``lint`` is present but not a mapping, when
+            ``lint.ignore`` is present but not a list, or when a ``lint.ignore``
+            element is not a string.
+    """
+    lint_data = data.get("lint")
+    if lint_data is None:
+        return None
+    if not isinstance(lint_data, dict):
+        raise ValueError("'lint' must be a mapping in .goga/config.yml")
+
+    ignore_raw = lint_data.get("ignore")
+    if ignore_raw is None:
+        ignore_list: list[str] = []
+    elif not isinstance(ignore_raw, list):
+        raise ValueError("lint.ignore must be a list of strings in .goga/config.yml")
+    elif not all(isinstance(x, str) for x in ignore_raw):
+        raise ValueError("lint.ignore must contain only strings in .goga/config.yml")
+    else:
+        ignore_list = list(ignore_raw)
+
+    return LintConfig(ignore=ignore_list)
 
 
 def _parse_tools(data: dict) -> dict[str, str] | None:
@@ -411,6 +454,7 @@ def load_project_config() -> ProjectConfig:
 
     tools = _parse_tools(data)
     usages = _parse_usages(data.get("usages"))
+    lint = _parse_lint(data)
 
     return ProjectConfig(
         lang=lang,
@@ -422,4 +466,5 @@ def load_project_config() -> ProjectConfig:
         codemanifest=_parse_codemanifest(data),
         tools=tools,
         usages=usages,
+        lint=lint,
     )
