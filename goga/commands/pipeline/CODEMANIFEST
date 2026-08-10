@@ -214,7 +214,7 @@ Annotations: |
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.pipeline.hosts
     - -c / --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
     - --update / -u (flag) — pull the image before launching the container
-    - --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
+    - -w / --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
     - --no-workflow (flag) — disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in the env-file)
     - -s / --skip NAME (multiple) — exclude a stage from the compiled pipeline (run mode only; one name per invocation); forwarded as GOGA_SKIP_STAGES
     - -p / --parallel N (int) — cap concurrently executing stages (None when absent); run mode only (no-op in discovery). Threaded to afm run --max-parallel N
@@ -262,7 +262,7 @@ Annotations: |
       to `extra_env` for environment passthrough into the container
     - Expose `name` as an optional positional argument
     - Expose --proxy URL, --add-host HOST:IP (multiple), --clean,
-      --update/-u, --workflow NAME, --no-workflow as click options
+      --update/-u, -w/--workflow NAME, --no-workflow as click options
     - Always propagate the container's exit code through the click context —
       both modes
     - CLI --add-host entries are merged on top of config.pipeline.hosts;
@@ -283,6 +283,7 @@ Annotations: |
     - Expose -p/--parallel N (int) bound to `parallel` (None when absent);
       run mode only (no-op in discovery); propagated exit code unchanged
     - Expose -c as a short alias of --clean (equivalent behavior)
+    - Expose -w as a short alias of --workflow (equivalent behavior)
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
