@@ -48,6 +48,7 @@ from .run_pipeline_container import run_pipeline_container
 )
 @click.option(
     "--workflow",
+    "-w",
     type=str,
     default=None,
     help="Apply an explicit workflow at .goga/workflows/<name>.yml (file must exist)",
