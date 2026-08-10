@@ -10,7 +10,7 @@ An open platform for building AI-SDLC. Declare the development process as pipeli
 
 - **Pipelines** — a declarative scenario of stages an agent walks through to deliver work, with `communication` checkpoints that switch between autonomous and human-in-the-loop execution. Any installed agent (Claude, Codex, Qwen, OpenCode, others) can be hired per stage.
 - **Tools** — pluggable capability packages. Any opensource tool or in-house methodology is packaged as `goga-tool-*` and lands in a shared catalog of skills and pipelines, all addressed uniformly.
-- **SDD** — the reference cycle shipped in the box: CODEMANIFEST contracts as the source of truth, an agent workflow from `propose` to `accept`. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.
+- **SDD** — the reference cycle shipped in the box: [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) contracts as the source of truth, an agent workflow from `propose` to `accept`. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.
 
 AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
 
