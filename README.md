@@ -8,27 +8,42 @@ An open platform for building AI-SDLC. Declare the development process as pipeli
 
 **Three pillars**
 
-- **Pipelines** — a declarative scenario of stages an agent walks through to deliver work, with `communication` checkpoints that switch between autonomous and human-in-the-loop execution. Any installed agent (Claude, Codex, Qwen, OpenCode, others) can be hired per stage.
-- **Tools** — pluggable capability packages. Any opensource tool or in-house methodology is packaged as `goga-tool-*` and lands in a shared catalog of skills and pipelines, all addressed uniformly.
-- **SDD** — the reference cycle shipped in the box: [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) contracts as the source of truth, an agent workflow from `propose` to `accept`. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.
+<table>
+  <tr>
+    <td width="33.33%" align="left" valign="top">
+      <h3>⚙ Pipelines</h3>
+      <p>A declarative scenario of stages an agent walks through to deliver work, with <code>communication</code> checkpoints that switch between autonomous and human-in-the-loop execution. Any installed agent (Claude, Codex, Qwen, OpenCode, others) can be hired per stage.</p>
+    </td>
+    <td width="33.33%" align="left" valign="top">
+      <h3>🧩 Tools</h3>
+      <p>Pluggable capability packages. Any opensource tool or in-house methodology is packaged as <code>goga-tool-*</code> and lands in a shared catalog of skills and pipelines, all addressed uniformly.</p>
+    </td>
+    <td width="33.33%" align="left" valign="top">
+      <h3>📋 SDD</h3>
+      <p>The reference cycle shipped in the box: <a href="https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md"><strong>CODEMANIFEST</strong></a> contracts as the source of truth, an agent workflow from <code>propose</code> to <code>accept</code>. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.</p>
+    </td>
+  </tr>
+</table>
 
 AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
 
-**Languages**
+**Languages & Agents**
 
-<img src="docs/assets/brands/python.svg" alt="Python" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/javascript.svg" alt="JavaScript" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40">
-
-**Agents**
-
-<img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/qwen.svg" alt="Qwen" width="40" height="40">
+<table>
+  <tr>
+    <td align="center"><sub>Python</sub><br><img src="docs/assets/brands/python.svg" alt="Python" width="40" height="40"></td>
+    <td align="center"><sub>JavaScript</sub><br><img src="docs/assets/brands/javascript.svg" alt="JavaScript" width="40" height="40"></td>
+    <td align="center"><sub>Kotlin</sub><br><img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40"></td>
+    <td align="center"><sub>Swift</sub><br><img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40"></td>
+    <td align="center"><sub>Go</sub><br><img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40"></td>
+    <td width="48"></td>
+    <td align="center"><sub>Claude</sub><br><img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40"></td>
+    <td align="center"><sub>Codex</sub><br><img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40"></td>
+    <td align="center"><sub>OpenCode</sub><br><img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40"></td>
+    <td align="center"><sub>Cursor</sub><br><img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40"></td>
+    <td align="center"><sub>Qwen</sub><br><img src="docs/assets/brands/qwen.svg" alt="Qwen" width="40" height="40"></td>
+  </tr>
+</table>
 
 [Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Pipelines](https://qarium.github.io/goga/pipelines/) · [Tools](https://qarium.github.io/goga/tools/) · [Configuration](https://qarium.github.io/goga/configuration/)
 
