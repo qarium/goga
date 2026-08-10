@@ -7,7 +7,7 @@ interpreter — the exact Python that runs goga — and then activates every
 already-connected agent so the freshly installed skills and pipelines appear in
 `~/.goga/` and in each agent's symlink tree.
 
-The command operates in three modes:
+The command operates in four modes:
 
 - **Single mode** (`goga install <name>`): install one tool. `--version` resolves
   via the four-form grammar; the project config is ignored.
@@ -15,6 +15,8 @@ The command operates in three modes:
   section of `.goga/config.yml`, in a single pip invocation, in YAML order.
 - **Empty mode** (`goga install` with no `tools` section): no-op, prints
   `Nothing to install`, exits 0.
+- **Local mode** (`goga install --local <path>` / `-l <path>`): pip-install a
+  local directory; mutually exclusive with `name` and `--version`.
 
 After a successful pip in single and bulk mode, the command runs a post-install
 activation: it re-syncs every agent recorded in `~/.goga/connect.yml` (using each
