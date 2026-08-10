@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 from click.testing import CliRunner
+from goga.cli import app
 from goga.commands import lint
 from goga.commands.lint import lint as lint_cmd
 
@@ -350,3 +351,27 @@ class TestIgnoreDerivation:
 
         assert result.exit_code in (0, 1)
         assert "YAMLError" not in result.output
+
+
+class TestCliAppIntegration:
+    """Feature B wired end-to-end through the full ``goga`` CLI app.
+
+    Task 4's ``TestIgnoreDerivation`` exercises the ``lint`` command *function*
+    directly (``CliRunner().invoke(lint_cmd, ...)``). This class drives the real
+    CLI entrypoint (``CliRunner().invoke(app, ["lint", ...])``) to verify the
+    config -> ast -> lint chain is wired correctly through Click's group
+    dispatch and the ``app`` facade.
+    """
+
+    def test_lint_app_end_to_end_ignores_directory(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["lint", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert ".venv" not in result.output

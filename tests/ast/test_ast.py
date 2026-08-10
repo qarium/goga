@@ -70,6 +70,27 @@ class TestAstIgnoreContract:
 # ---------------------------------------------------------------------------
 
 
+class TestAstUnaffectedConsumers:
+    def test_ast_default_loads_full_tree_for_consumers(self, tmp_path: Path) -> None:
+        """Default ``ignore=None`` loads the full tree (schema/review/contract gate).
+
+        Unaffected consumers (``schema``/``review``/``contract``) call ``AST(".")``
+        with no ``ignore``; the default ``ignore=None`` must leave traversal
+        unfiltered so every directory — including ``.venv`` — is loaded. This is
+        the Design Flow C "unaffected consumers" regression gate.
+        """
+        _make_cell(tmp_path)
+        venv = tmp_path / ".venv"
+        _make_cell(venv)
+
+        ast_obj = AST(str(tmp_path))  # default ignore=None
+        ast_obj.load()
+
+        # The .venv document IS loaded under the default (no filtering).
+        assert _has_doc(ast_obj, venv)
+        assert any(Path(p).name == ".venv" for p in _doc_paths(ast_obj))
+
+
 class TestAstIgnorePruning:
     def test_ast_skips_ignored_directory(self, tmp_path: Path) -> None:
         _make_cell(tmp_path)
