@@ -290,6 +290,15 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
 
+    # Step 2c — agent None-guard: build.task_executor.agent is optional at the
+    # loader level (None when absent/empty), but `goga build` resolves it into
+    # the in-container wrapper path and cannot run without it. Raise a clean
+    # ClickException BEFORE any agent access to avoid a downstream TypeError.
+    if config.build.task_executor.agent is None:
+        raise click.ClickException(
+            "build.task_executor.agent is required in .goga/config.yml to run 'goga build'"
+        )
+
     cli_flags = {
         "worktree": worktree,
         "skip_finalize": skip_finalize,

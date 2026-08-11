@@ -62,11 +62,13 @@ _AGENT_ENV_MAP: dict[str, list[str]] = {
 }
 
 
-def _collect_agent_env(agent: str) -> dict | None:
+def _collect_agent_env(agent: str | None) -> dict | None:
     """Collect environment variables for an agent.
 
     Proposes keys from `_AGENT_ENV_MAP` for the given agent, then optionally
     collects arbitrary KEY=VALUE pairs. Returns None when nothing is collected.
+    A None agent (no agent configured) skips the suggested-keys block and only
+    offers arbitrary KEY=VALUE pairs.
     """
     env: dict | None = None
 
@@ -134,7 +136,7 @@ class Questionnaire:
         image = self.ask_image(language)
         dockerfile_path = self.ask_dockerfile_path()
         env = self.ask_env(agent)
-        pipeline_agent = self.ask_pipeline_agent(agent)
+        pipeline_agent = self.ask_pipeline_agent()
         pipeline_env = self.ask_pipeline_env(pipeline_agent)
 
         return GogaConfigAnswers(
@@ -239,14 +241,21 @@ class Questionnaire:
 
         return codemanifest_annotations
 
-    def ask_agent(self) -> str:
+    def ask_agent(self) -> str | None:
         """Survey the AI agent that builds the implementation.
 
+        Optional: by default no agent is configured. The user must opt in via a
+        confirm gate, then select from (claude, codex). Declining returns None —
+        the agent is omitted from the generated config.
+
         Returns:
-            One of claude, codex.
+            One of claude, codex; None when the user declines to configure an agent.
         """
         click.echo("\n--- AI Agent ---")
         click.echo("Select the AI agent that will build implementation.")
+
+        if not click.confirm("Configure a build agent?", default=False):
+            return None
 
         return click.prompt(
             "Agent",
@@ -290,11 +299,12 @@ class Questionnaire:
 
         return None
 
-    def ask_env(self, agent: str) -> dict | None:
+    def ask_env(self, agent: str | None) -> dict | None:
         """Survey build task_executor environment variables for `agent`.
 
         Args:
-            agent: the selected build agent (drives suggested env keys).
+            agent: the selected build agent (drives suggested env keys); None when
+                no agent is configured.
 
         Returns:
             Env dict collected via `_collect_agent_env`, or None.
@@ -304,26 +314,34 @@ class Questionnaire:
 
         return _collect_agent_env(agent)
 
-    def ask_pipeline_agent(self, agent: str) -> str:
-        """Survey the pipeline agent, defaulting to the build `agent`.
+    def ask_pipeline_agent(self) -> str | None:
+        """Survey the pipeline agent.
+
+        Optional: by default no pipeline agent is configured. The user must opt
+        in via a confirm gate, then select from (claude, codex). Declining
+        returns None — the pipeline agent is omitted from the generated config.
+        The pipeline agent does NOT inherit the build `agent`.
 
         Returns:
-            One of claude, codex (default = the build agent).
+            One of claude, codex; None when the user declines to configure an agent.
         """
         click.echo("\n--- Pipeline Agent ---")
         click.echo("Select the AI agent that will run pipelines (afm client.command).")
 
+        if not click.confirm("Configure a pipeline agent?", default=False):
+            return None
+
         return click.prompt(
             "Pipeline agent",
             type=click.Choice(["claude", "codex"]),
-            default=agent,
         )
 
-    def ask_pipeline_env(self, pipeline_agent: str) -> dict | None:
+    def ask_pipeline_env(self, pipeline_agent: str | None) -> dict | None:
         """Survey pipeline environment variables for `pipeline_agent`.
 
         Args:
-            pipeline_agent: the selected pipeline agent (drives suggested env keys).
+            pipeline_agent: the selected pipeline agent (drives suggested env keys);
+                None when no agent is configured.
 
         Returns:
             Env dict collected via `_collect_agent_env`, or None.

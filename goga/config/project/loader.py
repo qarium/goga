@@ -13,11 +13,37 @@ from .config import (
 )
 
 
+def _parse_optional_agent(raw, section: str) -> str | None:
+    """Parse an optional agent name from a config section.
+
+    Tolerant normalization for the optional-agent contract: an unset agent
+    (absent, YAML-null, or empty/whitespace-only string) resolves to ``None`` so
+    the consuming command owns the user-facing requirement. A present non-string
+    value is a structural type error and raises ``ValueError``.
+
+    Args:
+        raw: The raw ``agent`` value from the section mapping (a ``str``, or
+            None when absent).
+        section: The dotted section prefix for error messages
+            (e.g. ``"build.task_executor"``, ``"pipeline"``).
+
+    Returns:
+        The stripped agent name, or ``None`` when unset/empty.
+
+    Raises:
+        ValueError: When ``raw`` is present but not a string.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise ValueError(f"{section}.agent must be a string in .goga/config.yml")
+    stripped = raw.strip()
+    return stripped or None
+
+
 def _parse_task_executor(task_executor_data: dict) -> TaskExecutorConfig:
     """Parse and validate task_executor section into a TaskExecutorConfig instance."""
-    agent = task_executor_data.get("agent")
-    if not isinstance(agent, str) or not agent.strip():
-        raise ValueError("build.task_executor.agent is required in .goga/config.yml")
+    agent = _parse_optional_agent(task_executor_data.get("agent"), "build.task_executor")
 
     env = task_executor_data.get("env", {})
     if not isinstance(env, dict):
@@ -25,7 +51,7 @@ def _parse_task_executor(task_executor_data: dict) -> TaskExecutorConfig:
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in env.items()):
         raise ValueError("build.task_executor.env must have string keys and values")
 
-    return TaskExecutorConfig(agent=agent.strip(), env=dict(env))
+    return TaskExecutorConfig(agent=agent, env=dict(env))
 
 
 def _parse_proxy(proxy_data, section: str) -> str | None:
@@ -48,9 +74,7 @@ def _parse_hosts(hosts_data, section: str) -> dict[str, str]:
 
 def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
     """Parse and validate the pipeline section into a PipelineConfig instance."""
-    agent = pipeline_data.get("agent")
-    if not isinstance(agent, str) or not agent.strip():
-        raise ValueError("pipeline.agent is required in .goga/config.yml")
+    agent = _parse_optional_agent(pipeline_data.get("agent"), "pipeline")
 
     env = pipeline_data.get("env", {})
     if not isinstance(env, dict):
@@ -61,7 +85,7 @@ def _parse_pipeline(pipeline_data: dict) -> PipelineConfig:
     proxy = _parse_proxy(pipeline_data.get("proxy"), "pipeline")
     hosts = _parse_hosts(pipeline_data.get("hosts"), "pipeline")
 
-    return PipelineConfig(agent=agent.strip(), env=dict(env), proxy=proxy, hosts=hosts)
+    return PipelineConfig(agent=agent, env=dict(env), proxy=proxy, hosts=hosts)
 
 
 def _parse_language(data: dict) -> str:

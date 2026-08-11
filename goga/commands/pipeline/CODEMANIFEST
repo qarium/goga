@@ -227,6 +227,12 @@ Annotations: |
         this command, agent/env in `run_pipeline_container`). Because
         `run_pipeline_container` is only reached through this command, the guard
         covers it transitively — no separate None-check is added there.
+    1c. When config.pipeline.agent is None → raise ClickException(
+        "pipeline.agent is required in .goga/config.yml to run 'goga
+        pipeline'"). The agent is optional at the loader level (None when
+        absent/empty), but the pipeline command resolves it into the in-container
+        wrapper path and cannot run without it. Runs BEFORE any agent access to
+        avoid a downstream TypeError (covers `run_pipeline_container` transitively).
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
     3. Resolve the proxy: take `proxy` when not None, otherwise fall back to

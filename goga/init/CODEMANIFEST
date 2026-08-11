@@ -53,15 +53,15 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Responses for generating .goga/config.yml.
 
-"GogaConfigAnswers(language: str, agent: str, image: str, pipeline_agent: str, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
+"GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
   location: answers.py
   annotations: |
     Input data for .goga/config.yml and Dockerfile generation.
 
     `language`: selected project language
-    `agent`: selected AI executor (used as build.task_executor.agent)
+    `agent`: selected AI executor (used as build.task_executor.agent); None when the user declines to configure a build agent
     `image`: Docker image (drives the top-level image field, NOT build.image)
-    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command
+    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command; None when the user declines to configure a pipeline agent
     `pipeline_env`: environment variables for the pipeline block
     `env`: environment variables for task_executor
     `codemanifest_usages`: codemanifest practice mappings
@@ -70,12 +70,14 @@ Annotations: |
   properties:
     "language -> str": |
       Selected project language.
-    "agent -> str": |
-      Selected AI executor. Used as build.task_executor.agent.
     "image -> str": |
       Docker image. Drives the top-level image field (NOT build.image).
-    "pipeline_agent -> str": |
-      AI executor used as pipeline.agent (afm client.command inside the container).
+    "agent -> str | None": |
+      Selected AI executor. Used as build.task_executor.agent. None — no build agent
+      configured (the agent key is omitted from the generated config).
+    "pipeline_agent -> str | None": |
+      AI executor used as pipeline.agent (afm client.command inside the container). None
+      — no pipeline agent configured. Does NOT inherit the build agent.
     "pipeline_env -> dict | None": |
       Environment variables for the pipeline block. None — omit pipeline.env.
     "env -> dict | None": |
@@ -122,23 +124,27 @@ Annotations: |
     "ask_codemanifest_annotations(prefill: str | None = None) -> codemanifest_annotations: str | None": |
       Optional custom annotations appended to `prefill` (the base convention annotations).
       Returns None when neither prefill nor input exists.
-    "ask_agent() -> agent: str": |
-      Select from (claude, codex). Used as build.task_executor.agent.
+    "ask_agent() -> agent: str | None": |
+      Confirm-gated (default No). On decline: return None (no build agent configured).
+      On acceptance: select from (claude, codex). Used as build.task_executor.agent.
     "ask_image(language: str) -> image: str": |
       Display hints from `image_defaults` for `language`; default to the last entry; accept free-form input.
       Captures the top-level image field (NOT build.image).
     "ask_dockerfile_path() -> dockerfile_path: str | None": |
       Optional; prompt to create a custom Dockerfile.
       On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
-    "ask_env(agent: str) -> env: dict | None": |
+    "ask_env(agent: str | None) -> env: dict | None": |
       Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env.
+      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env. A None `agent`
+      skips the suggested-keys block and only offers arbitrary key-value pairs.
       Returns None when nothing is collected.
-    "ask_pipeline_agent(agent: str) -> pipeline_agent: str": |
-      Select from (claude, codex); default = `agent`. Drives pipeline.agent.
-    "ask_pipeline_env(pipeline_agent: str) -> pipeline_env: dict | None": |
+    "ask_pipeline_agent() -> pipeline_agent: str | None": |
+      Confirm-gated (default No). On decline: return None (no pipeline agent configured). Does NOT
+      inherit the build agent. On acceptance: select from (claude, codex). Drives pipeline.agent.
+    "ask_pipeline_env(pipeline_agent: str | None) -> pipeline_env: dict | None": |
       Propose env keys from `agent_env_defaults` for `pipeline_agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives pipeline.env.
+      then optionally collect arbitrary key-value pairs. Drives pipeline.env. A None `pipeline_agent`
+      skips the suggested-keys block and only offers arbitrary key-value pairs.
       Returns None when nothing is collected.
 
 "FileGenerator()":
@@ -165,18 +171,21 @@ Annotations: |
       - language → language (top-level)
       - image → image (top-level)
       - dockerfile_path → dockerfile (top-level, omit when None)
-      - agent → build.task_executor.agent
+      - agent → build.task_executor.agent (omit when None)
       - env → build.task_executor.env (omit when None or empty)
-      - pipeline_agent → pipeline.agent
+      - pipeline_agent → pipeline.agent (omit when None)
       - pipeline_env → pipeline.env (omit when None or empty)
       - codemanifest_usages → codemanifest.usages (omit when None or empty)
       - codemanifest_annotations → codemanifest.annotations (omit when None)
 
       Requirements:
       - Emit image as a top-level field
-      - Always emit the pipeline: block (even when pipeline_env is omitted) —
-        the init-config must be self-contained so the pipeline command works
-        out-of-the-box without manual config edits
+      - Emit the build: block only when it carries content (a non-None agent
+        and/or a non-empty env); an empty build block adds no value and is omitted
+      - Emit the pipeline: block only when it carries content (a non-None
+        pipeline_agent and/or a non-empty pipeline_env); by default no agent is
+        configured, so a freshly-initialized project with no agent/env omits
+        pipeline entirely
       - Field order in the generated YAML: language, image, dockerfile, build, pipeline, codemanifest
 
 "InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":

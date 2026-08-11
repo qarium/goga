@@ -8,9 +8,9 @@ class GogaConfigAnswers:
     """Answers for creating .goga/config.yml."""
 
     language: str
-    agent: str
     image: str
-    pipeline_agent: str
+    agent: str | None = None
+    pipeline_agent: str | None = None
     pipeline_env: dict | None = None
     env: dict | None = None
     codemanifest_usages: dict | None = None

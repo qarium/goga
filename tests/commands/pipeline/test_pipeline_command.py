@@ -183,6 +183,44 @@ class TestPipelineSectionGuard:
         mock_run.assert_not_called()
 
 
+class TestPipelineAgentGuard:
+    """Step 1c — host-side None-guard: ClickException when pipeline.agent is
+    absent/empty. The agent is optional at the loader level (None when unset), but
+    `goga pipeline` needs it to resolve the in-container wrapper path, so the guard
+    runs before any agent access (covering run_pipeline_container transitively).
+    """
+
+    @staticmethod
+    def _write_config_without_pipeline_agent(tmp_path: Path) -> None:
+        """Write a valid config with a pipeline section but NO pipeline.agent."""
+        goga_dir = tmp_path / ".goga"
+        goga_dir.mkdir(parents=True, exist_ok=True)
+        lines = [
+            "language: python",
+            "image: qarium/goga:latest",
+            "build:",
+            "  task_executor:",
+            "    agent: claude",
+            "pipeline: {}",
+        ]
+        (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
+
+    def test_pipeline_command_raises_click_exception_when_agent_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A pipeline section without an agent surfaces as a ClickException (step 1c)."""
+        self._write_config_without_pipeline_agent(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, ["deploy"])
+
+        assert result.exit_code == 1
+        assert "pipeline.agent is required" in result.output
+        # The container never starts on an agent-less config.
+        mock_run.assert_not_called()
+
+
 # --- Logic tests ---
 
 

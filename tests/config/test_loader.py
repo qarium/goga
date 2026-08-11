@@ -520,8 +520,8 @@ build:
         config = load_project_config()
         assert config.image is None
 
-    def test_load_config_pipeline_agent_empty_raises(self, goga_project):
-        """pipeline.agent empty string raises ValueError."""
+    def test_load_config_pipeline_agent_empty_resolves_none(self, goga_project):
+        """pipeline.agent empty string resolves to None (optional field)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -534,11 +534,12 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_project_config()
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
 
-    def test_load_config_pipeline_agent_missing_raises(self, goga_project):
-        """pipeline block without agent raises ValueError."""
+    def test_load_config_pipeline_agent_missing_resolves_none(self, goga_project):
+        """pipeline block without agent resolves agent to None (optional field)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -550,7 +551,25 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+
+    def test_load_config_pipeline_agent_bool_raises(self, goga_project):
+        """pipeline.agent: true (bool, not string) → structural type error (ValueError)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: true
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.agent must be a string"):
             load_project_config()
 
     def test_load_config_image_non_string_raises(self, goga_project):
@@ -623,8 +642,8 @@ build: null
         config = load_project_config()
         assert config.build is None
 
-    def test_load_config_empty_pipeline_mapping_raises_inner_error(self, goga_project):
-        """pipeline: {} → inner validation preserved (ValueError on missing agent)."""
+    def test_load_config_empty_pipeline_mapping_parses_none_agent(self, goga_project):
+        """pipeline: {} → parses to PipelineConfig with agent=None (agent optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -636,8 +655,10 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_project_config()
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+        assert config.pipeline.env == {}
 
     def test_load_config_empty_build_mapping_raises_inner_error(self, goga_project):
         """build: {} → inner validation preserved (KeyError on missing task_executor)."""
@@ -843,8 +864,8 @@ build: {}
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
             load_project_config()
 
-    def test_load_config_missing_agent(self, goga_project):
-        """task_executor: {} (no agent key)."""
+    def test_load_config_missing_agent_resolves_none(self, goga_project):
+        """task_executor: {} (no agent key) → agent resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -856,11 +877,12 @@ build:
   task_executor: {}
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
-    def test_load_config_empty_agent(self, goga_project):
-        """agent: '' (empty string)."""
+    def test_load_config_empty_agent_resolves_none(self, goga_project):
+        """agent: '' (empty string) → resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -873,11 +895,12 @@ build:
     agent: ""
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
-    def test_load_config_whitespace_agent_raises(self, goga_project):
-        """agent: '   ' (whitespace-only string)."""
+    def test_load_config_whitespace_agent_resolves_none(self, goga_project):
+        """agent: '   ' (whitespace-only string) → resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -890,8 +913,9 @@ build:
     agent: "   "
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
     def test_load_config_task_executor_env_not_mapping(self, goga_project):
         """env: "not-a-dict"."""
@@ -931,7 +955,7 @@ build:
             load_project_config()
 
     def test_load_config_agent_bool_raises(self, goga_project):
-        """agent: true (bool, not string)."""
+        """agent: true (bool, not string) → structural type error (ValueError)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -944,7 +968,7 @@ build:
     agent: true
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
+        with pytest.raises(ValueError, match=r"build\.task_executor\.agent must be a string"):
             load_project_config()
 
     def test_load_config_task_executor_scalar_raises(self, goga_project):

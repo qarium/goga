@@ -116,6 +116,17 @@ def pipeline(  # noqa: PLR0913, PLR0917
     if config.pipeline is None:
         raise click.ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")
 
+    # Step 1c — agent None-guard: pipeline.agent is optional at the loader level
+    # (None when absent/empty), but `goga pipeline` resolves it into the
+    # in-container wrapper path and cannot run without it. Raise a clean
+    # ClickException BEFORE any agent access (and before dispatch into
+    # run_pipeline_container, which is only reachable through this command) to
+    # avoid a downstream TypeError.
+    if config.pipeline.agent is None:
+        raise click.ClickException(
+            "pipeline.agent is required in .goga/config.yml to run 'goga pipeline'"
+        )
+
     # Resolve the proxy: the --proxy CLI value wins over config.pipeline.proxy.
     resolved_proxy = proxy if proxy is not None else config.pipeline.proxy
 
