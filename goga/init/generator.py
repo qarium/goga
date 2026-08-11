@@ -103,17 +103,22 @@ class FileGenerator:
                 "agent": config.agent,
             },
         }
+
         if config.env:
             build["task_executor"]["env"] = config.env
+
         data["build"] = build
 
         pipeline: dict = {"agent": config.pipeline_agent}
+
         if config.pipeline_env:
             pipeline["env"] = config.pipeline_env
+
         data["pipeline"] = pipeline
 
         if config.codemanifest_usages or config.codemanifest_annotations is not None:
             codemanifest: dict = {}
+
             if config.codemanifest_usages:
                 codemanifest["usages"] = config.codemanifest_usages
             if config.codemanifest_annotations is not None:
