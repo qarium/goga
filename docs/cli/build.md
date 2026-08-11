@@ -142,7 +142,7 @@ build:
     foo.local: 127.0.0.1
 ```
 
-Only `language` is required by the loader. `goga build` additionally requires a `build` section (it exits with a `ClickException` when `build` is absent) and the top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field. The optional top-level `dockerfile` field (when set) makes `--update` build the image locally from that Dockerfile instead of pulling it. The optional `build.proxy` and `build.hosts` fields are overridden/augmented by the `--proxy` and `--add-host` CLI options respectively.
+Only `language` is required by the loader. `goga build` additionally requires a `build` section (it exits with a `ClickException` when `build` is absent), a non-`None` `build.task_executor.agent` (optional at the loader level — absent/empty/whitespace resolves to `None`; the command raises a `ClickException` when it is `None`, since the build needs an agent to resolve the in-container wrapper), and the top-level `image` field must be set; otherwise the command exits with an error. The deprecated `build.image` field is rejected — use the top-level `image` field. The optional top-level `dockerfile` field (when set) makes `--update` build the image locally from that Dockerfile instead of pulling it. The optional `build.proxy` and `build.hosts` fields are overridden/augmented by the `--proxy` and `--add-host` CLI options respectively.
 
 ## Exit Codes
 

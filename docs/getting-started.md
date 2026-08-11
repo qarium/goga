@@ -41,11 +41,11 @@ The wizard will prompt you for:
 2. **Convention** -- Optionally download language-specific conventions from the goga-lang-conventions repository
 3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
 4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
-5. **Agent** -- Select your AI executor: `claude`, `codex`
+5. **Agent** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose `claude` or `codex`
 6. **Docker image** -- Choose a prebuilt language image or enter a custom one
 7. **Dockerfile** -- Optionally generate a `Dockerfile` based on the selected image
 8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
-9. **Pipeline agent** -- Select the agent for `goga pipeline` execution (defaults to step 5)
+9. **Pipeline agent** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose `claude` or `codex`. Does not inherit the build agent from step 5 — the two are collected independently
 10. **Pipeline environment variables** -- Set env vars for the pipeline container (e.g., `ANTHROPIC_API_KEY`)
 
 ### What `goga init` creates

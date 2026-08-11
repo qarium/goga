@@ -110,14 +110,14 @@ codemanifest:
 
 | Field   | Type     | Required  | Description                                                                                                             |
 |---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
-| `agent` | `string` | Yes       | AI executor that runs the build inside the container. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
+| `agent` | `string` | No        | AI executor that runs the build inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; `goga build` raises a `ClickException` when it is `None` (the build needs an agent to resolve the in-container wrapper). Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
 | `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
 
 ### pipeline
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `agent` | `string` | Yes | AI agent that runs the pipeline stages inside the container. Same resolution mechanic and baseline set as `build.task_executor.agent` — see [Agents](./agents.md). |
+| `agent` | `string` | No | AI agent that runs the pipeline stages inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`. When `None`, the agent may be supplied by a per-stage workflow override (see [Workflows](../pipelines/workflows.md)) or afm's own default, so `goga pipeline` does not require it. Same resolution mechanic and baseline set as `build.task_executor.agent` — see [Agents](./agents.md). |
 | `env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the pipeline container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
