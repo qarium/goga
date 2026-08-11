@@ -14,7 +14,7 @@ The config loader looks for this file relative to the current working directory.
 
 ```yaml
 language: python
-image: qarium/goga-python-3.14:1.0
+image: qarium/goga-python-3.14:1.1
 # dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
 build:
@@ -76,7 +76,7 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
-| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.0`). Consumers raise an error when it is unset. |
+| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.1`). Consumers raise an error when it is unset. |
 | `dockerfile` | `string` | No | Path to a project Dockerfile. When set, `goga build --update` and `goga pipeline --update` build the image locally from this Dockerfile (fatal on build failure). When unset (default), `--update` pulls `image` from the registry instead (non-fatal warning on pull failure) |
 | `build` | mapping | No | Build pipeline settings. Optional at the loader level; `goga build` raises a `ClickException` when the section is absent |
 | `pipeline` | mapping | No | Pipeline (afm) execution settings. Optional at the loader level; `goga pipeline` raises a `ClickException` when the section is absent |

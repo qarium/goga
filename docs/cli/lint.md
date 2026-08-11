@@ -5,7 +5,7 @@ Validate CODEMANIFEST files in a project.
 ## Synopsis
 
 ```bash
-goga lint [CELL_PATH]
+goga lint [PATH]
 ```
 
 ## Description
@@ -31,7 +31,7 @@ A directory is pruned when its exact normalized relative path matches an `ignore
 
 | Argument    | Default | Description                          |
 |-------------|---------|--------------------------------------|
-| `CELL_PATH` | `.`     | Path to the cell of project to lint. |
+| `PATH`      | `.`     | Path to the directory to lint (lint changes into it before validating). |
 
 ## Output
 

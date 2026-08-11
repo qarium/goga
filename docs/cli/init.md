@@ -39,7 +39,7 @@ The wizard proceeds through the following steps in order:
 
 7. **Custom Dockerfile** -- Optionally create a custom Dockerfile based on the selected image. When accepted, the suggested path is `.goga/Dockerfile` (saved inside the project-scoped `.goga/` directory); press Enter to accept it or type a different path.
 
-8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
+8. **Environment Variables** -- Configure environment variables for the build. Suggested keys are offered per agent (e.g., `ANTHROPIC_DEFAULT_HAIKU_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` for Claude; `CODEX_MODEL` for Codex). You can also add arbitrary custom variables.
 
 9. **Pipeline Agent** -- Confirm-gated (defaults to **No**). Decline to skip configuring a pipeline agent (the `pipeline.agent` key is omitted; a per-stage workflow agent or afm's own default then covers the absent global agent). Accept to select an AI executor: `claude`, `codex`. Does **not** inherit the build agent from step 5 — build and pipeline are collected via independent confirm-gates, so they can diverge or both be left unset.
 

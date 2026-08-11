@@ -528,9 +528,7 @@ class TestBuildAgentGuard:
         (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
 
     @mock.patch.object(_build_mod, "_check_docker", return_value=True)
-    def test_build_command_raises_click_exception_when_agent_absent(
-        self, mock_docker, tmp_path, monkeypatch
-    ) -> None:
+    def test_build_command_raises_click_exception_when_agent_absent(self, mock_docker, tmp_path, monkeypatch) -> None:
         self._write_config_without_build_agent(tmp_path)
         with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])

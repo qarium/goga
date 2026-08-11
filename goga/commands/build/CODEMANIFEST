@@ -155,12 +155,12 @@ Annotations: |
     home.docker.build is forwarded to image build (steps 16/17, build branch).
     1. Verify docker availability; raise ClickException when missing
     2. Load configuration via `load_project_config` (practice `project-configuration`) — get `ProjectConfig`
-    2b. When config.build is None → raise ClickException(
+    2.1. When config.build is None → raise ClickException(
         "build section is required in .goga/config.yml to run 'goga build'").
         Host-side guard — runs BEFORE any config.build access and BEFORE the
         docker command is assembled, so the in-container goga.build never
         starts on a build-less config (no docker run).
-    2c. When config.build.task_executor.agent is None → raise ClickException(
+    2.2. When config.build.task_executor.agent is None → raise ClickException(
         "build.task_executor.agent is required in .goga/config.yml to run 'goga build'").
         The agent is optional at the loader level (None when absent/empty), but the
         build command resolves it into the in-container wrapper path and cannot run

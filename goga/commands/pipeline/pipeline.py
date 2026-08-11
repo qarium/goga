@@ -105,7 +105,7 @@ def pipeline(  # noqa: PLR0913, PLR0917
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    # Step 1b — host-side None-guard: the pipeline section is optional at the
+    # Step 1.1 — host-side None-guard: the pipeline section is optional at the
     # loader level (load_project_config returns config.pipeline=None when absent), but
     # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
     # any config.pipeline.* access and BEFORE dispatch into

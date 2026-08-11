@@ -2921,35 +2921,22 @@ class TestParseLintPositive:
 
 
 class TestParseLintNegative:
-    def test_parse_lint_rejects_non_mapping_section_string(self):
-        """lint: not-a-mapping → ValueError."""
+    @pytest.mark.parametrize("bad_section", ["not-a-mapping", 5, ["a", "b"]])
+    def test_parse_lint_rejects_non_mapping_section(self, bad_section):
+        """lint section that is not a mapping (str/int/list) → ValueError."""
         with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
-            _parse_lint({"lint": "not-a-mapping"})
-
-    def test_parse_lint_rejects_int_section(self):
-        """lint: 5 → ValueError."""
-        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
-            _parse_lint({"lint": 5})
-
-    def test_parse_lint_rejects_list_section(self):
-        """lint: [a, b] → ValueError."""
-        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
-            _parse_lint({"lint": ["a", "b"]})
+            _parse_lint({"lint": bad_section})
 
     def test_parse_lint_rejects_non_list_ignore(self):
         """lint: { ignore: not-a-list } → ValueError."""
         with pytest.raises(ValueError, match=r"lint\.ignore must be a list"):
             _parse_lint({"lint": {"ignore": "not-a-list"}})
 
-    def test_parse_lint_rejects_non_string_element(self):
-        """lint: { ignore: ['.venv/', 5] } → ValueError."""
+    @pytest.mark.parametrize("bad_element", [5, True])
+    def test_parse_lint_rejects_non_string_element(self, bad_element):
+        """lint.ignore element that is not a string (int/bool) → ValueError."""
         with pytest.raises(ValueError, match=r"only strings"):
-            _parse_lint({"lint": {"ignore": [".venv/", 5]}})
-
-    def test_parse_lint_rejects_bool_element(self):
-        """lint: { ignore: [true] } → ValueError."""
-        with pytest.raises(ValueError, match=r"only strings"):
-            _parse_lint({"lint": {"ignore": [True]}})
+            _parse_lint({"lint": {"ignore": [bad_element]}})
 
 
 # --- Integration tests: load_project_config with lint ---
