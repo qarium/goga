@@ -109,14 +109,15 @@ Annotations: |
   --clean flag to wipe this directory before launch via
   `clean_pipeline_runtime_dir`.
 
-  The afm config.yaml tmpfile written by the launcher carries five static
-  launcher-side fields: client.command, theme, open_browser, proxy.enabled,
-  and prompts_dir (see `run_pipeline_container` for the per-field contract).
-  prompts_dir is fixed at /home/goga/pipeline/prompts (derived from the
-  known AFM_DIR=/home/goga/pipeline constant — NOT from an additional
-  argument or config field) and is written unconditionally; the directory
-  itself is populated by the in-container run_pipeline routine (per the
-  `run-pipeline` practice), so afm uses goga-managed prompts regardless of
+  The afm config.yaml tmpfile written by the launcher carries the
+  launcher-side fields: theme, open_browser, proxy.enabled, and prompts_dir
+  unconditionally, plus client.command CONDITIONALLY (only when
+  config.pipeline.agent is configured — see `run_pipeline_container` for the
+  per-field contract). prompts_dir is fixed at /home/goga/pipeline/prompts
+  (derived from the known AFM_DIR=/home/goga/pipeline constant — NOT from an
+  additional argument or config field) and is written unconditionally; the
+  directory itself is populated by the in-container run_pipeline routine (per
+  the `run-pipeline` practice), so afm uses goga-managed prompts regardless of
   whether the pipeline-file contains a roles block.
 
   Workflow layer: when the user passes --workflow <name> or --no-workflow,
@@ -223,16 +224,16 @@ Annotations: |
     1. Load configuration via `load_project_config` — fails fast on schema errors
     1b. When config.pipeline is None → raise ClickException(
         "pipeline section is required in .goga/config.yml to run 'goga
-        pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts in
+        pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts/env in
         this command, agent/env in `run_pipeline_container`). Because
         `run_pipeline_container` is only reached through this command, the guard
         covers it transitively — no separate None-check is added there.
-    1c. When config.pipeline.agent is None → raise ClickException(
-        "pipeline.agent is required in .goga/config.yml to run 'goga
-        pipeline'"). The agent is optional at the loader level (None when
-        absent/empty), but the pipeline command resolves it into the in-container
-        wrapper path and cannot run without it. Runs BEFORE any agent access to
-        avoid a downstream TypeError (covers `run_pipeline_container` transitively).
+       (No agent guard: pipeline.agent is OPTIONAL. When it is None the agent
+       may be supplied per-stage by the workflow — the compiler composes each
+       stage's command: override from the workflow agent name, and afm ≥0.4.15
+       honors per-stage commands over the global client.command. The
+       launcher writes the afm-config client.command only when an agent is
+       configured, so an absent agent is not an error here.)
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
     3. Resolve the proxy: take `proxy` when not None, otherwise fall back to
@@ -433,16 +434,22 @@ Annotations: |
     3. Allocate a free localhost TCP port for the dashboard
     4. Generate a unique container_name
     5. Resolve the agent wrapper path via `resolve_wrapper_path` (Imports +
-       `resolve-wrapper-path` practice) using config.pipeline.agent. Do not
-       validate the agent value — absence of the wrapper file is surfaced by
-       afm itself.
+       `resolve-wrapper-path` practice) using config.pipeline.agent, ONLY when
+       config.pipeline.agent is not None; otherwise the wrapper path is None.
+       Do not validate the agent value — absence of the wrapper file is surfaced
+       by afm itself. pipeline.agent is OPTIONAL: when it is None the agent is
+       expected to come from the workflow (per-stage command: overrides) or
+       from afm's own defaults, so None is carried through, not rejected.
     6. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
        BEFORE creating any temp file — the leak-prevention invariant (a signal
        during tmpfile/env-file setup or the `docker_update` build must unwind to
        the finally block and unlink the secret files). The runner's handler later
        nests under this one. Then create a private afm-config tmpfile carrying
-       five static launcher-side fields: client.command set to the resolved
-       wrapper path, theme: goga (dashboard theme), open_browser: false (the
+       the launcher-side fields: client.command set to the resolved wrapper path
+       (written ONLY when the wrapper path is not None — i.e. when
+       config.pipeline.agent is configured; omitted otherwise so per-stage
+       workflow agents or afm's own defaults cover the absent global default),
+       theme: goga (dashboard theme), open_browser: false (the
        dashboard is reached via the host-printed http://localhost:<port> URL;
        afm must not attempt to open a browser inside the container),
        proxy.enabled: false (afm's own internal outbound proxy provider is
@@ -568,10 +575,15 @@ Annotations: |
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile is owner-only (private). It carries five static
+    - afm-config tmpfile is owner-only (private). It carries the
       launcher-side fields: client.command: <resolved wrapper path> (the
       value MUST be the absolute path returned by `resolve_wrapper_path`,
-      never a bare agent name), theme: goga (dashboard theme),
+      never a bare agent name; the client: block is written ONLY when
+      config.pipeline.agent is configured — when it is None the block is
+      omitted, so per-stage workflow agents or afm's own defaults cover the
+      absent global default; client.command is afm's default for stages
+      without a per-stage command: override, not a launch prerequisite),
+      theme: goga (dashboard theme),
       open_browser: false (the dashboard is reached via the host-printed
       http://localhost:<port> URL; afm must not attempt to open a browser
       inside the container), proxy.enabled: false (afm's own internal

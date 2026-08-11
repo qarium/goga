@@ -183,11 +183,15 @@ class TestPipelineSectionGuard:
         mock_run.assert_not_called()
 
 
-class TestPipelineAgentGuard:
-    """Step 1c — host-side None-guard: ClickException when pipeline.agent is
-    absent/empty. The agent is optional at the loader level (None when unset), but
-    `goga pipeline` needs it to resolve the in-container wrapper path, so the guard
-    runs before any agent access (covering run_pipeline_container transitively).
+class TestPipelineAgentOptional:
+    """pipeline.agent is OPTIONAL: an absent/empty agent is a valid state because
+    the agent may be supplied per-stage by the workflow (the compiler composes
+    each stage's ``command:`` override from the workflow agent name, and afm
+    ≥0.4.15 honors per-stage commands over the global ``client.command``). A
+    pipeline section without an agent therefore does NOT raise — the command
+    proceeds and dispatches to ``run_pipeline_container``, which omits the
+    afm-config ``client.command`` so per-stage workflow agents (or afm's own
+    defaults) cover the absent global default.
     """
 
     @staticmethod
@@ -205,20 +209,31 @@ class TestPipelineAgentGuard:
         ]
         (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
 
-    def test_pipeline_command_raises_click_exception_when_agent_absent(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A pipeline section without an agent surfaces as a ClickException (step 1c)."""
+    def test_pipeline_command_proceeds_when_agent_absent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A pipeline section without an agent proceeds and dispatches (agent optional)."""
         self._write_config_without_pipeline_agent(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
             result = runner.invoke(pipeline, ["deploy"])
 
-        assert result.exit_code == 1
-        assert "pipeline.agent is required" in result.output
-        # The container never starts on an agent-less config.
-        mock_run.assert_not_called()
+        assert result.exit_code == 0
+        # The container IS launched on an agent-less config — the agent may come
+        # from the workflow, so the launcher must not short-circuit.
+        mock_run.assert_called_once()
+
+    def test_pipeline_command_proceeds_in_discovery_when_agent_absent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Discovery mode also proceeds without an agent (it never needed one)."""
+        self._write_config_without_pipeline_agent(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
+            result = runner.invoke(pipeline, [])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
 
 
 # --- Logic tests ---

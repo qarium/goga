@@ -28,8 +28,13 @@ _AFM_MOUNT_SUFFIX = ":/home/goga/.afm/config.yaml:ro"
 _CODEX_AUTH_MOUNT_SUFFIX = ":/home/goga/.codex/auth.json:ro"
 
 
-def _make_config(*, pipeline_agent: str = "claude") -> ProjectConfig:
-    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block)."""
+def _make_config(*, pipeline_agent: str | None = "claude") -> ProjectConfig:
+    """Build a minimal ProjectConfig satisfying the new schema (top-level image, pipeline block).
+
+    ``pipeline_agent`` may be ``None`` to model a config where the agent is
+    intentionally left unconfigured (the agent is then expected to come from the
+    workflow per-stage overrides).
+    """
     return ProjectConfig(
         lang="python",
         image="qarium/goga:latest",
@@ -136,6 +141,26 @@ class TestWriteAfmConfigTmpfile:
         finally:
             path.unlink(missing_ok=True)
 
+    def test_omits_client_command_when_wrapper_path_none(self) -> None:
+        """None wrapper_path (no agent configured) omits the client: block entirely.
+
+        The agent may be supplied per-stage by the workflow, so the global
+        client.command is dropped instead of erroring — per-stage command
+        overrides (or afm's own defaults) cover its absence. The remaining
+        launcher-side fields are still written.
+        """
+        path = _write_afm_config_tmpfile(None)
+        try:
+            content = path.read_text()
+            assert content == (
+                "theme: goga\nopen_browser: false\nproxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
+            )
+            # No client: block, no client.command line.
+            assert "client:" not in content
+            assert "command:" not in content
+        finally:
+            path.unlink(missing_ok=True)
+
 
 # --- Resolved wrapper path in afm-config tmpfile ---
 
@@ -206,6 +231,37 @@ class TestResolvedWrapperAfmConfig:
             "  enabled: false\n"
             "prompts_dir: /home/goga/pipeline/prompts\n"
         )
+
+    def test_run_pipeline_container_omits_client_command_when_agent_none(self, tmp_path: Path, monkeypatch) -> None:
+        """No agent configured → afm-config omits client.command; run still launches.
+
+        The agent may be supplied per-stage by the workflow, so a None
+        pipeline.agent is carried through (not rejected): the afm-config tmpfile
+        drops the client: block while keeping the other launcher-side fields, and
+        the container is launched normally — per-stage command overrides (or
+        afm's own defaults) cover the absent global default.
+        """
+        config = _make_config(pipeline_agent=None)
+        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
+        monkeypatch.setattr(_rpc_mod, "_allocate_port", lambda: 50321)
+        monkeypatch.setattr(_rpc_mod, "_read_git_config", lambda: {})
+        monkeypatch.chdir(tmp_path)
+
+        captured: dict = {}
+        _mock_proc, popen_side_effect = _capture_afm_config_popen(captured)
+        with (
+            mock.patch.object(subprocess, "Popen", side_effect=popen_side_effect),
+            mock.patch.object(subprocess, "run"),
+        ):
+            result = rpc("deploy", config, ())
+
+        assert result == 0
+        assert captured["afm_content"] == (
+            "theme: goga\nopen_browser: false\nproxy:\n  enabled: false\nprompts_dir: /home/goga/pipeline/prompts\n"
+        )
+        assert "client:" not in captured["afm_content"]
+        assert "command:" not in captured["afm_content"]
 
 
 # --- Failure modes (click surface) ---
