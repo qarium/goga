@@ -14,7 +14,7 @@ The config loader looks for this file relative to the current working directory.
 
 ```yaml
 language: python
-image: qarium/goga-python-3.14:1.0
+image: qarium/goga-python-3.14:1.1
 # dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
 
 build:
@@ -76,7 +76,7 @@ codemanifest:
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `language` | `string` | Yes | Project language. One of: `python`, `golang`, `kotlin`, `swift`, `javascript` |
-| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.0`). Consumers raise an error when it is unset. |
+| `image` | `string` | No | Docker image used by `goga build` and `goga pipeline` (e.g. `qarium/goga-python-3.14:1.1`). Consumers raise an error when it is unset. |
 | `dockerfile` | `string` | No | Path to a project Dockerfile. When set, `goga build --update` and `goga pipeline --update` build the image locally from this Dockerfile (fatal on build failure). When unset (default), `--update` pulls `image` from the registry instead (non-fatal warning on pull failure) |
 | `build` | mapping | No | Build pipeline settings. Optional at the loader level; `goga build` raises a `ClickException` when the section is absent |
 | `pipeline` | mapping | No | Pipeline (afm) execution settings. Optional at the loader level; `goga pipeline` raises a `ClickException` when the section is absent |
@@ -110,14 +110,14 @@ codemanifest:
 
 | Field   | Type     | Required  | Description                                                                                                             |
 |---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
-| `agent` | `string` | Yes       | AI executor that runs the build inside the container. Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
+| `agent` | `string` | No        | AI executor that runs the build inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; `goga build` raises a `ClickException` when it is `None` (the build needs an agent to resolve the in-container wrapper). Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
 | `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
 
 ### pipeline
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `agent` | `string` | Yes | AI agent that runs the pipeline stages inside the container. Same resolution mechanic and baseline set as `build.task_executor.agent` — see [Agents](./agents.md). |
+| `agent` | `string` | No | AI agent that runs the pipeline stages inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`. When `None`, the agent may be supplied by a per-stage workflow override (see [Workflows](../pipelines/workflows.md)) or afm's own default, so `goga pipeline` does not require it. Same resolution mechanic and baseline set as `build.task_executor.agent` — see [Agents](./agents.md). |
 | `env` | mapping | No | Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to `{}` |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the pipeline container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |

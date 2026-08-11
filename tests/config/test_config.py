@@ -62,8 +62,11 @@ class TestTaskExecutorConfigAPIShape:
     def test_has_env_field(self):
         assert "env" in TaskExecutorConfig.__dataclass_fields__
 
-    def test_agent_type_is_str(self):
-        assert TaskExecutorConfig.__dataclass_fields__["agent"].type is str
+    def test_agent_type_is_str_or_none(self):
+        assert TaskExecutorConfig.__dataclass_fields__["agent"].type == str | None
+
+    def test_agent_has_default_none(self):
+        assert TaskExecutorConfig.__dataclass_fields__["agent"].default is None
 
     def test_env_type_is_dict(self):
         assert TaskExecutorConfig.__dataclass_fields__["env"].type is dict
@@ -79,8 +82,11 @@ class TestPipelineConfigAPIShape:
     def test_has_env_field(self):
         assert "env" in PipelineConfig.__dataclass_fields__
 
-    def test_agent_type_is_str(self):
-        assert PipelineConfig.__dataclass_fields__["agent"].type is str
+    def test_agent_type_is_str_or_none(self):
+        assert PipelineConfig.__dataclass_fields__["agent"].type == str | None
+
+    def test_agent_has_default_none(self):
+        assert PipelineConfig.__dataclass_fields__["agent"].default is None
 
     def test_env_type_is_dict(self):
         assert PipelineConfig.__dataclass_fields__["env"].type is dict

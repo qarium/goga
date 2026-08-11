@@ -16,7 +16,7 @@ An open platform for building AI-SDLC. Declare the development process as pipeli
     </td>
     <td width="33.33%" align="left" valign="top">
       <h3>🧩 Tools</h3>
-      <p>Pluggable capability packages. Any opensource tool or in-house methodology is packaged as <code>goga-tool-*</code> and lands in a shared catalog of skills and pipelines, all addressed uniformly.</p>
+      <p>Pluggable capability packages. Any open-source tool or in-house methodology is packaged as <code>goga-tool-*</code> and lands in a shared catalog of skills and pipelines, all addressed uniformly.</p>
     </td>
     <td width="33.33%" align="left" valign="top">
       <h3>📋 SDD</h3>
@@ -245,7 +245,7 @@ Read the full functional model in the [Pipelines](https://qarium.github.io/goga/
 
 ## Tools
 
-A **tool** is a pluggable capability package. Any opensource tool or in-house methodology is packaged as a Python package under the `goga_tool_` prefix and becomes part of the goga ecosystem: its skills land in a shared catalog at `~/.goga/skills/`, its pipeline-files install at `~/.goga/pipelines/` with a namespace prefix, and everything lives side by side, addressed uniformly.
+A **tool** is a pluggable capability package. Any open-source tool or in-house methodology is packaged as a Python package under the `goga_tool_` prefix and becomes part of the goga ecosystem: its skills land in a shared catalog at `~/.goga/skills/`, its pipeline-files install at `~/.goga/pipelines/` with a namespace prefix, and everything lives side by side, addressed uniformly.
 
 ### Installing a tool
 

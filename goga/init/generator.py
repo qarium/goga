@@ -90,6 +90,9 @@ class FileGenerator:
         # Field order: language, image, dockerfile, build, pipeline, codemanifest.
         # `dockerfile` is emitted only when dockerfile_path is set.
         # `commands` has no source in GogaConfigAnswers, so it is never emitted.
+        # `build`/`pipeline` are emitted only when they carry content (agent or
+        # env); with no agent configured by default, an empty block would add no
+        # value, so it is omitted entirely.
         data: dict = {
             "language": config.language,
             "image": config.image,
@@ -98,27 +101,50 @@ class FileGenerator:
         if config.dockerfile_path is not None:
             data["dockerfile"] = config.dockerfile_path
 
-        build: dict = {
-            "task_executor": {
-                "agent": config.agent,
-            },
-        }
-        if config.env:
-            build["task_executor"]["env"] = config.env
-        data["build"] = build
+        build_block = _build_block(config.agent, config.env)
+        if build_block is not None:
+            data["build"] = {"task_executor": build_block}
 
-        pipeline: dict = {"agent": config.pipeline_agent}
-        if config.pipeline_env:
-            pipeline["env"] = config.pipeline_env
-        data["pipeline"] = pipeline
+        pipeline_block = _build_block(config.pipeline_agent, config.pipeline_env)
+        if pipeline_block is not None:
+            data["pipeline"] = pipeline_block
 
-        if config.codemanifest_usages or config.codemanifest_annotations is not None:
-            codemanifest: dict = {}
-            if config.codemanifest_usages:
-                codemanifest["usages"] = config.codemanifest_usages
-            if config.codemanifest_annotations is not None:
-                codemanifest["annotations"] = _LiteralStr(config.codemanifest_annotations)
-            data["codemanifest"] = codemanifest
+        codemanifest_block = _build_codemanifest_block(config)
+        if codemanifest_block is not None:
+            data["codemanifest"] = codemanifest_block
 
         with (goga_dir / "config.yml").open("w", encoding="utf-8") as f:
             yaml.dump(data, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+
+
+def _build_block(agent: str | None, env: dict | None) -> dict | None:
+    """Assemble a build.task_executor / pipeline content dict.
+
+    Returns a dict with `agent` and/or `env` keys (in that order), or None when
+    the block carries no content (no agent and no/empty env) — signalling the
+    caller to omit the block entirely.
+    """
+    block: dict = {}
+
+    if agent is not None:
+        block["agent"] = agent
+
+    if env:
+        block["env"] = env
+
+    return block or None
+
+
+def _build_codemanifest_block(config: GogaConfigAnswers) -> dict | None:
+    """Assemble the optional codemanifest block, or None when it has no content."""
+    if not config.codemanifest_usages and config.codemanifest_annotations is None:
+        return None
+
+    codemanifest: dict = {}
+
+    if config.codemanifest_usages:
+        codemanifest["usages"] = config.codemanifest_usages
+    if config.codemanifest_annotations is not None:
+        codemanifest["annotations"] = _LiteralStr(config.codemanifest_annotations)
+
+    return codemanifest

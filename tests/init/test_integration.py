@@ -356,9 +356,11 @@ class TestIntegration:
                 False,  # Download base convention?
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
                 True,  # Create Dockerfile?
                 False,  # Set suggested task env variables?
                 False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
                 False,  # Set suggested pipeline env variables?
                 False,  # Add custom pipeline env variable?
             ]
@@ -402,9 +404,11 @@ class TestIntegration:
                 False,  # Download base convention?
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
                 True,  # Create Dockerfile?
                 False,  # Set suggested task env variables?
                 False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
                 False,  # Set suggested pipeline env variables?
                 False,  # Add custom pipeline env variable?
             ]

@@ -423,8 +423,8 @@ class TestNewSchema:
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert list(data.keys()) == ["language", "image", "dockerfile", "build", "pipeline", "codemanifest"]
 
-    def test_generate_goga_config_always_emits_pipeline_block(self, tmp_path: Path) -> None:
-        """pipeline: block is always emitted even when pipeline_env is omitted."""
+    def test_generate_goga_config_emits_pipeline_block_when_agent_set(self, tmp_path: Path) -> None:
+        """pipeline: block is emitted when a pipeline agent is set (even without env)."""
         config = self._make_config(pipeline_agent="claude", pipeline_env=None)
         gen = FileGenerator()
         gen._base_dir = tmp_path
@@ -435,6 +435,48 @@ class TestNewSchema:
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert data["pipeline"]["agent"] == "claude"
         assert "env" not in data["pipeline"]
+
+    def test_generate_goga_config_omits_pipeline_when_no_agent_no_env(self, tmp_path: Path) -> None:
+        """No pipeline agent and no pipeline env → the pipeline block is omitted entirely."""
+        config = self._make_config(pipeline_agent=None, pipeline_env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "pipeline" not in data
+
+    def test_generate_goga_config_omits_build_when_no_agent_no_env(self, tmp_path: Path) -> None:
+        """No build agent and no build env → the build block is omitted entirely."""
+        config = self._make_config(agent=None, env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "build" not in data
+
+    def test_generate_goga_config_emits_build_env_without_agent(self, tmp_path: Path) -> None:
+        """Build env is emitted even when the build agent is None."""
+        config = self._make_config(agent=None, env={"API_KEY": "secret"})
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret"}
+        assert "agent" not in data["build"]["task_executor"]
+
+    def test_generate_goga_config_omits_agent_keys_when_none(self, tmp_path: Path) -> None:
+        """agent keys are omitted from both build and pipeline when None."""
+        config = self._make_config(agent="claude", pipeline_agent=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["build"]["task_executor"]["agent"] == "claude"
+        assert "pipeline" not in data
 
     def test_generate_goga_config_emits_image_at_top_level(self, tmp_path: Path) -> None:
         """image is emitted at the top level, never under build:."""

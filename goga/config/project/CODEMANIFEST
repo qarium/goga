@@ -52,14 +52,16 @@ Annotations: |
     5. Extract the pipeline block. When the pipeline key is absent → set
        pipeline to None (the section is optional at the loader level). When the
        key is present → validate it is a mapping (raise ValueError otherwise)
-       and construct a `PipelineConfig` from its fields: agent (required,
-       non-empty), env (optional, default empty dict), proxy (optional, default
+       and construct a `PipelineConfig` from its fields: agent (OPTIONAL —
+       absent/YAML-null/empty/whitespace → None; a non-string value raises
+       ValueError), env (optional, default empty dict), proxy (optional, default
        None), hosts (optional, default empty dict)
     6. Extract the build block. When the build key is absent → set build to
        None. When the key is present → validate it is a mapping (raise
        ValueError otherwise), then validate the required task_executor
        sub-block (raise KeyError when missing), construct a
-       `TaskExecutorConfig` from agent (required, non-empty) and env (optional,
+       `TaskExecutorConfig` from agent (OPTIONAL — absent/YAML-null/empty/
+       whitespace → None; a non-string value raises ValueError) and env (optional,
        default empty dict), and finally construct a `BuildConfig` from
        task_executor, proxy (optional, default None), hosts (optional, default
        empty dict), plus the remaining optional build fields
@@ -107,13 +109,16 @@ Annotations: |
       ClickException when they need a concrete image)
     - pipeline block is OPTIONAL (None when the key is absent;
       present-but-non-mapping → ValueError); WHEN present, pipeline.agent is
-      required and non-empty
+      OPTIONAL — absent/YAML-null/empty/whitespace → None; a non-string value →
+      ValueError. the pipeline command raises a clean ClickException when it needs an agent
     - pipeline.env is optional, defaults to an empty mapping
     - pipeline.proxy is optional, defaults to None
     - pipeline.hosts is optional, defaults to an empty mapping
     - build block is OPTIONAL (None when the key is absent;
       present-but-non-mapping → ValueError); WHEN present, build.task_executor
-      sub-block and build.task_executor.agent are required (non-empty)
+      sub-block is required (KeyError when missing), but build.task_executor.agent is
+      OPTIONAL — absent/YAML-null/empty/whitespace → None; a non-string value →
+      ValueError. the build command raises a clean ClickException when it needs an agent
     - build.proxy is optional, defaults to None
     - build.hosts is optional, defaults to an empty mapping
     - codemanifest is optional
@@ -291,32 +296,34 @@ Annotations: |
       Optional host→IP mapping for "docker run --add-host HOST:IP" flags.
       Defaults to an empty dict when absent in .goga/config.yml.
 
-"TaskExecutorConfig(agent: str, env: dict)":
+"TaskExecutorConfig(agent: str | None, env: dict)":
   location: config.py
   annotations: |
     AI agent configuration for task execution.
     Constructed by load_project_config from the task_executor section.
 
-    `agent`: AI executor identifier
+    `agent`: AI executor identifier (optional — None when unset)
     `env`: environment variable dictionary
 
     Requirements:
-    - agent is required and must be a non-empty string
+    - agent is OPTIONAL — absent/YAML-null/empty/whitespace in .goga/config.yml
+      resolves to None; a non-string value raises ValueError. the build command raises a
+      clean ClickException when it needs an agent.
     - env is optional and defaults to an empty dict
   properties:
-    "agent -> str": |
+    "agent -> str | None": |
       AI executor identifier — agent name as declared in the goga Docker image
       (e.g. "claude", "codex", "opencode", or any other name matching the
       /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
       runtime by the consumer (goga/build) into an absolute wrapper path;
       this cell does no resolution or validation of the value.
-      Required — must not be an empty string.
+      Optional — None when the agent is not configured in .goga/config.yml.
     "env -> dict": |
       Environment variable dictionary ({str: str}).
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
 
-"PipelineConfig(agent: str, env: dict, proxy: str | None, hosts: dict[str, str])":
+"PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Pipeline configuration block. Constructed by load_project_config from the pipeline section.
@@ -324,6 +331,7 @@ Annotations: |
     afm client.command inside the container during pipeline execution.
 
     `agent`: AI executor identifier used as afm client.command inside the container
+             (optional — None when unset)
     `env`: environment variable dictionary
     `proxy`: optional HTTP/HTTPS proxy URL. Same semantics as BuildConfig.proxy,
              consumed by the pipeline container launcher. Defaults to None.
@@ -331,19 +339,21 @@ Annotations: |
              empty dict.
 
     Requirements:
-    - agent is required and must be a non-empty string
+    - agent is OPTIONAL — absent/YAML-null/empty/whitespace in .goga/config.yml
+      resolves to None; a non-string value raises ValueError. the pipeline command raises a
+      clean ClickException when it needs an agent.
     - env is optional and defaults to an empty dict
     - proxy is optional and defaults to None
     - hosts is optional and defaults to an empty dict
   properties:
-    "agent -> str": |
+    "agent -> str | None": |
       AI executor identifier — agent name as declared in the goga Docker image
       (e.g. "claude", "codex", "opencode", or any other name matching the
       /home/goga/bin/<agent>-as-claude.sh wrapper convention). Resolved at
       runtime by the consumer (goga/commands/pipeline) into an absolute
       wrapper path written into the afm-config tmpfile; this cell does no
       resolution or validation of the value.
-      Required — must not be an empty string.
+      Optional — None when the agent is not configured in .goga/config.yml.
     "env -> dict": |
       Environment variable dictionary ({str: str}).
       Passed to the container at pipeline run time.

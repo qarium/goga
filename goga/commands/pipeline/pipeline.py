@@ -105,7 +105,7 @@ def pipeline(  # noqa: PLR0913, PLR0917
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    # Step 1b — host-side None-guard: the pipeline section is optional at the
+    # Step 1.1 — host-side None-guard: the pipeline section is optional at the
     # loader level (load_project_config returns config.pipeline=None when absent), but
     # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
     # any config.pipeline.* access and BEFORE dispatch into
@@ -115,6 +115,14 @@ def pipeline(  # noqa: PLR0913, PLR0917
     # is only reachable through this command, so a single check here is enough.
     if config.pipeline is None:
         raise click.ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")
+
+    # pipeline.agent is OPTIONAL: it is None at the loader level when absent/
+    # empty, and that is a valid state — the agent may be supplied per-stage by
+    # the workflow (composed into each stage's `command:` override by the
+    # compiler; afm ≥0.4.15 honors per-stage commands over the global
+    # `client.command`). No host-side guard here: run_pipeline_container writes
+    # the afm-config `client.command` only when an agent is present, and lets
+    # per-stage workflow agents (or afm's own defaults) cover its absence.
 
     # Resolve the proxy: the --proxy CLI value wins over config.pipeline.proxy.
     resolved_proxy = proxy if proxy is not None else config.pipeline.proxy
