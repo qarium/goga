@@ -205,14 +205,24 @@ def resolve_pipeline_runtime_dir(pipeline_name: str) -> Path:
     the same branch. Pure with respect to the filesystem — the directory is NOT
     created here (creation is the caller's responsibility).
 
+    The ``pipeline_name`` path segment is sanitized by replacing every ``:`` with
+    ``-`` BEFORE delegation. The resolved path is later used as the source of a
+    docker bind-mount (``<runtime_dir>:/home/goga/pipeline``); an unsanitized
+    ``:`` would be parsed by docker as the ``source:target[:mode]`` separator
+    (e.g. ``pybuggy:api-feature`` → docker ``invalid mode``). The ORIGINAL
+    ``pipeline_name`` (not the sanitized segment) is still used for the
+    in-container run argv and the workflow auto-match basename, so the
+    sanitization affects only the host state-dir path segment.
+
     Args:
         pipeline_name: Pipeline name without extension (the run-mode name arg).
 
     Returns:
         Absolute host path
-        ``~/.goga/runtime/pipelines/<normalized>/<branch>/<pipeline_name>``.
+        ``~/.goga/runtime/pipelines/<normalized>/<branch>/<sanitized_name>``
+        where ``<sanitized_name>`` is ``pipeline_name`` with ``:`` → ``-``.
     """
-    return resolve_runtime_dir("pipelines", pipeline_name)
+    return resolve_runtime_dir("pipelines", pipeline_name.replace(":", "-"))
 
 
 def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:

@@ -700,24 +700,42 @@ Annotations: |
 
     `pipeline_name`: pipeline name without extension (the run-mode name argument)
     `runtime_dir`: absolute host path under
-                   ~/.goga/runtime/pipelines/<project>/<branch>/<pipeline_name>/
+                   ~/.goga/runtime/pipelines/<project>/<branch>/<sanitized_name>/
+                   where <sanitized_name> is pipeline_name with every colon
+                   replaced by a hyphen (the path is used as a docker bind-mount
+                   source, where an unsanitized colon is parsed by docker as the
+                   source:target[:mode] separator → "invalid mode").
 
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm:
-    1. Delegate to `resolve_runtime_dir`("pipelines", pipeline_name) from
+    1. Sanitize pipeline_name for use as a path segment: replace every colon
+       with a hyphen (colon → hyphen). The host state-dir path is a docker
+       bind-mount source, so an unsanitized colon would be parsed by docker as
+       the source:target[:mode] separator (e.g. "pybuggy:api-feature" → docker
+       "invalid mode"). The ORIGINAL pipeline_name (NOT the sanitized segment)
+       is still used for the in-container run argv and the workflow auto-match
+       basename, so this step affects only the host state-dir path segment.
+    2. Delegate to `resolve_runtime_dir`("pipelines", <sanitized_name>) from
        Imports — the routine composes the full path from cwd, git branch, and
-       the supplied pipeline_name suffix
-    2. Return the resulting path
+       the supplied suffix
+    3. Return the resulting path
 
     Requirements:
     - Return value is an absolute path
+    - The pipeline_name path segment has every colon replaced with a hyphen
+      (sanitization is THIS facade's responsibility, NOT resolve_runtime_dir's
+      — resolve_runtime_dir passes suffix_parts through verbatim per its
+      "caller owns the namespace" contract)
     - Pure with respect to the filesystem — does not create the directory
       (creation is the caller's responsibility)
 
     Constraints:
     - Do not create the directory here — the caller handles creation
     - Do not validate that pipeline_name corresponds to an existing pipeline file
+    - Do not sanitize the name for any use OTHER than the host state-dir path
+      segment — the in-container run argv and the workflow auto-match basename
+      use the ORIGINAL pipeline_name; only the host path segment is sanitized
 
 "clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> none: None":
   location: run_pipeline_container.py

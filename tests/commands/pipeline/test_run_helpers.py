@@ -93,6 +93,30 @@ class TestResolvePipelineRuntimeDirLogic:
         assert isinstance(result, Path)
         assert not result.exists()
 
+    def test_sanitizes_colon_in_pipeline_name_segment(self, tmp_path: Path, monkeypatch) -> None:
+        """A ':' in the pipeline name becomes '-' in the host path segment.
+
+        Regression guard for the docker ``invalid mode`` defect: the host
+        state-dir path is later used as a docker bind-mount source
+        (``<runtime_dir>:/home/goga/pipeline``), so an unsanitized ':' would be
+        parsed by docker as the ``source:target[:mode]`` separator. The facade
+        must sanitize the path segment so the composed path is mount-safe.
+        """
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path / "proj")
+        monkeypatch.setattr("goga.runtime.paths.resolve_git_branch", lambda: "main")
+        result = resolve_pipeline_runtime_dir("pybuggy:api-feature")
+        assert result.name == "pybuggy-api-feature"
+        assert ":" not in str(result)
+
+    def test_delegation_sanitizes_colon_before_resolving(self) -> None:
+        """The ':' is sanitized BEFORE delegation: the suffix reaches
+        ``resolve_runtime_dir`` already as 'pybuggy-api-feature'."""
+        with mock.patch.object(_rpc_mod, "resolve_runtime_dir") as mock_rrd:
+            mock_rrd.return_value = Path("/fake/path")
+            resolve_pipeline_runtime_dir("pybuggy:api-feature")
+        assert mock_rrd.call_args == mock.call("pipelines", "pybuggy-api-feature")
+
 
 # --- Logic tests (positive): clean_pipeline_runtime_dir ---
 
