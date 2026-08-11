@@ -16,6 +16,7 @@ class GogaConfigAnswers:
     codemanifest_usages: dict | None = None
     codemanifest_annotations: str | None = None
     dockerfile_path: str | None = None
+    dockerfile_base_image: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

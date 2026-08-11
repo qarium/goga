@@ -133,8 +133,18 @@ class Questionnaire:
         codemanifest_annotations = self.ask_codemanifest_annotations(annotations_prefill)
 
         agent = self.ask_agent()
-        image = self.ask_image(language)
+
+        # The Dockerfile decision drives the image semantics: with a Dockerfile
+        # the image is BUILT from it (needs its own name + a FROM base), without
+        # a Dockerfile a pre-built image is pulled.
         dockerfile_path = self.ask_dockerfile_path()
+        if dockerfile_path is not None:
+            dockerfile_base_image = self.ask_base_image(language)
+            image = self.ask_image_name(language)
+        else:
+            dockerfile_base_image = None
+            image = self.ask_image(language)
+
         env = self.ask_env(agent)
         pipeline_agent = self.ask_pipeline_agent()
         pipeline_env = self.ask_pipeline_env(pipeline_agent)
@@ -147,6 +157,7 @@ class Questionnaire:
             pipeline_env=pipeline_env,
             env=env,
             dockerfile_path=dockerfile_path,
+            dockerfile_base_image=dockerfile_base_image,
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
         )
@@ -263,17 +274,90 @@ class Questionnaire:
         )
 
     def ask_image(self, language: str) -> str:
-        """Survey the Docker image, hinting language-specific defaults.
+        """Survey the pre-built Docker image to PULL (no-Dockerfile case).
+
+        Used when the user does NOT create a custom Dockerfile: build/pipeline
+        pull this pre-built image. Displays language-specific hints from
+        `image_defaults` and defaults to the last entry; accepts free-form input.
 
         Args:
             language: the selected project language (drives the hint list).
 
         Returns:
-            Docker image name. Defaults to the last hint when hints exist;
-            accepts free-form input.
+            Docker image name. Captures the top-level image field (NOT build.image).
         """
-        click.echo("\n--- Docker Image ---")
-        click.echo("Select the Docker image for the build implementation.")
+        return self._prompt_language_image(
+            language,
+            section="Docker Image",
+            intro="Select the pre-built Docker image to use (pulled at build/pipeline time).",
+            prompt_label="Docker image",
+        )
+
+    def ask_base_image(self, language: str) -> str:
+        """Survey the BASE image for the Dockerfile FROM (Dockerfile case).
+
+        Used when the user creates a custom Dockerfile: this image is the FROM
+        baseline the built image extends. Displays language-specific hints from
+        `image_defaults` and defaults to the last entry; accepts free-form input.
+
+        Args:
+            language: the selected project language (drives the hint list).
+
+        Returns:
+            Base Docker image name. Written as the Dockerfile FROM line; never
+            emitted to config.yml.
+        """
+        return self._prompt_language_image(
+            language,
+            section="Dockerfile Base Image",
+            intro="Select the base image for the Dockerfile (the FROM line).",
+            prompt_label="Base image (FROM)",
+        )
+
+    def ask_image_name(self, language: str) -> str:
+        """Survey the NAME (tag) for the image built from the Dockerfile.
+
+        Used when the user creates a custom Dockerfile: `goga build` runs
+        `docker build -t <image>`, so the built image needs its own name,
+        distinct from the FROM base. Free-form input with a language-derived
+        placeholder default.
+
+        Args:
+            language: the selected project language (drives the default placeholder).
+
+        Returns:
+            Docker image name. Captures the top-level image field (NOT build.image).
+        """
+        click.echo("\n--- Built Image Name ---")
+        click.echo("Name for the docker image built from the Dockerfile (the top-level image field).")
+
+        return click.prompt("Built image name", default=f"{language}-image:latest")
+
+    def _prompt_language_image(
+        self,
+        language: str,
+        *,
+        section: str,
+        intro: str,
+        prompt_label: str,
+    ) -> str:
+        """Prompt for a Docker image, hinting language-specific defaults.
+
+        Lists the predefined images for `language` (from `_IMAGE_MAP`) and
+        defaults to the last entry; accepts free-form input. When the language
+        has no predefined images, no hints are shown and no default is offered.
+
+        Args:
+            language: the selected project language (drives the hint list).
+            section: the `---` section header text.
+            intro: the explanatory line under the header.
+            prompt_label: the click.prompt label.
+
+        Returns:
+            Docker image name. Defaults to the last hint when hints exist.
+        """
+        click.echo(f"\n--- {section} ---")
+        click.echo(intro)
         images = _IMAGE_MAP.get(language)
 
         if images is not None:
@@ -282,8 +366,8 @@ class Questionnaire:
             for img in images:
                 click.echo(f"  - {img}")
 
-            return click.prompt("Docker image", default=images[-1])
-        return click.prompt("Docker image")
+            return click.prompt(prompt_label, default=images[-1])
+        return click.prompt(prompt_label)
 
     def ask_dockerfile_path(self) -> str | None:
         """Optionally survey a custom Dockerfile path.

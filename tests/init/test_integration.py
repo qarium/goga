@@ -339,7 +339,8 @@ class TestIntegration:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )
@@ -378,10 +379,11 @@ class TestIntegration:
         dockerfile = tmp_path / ".goga" / "Dockerfile"
         assert dockerfile.exists()
         content = dockerfile.read_text(encoding="utf-8")
-        assert content.startswith("FROM ")
+        assert content == "FROM qarium/goga-python-3.12:1.0\n"
 
         config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
         assert "dockerfile: .goga/Dockerfile" in config_yml
+        assert "image: my-python-image:latest" in config_yml
 
     def test_init_custom_dockerfile_path_flows_through_chain(self, tmp_path: Path) -> None:
         """Cross-entity: a custom Dockerfile path reaches both the FS and config.yml.
@@ -394,8 +396,9 @@ class TestIntegration:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
                 ".goga/custom.Dockerfile",  # dockerfile path (typed, not default)
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )
@@ -425,7 +428,8 @@ class TestIntegration:
 
         dockerfile = tmp_path / ".goga" / "custom.Dockerfile"
         assert dockerfile.exists()
-        assert dockerfile.read_text(encoding="utf-8").startswith("FROM ")
+        assert dockerfile.read_text(encoding="utf-8") == "FROM qarium/goga-python-3.12:1.0\n"
 
         config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
         assert "dockerfile: .goga/custom.Dockerfile" in config_yml
+        assert "image: my-python-image:latest" in config_yml

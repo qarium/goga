@@ -48,6 +48,7 @@ class TestLogic:
         codemanifest_usages: dict | None = None,
         codemanifest_annotations: str | None = None,
         dockerfile_path: str | None = None,
+        dockerfile_base_image: str | None = None,
     ) -> GogaConfigAnswers:
         return GogaConfigAnswers(
             language=language,
@@ -59,6 +60,7 @@ class TestLogic:
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
             dockerfile_path=dockerfile_path,
+            dockerfile_base_image=dockerfile_base_image,
         )
 
     def _make_gen(self, tmp_path: Path) -> FileGenerator:
@@ -252,10 +254,15 @@ class TestLogic:
     # --- New tests for Dockerfile generation ---
 
     def test_generator_creates_dockerfile(self, tmp_path: Path) -> None:
-        """When dockerfile_path is set, Dockerfile is created with FROM image."""
+        """When dockerfile_path is set, Dockerfile is created with FROM base image.
+
+        The FROM line uses `dockerfile_base_image` (the baseline), while the
+        top-level `image` field holds the name of the image built from it.
+        """
         config = self._make_config(
-            image="qarium/goga-python-3.14:1.0",
+            image="my-python-app:latest",
             dockerfile_path="Dockerfile",
+            dockerfile_base_image="qarium/goga-python-3.14:1.0",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -310,10 +317,11 @@ class TestLogic:
         assert "dockerfile" not in text
 
     def test_generator_dockerfile_custom_path(self, tmp_path: Path) -> None:
-        """Dockerfile can be created at a custom path."""
+        """Dockerfile can be created at a custom path; FROM uses the base image."""
         config = self._make_config(
-            image="qarium/goga-golang-1.26:1.0",
+            image="my-golang-app:latest",
             dockerfile_path="docker/Dockerfile",
+            dockerfile_base_image="qarium/goga-golang-1.26:1.0",
         )
         answers = InitAnswers(goga_config=config)
 

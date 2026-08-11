@@ -53,25 +53,31 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Responses for generating .goga/config.yml.
 
-"GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
+"GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None, dockerfile_base_image: str | None)":
   location: answers.py
   annotations: |
     Input data for .goga/config.yml and Dockerfile generation.
 
     `language`: selected project language
     `agent`: selected AI executor (used as build.task_executor.agent); None when the user declines to configure a build agent
-    `image`: Docker image (drives the top-level image field, NOT build.image)
+    `image`: Docker image (drives the top-level image field, NOT build.image). With a
+      Dockerfile it is the NAME of the image built from it (the docker build -t tag);
+      without a Dockerfile it is the pre-built image to pull.
     `pipeline_agent`: AI executor used as pipeline.agent / afm client.command; None when the user declines to configure a pipeline agent
     `pipeline_env`: environment variables for the pipeline block
     `env`: environment variables for task_executor
     `codemanifest_usages`: codemanifest practice mappings
     `codemanifest_annotations`: codemanifest annotation block
     `dockerfile_path`: path to custom Dockerfile (None to skip Dockerfile creation)
+    `dockerfile_base_image`: base image for the Dockerfile FROM line; set only when
+      dockerfile_path is set, None otherwise. Never emitted to config.yml.
   properties:
     "language -> str": |
       Selected project language.
     "image -> str": |
-      Docker image. Drives the top-level image field (NOT build.image).
+      Docker image. Drives the top-level image field (NOT build.image). With a Dockerfile
+      it is the name/tag of the image built from it; without a Dockerfile it is the
+      pre-built image to pull.
     "agent -> str | None": |
       Selected AI executor. Used as build.task_executor.agent. None — no build agent
       configured (the agent key is omitted from the generated config).
@@ -88,6 +94,10 @@ Annotations: |
       Codemanifest annotation block.
     "dockerfile_path -> str | None": |
       Path to custom Dockerfile. None — skip Dockerfile creation.
+    "dockerfile_base_image -> str | None": |
+      Base image for the Dockerfile FROM line. Set only when dockerfile_path is set
+      (None otherwise). Consumed solely by Dockerfile generation; never emitted to
+      config.yml.
 
 "Questionnaire()":
   location: questionnaire.py
@@ -108,7 +118,10 @@ Annotations: |
       Display "Collecting .goga/config.yml settings...".
       Orchestrate the per-field ask_* methods in survey order and assemble GogaConfigAnswers:
       ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
-      → ask_agent → ask_image → ask_dockerfile_path → ask_env → ask_pipeline_agent → ask_pipeline_env.
+      → ask_agent → ask_dockerfile_path → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
+      The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
+      ask_base_image (FROM) then ask_image_name (built image tag) are surveyed and dockerfile_base_image
+      is set; otherwise ask_image (pre-built image to pull) is surveyed and dockerfile_base_image is None.
       Each per-field method emits a section header (---) and explanatory text.
     "ask_language() -> language: str": |
       Select from (python, golang, kotlin, swift, javascript).
@@ -127,12 +140,21 @@ Annotations: |
     "ask_agent() -> agent: str | None": |
       Confirm-gated (default No). On decline: return None (no build agent configured).
       On acceptance: select from (claude, codex). Used as build.task_executor.agent.
-    "ask_image(language: str) -> image: str": |
-      Display hints from `image_defaults` for `language`; default to the last entry; accept free-form input.
-      Captures the top-level image field (NOT build.image).
     "ask_dockerfile_path() -> dockerfile_path: str | None": |
       Optional; prompt to create a custom Dockerfile.
       On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
+    "ask_image(language: str) -> image: str": |
+      Survey the pre-built Docker image to PULL (no-Dockerfile branch). Display hints from
+      `image_defaults` for `language`; default to the last entry; accept free-form input.
+      Captures the top-level image field (NOT build.image).
+    "ask_base_image(language: str) -> base_image: str": |
+      Survey the BASE image for the Dockerfile FROM line (Dockerfile branch). Display hints
+      from `image_defaults` for `language`; default to the last entry; accept free-form input.
+      The result populates dockerfile_base_image and is never emitted to config.yml.
+    "ask_image_name(language: str) -> image: str": |
+      Survey the NAME (tag) for the image built from the Dockerfile (Dockerfile branch), since
+      goga build runs docker build -t <image>. Free-form input; default `{language}-image:latest`.
+      Captures the top-level image field (NOT build.image).
     "ask_env(agent: str | None) -> env: dict | None": |
       Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
       then optionally collect arbitrary key-value pairs. Drives build.task_executor.env. A None `agent`
@@ -155,7 +177,8 @@ Annotations: |
   methods:
     "generate(answers: InitAnswers) -> _:None": |
       Generate all project files from the provided answers.
-      If dockerfile_path is set — create a Dockerfile with FROM {image}.
+      If dockerfile_path is set — create a Dockerfile with FROM {dockerfile_base_image}
+      (the baseline); the top-level image field holds the name of the image built from it.
       Delegate to generate_goga_config() with answers.goga_config.
     "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
       Algorithm:

@@ -37,7 +37,8 @@ Run an interactive user survey and generate project files.
 - Create the .goga/ directory if it does not exist
 - Generate .goga/config.yml with minimal configuration
 - If the user opted in — download .goga/usages/conventions.md
-- If the user requested a custom Dockerfile — create it with `FROM {image}`
+- If the user requested a custom Dockerfile — create it with `FROM {dockerfile_base_image}`;
+  the top-level `image` field holds the name of the image built from it (the `docker build -t` tag)
 
 ### Data
 
@@ -46,13 +47,14 @@ Run an interactive user survey and generate project files.
 `GogaConfigAnswers` fields:
 - `language` — selected project language
 - `agent` — selected AI executor (becomes `build.task_executor.agent`); None when the user declines to configure a build agent (the agent key is omitted from the generated config)
-- `image` — Docker image (becomes the top-level `image`, NOT `build.image`)
+- `image` — Docker image (becomes the top-level `image`, NOT `build.image`). With a Dockerfile it is the NAME/tag of the image built from it (`docker build -t <image>`); without a Dockerfile it is the pre-built image to pull.
 - `pipeline_agent` — AI executor used as `pipeline.agent` (afm client.command); None when the user declines to configure a pipeline agent. Does NOT inherit `agent`.
 - `pipeline_env` — environment variables for the `pipeline` block (None → omit)
 - `env` — environment variables for `build.task_executor.env`
 - `codemanifest_usages` — codemanifest practice mappings
 - `codemanifest_annotations` — codemanifest annotation block
 - `dockerfile_path` — path to custom Dockerfile (None → skip Dockerfile creation AND omit the top-level `dockerfile` config field)
+- `dockerfile_base_image` — base image for the Dockerfile `FROM` line; set only when `dockerfile_path` is set (None otherwise). Consumed solely by Dockerfile generation; never emitted to config.yml.
 
 ## Survey flow
 
@@ -66,16 +68,22 @@ Run an interactive user survey and generate project files.
 3. **codemanifest_usages** — optional additional practices
 4. **codemanifest_annotations** — optional annotations
 5. **agent** — confirm-gated (default No). On decline: None (no build agent configured, the agent key is omitted). On acceptance: select an AI executor (claude, codex)
-6. **image** — Docker image: display language-specific hints, default to the last entry; accept free-form input
-   - Captures the top-level `image` (NOT `build.image`)
-   - python: qarium/goga-python-3.10:1.1 .. qarium/goga-python-3.14:1.1
-   - golang: qarium/goga-golang-1.23:1.1 .. qarium/goga-golang-1.26:1.1
-   - javascript: qarium/goga-node-22:1.1 .. qarium/goga-node-24:1.1
-   - kotlin: qarium/goga-kotlin-2.0:1.1 .. qarium/goga-kotlin-2.3:1.1
-   - swift: qarium/goga-swift-6.0:1.1 .. qarium/goga-swift-6.2:1.1
-7. **dockerfile** — optional custom Dockerfile creation
+6. **dockerfile** — optional custom Dockerfile creation
    - On acceptance, request the path (default: ".goga/Dockerfile")
-   - The Dockerfile contains `FROM {image}`
+   - The Dockerfile decision drives the image branch below (image semantics differ)
+7. **image branch** — depends on step 6:
+   - **With a Dockerfile** (`dockerfile_path` set): the image is BUILT from the Dockerfile, so:
+     - **base image** (`dockerfile_base_image`) — the `FROM` baseline; display language-specific hints, default to the last entry; accept free-form input. Never written to config.yml.
+     - **image name** (`image`) — the name/tag for the image built from the Dockerfile (`goga build` runs `docker build -t <image>`); free-form input, default `{language}-image:latest`. Captures the top-level `image` (NOT `build.image`).
+     - The Dockerfile contains `FROM {dockerfile_base_image}`
+   - **Without a Dockerfile** (`dockerfile_path` None): the image is a pre-built image to PULL:
+     - **image** (`image`) — display language-specific hints, default to the last entry; accept free-form input. Captures the top-level `image` (NOT `build.image`).
+   - Language image hints (used by both the pull image and the FROM base):
+     - python: qarium/goga-python-3.10:1.1 .. qarium/goga-python-3.14:1.1
+     - golang: qarium/goga-golang-1.23:1.1 .. qarium/goga-golang-1.26:1.1
+     - javascript: qarium/goga-node-22:1.1 .. qarium/goga-node-24:1.1
+     - kotlin: qarium/goga-kotlin-2.0:1.1 .. qarium/goga-kotlin-2.3:1.1
+     - swift: qarium/goga-swift-6.0:1.1 .. qarium/goga-swift-6.2:1.1
 8. **env** — propose env keys based on the selected `agent` (drives `build.task_executor.env`); a None `agent` skips the suggested-keys block and only offers arbitrary key-value pairs
    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
    - codex: CODEX_MODEL
@@ -98,8 +106,10 @@ Run an interactive user survey and generate project files.
 - `ask_codemanifest_usages(prefill: dict | None = None) -> dict | None`
 - `ask_codemanifest_annotations(prefill: str | None = None) -> str | None`
 - `ask_agent() -> str | None` (confirm-gated, default No; None when the user declines)
-- `ask_image(language: str) -> str`
 - `ask_dockerfile_path() -> str | None`
+- `ask_image(language: str) -> str` — pre-built image to PULL (no-Dockerfile branch)
+- `ask_base_image(language: str) -> str` — FROM baseline (Dockerfile branch); populates `dockerfile_base_image`
+- `ask_image_name(language: str) -> str` — name/tag for the image built from the Dockerfile (Dockerfile branch)
 - `ask_env(agent: str | None) -> dict | None`
 - `ask_pipeline_agent() -> str | None` (confirm-gated, default No; None when the user declines; does NOT inherit `agent`)
 - `ask_pipeline_env(pipeline_agent: str | None) -> dict | None`

@@ -36,7 +36,10 @@ class FileGenerator:
     def generate(self, answers: InitAnswers) -> None:
         """Create all files based on answers.
 
-        If dockerfile_path is set — creates Dockerfile, then generates config.yml.
+        If dockerfile_path is set — creates a Dockerfile whose FROM is the
+        selected base image (dockerfile_base_image), then generates config.yml.
+        The top-level image field holds the name of the image built from this
+        Dockerfile (distinct from the FROM base).
 
         Args:
             answers: User answers container with goga config payload.
@@ -47,7 +50,7 @@ class FileGenerator:
         config = answers.goga_config
 
         if config.dockerfile_path is not None:
-            dockerfile_content = f"FROM {config.image}\n"
+            dockerfile_content = f"FROM {config.dockerfile_base_image}\n"
             dockerfile = self._base_dir / config.dockerfile_path
             dockerfile.parent.mkdir(parents=True, exist_ok=True)
             dockerfile.write_text(dockerfile_content, encoding="utf-8")

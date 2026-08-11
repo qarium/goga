@@ -494,8 +494,9 @@ class TestLogic:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
                 "Dockerfile",  # dockerfile path
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )
@@ -519,6 +520,41 @@ class TestLogic:
             result = q.ask_goga_config()
 
         assert result.dockerfile_path == "Dockerfile"
+        assert result.dockerfile_base_image == "qarium/goga-python-3.12:1.0"
+        assert result.image == "my-python-image:latest"
+
+    def test_questionnaire_ask_goga_config_without_dockerfile_asks_pull_image(self) -> None:
+        """Without a Dockerfile, only the pull image is asked (no base/name split)."""
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # pull image
+                "claude",  # pipeline agent
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.dockerfile_path is None
+        assert result.dockerfile_base_image is None
+        assert result.image == "qarium/goga-python-3.12:1.0"
 
     def test_questionnaire_dockerfile_default_is_goga_dockerfile(self) -> None:
         """Step 7 default for Dockerfile path is `.goga/Dockerfile` (Enter accepted)."""
@@ -526,7 +562,8 @@ class TestLogic:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )

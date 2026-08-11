@@ -60,6 +60,7 @@ class TestContract:
             "codemanifest_usages",
             "codemanifest_annotations",
             "dockerfile_path",
+            "dockerfile_base_image",
         ]
 
     def test_constructors_accept_kwargs(self) -> None:
