@@ -45,9 +45,9 @@ Run an interactive user survey and generate project files.
 
 `GogaConfigAnswers` fields:
 - `language` — selected project language
-- `agent` — selected AI executor (becomes `build.task_executor.agent`)
+- `agent` — selected AI executor (becomes `build.task_executor.agent`); None when the user declines to configure a build agent (the agent key is omitted from the generated config)
 - `image` — Docker image (becomes the top-level `image`, NOT `build.image`)
-- `pipeline_agent` — AI executor used as `pipeline.agent` (afm client.command)
+- `pipeline_agent` — AI executor used as `pipeline.agent` (afm client.command); None when the user declines to configure a pipeline agent. Does NOT inherit `agent`.
 - `pipeline_env` — environment variables for the `pipeline` block (None → omit)
 - `env` — environment variables for `build.task_executor.env`
 - `codemanifest_usages` — codemanifest practice mappings
@@ -65,7 +65,7 @@ Run an interactive user survey and generate project files.
    - On acceptance, add `{"conventions": ".goga/usages/conventions.md"}` to codemanifest_usages
 3. **codemanifest_usages** — optional additional practices
 4. **codemanifest_annotations** — optional annotations
-5. **agent** — select an AI executor (claude, codex)
+5. **agent** — confirm-gated (default No). On decline: None (no build agent configured, the agent key is omitted). On acceptance: select an AI executor (claude, codex)
 6. **image** — Docker image: display language-specific hints, default to the last entry; accept free-form input
    - Captures the top-level `image` (NOT `build.image`)
    - python: qarium/goga-python-3.10:1.1 .. qarium/goga-python-3.14:1.1
@@ -76,14 +76,14 @@ Run an interactive user survey and generate project files.
 7. **dockerfile** — optional custom Dockerfile creation
    - On acceptance, request the path (default: ".goga/Dockerfile")
    - The Dockerfile contains `FROM {image}`
-8. **env** — propose env keys based on the selected `agent` (drives `build.task_executor.env`)
+8. **env** — propose env keys based on the selected `agent` (drives `build.task_executor.env`); a None `agent` skips the suggested-keys block and only offers arbitrary key-value pairs
    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
    - codex: CODEX_MODEL
    - Collect values for each proposed key
    - Then optionally collect arbitrary key-value pairs
-9. **pipeline_agent** — select an AI executor (claude, codex); default = `agent` from step 5
+9. **pipeline_agent** — confirm-gated (default No). On decline: None (no pipeline agent configured, the pipeline agent key is omitted). Does NOT inherit `agent` from step 5. On acceptance: select an AI executor (claude, codex)
    - Drives `pipeline.agent` (afm client.command inside the container)
-10. **pipeline_env** — propose env keys based on `pipeline_agent` from step 9 (drives `pipeline.env`)
+10. **pipeline_env** — propose env keys based on `pipeline_agent` from step 9 (drives `pipeline.env`); a None `pipeline_agent` skips the suggested-keys block and only offers arbitrary key-value pairs
     - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
     - codex: CODEX_MODEL
     - Collect values for each proposed key
@@ -97,12 +97,12 @@ Run an interactive user survey and generate project files.
 - `ask_base_convention() -> (codemanifest_usages, codemanifest_annotations)` — pre-fill pair for the two codemanifest fields
 - `ask_codemanifest_usages(prefill: dict | None = None) -> dict | None`
 - `ask_codemanifest_annotations(prefill: str | None = None) -> str | None`
-- `ask_agent() -> str`
+- `ask_agent() -> str | None` (confirm-gated, default No; None when the user declines)
 - `ask_image(language: str) -> str`
 - `ask_dockerfile_path() -> str | None`
-- `ask_env(agent: str) -> dict | None`
-- `ask_pipeline_agent(agent: str) -> str` (defaults to `agent`)
-- `ask_pipeline_env(pipeline_agent: str) -> dict | None`
+- `ask_env(agent: str | None) -> dict | None`
+- `ask_pipeline_agent() -> str | None` (confirm-gated, default No; None when the user declines; does NOT inherit `agent`)
+- `ask_pipeline_env(pipeline_agent: str | None) -> dict | None`
 
 ## Generated .goga/config.yml structure
 
@@ -110,14 +110,14 @@ Run an interactive user survey and generate project files.
 language: python
 image: qarium/goga-python-3.12:latest
 dockerfile: .goga/Dockerfile    # only when dockerfile_path is set (omit when None)
-build:
+build:                         # only when it carries content (a non-None agent and/or a non-empty env); omitted by default
   task_executor:
-    agent: claude
-    env: {...}
+    agent: claude              # omitted when agent is None
+    env: {...}                 # omitted when env is None or empty
   worktree: false         # other build fields only when provided
-pipeline:
-  agent: claude           # always emitted — init-config must be self-contained so `goga pipeline` works out-of-the-box
-  env: {...}              # omitted when pipeline_env is None or empty
+pipeline:                      # only when it carries content (a non-None pipeline_agent and/or a non-empty pipeline_env); omitted by default
+  agent: claude                # omitted when pipeline_agent is None
+  env: {...}                   # omitted when pipeline_env is None or empty
 codemanifest:             # omitted when both inner fields are empty
   usages: {...}
   annotations: |
@@ -129,6 +129,6 @@ codemanifest:             # omitted when both inner fields are empty
 ## Anti-patterns
 
 - Do not write `build.image` — the Docker image is the top-level `image` field, shared by build and pipeline.
-- Do not omit the `pipeline:` block — the init-config must be self-contained so `goga pipeline` works out-of-the-box without manual config edits; always emit at least `pipeline.agent`.
-- Do not reuse `agent` for both build and pipeline without confirming `pipeline_agent` — the survey explicitly collects `pipeline_agent` (defaulted to `agent`) so that build and pipeline can diverge.
+- Do not force-emit empty `build:`/`pipeline:` blocks — emit each block only when it carries content (a non-None agent and/or a non-empty env). A freshly-initialized project with no agent/env omits both blocks; the consumer commands raise a clean `ClickException` when an agent is actually needed.
+- Do not inherit `agent` into `pipeline_agent` — the survey collects them via independent confirm-gates (each defaults to No), so build and pipeline can diverge or both be unset.
 - Do not silently drop `pipeline_env` into `build.task_executor.env` — they are separate blocks driven by separate survey answers.
