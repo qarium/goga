@@ -12,7 +12,7 @@ from .deploy import deploy_usages
 logger = logging.getLogger(__name__)
 
 
-def sync(force: bool = False) -> int:
+def sync(force: bool = False, group: str | None = None, dep: str | None = None) -> int:
     """Synchronize declared cell-level usages into ``.goga/usages``.
 
     Loads project config and, for each declared ``<group>/<dep>`` git dependency,
@@ -25,10 +25,16 @@ def sync(force: bool = False) -> int:
         force: True clears ``.goga/usages/`` (except ``cooks`` and root files)
             via ``clean_usages_dir`` and re-syncs every dep; False (default) is
             incremental — deps whose target dir already exists are skipped.
+        group: When set, only sync deps under this group; non-matching groups
+            are skipped (never an error). ``None`` (default) syncs all groups.
+        dep: When set, only sync deps with this name; non-matching deps are
+            skipped (never an error). ``dep`` without ``group`` applies across
+            every group. ``None`` (default) syncs all deps.
 
     Returns:
         exit_code: ``0`` on success (including "nothing to sync" when the
-        ``usages`` section is absent), ``1`` if any dep failed to sync.
+        ``usages`` section is absent or no dep matches the filters), ``1`` if
+        any dep failed to sync.
 
     Raises:
         FileNotFoundError, KeyError, ValueError, yaml.YAMLError: propagated
@@ -45,9 +51,13 @@ def sync(force: bool = False) -> int:
         clean_usages_dir(usages_root)
 
     exit_code = 0
-    for group, deps in config.usages.items():
-        for dep, depcfg in deps.items():
-            target = usages_root / group / dep
+    for group_name, deps in config.usages.items():
+        if group is not None and group_name != group:
+            continue
+        for dep_name, depcfg in deps.items():
+            if dep is not None and dep_name != dep:
+                continue
+            target = usages_root / group_name / dep_name
             if (not force) and target.exists():
                 continue
 
@@ -61,11 +71,14 @@ def sync(force: bool = False) -> int:
                 # full git URL, which may contain embedded credentials (e.g.
                 # ``https://<token>@host/...``). Its ``stderr`` would be safe,
                 # but the exception text/traceback is not, so we omit it.
+                # Use the loop variables (group_name/dep_name), NOT the filter
+                # params (group/dep) — logging the filters would report the
+                # filter (or ``None``), not the failing dep.
                 logger.error(
                     "usages sync failed for %s/%s",
-                    group,
-                    dep,
-                    extra={"group": group, "dep": dep},
+                    group_name,
+                    dep_name,
+                    extra={"group": group_name, "dep": dep_name},
                 )
                 exit_code = 1
                 continue
