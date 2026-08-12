@@ -57,8 +57,17 @@ class _Node:
 
 
 @click.group()
-def usages() -> None:
-    """Manage cell-level usages synchronized from git dependencies."""
+@click.option("--group", "-g", default=None, help="Limit the action to one group.")
+@click.option("--dep", "-d", default=None, help="Limit the action to one dep name.")
+@click.pass_context
+def usages(ctx: click.Context, group: str | None, dep: str | None) -> None:
+    """Manage cell-level usages synchronized from git dependencies.
+
+    The ``--group/-g`` and ``--dep/-d`` options are declared on this group and
+    threaded to the ``sync``/``status`` subcommands through the click context
+    (the subcommands read them from ``ctx.parent.params``). They are absent by
+    default (``None``).
+    """
 
 
 @usages.command("sync")
@@ -70,9 +79,14 @@ def sync(ctx: click.Context, force: bool) -> None:
     Reads the ``usages`` section of ``.goga/config.yml`` and, for each declared
     ``<group>/<dep>`` git dependency, clones the repository and deploys its
     cell-level usages into ``.goga/usages/<group>/<dep>/``.
+
+    The ``--group/-g`` and ``--dep/-d`` filters are sourced from the ``usages``
+    group context (``ctx.parent.params``); they default to ``None`` when absent.
     """
+    group = ctx.parent.params.get("group")
+    dep = ctx.parent.params.get("dep")
     try:
-        exit_code = sync_logic(force)
+        exit_code = sync_logic(force, group, dep)
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -81,10 +95,8 @@ def sync(ctx: click.Context, force: bool) -> None:
 
 @usages.command("status")
 @click.option("--info", "-i", is_flag=True, default=False, help="Expand each dep into its per-node entry tree.")
-@click.option("--group", "-g", default=None, help="Limit the check to one group.")
-@click.option("--dep", "-d", default=None, help="Limit the check to one dep name.")
 @click.pass_context
-def status(ctx: click.Context, info: bool, group: str | None, dep: str | None) -> None:
+def status(ctx: click.Context, info: bool) -> None:
     """Check synchronized usages against the current remote git state.
 
     Reads the ``usages`` section of ``.goga/config.yml`` and, for each declared
@@ -92,7 +104,12 @@ def status(ctx: click.Context, info: bool, group: str | None, dep: str | None) -
     under ``.goga/usages/<group>/<dep>/`` against the current remote state and
     reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per
     dep. The check is read-only: it never modifies ``.goga/usages/``.
+
+    Group/dep filters (and ``--force`` for ``sync``) are declared on the
+    ``usages`` group and threaded here through the click context.
     """
+    group = ctx.parent.params.get("group")
+    dep = ctx.parent.params.get("dep")
     try:
         report = status_logic(group, dep)
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:

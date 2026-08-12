@@ -44,6 +44,34 @@ class TestContract:
         assert force_param.is_flag is True
         assert force_param.default is False
 
+    def test_usages_group_carries_group_option(self) -> None:
+        """The ``--group/-g`` option is declared on the ``usages`` GROUP callback,
+        not on any subcommand."""
+        group_params = {p.name: p for p in usages_cli.params}
+        assert "group" in group_params
+        group_param = group_params["group"]
+        assert isinstance(group_param, click.Option)
+        assert group_param.default is None
+        assert "--group" in group_param.opts
+        assert "-g" in group_param.opts
+        # not declared on the subcommands
+        for sub in ("sync", "status"):
+            assert "group" not in {p.name for p in usages_cli.commands[sub].params}
+
+    def test_usages_group_carries_dep_option(self) -> None:
+        """The ``--dep/-d`` option is declared on the ``usages`` GROUP callback,
+        not on any subcommand."""
+        group_params = {p.name: p for p in usages_cli.params}
+        assert "dep" in group_params
+        dep_param = group_params["dep"]
+        assert isinstance(dep_param, click.Option)
+        assert dep_param.default is None
+        assert "--dep" in dep_param.opts
+        assert "-d" in dep_param.opts
+        # not declared on the subcommands
+        for sub in ("sync", "status"):
+            assert "dep" not in {p.name for p in usages_cli.commands[sub].params}
+
 
 class TestLogic:
     """Logic-level tests for usages sync delegation."""
@@ -53,7 +81,7 @@ class TestLogic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
-        mock_logic.assert_called_once_with(False)
+        mock_logic.assert_called_once_with(False, None, None)
         assert result.exit_code == 1
 
     def test_cli_usages_sync_long_force_flag_passes_true(self) -> None:
@@ -61,7 +89,7 @@ class TestLogic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync", "--force"])
 
-        mock_logic.assert_called_once_with(True)
+        mock_logic.assert_called_once_with(True, None, None)
         assert result.exit_code == 0
 
     def test_cli_usages_sync_short_force_flag_passes_true(self) -> None:
@@ -69,7 +97,7 @@ class TestLogic:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync", "-f"])
 
-        mock_logic.assert_called_once_with(True)
+        mock_logic.assert_called_once_with(True, None, None)
         assert result.exit_code == 0
 
     def test_cli_usages_sync_config_error_converts_to_clickexception(self) -> None:
@@ -106,6 +134,32 @@ class TestLogic:
         assert result.exit_code == 0
         assert "sync" in result.output
 
+    def test_cli_usages_group_threads_group_dep_to_sync(self) -> None:
+        """``--group``/``--dep`` (declared on the group) thread to ``sync_logic``
+        as ``(force, group, dep)`` alongside the subcommand's ``--force``."""
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
+            runner = CliRunner()
+            result = runner.invoke(usages_cli, ["--group", "libs", "--dep", "click", "sync", "--force"])
+
+        mock_logic.assert_called_once_with(True, "libs", "click")
+        assert result.exit_code == 0
+
+    def test_cli_usages_group_threads_none_when_absent_to_sync(self) -> None:
+        """``--group``/``--dep`` absent → ``sync_logic`` receives ``None``."""
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
+            runner = CliRunner()
+            runner.invoke(usages_cli, ["sync"])
+
+        mock_logic.assert_called_once_with(False, None, None)
+
+    def test_cli_usages_group_threads_group_dep_short_flags_to_sync(self) -> None:
+        """The short ``-g``/``-d`` forms also thread to ``sync_logic``."""
+        with mock.patch.object(_usages_mod, "sync_logic", return_value=0) as mock_logic:
+            runner = CliRunner()
+            runner.invoke(usages_cli, ["-g", "libs", "-d", "click", "sync"])
+
+        mock_logic.assert_called_once_with(False, "libs", "click")
+
 
 class TestAppIntegration:
     """App-level integration: usages is registered on the root ``app`` and
@@ -130,7 +184,7 @@ class TestAppIntegration:
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync"])
 
-        mock_logic.assert_called_once_with(False)
+        mock_logic.assert_called_once_with(False, None, None)
         assert result.exit_code == 0
 
     def test_app_usages_sync_force_delegates_true(self) -> None:
@@ -138,7 +192,7 @@ class TestAppIntegration:
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync", "--force"])
 
-        mock_logic.assert_called_once_with(True)
+        mock_logic.assert_called_once_with(True, None, None)
         assert result.exit_code == 0
 
     def test_app_usages_sync_config_error_converts_to_clickexception(self) -> None:
@@ -173,16 +227,14 @@ class TestStatusContract:
         assert info_param.default is False
 
     def test_usages_status_group_option_contract(self) -> None:
+        """``--group`` is on the ``usages`` GROUP, not on ``status``."""
         status_cmd = usages_cli.commands["status"]
-        group_param = {p.name: p for p in status_cmd.params}["group"]
-        assert isinstance(group_param, click.Option)
-        assert group_param.default is None
+        assert "group" not in {p.name for p in status_cmd.params}
 
     def test_usages_status_dep_option_contract(self) -> None:
+        """``--dep`` is on the ``usages`` GROUP, not on ``status``."""
         status_cmd = usages_cli.commands["status"]
-        dep_param = {p.name: p for p in status_cmd.params}["dep"]
-        assert isinstance(dep_param, click.Option)
-        assert dep_param.default is None
+        assert "dep" not in {p.name for p in status_cmd.params}
 
     def test_render_status_report_importable_and_callable(self) -> None:
         from goga.commands.usages.usages import render_status_report
@@ -225,23 +277,50 @@ class TestStatusLogic:
     def test_cli_usages_status_group_passes_through(self) -> None:
         with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
             runner = CliRunner()
-            runner.invoke(usages_cli, ["status", "--group", "libs"])
+            runner.invoke(usages_cli, ["--group", "libs", "status"])
 
         assert mock_logic.call_args.args == ("libs", None)
 
     def test_cli_usages_status_dep_passes_through(self) -> None:
         with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
             runner = CliRunner()
-            runner.invoke(usages_cli, ["status", "-d", "click"])
+            runner.invoke(usages_cli, ["--dep", "click", "status"])
 
         assert mock_logic.call_args.args == (None, "click")
 
     def test_cli_usages_status_group_and_dep_pass_through(self) -> None:
         with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
             runner = CliRunner()
-            runner.invoke(usages_cli, ["status", "-g", "libs", "--dep", "click"])
+            runner.invoke(usages_cli, ["-g", "libs", "--dep", "click", "status"])
 
         assert mock_logic.call_args.args == ("libs", "click")
+
+    def test_cli_usages_group_threads_group_dep_to_status(self) -> None:
+        """``--group``/``--dep`` thread to ``status_logic`` unchanged in shape:
+        ``(group, dep)``."""
+        with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
+            runner = CliRunner()
+            runner.invoke(usages_cli, ["--group", "libs", "--dep", "click", "status"])
+
+        assert mock_logic.call_args.args == ("libs", "click")
+
+    def test_cli_usages_group_threads_none_when_absent_to_status(self) -> None:
+        """``--group``/``--dep`` absent → ``status_logic`` receives ``(None, None)``."""
+        with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
+            runner = CliRunner()
+            runner.invoke(usages_cli, ["status"])
+
+        assert mock_logic.call_args.args == (None, None)
+
+    def test_cli_usages_status_info_still_threads_with_group_dep(self) -> None:
+        """Regression: lifting the options did not break ``status``'s filter
+        wiring or ``--info/-i`` — ``--info`` only feeds the renderer, while
+        ``--group``/``--dep`` still reach ``status_logic``."""
+        with mock.patch.object(_usages_mod, "status_logic", return_value=_report()) as mock_logic:
+            runner = CliRunner()
+            runner.invoke(usages_cli, ["--group", "libs", "status", "--info"])
+
+        assert mock_logic.call_args.args == ("libs", None)
 
     def test_cli_usages_status_config_error_converts_to_clickexception(self) -> None:
         with mock.patch.object(_usages_mod, "status_logic", side_effect=ValueError("boom")):
@@ -273,11 +352,21 @@ class TestStatusLogic:
         assert "Traceback" not in result.output
 
     def test_cli_usages_status_help_lists_options(self) -> None:
+        """``status --help`` shows only ``--info`` (group/dep moved to the group)."""
         runner = CliRunner()
         result = runner.invoke(usages_cli, ["status", "--help"])
 
         assert result.exit_code == 0
         assert "--info" in result.output
+        assert "--group" not in result.output
+        assert "--dep" not in result.output
+
+    def test_cli_usages_group_help_lists_group_dep_options(self) -> None:
+        """``--group``/``--dep`` now appear in ``usages --help`` (group level)."""
+        runner = CliRunner()
+        result = runner.invoke(usages_cli, ["--help"])
+
+        assert result.exit_code == 0
         assert "--group" in result.output
         assert "--dep" in result.output
 
@@ -515,12 +604,21 @@ class TestStatusAppIntegration:
         assert "[ ] click.md" in result.output
 
     def test_app_usages_status_help_lists_options(self) -> None:
-        """``goga usages status --help`` lists all three options."""
+        """``status --help`` shows only ``--info`` (group/dep moved to the group)."""
         runner = CliRunner()
         result = runner.invoke(app, ["usages", "status", "--help"])
 
         assert result.exit_code == 0
         assert "--info" in result.output
+        assert "--group" not in result.output
+        assert "--dep" not in result.output
+
+    def test_app_usages_group_help_lists_group_dep_options(self) -> None:
+        """``--group``/``--dep`` appear in ``goga usages --help`` (group level)."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["usages", "--help"])
+
+        assert result.exit_code == 0
         assert "--group" in result.output
         assert "--dep" in result.output
 
