@@ -42,8 +42,10 @@ The wizard will prompt you for:
 3. **Codemanifest usages** -- Optional named practices (key-value pairs) for your project
 4. **Codemanifest annotations** -- Optional free-text instructions for AI agents
 5. **Agent** -- Confirm-gated (defaults to No). Decline to skip the build agent, or accept and choose `claude` or `codex`
-6. **Docker image** -- Choose a prebuilt language image or enter a custom one
-7. **Dockerfile** -- Optionally generate a `Dockerfile` based on the selected image
+6. **Custom Dockerfile** -- Optionally create a custom Dockerfile (suggested path `.goga/Dockerfile`). This decision drives the next step: image semantics differ between the two branches.
+7. **Docker image** (depends on step 6):
+   - **If you create a Dockerfile**, the image is **built from it**, so you provide two values: the **base image** for the `FROM` line (chosen from the language-specific list), and a **built image name/tag** (what `goga build` tags with `docker build -t`). The built image name defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL; when no git remote is available, no default is offered and the name is required.
+   - **If you skip the Dockerfile**, you pick a **prebuilt image to pull** from the language-specific list (or enter a custom one).
 8. **Environment variables** -- Set agent-specific env vars (e.g., `ANTHROPIC_API_KEY`)
 9. **Pipeline agent** -- Confirm-gated (defaults to No). Decline to skip the pipeline agent, or accept and choose `claude` or `codex`. Does not inherit the build agent from step 5 — the two are collected independently
 10. **Pipeline environment variables** -- Set env vars for the pipeline container (e.g., `ANTHROPIC_API_KEY`)

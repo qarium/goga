@@ -18,8 +18,9 @@ docs/index.md:
   - goga/docker
 
 docs/getting-started.md:
-  - goga/init
+  - goga/onboarding
   - goga/config
+  - goga/config/git
   - goga/pipeline
   - goga/commands/pipeline
 
@@ -83,7 +84,8 @@ docs/cli/index.md:
 
 docs/cli/init.md:
   - goga/commands/init
-  - goga/init
+  - goga/onboarding
+  - goga/config/git
 
 docs/cli/lint.md:
   - goga/commands/lint
