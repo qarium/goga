@@ -11,7 +11,7 @@ command and any caller running usages synchronization programmatically.
 ```python
 from goga.usages import sync
 
-exit_code = sync(force=False)
+exit_code = sync(force=False, group=None, dep=None)
 ```
 
 ## Configuration contract
@@ -67,6 +67,13 @@ the dep fails with an explicit error rather than producing an empty result.
   Changing `git`/`ref`/`root` in config does NOT re-sync an existing dep.
 - Force (`force=True`): every subdirectory of `.goga/usages/` except `cooks` is removed
   (root `*.md` files kept), then all declared deps are re-synced.
+
+## Filters
+
+`group` limits the sync to one group; `dep` to one dep name across all groups
+when `group` is not set. A non-matching value is a no-op for that dep (skipped,
+never an error). Filters compose with `force`: `force` re-syncs only the deps
+that match the active filters.
 
 ## Exit codes
 

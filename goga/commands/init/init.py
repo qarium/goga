@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import click
 
-from ...init import FileGenerator, InitLogic, Questionnaire
+from ...onboarding import FileGenerator, InitLogic, Questionnaire
 
 
 @click.command()

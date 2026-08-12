@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import click
 import requests.exceptions
 import yaml
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
-from goga.init.logic import InitLogic
-from goga.init.questionnaire import Questionnaire
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.generator import FileGenerator
+from goga.onboarding.logic import InitLogic
+from goga.onboarding.questionnaire import Questionnaire
 
 
 def _make_gen(tmp_path: Path) -> FileGenerator:
@@ -49,7 +49,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -82,7 +82,7 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
@@ -143,7 +143,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -170,7 +170,7 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
@@ -251,7 +251,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -292,7 +292,7 @@ class TestIntegration:
         logic = InitLogic(mock_q, gen)
 
         with patch(
-            "goga.init.generator.requests.get",
+            "goga.onboarding.generator.requests.get",
             side_effect=requests.exceptions.ConnectionError("Network error"),
         ):
             result = logic.run()
@@ -339,7 +339,8 @@ class TestIntegration:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )
@@ -356,9 +357,11 @@ class TestIntegration:
                 False,  # Download base convention?
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
                 True,  # Create Dockerfile?
                 False,  # Set suggested task env variables?
                 False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
                 False,  # Set suggested pipeline env variables?
                 False,  # Add custom pipeline env variable?
             ]
@@ -376,10 +379,11 @@ class TestIntegration:
         dockerfile = tmp_path / ".goga" / "Dockerfile"
         assert dockerfile.exists()
         content = dockerfile.read_text(encoding="utf-8")
-        assert content.startswith("FROM ")
+        assert content == "FROM qarium/goga-python-3.12:1.0\n"
 
         config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
         assert "dockerfile: .goga/Dockerfile" in config_yml
+        assert "image: my-python-image:latest" in config_yml
 
     def test_init_custom_dockerfile_path_flows_through_chain(self, tmp_path: Path) -> None:
         """Cross-entity: a custom Dockerfile path reaches both the FS and config.yml.
@@ -392,8 +396,9 @@ class TestIntegration:
             [
                 "python",  # language
                 "claude",  # agent
-                "qarium/goga-python-3.12:1.0",  # image
                 ".goga/custom.Dockerfile",  # dockerfile path (typed, not default)
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "my-python-image:latest",  # built image name
                 "claude",  # pipeline agent
             ]
         )
@@ -402,9 +407,11 @@ class TestIntegration:
                 False,  # Download base convention?
                 False,  # Add codemanifest usages?
                 False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
                 True,  # Create Dockerfile?
                 False,  # Set suggested task env variables?
                 False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
                 False,  # Set suggested pipeline env variables?
                 False,  # Add custom pipeline env variable?
             ]
@@ -421,7 +428,8 @@ class TestIntegration:
 
         dockerfile = tmp_path / ".goga" / "custom.Dockerfile"
         assert dockerfile.exists()
-        assert dockerfile.read_text(encoding="utf-8").startswith("FROM ")
+        assert dockerfile.read_text(encoding="utf-8") == "FROM qarium/goga-python-3.12:1.0\n"
 
         config_yml = (tmp_path / ".goga" / "config.yml").read_text(encoding="utf-8")
         assert "dockerfile: .goga/custom.Dockerfile" in config_yml
+        assert "image: my-python-image:latest" in config_yml

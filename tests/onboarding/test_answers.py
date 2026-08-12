@@ -4,19 +4,19 @@ import dataclasses
 from typing import get_type_hints
 
 import pytest
-from goga.init.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
 
 
 class TestContract:
     """Contract-level tests for InitAnswers and GogaConfigAnswers."""
 
     def test_goga_config_answers_importable_from_answers(self) -> None:
-        from goga.init.answers import GogaConfigAnswers
+        from goga.onboarding.answers import GogaConfigAnswers
 
         assert GogaConfigAnswers is not None
 
     def test_init_answers_importable_from_answers(self) -> None:
-        from goga.init.answers import InitAnswers
+        from goga.onboarding.answers import InitAnswers
 
         assert InitAnswers is not None
 
@@ -42,9 +42,9 @@ class TestContract:
     def test_goga_config_answers_property_types(self) -> None:
         hints = get_type_hints(GogaConfigAnswers)
         assert hints["language"] is str
-        assert hints["agent"] is str
         assert hints["image"] is str
-        assert hints["pipeline_agent"] is str
+        assert hints["agent"] == str | None
+        assert hints["pipeline_agent"] == str | None
         assert hints["pipeline_env"] == dict | None
         assert hints["env"] == dict | None
 
@@ -52,14 +52,15 @@ class TestContract:
         names = [f.name for f in dataclasses.fields(GogaConfigAnswers)]
         assert names == [
             "language",
-            "agent",
             "image",
+            "agent",
             "pipeline_agent",
             "pipeline_env",
             "env",
             "codemanifest_usages",
             "codemanifest_annotations",
             "dockerfile_path",
+            "dockerfile_base_image",
         ]
 
     def test_constructors_accept_kwargs(self) -> None:
@@ -101,13 +102,13 @@ class TestLogic:
         with pytest.raises(TypeError):
             GogaConfigAnswers("python", "claude", "img", "claude")  # type: ignore[call-arg]
 
-    def test_goga_config_answers_requires_pipeline_agent(self) -> None:
-        with pytest.raises(TypeError):
-            GogaConfigAnswers(  # type: ignore[call-arg]
-                language="python",
-                agent="claude",
-                image="qarium/goga-python-3.12:0.1",
-            )
+    def test_goga_config_answers_agents_default_none(self) -> None:
+        cfg = GogaConfigAnswers(
+            language="python",
+            image="qarium/goga-python-3.12:0.1",
+        )
+        assert cfg.agent is None
+        assert cfg.pipeline_agent is None
 
     def test_goga_config_answers_defaults_none(self) -> None:
         cfg = GogaConfigAnswers(

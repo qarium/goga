@@ -109,14 +109,15 @@ Annotations: |
   --clean flag to wipe this directory before launch via
   `clean_pipeline_runtime_dir`.
 
-  The afm config.yaml tmpfile written by the launcher carries five static
-  launcher-side fields: client.command, theme, open_browser, proxy.enabled,
-  and prompts_dir (see `run_pipeline_container` for the per-field contract).
-  prompts_dir is fixed at /home/goga/pipeline/prompts (derived from the
-  known AFM_DIR=/home/goga/pipeline constant — NOT from an additional
-  argument or config field) and is written unconditionally; the directory
-  itself is populated by the in-container run_pipeline routine (per the
-  `run-pipeline` practice), so afm uses goga-managed prompts regardless of
+  The afm config.yaml tmpfile written by the launcher carries the
+  launcher-side fields: theme, open_browser, proxy.enabled, and prompts_dir
+  unconditionally, plus client.command CONDITIONALLY (only when
+  config.pipeline.agent is configured — see `run_pipeline_container` for the
+  per-field contract). prompts_dir is fixed at /home/goga/pipeline/prompts
+  (derived from the known AFM_DIR=/home/goga/pipeline constant — NOT from an
+  additional argument or config field) and is written unconditionally; the
+  directory itself is populated by the in-container run_pipeline routine (per
+  the `run-pipeline` practice), so afm uses goga-managed prompts regardless of
   whether the pipeline-file contains a roles block.
 
   Workflow layer: when the user passes --workflow <name> or --no-workflow,
@@ -214,19 +215,25 @@ Annotations: |
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.pipeline.hosts
     - -c / --clean (flag) — wipe the persistent afm state directory before launch (run mode only)
     - --update / -u (flag) — pull the image before launching the container
-    - --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
+    - -w / --workflow NAME (str) — apply an explicit workflow at <cwd>/.goga/workflows/<name>.yml; file must exist on host (early validation)
     - --no-workflow (flag) — disable workflow application entirely (sets GOGA_WORKFLOW_DISABLED=1 in the env-file)
     - -s / --skip NAME (multiple) — exclude a stage from the compiled pipeline (run mode only; one name per invocation); forwarded as GOGA_SKIP_STAGES
     - -p / --parallel N (int) — cap concurrently executing stages (None when absent); run mode only (no-op in discovery). Threaded to afm run --max-parallel N
 
     Algorithm:
     1. Load configuration via `load_project_config` — fails fast on schema errors
-    1b. When config.pipeline is None → raise ClickException(
+    1.1. When config.pipeline is None → raise ClickException(
         "pipeline section is required in .goga/config.yml to run 'goga
-        pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts in
+        pipeline'"). Runs BEFORE any config.pipeline access (proxy/hosts/env in
         this command, agent/env in `run_pipeline_container`). Because
         `run_pipeline_container` is only reached through this command, the guard
         covers it transitively — no separate None-check is added there.
+       (No agent guard: pipeline.agent is OPTIONAL. When it is None the agent
+       may be supplied per-stage by the workflow — the compiler composes each
+       stage's command: override from the workflow agent name, and afm ≥0.4.15
+       honors per-stage commands over the global client.command. The
+       launcher writes the afm-config client.command only when an agent is
+       configured, so an absent agent is not an error here.)
     2. Collect `extra_env` from the repeatable env option (empty when the flag
        is absent)
     3. Resolve the proxy: take `proxy` when not None, otherwise fall back to
@@ -262,7 +269,7 @@ Annotations: |
       to `extra_env` for environment passthrough into the container
     - Expose `name` as an optional positional argument
     - Expose --proxy URL, --add-host HOST:IP (multiple), --clean,
-      --update/-u, --workflow NAME, --no-workflow as click options
+      --update/-u, -w/--workflow NAME, --no-workflow as click options
     - Always propagate the container's exit code through the click context —
       both modes
     - CLI --add-host entries are merged on top of config.pipeline.hosts;
@@ -283,6 +290,7 @@ Annotations: |
     - Expose -p/--parallel N (int) bound to `parallel` (None when absent);
       run mode only (no-op in discovery); propagated exit code unchanged
     - Expose -c as a short alias of --clean (equivalent behavior)
+    - Expose -w as a short alias of --workflow (equivalent behavior)
 
     Constraints:
     - Do not expose separate ls/run subcommands — this is a single command
@@ -426,16 +434,22 @@ Annotations: |
     3. Allocate a free localhost TCP port for the dashboard
     4. Generate a unique container_name
     5. Resolve the agent wrapper path via `resolve_wrapper_path` (Imports +
-       `resolve-wrapper-path` practice) using config.pipeline.agent. Do not
-       validate the agent value — absence of the wrapper file is surfaced by
-       afm itself.
+       `resolve-wrapper-path` practice) using config.pipeline.agent, ONLY when
+       config.pipeline.agent is not None; otherwise the wrapper path is None.
+       Do not validate the agent value — absence of the wrapper file is surfaced
+       by afm itself. pipeline.agent is OPTIONAL: when it is None the agent is
+       expected to come from the workflow (per-stage command: overrides) or
+       from afm's own defaults, so None is carried through, not rejected.
     6. Install a SIGTERM/SIGINT handler (raises SystemExit with code 128 + signum)
        BEFORE creating any temp file — the leak-prevention invariant (a signal
        during tmpfile/env-file setup or the `docker_update` build must unwind to
        the finally block and unlink the secret files). The runner's handler later
        nests under this one. Then create a private afm-config tmpfile carrying
-       five static launcher-side fields: client.command set to the resolved
-       wrapper path, theme: goga (dashboard theme), open_browser: false (the
+       the launcher-side fields: client.command set to the resolved wrapper path
+       (written ONLY when the wrapper path is not None — i.e. when
+       config.pipeline.agent is configured; omitted otherwise so per-stage
+       workflow agents or afm's own defaults cover the absent global default),
+       theme: goga (dashboard theme), open_browser: false (the
        dashboard is reached via the host-printed http://localhost:<port> URL;
        afm must not attempt to open a browser inside the container),
        proxy.enabled: false (afm's own internal outbound proxy provider is
@@ -561,10 +575,15 @@ Annotations: |
     Requirements:
     - Use the same port value in -p <port>:<port> and in --port <port>
       (single source — the port allocated in step 3)
-    - afm-config tmpfile is owner-only (private). It carries five static
+    - afm-config tmpfile is owner-only (private). It carries the
       launcher-side fields: client.command: <resolved wrapper path> (the
       value MUST be the absolute path returned by `resolve_wrapper_path`,
-      never a bare agent name), theme: goga (dashboard theme),
+      never a bare agent name; the client: block is written ONLY when
+      config.pipeline.agent is configured — when it is None the block is
+      omitted, so per-stage workflow agents or afm's own defaults cover the
+      absent global default; client.command is afm's default for stages
+      without a per-stage command: override, not a launch prerequisite),
+      theme: goga (dashboard theme),
       open_browser: false (the dashboard is reached via the host-printed
       http://localhost:<port> URL; afm must not attempt to open a browser
       inside the container), proxy.enabled: false (afm's own internal
@@ -699,24 +718,42 @@ Annotations: |
 
     `pipeline_name`: pipeline name without extension (the run-mode name argument)
     `runtime_dir`: absolute host path under
-                   ~/.goga/runtime/pipelines/<project>/<branch>/<pipeline_name>/
+                   ~/.goga/runtime/pipelines/<project>/<branch>/<sanitized_name>/
+                   where <sanitized_name> is pipeline_name with every colon
+                   replaced by a hyphen (the path is used as a docker bind-mount
+                   source, where an unsanitized colon is parsed by docker as the
+                   source:target[:mode] separator → "invalid mode").
 
     Apply the `conventions` practice for docstring style and intra-package imports.
 
     Algorithm:
-    1. Delegate to `resolve_runtime_dir`("pipelines", pipeline_name) from
+    1. Sanitize pipeline_name for use as a path segment: replace every colon
+       with a hyphen (colon → hyphen). The host state-dir path is a docker
+       bind-mount source, so an unsanitized colon would be parsed by docker as
+       the source:target[:mode] separator (e.g. "pybuggy:api-feature" → docker
+       "invalid mode"). The ORIGINAL pipeline_name (NOT the sanitized segment)
+       is still used for the in-container run argv and the workflow auto-match
+       basename, so this step affects only the host state-dir path segment.
+    2. Delegate to `resolve_runtime_dir`("pipelines", <sanitized_name>) from
        Imports — the routine composes the full path from cwd, git branch, and
-       the supplied pipeline_name suffix
-    2. Return the resulting path
+       the supplied suffix
+    3. Return the resulting path
 
     Requirements:
     - Return value is an absolute path
+    - The pipeline_name path segment has every colon replaced with a hyphen
+      (sanitization is THIS facade's responsibility, NOT resolve_runtime_dir's
+      — resolve_runtime_dir passes suffix_parts through verbatim per its
+      "caller owns the namespace" contract)
     - Pure with respect to the filesystem — does not create the directory
       (creation is the caller's responsibility)
 
     Constraints:
     - Do not create the directory here — the caller handles creation
     - Do not validate that pipeline_name corresponds to an existing pipeline file
+    - Do not sanitize the name for any use OTHER than the host state-dir path
+      segment — the in-container run argv and the workflow auto-match basename
+      use the ORIGINAL pipeline_name; only the host path segment is sanitized
 
 "clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> none: None":
   location: run_pipeline_container.py

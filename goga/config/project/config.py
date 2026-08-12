@@ -3,9 +3,14 @@ from dataclasses import dataclass, field
 
 @dataclass(kw_only=True, frozen=True)
 class TaskExecutorConfig:
-    """Configuration for the task execution agent and its environment."""
+    """Configuration for the task execution agent and its environment.
 
-    agent: str
+    `agent` is optional at the config level: absent/empty in `.goga/config.yml`
+    resolves to None, and the consuming `goga build` command raises a clean
+    ClickException when it actually needs an agent.
+    """
+
+    agent: str | None = None
     env: dict = field(default_factory=dict)
 
 
@@ -14,10 +19,12 @@ class PipelineConfig:
     """Configuration for pipeline execution inside the container.
 
     `agent` drives the afm `client.command` inside the container, semantically
-    distinct from `TaskExecutorConfig.agent`.
+    distinct from `TaskExecutorConfig.agent`. Optional at the config level:
+    absent/empty resolves to None, and `goga pipeline` raises a clean
+    ClickException when it needs an agent.
     """
 
-    agent: str
+    agent: str | None = None
     env: dict = field(default_factory=dict)
     proxy: str | None = None
     hosts: dict[str, str] = field(default_factory=dict)
@@ -66,6 +73,18 @@ class BuildConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
+class LintConfig:
+    """Immutable value-object for the optional `lint` section of `.goga/config.yml`.
+
+    Stores `ignore` verbatim — including trailing separators and glob characters —
+    with no normalization. Structural validation (mapping/list/element checks) belongs
+    to the loader (`load_project_config` / `_parse_lint`), not here.
+    """
+
+    ignore: list[str]
+
+
+@dataclass(kw_only=True, frozen=True)
 class ProjectConfig:
     """Root project configuration loaded from .goga/config.yml."""
 
@@ -78,3 +97,4 @@ class ProjectConfig:
     codemanifest: CodemanifestConfig | None = None
     tools: dict[str, str] | None = None
     usages: dict[str, dict[str, DepConfig]] | None = None
+    lint: LintConfig | None = None

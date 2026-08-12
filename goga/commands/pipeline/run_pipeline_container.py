@@ -144,19 +144,25 @@ def _allocate_port() -> int:
         sock.close()
 
 
-def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
+def _write_afm_config_tmpfile(wrapper_path: str | None) -> Path:
     """Write the afm config overlay to a private temp file (mode 0600).
 
     The file is created in the system temp directory — NEVER under ``/workspace``
     (per ``[[feedback_workspace_is_project_only]]``). It is mounted read-only at
     ``/home/goga/.afm/config.yaml`` inside the container.
 
-    The overlay carries five static launcher-side fields:
+    The overlay carries these launcher-side fields:
 
     - ``client.command: <wrapper_path>`` — the resolved absolute in-container
       wrapper path afm will drive as the agent client. ``client`` is a nested
       YAML map (``client:`` + ``  command: <wrapper_path>``), NOT a flat
       dotted-key, because afm reads it as a YAML map (same as ``proxy``).
+      Written ONLY when ``wrapper_path`` is not ``None`` — when no agent is
+      configured (``config.pipeline.agent is None``) the whole ``client:``
+      block is omitted, so afm relies on per-stage ``command:`` overrides
+      authored from the workflow (or its own defaults). ``client.command`` is
+      the DEFAULT for stages without an override; it is not required to start
+      afm (``~/.afm/config.yaml`` itself is optional).
     - ``theme: goga`` — the dashboard theme applied by afm.
     - ``open_browser: false`` — the dashboard is reached via the
       host-printed ``http://localhost:<port>`` URL; afm must not attempt to
@@ -177,8 +183,9 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     Args:
         wrapper_path: The resolved absolute in-container wrapper script path
             (``resolve_wrapper_path(config.pipeline.agent)``), e.g.
-            ``/home/goga/bin/codex-as-claude.sh``. Written verbatim into
-            ``client.command`` — never a bare agent name.
+            ``/home/goga/bin/codex-as-claude.sh``, written verbatim into
+            ``client.command`` — never a bare agent name. ``None`` when no
+            agent is configured: the ``client:`` block is omitted entirely.
 
     Returns:
         Path to the written temporary file.
@@ -186,8 +193,9 @@ def _write_afm_config_tmpfile(wrapper_path: str) -> Path:
     fd, path = tempfile.mkstemp(prefix="goga-afm-config-")
     with os.fdopen(fd, "w") as f:
         Path(path).chmod(stat.S_IRUSR | stat.S_IWUSR)
-        f.write("client:\n")
-        f.write(f"  command: {wrapper_path}\n")
+        if wrapper_path is not None:
+            f.write("client:\n")
+            f.write(f"  command: {wrapper_path}\n")
         f.write("theme: goga\n")
         f.write("open_browser: false\n")
         f.write("proxy:\n")
@@ -205,14 +213,24 @@ def resolve_pipeline_runtime_dir(pipeline_name: str) -> Path:
     the same branch. Pure with respect to the filesystem — the directory is NOT
     created here (creation is the caller's responsibility).
 
+    The ``pipeline_name`` path segment is sanitized by replacing every ``:`` with
+    ``-`` BEFORE delegation. The resolved path is later used as the source of a
+    docker bind-mount (``<runtime_dir>:/home/goga/pipeline``); an unsanitized
+    ``:`` would be parsed by docker as the ``source:target[:mode]`` separator
+    (e.g. ``pybuggy:api-feature`` → docker ``invalid mode``). The ORIGINAL
+    ``pipeline_name`` (not the sanitized segment) is still used for the
+    in-container run argv and the workflow auto-match basename, so the
+    sanitization affects only the host state-dir path segment.
+
     Args:
         pipeline_name: Pipeline name without extension (the run-mode name arg).
 
     Returns:
         Absolute host path
-        ``~/.goga/runtime/pipelines/<normalized>/<branch>/<pipeline_name>``.
+        ``~/.goga/runtime/pipelines/<normalized>/<branch>/<sanitized_name>``
+        where ``<sanitized_name>`` is ``pipeline_name`` with ``:`` → ``-``.
     """
-    return resolve_runtime_dir("pipelines", pipeline_name)
+    return resolve_runtime_dir("pipelines", pipeline_name.replace(":", "-"))
 
 
 def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
@@ -567,7 +585,12 @@ def _run_named(  # noqa: PLR0913, PLR0917
     afm_config: Path | None = None
     env_file: Path | None = None
     try:
-        wrapper_path = resolve_wrapper_path(config.pipeline.agent)
+        # pipeline.agent is OPTIONAL: the agent may be supplied per-stage by the
+        # workflow instead. Resolve the wrapper path only when an agent is
+        # configured; pass None through to _write_afm_config_tmpfile, which then
+        # omits the global client.command and lets per-stage workflow commands
+        # (or afm's own defaults) cover its absence.
+        wrapper_path = resolve_wrapper_path(config.pipeline.agent) if config.pipeline.agent is not None else None
         afm_config = _write_afm_config_tmpfile(wrapper_path)
         env_file = _build_env_file(
             home_env=home.env,
@@ -689,7 +712,9 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     Run mode (``name`` provided) allocates a free port, writes a private
     afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
     absolute ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare
-    agent name) mounted read-only at the FIXED path
+    agent name; the ``client:`` block is OMITTED when ``config.pipeline.agent``
+    is ``None``, so per-stage workflow agents or afm's own defaults cover the
+    absence) mounted read-only at the FIXED path
     ``/home/goga/.afm/config.yaml``, ensures the persistent afm state host
     directory exists (wiping it first when ``clean`` is set), writes a private
     env-file layering ``home.env`` as the BASE layer under

@@ -159,3 +159,46 @@ class TestRunPipelineProjectNameContract:
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
 
         assert len(calls) == 1
+
+
+class TestRunPipelineImportsResolveProjectNameFromConfig:
+    """Contract: run_pipeline sources resolve_project_name from goga.config.
+
+    The local ``def resolve_project_name`` was REMOVED from
+    ``run_pipeline.py`` (Part C). The routine now lives in the ``goga/config/git``
+    leaf cell and is re-exported on the ``goga/config`` facade; ``run_pipeline``
+    imports it via ``from ..config import resolve_project_name``. The step-7 call
+    shape ``resolve_project_name()`` is unchanged, but the symbol is no longer
+    defined locally — importing ``run_pipeline`` pulls in ``goga.config.git.identity``.
+    """
+
+    def test_resolve_project_name_importable_from_facade(self) -> None:
+        """from goga.config import resolve_project_name resolves to a callable."""
+        from goga.config import resolve_project_name
+
+        assert callable(resolve_project_name)
+
+    def test_run_pipeline_callable(self) -> None:
+        """from goga.pipeline.run_pipeline import run_pipeline is callable."""
+        assert callable(run_pipeline)
+
+    def test_no_local_definition_in_run_pipeline_source(self) -> None:
+        """resolve_project_name is NOT defined locally in run_pipeline.py.
+
+        The function moved to ``goga/config/git``; the local ``def`` block was
+        deleted, leaving only the import at the module top.
+        """
+        source = Path(_run_pipeline_module.__file__).read_text()
+        assert "def resolve_project_name" not in source
+
+    def test_importing_run_pipeline_pulls_goga_config_git_identity(self) -> None:
+        """Importing run_pipeline loads the goga.config.git.identity owning module.
+
+        After the swap, ``run_pipeline.py`` imports ``resolve_project_name`` from
+        ``..config`` (the facade), which re-exports it from ``.git.identity`` —
+        so the owning module lands in ``sys.modules`` once ``run_pipeline`` is
+        imported.
+        """
+        # run_pipeline is already imported at module top; ensure the owning module
+        # is registered in sys.modules as a consequence of the facade re-export.
+        assert "goga.config.git.identity" in sys.modules

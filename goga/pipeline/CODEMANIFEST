@@ -24,6 +24,9 @@ Imports:
     Usages:
       - parse-workflow
     From: goga/pipeline/workflow
+  - Types:
+      - resolve_project_name
+    From: goga/config
 
 Usages:
   conventions: .goga/usages/conventions.md
@@ -307,8 +310,7 @@ Annotations: |
         constructs a new `WorkflowDocument` when workflow is None, e.g.
         --no-workflow or no resolved workflow-file); when empty, the workflow
         is unchanged. The result is forwarded to `compile_flow` at step 7.
-    7. Resolve the in-container project name via `resolve_project_name` (None
-       when the git origin remote is unavailable — mirroring the root_dir
+    7. Resolve the in-container project name via `resolve_project_name` (None when the git origin remote is unavailable — mirroring the root_dir
        pattern, never raises). Compile the pipeline-file via `compile_flow`
        (per the `compile-flow` practice) with the resolved workflow as the
        optional workflow argument, the in-container project root (Path.cwd(),
@@ -547,33 +549,6 @@ Annotations: |
     - Do not write, read, or generate any workflow-file — the merge operates
       purely on in-memory Python objects
     - Do not mutate the input `workflow` object or its maps
-
-"resolve_project_name() -> name: str | None":
-  location: run_pipeline.py
-  annotations: |
-    Derive the project name from the current git repository's origin remote URL,
-    for use as the description prefix in compiled flow-files. Tolerant: any failure
-    (not a git repo, no origin remote, subprocess error) yields None — never raises.
-
-    `name`: project name (basename of the origin URL, .git suffix stripped), or
-            None when it cannot be determined
-
-    Algorithm:
-    1. Run git config --get remote.origin.url via subprocess (cwd = in-container
-       project root /workspace); capture stdout
-    2. On any error (non-zero exit, CalledProcessError, missing git binary) -> None
-    3. Take the basename of the URL; strip a trailing ".git" suffix when present
-    4. Empty result -> None; otherwise return it
-
-    Apply `conventions` for subprocess/error handling and docstrings.
-
-    Requirements:
-    - Any failure -> None (silent skip, never raise) — absence of remote is normal
-    - Runs in-container (project bind-mounted at /workspace)
-
-    Constraints:
-    - Do NOT raise on missing git / missing remote / subprocess error
-    - Do NOT fall back to another source — None is the canonical "unknown" value
 
 "pipeline_cli(argv: list[str]) -> exit_code: int":
   location: cli.py

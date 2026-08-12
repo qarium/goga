@@ -53,3 +53,28 @@ cells: 20 errors: 0
 goga lint
 goga lint goga/config
 ```
+
+## Ignoring directories
+
+Declare an optional `lint` section in .goga/config.yml to exclude directories
+from validation by exact relative path:
+
+```yaml
+lint:
+  ignore:
+    - .venv/
+    - build/dist
+```
+
+Behavior:
+- Matching directories are skipped during AST traversal (not loaded, no errors).
+- Entries are exact paths relative to the `goga lint` invocation cwd; glob
+  patterns (`**`, `*`, `?`) are NOT supported.
+- When the `lint` section (or .goga/config.yml) is absent OR invalid, lint
+  behavior is unchanged — the whole tree is validated; lint never fails due
+  to .goga/config.yml.
+
+```bash
+goga lint                       # honors lint.ignore when present
+goga lint goga/config           # path-scoped; ignore still applies
+```

@@ -4,6 +4,12 @@ Imports:
     Usages:
       - loading
     From: goga/ast
+  - Types:
+      - load_project_config
+      - ProjectConfig
+    Usages:
+      - project-configuration
+    From: goga/config
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -19,18 +25,35 @@ Annotations: |
   - understanding general development and testing principles and rules in the project
   Use the `click` practice to create CLI commands.
 
+  Use `project-configuration` to consume the optional lint section via
+  `load_project_config` (the single config entrypoint); .goga/config.yml is
+  optional for lint — its absence OR invalidity runs lint unfiltered (lint is
+  decoupled from config validity).
+
 ---
 
 "lint(path: str = '.')":
   location: lint.py
   annotations: |
-    Validates CODEMANIFEST files across the project.
+    Validates CODEMANIFEST files across the project, honoring the optional
+    lint.ignore section of .goga/config.yml by excluding matching directories
+    from AST traversal.
 
     `path`: directory path for CWD context initialization
 
     Algorithm:
     - Set CWD to the specified `path`
-    - Instantiate `AST` and load the project via the `loading` practice
+    - Derive ignore: load project configuration via `load_project_config`
+      (returns a `ProjectConfig`); treat ANY loader exception
+      (OSError — covering FileNotFoundError for an absent/empty file plus
+      IsADirectoryError/PermissionError when unreadable; KeyError,
+      ValueError, yaml.YAMLError) as ignore=None — config is optional for lint
+      and lint MUST NOT fail or change its exit code due to a present-but-invalid
+      config (run unfiltered). When cfg.lint is None -> ignore=None; otherwise
+      ignore=cfg.lint.ignore. Never let a raw loader exception surface as a
+      traceback and never let it change lint's exit code.
+    - Instantiate `AST` (passing `path` and the derived ignore) and load the
+      project via the `loading` practice
     - Print all errors in the defined format
     - Print the validation summary
 
@@ -57,6 +80,23 @@ Annotations: |
     - Render [rule_name] in red
     - Append the summary after all errors, preceded by a blank line
     - Exit with code 1 on errors, 0 otherwise
+    - When .goga/config.yml or the lint section is absent, ignore is None in
+      both cases (no directories excluded)
+    - ANY loader exception (OSError, KeyError, ValueError, yaml.YAMLError) on
+      a present-but-invalid config MUST be treated as ignore=None — lint MUST
+      NOT fail or change its exit code due to config;
+      lint is decoupled from config validity
+    - ignore is passed verbatim to `AST`; lint performs no path normalization
+      or glob interpretation — `AST` owns the matching semantics
+
+    Constraints:
+    - Do NOT require .goga/config.yml for lint to run — FileNotFoundError is
+      treated as "no ignore, proceed", not an error
+    - Do NOT fail lint on a present-but-invalid .goga/config.yml — treat every
+      loader exception (OSError, KeyError, ValueError, yaml.YAMLError) as
+      ignore=None; lint is decoupled from config validity
+    - Do NOT interpret glob patterns in ignore entries — they flow through to
+      `AST`, which documents them as unsupported
 
 ---
 

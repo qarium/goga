@@ -53,9 +53,27 @@ class TestInstallFacade:
         assert isinstance(install, click.Command)
         assert install.name == "install"
 
-    def test_install_has_three_options(self) -> None:
+    def test_install_has_four_options(self) -> None:
         names = {p.name for p in install.params if isinstance(p, click.Option)}
-        assert names == {"sudo", "version", "no_connect"}
+        assert names == {"sudo", "version", "local", "no_connect"}
+
+    def test_install_local_default_none(self) -> None:
+        param = next(p for p in install.params if p.name == "local")
+        assert isinstance(param, click.Option)
+        assert param.default is None
+
+    def test_install_local_exposes_long_and_short_flags(self) -> None:
+        param = next(p for p in install.params if p.name == "local")
+        # Both forms deserialise into the same Option/parameter.
+        assert "--local" in param.opts
+        assert "-l" in param.opts
+
+    def test_install_exposes_local_option(self) -> None:
+        # The --local/-l option is wired onto the CLI surface.
+        result = CliRunner().invoke(app, ["install", "--help"])
+        assert result.exit_code == 0
+        assert "--local" in result.output
+        assert "-l" in result.output
 
     def test_install_no_connect_option_is_flag_default_false(self) -> None:
         param = next(p for p in install.params if p.name == "no_connect")
@@ -352,6 +370,117 @@ class TestInstallWiringInvariants:
         # The declared afm form resolves; the --version "2.0" never leaks in.
         assert _pkgs_from_argv(argv) == ["goga-tool-afm~=1.0.0"]
         assert "goga-tool-afm==2.0" not in argv
+
+    def test_install_short_alias_v_resolves_version_in_single_path(self) -> None:
+        # The short alias ``-v`` is registered alongside ``--version`` on the
+        # same Click Option, so single path must resolve the form via
+        # resolve_version exactly as the long form does.
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "foo", "-v", "1.0.x"])
+        assert result.exit_code == 0
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-foo~=1.0.0"]
+
+
+class TestInstallLocalMode:
+    """LOCAL PATH — ``--local``/``-l`` pip-installs a local directory.
+
+    The fourth mode reuses ``_pip_argv([local], sudo)`` (``-U``, never ``-e``),
+    ``_run_pip`` (pip owns the missing-path error), and ``_after_pip`` (activation
+    follows SINGLE/BULK rules). Mutex VALIDATIONS reject ``name``+``--local`` and
+    ``--local``+``--version``.
+    """
+
+    def test_install_local_invokes_pip_with_path(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        assert "./my-tool" in argv
+        assert argv[-1] == "-U"
+        assert "-e" not in argv
+        mock_resync.assert_called_once()
+
+    def test_install_local_short_alias_l(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "-l", "./my-tool"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        assert "./my-tool" in argv
+
+    def test_install_local_no_connect_skips_activation(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool", "--no-connect"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        mock_resync.assert_not_called()
+
+    def test_install_local_propagates_pip_failure(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./missing"])
+        assert result.exit_code == 1
+        # pip-rc translated verbatim — no CLI-level existence check short-circuits.
+        mock_run.assert_called_once()
+        mock_resync.assert_not_called()
+
+    def test_install_rejects_name_and_local_combined(self) -> None:
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "foo", "--local", "./x"])
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.output
+        mock_run.assert_not_called()
+
+    def test_install_rejects_version_in_local_mode(self) -> None:
+        with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run:
+            result = CliRunner().invoke(app, ["install", "--local", "./x", "-v", "1.0.1"])
+        assert result.exit_code == 1
+        assert "version" in result.output.lower()
+        mock_run.assert_not_called()
+
+    def test_install_local_does_not_read_config(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # LOCAL path must not consult .goga/config.yml — declaring tools must not
+        # change the local install argv, and a config error must not surface.
+        _write_config(
+            tmp_path,
+            "language: python\ntools:\n  afm: 1.0.x\n  ralphex: 1.x\n",
+        )
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool"])
+        assert result.exit_code == 0
+        assert mock_run.call_count == 1
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["./my-tool"]
+
+    def test_install_local_sudo_prepends_sudo_preserve_home(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./x", "--sudo"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        assert argv[:2] == ["sudo", "--preserve-env=HOME"]
+        assert "./x" in argv
+        assert argv[-1] == "-U"
+        # Activation runs once and never under sudo.
+        mock_resync.assert_called_once()
 
 
 class TestInstallActivation:

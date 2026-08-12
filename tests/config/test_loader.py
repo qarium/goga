@@ -8,6 +8,7 @@ import pytest
 import yaml
 from goga.config import (
     CodemanifestConfig,
+    LintConfig,
     PipelineConfig,
     ProjectConfig,
     TaskExecutorConfig,
@@ -18,6 +19,7 @@ from goga.config.project.loader import (
     _parse_codemanifest,
     _parse_depcfg,
     _parse_dockerfile,
+    _parse_lint,
     _parse_tools,
     _parse_usages,
     _validate_usages_root,
@@ -518,8 +520,8 @@ build:
         config = load_project_config()
         assert config.image is None
 
-    def test_load_config_pipeline_agent_empty_raises(self, goga_project):
-        """pipeline.agent empty string raises ValueError."""
+    def test_load_config_pipeline_agent_empty_resolves_none(self, goga_project):
+        """pipeline.agent empty string resolves to None (optional field)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -532,11 +534,12 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_project_config()
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
 
-    def test_load_config_pipeline_agent_missing_raises(self, goga_project):
-        """pipeline block without agent raises ValueError."""
+    def test_load_config_pipeline_agent_missing_resolves_none(self, goga_project):
+        """pipeline block without agent resolves agent to None (optional field)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -548,7 +551,25 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+
+    def test_load_config_pipeline_agent_bool_raises(self, goga_project):
+        """pipeline.agent: true (bool, not string) → structural type error (ValueError)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: true
+build:
+  task_executor:
+    agent: claude
+""",
+        )
+        with pytest.raises(ValueError, match=r"pipeline\.agent must be a string"):
             load_project_config()
 
     def test_load_config_image_non_string_raises(self, goga_project):
@@ -621,8 +642,8 @@ build: null
         config = load_project_config()
         assert config.build is None
 
-    def test_load_config_empty_pipeline_mapping_raises_inner_error(self, goga_project):
-        """pipeline: {} → inner validation preserved (ValueError on missing agent)."""
+    def test_load_config_empty_pipeline_mapping_parses_none_agent(self, goga_project):
+        """pipeline: {} → parses to PipelineConfig with agent=None (agent optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -634,8 +655,10 @@ build:
     agent: claude
 """,
         )
-        with pytest.raises(ValueError, match=r"pipeline\.agent"):
-            load_project_config()
+        config = load_project_config()
+        assert config.pipeline is not None
+        assert config.pipeline.agent is None
+        assert config.pipeline.env == {}
 
     def test_load_config_empty_build_mapping_raises_inner_error(self, goga_project):
         """build: {} → inner validation preserved (KeyError on missing task_executor)."""
@@ -841,8 +864,8 @@ build: {}
         with pytest.raises(KeyError, match=r"build\.task_executor is required"):
             load_project_config()
 
-    def test_load_config_missing_agent(self, goga_project):
-        """task_executor: {} (no agent key)."""
+    def test_load_config_missing_agent_resolves_none(self, goga_project):
+        """task_executor: {} (no agent key) → agent resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -854,11 +877,12 @@ build:
   task_executor: {}
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
-    def test_load_config_empty_agent(self, goga_project):
-        """agent: '' (empty string)."""
+    def test_load_config_empty_agent_resolves_none(self, goga_project):
+        """agent: '' (empty string) → resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -871,11 +895,12 @@ build:
     agent: ""
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
-    def test_load_config_whitespace_agent_raises(self, goga_project):
-        """agent: '   ' (whitespace-only string)."""
+    def test_load_config_whitespace_agent_resolves_none(self, goga_project):
+        """agent: '   ' (whitespace-only string) → resolves to None (optional)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -888,8 +913,9 @@ build:
     agent: "   "
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
-            load_project_config()
+        config = load_project_config()
+        assert config.build is not None
+        assert config.build.task_executor.agent is None
 
     def test_load_config_task_executor_env_not_mapping(self, goga_project):
         """env: "not-a-dict"."""
@@ -929,7 +955,7 @@ build:
             load_project_config()
 
     def test_load_config_agent_bool_raises(self, goga_project):
-        """agent: true (bool, not string)."""
+        """agent: true (bool, not string) → structural type error (ValueError)."""
         _write_goga_yml(
             goga_project,
             """\
@@ -942,7 +968,7 @@ build:
     agent: true
 """,
         )
-        with pytest.raises(ValueError, match="agent is required"):
+        with pytest.raises(ValueError, match=r"build\.task_executor\.agent must be a string"):
             load_project_config()
 
     def test_load_config_task_executor_scalar_raises(self, goga_project):
@@ -2804,3 +2830,259 @@ usages:
         )
         with pytest.raises(ValueError, match=match):
             load_project_config()
+
+
+# --- Contract tests for _parse_lint ---
+
+
+class TestParseLintContract:
+    def test_parse_lint_exists(self):
+        """_parse_lint is importable from goga.config.project.loader."""
+        assert callable(_parse_lint)
+
+    def test_parse_lint_signature(self):
+        """_parse_lint accepts a single dict parameter (parity with _parse_codemanifest)."""
+        sig = inspect.signature(_parse_lint)
+        params = list(sig.parameters.keys())
+        assert params == ["data"]
+
+    def test_parse_lint_return_annotation(self):
+        """_parse_lint returns LintConfig | None."""
+        ret = inspect.signature(_parse_lint).return_annotation
+        assert ret == LintConfig | None
+
+    def test_projectconfig_has_lint_field(self):
+        """ProjectConfig declares a `lint` field."""
+        field_names = {f.name for f in dataclasses.fields(ProjectConfig)}
+        assert "lint" in field_names
+
+    def test_projectconfig_lint_is_last_field(self):
+        """lint is the last declared field of ProjectConfig (backward-compatible append)."""
+        field_names = [f.name for f in dataclasses.fields(ProjectConfig)]
+        assert field_names[-1] == "lint"
+
+    def test_projectconfig_lint_annotation_optional_lintconfig(self):
+        """lint field type is LintConfig | None."""
+        lint_field = {f.name: f for f in dataclasses.fields(ProjectConfig)}["lint"]
+        assert lint_field.type == LintConfig | None
+
+    def test_projectconfig_lint_defaults_none(self):
+        """lint defaults to None (backward compatible — section absent)."""
+        assert {f.name: f for f in dataclasses.fields(ProjectConfig)}["lint"].default is None
+
+
+# --- Logic tests for _parse_lint (direct) ---
+
+
+class TestParseLintPositive:
+    def test_parse_lint_without_section_returns_none(self):
+        """No lint section → returns None."""
+        assert _parse_lint({"language": "python"}) is None
+
+    def test_parse_lint_null_section_returns_none(self):
+        """lint: null → returns None."""
+        assert _parse_lint({"lint": None}) is None
+
+    def test_parse_lint_builds_lintconfig_with_ignore(self):
+        """lint.ignore list is stored verbatim (incl. trailing slash)."""
+        result = _parse_lint({"lint": {"ignore": [".venv/", "build/dist"]}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == [".venv/", "build/dist"]
+
+    def test_parse_lint_ignore_absent_defaults_empty(self):
+        """lint: {} (no ignore key) → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_ignore_null_defaults_empty(self):
+        """lint: { ignore: null } → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {"ignore": None}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_empty_ignore_section(self):
+        """lint: { ignore: [] } → LintConfig(ignore=[])."""
+        result = _parse_lint({"lint": {"ignore": []}})
+        assert isinstance(result, LintConfig)
+        assert result.ignore == []
+
+    def test_parse_lint_stores_verbatim_no_normalization(self):
+        """Trailing slash and glob characters are preserved verbatim (no normalization)."""
+        result = _parse_lint({"lint": {"ignore": [".venv/", "*"]}})
+        assert result.ignore == [".venv/", "*"]
+
+    def test_parse_lint_returns_plain_list_copy(self):
+        """The returned ignore list is a copy — not the original list object."""
+        original = [".venv/"]
+        result = _parse_lint({"lint": {"ignore": original}})
+        assert result.ignore == original
+        assert result.ignore is not original
+
+
+class TestParseLintNegative:
+    @pytest.mark.parametrize("bad_section", ["not-a-mapping", 5, ["a", "b"]])
+    def test_parse_lint_rejects_non_mapping_section(self, bad_section):
+        """lint section that is not a mapping (str/int/list) → ValueError."""
+        with pytest.raises(ValueError, match=r"'lint' must be a mapping"):
+            _parse_lint({"lint": bad_section})
+
+    def test_parse_lint_rejects_non_list_ignore(self):
+        """lint: { ignore: not-a-list } → ValueError."""
+        with pytest.raises(ValueError, match=r"lint\.ignore must be a list"):
+            _parse_lint({"lint": {"ignore": "not-a-list"}})
+
+    @pytest.mark.parametrize("bad_element", [5, True])
+    def test_parse_lint_rejects_non_string_element(self, bad_element):
+        """lint.ignore element that is not a string (int/bool) → ValueError."""
+        with pytest.raises(ValueError, match=r"only strings"):
+            _parse_lint({"lint": {"ignore": [bad_element]}})
+
+
+# --- Integration tests: load_project_config with lint ---
+
+
+class TestLoadConfigLint:
+    def test_load_config_returns_lint_accessor(self, goga_project):
+        """Minimal valid config exposes the cfg.lint accessor — initially None."""
+        _write_goga_yml(goga_project, MINIMAL_YAML)
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_returns_none_when_section_absent(self, goga_project):
+        """Config with only language → cfg.lint is None."""
+        _write_goga_yml(goga_project, "language: python\n")
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_builds_lintconfig_with_ignore(self, goga_project):
+        """lint.ignore list is parsed verbatim into cfg.lint.ignore (incl. trailing slash)."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore:
+    - .venv/
+    - build/dist
+""",
+        )
+        config = load_project_config()
+        assert config.lint is not None
+        assert isinstance(config.lint, LintConfig)
+        assert config.lint.ignore == [".venv/", "build/dist"]
+
+    def test_parse_lint_empty_ignore_section(self, goga_project):
+        """lint: { ignore: [] } → cfg.lint is present with ignore == []."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore: []
+""",
+        )
+        config = load_project_config()
+        assert config.lint is not None
+        assert config.lint.ignore == []
+
+    def test_parse_lint_rejects_non_mapping_section(self, goga_project):
+        """lint: not-a-mapping → ValueError match 'lint.*mapping'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint: not-a-mapping
+""",
+        )
+        with pytest.raises(ValueError, match=r"lint.*mapping"):
+            load_project_config()
+
+    def test_parse_lint_rejects_non_list_ignore(self, goga_project):
+        """lint: { ignore: not-a-list } → ValueError match 'lint.ignore.*list'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore: not-a-list
+""",
+        )
+        with pytest.raises(ValueError, match=r"lint\.ignore.*list"):
+            load_project_config()
+
+    def test_parse_lint_rejects_non_string_element(self, goga_project):
+        """lint: { ignore: ['.venv/', 5] } → ValueError match 'only strings'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint:
+  ignore:
+    - .venv/
+    - 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"only strings"):
+            load_project_config()
+
+    def test_parse_lint_null_section_returns_none(self, goga_project):
+        """lint: null → cfg.lint is None."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+pipeline:
+  agent: claude
+build:
+  task_executor:
+    agent: claude
+lint: null
+""",
+        )
+        config = load_project_config()
+        assert config.lint is None
+
+    def test_parse_lint_backward_compatible_without_section(self, goga_project):
+        """Existing config without lint → cfg.lint is None, other fields unchanged."""
+        _write_goga_yml(goga_project, HAPPY_YAML)
+        config = load_project_config()
+        assert config.lint is None
+        assert config.lang == "python"
+        assert config.image == "qarium/foo:1.0"
+        assert config.pipeline.agent == "claude"
+        assert config.build.task_executor.agent == "claude"
+        assert config.build.task_executor.env == {"KEY": "value"}
+        assert config.build.worktree is True
+        assert config.commands == {"foo": "bar"}

@@ -63,13 +63,17 @@ def resolve_version(form: str | None) -> str | None:
     # 1. None / "latest" → no specifier; pip selects the newest under -U.
     if form is None or form == "latest":
         return None
+
     # 2. Operator-prefixed forms are rejected — this routine owns the operator.
     if form.startswith(("==", ">=", "<=", "~=", "!=", "<", ">", "===")):
         raise ValueError("operator-prefixed forms are rejected")
+
     segments = form.split(".")
+
     # 3. Major x-range "N.x": exactly one dot, last segment "x", major numeric.
     if len(segments) == _XRANGE_MAJOR_SEGMENTS and segments[1] == "x" and segments[0].isdigit() and segments[0] != "":
         return f"~={segments[0]}.0"
+
     # 4. Minor x-range "N.M.x": exactly two dots, last segment "x", both numeric.
     if (
         len(segments) == _XRANGE_MINOR_SEGMENTS
@@ -78,11 +82,13 @@ def resolve_version(form: str | None) -> str | None:
         and segments[1].isdigit()
     ):
         return f"~={segments[0]}.{segments[1]}.0"
+
     # 5. Concrete "N(.M)?(.K)?": 1-3 numeric segments, no trailing "x".
     if _CONCRETE_MIN_SEGMENTS <= len(segments) <= _CONCRETE_MAX_SEGMENTS and all(
         s.isdigit() and s != "" for s in segments
     ):
         return f"=={form}"
+
     # 6. Anything else is malformed.
     raise ValueError("malformed version form")
 
@@ -96,8 +102,10 @@ def _pip_argv(pkgs: list[str], sudo: bool) -> list[str]:
     tool discovery still reads the caller's home directory.
     """
     argv: list[str] = [sys.executable, "-m", "pip", "install", *pkgs, "-U"]
+
     if sudo:
         argv = ["sudo", "--preserve-env=HOME", *argv]
+
     return argv
 
 
@@ -112,8 +120,10 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     since there is no returncode to propagate.
     """
     logger.info("install start")
+
     if sudo:
         logger.warning("running pip under sudo")
+
     try:
         result = subprocess.run(argv, check=False)
     except OSError as exc:
@@ -125,10 +135,12 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
         # sudo, not pip, is what's absent.
         target = exc.filename or argv[0]
         raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
+
     if result.returncode == 0:
         logger.info("install complete")
     else:
         logger.error("pip failed with exit code %s", result.returncode)
+
     return result.returncode
 
 
@@ -143,7 +155,7 @@ def _resolve_pkg(name: str, form: str | None) -> str:
 
 
 def _after_pip(pip_rc: int, no_connect: bool) -> int:
-    """Decide the final exit code after pip (Algorithm step 3 — ACTIVATION).
+    """Decide the final exit code after pip (Algorithm step 4 — ACTIVATION).
 
     Activation (the post-install agent re-sync) runs only when pip succeeded
     (``pip_rc == 0``) and the caller did not opt out with ``no_connect``. When
@@ -163,6 +175,7 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
     """
     if no_connect or pip_rc != 0:
         return pip_rc
+
     return resync_registered_agents(Path.home() / ".goga")
 
 
@@ -171,8 +184,16 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
 @click.option("--sudo", is_flag=True, default=False, help="Run pip under sudo with --preserve-env=HOME")
 @click.option(
     "--version",
+    "-v",
     default=None,
     help="Version form for the tool (single-path only); resolved into a pip specifier",
+)
+@click.option(
+    "--local",
+    "-l",
+    "local",
+    default=None,
+    help="Path to a pip-installable local directory (local mode); mutually exclusive with name; --version is rejected",
 )
 @click.option(
     "--no-connect",
@@ -182,20 +203,23 @@ def _after_pip(pip_rc: int, no_connect: bool) -> int:
     help="Skip post-install agent activation (install-only)",
 )
 @click.pass_context
-def install(
+def install(  # noqa: PLR0913, PLR0917 — Click callback arity is contract-mandated
     ctx: click.Context,
     name: str | None,
     sudo: bool,
     version: str | None,
+    local: str | None,
     no_connect: bool = False,
 ) -> None:
     """Install goga-tool packages into the current interpreter via pip.
 
-    Three paths, selected by whether ``name`` is given:
+    Four paths, selected by whether ``name`` or ``--local`` is given:
 
     \b
       * SINGLE (``name`` set): install ``goga-tool-<name><spec>`` resolved from
         ``--version`` in a single pip call.
+      * LOCAL (``--local <path>`` set): pip-install a local directory; mutually
+        exclusive with ``name``, and ``--version`` is rejected.
       * BULK (``name`` omitted, ``.goga/config.yml`` lists ``tools:``): install
         every ``goga-tool-<tool><spec>`` declared in the config in a single pip
         call.
@@ -205,13 +229,26 @@ def install(
     The pip exit code is propagated unchanged. Configuration or version errors
     exit with code 1.
     """
+    # 0. VALIDATIONS — mutexes fire only when BOTH are set.
+    if name is not None and local is not None:
+        raise click.ClickException("name and --local are mutually exclusive")
+    if local is not None and version is not None:
+        raise click.ClickException("--version is not supported with --local")
+
     if name is not None:
         # SINGLE PATH — install one tool, grammar-resolving --version.
         try:
             pkg = _resolve_pkg(name, version)
         except ValueError as exc:
             raise click.ClickException(f"invalid --version value {version!r}: {exc}") from exc
+
         pip_rc = _run_pip(_pip_argv([pkg], sudo), sudo)
+        ctx.exit(_after_pip(pip_rc, no_connect))
+
+    if local is not None:
+        # LOCAL PATH — pip-install a local directory. pip owns the missing-path
+        # error (no CLI-level existence check), and -U is always requested (never -e).
+        pip_rc = _run_pip(_pip_argv([local], sudo), sudo)
         ctx.exit(_after_pip(pip_rc, no_connect))
 
     # BULK / EMPTY PATH — driven by .goga/config.yml.
@@ -234,5 +271,6 @@ def install(
             pkgs.append(_resolve_pkg(tool_name, form))
         except ValueError as exc:
             raise click.ClickException(f"invalid version for tool {tool_name!r}: {exc}") from exc
+
     pip_rc = _run_pip(_pip_argv(pkgs, sudo), sudo)
     ctx.exit(_after_pip(pip_rc, no_connect))

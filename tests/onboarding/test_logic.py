@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.logic import InitLogic
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.logic import InitLogic
 
 
 class TestContract:
     """Contract-level tests for InitLogic."""
 
     def test_init_logic_importable_from_logic(self) -> None:
-        from goga.init.logic import InitLogic
+        from goga.onboarding.logic import InitLogic
 
         assert InitLogic is not None
 

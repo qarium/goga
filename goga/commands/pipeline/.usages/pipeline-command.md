@@ -17,7 +17,7 @@ When NAME is omitted → discovery mode. When provided → run mode.
 |--------|------|--------|
 | -p / --parallel N | int (optional) | max concurrently executing stages; forwarded as the in-container --parallel, which threads to afm run --max-parallel N. Absent ⇒ afm unbounded. Run mode only (no-op in discovery). |
 | -s / --skip NAME | repeatable | exclude a stage (run mode only) |
-| --workflow NAME | str | apply an explicit workflow |
+| -w / --workflow NAME | str | apply an explicit workflow |
 | --no-workflow | flag | disable workflow resolution |
 | -c / --clean | flag | wipe persistent afm state before launch (run mode only) |
 

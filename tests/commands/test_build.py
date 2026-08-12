@@ -505,6 +505,40 @@ class TestBuildSectionGuard:
         mock_env.assert_not_called()
 
 
+# --- Build task_executor.agent None-guard (step 2c) tests ---
+
+
+class TestBuildAgentGuard:
+    """Step 2c — host-side None-guard: ClickException when build.task_executor.agent
+    is absent/empty. The agent is optional at the loader level (None when unset), but
+    `goga build` needs it to resolve the in-container wrapper path, so the guard runs
+    before any agent access to avoid a downstream TypeError.
+    """
+
+    @staticmethod
+    def _write_config_without_build_agent(tmp_path: Path) -> None:
+        """Write a valid config with a build section but NO task_executor.agent."""
+        data = {
+            "language": "python",
+            "image": "qarium/goga:latest",
+            "build": {"task_executor": {}},
+            "pipeline": {"agent": "claude"},
+        }
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    def test_build_command_raises_click_exception_when_agent_absent(self, mock_docker, tmp_path, monkeypatch) -> None:
+        self._write_config_without_build_agent(tmp_path)
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "build.task_executor.agent is required" in result.output
+        # docker run never starts on an agent-less config.
+        mock_runner.return_value.run.assert_not_called()
+
+
 # --- Negative cases ---
 
 

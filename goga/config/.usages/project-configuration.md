@@ -16,6 +16,7 @@ from goga.config import (
     PipelineConfig,
     CodemanifestConfig,
     DepConfig,
+    LintConfig,
     load_project_config,
 )
 ```
@@ -39,8 +40,8 @@ config = load_project_config()
 - Root YAML element must be a mapping — raises `ValueError` otherwise
 - Required top-level field: `language`. All other top-level fields (`image`, `pipeline`, `build`, `commands`, `codemanifest`, `dockerfile`) are optional
 - Optional sections `pipeline` and `build` may be absent — `config.pipeline` and `config.build` are then `None`. Consumers that need them (the `pipeline` and `build` commands) guard the `None` case and raise `ClickException` before any field access
-- When `pipeline` is present: it must be a mapping, and `pipeline.agent` is required (non-empty)
-- When `build` is present: it must be a mapping, and `build.task_executor` (with its required `agent`) is required
+- When `pipeline` is present: it must be a mapping; `pipeline.agent` is OPTIONAL — absent/null/empty/whitespace resolves to `None`, and `goga pipeline` raises `ClickException` when it needs an agent
+- When `build` is present: it must be a mapping, and `build.task_executor` is required; `build.task_executor.agent` is OPTIONAL — absent/null/empty/whitespace resolves to `None`, and `goga build` raises `ClickException` when it needs an agent
 - A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `pipeline:` null, `build: true`) raises `ValueError`, not `AttributeError`
 - Raises `yaml.YAMLError` on invalid YAML syntax
 
@@ -54,8 +55,9 @@ try:
 except FileNotFoundError:
     # .goga/config.yml not found or empty
 except KeyError as e:
-    # Missing required field — `language`, or `build.task_executor` / its
-    # `agent` when the `build` section is present
+    # Missing required field — `language`, or `build.task_executor`
+    # when the `build` section is present (`build.task_executor.agent` itself
+    # is optional and resolves to None when absent)
     print(e)
 except ValueError as e:
     # Invalid field value
@@ -142,6 +144,10 @@ usages:                       # usages-sync section (optional)
     click:                    # <dep> — subdir under the group
       git: https://github.com/pallets/click.git
       ref: main               # optional: branch/tag/commit (absent → default branch)
+lint:                          # optional linter section
+  ignore:                      # list of exact relative paths to exclude
+    - .venv/                   # glob (**, *, ?) is NOT supported
+    - build/dist
 ```
 
 ### Required Fields
@@ -158,11 +164,11 @@ section, the command raises `ClickException` before any field access.
 
 | Field                       | Required by           | Notes                                                                          |
 |-----------------------------|-----------------------|--------------------------------------------------------------------------------|
-| `pipeline`                  | `goga pipeline`       | Must be a mapping when present. `pipeline.agent` is required when present.     |
-| `pipeline.agent`            | `goga pipeline`       | Agent name; resolved into the in-container `*-as-claude.sh` wrapper path.      |
+| `pipeline`                  | `goga pipeline`       | Must be a mapping when present.                                                |
+| `pipeline.agent`            | `goga pipeline`       | Optional at the loader level (absent/empty → `None`); required to actually run `goga pipeline`, which raises `ClickException` otherwise. Resolved into the in-container `*-as-claude.sh` wrapper path. |
 | `build`                     | `goga build`          | Must be a mapping when present. `build.task_executor` is required when present.|
 | `build.task_executor`       | `goga build`          | AI agent configuration block.                                                  |
-| `build.task_executor.agent` | `goga build`          | Agent name; resolved into the in-container `*-as-claude.sh` wrapper path.      |
+| `build.task_executor.agent` | `goga build`          | Optional at the loader level (absent/empty → `None`); required to actually run `goga build`, which raises `ClickException` otherwise. Resolved into the in-container `*-as-claude.sh` wrapper path. |
 
 #### Agent name semantics
 
@@ -205,6 +211,8 @@ afm) that consume these fields.
 | `usages`                    | mapping | None                   | usages-sync section: `{group: {dep: {git, ref}}}` (None when absent) |
 | `usages.<group>.<dep>.git`  | str     | —                      | git URL (required, non-empty) |
 | `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
+| `lint`        | mapping | None | Linter section (optional); when absent, config.lint is None |
+| `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by `goga lint`. Glob is not supported |
 
 ## Accessing Configuration Data
 
@@ -236,7 +244,7 @@ if config.build is None:
 # now safe to read config.build.task_executor / proxy / hosts / ...
 
 # PipelineConfig fields (after the None-guard)
-config.pipeline.agent  # str — afm client.command inside the container
+config.pipeline.agent  # str | None — afm client.command inside the container; None when not configured
 config.pipeline.env  # dict — {str: str}
 config.pipeline.proxy  # str | None — HTTP/HTTPS proxy URL for the pipeline container
 config.pipeline.hosts  # dict[str, str] — docker run --add-host entries
@@ -248,7 +256,7 @@ config.build.proxy  # str | None — HTTP/HTTPS proxy URL for the build containe
 config.build.hosts  # dict[str, str] — docker run --add-host entries
 
 # TaskExecutorConfig fields
-config.build.task_executor.agent  # str
+config.build.task_executor.agent  # str | None — None when not configured
 config.build.task_executor.env  # dict — {str: str}
 
 # CodemanifestConfig fields — None when the `codemanifest` section is absent
@@ -332,6 +340,31 @@ CLI dot-notation renders a single dep's `DepConfig` via `beautiful_yaml`:
 ```bash
 goga config usages.libs.click   # → DepConfig(git=..., ref=...)
 ```
+
+### `lint` accessor
+
+`config.lint` exposes the optional linter section.
+
+```python
+config.lint  # LintConfig | None — None when the `lint` section is absent
+config.lint.ignore  # list[str] — exact relative paths; empty when ignore is absent/empty
+```
+
+```yaml
+lint:
+  ignore:
+    - .venv/
+    - build/dist
+```
+
+- `ignore` entries are exact paths relative to the `goga lint` invocation cwd
+  (after `os.chdir(path)` — relative to the traversal root). Matching is strict:
+  trailing slash is insignificant (`.venv/` == `.venv`); glob patterns
+  (`**`, `*`, `?`) are NOT supported and are not applied.
+- The loader performs only structural validation (list of strings); path
+  semantics (glob/normalization/existence) are the consumer's responsibility.
+- Absence of the `lint` section ⇒ `config.lint is None` ⇒ no directories are
+  excluded from validation.
 
 ## Immutability
 

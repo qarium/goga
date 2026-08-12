@@ -39,51 +39,61 @@ Annotations: |
 
 ---
 
-"usages()":
+"usages(group: str | None = None, dep: str | None = None)":
   location: usages.py
   annotations: |
     The goga usages command group — a click.Group container for usages subcommands.
     Exported via __all__ and registered in goga/cli.py. The sync and status subcommands are
     registered on this group per the `click` practice.
 
+    The group carries --group/-g and --dep/-d as group-level click options (declared on
+    the group callback; threaded to subcommands via @click.pass_context / ctx.parent.params,
+    per the `click` practice).
+
     Use the `click` practice for the group decorator (@click.group()).
   methods:
-    "sync(force: bool = False) -> exit_code: int": |
+    "sync(force: bool = False, group: str | None = None, dep: str | None = None) -> exit_code: int": |
       Subcommand goga usages sync: synchronize cell-level usages from declared git
       dependencies. Thin wrapper — delegates to `sync_logic`.
 
       `force`: --force/-f flag (click is_flag, default False) — clean then re-sync all deps.
+      `group`: sourced from the group context (NOT a method-level @click.option) — the
+        --group/-g value declared on the `usages` group callback.
+      `dep`: sourced from the group context (NOT a method-level @click.option) — the
+        --dep/-d value declared on the `usages` group callback.
       `exit_code`: propagated from `sync_logic` (0 success, 1 error).
 
       CLI option:
       - --force / -f: clean .goga/usages/ (except cooks and root *.md) then re-sync all
 
       Algorithm:
-      1. Call `sync_logic`(`force`) per the `sync-usages` practice
+      1. Call `sync_logic`(`force`, `group`, `dep`) per the `sync-usages` practice
       2. If `sync_logic` propagates a config-load error (FileNotFoundError, KeyError,
          ValueError, or yaml.YAMLError raised by load_project_config) → raise
          click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
          practice for the YAMLError catch
       3. Return exit_code via ctx.exit
 
-      Use the `click` practice for the subcommand and the --force/-f flag.
+      Use the `click` practice for the subcommand and the --force/-f flag. The `group`/`dep`
+      filters are read from the group context (declared on the group, not redeclared here).
     "status(info: bool = False, group: str | None = None, dep: str | None = None) -> exit_code: int": |
       Subcommand goga usages status: check synchronized cell-level usages against the current
       remote git state. Thin wrapper — delegates to `status_logic` and renders the result.
 
       `info`: --info/-i flag (click is_flag, default False) — expand each dep into its per-node
         file/folder entry tree with per-node status markers.
-      `group`: --group/-g option (default None) — limit the check to one group.
-      `dep`: --dep/-d option (default None) — limit the check to one dep name.
+      `group`: sourced from the group context — the
+        --group/-g value declared on the `usages` group callback.
+      `dep`: sourced from the group context — the
+        --dep/-d value declared on the `usages` group callback.
       `exit_code`: propagated from the report produced by `status_logic` (0 success, 1 drift/error).
 
       CLI options:
       - --info / -i: expand each dep into its per-node file/folder entry tree with per-node status markers
-      - --group / -g: limit the check to one group
-      - --dep / -d: limit the check to one dep name (across all groups when --group is absent)
 
       Algorithm:
-      1. Call `status_logic`(`group`, `dep`) per the `usages-status` practice → UsageStatusReport
+      1. Call `status_logic`(`group`, `dep`) — `group`/`dep` are read from the group context —
+         per the `usages-status` practice → UsageStatusReport
       2. If `status_logic` propagates a config-load error (FileNotFoundError, KeyError,
          ValueError, or yaml.YAMLError raised by load_project_config) → raise
          click.ClickException(str(exc)) for a clean CLI error (exit 1), per the `yaml`
@@ -91,7 +101,8 @@ Annotations: |
       3. Render the report via `render_status_report`(report, `info`)
       4. Return exit_code via ctx.exit
 
-      Use the `click` practice for the subcommand and the --info/-i, --group/-g, --dep/-d options.
+      Use the `click` practice for the subcommand and the --info/-i option. The `group`/`dep`
+      filters are read from the group context (declared on the group, not on status).
 
 "render_status_report(report: UsageStatusReport, info: bool)":
   location: usages.py

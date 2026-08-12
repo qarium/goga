@@ -1,5 +1,10 @@
+Imports:
+  - Types:
+      - resolve_project_name
+    From: goga/config
+
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
   yaml: |
     Use yaml.dump() to generate .goga/config.yml.
@@ -27,12 +32,12 @@ Usages:
     - codex: CODEX_MODEL
 
 Annotations: |
-  Practice `conventions` supports:
-  - codebase navigation and development
-  - REPL-based development workflow
-  - debugging and testing
-  - test infrastructure setup
-  - understanding project-wide development and testing conventions
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
   Use `click` for interactive user input (Questionnaire).
   Use `yaml` for YAML file generation (FileGenerator).
   Use `lang_conventions` to download the base convention for the selected language (Questionnaire, FileGenerator).
@@ -53,29 +58,37 @@ Annotations: |
     "goga_config -> GogaConfigAnswers": |
       Responses for generating .goga/config.yml.
 
-"GogaConfigAnswers(language: str, agent: str, image: str, pipeline_agent: str, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None)":
+"GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None, dockerfile_base_image: str | None)":
   location: answers.py
   annotations: |
     Input data for .goga/config.yml and Dockerfile generation.
 
     `language`: selected project language
-    `agent`: selected AI executor (used as build.task_executor.agent)
-    `image`: Docker image (drives the top-level image field, NOT build.image)
-    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command
+    `agent`: selected AI executor (used as build.task_executor.agent); None when the user declines to configure a build agent
+    `image`: Docker image (drives the top-level image field, NOT build.image). With a
+      Dockerfile it is the NAME of the image built from it (the docker build -t tag);
+      without a Dockerfile it is the pre-built image to pull.
+    `pipeline_agent`: AI executor used as pipeline.agent / afm client.command; None when the user declines to configure a pipeline agent
     `pipeline_env`: environment variables for the pipeline block
     `env`: environment variables for task_executor
     `codemanifest_usages`: codemanifest practice mappings
     `codemanifest_annotations`: codemanifest annotation block
     `dockerfile_path`: path to custom Dockerfile (None to skip Dockerfile creation)
+    `dockerfile_base_image`: base image for the Dockerfile FROM line; set only when
+      dockerfile_path is set, None otherwise. Never emitted to config.yml.
   properties:
     "language -> str": |
       Selected project language.
-    "agent -> str": |
-      Selected AI executor. Used as build.task_executor.agent.
     "image -> str": |
-      Docker image. Drives the top-level image field (NOT build.image).
-    "pipeline_agent -> str": |
-      AI executor used as pipeline.agent (afm client.command inside the container).
+      Docker image. Drives the top-level image field (NOT build.image). With a Dockerfile
+      it is the name/tag of the image built from it; without a Dockerfile it is the
+      pre-built image to pull.
+    "agent -> str | None": |
+      Selected AI executor. Used as build.task_executor.agent. None — no build agent
+      configured (the agent key is omitted from the generated config).
+    "pipeline_agent -> str | None": |
+      AI executor used as pipeline.agent (afm client.command inside the container). None
+      — no pipeline agent configured. Does NOT inherit the build agent.
     "pipeline_env -> dict | None": |
       Environment variables for the pipeline block. None — omit pipeline.env.
     "env -> dict | None": |
@@ -86,6 +99,10 @@ Annotations: |
       Codemanifest annotation block.
     "dockerfile_path -> str | None": |
       Path to custom Dockerfile. None — skip Dockerfile creation.
+    "dockerfile_base_image -> str | None": |
+      Base image for the Dockerfile FROM line. Set only when dockerfile_path is set
+      (None otherwise). Consumed solely by Dockerfile generation; never emitted to
+      config.yml.
 
 "Questionnaire()":
   location: questionnaire.py
@@ -106,7 +123,13 @@ Annotations: |
       Display "Collecting .goga/config.yml settings...".
       Orchestrate the per-field ask_* methods in survey order and assemble GogaConfigAnswers:
       ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
-      → ask_agent → ask_image → ask_dockerfile_path → ask_env → ask_pipeline_agent → ask_pipeline_env.
+      → ask_agent → ask_dockerfile_path → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
+      The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
+      ask_base_image (FROM) is surveyed, then `resolve_project_name` is
+      called — if it returns a name the proposed default is <name>:latest, if it returns None no
+      default is set — then ask_image_name(language=None, default=<that value>) is surveyed (built
+      image tag), and dockerfile_base_image is set; otherwise ask_image (pre-built image to pull) is
+      surveyed and dockerfile_base_image is None.
       Each per-field method emits a section header (---) and explanatory text.
     "ask_language() -> language: str": |
       Select from (python, golang, kotlin, swift, javascript).
@@ -122,23 +145,43 @@ Annotations: |
     "ask_codemanifest_annotations(prefill: str | None = None) -> codemanifest_annotations: str | None": |
       Optional custom annotations appended to `prefill` (the base convention annotations).
       Returns None when neither prefill nor input exists.
-    "ask_agent() -> agent: str": |
-      Select from (claude, codex). Used as build.task_executor.agent.
-    "ask_image(language: str) -> image: str": |
-      Display hints from `image_defaults` for `language`; default to the last entry; accept free-form input.
-      Captures the top-level image field (NOT build.image).
+    "ask_agent() -> agent: str | None": |
+      Confirm-gated (default No). On decline: return None (no build agent configured).
+      On acceptance: select from (claude, codex). Used as build.task_executor.agent.
     "ask_dockerfile_path() -> dockerfile_path: str | None": |
       Optional; prompt to create a custom Dockerfile.
       On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
-    "ask_env(agent: str) -> env: dict | None": |
+    "ask_image(language: str) -> image: str": |
+      Survey the pre-built Docker image to PULL (no-Dockerfile branch). Display hints from
+      `image_defaults` for `language`; default to the last entry; accept free-form input.
+      Captures the top-level image field (NOT build.image).
+    "ask_base_image(language: str) -> base_image: str": |
+      Survey the BASE image for the Dockerfile FROM line (Dockerfile branch). Display hints
+      from `image_defaults` for `language`; default to the last entry; accept free-form input.
+      The result populates dockerfile_base_image and is never emitted to config.yml.
+    "ask_image_name(language: str | None = None, default: str | None = None) -> image: str": |
+      Survey the NAME (tag) for the image built from the Dockerfile (Dockerfile branch), since
+      goga build runs docker build -t <image>. Free-form input. When `language` is provided
+      (not None): default `{language}-image:latest` (used by consumers that pass
+      `language`). When `language` is None: offer `default` as the default; when
+      `default` is None → no default is offered and the `image` field is required. Captures the
+      top-level image field (NOT build.image).
+
+      Requirements:
+      - The offered default depends on `language`/`default` as above; a None default makes the
+        `image` field required (no suggestion).
+    "ask_env(agent: str | None) -> env: dict | None": |
       Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env.
+      then optionally collect arbitrary key-value pairs. Drives build.task_executor.env. A None `agent`
+      skips the suggested-keys block and only offers arbitrary key-value pairs.
       Returns None when nothing is collected.
-    "ask_pipeline_agent(agent: str) -> pipeline_agent: str": |
-      Select from (claude, codex); default = `agent`. Drives pipeline.agent.
-    "ask_pipeline_env(pipeline_agent: str) -> pipeline_env: dict | None": |
+    "ask_pipeline_agent() -> pipeline_agent: str | None": |
+      Confirm-gated (default No). On decline: return None (no pipeline agent configured). Does NOT
+      inherit the build agent. On acceptance: select from (claude, codex). Drives pipeline.agent.
+    "ask_pipeline_env(pipeline_agent: str | None) -> pipeline_env: dict | None": |
       Propose env keys from `agent_env_defaults` for `pipeline_agent`; collect values for each,
-      then optionally collect arbitrary key-value pairs. Drives pipeline.env.
+      then optionally collect arbitrary key-value pairs. Drives pipeline.env. A None `pipeline_agent`
+      skips the suggested-keys block and only offers arbitrary key-value pairs.
       Returns None when nothing is collected.
 
 "FileGenerator()":
@@ -149,7 +192,8 @@ Annotations: |
   methods:
     "generate(answers: InitAnswers) -> _:None": |
       Generate all project files from the provided answers.
-      If dockerfile_path is set — create a Dockerfile with FROM {image}.
+      If dockerfile_path is set — create a Dockerfile with FROM {dockerfile_base_image}
+      (the baseline); the top-level image field holds the name of the image built from it.
       Delegate to generate_goga_config() with answers.goga_config.
     "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
       Algorithm:
@@ -165,18 +209,21 @@ Annotations: |
       - language → language (top-level)
       - image → image (top-level)
       - dockerfile_path → dockerfile (top-level, omit when None)
-      - agent → build.task_executor.agent
+      - agent → build.task_executor.agent (omit when None)
       - env → build.task_executor.env (omit when None or empty)
-      - pipeline_agent → pipeline.agent
+      - pipeline_agent → pipeline.agent (omit when None)
       - pipeline_env → pipeline.env (omit when None or empty)
       - codemanifest_usages → codemanifest.usages (omit when None or empty)
       - codemanifest_annotations → codemanifest.annotations (omit when None)
 
       Requirements:
       - Emit image as a top-level field
-      - Always emit the pipeline: block (even when pipeline_env is omitted) —
-        the init-config must be self-contained so the pipeline command works
-        out-of-the-box without manual config edits
+      - Emit the build: block only when it carries content (a non-None agent
+        and/or a non-empty env); an empty build block adds no value and is omitted
+      - Emit the pipeline: block only when it carries content (a non-None
+        pipeline_agent and/or a non-empty pipeline_env); by default no agent is
+        configured, so a freshly-initialized project with no agent/env omits
+        pipeline entirely
       - Field order in the generated YAML: language, image, dockerfile, build, pipeline, codemanifest
 
 "InitLogic(questionnaire: Questionnaire, generator: FileGenerator)":

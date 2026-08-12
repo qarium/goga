@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import click
 from click.testing import CliRunner
+from goga.cli import app
 from goga.commands import lint
 from goga.commands.lint import lint as lint_cmd
 
@@ -72,6 +73,15 @@ def _write_codemanifest(directory, content: str) -> None:
     (directory / "CODEMANIFEST").write_text(content, encoding="utf-8")
 
 
+MINIMAL_VALID_CODEMANIFEST = 'Usages: {}\nAnnotations: ""\n'
+
+
+def _write_goga_config(directory, content: str) -> None:
+    goga_dir = directory / ".goga"
+    goga_dir.mkdir(exist_ok=True)
+    (goga_dir / "config.yml").write_text(content, encoding="utf-8")
+
+
 def _setup_valid_project(tmp_path) -> str:
     project_dir = tmp_path / "valid_project"
     project_dir.mkdir()
@@ -95,6 +105,20 @@ class TestFacadeAvailability:
 
     def test_lint_is_click_command(self) -> None:
         assert isinstance(lint_cmd, click.Command)
+
+    def test_lint_imports_load_project_config(self) -> None:
+        """lint imports load_project_config from goga.config (NEW lint -> config edge).
+
+        The module is fetched via sys.modules because the package ``__init__``
+        re-exports ``lint`` (the function), shadowing the submodule name.
+        """
+        import sys
+
+        from goga.config import load_project_config
+
+        lint_module = sys.modules["goga.commands.lint.lint"]
+        assert hasattr(lint_module, "load_project_config")
+        assert lint_module.load_project_config is load_project_config
 
 
 class TestApiShape:
@@ -287,3 +311,81 @@ class TestExitCodes:
         result = _run_lint(project_dir)
 
         assert result.exit_code == 0
+
+
+class TestIgnoreDerivation:
+    def test_lint_derives_ignore_from_config(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 0
+        assert ".venv" not in result.output
+
+    def test_lint_runs_unfiltered_when_config_absent(self, tmp_path) -> None:
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        assert result.exit_code == 1
+        # The missing-config FileNotFoundError must be swallowed by the tolerant
+        # try/except: lint runs to its summary and exits cleanly via ctx.exit
+        # (SystemExit). If the exception escaped, CliRunner would record the
+        # FileNotFoundError as result.exception and print no summary.
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
+
+    def test_lint_unfiltered_when_lint_section_absent(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\n")
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        # Config parses (lint section absent -> cfg.lint is None -> ignore=None
+        # direct assignment), so lint runs unfiltered to its summary and exits
+        # cleanly via ctx.exit (SystemExit).
+        assert result.exit_code == 1
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
+
+    def test_lint_treats_invalid_config_as_unfiltered(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python: [unclosed")
+        _write_codemanifest(tmp_path, INVALID_CODEMANIFEST)
+
+        result = _run_lint(str(tmp_path))
+
+        # The yaml.YAMLError must be swallowed by the tolerant try/except: lint
+        # runs unfiltered, the invalid root CODEMANIFEST yields its errors, and
+        # the command exits cleanly via ctx.exit (SystemExit) — never surfacing
+        # the YAMLError. Exit code is 1 because the root cell has 2 errors.
+        assert result.exit_code == 1
+        assert "goga lint" in result.output
+        assert isinstance(result.exception, SystemExit)
+
+
+class TestCliAppIntegration:
+    """Feature B wired end-to-end through the full ``goga`` CLI app.
+
+    Task 4's ``TestIgnoreDerivation`` exercises the ``lint`` command *function*
+    directly (``CliRunner().invoke(lint_cmd, ...)``). This class drives the real
+    CLI entrypoint (``CliRunner().invoke(app, ["lint", ...])``) to verify the
+    config -> ast -> lint chain is wired correctly through Click's group
+    dispatch and the ``app`` facade.
+    """
+
+    def test_lint_app_end_to_end_ignores_directory(self, tmp_path) -> None:
+        _write_goga_config(tmp_path, "language: python\nlint:\n  ignore:\n    - .venv/\n")
+        _write_codemanifest(tmp_path, MINIMAL_VALID_CODEMANIFEST)
+        venv_dir = tmp_path / ".venv"
+        venv_dir.mkdir()
+        _write_codemanifest(venv_dir, INVALID_CODEMANIFEST)
+
+        runner = CliRunner()
+        result = runner.invoke(app, ["lint", str(tmp_path)])
+
+        assert result.exit_code == 0
+        assert ".venv" not in result.output

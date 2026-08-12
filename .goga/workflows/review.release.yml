@@ -1,0 +1,34 @@
+prompt: |
+  Answer (feedbacks, proposes, questions and etc) in Russian language.
+
+stages:
+  code-review:
+    approve: dialog
+  contracts-review:
+    approve: dialog
+  documentation-review:
+    approve: dialog
+  testing:
+    approve: dialog
+    prompt: |
+      Run and fix tests after review.
+  
+      Requirements:
+      - Create venv outside of project, create it in /opt/goga
+
+extend:
+  update-docs:
+    communication: true
+    before:
+      - discovery-scope
+    skills:
+      - goga-tool
+    prompt: |
+      ARGUMENTS="mkdocs"
+
+      Requirements:
+      - Commit changes after update docs
+      - Ask the user if the decision to create a new documentation section or change structure is ambiguous
+
+      Constraints:
+      - Capture only the current state of the product, do not capture changes in the changelog format

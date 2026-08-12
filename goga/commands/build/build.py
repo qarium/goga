@@ -280,7 +280,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     except (FileNotFoundError, KeyError, ValueError, yaml.YAMLError) as exc:
         raise click.ClickException(str(exc)) from exc
 
-    # Step 2b — host-side None-guard: the build section is optional at the
+    # Step 2.1 — host-side None-guard: the build section is optional at the
     # loader level (load_project_config returns config.build=None when absent), but
     # `goga build` cannot run without it. Raise a clean ClickException BEFORE
     # any config.build.* access and BEFORE the secret env-file write (step 10),
@@ -289,6 +289,13 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # run, no secret env-file leak on disk).
     if config.build is None:
         raise click.ClickException("build section is required in .goga/config.yml to run 'goga build'")
+
+    # Step 2.2 — agent None-guard: build.task_executor.agent is optional at the
+    # loader level (None when absent/empty), but `goga build` resolves it into
+    # the in-container wrapper path and cannot run without it. Raise a clean
+    # ClickException BEFORE any agent access to avoid a downstream TypeError.
+    if config.build.task_executor.agent is None:
+        raise click.ClickException("build.task_executor.agent is required in .goga/config.yml to run 'goga build'")
 
     cli_flags = {
         "worktree": worktree,

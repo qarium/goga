@@ -7,12 +7,16 @@ Imports:
       - TaskExecutorConfig
       - CodemanifestConfig
       - DepConfig
+      - LintConfig
     From: goga/config/project
   - Types:
       - HomeConfig
       - DockerArgsConfig
       - load_home_config
     From: goga/config/home
+  - Types:
+      - resolve_project_name
+    From: goga/config/git
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -25,10 +29,12 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell is a re-export facade: it embeds (re-exports) all configuration
-  types from goga/config/project (project configuration) and goga/config/home
-  (home/docker configuration) so consumers import a single entry point
-  (From: goga/config). It owns no behavior — all logic lives in the child cells.
+  This cell is a re-export facade: it embeds (re-exports) all configuration types
+  from goga/config/project (project configuration), goga/config/home
+  (home/docker configuration), and goga/config/git (git-environment
+  introspection — `resolve_project_name`) so consumers import a single entry
+  point (From: goga/config). It owns no behavior — all logic lives in the child
+  cells.
 
 ---
 
@@ -39,15 +45,18 @@ Annotations: |
 ->TaskExecutorConfig: {}
 ->CodemanifestConfig: {}
 ->DepConfig: {}
+->LintConfig: {}
 ->HomeConfig: {}
 ->DockerArgsConfig: {}
 ->load_home_config: {}
+->resolve_project_name: {}
 
 ---
 
 Author: Goga
 CreatedAt: 24/07/26
 Description: |
-  Re-export facade — embeds project (goga/config/project) and home
-  (goga/config/home) configuration types so consumers import a single entry
-  point. Owns no behavior.
+  Re-export facade — embeds project (goga/config/project), home
+  (goga/config/home), and git-introspection (goga/config/git —
+  `resolve_project_name`) configuration types so consumers import a single
+  entry point. Owns no behavior.

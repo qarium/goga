@@ -4,27 +4,54 @@
 
 # Goga
 
-A new semantic layer between specification and implementation based on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification — helping humans and AI agents reason about project structure at a higher level of abstraction.
+An open platform for building AI-SDLC. Declare the development process as pipelines, hire any CLI agent per stage, extend capabilities with tools. A full Specification-Driven Development (SDD) cycle ships in the box — and through tools and workflows the cycle can be extended, reshaped, or replaced with any other methodology.
 
-A full-fledged **Specification-Driven Development (SDD)** framework: describe cell contracts with a structured YAML DSL, validate them, extract contracts from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and accept — under the hood.
+**Three pillars**
+
+<table>
+  <tr>
+    <td width="33.33%" align="left" valign="top">
+      <h3>⚙ Pipelines</h3>
+      <p>A declarative scenario of stages an agent walks through to deliver work, with <code>communication</code> checkpoints that switch between autonomous and human-in-the-loop execution. Any installed agent (Claude, Codex, Qwen, OpenCode, others) can be hired per stage.</p>
+    </td>
+    <td width="33.33%" align="left" valign="top">
+      <h3>🧩 Tools</h3>
+      <p>Pluggable capability packages. Any open-source tool or in-house methodology is packaged as <code>goga-tool-*</code> and lands in a shared catalog of skills and pipelines, all addressed uniformly.</p>
+    </td>
+    <td width="33.33%" align="left" valign="top">
+      <h3>📋 SDD</h3>
+      <p>The reference cycle shipped in the box: <a href="https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md"><strong>CODEMANIFEST</strong></a> contracts as the source of truth, an agent workflow from <code>propose</code> to <code>accept</code>. Use it as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.</p>
+    </td>
+  </tr>
+</table>
+
+AI development without a framework collapses into uncoordinated agent runs — the cycle cannot be reproduced, there are no managed approval checkpoints, and the methodology is locked into a single tool. goga is the framework: the process is declared, agents are interchangeable, methodologies are composable.
 
 **Languages**
 
-<img src="docs/assets/brands/python.svg" alt="Python" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/javascript.svg" alt="JavaScript" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40">
+<table>
+  <tr>
+    <td align="center"><sub>Python</sub><br><img src="docs/assets/brands/python.svg" alt="Python" width="40" height="40"></td>
+    <td align="center"><sub>JavaScript</sub><br><img src="docs/assets/brands/javascript.svg" alt="JavaScript" width="40" height="40"></td>
+    <td align="center"><sub>Kotlin</sub><br><img src="docs/assets/brands/kotlin.svg" alt="Kotlin" width="40" height="40"></td>
+    <td align="center"><sub>Swift</sub><br><img src="docs/assets/brands/swift.svg" alt="Swift" width="40" height="40"></td>
+    <td align="center"><sub>Go</sub><br><img src="docs/assets/brands/go.svg" alt="Go" width="40" height="40"></td>
+  </tr>
+</table>
 
 **Agents**
 
-<img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40">&nbsp;&nbsp;&nbsp;&nbsp;
-<img src="docs/assets/brands/qwen.svg" alt="Qwen" width="40" height="40">
+<table>
+  <tr>
+    <td align="center"><sub>Claude</sub><br><img src="docs/assets/brands/claude.svg" alt="Claude" width="40" height="40"></td>
+    <td align="center"><sub>Codex</sub><br><img src="docs/assets/brands/openai.svg" alt="Codex" width="40" height="40"></td>
+    <td align="center"><sub>OpenCode</sub><br><img src="docs/assets/brands/opencode.svg" alt="OpenCode" width="40" height="40"></td>
+    <td align="center"><sub>Cursor</sub><br><img src="docs/assets/brands/cursor.svg" alt="Cursor" width="40" height="40"></td>
+    <td align="center"><sub>Qwen</sub><br><img src="docs/assets/brands/qwen.svg" alt="Qwen" width="40" height="40"></td>
+  </tr>
+</table>
 
-[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Workflow](https://qarium.github.io/goga/workflow/) · [Pipelines](https://qarium.github.io/goga/pipelines/) · [Configuration](https://qarium.github.io/goga/configuration/)
+[Documentation](https://qarium.github.io/goga/) · [Getting Started](https://qarium.github.io/goga/getting-started/) · [Pipelines](https://qarium.github.io/goga/pipelines/) · [Tools](https://qarium.github.io/goga/tools/) · [Configuration](https://qarium.github.io/goga/configuration/)
 
 </div>
 
@@ -56,7 +83,7 @@ goga upgrade
 
 ## Quick start
 
-Start a new project from scratch and build your first feature end-to-end.
+Start a new project from scratch and ship your first piece of work end-to-end.
 
 **1. Initialize the project** — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:
 
@@ -66,23 +93,18 @@ goga init
 
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
-**3. Ship the first feature** — run the full SDD lifecycle in one command inside an isolated container, with agent credentials forwarded automatically:
+**3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. Credentials for `claude`, `codex`, and `opencode` are detected on the host and forwarded into the container automatically:
 
 ```bash
-goga pipeline feature
+goga pipeline feature       # the full SDD cycle: propose → … → accept
+goga pipeline bugfix        # root-cause analysis and defect resolution
+goga pipeline patch         # refactoring or minimal change with a plan
+goga pipeline review        # scoped review of code, contracts, docs, then lint/format/tests
 ```
 
-The `feature` pipeline walks all eleven stages — propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result — pausing at every `communication` stage to ask for your input. Three more shipped pipelines cover other lifecycles:
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, stage skipping, new stages).
 
-```bash
-goga pipeline bugfix       # root-cause analysis and defect resolution
-goga pipeline patch        # refactoring or minimal change with a plan
-goga pipeline review       # scoped review of code, contracts, docs, then lint/format/tests
-```
-
-Each pipeline is a flat YAML file; layer project-specific overrides on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file.
-
-**4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running the whole cycle automatically, formulate the task and step through each command manually:
+**4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
 ```text
 /goga:propose <what you want to create>
@@ -92,7 +114,7 @@ Each pipeline is a flat YAML file; layer project-specific overrides on top via a
 propose → brainstorm → apply → design → plan → goga build → change → accept
 ```
 
-The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/cli/connect/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Reviews are optional at every stage. For smaller changes, use one of the shortcut paths described in the [Workflow](https://qarium.github.io/goga/workflow/) section.
+The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](https://qarium.github.io/goga/cli/connect/)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Reviews are optional at every stage.
 
 **5. Visualize the result** — once `apply` has produced cells on disk, inspect the architecture:
 
@@ -100,7 +122,253 @@ The slash-command form `/goga:<command>` works in agents that consume the goga c
 goga schema | goga tool viewer
 ```
 
-## What is a cell?
+## Pipelines
+
+A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.
+
+A pipeline-file is a flat YAML document with a header and a list of stages:
+
+```yaml
+name: Feature
+description: End-to-end feature development
+---
+
+- name: propose
+  title: "Create the task from a user propose"
+  communication: true
+  prompt: |
+    Save the task file as `<git branch --show-current>.md`
+  skills:
+    - goga-propose
+
+- name: brainstorm
+  title: "Task-based architecture development"
+  communication: true
+  skills:
+    - goga-brainstorm
+
+- name: accept-result
+  title: "Contracts & coverage audit"
+  communication: true
+  skills:
+    - goga-accept
+```
+
+Four definitions ship with goga:
+
+| Pipeline  | Purpose                                              |
+|-----------|------------------------------------------------------|
+| `feature` | End-to-end feature implementation lifecycle          |
+| `bugfix`  | Root-cause analysis and resolution for a defect      |
+| `patch`   | Refactoring or minimal change with a formalized plan |
+| `review`  | Scoped review of code, contracts, docs, then lint/format/tests |
+
+Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
+
+```bash
+goga pipeline feature          # run the full cycle
+goga pipeline feature -p 4     # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline feature --clean  # wipe persistent state for a fresh run
+```
+
+A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
+
+### Workflows — configure and extend a pipeline
+
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Five levers, each with a short example.
+
+**`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
+
+```yaml
+stages:
+  propose:
+    agent: codex
+  brainstorm:
+    agent: codex
+  architecture-review:
+    agent: claude
+  plan-review:
+    agent: claude
+```
+
+**`loop` — repeat a stage N times as chained copies.** Multiple review passes with increasing depth:
+
+```yaml
+stages:
+  plan-review:
+    loop: 2       # → plan-review-1 → plan-review-2, each depending on the previous
+```
+
+**`approve` — auto-approve a stage.** Three modes (`auto` / `plan` / `dialog`) drive two independent effects — suppression of `interactive` and emission of `auto_approve`:
+
+```yaml
+stages:
+  accept-result:
+    approve: auto   # the stage will not prompt the user and will self-approve
+```
+
+**`skills` — add skills to a stage.** Merged with the pipeline stage's own skills (pipeline-first, deduplicated by value):
+
+```yaml
+stages:
+  brainstorm:
+    skills: [acme-explore, acme-propose]
+```
+
+**`prompt` — context, not command.** To make a workflow `prompt` carry actual requirements, use labeled blocks (`Requirements:` / `Constraints:`); free-form prose is interpreted as background:
+
+```yaml
+stages:
+  propose:
+    prompt: |
+      Task formalization process.
+
+      Requirements:
+      - Examine all link connections between cells carefully.
+      - Do not write code examples in the task.
+
+      Constraints:
+      - Do not build architecture in the task.
+```
+
+Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning. The full model is in the [Workflows](https://qarium.github.io/goga/pipelines/workflows/) documentation.
+
+Run with a workflow:
+
+```bash
+goga pipeline feature                   # auto-match: .goga/workflows/feature.yml if present
+goga pipeline feature --workflow custom # explicit
+goga pipeline feature --no-workflow     # disable workflow application entirely
+```
+
+Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
+
+## Tools
+
+A **tool** is a pluggable capability package. Any open-source tool or in-house methodology is packaged as a Python package under the `goga_tool_` prefix and becomes part of the goga ecosystem: its skills land in a shared catalog at `~/.goga/skills/`, its pipeline-files install at `~/.goga/pipelines/` with a namespace prefix, and everything lives side by side, addressed uniformly.
+
+### Installing a tool
+
+Tools are distributed as Python packages under the `goga-tool-` prefix. `goga install` targets the running interpreter's pip directly and re-syncs every already-connected agent after a successful pip — the new tool's skills and pipelines appear in `~/.goga/` and in each agent's symlink tree immediately:
+
+```bash
+# Install one tool, latest version
+goga install <tool-name>
+
+# Install a pinned or ranged version (four-form grammar)
+goga install <tool-name> --version 1.0.x
+
+# Install every tool declared under tools: in .goga/config.yml in one pip call
+goga install
+
+# Install a tool from a local source directory (no PyPI lookup)
+goga install --local <path>
+```
+
+After installing, connect the tool to your agent (only required the first time, or to connect a new agent — `goga install` re-syncs already-connected agents automatically):
+
+```bash
+goga connect <agent>
+```
+
+Pass `goga install --no-connect` to opt out of post-install activation (CI/Docker escape-hatch). Pass `goga install --sudo` for system-Python installs requiring root.
+
+See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty/local semantics.
+
+### Using a tool
+
+**Via CLI:**
+
+```bash
+goga tool <name> [args...]
+```
+
+**Via agent skill:**
+
+Invoke the `/goga:tool <name>` command (or `goga-tool` skill) in your agent session. The slash-command form works in `claude`, `opencode`, `qwen`; in Codex and cursor, invoke the skill directly — `goga-tool` (Codex: `$goga-tool`).
+
+### Built-in tools
+
+The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.
+
+| Tool | Description                                                                                             |
+|---|---------------------------------------------------------------------------------------------------------|
+| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells                                              |
+| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files                                      |
+| **scriba** | The writer — translates texts between languages and reviews texts against prompt-engineering principles |
+
+### Packaging your own tool
+
+Minimal layout, illustrated by a tool named `acme` that ships four subcommands — `explore`, `propose`, `apply`, `archive` — and one pipeline-file, with no top-level dispatcher skill:
+
+```
+goga_tool_acme/
+├── __init__.py            # main(argv: list[str]) — CLI entry point
+├── skills/
+│   ├── acme-explore/
+│   │   └── SKILL.md       # goga-tool-acme-explore
+│   ├── acme-propose/
+│   │   └── SKILL.md       # goga-tool-acme-propose
+│   ├── acme-apply/
+│   │   └── SKILL.md       # goga-tool-acme-apply
+│   └── acme-archive/
+│       └── SKILL.md       # goga-tool-acme-archive
+└── pipelines/
+    └── spec.yml           # → ~/.goga/pipelines/acme:spec.yml
+```
+
+A valid tool **must**:
+
+- Be named with the `goga_tool_` prefix (PyPI publication under `goga-tool-`)
+- Contain a `skills/` directory with at least one skill (each skill directory has a `SKILL.md`)
+- Expose a `main(argv: list[str])` function for CLI execution (optionally declaring a keyword-capable `ast` parameter to receive the project AST)
+- A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time, namespaced as `<tool>:<name>.yml`
+
+After publication, install into any project:
+
+```bash
+goga install acme
+goga pipeline acme:spec            # namespaced pipeline from the tool
+```
+
+The subcommands become ordinary agent skills — `goga-tool-acme-explore`, `goga-tool-acme-propose`, `goga-tool-acme-apply`, `goga-tool-acme-archive` — that can be invoked directly (`/goga:tool acme explore`, `goga-tool-acme-explore`, or `$goga-tool-acme-explore` in Codex) or merged into any stage of any pipeline via `skills:` in a workflow-file. The `acme` cycle `explore → propose → apply → archive` can be run end-to-end through `acme:spec`, woven stage-by-stage into the SDD cycle, or composed into a custom pipeline where `acme-propose` runs next to `goga-brainstorm`.
+
+The entry point may optionally declare a keyword-capable `ast` parameter to receive the project AST (loaded lazily from the current project root, only when declared). A tool that does not need the AST keeps the minimal `main(argv)` form and the AST is never built. See [`goga tool`](https://qarium.github.io/goga/cli/tool/) for the entry-point forms and opt-in rules.
+
+### Skill naming
+
+When `goga connect` installs a tool, the prefix `goga-tool-<tool-name>-` is added to every skill and the result lives centrally under `~/.goga/skills/`:
+
+| In package (`skills/`)       | After `goga connect` (`~/.goga/skills/`) |
+|------------------------------|------------------------------------------|
+| `mkdocs/SKILL.md`            | `goga-tool-mkdocs`                       |
+| `mkdocs-discovery/SKILL.md`  | `goga-tool-mkdocs-discovery`             |
+| `mkdocs-writer/SKILL.md`     | `goga-tool-mkdocs-writer`                |
+
+Rules:
+
+- Use lowercase with hyphens as separators
+- When a top-level dispatcher skill is wanted, name its directory exactly `<tool-name>` — it becomes the entry point invoked by `/goga:tool <name>` (or `goga-tool` / `$goga-tool` in agents without slash-command support). A tool that exposes only subcommands (like `acme` above) skips this directory.
+- Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
+
+### Pipeline namespacing
+
+Tool pipelines are namespaced on install. A file `<name>.yml` in a tool's `pipelines/` directory is copied into `~/.goga/pipelines/` **as `<tool>:<name>.yml`**, where `<tool>` is the package name with the `goga_tool_` prefix dropped and underscores normalized to hyphens (`goga_tool_hello_world` → `hello-world`):
+
+| Source                                    | Destination in `~/.goga/pipelines/`  | Addressable as                |
+|-------------------------------------------|--------------------------------------|-------------------------------|
+| Internal goga source (`goga/assets/pipelines/`) | `feature.yml` (un-prefixed)     | `goga pipeline feature`       |
+| Tool package `goga_tool_acme/pipelines/deploy.yml` | `acme:deploy.yml`             | `goga pipeline acme:deploy`   |
+
+Namespacing structurally prevents collisions — between a tool pipeline and an internal-source pipeline, and between two tools shipping the same name. See [Shipped Pipelines](https://qarium.github.io/goga/pipelines/shipped/) for the full installation algorithm.
+
+Read the full Tools model in the [Tools](https://qarium.github.io/goga/tools/) section of the docs.
+
+## SDD — the reference cycle
+
+Out of the box, goga ships a full Specification-Driven Development (SDD) cycle. This is the three pillars in action: a pipeline-file describes the stages, tools supply skills, and CODEMANIFEST is the contract language used inside the stages. Use the cycle as is, extend it through workflows, or replace it with your own methodology built from tools and pipelines.
+
+### Contracts as the source of truth
 
 A **cell** is a directory that encapsulates a distinct responsibility domain with a well-defined API boundary. Each cell contains a `CODEMANIFEST` file describing its contract and an optional `.usages/` directory with documentation for API consumers.
 
@@ -112,7 +380,7 @@ cell/
 
 The rule of thumb is **one responsibility zone — one cell**. A new cell is born when logic can be decoupled, owns distinct data models, must be reused, or can be stated in a single phrase without "and".
 
-### Anatomy of a contract
+#### Anatomy of a contract
 
 A `CODEMANIFEST` consists of three sections separated by `---`:
 
@@ -128,7 +396,7 @@ Cells expose three kinds of types:
 
 Specialization is expressed with the `::` mutation syntax. The DSL stays language-agnostic — `BaseEntity::ExtendedEntity` may be realized through inheritance, composition, an adapter, or an interface implementation in the target language.
 
-### Example
+#### Example
 
 ```yaml
 Imports:
@@ -174,32 +442,71 @@ Description: |
   HTTP entry point cell.
 ```
 
-## Pipelines
+### Extending the cycle
 
-A **pipeline** is a named YAML file describing a sequence of stages an AI agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
+The SDD cycle is not monolithic — every part of it is extensible through the same workflow mechanisms described in the [Pipelines](#workflows--configure-and-extend-a-pipeline) section, applied to the shipped `feature` pipeline.
 
-Four definitions ship with goga:
+**Add an external skill to a stage.** `brainstorm` gains an extra skill from the `acme` tool alongside `goga-brainstorm`:
 
-| Pipeline  | Purpose                                              |
-|-----------|------------------------------------------------------|
-| `feature` | End-to-end feature implementation lifecycle          |
-| `bugfix`  | Root-cause analysis and resolution for a defect      |
-| `patch`   | Refactoring or minimal change with a formalized plan |
-| `review`  | Scoped review of code, contracts, docs, then lint/format/tests |
-
-```bash
-goga pipeline feature
+```yaml
+# .goga/workflows/feature.yml
+stages:
+  brainstorm:
+    skills: [acme-explore]
 ```
 
-A pipeline-file answers **what** the pipeline does. A [workflow](https://qarium.github.io/goga/pipelines/workflows/) file layers **how the same pipeline should behave in this project** — per-stage CLI agent, additional prompt context, skills overrides, loop expansion, stage skipping via `skip`, per-stage auto-approval via `approve`, and new stages via `extend` — without forking the base file.
+**Swap an SDD stage for an external equivalent.** On `architecture-review`, switch to `codex` and run `acme-explore` against the spec; on `apply-architecture`, loop twice and pair `goga-apply` with `acme-apply`:
 
-A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. Cap how many stages may run in parallel with `goga pipeline <name> -p N` (subject to the pipeline's dependency rules).
+```yaml
+stages:
+  architecture-review:
+    agent: codex
+    skills: [acme-explore]
+  apply-architecture:
+    loop: 2
+    skills: [acme-apply]
+```
 
-Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
+**Insert new stages from a tool's arsenal.** Between `propose` and `brainstorm`, run `acme-explore` to walk the spec; after `accept-result`, run `acme-archive` to archive the delivered spec snapshot:
+
+```yaml
+extend:
+  spec-explore:
+    after: [propose]
+    before: [brainstorm]
+    title: Spec exploration
+    skills: [acme-explore]
+    prompt: |
+      Walk the current spec before architecture work begins.
+  spec-archive:
+    after: [accept-result]
+    title: Archive spec
+    skills: [acme-archive]
+    prompt: |
+      Archive the delivered spec snapshot.
+```
+
+**Run a stage for two passes.** `plan-review` with `loop: 2` runs two sequential passes with increasing depth:
+
+```yaml
+stages:
+  plan-review:
+    loop: 2
+```
+
+**Finish autonomously.** `accept-result` with `approve: auto` suppresses the user prompt and self-approves:
+
+```yaml
+stages:
+  accept-result:
+    approve: auto
+```
+
+These are not special "SDD extension points" — they are exactly the same workflow mechanisms from the Pipelines section, applied to the SDD cycle. Combining tools and workflows, SDD can be compressed to `propose → accept` for prototypes or expanded with threat-modelling, security review, and compliance gates for production. Read the full functional model in the [Workflow](https://qarium.github.io/goga/pipelines/workflows/) section of the docs.
 
 ## Build
 
-A plan describes **what** to implement; `goga build` is the bridge that materializes the code. It hands the plan to a ralph-loop running inside an isolated Docker container — the loop reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
+`goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
 
 ```bash
 goga build docs/plans/<topic>.md
@@ -218,137 +525,6 @@ goga build plan.md -e ENV_VAR=value       # forward an extra env var into the co
 A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
 
 See [`goga build`](https://qarium.github.io/goga/cli/build/) for the full CLI reference, configuration, and exit codes.
-
-## Tools
-
-A **tool** is a separately distributed Python package that extends goga with a specialized capability — documentation generation, translation, review, visualization, anything you can encode as an agent skill. Each tool ships one or more agent skills, an optional CLI entry point, and an optional set of pipeline-files. Tools land in the exact interpreter that runs goga, so they work regardless of how goga was deployed (pipx venv, system Python, container).
-
-### Installing a tool
-
-Tools are distributed as Python packages under the `goga-tool-` prefix. `goga install` targets the running interpreter's pip directly and re-syncs every already-connected agent after a successful pip — the new tool's skills and pipelines appear in `~/.goga/` and in each agent's symlink tree immediately:
-
-```bash
-# Install one tool, latest version
-goga install <tool-name>
-
-# Install a pinned or ranged version (four-form grammar)
-goga install <tool-name> --version 1.0.x
-
-# Install every tool declared under tools: in .goga/config.yml in one pip call
-goga install
-```
-
-`goga install` branches on whether a tool name is given:
-
-- **Single mode** (`goga install <name>`) — install one tool, then activate. `--version` resolves through the four-form grammar (`1.0.x` → `~=1.0.0`, `1.x` → `~=1.0`, `1.0.1` → `==1.0.1`, `latest` → no specifier). The project config is ignored.
-- **Bulk mode** (`goga install`) — install every tool declared in the `tools:` section of `.goga/config.yml`, in a single pip invocation in YAML insertion order, then one activation pass. Declare versions inline:
-
-  ```yaml
-  # .goga/config.yml
-  tools:
-    one: latest        # → no specifier (pip selects newest)
-    two: 1.0.x            # → ~=1.0.0  (>=1.0.0,<1.1.0)
-    three: 1.x          # → ~=1.0    (>=1.0.0,<2.0.0)
-    four: 1.0.1             # → ==1.0.1  (exact pin)
-  ```
-
-- **Empty mode** (`goga install` with no `tools:` section) — no-op. Prints `Nothing to install`, exits 0; pip is not invoked.
-
-After installing, connect the tool to your agent (only required the first time, or to connect a new agent — `goga install` re-syncs already-connected agents automatically):
-
-```bash
-goga connect <agent>
-```
-
-Pass `goga install --no-connect` to opt out of post-install activation (CI/Docker escape-hatch where a transient activation failure must not fail the install). Pass `goga install --sudo` for system-Python installs requiring root — pip runs under `sudo --preserve-env=HOME`, activation never does.
-
-See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules, exit codes, and single/bulk/empty semantics.
-
-### Using a tool
-
-**Via CLI:**
-
-```bash
-goga tool <name> [args...]
-```
-
-**Via agent skill:**
-
-Invoke the `/goga:tool <name>` command (or `goga-tool` skill) in your agent session (the slash-command form works in `claude`, `opencode`, `qwen`; in Codex and cursor, invoke the dispatcher skill directly — `goga-tool`, or `$goga-tool` in Codex).
-
-### Tool package contract
-
-Each tool is a Python package with the `goga_tool_` prefix and the following layout:
-
-```
-goga_tool_<name>/
-├── __init__.py        # main(argv: list[str]) entry point for CLI
-├── skills/            # Required — at least one skill
-│   └── <skill>/
-│       └── SKILL.md   # Agent skill definition
-└── pipelines/         # Optional — flat *.yml pipeline-files
-    └── <name>.yml     # Installed by goga connect as <tool>:<name>.yml
-```
-
-A valid tool **must**:
-
-- Be named with the `goga_tool_` prefix
-- Contain a `skills/` directory with at least one skill (each skill directory has a `SKILL.md`)
-- Expose a `main(argv: list[str])` function for CLI execution
-- A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time
-
-The entry point may optionally declare a keyword-capable `ast` parameter to receive the project AST (loaded lazily from the current project root, only when declared). A tool that does not need the AST keeps the minimal `main(argv)` form and the AST is never built. See [`goga tool`](https://qarium.github.io/goga/cli/tool/) for the entry-point forms and opt-in rules.
-
-### Skill naming
-
-When `goga connect` installs a tool, the prefix `goga-tool-<tool-name>-` is added to every skill and the result lives centrally under `~/.goga/skills/`:
-
-| In package (`skills/`)       | After `goga connect` (`~/.goga/skills/`) |
-|------------------------------|------------------------------------------|
-| `mkdocs/SKILL.md`            | `goga-tool-mkdocs`                       |
-| `mkdocs-discovery/SKILL.md`  | `goga-tool-mkdocs-discovery`             |
-| `mkdocs-writer/SKILL.md`     | `goga-tool-mkdocs-writer`                |
-
-Rules:
-
-- Use lowercase with hyphens as separators
-- Name the main skill directory exactly `<tool-name>` — it becomes the dispatcher invoked by `/goga:tool <name>` (or `goga-tool` / `$goga-tool` in agents without slash-command support)
-- Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
-
-### Pipeline namespacing
-
-Tool pipelines are namespaced on install. A file `<name>.yml` in a tool's `pipelines/` directory is copied into `~/.goga/pipelines/` **as `<tool>:<name>.yml`**, where `<tool>` is the package name with the `goga_tool_` prefix dropped and underscores normalized to hyphens (`goga_tool_hello_world` → `hello-world`):
-
-| Source                                    | Destination in `~/.goga/pipelines/`  | Addressable as                |
-|-------------------------------------------|--------------------------------------|-------------------------------|
-| Internal goga source (`goga/assets/pipelines/`) | `feature.yml` (un-prefixed)     | `goga pipeline feature`       |
-| Tool package `goga_tool_acme/pipelines/deploy.yml` | `acme:deploy.yml`             | `goga pipeline acme:deploy`   |
-
-Namespacing structurally prevents collisions — between a tool pipeline and an internal-source pipeline, and between two tools shipping the same name. Only a residual conflict on the namespaced destination is possible, resolved with the same `--force-overwrite` semantics used for tool-skill installation. See [Shipped Pipelines](https://qarium.github.io/goga/pipelines/shipped/) for the full installation algorithm.
-
-### Built-in tools
-
-The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.
-
-| Tool | Description                                                                                             |
-|---|---------------------------------------------------------------------------------------------------------|
-| **viewer** | Interactive dependency graph viewer for CODEMANIFEST cells                                              |
-| **mkdocs** | Generate and maintain MkDocs documentation from CODEMANIFEST files                                      |
-| **scriba** | The writer — translates texts between languages and reviews texts against prompt-engineering principles |
-
-Read the full Tools model in the [Tools](https://qarium.github.io/goga/tools/) section of the docs.
-
-## Features
-
-- **Specification-Driven Development** — Contracts are the source of truth; the agent workflow produces architecture, code, and tests from them
-- **CODEMANIFEST DSL** — Describe cell contracts with types, routines, imports, usages, and annotations
-- **Agent workflow** — Built-in cycle: `propose → brainstorm → apply → design → plan → build → change → accept`, with review checkpoints and shortcut paths for smaller changes
-- **Validation** — AST-based linter with 21 document-level and 3 tree-level rules
-- **Language parsers** — Extract contracts from Python, Go, Kotlin, Swift, and JavaScript via tree-sitter
-- **CLI toolkit** — init, lint, build, schema, connect, install, upgrade, contract extraction, and pipeline commands
-- **Pipelines** — flat YAML pipeline-files describing a named sequence of stages an AI agent walks through (propose → … → accept). Ships four ready-to-use definitions — `feature`, `bugfix`, `patch`, `review` — installable via `goga connect` and overridable per-project via optional declarative [workflow](https://qarium.github.io/goga/pipelines/workflows/) files at `.goga/workflows/<name>.yml` that layer per-stage agent/prompt/skills overrides, loop-expansion, stage skipping via `skip`, per-stage auto-approval via `approve`, and new stages via `extend` on top of a pipeline at compile time (disable with `--no-workflow`); cap concurrency with `goga pipeline <name> -p N` (the maximum number of stages that may run in parallel, subject to the pipeline's dependency rules)
-- **Tools** — Extensible tool packages distributed as `goga-tool-*` Python modules that ship agent skills, an optional CLI entry point (`main(argv)`, with an opt-in `ast` injection of the project AST), and optional pipeline-files; install with `goga install <tool> [--version <form>]` (single) or `goga install` (bulk from the `tools:` section of `.goga/config.yml`, one pip call; empty section is a no-op), version forms `1.0.x` / `1.x` / `1.0.1` / `latest` resolve to PEP 440 specifiers, post-install activation re-syncs every connected agent unless `--no-connect` is set; skills install under a `goga-tool-<skill>` prefix into `~/.goga/skills/` (the skill whose directory matches the tool name becomes the `/goga:tool <name>` dispatcher), tool pipelines are namespaced on install as `<tool>:<name>.yml` into `~/.goga/pipelines/` so they are addressable as `goga pipeline <tool>:<name>` and never collide with internal pipelines
-- **Docker builds & pipelines** — Execute build plans via a ralph-loop and run pipelines in isolated containers, with automatic forwarding of AI-agent credentials (claude/codex/opencode), optional HTTP proxy / `--add-host` support for corporate environments, persistent pipeline state across runs, inline `roles` overrides that customize the three authorable agent prompts (planner/executor/reviewer, mapping to the planning/implementation/review stems) per pipeline-file — the `summary` prompt is always the shipped default, and an `--update` image refresh that builds from a project `dockerfile:` when declared (else pulls)
 
 ## Documentation
 

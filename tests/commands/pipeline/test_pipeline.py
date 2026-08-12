@@ -90,6 +90,16 @@ class TestPipelineContract:
         assert "--clean" in clean_param.opts
         assert clean_param.is_flag is True
 
+    def test_pipeline_workflow_option_has_short_alias(self) -> None:
+        """The `--workflow` option gains a short `-w` alias (str, optional)."""
+        workflow_param = next(
+            (p for p in pipeline.params if isinstance(p, click.Option) and p.name == "workflow"),
+            None,
+        )
+        assert workflow_param is not None
+        assert "-w" in workflow_param.opts
+        assert "--workflow" in workflow_param.opts
+
     def test_pipeline_callback_has_skip_parameter(self) -> None:
         """The decorated callback exposes a `skip` parameter."""
         parameters = inspect.signature(pipeline_cmd.callback).parameters
@@ -278,6 +288,30 @@ class TestPipelineLogic:
 
         assert kwargs_long is True
         assert kwargs_long == kwargs_short_c
+
+    def test_pipeline_workflow_short_alias_equivalent(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """`-w` and `--workflow` produce the same workflow=<name> dispatch value."""
+        config = _make_config()
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True, exist_ok=True)
+        (workflows_dir / "custom.yml").write_text("prompt: hi\n")
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            runner.invoke(pipeline, ["deploy", "--workflow", "custom"])
+            kwargs_long = mock_rpc.call_args.kwargs["workflow"]
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
+        ):
+            runner.invoke(pipeline, ["deploy", "-w", "custom"])
+            kwargs_short_w = mock_rpc.call_args.kwargs["workflow"]
+
+        assert kwargs_long == "custom"
+        assert kwargs_long == kwargs_short_w
 
     @pytest.mark.parametrize("exit_code", [0, 1, 2, 42, 127, 130])
     def test_pipeline_propagates_exit_code(self, exit_code: int) -> None:

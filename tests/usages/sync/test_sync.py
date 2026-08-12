@@ -45,6 +45,24 @@ _DEP_BLOCK_WITH_ROOT = (
     "usages:\n  libs:\n    click:\n      git: https://x/click.git\n      ref: main\n      root: docs\n"
 )
 
+# Two groups (``libs``, ``apps``), each with a ``common`` dep so a ``dep``-only
+# filter can be observed crossing group boundaries; ``libs`` also has ``click``
+# so a ``group`` filter narrows to one group's deps.
+_MULTI_GROUP_DEP_BLOCK = (
+    "usages:\n"
+    "  libs:\n"
+    "    click:\n"
+    "      git: https://x/click.git\n"
+    "      ref: main\n"
+    "    common:\n"
+    "      git: https://x/common.git\n"
+    "      ref: main\n"
+    "  apps:\n"
+    "    common:\n"
+    "      git: https://x/common.git\n"
+    "      ref: main\n"
+)
+
 
 # --- contract tests ---
 
@@ -59,12 +77,14 @@ class TestSyncContract:
         assert sync is facade_sync
 
     def test_signature(self):
-        """Signature is sync(force: bool = False) -> int."""
+        """Signature is sync(force: bool = False, group=None, dep=None) -> int."""
         sig = inspect.signature(sync)
         params = list(sig.parameters)
-        assert params == ["force"]
+        assert params == ["force", "group", "dep"]
         assert sig.parameters["force"].annotation is bool
         assert sig.parameters["force"].default is False
+        assert sig.parameters["group"].default is None
+        assert sig.parameters["dep"].default is None
         assert sig.return_annotation is int
 
 
@@ -245,3 +265,154 @@ class TestSyncLogic:
             Path(".goga/usages/libs/click"),
             "docs",
         )
+
+    def test_sync_group_filter_syncs_only_matching_group(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """``group="libs"`` syncs only the ``libs`` group (its ``click`` + ``common``)."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group="libs", dep=None)
+
+        assert result == 0
+        # only the two deps under ``libs`` are synced; ``apps/common`` is skipped
+        assert clone_mock.call_count == 2
+        clone_mock.assert_any_call("https://x/click.git", "main")
+        clone_mock.assert_any_call("https://x/common.git", "main")
+        deploy_targets = {call.args[1] for call in deploy_mock.call_args_list}
+        assert deploy_targets == {
+            Path(".goga/usages/libs/click"),
+            Path(".goga/usages/libs/common"),
+        }
+        assert Path(".goga/usages/apps/common") not in deploy_targets
+
+    def test_sync_dep_filter_applies_across_all_groups(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """``dep="common"`` (no group) syncs ``common`` in every group."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group=None, dep="common")
+
+        assert result == 0
+        # ``common`` in both ``libs`` and ``apps``; ``libs/click`` is skipped
+        assert clone_mock.call_count == 2
+        # every call targets the ``common`` dep's git URL (never ``click``)
+        assert {call.args for call in clone_mock.call_args_list} == {("https://x/common.git", "main")}
+        deploy_targets = {call.args[1] for call in deploy_mock.call_args_list}
+        assert deploy_targets == {
+            Path(".goga/usages/libs/common"),
+            Path(".goga/usages/apps/common"),
+        }
+        assert Path(".goga/usages/libs/click") not in deploy_targets
+
+    def test_sync_group_and_dep_filter_narrows_to_one_dep(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """``group="libs", dep="click"`` syncs exactly ``libs/click``."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group="libs", dep="click")
+
+        assert result == 0
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        deploy_mock.assert_called_once_with(
+            fake_repo,
+            Path(".goga/usages/libs/click"),
+            None,
+        )
+
+    def test_sync_filter_matching_nothing_returns_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+        """A filter matching no dep → exit 0 (nothing to sync, not an error)."""
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_sync_mod, "clone_repository") as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group="nope", dep=None)
+
+        assert result == 0
+        clone_mock.assert_not_called()
+        deploy_mock.assert_not_called()
+
+    def test_sync_force_with_filter_wipes_non_matching_then_reclones_only_matching(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """``force`` + filter: ``clean_usages_dir`` is unconditional (per the
+        ``sync`` CODEMANIFEST step 4), so previously-synced NON-matching targets
+        are removed from disk; only the matching deps are then re-cloned/deployed.
+
+        Pins the designed ``force``+filter composition (design Edge Case:
+        "``clean_usages_dir`` still wipes, but only matching deps are re-cloned")
+        against a future change that would silently scope the clean to the filter.
+        """
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        # Pre-existing synced trees for BOTH a matching and a non-matching dep.
+        (usages_root / "libs" / "click").mkdir(parents=True)
+        (usages_root / "libs" / "click" / "old.md").write_text("old")
+        (usages_root / "apps" / "common").mkdir(parents=True)  # NON-matching → wiped
+        (usages_root / "apps" / "common" / "old.md").write_text("old")
+        (usages_root / "cooks").mkdir(parents=True)  # preserved verbatim
+        (usages_root / "cooks" / "k.md").write_text("cook")
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group="libs", dep="click")
+
+        assert result == 0
+        # only the matching dep is re-cloned/deployed
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        deploy_mock.assert_called_once_with(fake_repo, Path(".goga/usages/libs/click"), None)
+        # clean ran for real: the non-matching ``apps/common`` tree is GONE
+        assert not (usages_root / "apps" / "common").exists()
+        assert not (usages_root / "apps").exists()
+        # cooks is preserved (clean never touches it)
+        assert (usages_root / "cooks" / "k.md").read_text() == "cook"

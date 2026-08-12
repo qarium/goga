@@ -7,15 +7,15 @@ import pytest
 import requests.exceptions
 import yaml
 from goga.config import load_project_config
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.generator import FileGenerator
 
 
 class TestContract:
     """Contract-level tests for FileGenerator."""
 
     def test_file_generator_importable_from_generator(self) -> None:
-        from goga.init.generator import FileGenerator
+        from goga.onboarding.generator import FileGenerator
 
         assert FileGenerator is not None
 
@@ -48,6 +48,7 @@ class TestLogic:
         codemanifest_usages: dict | None = None,
         codemanifest_annotations: str | None = None,
         dockerfile_path: str | None = None,
+        dockerfile_base_image: str | None = None,
     ) -> GogaConfigAnswers:
         return GogaConfigAnswers(
             language=language,
@@ -59,6 +60,7 @@ class TestLogic:
             codemanifest_usages=codemanifest_usages,
             codemanifest_annotations=codemanifest_annotations,
             dockerfile_path=dockerfile_path,
+            dockerfile_base_image=dockerfile_base_image,
         )
 
     def _make_gen(self, tmp_path: Path) -> FileGenerator:
@@ -88,7 +90,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         config_path = tmp_path / ".goga" / "config.yml"
@@ -153,7 +155,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response) as mock_get:
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response) as mock_get:
             gen.generate(answers)
 
         called_url = mock_get.call_args[0][0]
@@ -165,7 +167,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
         mock_get.assert_not_called()
@@ -184,7 +186,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
         mock_get.assert_not_called()
@@ -210,7 +212,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate(answers)
 
         conventions_path = tmp_path / ".goga" / "usages" / "conventions.md"
@@ -228,7 +230,10 @@ class TestLogic:
 
         gen = self._make_gen(tmp_path)
         with (
-            patch("goga.init.generator.requests.get", side_effect=requests.exceptions.ConnectionError("Network error")),
+            patch(
+                "goga.onboarding.generator.requests.get",
+                side_effect=requests.exceptions.ConnectionError("Network error"),
+            ),
             pytest.raises(RuntimeError, match="Failed to download convention"),
         ):
             gen.generate(answers)
@@ -252,10 +257,15 @@ class TestLogic:
     # --- New tests for Dockerfile generation ---
 
     def test_generator_creates_dockerfile(self, tmp_path: Path) -> None:
-        """When dockerfile_path is set, Dockerfile is created with FROM image."""
+        """When dockerfile_path is set, Dockerfile is created with FROM base image.
+
+        The FROM line uses `dockerfile_base_image` (the baseline), while the
+        top-level `image` field holds the name of the image built from it.
+        """
         config = self._make_config(
-            image="qarium/goga-python-3.14:1.0",
+            image="my-python-app:latest",
             dockerfile_path="Dockerfile",
+            dockerfile_base_image="qarium/goga-python-3.14:1.0",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -273,7 +283,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get"):
+        with patch("goga.onboarding.generator.requests.get"):
             gen.generate(answers)
 
         assert not (tmp_path / "Dockerfile").exists()
@@ -310,10 +320,11 @@ class TestLogic:
         assert "dockerfile" not in text
 
     def test_generator_dockerfile_custom_path(self, tmp_path: Path) -> None:
-        """Dockerfile can be created at a custom path."""
+        """Dockerfile can be created at a custom path; FROM uses the base image."""
         config = self._make_config(
-            image="qarium/goga-golang-1.26:1.0",
+            image="my-golang-app:latest",
             dockerfile_path="docker/Dockerfile",
+            dockerfile_base_image="qarium/goga-golang-1.26:1.0",
         )
         answers = InitAnswers(goga_config=config)
 
@@ -391,7 +402,7 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
@@ -417,14 +428,14 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert list(data.keys()) == ["language", "image", "dockerfile", "build", "pipeline", "codemanifest"]
 
-    def test_generate_goga_config_always_emits_pipeline_block(self, tmp_path: Path) -> None:
-        """pipeline: block is always emitted even when pipeline_env is omitted."""
+    def test_generate_goga_config_emits_pipeline_block_when_agent_set(self, tmp_path: Path) -> None:
+        """pipeline: block is emitted when a pipeline agent is set (even without env)."""
         config = self._make_config(pipeline_agent="claude", pipeline_env=None)
         gen = FileGenerator()
         gen._base_dir = tmp_path
@@ -435,6 +446,48 @@ class TestNewSchema:
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
         assert data["pipeline"]["agent"] == "claude"
         assert "env" not in data["pipeline"]
+
+    def test_generate_goga_config_omits_pipeline_when_no_agent_no_env(self, tmp_path: Path) -> None:
+        """No pipeline agent and no pipeline env → the pipeline block is omitted entirely."""
+        config = self._make_config(pipeline_agent=None, pipeline_env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "pipeline" not in data
+
+    def test_generate_goga_config_omits_build_when_no_agent_no_env(self, tmp_path: Path) -> None:
+        """No build agent and no build env → the build block is omitted entirely."""
+        config = self._make_config(agent=None, env=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert "build" not in data
+
+    def test_generate_goga_config_emits_build_env_without_agent(self, tmp_path: Path) -> None:
+        """Build env is emitted even when the build agent is None."""
+        config = self._make_config(agent=None, env={"API_KEY": "secret"})
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["build"]["task_executor"]["env"] == {"API_KEY": "secret"}
+        assert "agent" not in data["build"]["task_executor"]
+
+    def test_generate_goga_config_omits_agent_keys_when_none(self, tmp_path: Path) -> None:
+        """agent keys are omitted from both build and pipeline when None."""
+        config = self._make_config(agent="claude", pipeline_agent=None)
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        gen.generate_goga_config(config)
+
+        data = self._load_yaml(tmp_path / ".goga" / "config.yml")
+        assert data["build"]["task_executor"]["agent"] == "claude"
+        assert "pipeline" not in data
 
     def test_generate_goga_config_emits_image_at_top_level(self, tmp_path: Path) -> None:
         """image is emitted at the top level, never under build:."""
