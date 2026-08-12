@@ -4,19 +4,19 @@ import dataclasses
 from typing import get_type_hints
 
 import pytest
-from goga.init.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
 
 
 class TestContract:
     """Contract-level tests for InitAnswers and GogaConfigAnswers."""
 
     def test_goga_config_answers_importable_from_answers(self) -> None:
-        from goga.init.answers import GogaConfigAnswers
+        from goga.onboarding.answers import GogaConfigAnswers
 
         assert GogaConfigAnswers is not None
 
     def test_init_answers_importable_from_answers(self) -> None:
-        from goga.init.answers import InitAnswers
+        from goga.onboarding.answers import InitAnswers
 
         assert InitAnswers is not None
 

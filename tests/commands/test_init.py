@@ -5,10 +5,10 @@ from unittest import mock
 
 import click
 from click.testing import CliRunner
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
-from goga.init.logic import InitLogic
-from goga.init.questionnaire import Questionnaire
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.generator import FileGenerator
+from goga.onboarding.logic import InitLogic
+from goga.onboarding.questionnaire import Questionnaire
 
 _cmd_init_module = importlib.import_module("goga.commands.init.init")
 

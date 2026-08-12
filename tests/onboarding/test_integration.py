@@ -6,10 +6,10 @@ from unittest.mock import MagicMock, patch
 import click
 import requests.exceptions
 import yaml
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
-from goga.init.logic import InitLogic
-from goga.init.questionnaire import Questionnaire
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.generator import FileGenerator
+from goga.onboarding.logic import InitLogic
+from goga.onboarding.questionnaire import Questionnaire
 
 
 def _make_gen(tmp_path: Path) -> FileGenerator:
@@ -49,7 +49,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -82,7 +82,7 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
@@ -143,7 +143,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -170,7 +170,7 @@ class TestIntegration:
         gen = _make_gen(tmp_path)
         logic = InitLogic(mock_q, gen)
 
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             result = logic.run()
 
         assert result == 0
@@ -251,7 +251,7 @@ class TestIntegration:
         mock_response.status_code = 200
         mock_response.raise_for_status = MagicMock()
 
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             result = logic.run()
 
         assert result == 0
@@ -292,7 +292,7 @@ class TestIntegration:
         logic = InitLogic(mock_q, gen)
 
         with patch(
-            "goga.init.generator.requests.get",
+            "goga.onboarding.generator.requests.get",
             side_effect=requests.exceptions.ConnectionError("Network error"),
         ):
             result = logic.run()

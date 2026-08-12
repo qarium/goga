@@ -2,15 +2,15 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.questionnaire import Questionnaire
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.questionnaire import Questionnaire
 
 
 class TestContract:
     """Contract-level tests for Questionnaire."""
 
     def test_questionnaire_importable_from_questionnaire(self) -> None:
-        from goga.init.questionnaire import Questionnaire
+        from goga.onboarding.questionnaire import Questionnaire
 
         assert Questionnaire is not None
 
@@ -395,14 +395,14 @@ class TestLogic:
         assert result.image == "qarium/goga-node-24:1.0"
 
     def test_all_languages_have_image_map_entries(self) -> None:
-        from goga.init.questionnaire import _IMAGE_MAP, _LANGUAGES
+        from goga.onboarding.questionnaire import _IMAGE_MAP, _LANGUAGES
 
         for language in _LANGUAGES:
             assert language in _IMAGE_MAP, f"Language '{language}' missing from _IMAGE_MAP"
 
     def test_image_map_defaults_use_version_1_1(self) -> None:
         """All suggested Docker images use the current default tag `:1.1`."""
-        from goga.init.questionnaire import _IMAGE_MAP
+        from goga.onboarding.questionnaire import _IMAGE_MAP
 
         for language, images in _IMAGE_MAP.items():
             assert images, f"Language '{language}' has no image entries"
@@ -485,7 +485,7 @@ class TestLogic:
 
     def test_cpp_not_in_language_choices(self) -> None:
         """cpp must not appear in language choices."""
-        from goga.init.questionnaire import _LANGUAGES
+        from goga.onboarding.questionnaire import _LANGUAGES
 
         assert "cpp" not in _LANGUAGES
 
@@ -730,7 +730,7 @@ class TestLogic:
         assert result.env == {"CODEX_MODEL": "o4-mini"}
 
     def test_agent_env_map_contains_codex(self) -> None:
-        from goga.init.questionnaire import _AGENT_ENV_MAP
+        from goga.onboarding.questionnaire import _AGENT_ENV_MAP
 
         assert "codex" in _AGENT_ENV_MAP
         assert _AGENT_ENV_MAP["codex"] == ["CODEX_MODEL"]

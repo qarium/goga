@@ -7,15 +7,15 @@ import pytest
 import requests.exceptions
 import yaml
 from goga.config import load_project_config
-from goga.init.answers import GogaConfigAnswers, InitAnswers
-from goga.init.generator import FileGenerator
+from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
+from goga.onboarding.generator import FileGenerator
 
 
 class TestContract:
     """Contract-level tests for FileGenerator."""
 
     def test_file_generator_importable_from_generator(self) -> None:
-        from goga.init.generator import FileGenerator
+        from goga.onboarding.generator import FileGenerator
 
         assert FileGenerator is not None
 
@@ -90,7 +90,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         config_path = tmp_path / ".goga" / "config.yml"
@@ -155,7 +155,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response) as mock_get:
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response) as mock_get:
             gen.generate(answers)
 
         called_url = mock_get.call_args[0][0]
@@ -167,7 +167,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
         mock_get.assert_not_called()
@@ -186,7 +186,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get") as mock_get:
+        with patch("goga.onboarding.generator.requests.get") as mock_get:
             gen.generate(answers)
 
         mock_get.assert_not_called()
@@ -212,7 +212,7 @@ class TestLogic:
         mock_response.raise_for_status = MagicMock()
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate(answers)
 
         conventions_path = tmp_path / ".goga" / "usages" / "conventions.md"
@@ -230,7 +230,10 @@ class TestLogic:
 
         gen = self._make_gen(tmp_path)
         with (
-            patch("goga.init.generator.requests.get", side_effect=requests.exceptions.ConnectionError("Network error")),
+            patch(
+                "goga.onboarding.generator.requests.get",
+                side_effect=requests.exceptions.ConnectionError("Network error"),
+            ),
             pytest.raises(RuntimeError, match="Failed to download convention"),
         ):
             gen.generate(answers)
@@ -280,7 +283,7 @@ class TestLogic:
         answers = InitAnswers(goga_config=config)
 
         gen = self._make_gen(tmp_path)
-        with patch("goga.init.generator.requests.get"):
+        with patch("goga.onboarding.generator.requests.get"):
             gen.generate(answers)
 
         assert not (tmp_path / "Dockerfile").exists()
@@ -399,7 +402,7 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
@@ -425,7 +428,7 @@ class TestNewSchema:
 
         gen = FileGenerator()
         gen._base_dir = tmp_path
-        with patch("goga.init.generator.requests.get", return_value=mock_response):
+        with patch("goga.onboarding.generator.requests.get", return_value=mock_response):
             gen.generate_goga_config(config)
 
         data = self._load_yaml(tmp_path / ".goga" / "config.yml")
