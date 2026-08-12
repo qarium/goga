@@ -4,8 +4,8 @@ Imports:
       - Questionnaire
       - FileGenerator
     Usages:
-      - init-usage
-    From: goga/init
+      - onboarding-usage
+    From: goga/onboarding
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -20,7 +20,7 @@ Annotations: |
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
   The command delegates business logic through `InitLogic`.
-  Use `init-usage` from Imports to understand the InitLogic API.
+  Use `onboarding-usage` from Imports to understand the InitLogic API.
 
 ---
 

@@ -13,7 +13,7 @@ from goga.ast import AST
 from goga.build import build
 from goga.connect import connect
 from goga.contract import contract
-from goga.init import InitLogic, Questionnaire
+from goga.onboarding import InitLogic, Questionnaire
 from goga.pipeline import run_pipeline
 from goga.runtime import resolve_runtime_dir
 from goga.schema import schema
@@ -30,7 +30,7 @@ Note: `goga.ast` is the only domain re-exported at the facade level (`from goga 
 | `build`    | `goga/build/`       | Orchestrate code builds through ralphex                                                     |
 | `connect`  | `goga/connect/`     | Centralized install of goga skills/commands/pipelines into `~/.goga/` with per-agent registry and re-sync |
 | `contract` | `goga/contract/`    | Work with an implemented contract in a specific programming language                        |
-| `init`     | `goga/init/`        | Interactive goga project initialization — user survey and configuration file generation    |
+| `onboarding` | `goga/onboarding/` | Interactive goga project initialization — user survey and configuration file generation    |
 | `pipeline` | `goga/pipeline/`    | End-to-end pipeline workflow — discovery, entity model, run coordination, in-container CLI  |
 | `runtime`  | `goga/runtime/`     | Pure leaf utilities for runtime-directory path composition (`~/.goga/runtime/...`)          |
 | `schema`   | `goga/schema/`      | Generate the CODEMANIFEST project JSON schema                                              |
@@ -50,7 +50,7 @@ Centralized goga skill/command/pipeline installation logic. Assets are installed
 ### contract
 Working with an implemented contract in a programming language. Dispatches to language-specific subcells (`goga/contract/python`, `goga/contract/golang`, `goga/contract/kotlin`, `goga/contract/swift`, `goga/contract/javascript`) and compares CODEMANIFEST signatures against the live implementation.
 
-### init
+### onboarding
 Interactive goga project initialization — user survey and configuration file generation. Drives the questionnaire, collects answers, and emits the project's `.goga/config.yml`.
 
 ### pipeline

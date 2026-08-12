@@ -1,0 +1,58 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  git: |
+    External git binary invoked via subprocess.run (check=True, capture_output=True).
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
+    subprocess call in tests per `convention`.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns git-environment introspection for the config domain: deriving project
+  identity from the local git repository. It is environment-probing (subprocess to the
+  `git` binary), NOT .goga/config.yml parsing — that lives in goga/config/project. All
+  git access flows through the `git` practice; mock the subprocess call in tests per
+  `convention`. Use relative imports. Re-exported on the goga/config facade via embedding.
+
+---
+
+"resolve_project_name() -> name: str | None":
+  location: identity.py
+  annotations: |
+    Derive the project name from the current git repository's origin remote URL, for use
+    as a description prefix / default identifier by consumers (pipeline flow-file
+    description prefix; onboarding image-name default). Tolerant: any failure (not a git
+    repo, no origin remote, subprocess error) yields None — never raises.
+
+    `name`: project name (basename of the origin URL, .git suffix stripped), or None when
+            it cannot be determined
+
+    Algorithm:
+    1. Run git config --get remote.origin.url via the `git` practice (subprocess; CWD =
+       the caller's project root); capture stdout
+    2. On any error (non-zero exit, CalledProcessError, missing git binary) -> None
+    3. Take the basename of the URL; strip a trailing ".git" suffix when present
+    4. Empty result -> None; otherwise return it
+
+    Requirements:
+    - Any failure -> None (silent skip, never raise) — absence of remote is normal
+    - Reads the git remote from the caller's CWD (works in-container at /workspace and
+      host-side at the project root)
+
+    Constraints:
+    - Do NOT raise on missing git / missing remote / subprocess error
+    - Do NOT fall back to another source — None is the canonical "unknown" value
+    - Do NOT read or parse .goga/config.yml (that is goga/config/project's responsibility)
+
+---
+
+Author: Goga
+CreatedAt: 12/08/26
+Description: |
+  Git-environment introspection for the config domain — derives the project name from
+  the local git repository's origin remote. Re-exported on the goga/config facade.

@@ -27,7 +27,7 @@ Annotations: |
 
 ---
 
-"sync(force: bool = False) -> exit_code: int":
+"sync(force: bool = False, group: str | None = None, dep: str | None = None) -> exit_code: int":
   location: sync.py
   annotations: |
     Config-driven synchronization of cell-level usages from declared git dependencies
@@ -35,6 +35,9 @@ Annotations: |
 
     `force`: True — clean .goga/usages/ (except cooks and root *.md) then re-sync all
              declared deps; False (default) — incremental, skip deps whose target dir exists.
+    `group`: optional filter — limit the sync to one group name; None (default) → all groups.
+    `dep`: optional filter — limit the sync to one dep name; None (default) → all deps. `dep`
+           without `group` applies across every group.
     `exit_code`: 0 on success (incl. "nothing to sync"), 1 if any dep failed.
 
     Algorithm:
@@ -42,7 +45,8 @@ Annotations: |
     2. If ProjectConfig.usages is None → nothing to sync, return 0
     3. usages_root = .goga/usages (relative to CWD)
     4. If `force` → `clean_usages_dir`(usages_root)
-    5. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order):
+    5. For each group, dep, depcfg (`DepConfig`) in ProjectConfig.usages (insertion order),
+       **applying the `group`/`dep` filters (a non-matching name is skipped, not an error)**:
        5.1. target = usages_root / group / dep
        5.2. If (not force) and target.exists() → skip (incremental)
        5.3. Else: repo = `clone_repository`(depcfg.git, depcfg.ref); try:
@@ -56,6 +60,8 @@ Annotations: |
     - deploy receives the dep's optional root verbatim from `DepConfig` (None = walk from
       repo root); `sync` does not resolve or validate root — `deploy_usages` does, against
       the clone
+    - A non-matching `group`/`dep` filter value is skipped, never treated as an error; only
+      real sync errors on a matching dep set exit_code = 1.
 
     Constraints:
     - Never touch .goga/usages/cooks or root *.md (`clean_usages_dir` owns that)

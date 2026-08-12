@@ -1,5 +1,10 @@
+Imports:
+  - Types:
+      - resolve_project_name
+    From: goga/config
+
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
   yaml: |
     Use yaml.dump() to generate .goga/config.yml.
@@ -27,12 +32,12 @@ Usages:
     - codex: CODEX_MODEL
 
 Annotations: |
-  Practice `conventions` supports:
-  - codebase navigation and development
-  - REPL-based development workflow
-  - debugging and testing
-  - test infrastructure setup
-  - understanding project-wide development and testing conventions
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
   Use `click` for interactive user input (Questionnaire).
   Use `yaml` for YAML file generation (FileGenerator).
   Use `lang_conventions` to download the base convention for the selected language (Questionnaire, FileGenerator).
@@ -120,8 +125,11 @@ Annotations: |
       ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
       → ask_agent → ask_dockerfile_path → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
       The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
-      ask_base_image (FROM) then ask_image_name (built image tag) are surveyed and dockerfile_base_image
-      is set; otherwise ask_image (pre-built image to pull) is surveyed and dockerfile_base_image is None.
+      ask_base_image (FROM) is surveyed, then `resolve_project_name` (imported from goga/config) is
+      called — if it returns a name the proposed default is <name>:latest, if it returns None no
+      default is set — then ask_image_name(language=None, default=<that value>) is surveyed (built
+      image tag), and dockerfile_base_image is set; otherwise ask_image (pre-built image to pull) is
+      surveyed and dockerfile_base_image is None.
       Each per-field method emits a section header (---) and explanatory text.
     "ask_language() -> language: str": |
       Select from (python, golang, kotlin, swift, javascript).
@@ -151,10 +159,17 @@ Annotations: |
       Survey the BASE image for the Dockerfile FROM line (Dockerfile branch). Display hints
       from `image_defaults` for `language`; default to the last entry; accept free-form input.
       The result populates dockerfile_base_image and is never emitted to config.yml.
-    "ask_image_name(language: str) -> image: str": |
+    "ask_image_name(language: str | None = None, default: str | None = None) -> image: str": |
       Survey the NAME (tag) for the image built from the Dockerfile (Dockerfile branch), since
-      goga build runs docker build -t <image>. Free-form input; default `{language}-image:latest`.
-      Captures the top-level image field (NOT build.image).
+      goga build runs docker build -t <image>. Free-form input. When `language` is provided
+      (not None): legacy default `{language}-image:latest` (backward-compatible with consumers
+      that pass `language`). When `language` is None: offer `default` as the default; when
+      `default` is None → no default is offered and the `image` field is required. Captures the
+      top-level image field (NOT build.image).
+
+      Requirements:
+      - The offered default depends on `language`/`default` as above; a None default makes the
+        `image` field required (no suggestion).
     "ask_env(agent: str | None) -> env: dict | None": |
       Propose env keys from `agent_env_defaults` for the selected `agent`; collect values for each,
       then optionally collect arbitrary key-value pairs. Drives build.task_executor.env. A None `agent`
