@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import click
 
-from goga.config import resolve_project_name
-
+from ..config import resolve_project_name
 from .answers import GogaConfigAnswers, InitAnswers
 
 _IMAGE_MAP: dict[str, list[str]] = {
