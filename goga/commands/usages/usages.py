@@ -105,8 +105,9 @@ def status(ctx: click.Context, info: bool) -> None:
     reports one of ``new`` / ``up to date`` / ``out of date`` / ``error`` per
     dep. The check is read-only: it never modifies ``.goga/usages/``.
 
-    Group/dep filters (and ``--force`` for ``sync``) are declared on the
-    ``usages`` group and threaded here through the click context.
+    The group/dep filters are declared on the ``usages`` group (not here) and
+    threaded through the click context (``ctx.parent.params``); they default to
+    ``None`` when absent.
     """
     group = ctx.parent.params.get("group")
     dep = ctx.parent.params.get("dep")

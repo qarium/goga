@@ -379,3 +379,50 @@ class TestSyncLogic:
         assert result == 0
         clone_mock.assert_not_called()
         deploy_mock.assert_not_called()
+
+    def test_sync_force_with_filter_wipes_non_matching_then_reclones_only_matching(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        """``force`` + filter: ``clean_usages_dir`` is unconditional (per the
+        ``sync`` CODEMANIFEST step 4), so previously-synced NON-matching targets
+        are removed from disk; only the matching deps are then re-cloned/deployed.
+
+        Pins the designed ``force``+filter composition (design Edge Case:
+        "``clean_usages_dir`` still wipes, but only matching deps are re-cloned")
+        against a future change that would silently scope the clean to the filter.
+        """
+        _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        # Pre-existing synced trees for BOTH a matching and a non-matching dep.
+        (usages_root / "libs" / "click").mkdir(parents=True)
+        (usages_root / "libs" / "click" / "old.md").write_text("old")
+        (usages_root / "apps" / "common").mkdir(parents=True)  # NON-matching → wiped
+        (usages_root / "apps" / "common" / "old.md").write_text("old")
+        (usages_root / "cooks").mkdir(parents=True)  # preserved verbatim
+        (usages_root / "cooks" / "k.md").write_text("cook")
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(
+                _sync_mod,
+                "clone_repository",
+                return_value=fake_repo,
+            ) as clone_mock,
+            mock.patch.object(_sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            result = sync(force=True, group="libs", dep="click")
+
+        assert result == 0
+        # only the matching dep is re-cloned/deployed
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        deploy_mock.assert_called_once_with(fake_repo, Path(".goga/usages/libs/click"), None)
+        # clean ran for real: the non-matching ``apps/common`` tree is GONE
+        assert not (usages_root / "apps" / "common").exists()
+        assert not (usages_root / "apps").exists()
+        # cooks is preserved (clean never touches it)
+        assert (usages_root / "cooks" / "k.md").read_text() == "cook"

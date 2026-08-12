@@ -33,7 +33,7 @@ The wizard proceeds through the following steps in order:
 
    - **If you created a Dockerfile**, the image is **built from it**, so you are asked for two things:
      - **Base image (FROM)** -- the baseline the Dockerfile extends. Available images depend on the chosen language (table below). This is written to the Dockerfile's `FROM` line only; it is not stored in `config.yml`.
-     - **Built image name** -- the name/tag for the image built from your Dockerfile (`goga build` runs `docker build -t <image>`). Free-form; defaults to `{language}-image:latest`. Stored as the top-level `image` in `config.yml`.
+     - **Built image name** -- the name/tag for the image built from your Dockerfile (`goga build` runs `docker build -t <image>`). Free-form; defaults to `<project-name>:latest`, where `<project-name>` is derived from your git `origin` remote URL (basename with `.git` stripped). When no git remote is available, no default is offered and the image name is required. Stored as the top-level `image` in `config.yml`.
    - **If you did not create a Dockerfile**, the image is a **pre-built image to pull**. Select it from the language-specific list (table below); it is stored as the top-level `image` in `config.yml`.
 
    | Language | Images |

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import ClassVar
 from unittest import mock
 
 # The owning module of resolve_project_name (used to mock the call in BOTH
@@ -157,60 +158,77 @@ class TestFlowC1PipelinePrefix:
 class TestFlowC2OnboardingDefault:
     """Flow C2 — onboarding image-name default.
 
-    ``Questionnaire.ask_goga_config`` Dockerfile branch derives the built-image
-    default ``f"{name}:latest"`` (or ``None``) from ``resolve_project_name`` and
-    offers it via the two-mode ``ask_image_name(language=None, default=...)``.
-    The offered default is exactly ``f"{name}:latest"`` when a name resolves and
-    is absent (image required) when it does not.
+    Drives the REAL ``Questionnaire.ask_goga_config`` Dockerfile branch (not a
+    hand-mirrored copy of its formula) so the test asserts the production wiring
+    of ``resolve_project_name`` → ``ask_image_name(language=None, default=...)``
+    through the code path a consumer actually runs. ``resolve_project_name`` is
+    mocked on its owning module (per ``convention`` — never invoke the real git
+    subprocess); the offered default is exactly ``f"{name}:latest"`` when a name
+    resolves and is absent (image required) when it does not.
     """
 
-    def test_c2_name_offers_name_latest_as_default(self) -> None:
-        """resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
+    _CONFIRMS: ClassVar[list[bool]] = [
+        False,  # Download base convention?
+        False,  # Add codemanifest usages?
+        False,  # Add codemanifest annotations?
+        True,  # Configure a build agent?
+        True,  # Create Dockerfile?
+        False,  # Set suggested task env variables?
+        False,  # Add custom task env variable?
+        True,  # Configure a pipeline agent?
+        False,  # Set suggested pipeline env variables?
+        False,  # Add custom pipeline env variable?
+    ]
+
+    def _run_goga_config(self, resolve_return, built_image_reply, monkeypatch):
+        """Drive ``ask_goga_config`` to its Dockerfile branch; capture the offered
+        built-image default and return the resulting :class:`GogaConfigAnswers`."""
         captured: dict = {}
 
-        def fake_prompt(message, *args, **kwargs):
-            captured["message"] = message
-            captured["default"] = kwargs.get("default")
-            return kwargs.get("default")
+        def fake_image_prompt(message, *args, **kwargs):
+            if message == "Built image name":
+                captured["default"] = kwargs.get("default")
+                return built_image_reply
+            return "default-placeholder"
 
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "Dockerfile",  # dockerfile path
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "claude",  # pipeline agent
+            ]
+        )
+
+        def prompt_router(message, *args, **kwargs):
+            if message == "Built image name":
+                return fake_image_prompt(message, *args, **kwargs)
+            return next(prompts)
+
+        monkeypatch.setattr(qmod, "resolve_project_name", lambda: resolve_return)
         with (
-            mock.patch.object(qmod, "resolve_project_name", return_value="widget"),
-            mock.patch("click.prompt", side_effect=fake_prompt),
-            mock.patch("click.echo"),
+            mock.patch("click.prompt", side_effect=prompt_router),
+            mock.patch("click.confirm", side_effect=iter(self._CONFIRMS)),
         ):
-            # Mirror the consumer logic (ask_goga_config Dockerfile branch). Access
-            # resolve_project_name through the module so the patch takes effect.
-            name = qmod.resolve_project_name()
-            default = f"{name}:latest" if name is not None else None
-            image = qmod.Questionnaire().ask_image_name(language=None, default=default)
+            result = qmod.Questionnaire().ask_goga_config()
 
-        assert name == "widget"
-        assert default == "widget:latest"
-        assert captured["message"] == "Built image name"
+        return result, captured
+
+    def test_c2_name_offers_name_latest_as_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
+        result, captured = self._run_goga_config("widget", "widget:latest", monkeypatch)
+
         assert captured["default"] == "widget:latest"
-        assert image == "widget:latest"
+        assert result.image == "widget:latest"
+        assert result.dockerfile_path == "Dockerfile"
 
-    def test_c2_none_offers_no_default_image_required(self) -> None:
+    def test_c2_none_offers_no_default_image_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """resolve_project_name → None → ask_image_name called with no default (image required)."""
-        captured: list[dict] = []
+        result, captured = self._run_goga_config(None, "provided-image:latest", monkeypatch)
 
-        def fake_prompt(message, *args, **kwargs):
-            captured.append({"message": message, "has_default": "default" in kwargs})
-            return "provided-image:latest"
-
-        with (
-            mock.patch.object(qmod, "resolve_project_name", return_value=None),
-            mock.patch("click.prompt", side_effect=fake_prompt),
-            mock.patch("click.echo"),
-        ):
-            name = qmod.resolve_project_name()
-            default = f"{name}:latest" if name is not None else None
-            image = qmod.Questionnaire().ask_image_name(language=None, default=default)
-
-        assert name is None
-        assert default is None
-        assert all(not c["has_default"] for c in captured)
-        assert image == "provided-image:latest"
+        assert captured["default"] is None
+        assert result.image == "provided-image:latest"
 
 
 class TestFacadeSingleEntryPoint:

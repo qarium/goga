@@ -10,9 +10,11 @@ Declare your dependencies once in `.goga/config.yml`, then `sync` to materialize
 ## Synopsis
 
 ```bash
-goga usages sync [--force]
-goga usages status [--info] [--group GROUP] [--dep DEP]
+goga usages [--group GROUP] [--dep DEP] sync [--force]
+goga usages [--group GROUP] [--dep DEP] status [--info]
 ```
+
+`--group`/`--dep` are declared on the `usages` **group**, so they go **before** the subcommand and apply to both `sync` and `status`. Omit them to act on every declared dep.
 
 ## What It Does
 
@@ -24,7 +26,7 @@ goga usages status [--info] [--group GROUP] [--dep DEP]
 4. **Deploy** every `.usages/` folder found under the dep's optional `root` into `.goga/usages/<group>/<dep>/`, dropping the `.usages` segment from destination paths.
 5. **Clean up** the temp directory in a `finally` block (on success) or before re-raising (on failure, so a failed clone never leaks a temp directory).
 
-When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory except `cooks` is removed, root files are preserved, then every declared dep is re-synced from scratch.
+When `--force` is passed, `.goga/usages/` is cleaned first: every subdirectory except `cooks` is removed, root files are preserved, then the declared deps (narrowed by the `--group`/`--dep` filters) are re-synced from scratch.
 
 ### Nothing to sync
 
@@ -55,14 +57,25 @@ A `.usages` folder sitting directly at `root` (empty relative path) copies into 
 | Mode | When | Behavior |
 |---|---|---|
 | **Incremental** (default) | `.goga/config.yml` has a `usages:` section | For each declared dep: skip if `.goga/usages/<group>/<dep>/` exists, otherwise clone and deploy. |
-| **Force** | `--force` / `-f` passed | Clean `.goga/usages/` (every subdir except `cooks`; root files preserved), then re-sync every declared dep. |
+| **Force** | `--force` / `-f` passed | Clean `.goga/usages/` (every subdir except `cooks`; root files preserved), then re-sync the declared deps narrowed by the `--group`/`--dep` filters. |
 | **Nothing to sync** | `usages:` section absent | No-op â€” exits `0` without invoking git. |
 
 ## Options
 
+`--group`/`--dep` are declared on the `usages` group and apply to **both** subcommands (place them before the subcommand name):
+
 | Option | Default | Description |
 |---|---|---|
-| `--force`, `-f` | off | Clean `.goga/usages/` (except `cooks` and root files) then re-sync all deps. |
+| `--group GROUP`, `-g` | all | Limit the action to deps under one group. |
+| `--dep DEP`, `-d` | all | Limit the action to deps with one name (across all groups). |
+
+A non-matching `--group` or `--dep` is a no-op for that dep (skipped, never an error).
+
+### `sync` options
+
+| Option | Default | Description |
+|---|---|---|
+| `--force`, `-f` | off | Clean `.goga/usages/` (except `cooks` and root files) then re-sync the matching deps. |
 
 ## Configuration
 
@@ -149,7 +162,7 @@ goga usages sync
 ### Synopsis
 
 ```bash
-goga usages status [--info] [--group GROUP] [--dep DEP]
+goga usages [--group GROUP] [--dep DEP] status [--info]
 ```
 
 ### What It Does
@@ -194,10 +207,8 @@ Color is applied **only** to the changed markers (`[*]`, `[+]`, `[-]`, `[!]`) â€
 | Option | Default | Description |
 |---|---|---|
 | `--info`, `-i` | off | Expand each dep into its per-node file/folder tree with per-node status markers. |
-| `--group`, `-g` | all | Limit the check to deps under one group. |
-| `--dep`, `-d` | all | Limit the check to deps with one name (across all groups). |
 
-A non-matching `--group` or `--dep` yields an empty result, never an error.
+`--group`/`--dep` are declared on the `usages` group (see [Options](#options)); place them before the `status` subcommand. A non-matching `--group` or `--dep` yields an empty result, never an error.
 
 ### Exit Codes
 
@@ -255,7 +266,7 @@ libs/
 Check a single dep across all groups:
 
 ```bash
-goga usages status --dep click
+goga usages --dep click status
 ```
 
 ## Exit Codes (`sync`)
