@@ -62,6 +62,13 @@ _AGENT_ENV_MAP: dict[str, list[str]] = {
     ],
 }
 
+# Agents offered for selection in the wizard. Derived from `_AGENT_ENV_MAP`
+# so the choice list can never drift from the set of agents the wizard can
+# actually configure env for — every selectable agent has env keys, and every
+# agent with env keys is selectable. Order follows insertion order above
+# (claude, codex first for backward-compatible UX; newer agents appended).
+_AGENTS = list(_AGENT_ENV_MAP)
+
 
 def _collect_agent_env(agent: str | None) -> dict | None:
     """Collect environment variables for an agent.
@@ -269,11 +276,13 @@ class Questionnaire:
         """Survey the AI agent that builds the implementation.
 
         Optional: by default no agent is configured. The user must opt in via a
-        confirm gate, then select from (claude, codex). Declining returns None —
-        the agent is omitted from the generated config.
+        confirm gate, then select from the supported agents (`_AGENTS`,
+        currently claude, codex, cursor, opencode, qwen). Declining returns
+        None — the agent is omitted from the generated config.
 
         Returns:
-            One of claude, codex; None when the user declines to configure an agent.
+            One of the supported agents in `_AGENTS`; None when the user
+            declines to configure an agent.
         """
         click.echo("\n--- AI Agent ---")
         click.echo("Select the AI agent that will build implementation.")
@@ -283,7 +292,7 @@ class Questionnaire:
 
         return click.prompt(
             "Agent",
-            type=click.Choice(["claude", "codex"]),
+            type=click.Choice(_AGENTS),
         )
 
     def ask_image(self, language: str) -> str:
@@ -430,12 +439,14 @@ class Questionnaire:
         """Survey the pipeline agent.
 
         Optional: by default no pipeline agent is configured. The user must opt
-        in via a confirm gate, then select from (claude, codex). Declining
-        returns None — the pipeline agent is omitted from the generated config.
-        The pipeline agent does NOT inherit the build `agent`.
+        in via a confirm gate, then select from the supported agents (`_AGENTS`,
+        currently claude, codex, cursor, opencode, qwen). Declining returns None
+        — the pipeline agent is omitted from the generated config. The pipeline
+        agent does NOT inherit the build `agent`.
 
         Returns:
-            One of claude, codex; None when the user declines to configure an agent.
+            One of the supported agents in `_AGENTS`; None when the user
+            declines to configure an agent.
         """
         click.echo("\n--- Pipeline Agent ---")
         click.echo("Select the AI agent that will run pipelines (afm client.command).")
@@ -445,7 +456,7 @@ class Questionnaire:
 
         return click.prompt(
             "Pipeline agent",
-            type=click.Choice(["claude", "codex"]),
+            type=click.Choice(_AGENTS),
         )
 
     def ask_pipeline_env(self, pipeline_agent: str | None) -> dict | None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+import pytest
 from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
 from goga.onboarding.questionnaire import Questionnaire
 
@@ -717,6 +718,44 @@ class TestLogic:
         assert result.agent == "codex"
         assert result.env is None
 
+    def test_questionnaire_ask_goga_config_supports_new_agents(self) -> None:
+        """The wizard accepts the full supported agent set (cursor build, qwen pipeline).
+
+        Regression guard for the bug where build/pipeline agent selection only
+        offered claude and codex despite cursor/opencode/qwen being supported.
+        """
+        prompts = iter(
+            [
+                "python",  # language
+                "cursor",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "qwen",  # pipeline agent
+            ]
+        )
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+            q = Questionnaire()
+            result = q.ask_goga_config()
+
+        assert result.agent == "cursor"
+        assert result.pipeline_agent == "qwen"
+        assert result.env is None
+        assert result.pipeline_env is None
+
     def test_questionnaire_codex_env_suggested_keys(self) -> None:
         prompts = iter(
             [
@@ -753,6 +792,34 @@ class TestLogic:
 
         assert "codex" in _AGENT_ENV_MAP
         assert _AGENT_ENV_MAP["codex"] == ["CODEX_MODEL"]
+
+    def test_agents_choice_equals_agent_env_map_keys(self) -> None:
+        """The build/pipeline agent choice list never drifts from _AGENT_ENV_MAP keys."""
+        from goga.onboarding.questionnaire import _AGENT_ENV_MAP, _AGENTS
+
+        assert list(_AGENT_ENV_MAP) == _AGENTS
+        # Every previously-unselectable supported agent must now be offered.
+        for agent in ("claude", "codex", "cursor", "opencode", "qwen"):
+            assert agent in _AGENTS
+
+    def test_agent_choice_accepts_all_supported_agents(self) -> None:
+        """click.Choice built from _AGENTS validates every supported agent.
+
+        Exercises the real click.Choice validation (convert raises BadParameter
+        for values outside the choice set) — this is the guard that the mocked
+        flow tests cannot exercise and that would have caught the original bug.
+        """
+        from click import Choice
+        from click.exceptions import BadParameter
+        from goga.onboarding.questionnaire import _AGENTS
+
+        choice = Choice(_AGENTS)
+        for agent in ("claude", "codex", "cursor", "opencode", "qwen"):
+            assert choice.convert(agent, None, None) == agent
+
+        # A value outside the supported set must still be rejected.
+        with pytest.raises(BadParameter):
+            choice.convert("not-a-real-agent", None, None)
 
     def test_questionnaire_env_skip_suggested_custom_only(self) -> None:
         prompts = iter(
