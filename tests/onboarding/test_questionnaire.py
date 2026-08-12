@@ -28,6 +28,17 @@ class TestContract:
         assert hasattr(q, "ask_goga_config")
         assert callable(q.ask_goga_config)
 
+    def test_ask_image_name_two_mode_signature_contract(self) -> None:
+        """ask_image_name is two-mode: (language=None, default=None) both default to None."""
+        import inspect
+
+        params = inspect.signature(Questionnaire.ask_image_name).parameters
+
+        assert "language" in params
+        assert "default" in params
+        assert params["language"].default is None
+        assert params["default"].default is None
+
 
 class TestLogic:
     """Logic tests for Questionnaire — mock click.prompt/click.confirm.
@@ -515,7 +526,11 @@ class TestLogic:
             ]
         )
 
-        with patch("click.prompt", side_effect=prompts), patch("click.confirm", side_effect=confirms):
+        with (
+            patch("click.prompt", side_effect=prompts),
+            patch("click.confirm", side_effect=confirms),
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value=None),
+        ):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -590,7 +605,11 @@ class TestLogic:
             ]
         )
 
-        with patch("click.prompt", side_effect=fake_prompt), patch("click.confirm", side_effect=confirms):
+        with (
+            patch("click.prompt", side_effect=fake_prompt),
+            patch("click.confirm", side_effect=confirms),
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value=None),
+        ):
             q = Questionnaire()
             result = q.ask_goga_config()
 
@@ -894,3 +913,196 @@ class TestLogic:
 
         assert result.env is None
         assert result.pipeline_env == {"CODEX_MODEL": "gpt-5"}
+
+
+class TestAskImageNameTwoMode:
+    """Logic tests for the two-mode ask_image_name(language=None, default=None)."""
+
+    def test_ask_image_name_accepts_default_from_resolve_project_name(self) -> None:
+        """(a) positive — resolve_project_name → 'widget' → default 'widget:latest' accepted."""
+        from goga.onboarding import questionnaire as qmod
+
+        captured: dict = {}
+
+        def fake_prompt(message, *args, **kwargs):
+            # Record the default offered, then simulate the user accepting it.
+            captured["default"] = kwargs.get("default")
+            return kwargs.get("default")
+
+        with (
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value="widget"),
+            patch("click.prompt", side_effect=fake_prompt),
+            patch("click.echo"),
+        ):
+            # Mirror the consumer logic (ask_goga_config Dockerfile branch). Access
+            # resolve_project_name through the module so the patch takes effect.
+            name = qmod.resolve_project_name()
+            default = f"{name}:latest" if name is not None else None
+            image = qmod.Questionnaire().ask_image_name(language=None, default=default)
+
+        assert name == "widget"
+        assert captured["default"] == "widget:latest"
+        assert image == "widget:latest"
+
+    def test_ask_image_name_required_when_resolve_project_name_returns_none(self) -> None:
+        """(b) negative — resolve_project_name → None → no default, image required.
+
+        The offered default is None (click.prompt called with no default), so the
+        user's first empty line is rejected and a real value is required.
+        """
+        from goga.onboarding import questionnaire as qmod
+
+        captured: list[dict] = []
+
+        def fake_prompt(message, *args, **kwargs):
+            captured.append({"has_default": "default" in kwargs})
+            # The implementation calls click.prompt("Built image name") (no default)
+            # exactly once — return a real value.
+            return "real-image:latest"
+
+        with (
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value=None),
+            patch("click.prompt", side_effect=fake_prompt),
+            patch("click.echo"),
+        ):
+            name = qmod.resolve_project_name()
+            default = f"{name}:latest" if name is not None else None
+            image = qmod.Questionnaire().ask_image_name(language=None, default=default)
+
+        assert name is None
+        assert default is None
+        assert all(not c["has_default"] for c in captured)
+        assert image == "real-image:latest"
+
+    def test_ask_image_name_legacy_language_default_still_offered(self) -> None:
+        """(c) legacy compatibility — ask_image_name(language='python') offers 'python-image:latest'."""
+        captured: dict = {}
+
+        def fake_prompt(message, *args, **kwargs):
+            captured["default"] = kwargs.get("default")
+            return kwargs.get("default")
+
+        with patch("click.prompt", side_effect=fake_prompt), patch("click.echo"):
+            image = Questionnaire().ask_image_name(language="python")
+
+        assert captured["default"] == "python-image:latest"
+        assert image == "python-image:latest"
+
+    def test_ask_image_name_legacy_language_ignores_default_arg(self) -> None:
+        """When language is provided, the default arg is ignored in favor of the legacy default."""
+        captured: dict = {}
+
+        def fake_prompt(message, *args, **kwargs):
+            captured["default"] = kwargs.get("default")
+            return "custom"
+
+        with patch("click.prompt", side_effect=fake_prompt), patch("click.echo"):
+            image = Questionnaire().ask_image_name(language="golang", default="ignored:latest")
+
+        assert captured["default"] == "golang-image:latest"
+        assert image == "custom"
+
+
+class TestAskGogaConfigDockerfileBranch:
+    """Logic tests for the ask_goga_config Dockerfile branch wiring of resolve_project_name."""
+
+    def test_dockerfile_branch_uses_resolve_project_name_for_default(self) -> None:
+        """(d) resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
+        captured: dict = {}
+
+        def fake_prompt(message, *args, **kwargs):
+            if message == "Built image name":
+                captured["default"] = kwargs.get("default")
+                return kwargs.get("default")
+            return "default-placeholder"
+
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "Dockerfile",  # dockerfile path
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "claude",  # pipeline agent
+            ]
+        )
+
+        def prompt_router(message, *args, **kwargs):
+            if message == "Built image name":
+                return fake_prompt(message, *args, **kwargs)
+            return next(prompts)
+
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
+                True,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with (
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value="widget"),
+            patch("click.prompt", side_effect=prompt_router),
+            patch("click.confirm", side_effect=confirms),
+        ):
+            result = Questionnaire().ask_goga_config()
+
+        assert captured["default"] == "widget:latest"
+        assert result.image == "widget:latest"
+        assert result.dockerfile_path == "Dockerfile"
+
+    def test_dockerfile_branch_no_default_when_resolve_project_name_none(self) -> None:
+        """(d) resolve_project_name → None → ask_image_name called with no default (image required)."""
+        captured: list[dict] = []
+
+        def fake_prompt(message, *args, **kwargs):
+            if message == "Built image name":
+                captured.append({"has_default": "default" in kwargs})
+                return "provided-image:latest"
+            return "default-placeholder"
+
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "Dockerfile",  # dockerfile path
+                "qarium/goga-python-3.12:1.0",  # base image (FROM)
+                "claude",  # pipeline agent
+            ]
+        )
+
+        def prompt_router(message, *args, **kwargs):
+            if message == "Built image name":
+                return fake_prompt(message, *args, **kwargs)
+            return next(prompts)
+
+        confirms = iter(
+            [
+                False,  # Download base convention?
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
+                True,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with (
+            patch("goga.onboarding.questionnaire.resolve_project_name", return_value=None),
+            patch("click.prompt", side_effect=prompt_router),
+            patch("click.confirm", side_effect=confirms),
+        ):
+            result = Questionnaire().ask_goga_config()
+
+        assert all(not c["has_default"] for c in captured)
+        assert result.image == "provided-image:latest"

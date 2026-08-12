@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import click
 
+from goga.config import resolve_project_name
+
 from .answers import GogaConfigAnswers, InitAnswers
 
 _IMAGE_MAP: dict[str, list[str]] = {
@@ -140,7 +142,13 @@ class Questionnaire:
         dockerfile_path = self.ask_dockerfile_path()
         if dockerfile_path is not None:
             dockerfile_base_image = self.ask_base_image(language)
-            image = self.ask_image_name(language)
+            # Derive the built-image-name default from the git origin remote
+            # (via goga/config) — "<name>:latest" when a name resolves, else no
+            # default (the image field is required). Tolerant: any failure
+            # yields None and never raises.
+            name = resolve_project_name()
+            default = f"{name}:latest" if name is not None else None
+            image = self.ask_image_name(language=None, default=default)
         else:
             dockerfile_base_image = None
             image = self.ask_image(language)
@@ -314,24 +322,39 @@ class Questionnaire:
             prompt_label="Base image (FROM)",
         )
 
-    def ask_image_name(self, language: str) -> str:
+    def ask_image_name(self, language: str | None = None, default: str | None = None) -> str:
         """Survey the NAME (tag) for the image built from the Dockerfile.
 
         Used when the user creates a custom Dockerfile: `goga build` runs
         `docker build -t <image>`, so the built image needs its own name,
-        distinct from the FROM base. Free-form input with a language-derived
-        placeholder default.
+        distinct from the FROM base. Free-form input. Two modes govern the
+        offered default:
+
+        - ``language`` provided (not ``None``) → legacy default
+          ``{language}-image:latest`` (backward-compatible with callers that
+          pass ``language``).
+        - ``language`` is ``None`` → offer ``default`` as the default; when
+          ``default`` is also ``None`` → no default is offered and the ``image``
+          field is required (click re-prompts on empty input).
 
         Args:
-            language: the selected project language (drives the default placeholder).
+            language: the selected project language; when provided, drives the
+                legacy ``{language}-image:latest`` default placeholder.
+            default: the default to offer when ``language`` is ``None`` (e.g.
+                the ``<project-name>:latest`` default derived from git). ``None``
+                makes the ``image`` field required (no suggestion).
 
         Returns:
             Docker image name. Captures the top-level image field (NOT build.image).
         """
+        offered = f"{language}-image:latest" if language is not None else default
+
         click.echo("\n--- Built Image Name ---")
         click.echo("Name for the docker image built from the Dockerfile (the top-level image field).")
 
-        return click.prompt("Built image name", default=f"{language}-image:latest")
+        if offered is None:
+            return click.prompt("Built image name")
+        return click.prompt("Built image name", default=offered)
 
     def _prompt_language_image(
         self,
