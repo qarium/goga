@@ -1,22 +1,19 @@
 from __future__ import annotations
 
 import inspect
-import sys
+import subprocess
 
+# The owning module of ``resolve_project_name`` is ``goga.config.git.identity``.
+# Patch ``subprocess.run`` on that module directly so the call-time lookup hits
+# the fake (the real lookup target at call time). Per ``convention`` (mock the
+# subprocess call in tests by patching the owning module).
+import goga.config.git.identity as _identity_module
 import pytest
-from goga.pipeline.run_pipeline import resolve_project_name
-
-# ``goga.pipeline.run_pipeline`` is shadowed in the package ``__init__`` by the
-# ``run_pipeline`` function, so a dotted-string ``monkeypatch.setattr`` path
-# walking through ``goga.pipeline.run_pipeline`` resolves to the function (not
-# the module) and fails to find ``subprocess``. Resolve the real module via
-# ``sys.modules`` and patch its ``subprocess.run`` attribute directly (the real
-# lookup target at call time). Per [[feedback_mock_patch_module_shadowing]].
-_run_pipeline_module = sys.modules["goga.pipeline.run_pipeline"]
+from goga.config.git.identity import resolve_project_name
 
 
 def _patch_run(monkeypatch: pytest.MonkeyPatch, fake) -> None:
-    monkeypatch.setattr(_run_pipeline_module.subprocess, "run", fake)
+    monkeypatch.setattr(_identity_module.subprocess, "run", fake)
 
 
 class _Result:
@@ -40,14 +37,32 @@ class _RecordingRun:
         return _Result(self._returncode, self._stdout)
 
 
+class _RaisingRun:
+    """A fake ``subprocess.run`` that raises ``CalledProcessError`` (check=True).
+
+    The moved routine uses ``check=True``: a non-zero exit / no ``origin``
+    remote surfaces as a raised :class:`subprocess.CalledProcessError` (a
+    subclass of :class:`subprocess.SubprocessError`), NOT a non-raising result
+    with ``returncode=1``.
+    """
+
+    def __init__(self, stdout: str = "") -> None:
+        self._stdout = stdout
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, **_kwargs):
+        self.calls.append(list(argv))
+        raise subprocess.CalledProcessError(1, argv, output=self._stdout)
+
+
 class TestResolveProjectNameContract:
     """Contract: resolve_project_name is importable and typed str | None."""
 
-    def test_importable_from_run_pipeline_module(self) -> None:
+    def test_importable_from_identity_module(self) -> None:
         assert callable(resolve_project_name)
 
     def test_return_annotation_is_str_or_none(self) -> None:
-        # ``run_pipeline.py`` uses ``from __future__ import annotations`` so the
+        # ``identity.py`` uses ``from __future__ import annotations`` so the
         # return annotation is the string ``"str | None"`` at runtime.
         annotation = inspect.signature(resolve_project_name).return_annotation
         assert annotation == "str | None"
@@ -76,7 +91,9 @@ class TestResolveProjectNameLogic:
         assert resolve_project_name() == "widget"
 
     def test_returns_none_when_no_remote(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        _patch_run(monkeypatch, _RecordingRun(1, ""))
+        # check=True: a non-zero exit / no origin raises CalledProcessError,
+        # which the routine swallows into None.
+        _patch_run(monkeypatch, _RaisingRun())
         assert resolve_project_name() is None
 
     def test_trailing_slash_url_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
