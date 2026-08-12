@@ -30,6 +30,9 @@ Usages:
     Agent → env key mapping:
     - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
     - codex: CODEX_MODEL
+    - cursor: CURSOR_MODEL
+    - opencode: OPENCODE_MODEL, OPENCODE_VARIANT
+    - qwen: OPENAI_BASE_URL, OPENAI_MODEL
 
 Annotations: |
   The `convention` practice is used for:
@@ -147,7 +150,7 @@ Annotations: |
       Returns None when neither prefill nor input exists.
     "ask_agent() -> agent: str | None": |
       Confirm-gated (default No). On decline: return None (no build agent configured).
-      On acceptance: select from (claude, codex). Used as build.task_executor.agent.
+      On acceptance: select from (claude, codex, cursor, opencode, qwen). Used as build.task_executor.agent.
     "ask_dockerfile_path() -> dockerfile_path: str | None": |
       Optional; prompt to create a custom Dockerfile.
       On acceptance: request path (default ".goga/Dockerfile"). None to skip Dockerfile creation.
@@ -177,7 +180,8 @@ Annotations: |
       Returns None when nothing is collected.
     "ask_pipeline_agent() -> pipeline_agent: str | None": |
       Confirm-gated (default No). On decline: return None (no pipeline agent configured). Does NOT
-      inherit the build agent. On acceptance: select from (claude, codex). Drives pipeline.agent.
+      inherit the build agent. On acceptance: select from (claude, codex, cursor, opencode, qwen).
+      Drives pipeline.agent.
     "ask_pipeline_env(pipeline_agent: str | None) -> pipeline_env: dict | None": |
       Propose env keys from `agent_env_defaults` for `pipeline_agent`; collect values for each,
       then optionally collect arbitrary key-value pairs. Drives pipeline.env. A None `pipeline_agent`
