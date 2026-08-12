@@ -67,9 +67,15 @@ def _collect_agent_env(agent: str | None) -> dict | None:
     """Collect environment variables for an agent.
 
     Proposes keys from `_AGENT_ENV_MAP` for the given agent, then optionally
-    collects arbitrary KEY=VALUE pairs. Returns None when nothing is collected.
-    A None agent (no agent configured) skips the suggested-keys block and only
-    offers arbitrary KEY=VALUE pairs.
+    collects arbitrary KEY=VALUE pairs. A None agent (no agent configured)
+    skips the suggested-keys block and only offers arbitrary KEY=VALUE pairs.
+
+    Args:
+        agent: The selected agent whose suggested env keys are proposed, or None
+            when no agent is configured (skips the suggested-keys block).
+
+    Returns:
+        The collected env mapping, or None when nothing is collected.
     """
     env: dict | None = None
 

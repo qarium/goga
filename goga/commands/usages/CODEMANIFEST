@@ -82,9 +82,9 @@ Annotations: |
 
       `info`: --info/-i flag (click is_flag, default False) — expand each dep into its per-node
         file/folder entry tree with per-node status markers.
-      `group`: sourced from the group context (previously a status-level @click.option) — the
+      `group`: sourced from the group context — the
         --group/-g value declared on the `usages` group callback.
-      `dep`: sourced from the group context (previously a status-level @click.option) — the
+      `dep`: sourced from the group context — the
         --dep/-d value declared on the `usages` group callback.
       `exit_code`: propagated from the report produced by `status_logic` (0 success, 1 drift/error).
 

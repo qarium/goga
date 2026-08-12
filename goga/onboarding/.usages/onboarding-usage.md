@@ -46,7 +46,7 @@ Run an interactive user survey and generate project files.
 
 `GogaConfigAnswers` fields: `language`, `agent`, `image`, `pipeline_agent`,
 `pipeline_env`, `env`, `codemanifest_usages`, `codemanifest_annotations`,
-`dockerfile_path`, `dockerfile_base_image` (same semantics as before — see CODEMANIFEST).
+`dockerfile_path`, `dockerfile_base_image` (see CODEMANIFEST).
 
 ## Survey flow
 
@@ -59,10 +59,10 @@ The image branch depends on the Dockerfile decision:
   - `ask_base_image(language)` — the `FROM` baseline (language hints, default = last entry).
   - `ask_image_name(language=None, default=<git-project-name>:latest)` — the name/tag for
     the image built from the Dockerfile. The default is resolved from the git project name
-    via the shared `resolve_project_name` helper (re-exported from `goga.config`):
+    via the shared `resolve_project_name` helper:
     `<name>:latest` when the git remote is available; **when the git name is unavailable,
-    no default is offered and `image` is required**. Passing `language` retains the legacy
-    `{language}-image:latest` default (backward-compatible).
+    no default is offered and `image` is required**. Passing `language` retains the
+    `{language}-image:latest` default (compatibility behavior).
 - **Without a Dockerfile** (`dockerfile_path` None): `ask_image(language)` — pre-built
   image to PULL.
 
@@ -83,7 +83,7 @@ The image branch depends on the Dockerfile decision:
 
 ## Generated .goga/config.yml structure
 
-(Same as before — `language`, `image`, `dockerfile`, `build`, `pipeline`, `codemanifest`
+(`language`, `image`, `dockerfile`, `build`, `pipeline`, `codemanifest`
 field order; see CODEMANIFEST `FileGenerator`.)
 
 ## Anti-patterns

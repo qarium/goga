@@ -266,9 +266,7 @@ class TestSyncLogic:
             "docs",
         )
 
-    def test_sync_group_filter_syncs_only_matching_group(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_group_filter_syncs_only_matching_group(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """``group="libs"`` syncs only the ``libs`` group (its ``click`` + ``common``)."""
         _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
 
@@ -299,9 +297,7 @@ class TestSyncLogic:
         }
         assert Path(".goga/usages/apps/common") not in deploy_targets
 
-    def test_sync_dep_filter_applies_across_all_groups(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_dep_filter_applies_across_all_groups(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """``dep="common"`` (no group) syncs ``common`` in every group."""
         _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
 
@@ -324,9 +320,7 @@ class TestSyncLogic:
         # ``common`` in both ``libs`` and ``apps``; ``libs/click`` is skipped
         assert clone_mock.call_count == 2
         # every call targets the ``common`` dep's git URL (never ``click``)
-        assert {call.args for call in clone_mock.call_args_list} == {
-            ("https://x/common.git", "main")
-        }
+        assert {call.args for call in clone_mock.call_args_list} == {("https://x/common.git", "main")}
         deploy_targets = {call.args[1] for call in deploy_mock.call_args_list}
         assert deploy_targets == {
             Path(".goga/usages/libs/common"),
@@ -334,9 +328,7 @@ class TestSyncLogic:
         }
         assert Path(".goga/usages/libs/click") not in deploy_targets
 
-    def test_sync_group_and_dep_filter_narrows_to_one_dep(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_group_and_dep_filter_narrows_to_one_dep(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """``group="libs", dep="click"`` syncs exactly ``libs/click``."""
         _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
 
@@ -363,9 +355,7 @@ class TestSyncLogic:
             None,
         )
 
-    def test_sync_filter_matching_nothing_returns_zero(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ):
+    def test_sync_filter_matching_nothing_returns_zero(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         """A filter matching no dep → exit 0 (nothing to sync, not an error)."""
         _write_config(tmp_path, usages_block=_MULTI_GROUP_DEP_BLOCK)
         monkeypatch.chdir(tmp_path)

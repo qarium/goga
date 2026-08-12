@@ -125,7 +125,7 @@ Annotations: |
       ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
       → ask_agent → ask_dockerfile_path → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
       The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
-      ask_base_image (FROM) is surveyed, then `resolve_project_name` (imported from goga/config) is
+      ask_base_image (FROM) is surveyed, then `resolve_project_name` is
       called — if it returns a name the proposed default is <name>:latest, if it returns None no
       default is set — then ask_image_name(language=None, default=<that value>) is surveyed (built
       image tag), and dockerfile_base_image is set; otherwise ask_image (pre-built image to pull) is
@@ -162,8 +162,8 @@ Annotations: |
     "ask_image_name(language: str | None = None, default: str | None = None) -> image: str": |
       Survey the NAME (tag) for the image built from the Dockerfile (Dockerfile branch), since
       goga build runs docker build -t <image>. Free-form input. When `language` is provided
-      (not None): legacy default `{language}-image:latest` (backward-compatible with consumers
-      that pass `language`). When `language` is None: offer `default` as the default; when
+      (not None): default `{language}-image:latest` (used by consumers that pass
+      `language`). When `language` is None: offer `default` as the default; when
       `default` is None → no default is offered and the `image` field is required. Captures the
       top-level image field (NOT build.image).
 

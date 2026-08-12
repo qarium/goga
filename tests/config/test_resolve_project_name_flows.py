@@ -112,9 +112,7 @@ class TestFlowC1PipelinePrefix:
         monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", lambda: None)
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(None)
-            ) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(None)) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
@@ -133,9 +131,7 @@ class TestFlowC1PipelinePrefix:
         """
         project_dir = self._setup(tmp_path, monkeypatch)
         # Restore the real (imported) routine; patch the subprocess it calls.
-        monkeypatch.setattr(
-            _run_pipeline_module, "resolve_project_name", _identity_module.resolve_project_name
-        )
+        monkeypatch.setattr(_run_pipeline_module, "resolve_project_name", _identity_module.resolve_project_name)
 
         def raise_filenotfound(_argv, **_kwargs):
             raise FileNotFoundError(2, "No such file or directory: 'git'")
@@ -143,9 +139,7 @@ class TestFlowC1PipelinePrefix:
         monkeypatch.setattr(_identity_module.subprocess, "run", raise_filenotfound)
 
         with (
-            mock.patch.object(
-                _run_pipeline_module, "compile_flow", return_value=_fake_documents(None)
-            ) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents(None)) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)

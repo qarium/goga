@@ -123,9 +123,17 @@ class FileGenerator:
 def _build_block(agent: str | None, env: dict | None) -> dict | None:
     """Assemble a build.task_executor / pipeline content dict.
 
-    Returns a dict with `agent` and/or `env` keys (in that order), or None when
-    the block carries no content (no agent and no/empty env) — signalling the
-    caller to omit the block entirely.
+    Keys are emitted in field order (`agent`, then `env`). The block is omitted
+    entirely when it carries no content (no agent and no/empty env).
+
+    Args:
+        agent: The agent name to emit under the `agent` key, or None to omit it.
+        env: The environment mapping to emit under the `env` key, or None/empty
+            to omit it.
+
+    Returns:
+        A dict with `agent` and/or `env` keys (in that order), or None when the
+        block carries no content — signalling the caller to omit the block.
     """
     block: dict = {}
 
@@ -139,7 +147,16 @@ def _build_block(agent: str | None, env: dict | None) -> dict | None:
 
 
 def _build_codemanifest_block(config: GogaConfigAnswers) -> dict | None:
-    """Assemble the optional codemanifest block, or None when it has no content."""
+    """Assemble the optional codemanifest block, or None when it has no content.
+
+    Args:
+        config: The goga config answers carrying `codemanifest_usages` and
+            `codemanifest_annotations`.
+
+    Returns:
+        A codemanifest dict with `usages` and/or `annotations` keys, or None
+        when neither is present — signalling the caller to omit the block.
+    """
     if not config.codemanifest_usages and config.codemanifest_annotations is None:
         return None
 
@@ -147,6 +164,7 @@ def _build_codemanifest_block(config: GogaConfigAnswers) -> dict | None:
 
     if config.codemanifest_usages:
         codemanifest["usages"] = config.codemanifest_usages
+
     if config.codemanifest_annotations is not None:
         codemanifest["annotations"] = _LiteralStr(config.codemanifest_annotations)
 

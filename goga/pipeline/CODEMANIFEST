@@ -310,8 +310,7 @@ Annotations: |
         constructs a new `WorkflowDocument` when workflow is None, e.g.
         --no-workflow or no resolved workflow-file); when empty, the workflow
         is unchanged. The result is forwarded to `compile_flow` at step 7.
-    7. Resolve the in-container project name via `resolve_project_name` **imported
-       from goga/config** (None when the git origin remote is unavailable — mirroring the root_dir
+    7. Resolve the in-container project name via `resolve_project_name` (None when the git origin remote is unavailable — mirroring the root_dir
        pattern, never raises). Compile the pipeline-file via `compile_flow`
        (per the `compile-flow` practice) with the resolved workflow as the
        optional workflow argument, the in-container project root (Path.cwd(),
@@ -490,7 +489,7 @@ Annotations: |
     - Do not write or generate a workflow-file for skip — the merge is
       in-memory only
     - project_name is derived in-container via `resolve_project_name`
-      **(imported from goga/config)** (mirroring the root_dir pattern — derived inside the container, not read
+      (mirroring the root_dir pattern — derived inside the container, not read
       from config); None when the git origin remote is unavailable → the
       compiled flow description carries no [<project-name>] prefix
 
