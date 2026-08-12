@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 from ..afm import run_flow
+from ..config import resolve_project_name
 from .apply_skip_stages import apply_skip_stages
 from .compiler import compile_flow, translate_role
 from .list_pipelines import list_pipelines
@@ -77,54 +77,6 @@ def _resolve_workflow(name: str) -> WorkflowDocument | None:
         return None
 
     return parse_workflow(workflow_path)
-
-
-def resolve_project_name() -> str | None:
-    """Derive the project name from the git origin remote URL.
-
-    The in-container project name is reflected into the compiled flow-file
-    description as a ``[<project-name>]`` prefix (Part 2). It is derived from
-    ``git config --get remote.origin.url`` — the same git remote the project
-    bind-mount originates from — and is OUTPUT-only context, mirroring the
-    ``root_dir`` pattern (derived in-container from ``Path.cwd()``, never read
-    from config, and never raising so it cannot abort a pipeline run).
-
-    The basename of the URL is the project name, with a trailing ``.git``
-    suffix stripped. Any failure resolves to ``None`` rather than raising: a
-    missing ``git`` binary, not a git repo, no ``origin`` remote configured, a
-    non-zero exit, an empty result, or a trailing-slash URL whose basename is
-    empty. A ``None`` name simply yields no prefix on the flow description.
-
-    Returns:
-        The derived project name, or ``None`` when it cannot be derived.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "config", "--get", "remote.origin.url"],
-            capture_output=True,
-            text=True,
-            cwd=str(Path.cwd()),
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-
-    if result.returncode != 0:
-        return None
-
-    url = result.stdout.strip()
-    if not url:
-        return None
-
-    # ``os.path.basename`` is intentional over ``Path(url).name``: the former
-    # returns ``""`` for a trailing-slash URL (e.g. ``".../acme/"``) while the
-    # latter returns ``"acme"`` — the trailing-slash case must resolve to
-    # ``None`` (no prefix), so the basename-empty guard below fires. noqa: PTH119
-    name = os.path.basename(url)  # noqa: PTH119
-    if name.endswith(".git"):
-        name = name[:-4]
-
-    return name or None
 
 
 def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> int:
