@@ -629,3 +629,212 @@ class TestStatusAppIntegration:
 
         assert result.exit_code == 0
         assert "status" in result.output
+
+
+class TestUsagesGroupEndToEnd:
+    """Whole-feature Part A integration: the real ``usages`` group drives the
+    real ``sync_logic`` (config load -> filter loop -> clone + deploy) end-to-end
+    via the click CLI, with the git boundary (``clone_repository``) and the
+    filesystem side-effect of ``deploy_usages`` mocked. Exercises the
+    ``goga usages --group G --dep D sync`` flow (only the matching ``(G,D)``
+    pair is deployed) and the symmetric ``status`` path through the group
+    context (call shape unchanged).
+    """
+
+    @staticmethod
+    def _two_group_config() -> str:
+        """Two-group, multi-dep usages block.
+
+        ``libs`` carries ``click`` + ``common`` and ``apps`` carries ``common``,
+        so a ``--group`` filter narrows to one group and a ``--dep`` filter
+        crosses group boundaries.
+        """
+        return (
+            "usages:\n"
+            "  libs:\n"
+            "    click:\n"
+            "      git: https://x/click.git\n"
+            "      ref: main\n"
+            "    common:\n"
+            "      git: https://x/common.git\n"
+            "      ref: main\n"
+            "  apps:\n"
+            "    common:\n"
+            "      git: https://x/common.git\n"
+            "      ref: main\n"
+        )
+
+    def test_sync_group_dep_filter_deploys_only_matching_pair(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ) -> None:
+        """``goga usages --group libs --dep click sync --force`` deploys ONLY
+        ``libs/click`` — the real ``sync_logic`` filter loop runs through the
+        group context, so the non-matching ``libs/common`` and ``apps/common``
+        are skipped (never cloned or deployed)."""
+        write_config(self._two_group_config())
+        monkeypatch.chdir(tmp_path)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+        sync_mod = importlib.import_module("goga.usages.sync.sync")
+
+        with (
+            mock.patch.object(sync_mod, "clone_repository", return_value=fake_repo) as clone_mock,
+            mock.patch.object(sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "--group", "libs", "--dep", "click", "sync", "--force"])
+
+        assert result.exit_code == 0
+        # Only the matching (libs, click) pair is synced.
+        clone_mock.assert_called_once_with("https://x/click.git", "main")
+        deploy_mock.assert_called_once_with(fake_repo, Path(".goga/usages/libs/click"), None)
+
+    def test_sync_dep_only_filter_applies_across_groups(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ) -> None:
+        """``goga usages --dep common sync --force`` deploys ``common`` in every
+        group (``libs/common`` AND ``apps/common``); ``libs/click`` is skipped."""
+        write_config(self._two_group_config())
+        monkeypatch.chdir(tmp_path)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+        sync_mod = importlib.import_module("goga.usages.sync.sync")
+
+        with (
+            mock.patch.object(sync_mod, "clone_repository", return_value=fake_repo) as clone_mock,
+            mock.patch.object(sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "--dep", "common", "sync", "--force"])
+
+        assert result.exit_code == 0
+        # ``common`` in both groups; every clone targets the common URL.
+        assert clone_mock.call_count == 2
+        assert {call.args for call in clone_mock.call_args_list} == {("https://x/common.git", "main")}
+        deploy_targets = {call.args[1] for call in deploy_mock.call_args_list}
+        assert deploy_targets == {Path(".goga/usages/libs/common"), Path(".goga/usages/apps/common")}
+
+    def test_sync_no_filter_deploys_all(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        write_config,
+    ) -> None:
+        """``goga usages sync --force`` (no filter) deploys every declared dep."""
+        write_config(self._two_group_config())
+        monkeypatch.chdir(tmp_path)
+
+        fake_repo = tmp_path / "fake_clone"
+        fake_repo.mkdir()
+        sync_mod = importlib.import_module("goga.usages.sync.sync")
+
+        with (
+            mock.patch.object(sync_mod, "clone_repository", return_value=fake_repo) as clone_mock,
+            mock.patch.object(sync_mod, "deploy_usages") as deploy_mock,
+        ):
+            runner = CliRunner()
+            result = runner.invoke(app, ["usages", "sync", "--force"])
+
+        assert result.exit_code == 0
+        # All three deps deployed: libs/click, libs/common, apps/common.
+        assert clone_mock.call_count == 3
+        deploy_targets = {call.args[1] for call in deploy_mock.call_args_list}
+        assert deploy_targets == {
+            Path(".goga/usages/libs/click"),
+            Path(".goga/usages/libs/common"),
+            Path(".goga/usages/apps/common"),
+        }
+
+    def test_status_group_dep_filter_threaded_through_context(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ) -> None:
+        """Symmetric Part A ``status`` path: ``goga usages --group G --dep D
+        status`` threads the filters through the group context to the real
+        ``status_logic`` (call shape ``(group, dep)`` unchanged). Only the
+        matching dep is inspected.
+
+        Builds two groups; pre-seeds every target so every dep resolves to a
+        concrete state, then filters to ``libs/click`` and asserts only that
+        dep appears in the rendered output.
+        """
+        click_repo = make_repo("click", {".usages/src/click.md": "C1"})
+        common_repo = make_repo("common", {".usages/common.md": "COMMON"})
+        write_config(self._two_group_config())
+        monkeypatch.chdir(tmp_path)
+
+        # Pre-seed every dep target to match its remote → all up_to_date.
+        usages_root = tmp_path / ".goga" / "usages"
+        for group, dep, rel, content in (
+            ("libs", "click", "src/click.md", "C1"),
+            ("libs", "common", "common.md", "COMMON"),
+            ("apps", "common", "common.md", "COMMON"),
+        ):
+            target = usages_root / group / dep
+            target.mkdir(parents=True, exist_ok=True)
+            (target / rel).parent.mkdir(parents=True, exist_ok=True)
+            (target / rel).write_text(content)
+
+        runner = CliRunner()
+        sources = {
+            "https://x/click.git": click_repo,
+            "https://x/common.git": common_repo,
+        }
+        with patch_clone(sources):
+            result = runner.invoke(app, ["usages", "--group", "libs", "--dep", "click", "status"])
+
+        assert result.exit_code == 0
+        # Only the filtered libs/click dep is rendered; the others are excluded.
+        assert "click/" in result.output
+        assert "common/" not in result.output
+
+    def test_status_no_filter_includes_all_groups(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        make_repo,
+        write_config,
+        patch_clone,
+    ) -> None:
+        """Symmetric Part A ``status`` path with no filter: both groups render."""
+        click_repo = make_repo("click", {".usages/src/click.md": "C1"})
+        common_repo = make_repo("common", {".usages/common.md": "COMMON"})
+        write_config(self._two_group_config())
+        monkeypatch.chdir(tmp_path)
+
+        usages_root = tmp_path / ".goga" / "usages"
+        for group, dep, rel, content in (
+            ("libs", "click", "src/click.md", "C1"),
+            ("libs", "common", "common.md", "COMMON"),
+            ("apps", "common", "common.md", "COMMON"),
+        ):
+            target = usages_root / group / dep
+            target.mkdir(parents=True, exist_ok=True)
+            (target / rel).parent.mkdir(parents=True, exist_ok=True)
+            (target / rel).write_text(content)
+
+        runner = CliRunner()
+        sources = {
+            "https://x/click.git": click_repo,
+            "https://x/common.git": common_repo,
+        }
+        with patch_clone(sources):
+            result = runner.invoke(app, ["usages", "status"])
+
+        assert result.exit_code == 0
+        # Both groups render (sorted: apps before libs).
+        assert "apps/" in result.output
+        assert "libs/" in result.output
+        assert result.output.index("apps/") < result.output.index("libs/")

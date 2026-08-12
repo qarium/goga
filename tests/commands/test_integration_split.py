@@ -32,7 +32,7 @@ class TestUsagesSyncDelegation:
             runner = CliRunner()
             result = runner.invoke(usages_cli, ["sync"])
 
-        mock_logic.assert_called_once_with(False)
+        mock_logic.assert_called_once_with(False, None, None)
         assert result.exit_code == 0
 
     def test_usages_sync_delegates_exit_code_1(self) -> None:
@@ -279,7 +279,7 @@ class TestAllCommandsDelegationViaApp:
             runner = CliRunner()
             result = runner.invoke(app, ["usages", "sync"])
 
-        mock_logic.assert_called_once_with(False)
+        mock_logic.assert_called_once_with(False, None, None)
         assert result.exit_code == 0
 
     def test_schema_via_app_delegates(self, tmp_path: Path) -> None:
