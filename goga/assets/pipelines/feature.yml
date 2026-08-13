@@ -2,13 +2,20 @@ name: GogaFeature
 description: "Feature development"
 ---
 
+- name: discover
+  title: "Technical discovery & architecture design"
+  communication: true
+  prompt: |
+    Save the ADR file as `<git branch --show-current>.md`
+  skills:
+    - goga-discover
+
 - name: propose
   title: "Create the task from a user propose"
   communication: true
   prompt: |
     Save the task file as `<git branch --show-current>.md`
-
-    Use `docs/proposals/<git branch --show-current>.md` as the task file, if it exists.
+    Use `docs/proposals/<git branch --show-current>.md` as the task file, if it exists
   skills:
     - goga-propose
 
@@ -81,7 +88,7 @@ description: "Feature development"
   skills:
     - goga-review-plan
 
-- name: commit-architecture
+- name: prepare-build
   title: "Commit changes and wait for the coding plan was built"
   communication: true
   prompt: |
