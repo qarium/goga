@@ -26,13 +26,14 @@ Annotations: |
 
     Algorithm:
     1. Resolve the package name from `name` using the goga_tool_ prefix
-    2. Import the package
+    2. Import the package; a `ModuleNotFoundError` whose `.name` equals the package name means the package itself is absent, while any other import error (a transitive import inside the package) is re-raised uncaught so its honest traceback surfaces
     3. Retrieve the entry point from the imported module
     4. Compute the optional injections via `build_injections`
     5. Invoke the entry point, forwarding `args` and the projected injections
 
     Error handling:
-    - Package not found → user-facing message, exit with code 1
+    - Package not found (the package itself is absent) → user-facing message, exit with code 1
+    - Import error from a found package (a transitive import inside it fails) → re-raised uncaught as an honest traceback
     - Entry point missing → user-facing message, exit with code 1
     - Manifest load failure → user-facing message, exit with code 1
 

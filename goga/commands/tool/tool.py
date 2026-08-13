@@ -95,7 +95,17 @@ def tool(ctx: click.Context, name: str) -> None:
     package_name = f"goga_tool_{name}"
     try:
         module = importlib.import_module(package_name)
-    except ModuleNotFoundError:
+    except ModuleNotFoundError as exc:
+        # `importlib.import_module` raises ModuleNotFoundError both when the
+        # requested package is genuinely absent and when the package exists but
+        # a transitive import inside it fails. The import machinery records the
+        # name of the module it could not resolve on `exc.name`, and that equals
+        # `package_name` only when the tool package itself is missing. When a
+        # deeper import failed, the package was found, so the misleading "not
+        # found" message must not mask the real cause — re-raise and let the
+        # honest traceback through, exactly like the `main` invocation below.
+        if exc.name != package_name:
+            raise
         click.secho(f"Tool package '{package_name}' not found", fg="red", err=True)
         ctx.exit(1)
 
