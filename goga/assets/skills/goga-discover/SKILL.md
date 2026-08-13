@@ -1,9 +1,9 @@
 ---
-name: goga-refine
+name: goga-discover
 description: Interview the user relentlessly about a decision until every branch of the design tree is resolved, then record the result as a short ADR.
 ---
 
-# Goga refine
+# Goga discover
 
 Interview the user relentlessly until you reach a shared understanding on a decision worth recording. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
@@ -23,7 +23,7 @@ Finding _facts_ is your job, never the user's. When a frontier question needs a 
 
 The interview is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not write the ADR until the user confirms you have reached a shared understanding.
 
-Once confirmed, write the ADR to `docs/proposes/<topic>.md` (slug name, lowercase kebab-case; create the directory lazily if needed), following `adr-template.md` from the current skill directory.
+Once confirmed, write the ADR to `docs/proposals/<topic>.md` (slug name, lowercase kebab-case; create the directory lazily if needed), following `adr-template.md` from the current skill directory.
 
 ## Research
 

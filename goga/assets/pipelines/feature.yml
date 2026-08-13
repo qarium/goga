@@ -7,6 +7,8 @@ description: "Feature development"
   communication: true
   prompt: |
     Save the task file as `<git branch --show-current>.md`
+
+    Use `docs/proposals/<git branch --show-current>.md` as the task file, if it exists.
   skills:
     - goga-propose
 
@@ -92,7 +94,7 @@ description: "Feature development"
 
     Constraints:
       - Don't autoconfirm user answer.
-      - Except changes in `docs/<tasks|arch|design|plans>`.
+      - Except changes in `docs/<proposals|tasks|arch|design|plans>`.
 
 - name: accept-result
   title: "Contracts & coverage audit"
