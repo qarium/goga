@@ -174,9 +174,13 @@ class TestFlowC2OnboardingDefault:
         False,  # Add custom pipeline env variable?
     ]
 
-    def _run_goga_config(self, resolve_return, built_image_reply, monkeypatch):
+    def _run_goga_config(self, resolve_return, built_image_reply, monkeypatch, tmp_path):
         """Drive ``ask_goga_config`` to its Dockerfile branch; capture the offered
         built-image default and return the resulting :class:`GogaConfigAnswers`."""
+        # ask_goga_config() short-circuits to None when .goga/config.yml exists;
+        # the repo CWD contains the goga project's own config.yml, so run in a
+        # clean tmp_path (no config.yml) to reach the Dockerfile branch.
+        monkeypatch.chdir(tmp_path)
         captured: dict = {}
 
         def fake_image_prompt(message, *args, **kwargs):
@@ -209,17 +213,17 @@ class TestFlowC2OnboardingDefault:
 
         return result, captured
 
-    def test_c2_name_offers_name_latest_as_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_c2_name_offers_name_latest_as_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
-        result, captured = self._run_goga_config("widget", "widget:latest", monkeypatch)
+        result, captured = self._run_goga_config("widget", "widget:latest", monkeypatch, tmp_path)
 
         assert captured["default"] == "widget:latest"
         assert result.image == "widget:latest"
         assert result.dockerfile_path == "Dockerfile"
 
-    def test_c2_none_offers_no_default_image_required(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_c2_none_offers_no_default_image_required(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """resolve_project_name → None → ask_image_name called with no default (image required)."""
-        result, captured = self._run_goga_config(None, "provided-image:latest", monkeypatch)
+        result, captured = self._run_goga_config(None, "provided-image:latest", monkeypatch, tmp_path)
 
         assert captured["default"] is None
         assert result.image == "provided-image:latest"

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import click
+import pytest
 import requests.exceptions
 import yaml
 from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
@@ -326,7 +327,11 @@ class TestIntegration:
         assert data["pipeline"]["env"] == {"CODEX_MODEL": "o4-mini"}
         assert "image" not in data["build"]
 
-    def test_init_generates_goga_dockerfile_at_new_default_path(self, tmp_path: Path) -> None:
+    def test_init_generates_goga_dockerfile_at_new_default_path(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """End-to-end (D5): accept Dockerfile + Enter → .goga/Dockerfile created & recorded.
 
         Cross-entity scenario exercising the full chain
@@ -335,6 +340,10 @@ class TestIntegration:
         prompt, taking the new `.goga/Dockerfile` default (most common case).
         Asserts the default propagates into both the filesystem and config.yml.
         """
+        # ask_goga_config() short-circuits to None when .goga/config.yml exists;
+        # the repo CWD contains the goga project's own config.yml, so run in a
+        # clean tmp_path (no config.yml) to take the non-skip survey path.
+        monkeypatch.chdir(tmp_path)
         other_prompts = iter(
             [
                 "python",  # language
@@ -385,13 +394,20 @@ class TestIntegration:
         assert "dockerfile: .goga/Dockerfile" in config_yml
         assert "image: my-python-image:latest" in config_yml
 
-    def test_init_custom_dockerfile_path_flows_through_chain(self, tmp_path: Path) -> None:
+    def test_init_custom_dockerfile_path_flows_through_chain(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """Cross-entity: a custom Dockerfile path reaches both the FS and config.yml.
 
         Confirms that the survey answer (dockerfile_path) is threaded unchanged
         through Questionnaire → InitLogic → FileGenerator, not hardcoded to the
         default. The file lands at the user-chosen location under .goga/.
         """
+        # Run in a clean dir without .goga/config.yml so ask_goga_config() does
+        # not short-circuit to None (the repo CWD has the goga project's config).
+        monkeypatch.chdir(tmp_path)
         prompts = iter(
             [
                 "python",  # language

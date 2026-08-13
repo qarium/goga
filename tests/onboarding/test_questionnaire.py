@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import get_type_hints
 from unittest.mock import patch
 
 import pytest
@@ -28,6 +29,11 @@ class TestContract:
         q = Questionnaire()
         assert hasattr(q, "ask_goga_config")
         assert callable(q.ask_goga_config)
+
+    def test_ask_goga_config_return_annotation_is_optional(self) -> None:
+        """ask_goga_config returns GogaConfigAnswers | None (skip whole survey)."""
+        hints = get_type_hints(Questionnaire.ask_goga_config)
+        assert hints["return"] == GogaConfigAnswers | None
 
     def test_ask_image_name_two_mode_signature_contract(self) -> None:
         """ask_image_name is two-mode: (language=None, default=None) both default to None."""
@@ -70,6 +76,19 @@ class TestLogic:
     10. (If pipeline env suggestions: value for each key)
     11. (If custom pipeline env: key, value, in loop)
     """
+
+    @pytest.fixture(autouse=True)
+    def _clean_cwd(self, tmp_path, monkeypatch) -> None:
+        """Run each survey test in a clean dir without .goga/config.yml.
+
+        ask_goga_config() short-circuits to None when .goga/config.yml exists.
+        The repository CWD already contains .goga/config.yml (the goga project's
+        own config), and there is no autouse chdir in the shared conftest (it
+        redirects only HOME). Without this, every survey test would skip the
+        survey and fail its assertions. monkeypatch.chdir restores the original
+        CWD automatically on teardown.
+        """
+        monkeypatch.chdir(tmp_path)
 
     def test_questionnaire_ask_goga_config_python_with_convention(self) -> None:
         prompts = iter(
@@ -1073,6 +1092,16 @@ class TestAskImageNameTwoMode:
 class TestAskGogaConfigDockerfileBranch:
     """Logic tests for the ask_goga_config Dockerfile branch wiring of resolve_project_name."""
 
+    @pytest.fixture(autouse=True)
+    def _clean_cwd(self, tmp_path, monkeypatch) -> None:
+        """Run each survey test in a clean dir without .goga/config.yml.
+
+        See TestLogic._clean_cwd for rationale. monkeypatch.chdir restores the
+        original CWD on teardown.
+        """
+        monkeypatch.chdir(tmp_path)
+
+
     def test_dockerfile_branch_uses_resolve_project_name_for_default(self) -> None:
         """(d) resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
         captured: dict = {}
@@ -1173,3 +1202,103 @@ class TestAskGogaConfigDockerfileBranch:
 
         assert all(not c["has_default"] for c in captured)
         assert result.image == "provided-image:latest"
+
+
+class TestAskGogaConfigConditionalSkip:
+    """Logic tests for the filesystem-conditional ask_goga_config behavior."""
+
+    def test_ask_goga_config_returns_none_when_config_yml_exists(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """When .goga/config.yml exists, the whole config survey is skipped."""
+        goga = tmp_path / ".goga"
+        goga.mkdir()
+        (goga / "config.yml").write_text("language: python\n")
+        monkeypatch.chdir(tmp_path)
+
+        # The survey must be fully skipped: nothing should be echoed, and no
+        # prompt/confirm should fire. Patch them to raise if touched.
+        with (
+            patch("click.echo") as mock_echo,
+            patch("click.prompt") as mock_prompt,
+            patch("click.confirm") as mock_confirm,
+        ):
+            result = Questionnaire().ask_goga_config()
+
+        assert result is None
+        assert all("Collecting" not in str(c) for c in mock_echo.call_args_list)
+        mock_prompt.assert_not_called()
+        mock_confirm.assert_not_called()
+
+    def test_ask_goga_config_skips_base_convention_when_conventions_md_exists(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """When conventions.md exists (config.yml absent), base convention is skipped.
+
+        ask_base_convention must NOT be invoked — its prefill is (None, None).
+        Drive the remaining survey deterministically and assert the result is
+        assembled and "Base Convention" is never printed.
+        """
+        goga = tmp_path / ".goga"
+        usages = goga / "usages"
+        usages.mkdir(parents=True)
+        (usages / "conventions.md").write_text("# conventions\n")
+        monkeypatch.chdir(tmp_path)
+
+        prompts = iter(
+            [
+                "python",  # language
+                "claude",  # agent
+                "qarium/goga-python-3.12:1.0",  # image
+                "claude",  # pipeline agent
+            ]
+        )
+        # No "Download base convention?" confirm — that step is skipped. The
+        # confirms below follow the survey order AFTER ask_base_convention.
+        confirms = iter(
+            [
+                False,  # Add codemanifest usages?
+                False,  # Add codemanifest annotations?
+                True,  # Configure a build agent?
+                False,  # Create Dockerfile?
+                False,  # Set suggested task env variables?
+                False,  # Add custom task env variable?
+                True,  # Configure a pipeline agent?
+                False,  # Set suggested pipeline env variables?
+                False,  # Add custom pipeline env variable?
+            ]
+        )
+
+        with (
+            patch("click.prompt", side_effect=prompts),
+            patch("click.echo") as mock_echo,
+            patch("click.confirm", side_effect=confirms),
+        ):
+            result = Questionnaire().ask_goga_config()
+
+        assert result is not None
+        # base convention prefill is (None, None), so no conventions entry is added
+        assert result.codemanifest_usages is None
+        assert result.codemanifest_annotations is None
+        assert all("Base Convention" not in str(c) for c in mock_echo.call_args_list)
+
+    def test_ask_wraps_none_into_init_answers_when_config_yml_exists(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """ask() wraps the Optional result (None) into InitAnswers transparently."""
+        goga = tmp_path / ".goga"
+        goga.mkdir()
+        (goga / "config.yml").write_text("language: python\n")
+        monkeypatch.chdir(tmp_path)
+
+        with patch("click.prompt"), patch("click.confirm"):
+            result = Questionnaire().ask()
+
+        assert isinstance(result, InitAnswers)
+        assert result.goga_config is None
