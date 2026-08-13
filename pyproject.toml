@@ -22,8 +22,8 @@ classifiers = [
 dependencies = [
     "pip",
     "click>=8.0",
+    "copier>=9.0",
     "pyyaml>=6.0",
-    "pydantic>=2.13.4",
     "requests>=2.28.0",
     "tree-sitter>=0.25.2",
     "tree-sitter-go>=0.25.0",
