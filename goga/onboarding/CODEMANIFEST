@@ -28,7 +28,7 @@ Usages:
     Map each agent to a list of environment variable keys for prompting.
     Display the keys to the user; collect corresponding values.
     Agent → env key mapping:
-    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
+    - claude: ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_MODEL
     - codex: CODEX_MODEL
     - cursor: CURSOR_MODEL
     - opencode: OPENCODE_MODEL, OPENCODE_VARIANT
