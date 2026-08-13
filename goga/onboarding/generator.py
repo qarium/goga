@@ -49,6 +49,9 @@ class FileGenerator:
         """
         config = answers.goga_config
 
+        if config is None:
+            return
+
         if config.dockerfile_path is not None:
             dockerfile_content = f"FROM {config.dockerfile_base_image}\n"
             dockerfile = self._base_dir / config.dockerfile_path
