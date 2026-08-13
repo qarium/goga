@@ -3,7 +3,9 @@
 ## Overview
 
 The `goga.onboarding` package provides interactive goga project onboarding —
-collecting user input and generating configuration files.
+collecting user input and generating configuration files. Onboarding is
+filesystem-conditional: sections whose artefacts already exist are skipped
+(relevant when onboarding runs after scaffold).
 
 ## Facade
 
@@ -35,20 +37,26 @@ Run an interactive user survey and generate project files.
 
 **Behavior:**
 - Create the .goga/ directory if it does not exist
-- Generate .goga/config.yml with minimal configuration
+- Generate .goga/config.yml with minimal configuration — SKIPPED when goga_config is None (the file already exists)
 - If the user opted in — download .goga/usages/conventions.md
 - If the user requested a custom Dockerfile — create it with `FROM {dockerfile_base_image}`;
   the top-level `image` field holds the name of the image built from it (the `docker build -t` tag)
 
 ### Data
 
-`InitAnswers` — response container holding `GogaConfigAnswers`.
+`InitAnswers` — response container holding `GogaConfigAnswers` (now Optional).
+`goga_config`: `GogaConfigAnswers | None`. `None` = do not write .goga/config.yml
+(used when the file already exists).
 
 `GogaConfigAnswers` fields: `language`, `agent`, `image`, `pipeline_agent`,
 `pipeline_env`, `env`, `codemanifest_usages`, `codemanifest_annotations`,
 `dockerfile_path`, `dockerfile_base_image` (see CODEMANIFEST).
 
 ## Survey flow
+
+`Questionnaire.ask_goga_config()` returns `GogaConfigAnswers | None`: If
+.goga/config.yml already exists -> returns None (the whole config survey is
+skipped). Otherwise proceeds:
 
 `Questionnaire.ask_goga_config()` proceeds: language → convention →
 codemanifest_usages → codemanifest_annotations → agent → dockerfile → (image branch)
@@ -66,10 +74,19 @@ The image branch depends on the Dockerfile decision:
 - **Without a Dockerfile** (`dockerfile_path` None): `ask_image(language)` — pre-built
   image to PULL.
 
+## Conditional onboarding
+
+When onboarding runs after scaffold (`goga init <tpl>`), the template may
+have produced `.goga/config.yml` and/or `.goga/usages/conventions.md`.
+Onboarding detects existing artefacts and skips the corresponding survey
+sections instead of asking twice. This is composition, not arbitration:
+where both the template and onboarding would write `.goga/config.yml`, the
+template wins because it ran first.
+
 ## Per-field survey methods
 
 - `ask_language() -> str`
-- `ask_base_convention() -> (codemanifest_usages, codemanifest_annotations)`
+- `ask_base_convention() -> (codemanifest_usages, codemanifest_annotations)` — skipped when .goga/usages/conventions.md exists
 - `ask_codemanifest_usages(prefill: dict | None = None) -> dict | None`
 - `ask_codemanifest_annotations(prefill: str | None = None) -> str | None`
 - `ask_agent() -> str | None`
@@ -91,3 +108,4 @@ field order; see CODEMANIFEST `FileGenerator`.)
 - Do not write `build.image` — the Docker image is the top-level `image` field.
 - Do not force-emit empty `build:`/`pipeline:` blocks.
 - Do not inherit `agent` into `pipeline_agent`.
+- Do not regenerate .goga/config.yml when goga_config is None — None means skip.
