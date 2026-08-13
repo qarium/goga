@@ -296,6 +296,30 @@ class TestLogic:
         assert result.exit_code == 1
         mock_logic.run.assert_not_called()
 
+    def test_init_scaffold_generate_nonzero_skips_onboarding(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """SCAFFOLD_THEN_ONBOARDING: Scaffold.generate returns nonzero → that
+        exit code propagates and onboarding does not run."""
+        from goga.commands.init import init
+
+        mock_scaffold = mock.MagicMock()
+        mock_scaffold.generate.return_value = 1
+        mock_logic = mock.MagicMock(spec=InitLogic)
+
+        monkeypatch.chdir(tmp_path)
+
+        with (
+            mock.patch.object(_cmd_init_module, "Scaffold", return_value=mock_scaffold),
+            mock.patch.object(_cmd_init_module, "InitLogic", return_value=mock_logic),
+        ):
+            runner = CliRunner()
+            result = runner.invoke(init, ["https://example.com/tpl.git"])
+
+        assert result.exit_code == 1
+        mock_scaffold.generate.assert_called_once_with("https://example.com/tpl.git", None)
+        mock_logic.run.assert_not_called()
+
     def test_init_tpl_skips_already_init_guard_in_existing_project(
         self, tmp_path, monkeypatch
     ) -> None:

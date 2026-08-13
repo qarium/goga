@@ -91,6 +91,8 @@ Start a new project from scratch and ship your first piece of work end-to-end.
 goga init
 ```
 
+You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. See [`goga init`](https://qarium.github.io/goga/cli/init/) for the full surface.
+
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
 **3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. Credentials for `claude`, `codex`, and `opencode` are detected on the host and forwarded into the container automatically:
