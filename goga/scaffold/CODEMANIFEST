@@ -20,6 +20,7 @@ Annotations: |
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
+
   This cell wraps the copier template engine for goga project scaffolding: primary generation
   (Scaffold.generate via copier.run_copy) and template migration (Scaffold.upgrade via
   copier.run_update). It owns the goga-specific hard conventions for the copier state file
@@ -30,7 +31,7 @@ Annotations: |
 
 ---
 
-"Scaffold(dst_path: str = \".\", answers_file: str = \".goga/scaffold.yml\")":
+"Scaffold(dst_path: str = '.', answers_file: str = '.goga/scaffold.yml')":
   location: scaffold.py
   annotations: |
     Wraps the copier template engine for a single scaffolding target directory. Owns the goga
