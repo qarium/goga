@@ -14,4 +14,4 @@ stages:
       Run and fix tests after review.
   
       Requirements:
-      - Create venv outside of project, create it in /opt/goga
+      - Create venv outside the project, in /opt/goga

@@ -63,7 +63,7 @@ class Scaffold:
                 takes precedence over the URL fragment.
 
         Returns:
-            ``0`` on success, ``1`` on error.
+            ``0`` on success, ``1`` on error (the cause is echoed to stderr).
         """
         template_url, vcs_ref = parse_template_ref(template_input, ref_override)
         project_name = resolve_scaffold_name()
@@ -90,7 +90,8 @@ class Scaffold:
         """Migrate a previously scaffolded project to a newer template version.
 
         Invokes ``copier.run_update`` at ``dst_path`` with the shared
-        ``answers_file`` (written by :meth:`generate`), ``vcs_ref=ref_override``,
+        ``answers_file`` (the state file recorded during :meth:`generate` by
+        the template's answers-file entry), ``vcs_ref=ref_override``,
         ``overwrite=True`` (required by copier), and ``defaults=True`` (the
         survey is bypassed on migration). The template source is read from the
         state file — no template argument.
