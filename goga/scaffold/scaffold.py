@@ -80,6 +80,7 @@ class Scaffold:
             )
         except Exception as exc:
             message = f"scaffold generate failed: {exc}"
+
             logger.error("scaffold generate failed", extra={"error": str(exc)})
             click.echo(message, err=True)
             return 1
@@ -105,6 +106,7 @@ class Scaffold:
         """
         if not Path(self.answers_file).is_file():
             message = f"missing scaffold state file: {self.answers_file}"
+
             logger.error("missing scaffold state file", extra={"path": self.answers_file})
             click.echo(message, err=True)
             return 1
@@ -119,6 +121,7 @@ class Scaffold:
             )
         except Exception as exc:
             message = f"scaffold upgrade failed: {exc}"
+
             logger.error("scaffold upgrade failed", extra={"error": str(exc)})
             click.echo(message, err=True)
             return 1
