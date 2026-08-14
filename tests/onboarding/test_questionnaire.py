@@ -1101,7 +1101,6 @@ class TestAskGogaConfigDockerfileBranch:
         """
         monkeypatch.chdir(tmp_path)
 
-
     def test_dockerfile_branch_uses_resolve_project_name_for_default(self) -> None:
         """(d) resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""
         captured: dict = {}
