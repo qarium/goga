@@ -80,7 +80,7 @@ copier renders `answers_file` from the template: YAML with the template source (
 
 ## Composition with the caller
 
-The caller decides what happens after `run_copy` returns: primary generation does not invoke any other tooling. If another component later writes files the template also wrote, the template's output stands — it ran first.
+The caller decides what happens after `run_copy` returns: primary generation does not invoke any other tooling.
 
 ## Anti-patterns
 

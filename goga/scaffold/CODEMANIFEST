@@ -117,7 +117,7 @@ Annotations: |
       - ref_override, when not None, overrides the migration target ref
 
       Constraints:
-      - Do not run onboarding — upgrade is scaffold-only
+      - Do not run any post-generation survey — upgrade is scaffold-only
       - Missing state file must NOT be a silent success (nonzero exit)
       - Do not accept a template argument — the source is read from the state file
 
