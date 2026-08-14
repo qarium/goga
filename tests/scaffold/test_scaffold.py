@@ -108,7 +108,7 @@ class TestLogic:
             assert call_args.args[2] == {"project_name": "my-proj"}
             assert call_args.kwargs["answers_file"] == answers_file
             assert call_args.kwargs["vcs_ref"] == "v1.0"
-            assert call_args.kwargs["defaults"] is True
+            assert call_args.kwargs["defaults"] is False
 
     def test_scaffold_upgrade_invokes_copier_run_update_with_overwrite_and_vcs_ref(self, tmp_path) -> None:
         state_file = tmp_path / ".goga" / "scaffold.yml"
@@ -145,6 +145,22 @@ class TestLogic:
             assert result == 1
             copier.run_update.assert_not_called()
 
+    def test_scaffold_upgrade_missing_state_file_echoes_cause_to_stderr(self, tmp_path, capsys) -> None:
+        with mock.patch("goga.scaffold.scaffold.copier"):
+            from goga.scaffold import Scaffold
+
+            scaffold = Scaffold(
+                dst_path=str(tmp_path),
+                answers_file=str(tmp_path / ".goga" / "scaffold.yml"),
+            )
+
+            scaffold.upgrade()
+
+            err = capsys.readouterr().err
+            assert "missing scaffold state file" in err
+            assert ".goga" in err
+            assert "scaffold.yml" in err
+
     def test_scaffold_generate_returns_nonzero_on_copier_error(self, tmp_path) -> None:
         with (
             mock.patch("goga.scaffold.scaffold.copier") as copier,
@@ -165,6 +181,29 @@ class TestLogic:
             result = scaffold.generate("https://example.com/tpl.git", None)
 
             assert result == 1
+
+    def test_scaffold_generate_error_echoes_cause_to_stderr(self, tmp_path, capsys) -> None:
+        with (
+            mock.patch("goga.scaffold.scaffold.copier") as copier,
+            mock.patch(
+                "goga.scaffold.scaffold.resolve_scaffold_name",
+                return_value="my-proj",
+            ),
+        ):
+            copier.run_copy.side_effect = RuntimeError("fatal: bad ref")
+
+            from goga.scaffold import Scaffold
+
+            scaffold = Scaffold(
+                dst_path=str(tmp_path),
+                answers_file=str(tmp_path / ".goga" / "scaffold.yml"),
+            )
+
+            scaffold.generate("https://example.com/tpl.git#min", None)
+
+            err = capsys.readouterr().err
+            assert "scaffold generate failed" in err
+            assert "fatal: bad ref" in err
 
     def test_scaffold_generate_ref_override_wins_over_fragment(self, tmp_path) -> None:
         with (
@@ -239,3 +278,21 @@ class TestLogic:
             result = scaffold.upgrade()
 
             assert result == 1
+
+    def test_scaffold_upgrade_error_echoes_cause_to_stderr(self, tmp_path, capsys) -> None:
+        state_file = tmp_path / ".goga" / "scaffold.yml"
+        state_file.parent.mkdir(parents=True, exist_ok=True)
+        state_file.write_text("_src_path: https://example.com/tpl.git\n")
+
+        with mock.patch("goga.scaffold.scaffold.copier") as copier:
+            copier.run_update.side_effect = RuntimeError("bad update")
+
+            from goga.scaffold import Scaffold
+
+            scaffold = Scaffold(dst_path=str(tmp_path), answers_file=str(state_file))
+
+            scaffold.upgrade()
+
+            err = capsys.readouterr().err
+            assert "scaffold upgrade failed" in err
+            assert "bad update" in err

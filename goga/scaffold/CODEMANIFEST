@@ -11,7 +11,10 @@ Usages:
     goga hard conventions for the copier state file. dst_path = the current directory (where
     goga init runs). answers_file = .goga/scaffold.yml — passed programmatically to both
     copier.run_copy and copier.run_update and overrides any answers_file declared in the
-    template copier.yml.
+    template copier.yml. copier persists the state file only when the template itself renders
+    it: a template must contain an answers-file template entry (the copier convention
+    "{{ _copier_conf.answers_file }}.jinja" rendering the recorded answers); without it
+    .goga/scaffold.yml is not created and Scaffold.upgrade reports the missing state file.
 
 Annotations: |
   The `convention` practice is used for:
@@ -25,9 +28,13 @@ Annotations: |
   (Scaffold.generate via copier.run_copy) and template migration (Scaffold.upgrade via
   copier.run_update). It owns the goga-specific hard conventions for the copier state file
   (`scaffold_conventions`) and translates CLI inputs into copier calls. Programmatic use of copier
-  is limited to run_copy/run_update — the copier interactive survey is never used. Use `copier`
+  is limited to run_copy/run_update. On primary generation the copier interactive survey asks
+  every template question not answered programmatically (project_name is supplied via data);
+  on migration the survey is bypassed. Template state-file persistence requires the template
+  itself to render the answers file (see `scaffold_conventions`). Use `copier`
   for the copier API surface. Use `click` for the project_name prompt fallback in
-  `resolve_scaffold_name`. All data models are immutable dataclasses (frozen=True, kw_only=True).
+  `resolve_scaffold_name` and for stderr diagnostics in Scaffold. All data models are
+  immutable dataclasses (frozen=True, kw_only=True).
 
 ---
 
@@ -35,7 +42,8 @@ Annotations: |
   location: scaffold.py
   annotations: |
     Wraps the copier template engine for a single scaffolding target directory. Owns the goga
-    hard conventions for the copier state file as construction state.
+    hard conventions for the copier state file as construction state. Error causes are echoed
+    to stderr — never hidden in logs.
 
     `dst_path`: target directory for scaffolding (goga init uses the current directory)
     `answers_file`: copier answers/state file path — goga hard convention; passed programmatically
@@ -66,17 +74,21 @@ Annotations: |
       2. Resolve project_name via `resolve_scaffold_name`
       3. Assemble copier answers data with project_name
       4. Invoke the copier primary-generation operation (see `copier`) at dst_path, passing the
-         template_url, the assembled answers, answers_file, and vcs_ref
-      5. Return 0 on success; on copier error return nonzero
+         template_url, the assembled answers, answers_file, and vcs_ref with defaults=False —
+         copier asks interactively every template question not covered by the assembled answers
+      5. Return 0 on success; on copier error echo the error cause to stderr and return nonzero
 
       Requirements:
       - answers_file is passed programmatically (goga hard convention) — overrides any template
         copier.yml declaration
       - dst_path is the instance target directory
-      - The copier interactive survey is bypassed — answers are supplied programmatically
+      - Questions not covered by the assembled answers are asked interactively by copier — a
+        template question without a programmatic answer and without a default MUST be answered
+        by the user, not fail the generation
+      - The copier interactive survey requires a TTY; in a non-interactive environment copier
+        fails and the error cause is echoed to stderr
 
       Constraints:
-      - Do not invoke copier interactive questionary
       - Do not pass a different answers_file than the instance's
     "upgrade(ref_override: str | None) -> exit_code: int": |
       Migrate a previously scaffolded project to a newer version of its template; delegates to
@@ -89,12 +101,15 @@ Annotations: |
       Algorithm:
       1. Invoke the copier migration operation (see `copier`) at dst_path with answers_file,
          vcs_ref=ref_override, overwrite=True, and defaults=True
-      2. Return 0 on success; on copier error or missing answers_file return nonzero
+      2. Return 0 on success; on copier error echo the error cause to stderr and return
+         nonzero; on missing answers_file echo the state-file path to stderr and return nonzero
 
       Requirements:
-      - Reads the template source and applied answers from answers_file (written by
-        Scaffold.generate)
+      - Reads the template source and applied answers from answers_file (persisted by the
+        template answers-file entry per `scaffold_conventions`)
       - Same answers_file as generate — one shared state file
+      - The migration survey is bypassed (defaults=True): a new required template question
+        without a default fails migration with a nonzero exit and the cause echoed to stderr
       - overwrite=True is REQUIRED — copier's run_update refuses to update without it (the migration
         diff is reviewed via git in the destination)
       - copier's run_update preconditions, enforced by copier and surfaced as a nonzero exit on

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import click
 import copier
 
 from .project_name import resolve_scaffold_name
@@ -19,10 +20,12 @@ class Scaffold:
     state file path, passed programmatically to both copier operations and
     overriding any ``answers_file`` declared in the template ``copier.yml``).
 
-    The copier interactive survey is never used — answers are supplied
-    programmatically with ``defaults=True`` on both operations. copier
-    exceptions are caught (broad ``Exception``) and translated to a nonzero
-    exit; they never propagate to the CLI.
+    On primary generation the copier interactive survey asks every template
+    question not answered programmatically (``defaults=False``;
+    ``project_name`` is supplied via ``data``). On migration the survey is
+    bypassed (``defaults=True``). copier exceptions are caught (broad
+    ``Exception``), reported to stderr with their cause, and translated to a
+    nonzero exit; they never propagate to the CLI.
     """
 
     def __init__(
@@ -49,7 +52,9 @@ class Scaffold:
         Parses ``template_input`` (with ``ref_override`` precedence over any URL
         fragment), resolves the project name, and invokes ``copier.run_copy`` at
         ``dst_path`` with the assembled answers data and the goga state-file
-        convention. Returns ``0`` on success, ``1`` on any copier error.
+        convention. Questions not answered programmatically are asked
+        interactively (``defaults=False``). Returns ``0`` on
+        success, ``1`` on any copier error (the cause is echoed to stderr).
 
         Args:
             template_input: raw template source — a git URL, optionally carrying
@@ -71,10 +76,12 @@ class Scaffold:
                 data,
                 answers_file=self.answers_file,
                 vcs_ref=vcs_ref,
-                defaults=True,
+                defaults=False,
             )
         except Exception as exc:
+            message = f"scaffold generate failed: {exc}"
             logger.error("scaffold generate failed", extra={"error": str(exc)})
+            click.echo(message, err=True)
             return 1
         return 0
 
@@ -83,8 +90,9 @@ class Scaffold:
 
         Invokes ``copier.run_update`` at ``dst_path`` with the shared
         ``answers_file`` (written by :meth:`generate`), ``vcs_ref=ref_override``,
-        ``overwrite=True`` (required by copier), and ``defaults=True``. The
-        template source is read from the state file — no template argument.
+        ``overwrite=True`` (required by copier), and ``defaults=True`` (the
+        survey is bypassed on migration). The template source is read from the
+        state file — no template argument.
 
         Args:
             ref_override: explicit git ref from ``--ref`` overriding the
@@ -92,10 +100,13 @@ class Scaffold:
                 state file.
 
         Returns:
-            ``0`` on success, ``1`` on error or when the state file is missing.
+            ``0`` on success, ``1`` on error or when the state file is missing
+            (the cause is echoed to stderr).
         """
         if not Path(self.answers_file).is_file():
+            message = f"missing scaffold state file: {self.answers_file}"
             logger.error("missing scaffold state file", extra={"path": self.answers_file})
+            click.echo(message, err=True)
             return 1
 
         try:
@@ -107,7 +118,9 @@ class Scaffold:
                 defaults=True,
             )
         except Exception as exc:
+            message = f"scaffold upgrade failed: {exc}"
             logger.error("scaffold upgrade failed", extra={"error": str(exc)})
+            click.echo(message, err=True)
             return 1
 
         return 0

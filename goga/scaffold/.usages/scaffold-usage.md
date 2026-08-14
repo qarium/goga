@@ -33,12 +33,13 @@ exit_code = scaffold.generate(
 )
 ```
 
-- The engine writes the copier state file (`.goga/scaffold.yml` by default)
-  recording the applied template and answers.
-- The copier interactive survey is bypassed — answers are assembled
-  programmatically (the project name is resolved from the git remote, falling
-  back to an interactive prompt).
-- Returns `0` on success, nonzero on error.
+- The engine passes the copier state-file path (`.goga/scaffold.yml` by default) to copier;
+  the state file is persisted when the template renders it (the template must contain an
+  answers-file entry — the copier `{{ _copier_conf.answers_file }}.jinja` convention).
+- Questions not covered by the programmatic answers are asked interactively by copier
+  (questionary TUI; a TTY is required). The project name is resolved from the git remote,
+  falling back to an interactive prompt, and supplied programmatically.
+- Returns `0` on success, nonzero on error (the error cause is echoed to stderr).
 
 ### Scaffold — migrate a scaffolded project
 
@@ -70,8 +71,9 @@ temporary directory.
 
 ## Side effects
 
-- `generate` writes files into `dst_path` and creates the state file at
-  `answers_file`.
+- `generate` writes files into `dst_path`; the state file at `answers_file` is
+  persisted by the template's answers-file entry (without such an entry no
+  state file is created and `upgrade` reports it missing).
 - `upgrade` rewrites files in `dst_path` according to the newer template
   version.
 - The state file must NOT be git-ignored in a scaffolded project — `upgrade`
@@ -83,5 +85,8 @@ temporary directory.
   file to read).
 - Do not pass a different `answers_file` to `generate` and `upgrade` — they
   share one state file.
-- Do not expect the copier interactive survey — answers are supplied
-  programmatically.
+- Do not ship a template without an answers-file entry — the state file is the
+  migration history `upgrade` depends on.
+- Do not run `generate` non-interactively (CI/pipe) with template questions
+  lacking programmatic answers or defaults — the copier survey requires a TTY
+  and fails with the cause echoed to stderr.
