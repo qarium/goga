@@ -1,4 +1,4 @@
-# goga-refine
+# goga-discover
 
 Command dispatcher for discover.
 

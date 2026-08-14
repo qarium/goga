@@ -105,7 +105,7 @@ The fastest path. Goga ships ready-to-use pipelines that run the full cycle insi
 goga pipeline feature
 ```
 
-The pipeline walks all eleven stages — propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result — and pauses at every `communication` stage to ask for your input before moving on. Three more shipped pipelines cover other lifecycles:
+The pipeline walks all twelve stages — discover → propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → prepare-build → accept-result — and pauses at every `communication` stage to ask for your input before moving on. Three more shipped pipelines cover other lifecycles:
 
 ```bash
 goga pipeline bugfix     # root-cause analysis and defect resolution

@@ -29,7 +29,7 @@ Once confirmed, write the ADR to `docs/proposals/<topic>.md` (slug name, lowerca
 
 ### Initialization
 
-Load these skills via the **Skill tool** before starting the pipeline.
+Load these skills via the **Skill tool** before starting the interview.
 
 - **`goga-cell`** — DSL specification: cell and CODEMANIFEST structure, directives, and syntax.
 - **`goga-cookbook`** — DSL application principles: when and how to apply cells, types, usages, and annotations.
