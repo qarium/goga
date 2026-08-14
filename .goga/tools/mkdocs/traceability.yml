@@ -50,6 +50,9 @@ docs/tools.md:
 docs/workflow/index.md:
   - goga/connect
 
+docs/workflow/discover.md:
+  - goga/connect
+
 docs/workflow/propose.md:
   - goga/connect
 

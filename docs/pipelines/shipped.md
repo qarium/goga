@@ -81,18 +81,20 @@ pipeline (project source wins on name conflicts — see
 
 ## `feature`
 
-End-to-end feature implementation. Eleven stages that walk from task
-formulation through acceptance:
+End-to-end feature implementation. Twelve stages that walk from
+technical discovery through acceptance:
 
 ```
-propose → task-review → brainstorm → architecture-review → apply-architecture →
-code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result
+discover → propose → task-review → brainstorm → architecture-review → apply-architecture →
+code-design → design-review → coding-plan → plan-review → prepare-build → accept-result
 ```
 
-The `propose`, `brainstorm`, `code-design`, and `coding-plan` stages emit
-documents named after the current git branch; the `*-review` stages
-validate them; `commit-architecture` waits for user confirmation before
-acceptance runs.
+The `discover` stage runs the `goga-discover` skill and records the
+settled decision as a short ADR. The `propose`, `brainstorm`,
+`code-design`, and `coding-plan` stages emit documents named after the
+current git branch; the `*-review` stages validate them; `prepare-build`
+commits the accumulated changes and waits for user confirmation that the
+implementation is built before acceptance runs.
 
 ## `bugfix`
 
@@ -166,7 +168,7 @@ must not ignore any error.
 
 The `bugfix`, `patch`, and `review` pipelines share the same
 `commit-changes` stage, and `feature` ships a stage named
-`commit-architecture` with the same behavior. Each of these stages
+`prepare-build` with the same behavior. Each of these stages
 commits the untracked changes accumulated during the previous stages.
 In `feature`, `bugfix`, and `patch` the stage carries `communication: true`
 and asks the user whether the implementation is built and ready for
@@ -177,7 +179,7 @@ key `interactive`.) In `review` the stage runs without `communication`:
 it simply commits the accumulated review fixes, with no acceptance stage
 to follow.
 
-The stage explicitly excludes `docs/<tasks|arch|design|plans>` from the
+The stage explicitly excludes `docs/<proposals|tasks|arch|design|plans>` from the
 commit path, so in-flight design artifacts that live outside the source
 tree are not bundled into the implementation commit.
 

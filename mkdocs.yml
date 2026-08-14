@@ -37,6 +37,7 @@ nav:
   - Getting Started: getting-started.md
   - Workflow:
       - workflow/index.md
+      - Discover: workflow/discover.md
       - Propose: workflow/propose.md
       - Review: workflow/review.md
       - Brainstorm: workflow/brainstorm.md

@@ -16,10 +16,10 @@ Goga supports three working modes. The choice depends on how deeply the change a
 
 ### Full cycle
 
-Use when a feature requires new architecture, new cells, or modifies existing contracts. Each artifact-producing step can be followed by a review of that artifact.
+Use when a feature requires new architecture, new cells, or modifies existing contracts. Each artifact-producing step can be followed by a review of that artifact. The cycle may open with [`discover`](discover.md) when a hard-to-reverse decision needs to be settled and recorded as an ADR before the task is formulated.
 
 ```
-propose → review(task)
+discover → propose → review(task)
    → brainstorm → review(arch)
       → apply → design → review(design)
          → plan → review(plan)
@@ -68,6 +68,7 @@ Does the contract (CODEMANIFEST) change?
 
 | Command | Input artifact | Output artifact |
 |---|---|---|
+| [`discover`](discover.md) | A decision worth recording | `docs/proposals/<topic>.md` (short ADR) |
 | [`propose`](propose.md) | User request text | `docs/tasks/<topic>.md` |
 | [`review`](review.md) | Any artifact in `docs/` | Review report |
 | [`brainstorm`](brainstorm.md) | `docs/tasks/<topic>.md` | `docs/arch/<topic>.md` |
