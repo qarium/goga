@@ -44,7 +44,7 @@ exit_code = scaffold.generate(
 ### Scaffold — migrate a scaffolded project
 
 `Scaffold.upgrade(ref_override)` re-applies the recorded template at a newer version. It
-reads the template source and answers from the state file written by `generate`;
+reads the template source and answers from the state file persisted by `generate`;
 `ref_override` (the CLI `--ref`) optionally overrides the migration target ref.
 
 ```python

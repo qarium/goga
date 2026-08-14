@@ -8,7 +8,7 @@ Installation: `pip install copier`
 
 **IMPORTANT** — the library must be declared in the project's main dependencies (never in extras).
 
-copier transitively pulls `pydantic`, `questionary`, `prompt-toolkit`. goga uses copier **programmatically only**, through two operations: `run_copy` (project creation) and `run_update` (migrating a previously created project). During primary generation, the copier interactive survey (`questionary`) asks every template question not covered by programmatic answers; goga passes only `project_name` programmatically.
+copier transitively pulls `pydantic`, `questionary`, `prompt-toolkit`. goga drives copier programmatically through two operations: `run_copy` (project creation) and `run_update` (migrating a previously created project). During primary generation, the copier interactive survey (`questionary`) asks every template question not covered by programmatic answers; goga passes only `project_name` programmatically.
 
 ## Two operations
 
@@ -59,7 +59,7 @@ run_update(
 - Therefore the `answers_file` for `run_copy` and `run_update` must be the same — it is one shared state.
 - `overwrite=True` is **mandatory**: copier's `Worker.run_update` without it raises `UserMessageError("Enable overwrite to update a subproject.")` — the user reviews the migration diff via git in the destination project.
 - `vcs_ref`, when given, overrides the migration target ref (by default the migration goes to the latest commit of the template branch recorded in the state file).
-- `defaults=True` is **kept** on migration (unlike generation): the migration is non-interactive; a new required question of a newer template version without a default fails the migration with a nonzero exit and the cause echoed to stderr.
+- `defaults=True` — the migration is non-interactive; a new required question of a newer template version without a default fails the migration with a nonzero exit and the cause echoed to stderr.
 - copier verifies preconditions and raises `UserMessageError` (→ nonzero) on violation: the target directory must be a git repository, clean (no uncommitted changes), and the template must be git-trackable (a git URL, not a local path) with a non-decreasing version.
 
 ## answers_file — programmatic override (the key goga convention)
