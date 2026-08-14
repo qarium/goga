@@ -77,18 +77,7 @@ class TestLogic:
     11. (If custom pipeline env: key, value, in loop)
     """
 
-    @pytest.fixture(autouse=True)
-    def _clean_cwd(self, tmp_path, monkeypatch) -> None:
-        """Run each survey test in a clean dir without .goga/config.yml.
-
-        ask_goga_config() short-circuits to None when .goga/config.yml exists.
-        The repository CWD already contains .goga/config.yml (the goga project's
-        own config), and there is no autouse chdir in the shared conftest (it
-        redirects only HOME). Without this, every survey test would skip the
-        survey and fail its assertions. monkeypatch.chdir restores the original
-        CWD automatically on teardown.
-        """
-        monkeypatch.chdir(tmp_path)
+    # The `_clean_cwd` autouse fixture lives in tests/onboarding/conftest.py.
 
     def test_questionnaire_ask_goga_config_python_with_convention(self) -> None:
         prompts = iter(
@@ -1091,15 +1080,6 @@ class TestAskImageNameTwoMode:
 
 class TestAskGogaConfigDockerfileBranch:
     """Logic tests for the ask_goga_config Dockerfile branch wiring of resolve_project_name."""
-
-    @pytest.fixture(autouse=True)
-    def _clean_cwd(self, tmp_path, monkeypatch) -> None:
-        """Run each survey test in a clean dir without .goga/config.yml.
-
-        See TestLogic._clean_cwd for rationale. monkeypatch.chdir restores the
-        original CWD on teardown.
-        """
-        monkeypatch.chdir(tmp_path)
 
     def test_dockerfile_branch_uses_resolve_project_name_for_default(self) -> None:
         """(d) resolve_project_name → 'widget' → ask_image_name offered 'widget:latest'."""

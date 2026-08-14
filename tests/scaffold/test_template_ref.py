@@ -3,6 +3,8 @@ from __future__ import annotations
 import inspect
 from typing import get_type_hints
 
+import pytest
+
 
 class TestContract:
     """Contract-level tests for parse_template_ref.
@@ -79,37 +81,26 @@ class TestLogic:
         result = parse_template_ref("https://example.com/tpl.git", "dev")
         assert result == ("https://example.com/tpl.git", "dev")
 
-    def test_trailing_ref_only(self) -> None:
+    @pytest.mark.parametrize(
+        ("template_input", "ref_override", "expected_ref"),
+        [
+            # An empty fragment (trailing '#') normalizes to None — copier's
+            # documented default (HEAD) — rather than the distinct value "".
+            ("https://example.com/tpl.git#", None, None),
+            # '' override is treated as "not given" → the fragment wins.
+            ("https://example.com/tpl.git#v1.0", "", "v1.0"),
+            # '' override + no fragment → None (not "").
+            ("https://example.com/tpl.git", "", None),
+        ],
+    )
+    def test_empty_fragment_or_override_boundaries(self, template_input, ref_override, expected_ref) -> None:
         from goga.scaffold.template_ref import parse_template_ref
 
-        # An empty fragment (trailing '#') normalizes to None — copier's
-        # documented default (HEAD) — rather than the distinct value "".
-        result = parse_template_ref("https://example.com/tpl.git#", None)
-        assert result == ("https://example.com/tpl.git", None)
+        result = parse_template_ref(template_input, ref_override)
+        assert result == ("https://example.com/tpl.git", expected_ref)
 
     def test_hash_in_path_segment_takes_last_as_fragment(self) -> None:
         from goga.scaffold.template_ref import parse_template_ref
 
         result = parse_template_ref("https://example.com/a#b/tpl.git#v1.0", None)
         assert result == ("https://example.com/a#b/tpl.git", "v1.0")
-
-    def test_empty_fragment_falls_through_to_none(self) -> None:
-        from goga.scaffold.template_ref import parse_template_ref
-
-        # '' fragment + no override → None (not "").
-        result = parse_template_ref("https://example.com/tpl.git#", None)
-        assert result == ("https://example.com/tpl.git", None)
-
-    def test_empty_override_falls_through_to_fragment(self) -> None:
-        from goga.scaffold.template_ref import parse_template_ref
-
-        # '' override is treated as "not given" → the fragment wins.
-        result = parse_template_ref("https://example.com/tpl.git#v1.0", "")
-        assert result == ("https://example.com/tpl.git", "v1.0")
-
-    def test_empty_override_and_no_fragment_yields_none(self) -> None:
-        from goga.scaffold.template_ref import parse_template_ref
-
-        # '' override + no fragment → None (not "").
-        result = parse_template_ref("https://example.com/tpl.git", "")
-        assert result == ("https://example.com/tpl.git", None)

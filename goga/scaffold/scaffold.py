@@ -84,6 +84,7 @@ class Scaffold:
             logger.error("scaffold generate failed", extra={"error": str(exc)})
             click.echo(message, err=True)
             return 1
+
         return 0
 
     def upgrade(self, ref_override: str | None = None) -> int:

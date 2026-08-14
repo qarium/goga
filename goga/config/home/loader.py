@@ -44,6 +44,7 @@ def _shell_split(entries: list[str]) -> list[str]:
 
     for entry in entries:
         tokens.extend(shlex.split(str(entry)))
+
     return tokens
 
 
