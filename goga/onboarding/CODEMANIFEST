@@ -60,7 +60,7 @@ Annotations: |
     as needed.
 
     `goga_config`: responses for generating .goga/config.yml, or None when config.yml is not
-    written (artifact already exists / produced by scaffold); defaults to None
+    written (the artifact already exists); defaults to None
   properties:
     "goga_config -> GogaConfigAnswers | None": |
       Responses for generating .goga/config.yml. None signals 'do not write the file' to
@@ -213,7 +213,7 @@ Annotations: |
 
       Algorithm:
       1. If answers.goga_config is None -> skip config.yml and Dockerfile generation; return
-         (artefacts already exist / produced by scaffold).
+         (the artefacts already exist).
       2. Otherwise: if dockerfile_path is set — create a Dockerfile with
          FROM {dockerfile_base_image}; the top-level image field holds the name of the image
          built from it.

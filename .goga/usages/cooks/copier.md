@@ -78,9 +78,9 @@ answers_file = ".goga/scaffold.yml"
 
 copier renders `answers_file` from the template: YAML with the template source (URL + `_commit`) and the dictionary of applied answers. **The key template convention**: the state file is created only if the template itself contains an answers-file entry — `{{ _copier_conf.answers_file }}.jinja` rendering `_copier_answers` (for non-jinja files see the copier documentation). Without such an entry `.goga/scaffold.yml` never appears, and `goga init --upgrade` fails with "missing scaffold state file". goga does not manage the contents directly — copier writes and reads it itself; goga only fixes the path via the programmatic `answers_file`.
 
-## Composition with onboarding
+## Composition with the caller
 
-On `goga init <tpl>` **scaffold runs first, then onboarding**. The template may itself place `.goga/config.yml` (and other `.goga/` artifacts); onboarding then detects the existing artifacts and skips the corresponding survey sections. This is composition, not arbitration: the template and goga each own their own entries; where both want to write `config.yml`, the template wins because it ran first and the user subscribed to it.
+The caller decides what happens after `run_copy` returns: primary generation does not invoke any other tooling. If another component later writes files the template also wrote, the template's output stands — it ran first.
 
 ## Anti-patterns
 
@@ -89,5 +89,5 @@ On `goga init <tpl>` **scaffold runs first, then onboarding**. The template may 
 - Do not ship a template without an answers-file entry (`{{ _copier_conf.answers_file }}.jinja`) — the state file will not be created and `--upgrade` will not work.
 - Do not pass different `answers_file` values to `run_copy` and `run_update` — it is one shared state; `--upgrade` reads what the primary `run_copy` wrote.
 - Do not git-ignore `.goga/scaffold.yml` in user projects — `goga init --upgrade` will stop working.
-- Do not run `goga init <tpl>` non-interactively (pipe/CI) for a template with uncovered questions — the questionary survey requires a TTY and will fail with `InteractiveSessionError`.
+- Do not invoke `run_copy` non-interactively (pipe/CI) for a template with uncovered questions — the questionary survey requires a TTY and will fail with `InteractiveSessionError`.
 - Do not implement your own Jinja2 + `git clone` on top of copier — the engine already handles recursive clone, ref resolution, `.git/` cleanup, binary files, symlinks, and conditional file inclusion correctly.

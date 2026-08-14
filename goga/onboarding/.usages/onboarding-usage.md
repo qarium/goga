@@ -5,7 +5,7 @@
 The `goga.onboarding` package provides interactive goga project onboarding —
 collecting user input and generating configuration files. Onboarding is
 filesystem-conditional: sections whose artefacts already exist are skipped
-(relevant when onboarding runs after scaffold).
+(relevant when an external template generator has run first).
 
 ## Facade
 
