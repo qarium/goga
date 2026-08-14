@@ -109,4 +109,5 @@ class Scaffold:
         except Exception as exc:
             logger.error("scaffold upgrade failed", extra={"error": str(exc)})
             return 1
+
         return 0

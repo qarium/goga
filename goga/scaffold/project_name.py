@@ -24,6 +24,8 @@ def resolve_scaffold_name() -> str:
         the value supplied at the fallback prompt.
     """
     name = resolve_project_name()
+
     if name is None:
         name = click.prompt("Project name")
+
     return name
