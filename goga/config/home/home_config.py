@@ -3,9 +3,14 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True, kw_only=True)
 class DockerArgsConfig:
-    """Raw extra docker CLI tokens from the home config docker block.
+    """Extra docker CLI tokens from the home config docker block.
 
-    Structural validation only (list[str]); docker surfaces flag conflicts.
+    Structural validation only (list[str]); docker surfaces flag conflicts. Each
+    raw YAML list entry is shell-tokenized (``shlex.split``) at load by
+    ``load_home_config`` so a shell-like fragment such as
+    ``-v /host:/container`` is stored as two argv tokens ``["-v",
+    "/host:/container"]``; single-token entries and the ``--flag=value`` form are
+    unchanged.
 
     `run`: tokens appended to every docker run (pipeline + build containers).
     `build`: tokens appended to docker build (image build).

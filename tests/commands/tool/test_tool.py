@@ -73,9 +73,21 @@ class TestToolWithNoArgs:
 
 class TestToolPackageNotFound:
     def test_tool_package_not_found(self) -> None:
-        """Missing tool package shows a 'not found' error message."""
+        """Missing tool package shows a 'not found' error message.
+
+        The import machinery sets `ModuleNotFoundError.name` to the module it
+        could not resolve; for a genuinely absent top-level package that equals
+        the package name. The mock reflects this so the "not found" branch is
+        exercised truthfully (see
+        ``test_found_package_with_import_failure_propagates_not_masked_as_not_found``
+        for the package-found-but-import-broken case).
+        """
         runner = CliRunner()
-        with mock.patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("goga_tool_nonexistent")):
+        with mock.patch.object(
+            importlib,
+            "import_module",
+            side_effect=ModuleNotFoundError("No module named 'goga_tool_nonexistent'", name="goga_tool_nonexistent"),
+        ):
             result = runner.invoke(tool, ["nonexistent"])
 
         assert result.exit_code != 0
@@ -342,12 +354,38 @@ class TestToolErrorBehaviorPreserved:
     def test_package_not_found_preserves_error_behavior(self) -> None:
         """Package-not-found still surfaces the 'not found' message and non-zero exit."""
         runner = CliRunner()
-        with mock.patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("goga_tool_nonexistent")):
+        with mock.patch.object(
+            importlib,
+            "import_module",
+            side_effect=ModuleNotFoundError("No module named 'goga_tool_nonexistent'", name="goga_tool_nonexistent"),
+        ):
             result = runner.invoke(tool, ["nonexistent"])
 
         assert result.exit_code != 0
         assert "goga_tool_nonexistent" in result.output
         assert "not found" in result.output.lower()
+
+    def test_found_package_with_import_failure_propagates_not_masked_as_not_found(self) -> None:
+        """A found package whose transitive import fails is NOT reported as 'not found'.
+
+        Regression for the dispatcher conflating "package absent" with "package
+        present but a transitive import inside it failed". ``import_module`` sets
+        ``ModuleNotFoundError.name`` to the deeper missing module (here
+        ``goga.init``), which differs from the tool package. The dispatcher must
+        re-raise so the honest traceback surfaces, instead of the misleading
+        "Tool package '...' not found" message.
+        """
+        runner = CliRunner()
+        missing = ModuleNotFoundError("No module named 'goga.init'", name="goga.init")
+        with mock.patch.object(importlib, "import_module", side_effect=missing):
+            result = runner.invoke(tool, ["pybuggy"])
+
+        # Re-raised: the original ModuleNotFoundError propagates (non-zero exit).
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ModuleNotFoundError)
+        assert result.exception.name == "goga.init"
+        # Must NOT be misreported as 'not found'.
+        assert "not found" not in result.output.lower()
 
     def test_missing_main_preserves_error_behavior(self) -> None:
         """A package without main still surfaces the 'main' message and non-zero exit."""

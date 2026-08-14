@@ -91,6 +91,8 @@ Start a new project from scratch and ship your first piece of work end-to-end.
 goga init
 ```
 
+You can also start from a [copier](https://copier.readthedocs.io/) template (`goga init <template-url>`, optionally pinned with `#ref` or `--ref`), and later migrate a scaffolded project with `goga init --upgrade`. See [`goga init`](https://qarium.github.io/goga/cli/init/) for the full surface.
+
 **2. Open your agent** — launch the agent you connected via `goga connect` (e.g., Claude Code) in the project directory. All `goga-<command>` skills are now available.
 
 **3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. Credentials for `claude`, `codex`, and `opencode` are detected on the host and forwarded into the container automatically:
@@ -166,9 +168,10 @@ Four definitions ship with goga:
 Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
 ```bash
-goga pipeline feature          # run the full cycle
-goga pipeline feature -p 4     # cap parallelism (subject to the pipeline's dependency rules)
-goga pipeline feature --clean  # wipe persistent state for a fresh run
+goga pipeline feature            # run the full cycle (opens with discover)
+goga pipeline feature -s discover # shorter run: skip discovery, start at propose
+goga pipeline feature -p 4       # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline feature --clean    # wipe persistent state for a fresh run
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.

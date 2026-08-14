@@ -24,6 +24,10 @@ class TestContract:
         hints = get_type_hints(InitAnswers)
         assert "goga_config" in hints
 
+    def test_init_answers_goga_config_is_optional(self) -> None:
+        hints = get_type_hints(InitAnswers)
+        assert hints["goga_config"] == GogaConfigAnswers | None
+
     def test_goga_config_answers_has_all_declared_properties(self) -> None:
         hints = get_type_hints(GogaConfigAnswers)
         expected = {
@@ -147,3 +151,17 @@ class TestLogic:
         )
         with pytest.raises(TypeError):
             InitAnswers(cfg)  # type: ignore[call-arg]
+
+    def test_init_answers_goga_config_accepts_none(self) -> None:
+        answers = InitAnswers(goga_config=None)
+        assert answers.goga_config is None
+
+    def test_init_answers_goga_config_round_trips_non_none(self) -> None:
+        cfg = GogaConfigAnswers(
+            language="python",
+            agent="claude",
+            image="qarium/goga-python-3.12:0.1",
+            pipeline_agent="claude",
+        )
+        answers = InitAnswers(goga_config=cfg)
+        assert answers.goga_config is cfg

@@ -1,2 +1,17 @@
 prompt: |
   Answer (feedbacks, proposes, questions and etc) in Russian language.
+
+stages:
+  code-review:
+    approve: dialog
+  contracts-review:
+    approve: dialog
+  documentation-review:
+    approve: dialog
+  testing:
+    approve: dialog
+    prompt: |
+      Run and fix tests after review.
+  
+      Requirements:
+      - Create venv outside the project, in /opt/goga

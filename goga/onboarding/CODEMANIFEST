@@ -28,7 +28,7 @@ Usages:
     Map each agent to a list of environment variable keys for prompting.
     Display the keys to the user; collect corresponding values.
     Agent → env key mapping:
-    - claude: ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_BASE_URL
+    - claude: ANTHROPIC_BASE_URL, ANTHROPIC_DEFAULT_HAIKU_MODEL, ANTHROPIC_DEFAULT_SONNET_MODEL, ANTHROPIC_DEFAULT_OPUS_MODEL, ANTHROPIC_MODEL
     - codex: CODEX_MODEL
     - cursor: CURSOR_MODEL
     - opencode: OPENCODE_MODEL, OPENCODE_VARIANT
@@ -47,19 +47,24 @@ Annotations: |
   Use `image_defaults` to list available Docker images by language (Questionnaire).
   Use `agent_env_defaults` to suggest env keys for the selected agent (Questionnaire).
   All types must be immutable dataclasses (frozen=True, kw_only=True).
+  Onboarding is filesystem-conditional: it skips sections whose artefacts already exist (see
+  Questionnaire, FileGenerator). An existing .goga/config.yml is never rewritten —
+  whoever created it first wins.
 
 ---
 
-"InitAnswers(goga_config: GogaConfigAnswers)":
+"InitAnswers(goga_config: GogaConfigAnswers | None = None)":
   location: answers.py
   annotations: |
     User response container. Extend with new properties for additional config files
     as needed.
 
-    `goga_config`: responses for generating .goga/config.yml
+    `goga_config`: responses for generating .goga/config.yml, or None when config.yml is not
+    written (the artifact already exists); defaults to None
   properties:
-    "goga_config -> GogaConfigAnswers": |
-      Responses for generating .goga/config.yml.
+    "goga_config -> GogaConfigAnswers | None": |
+      Responses for generating .goga/config.yml. None signals 'do not write the file' to
+      FileGenerator (used when .goga/config.yml already exists). Defaults to None.
 
 "GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None, dockerfile_base_image: str | None)":
   location: answers.py
@@ -120,13 +125,22 @@ Annotations: |
   methods:
     "ask() -> answers:InitAnswers": |
       Display the header "=== Goga Project Initialization ===" and wizard description.
-      Delegate to ask_goga_config() and wrap the result in InitAnswers.
-    "ask_goga_config() -> config:GogaConfigAnswers": |
+      Delegate to ask_goga_config() (which may return None when .goga/config.yml already exists)
+      and wrap the result in InitAnswers (goga_config may be None).
+    "ask_goga_config() -> config:GogaConfigAnswers | None": |
       Survey for .goga/config.yml.
-      Display "Collecting .goga/config.yml settings...".
-      Orchestrate the per-field ask_* methods in survey order and assemble GogaConfigAnswers:
-      ask_language → ask_base_convention → ask_codemanifest_usages → ask_codemanifest_annotations
-      → ask_agent → ask_dockerfile_path → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
+
+      Returns None when .goga/config.yml already exists (skip the whole config survey).
+
+      `config`: assembled responses, or None when .goga/config.yml already exists
+
+      Algorithm:
+      1. If .goga/config.yml exists -> return None (skip the entire config survey)
+      2. Display "Collecting .goga/config.yml settings...". Orchestrate the per-field ask_* methods in
+      survey order and assemble GogaConfigAnswers:
+      ask_language → ask_base_convention (SKIPPED when .goga/usages/conventions.md exists)
+      → ask_codemanifest_usages → ask_codemanifest_annotations → ask_agent → ask_dockerfile_path
+      → (image branch) → ask_env → ask_pipeline_agent → ask_pipeline_env.
       The image branch depends on the Dockerfile decision: when ask_dockerfile_path returns a path,
       ask_base_image (FROM) is surveyed, then `resolve_project_name` is
       called — if it returns a name the proposed default is <name>:latest, if it returns None no
@@ -196,9 +210,14 @@ Annotations: |
   methods:
     "generate(answers: InitAnswers) -> _:None": |
       Generate all project files from the provided answers.
-      If dockerfile_path is set — create a Dockerfile with FROM {dockerfile_base_image}
-      (the baseline); the top-level image field holds the name of the image built from it.
-      Delegate to generate_goga_config() with answers.goga_config.
+
+      Algorithm:
+      1. If answers.goga_config is None -> skip config.yml and Dockerfile generation; return
+         (the artefacts already exist).
+      2. Otherwise: if dockerfile_path is set — create a Dockerfile with
+         FROM {dockerfile_base_image}; the top-level image field holds the name of the image
+         built from it.
+      3. Delegate to generate_goga_config() with answers.goga_config.
     "generate_goga_config(config: GogaConfigAnswers) -> _:None": |
       Algorithm:
       1. If codemanifest_usages contains the key "conventions" — download the

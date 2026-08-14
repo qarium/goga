@@ -1,25 +1,48 @@
 # goga init
 
-Interactive project initialization wizard.
+Interactive project initialization wizard, with optional template scaffolding.
 
 ## Synopsis
 
 ```bash
-goga init
+goga init [TPL] [--ref REF]
+goga init --upgrade [--ref REF]
 ```
 
 ## Description
 
-`goga init` launches an interactive questionnaire that walks you through setting up a new goga project. It collects configuration values and generates the necessary project files.
+`goga init` initializes a new goga project. It runs in one of three modes depending on the arguments:
+
+- **Bare onboarding** (`goga init`) — launches an interactive questionnaire that walks you through setting up a new goga project. It collects configuration values and generates the necessary project files. Refuses to run when `.goga/` already exists ("Project already initialized").
+- **Scaffold then onboarding** (`goga init <tpl>`) — scaffolds boilerplate from a [copier](https://copier.readthedocs.io/) template first (a git URL, optionally carrying a `#ref` fragment), then runs the onboarding questionnaire. Copier interactively asks template questions that are not answered programmatically. Onboarding is filesystem-conditional: questions whose artifacts the template already brought (`.goga/config.yml`, `.goga/usages/conventions.md`) are skipped. The already-initialized guard does **not** fire in this mode — a template may be applied to an existing tree.
+- **Upgrade only** (`goga init --upgrade`) — migrates a previously scaffolded project to a newer template version via copier `run_update`. No onboarding runs. The template source is read from the `.goga/scaffold.yml` state file written by an earlier `goga init <tpl>`; if that file is absent the command exits nonzero.
+
+`<tpl>` and `--upgrade` are mutually exclusive: `--upgrade` updates state tied to a specific repository already recorded in `.goga/scaffold.yml`. `--ref` is meaningful only with `<tpl>` or `--upgrade` (a bare `--ref` is rejected).
+
+### Interactivity
+
+The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort.
+
+With a template (`goga init <tpl>`), copier asks every template question that has no programmatic answer interactively. The project name is resolved from the git remote, falling back to a prompt, and supplied programmatically. A template question with neither a programmatic answer nor a default **must** be answered by the user — generation does not fail on it. The survey requires a TTY: in a non-interactive environment (CI, pipe) copier fails and the error cause is echoed to stderr. On migration (`--upgrade`) the survey is bypassed (`defaults=True`) — a new required template question without a default fails migration with a nonzero exit.
+
+### Modes
+
+`goga init` branches on the presence of `<tpl>` and `--upgrade`:
+
+| Invocation | Mode | Behavior |
+|---|---|---|
+| `goga init` | Bare onboarding | Interactive questionnaire; refuses if `.goga/` exists. |
+| `goga init <tpl> [--ref REF]` | Scaffold then onboarding | Copier `run_copy` from `<tpl>`, then the conditional questionnaire. |
+| `goga init --upgrade [--ref REF]` | Upgrade | Copier `run_update`; no onboarding. Requires `.goga/scaffold.yml`. |
 
 ### Questionnaire Flow
 
-The wizard proceeds through the following steps in order:
+The wizard proceeds through the following steps in order. **The entire survey is skipped when `.goga/config.yml` already exists** (for example, when a copier template brought its own config) — `ask_goga_config` short-circuits and no file is (re)written.
 
 1. **Language** -- Select the primary programming language.
    Choices: `python`, `golang`, `kotlin`, `swift`, `javascript`.
 
-2. **Base Convention** -- Optionally download the default code conventions for the selected language from the [goga-lang-conventions](https://github.com/qarium/goga-lang-conventions) repository.
+2. **Base Convention** -- Optionally download the default code conventions for the selected language from the [goga-lang-conventions](https://github.com/qarium/goga-lang-conventions) repository. **Skipped when `.goga/usages/conventions.md` already exists** (for example, when a template brought its own conventions); the prefill is treated as `(None, None)`.
 
 3. **Codemanifest Usages** -- Add additional named usages (code practice documentation entries). Each usage has a name and a file path.
 
@@ -58,6 +81,10 @@ After the questionnaire completes, `goga init` creates:
 - **`.goga/usages/conventions.md`** -- (If base convention was downloaded) Language-specific code conventions.
 - **`.goga/Dockerfile`** -- (If requested) A Dockerfile whose `FROM` line is the selected base image, written at the suggested path inside `.goga/`. When created, a top-level `dockerfile:` entry (defaulting to `.goga/Dockerfile`) is also written to `.goga/config.yml`, and the top-level `image` holds the **name of the image built from it** (the `docker build -t` tag) — so `goga build --update` / `goga pipeline --update` build the image locally instead of pulling it.
 
+When `goga init <tpl>` is used, copier additionally writes:
+
+- **`.goga/scaffold.yml`** -- copier's state file recording the template source and the answers used. `goga init --upgrade` reads this file to re-apply the recorded template, and exits nonzero if it is absent.
+
 ## Examples
 
 Run the initialization wizard:
@@ -66,11 +93,40 @@ Run the initialization wizard:
 goga init
 ```
 
-The wizard is fully interactive. Press `Ctrl+C` at any time to abort.
+Scaffold a project from a copier template, then run the conditional questionnaire:
+
+```bash
+# Latest commit on the template's default branch
+goga init https://github.com/qarium/my-template.git
+
+# Pin a specific ref via the URL fragment
+goga init https://github.com/qarium/my-template.git#v1.0
+
+# Override the ref explicitly (--ref wins over a fragment)
+goga init https://github.com/qarium/my-template.git#v1.0 --ref main
+```
+
+Migrate a previously scaffolded project to a newer template version:
+
+```bash
+# Re-apply the recorded template at its current ref
+goga init --upgrade
+
+# Migrate to a specific target ref
+goga init --upgrade --ref v2.0
+```
+
+## Options
+
+| Option/Argument | Type | Default | Purpose |
+|---|---|---|---|
+| `TPL` (positional, optional) | string | None | Copier template source — a git URL, optionally carrying a `#ref` fragment. Triggers scaffold-then-onboarding mode. Mutually exclusive with `--upgrade`. |
+| `--upgrade` | flag | False | Migrate a previously scaffolded project via copier `run_update`; no onboarding. Mutually exclusive with `<tpl>`. |
+| `--ref REF` | string | None | Override the git ref. With `<tpl>` it overrides the URL fragment; with `--upgrade` it sets the migration target ref. Requires `<tpl>` or `--upgrade` (a bare `--ref` is rejected). |
 
 ## Exit Codes
 
 | Code | Meaning |
 |---|---|
-| `0` | Success -- all files generated |
-| `1` | Error or user abort (`Ctrl+C`) |
+| `0` | Success — files generated (onboarding), template scaffolded, or migration applied. |
+| `1` | Error or user abort (`Ctrl+C`). Includes: project already initialized (bare `init` with `.goga/` present); `<tpl>` and `--upgrade` given together (mutually exclusive); `--ref` given without `<tpl>` or `--upgrade`; copier scaffold/upgrade failure (bad template URL, git error, missing `.goga/scaffold.yml` on upgrade); or onboarding failure (a nonzero exit code from a delegate — `Scaffold.generate`/`Scaffold.upgrade`, `InitLogic.run` — is propagated verbatim). |

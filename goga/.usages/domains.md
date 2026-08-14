@@ -16,6 +16,7 @@ from goga.contract import contract
 from goga.onboarding import InitLogic, Questionnaire
 from goga.pipeline import run_pipeline
 from goga.runtime import resolve_runtime_dir
+from goga.scaffold import Scaffold
 from goga.schema import schema
 from goga.usages import sync
 ```
@@ -33,6 +34,7 @@ Note: `goga.ast` is the only domain re-exported at the facade level (`from goga 
 | `onboarding` | `goga/onboarding/` | Interactive goga project initialization — user survey and configuration file generation    |
 | `pipeline` | `goga/pipeline/`    | End-to-end pipeline workflow — discovery, entity model, run coordination, in-container CLI  |
 | `runtime`  | `goga/runtime/`     | Pure leaf utilities for runtime-directory path composition (`~/.goga/runtime/...`)          |
+| `scaffold` | `goga/scaffold/`    | Wrap the copier template engine for goga project scaffolding — generation and migration    |
 | `schema`   | `goga/schema/`      | Generate the CODEMANIFEST project JSON schema                                              |
 | `usages`   | `goga/usages/`      | Config-driven synchronization of cell-level usages from declared git dependencies           |
 
@@ -58,6 +60,9 @@ Cell that owns the entire pipeline workflow: discovery of `*.yml` pipeline files
 
 ### runtime
 Pure leaf utilities module for runtime-directory path composition. Owns the single shared formula `~/.goga/runtime/<purpose>/<normalized_project>/<branch>/<*suffix_parts>` and exposes two atomic helpers plus one composite routine. Consumers call `resolve_runtime_dir` with their purpose and optional suffix.
+
+### scaffold
+Wraps the copier template engine for goga project scaffolding. Exposes the `Scaffold` facade with two operations: primary generation (`Scaffold.generate` via copier run_copy) and template migration (`Scaffold.upgrade` via copier run_update). Owns the goga hard conventions for the copier state file (`.goga/scaffold.yml`) shared by both operations.
 
 ### schema
 This manifest defines how the `schema` routine generates the CODEMANIFEST project JSON schema.

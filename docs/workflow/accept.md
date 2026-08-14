@@ -126,7 +126,7 @@ Each stop produces a structured report explaining what to fix.
 ## When to use
 
 - At the end of the **full cycle**, after the build-test-change loop converges.
-- At the end of the **Propose → Change** shortcut.
+- At the end of the **short cycle**.
 - Optionally, after a standalone `change` — when formal sign-off on a fix is desired.
 
 ## Inputs and outputs

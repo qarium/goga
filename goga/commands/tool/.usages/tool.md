@@ -23,7 +23,7 @@ All remaining arguments are captured and forwarded to the tool package's entry p
 ## Exit code
 
 - 0 — success
-- 1 — error (package not found, entry point missing, manifest load failure)
+- 1 — error (package not found, entry point missing, manifest load failure, or an uncaught import error from a found tool package)
 
 ## Examples
 

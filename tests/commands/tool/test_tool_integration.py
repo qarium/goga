@@ -49,9 +49,19 @@ class TestToolInvocationThroughApp:
 
 class TestToolNotFoundThroughApp:
     def test_tool_not_found_through_app(self) -> None:
-        """End-to-end: missing tool package via app shows 'not found' error."""
+        """End-to-end: missing tool package via app shows 'not found' error.
+
+        The mock sets ``ModuleNotFoundError.name`` to the package name, matching
+        what the import machinery produces for a genuinely absent top-level
+        package. A package that is found but fails to import raises with a
+        different ``.name`` and is re-raised (see the unit suite).
+        """
         runner = CliRunner()
-        with mock.patch.object(importlib, "import_module", side_effect=ModuleNotFoundError("goga_tool_nonexistent")):
+        with mock.patch.object(
+            importlib,
+            "import_module",
+            side_effect=ModuleNotFoundError("No module named 'goga_tool_nonexistent'", name="goga_tool_nonexistent"),
+        ):
             result = runner.invoke(app, ["tool", "nonexistent"])
 
         assert result.exit_code != 0

@@ -2,7 +2,7 @@
 
 Specification-governed maintenance workflow. Coordinates sub-skills to modify code while preserving triple consistency across `CODEMANIFEST`, implementation, and `.usages/*.md`.
 
-`change` works as part of the full cycle (post-build bugfix loop) and standalone for point fixes that do not require revisiting architecture.
+`change` works as part of the full cycle (post-build bugfix loop), as the tail of the short cycle, and standalone for point fixes that do not require revisiting architecture.
 
 ## Synopsis
 
@@ -178,9 +178,9 @@ For small fixes that do not touch contracts — bug fixes, behavior tweaks, refa
 change → accept
 ```
 
-### 3. Propose → Change shortcut
+### 3. Short cycle
 
-When the cell contract is stable but an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `propose`, then run `change` to perform the rewrite.
+When the work does not require deep technical elaboration — the architecture is clear and the cell contract is stable. A typical case: an external dependency changes — swap one library for another that implements the same logic. The new library needs a new `usage` file, and the implementation must be rewritten against it. Formulate the task with `propose`, then run `change` to perform the rewrite.
 
 ```
 propose → change → accept
@@ -199,4 +199,4 @@ This path is significantly faster than the full cycle while preserving quality.
 
 - Bugfix loop — re-test, then re-run `change` if needed, or proceed to `accept`.
 - Standalone — verify the fix manually.
-- Propose → Change shortcut — run [`accept`](accept.md) for final sign-off.
+- Short cycle — run [`accept`](accept.md) for final sign-off.

@@ -60,6 +60,29 @@ The wizard will prompt you for:
   Dockerfile              # Optional, if you chose to create one (default location)
 ```
 
+### Starting from a template (optional)
+
+Instead of the bare wizard, you can scaffold a project from a [copier](https://copier.readthedocs.io/) template first. Copier writes the template files plus a `.goga/scaffold.yml` state file, then the same questionnaire runs. Questions are skipped when the template already brought the corresponding artifact (`.goga/config.yml` or `.goga/usages/conventions.md`). During scaffolding, copier interactively asks every template question that has no programmatic answer (the project name is resolved from the git remote and supplied for you) — run it in a terminal, not a pipe/CI.
+
+On `--upgrade` the survey is skipped and defaults are used:
+
+```bash
+# Latest commit on the template's default branch
+goga init https://github.com/qarium/my-template.git
+
+# Pin a ref via the URL fragment, or override it with --ref
+goga init https://github.com/qarium/my-template.git#v1.0
+```
+
+To migrate a previously scaffolded project to a newer template version later, copier re-applies the recorded template from the state file (no onboarding):
+
+```bash
+goga init --upgrade            # re-apply at the recorded ref
+goga init --upgrade --ref v2.0 # migrate to a specific ref
+```
+
+`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](cli/init.md) for details.
+
 ## Develop your first feature
 
 Goga is built around an agent-driven development cycle. You do not write CODEMANIFEST files by hand — you describe the feature, and the agent produces the architecture, the contract files, the design, and the implementation plan. The cycle can be driven in two ways: run it automatically with a single pipeline command, or step through it manually for full control over each artifact.
@@ -76,6 +99,8 @@ propose → review(task)
                   → accept
 ```
 
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the cycle. For work that does not require deep technical elaboration, the shorter path starts directly at `propose` and cuts straight to `change` — see [Workflow](workflow/index.md).
+
 ### Automated cycle
 
 The fastest path. Goga ships ready-to-use pipelines that run the full cycle inside an isolated container, with agent credentials forwarded automatically. Run the `feature` pipeline from your agent:
@@ -84,7 +109,13 @@ The fastest path. Goga ships ready-to-use pipelines that run the full cycle insi
 goga pipeline feature
 ```
 
-The pipeline walks all eleven stages — propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result — and pauses at every `communication` stage to ask for your input before moving on. Three more shipped pipelines cover other lifecycles:
+The pipeline walks all twelve stages — discover → propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → prepare-build → accept-result — and pauses at every `communication` stage to ask for your input before moving on. When the work does not need deep technical elaboration, skip the discovery stage and start at `propose`:
+
+```bash
+goga pipeline feature -s discover
+```
+
+Three more shipped pipelines cover other lifecycles:
 
 ```bash
 goga pipeline bugfix     # root-cause analysis and defect resolution

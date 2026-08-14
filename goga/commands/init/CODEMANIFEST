@@ -6,6 +6,11 @@ Imports:
     Usages:
       - onboarding-usage
     From: goga/onboarding
+  - Types:
+      - Scaffold
+    Usages:
+      - scaffold-usage
+    From: goga/scaffold
 
 Usages:
   click: .goga/usages/cooks/click.md
@@ -19,25 +24,68 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
-  The command delegates business logic through `InitLogic`.
-  Use `onboarding-usage` to understand the InitLogic API.
+  The command delegates business logic through `InitLogic` and `Scaffold`.
+  The command is the integration point of two independent domains — onboarding
+  and scaffold. Use `onboarding-usage` to understand the InitLogic API.
+  Use `scaffold-usage` to understand the Scaffold API.
 
 ---
 
-"init()":
+"init(tpl: str | None, upgrade: bool, ref: str | None) -> exit_code: int":
   location: init.py
   annotations: |
-    CLI wrapper for the initialization command. Delegates business logic to `InitLogic`.
+    CLI wrapper for the initialization command. Integrates two independent domains — onboarding
+    and scaffold — and owns the mode routing, execution order, and already-initialized guard.
+    Delegates execution to `InitLogic` (onboarding) and `Scaffold` (scaffold).
+
+    `tpl`: optional positional — git URL of a copier template, optionally with a ref fragment
+      (url.git#ref)
+    `upgrade`: when True, run template migration only (no onboarding)
+    `ref`: explicit git ref overriding the URL fragment (`tpl`) or the migration target ref
+      (`upgrade`); rejected with a nonzero exit when given without `tpl` and without `upgrade`
+      (meaningless with no template source)
+    `exit_code`: 0 on success, nonzero on error, already-initialized, or invalid argument
+      combination
 
     Algorithm:
-    1. Create `Questionnaire` and `FileGenerator`
-    2. Create `InitLogic`(questionnaire, generator)
-    3. Call `InitLogic`.run()
-    4. Return exit_code
+    1. Validate `ref` placement: if `ref` is not None and `tpl` is None and not `upgrade` -> emit
+       "--ref requires <tpl> or --upgrade" and return nonzero (ref is meaningful only with a
+       template source — primary generation or migration target)
+    2. Determine mode: if `upgrade` and `tpl` are both given -> emit "<tpl> and --upgrade are
+       mutually exclusive (--upgrade updates existing state tied to a specific repository)" and
+       return nonzero; otherwise `upgrade` -> UPGRADE; `tpl` is not None ->
+       SCAFFOLD_THEN_ONBOARDING; otherwise BARE_ONBOARDING
+    3. Already-initialized guard: if BARE_ONBOARDING and the .goga/ directory exists -> emit
+       "Project already initialized" and return nonzero (the guard does NOT fire when `tpl` is
+       given)
+    4. Dispatch:
+       - UPGRADE: construct `Scaffold`; return Scaffold.upgrade(`ref`)
+       - SCAFFOLD_THEN_ONBOARDING: construct `Scaffold`; sc = Scaffold.generate(`tpl`, `ref`); if
+         sc nonzero return sc; otherwise construct `InitLogic`(`Questionnaire`, `FileGenerator`) and
+         return its run()
+       - BARE_ONBOARDING: construct `InitLogic`(`Questionnaire`, `FileGenerator`) and return its run()
+
+    Requirements:
+    - scaffold runs before onboarding when `tpl` is given (template may bring .goga/ artefacts
+      that onboarding then skips)
+    - the already-initialized marker is the .goga/ directory, not a specific file
+
+    Constraints:
+    - Do not combine --upgrade with <tpl> — --upgrade updates state tied to a specific
+      repository; the combination is rejected with a nonzero exit
+    - Do not run onboarding in UPGRADE mode
+    - Do not fire the already-initialized guard when `tpl` is given (scaffold is meaningful in an
+      existing project)
+    - Do not accept a bare --ref (no <tpl>, no --upgrade) — ref is only meaningful with a template
+      source; a bare --ref is rejected with a nonzero exit
+    - The command delegates execution — it does not implement onboarding or copier logic itself
 
 ---
 
 Author: Goga
 CreatedAt: 03/06/26
 Description: |
-  CLI wrapper for the interactive goga project initialization command
+  CLI wrapper for the goga project initialization command — integrates
+  interactive onboarding with copier template scaffolding, routes between
+  onboarding-only / scaffold-then-onboarding / upgrade modes, and guards
+  against re-initializing an existing project.

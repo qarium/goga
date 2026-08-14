@@ -3,10 +3,13 @@ prompt: |
 
 stages:
   code-review:
+    loop: 3
     approve: dialog
   contracts-review:
+    loop: 3
     approve: dialog
   documentation-review:
+    loop: 3
     approve: dialog
   testing:
     approve: dialog

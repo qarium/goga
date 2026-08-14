@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from ..config import resolve_project_name
@@ -129,20 +131,29 @@ class Questionnaire:
 
         return InitAnswers(goga_config=config)
 
-    def ask_goga_config(self) -> GogaConfigAnswers:
+    def ask_goga_config(self) -> GogaConfigAnswers | None:
         """Run questionnaire for .goga/config.yml creation.
 
         Orchestrates the per-field ask_* survey methods in order and assembles
         the results into a GogaConfigAnswers.
 
         Returns:
-            GogaConfigAnswers with all collected goga config fields.
+            GogaConfigAnswers with all collected goga config fields, or None
+            when .goga/config.yml already exists (the whole config survey is
+            skipped — a copier template may have brought its own config.yml).
         """
+        if Path(".goga/config.yml").is_file():
+            return None
+
         click.echo("Collecting .goga/config.yml settings...\n")
 
         language = self.ask_language()
 
-        usages_prefill, annotations_prefill = self.ask_base_convention()
+        if Path(".goga/usages/conventions.md").is_file():
+            usages_prefill, annotations_prefill = None, None
+        else:
+            usages_prefill, annotations_prefill = self.ask_base_convention()
+
         codemanifest_usages = self.ask_codemanifest_usages(usages_prefill)
         codemanifest_annotations = self.ask_codemanifest_annotations(annotations_prefill)
 

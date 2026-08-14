@@ -1,0 +1,176 @@
+Imports:
+  - Types:
+      - resolve_project_name
+    From: goga/config
+
+Usages:
+  convention: .goga/usages/conventions.md
+  copier: .goga/usages/cooks/copier.md
+  click: .goga/usages/cooks/click.md
+  scaffold_conventions: |
+    goga hard conventions for the copier state file. dst_path = the current directory (where
+    goga init runs). answers_file = .goga/scaffold.yml — passed programmatically to both
+    copier.run_copy and copier.run_update and overrides any answers_file declared in the
+    template copier.yml. copier persists the state file only when the template itself renders
+    it: a template must contain an answers-file template entry (the copier convention
+    "{{ _copier_conf.answers_file }}.jinja" rendering the recorded answers); without it
+    .goga/scaffold.yml is not created and Scaffold.upgrade reports the missing state file.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell wraps the copier template engine for goga project scaffolding: primary generation
+  (Scaffold.generate via copier.run_copy) and template migration (Scaffold.upgrade via
+  copier.run_update). It owns the goga-specific hard conventions for the copier state file
+  (`scaffold_conventions`) and translates CLI inputs into copier calls. Programmatic use of copier
+  is limited to run_copy/run_update. On primary generation the copier interactive survey asks
+  every template question not answered programmatically (project_name is supplied via data);
+  on migration the survey is bypassed. Template state-file persistence requires the template
+  itself to render the answers file (see `scaffold_conventions`). Use `copier`
+  for the copier API surface. Use `click` for the project_name prompt fallback in
+  `resolve_scaffold_name` and for stderr diagnostics in Scaffold.
+
+---
+
+"Scaffold(dst_path: str = '.', answers_file: str = '.goga/scaffold.yml')":
+  location: scaffold.py
+  annotations: |
+    Wraps the copier template engine for a single scaffolding target directory. Owns the goga
+    hard conventions for the copier state file as construction state. Error causes are echoed
+    to stderr — never hidden in logs.
+
+    `dst_path`: target directory for scaffolding (goga init uses the current directory)
+    `answers_file`: copier answers/state file path — goga hard convention; passed programmatically
+      to both copier operations and overrides any answers_file declared in the template copier.yml
+
+    Use `scaffold_conventions` for the fixed default values.
+    Use `copier` for the underlying engine API.
+  properties:
+    "dst_path -> str": |
+      Target directory for scaffolding. Defaults to the current directory.
+    "answers_file -> str": |
+      Copier answers/state file path. goga hard convention; passed programmatically to both
+      copier operations, overriding any answers_file declared in the template copier.yml. Read by
+      Scaffold.upgrade.
+  methods:
+    "generate(template_input: str, ref_override: str | None) -> exit_code: int": |
+      Primary project generation from a copier template; delegates to copier.run_copy (see
+      `copier`).
+
+      `template_input`: raw template source — a git URL, optionally carrying a ref fragment
+        (url.git#ref)
+      `ref_override`: explicit git ref from --ref; when not None it takes precedence over the
+        URL fragment
+      `exit_code`: 0 on success, nonzero on error
+
+      Algorithm:
+      1. Parse `template_input` and `ref_override` via `parse_template_ref` -> (template_url, vcs_ref)
+      2. Resolve project_name via `resolve_scaffold_name`
+      3. Assemble copier answers data with project_name
+      4. Invoke the copier primary-generation operation (see `copier`) at dst_path, passing the
+         template_url, the assembled answers, answers_file, and vcs_ref with defaults=False —
+         copier asks interactively every template question not covered by the assembled answers
+      5. Return 0 on success; on copier error echo the error cause to stderr and return nonzero
+
+      Requirements:
+      - answers_file is passed programmatically (goga hard convention) — overrides any template
+        copier.yml declaration
+      - dst_path is the instance target directory
+      - Questions not covered by the assembled answers are asked interactively by copier — a
+        template question without a programmatic answer and without a default MUST be answered
+        by the user, not fail the generation
+      - The copier interactive survey requires a TTY; in a non-interactive environment copier
+        fails and the error cause is echoed to stderr
+
+      Constraints:
+      - Do not pass a different answers_file than the instance's
+    "upgrade(ref_override: str | None) -> exit_code: int": |
+      Migrate a previously scaffolded project to a newer version of its template; delegates to
+      copier.run_update (see `copier`).
+
+      `ref_override`: explicit git ref from --ref overriding the migration target ref; None uses the
+        ref recorded in the state file
+      `exit_code`: 0 on success, nonzero on error or when the state file is missing
+
+      Algorithm:
+      1. Invoke the copier migration operation (see `copier`) at dst_path with answers_file,
+         vcs_ref=ref_override, overwrite=True, and defaults=True
+      2. Return 0 on success; on copier error echo the error cause to stderr and return
+         nonzero; on missing answers_file echo the state-file path to stderr and return nonzero
+
+      Requirements:
+      - Reads the template source and applied answers from answers_file (persisted by the
+        template answers-file entry per `scaffold_conventions`)
+      - Same answers_file as generate — one shared state file
+      - The migration survey is bypassed (defaults=True): a new required template question
+        without a default fails migration with a nonzero exit and the cause echoed to stderr
+      - overwrite=True is REQUIRED — copier's run_update refuses to update without it (the migration
+        diff is reviewed via git in the destination)
+      - copier's run_update preconditions, enforced by copier and surfaced as a nonzero exit on
+        violation: the destination must be a git repository, clean (no uncommitted changes), and the
+        template must be git-trackable (a git URL, not a local path) with a non-decreasing version
+      - ref_override, when not None, overrides the migration target ref
+
+      Constraints:
+      - Do not run any post-generation survey — upgrade is scaffold-only
+      - Missing state file must NOT be a silent success (nonzero exit)
+      - Do not accept a template argument — the source is read from the state file
+
+"parse_template_ref(template_input: str, ref_override: str | None) -> parsed: tuple[str, str | None]":
+  location: template_ref.py
+  annotations: |
+    Parse a raw template source string and an explicit ref override into the clean copier inputs.
+
+    `template_input`: raw template source — a git URL, optionally carrying a ref fragment
+      (url.git#ref)
+    `ref_override`: explicit git ref from --ref, or None when not given; an empty string is
+      treated as not given
+    `parsed`: (template_url, effective_vcs_ref) — the clean URL and the resolved ref
+
+    Algorithm:
+    1. Split `template_input` on the ref fragment; extract base_ref and the clean template_url;
+       an empty fragment (url.git#) normalizes to None
+    2. effective_ref = `ref_override` when a non-empty string, else base_ref
+    3. Return (template_url, effective_ref)
+
+    Requirements:
+    - `ref_override` takes precedence over the URL fragment when both are present
+    - An empty-string `ref_override` and an empty URL fragment normalize to None (the copier
+      default ref), not to the empty string
+
+    Constraints:
+    - Do not fetch or validate the URL — parsing only
+
+"resolve_scaffold_name() -> project_name: str":
+  location: project_name.py
+  annotations: |
+    Resolve the project_name for copier answers, falling back to an interactive prompt when the
+    git name is unavailable.
+
+    `project_name`: project name for copier answers data
+
+    Algorithm:
+    1. Resolve the git project name via `resolve_project_name`
+    2. When name is None, prompt the user via `click`
+    3. Return name
+
+    Requirements:
+    - Always returns a non-empty name (prompt guarantees a value when git yields None)
+
+    Constraints:
+    - Do not raise when the git name is unavailable — fall back to the prompt
+    - Use `click` only for the fallback prompt
+
+---
+
+Author: Goga
+CreatedAt: 13/08/26
+Description: |
+  Wraps the copier template engine for goga project scaffolding — primary generation
+  (Scaffold.generate) and template migration (Scaffold.upgrade) — owning the goga hard
+  conventions for the copier state file (.goga/scaffold.yml).

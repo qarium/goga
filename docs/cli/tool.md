@@ -107,3 +107,8 @@ def main(argv: list[str]) -> None: ...
 |------|--------------------------------------------------|
 | `0`  | Tool executed successfully                       |
 | `1`  | Tool package not found, has no `main` function, or the project manifest could not be loaded |
+
+"Tool package not found" is reported only when the `goga_tool_*` package
+itself is missing. A `ModuleNotFoundError` raised by a transitive import
+inside an installed tool package is re-raised with its traceback instead
+of being masked as "not found".

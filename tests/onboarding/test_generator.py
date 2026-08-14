@@ -33,6 +33,18 @@ class TestContract:
         assert hasattr(gen, "generate_goga_config")
         assert callable(gen.generate_goga_config)
 
+    def test_file_generator_generate_accepts_none_goga_config(self, tmp_path: Path) -> None:
+        """generate() must be callable with InitAnswers(goga_config=None) without raising.
+
+        The None guard skips config.yml + Dockerfile generation entirely.
+        """
+        gen = FileGenerator()
+        gen._base_dir = tmp_path
+        answers = InitAnswers(goga_config=None)
+
+        # Must not raise — the None guard returns early.
+        gen.generate(answers)
+
 
 class TestLogic:
     """Logic tests for FileGenerator — uses tmp_path and mocks urllib."""
@@ -253,6 +265,31 @@ class TestLogic:
 
         data = self._load_yaml(goga_dir / "config.yml")
         assert data["language"] == "golang"
+
+    def test_file_generator_generate_skips_when_goga_config_none(self, tmp_path: Path) -> None:
+        """When goga_config is None, generate() must skip all file artefacts.
+
+        No .goga/config.yml (and no Dockerfile) is written — the leading guard
+        returns before generate_goga_config is reached.
+        """
+        gen = self._make_gen(tmp_path)
+        answers = InitAnswers(goga_config=None)
+
+        gen.generate(answers)
+
+        assert (tmp_path / ".goga" / "config.yml").exists() is False
+        # .goga directory itself should not be created by generate on the skip path.
+        assert (tmp_path / ".goga").exists() is False
+
+    def test_file_generator_generate_none_does_not_call_generate_goga_config(self, tmp_path: Path) -> None:
+        """On the None path, generate_goga_config must not be invoked at all."""
+        gen = self._make_gen(tmp_path)
+        answers = InitAnswers(goga_config=None)
+
+        with patch.object(gen, "generate_goga_config") as mock_gen_config:
+            gen.generate(answers)
+
+        mock_gen_config.assert_not_called()
 
     # --- New tests for Dockerfile generation ---
 
