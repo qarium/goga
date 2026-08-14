@@ -40,8 +40,12 @@ Annotations: |
 "DockerArgsConfig(run: list[str], build: list[str])":
   location: home_config.py
   annotations: |
-    Raw extra docker CLI tokens from the home config docker block. Structural
-    validation only (list[str]); docker surfaces flag conflicts.
+    Extra docker CLI tokens from the home config docker block. Structural
+    validation only (list[str]); docker surfaces flag conflicts. Each YAML list
+    entry is shell-tokenized (shlex.split) at load by `load_home_config`, so a
+    user authors entries as shell-like fragments: `-v /host:/container` becomes
+    two argv tokens `["-v", "/host:/container"]`, while the `--flag=value` form
+    and already-split single tokens stay unchanged (backward compatible).
 
     `run`: tokens appended to every docker run (pipeline + build containers)
     `build`: tokens appended to docker build (image build)
@@ -49,9 +53,11 @@ Annotations: |
     Build with @dataclass(frozen=True, kw_only=True) per `convention`.
   properties:
     "run -> list[str]": |
-      Extra docker run tokens. Empty list when absent.
+      Extra docker run tokens (shell-tokenized from the raw YAML entries at
+      load). Empty list when absent.
     "build -> list[str]": |
-      Extra docker build tokens. Empty list when absent.
+      Extra docker build tokens (shell-tokenized from the raw YAML entries at
+      load). Empty list when absent.
 
 "load_home_config(path: Path | None = None) -> config: HomeConfig":
   location: loader.py
@@ -71,7 +77,10 @@ Annotations: |
     5. Extract optional env (mapping, default {}); non-mapping -> ValueError
     6. Extract optional docker; when present build DockerArgsConfig from run
        (list[str], default []) and build (list[str], default []); non-list ->
-       ValueError; absent -> empty DockerArgsConfig
+       ValueError; absent -> empty DockerArgsConfig. Each `run`/`build` entry is
+       shell-tokenized via shlex.split (coerced to str first so a non-string
+       YAML scalar never crashes the loader) into argv tokens — a malformed
+       entry (e.g. unterminated quote) raises ValueError
     7. Return HomeConfig(env, docker)
 
     Use the `yaml` practice for parsing. Apply `convention` for dataclass/error style.
@@ -79,12 +88,16 @@ Annotations: |
     Requirements:
     - A missing file is NOT an error — return an empty HomeConfig
     - Structural validation only: env a mapping; docker.run/docker.build lists of str
+    - Each docker.run/docker.build entry is shell-tokenized (shlex.split) at load
+      so a shell-like fragment `-v /host:/container` reaches docker as two argv
+      tokens; single-token entries and the --flag=value form are unchanged
     - Unknown keys ignored (forward-compat)
 
     Constraints:
     - Do NOT merge with project config here — layering is the consumer's job
     - Do NOT raise on a missing file
-    - Do NOT semantically validate docker tokens
+    - Do NOT semantically validate docker tokens (shlex tokenization is
+      structural splitting, not validation of flag correctness)
 
 ---
 

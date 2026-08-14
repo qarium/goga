@@ -153,3 +153,94 @@ class TestLoadHomeConfigLogic:
         # tmp_path has no ~/.goga/config.yml — must not raise, any path form.
         config = load_home_config()
         assert isinstance(config, HomeConfig)
+
+
+# --- Shell-tokenization of docker.run / docker.build entries ---
+
+
+class TestDockerTokenShellSplit:
+    """Each docker.run / docker.build entry is shell-tokenized at load so a
+    shell-like fragment ``-v /host:/container`` reaches docker as two argv
+    tokens (subprocess.Popen does not split a list argv on whitespace)."""
+
+    def test_flag_value_entry_is_split_into_two_tokens(self, tmp_path, monkeypatch):
+        """`-v /host:/container` (one YAML entry) → ['-v', '/host:/container']."""
+        _write_home_yml(
+            tmp_path,
+            'docker:\n  run:\n    - "-v /Users/me/.ssh:/home/goga/.ssh"\n',
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["-v", "/Users/me/.ssh:/home/goga/.ssh"]
+
+    def test_quoted_value_with_whitespace_is_preserved(self, tmp_path, monkeypatch):
+        """A value containing whitespace is quoted by the author and kept whole."""
+        _write_home_yml(
+            tmp_path,
+            "docker:\n  run:\n    - '-v \"/host with space:/c\"'\n",
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["-v", "/host with space:/c"]
+
+    def test_single_token_entries_are_unchanged(self, tmp_path, monkeypatch):
+        """Backward compat: --flag=value, boolean flags, and already-split tokens."""
+        _write_home_yml(
+            tmp_path,
+            "docker:\n  run:\n    - --network=host\n    - --rm\n  build:\n    - --squash\n",
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["--network=host", "--rm"]
+        assert config.docker.build == ["--squash"]
+
+    def test_already_split_two_item_list_is_unchanged(self, tmp_path, monkeypatch):
+        """A user who already split flag and value into two entries is unaffected."""
+        _write_home_yml(
+            tmp_path,
+            'docker:\n  run:\n    - "-v"\n    - "/host:/c"\n',
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["-v", "/host:/c"]
+
+    def test_multiple_flags_in_one_entry_are_split(self, tmp_path, monkeypatch):
+        """A single entry carrying several flag/value pairs is fully tokenized."""
+        _write_home_yml(
+            tmp_path,
+            'docker:\n  run:\n    - "-v /a:/b -v /c:/d"\n',
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["-v", "/a:/b", "-v", "/c:/d"]
+
+    def test_malformed_quote_raises_value_error(self, tmp_path, monkeypatch):
+        """A YAML entry whose parsed string is malformed shell (an unterminated
+        quote) surfaces as ValueError from shlex at load — caught by the
+        launcher preamble as a clean ClickException, never a raw traceback.
+
+        (A quote unterminated at the YAML level is a separate case already
+        handled — it raises yaml.YAMLError, also caught by the preamble.)"""
+        _write_home_yml(
+            tmp_path,
+            "docker:\n  run:\n    - '-v /host:/c\"'\n",  # YAML ok; shell has a stray "
+        )
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        with pytest.raises(ValueError, match="No closing quotation"):
+            load_home_config()
+
+    def test_non_string_entry_is_coerced_not_crashed(self, tmp_path, monkeypatch):
+        """A non-string YAML scalar (e.g. an int) is coerced rather than raising
+        an uncaught AttributeError — docker surfaces the resulting bad token."""
+        _write_home_yml(tmp_path, "docker:\n  run:\n    - 123\n")
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+        config = load_home_config()
+        assert config.docker.run == ["123"]
+
+    def test_shell_split_helper_directly(self):
+        """The _shell_split helper is the documented tokenization entry point."""
+        from goga.config.home.loader import _shell_split
+
+        assert _shell_split(["--network=host"]) == ["--network=host"]
+        assert _shell_split(["-v /h:/c"]) == ["-v", "/h:/c"]
+        assert _shell_split([]) == []
