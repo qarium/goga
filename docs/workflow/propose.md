@@ -88,4 +88,4 @@ Write the task to `docs/tasks/<topic>.md` using the task template. Present a sum
 ## What happens next
 
 - Run [`review`](review.md) with the `task` type to validate the formulation.
-- On approval, proceed to [`brainstorm`](brainstorm.md) (full cycle) or [`change`](change.md) (shortcut).
+- On approval, proceed to [`brainstorm`](brainstorm.md) (full cycle) or [`change`](change.md) (short cycle).

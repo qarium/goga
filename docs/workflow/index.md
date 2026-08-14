@@ -2,21 +2,21 @@
 
 Goga organizes feature development as a sequence of agent commands, separated by review stages. Each command produces a concrete artifact (task, architecture, design, plan) — this lets you review decisions before they turn into code.
 
-## Three paths
+## Two cycles and a shortcut
 
-Goga supports three working modes. The choice depends on how deeply the change affects contracts.
+Goga supports two cycles plus a shortcut. The choice depends on how much technical elaboration the work needs.
 
 > Command examples in this section use the slash-command form `/goga:<command>`. This form works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](../cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-<command>` (Codex uses the `$` prefix — for example, `$goga-propose`).
 
 | Path | When to use | Length |
 |---|---|---|
-| **Full cycle** | New feature that affects architecture and contracts | Long |
-| **Propose → Change** | Contract stays the same, but an external dependency changes (new usage file, rewritten implementation) | Short |
+| **Full cycle** | Work that requires deep technical elaboration: new architecture, new cells, contract changes, hard-to-reverse decisions | Longest |
+| **Short cycle** | Work that does not require deep technical elaboration — the architecture is clear and the contracts stay stable (for example, an external dependency changes and the implementation is rewritten against a new usage file) | Short |
 | **Standalone change** | Point fix that does not touch contracts | Shortest |
 
 ### Full cycle
 
-Use when a feature requires new architecture, new cells, or modifies existing contracts. Each artifact-producing step can be followed by a review of that artifact. The cycle may open with [`discover`](discover.md) when a hard-to-reverse decision needs to be settled and recorded as an ADR before the task is formulated.
+The longest path, opened by [`discover`](discover.md). Use when a feature requires new architecture, new cells, or modifies existing contracts — work that needs deep technical elaboration. [`discover`](discover.md) settles hard-to-reverse decisions and records them as ADRs before the task is formulated; each subsequent artifact-producing step can be followed by a review of that artifact.
 
 ```
 discover → propose → review(task)
@@ -30,16 +30,16 @@ discover → propose → review(task)
 
 > Reviews are **optional** at every stage — you decide how much verification each artifact needs. Skipping a review is acceptable when the change is small, the artifact is straightforward, or you are confident in the result. Run a review when the artifact introduces risk: large architectural changes, ambiguous contracts, or unfamiliar domains. Reviews catch drift while it is still cheap to fix.
 
-### Propose → Change
+### Short cycle
 
-Use when a cell's contract stays the same, but an external dependency changes: another library, another SDK, a rewritten parser. In this case you formulate the task (`propose`), obtain a new `usage` file, and rewrite the implementation through `change`, skipping the rest of the flow.
+Starts with [`propose`](propose.md). Use when the work does not require deep technical elaboration: the architecture is clear, the contracts stay stable, and the middle of the full cycle — `brainstorm`, `apply`, `design`, `plan`, `build` — would produce nothing of value. A typical case: a cell's contract stays the same, but an external dependency changes (another library, another SDK, a rewritten parser) — you formulate the task (`propose`), obtain a new `usage` file, and rewrite the implementation through `change`.
 
 ```
 propose → review(task)
    → change → accept
 ```
 
-This path significantly speeds up delivery when the contract is stable.
+This path significantly speeds up delivery when no elaboration is needed.
 
 ### Standalone change
 
@@ -52,15 +52,16 @@ change → accept
 ## Choosing a path
 
 ```text
-Does the contract (CODEMANIFEST) change?
+Does the work require deep technical elaboration
+(new architecture, new cells, contract changes, hard-to-reverse decisions)?
 │
-├─ Yes, new architecture or new cell
-│   └─ Full cycle
+├─ Yes
+│   └─ Full cycle (opens with discover)
 │
-├─ No, but an external dependency changes (usage, implementation)
-│   └─ Propose → Change
+├─ No, but the task needs formulation and an implementation pass
+│   └─ Short cycle (opens with propose)
 │
-└─ No, fix without a contract change
+└─ No, point fix without a contract change
     └─ Standalone change
 ```
 
@@ -81,6 +82,7 @@ Does the contract (CODEMANIFEST) change?
 
 ## Next steps
 
-- Starting a new feature — open [`propose`](propose.md).
+- Starting work that needs deep elaboration — open [`discover`](discover.md).
+- Starting a straightforward task — open [`propose`](propose.md).
 - Need a point fix — [`change`](change.md).
 - Want to accept completed work — [`accept`](accept.md).

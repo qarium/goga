@@ -64,6 +64,7 @@ Pipelines installed from `goga_tool_*` packages are namespaced as `<tool>:<name>
 
 ```bash
 goga pipeline feature
+goga pipeline feature -s discover  # skip the discovery stage, start at propose
 goga pipeline acme:deploy
 ```
 

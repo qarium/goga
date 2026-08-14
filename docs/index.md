@@ -72,6 +72,12 @@ discover → propose → task-review → brainstorm → architecture-review → 
 code-design → design-review → coding-plan → plan-review → prepare-build → accept-result
 ```
 
+When the work does not need deep technical elaboration, skip the discovery stage and start at `propose`:
+
+```bash
+goga pipeline feature -s discover
+```
+
 Three more pipelines cover the remaining lifecycles:
 
 ```bash
@@ -90,7 +96,7 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to create>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the manual cycle and its shortcut paths.
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the manual cycle, its full and short variants, and the standalone shortcut.
 
 ## Next steps
 

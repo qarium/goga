@@ -168,9 +168,10 @@ Four definitions ship with goga:
 Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
 ```bash
-goga pipeline feature          # run the full cycle
-goga pipeline feature -p 4     # cap parallelism (subject to the pipeline's dependency rules)
-goga pipeline feature --clean  # wipe persistent state for a fresh run
+goga pipeline feature            # run the full cycle (opens with discover)
+goga pipeline feature -s discover # shorter run: skip discovery, start at propose
+goga pipeline feature -p 4       # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline feature --clean    # wipe persistent state for a fresh run
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.

@@ -99,7 +99,7 @@ propose → review(task)
                   → accept
 ```
 
-The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated.
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the cycle. For work that does not require deep technical elaboration, the shorter path starts directly at `propose` and cuts straight to `change` — see [Workflow](workflow/index.md).
 
 ### Automated cycle
 
@@ -109,7 +109,13 @@ The fastest path. Goga ships ready-to-use pipelines that run the full cycle insi
 goga pipeline feature
 ```
 
-The pipeline walks all twelve stages — discover → propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → prepare-build → accept-result — and pauses at every `communication` stage to ask for your input before moving on. Three more shipped pipelines cover other lifecycles:
+The pipeline walks all twelve stages — discover → propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → prepare-build → accept-result — and pauses at every `communication` stage to ask for your input before moving on. When the work does not need deep technical elaboration, skip the discovery stage and start at `propose`:
+
+```bash
+goga pipeline feature -s discover
+```
+
+Three more shipped pipelines cover other lifecycles:
 
 ```bash
 goga pipeline bugfix     # root-cause analysis and defect resolution
