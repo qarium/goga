@@ -33,8 +33,7 @@ Annotations: |
   on migration the survey is bypassed. Template state-file persistence requires the template
   itself to render the answers file (see `scaffold_conventions`). Use `copier`
   for the copier API surface. Use `click` for the project_name prompt fallback in
-  `resolve_scaffold_name` and for stderr diagnostics in Scaffold. All data models are
-  immutable dataclasses (frozen=True, kw_only=True).
+  `resolve_scaffold_name` and for stderr diagnostics in Scaffold.
 
 ---
 

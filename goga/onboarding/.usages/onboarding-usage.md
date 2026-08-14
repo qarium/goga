@@ -74,12 +74,11 @@ The image branch depends on the Dockerfile decision:
 
 ## Conditional onboarding
 
-When onboarding runs after scaffold (`goga init <tpl>`), the template may
-have produced `.goga/config.yml` and/or `.goga/usages/conventions.md`.
-Onboarding detects existing artefacts and skips the corresponding survey
-sections instead of asking twice. This is composition, not arbitration:
-where both the template and onboarding would write `.goga/config.yml`, the
-template wins because it ran first.
+When onboarding runs after an external template generator has produced
+`.goga/config.yml` and/or `.goga/usages/conventions.md`, onboarding detects
+the existing artefacts and skips the corresponding survey sections instead
+of asking twice. This is composition, not arbitration: an existing
+`.goga/config.yml` is not rewritten — whoever created it first wins.
 
 ## Per-field survey methods
 

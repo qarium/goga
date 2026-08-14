@@ -18,8 +18,8 @@ goga init [<tpl>] [--upgrade] [--ref <git-ref>]
 | Invocation | Behaviour |
 |------------|-----------|
 | `goga init` | onboarding only (interactive survey in a clean directory) |
-| `goga init <tpl>` | scaffold (copier `run_copy`) → conditional onboarding |
-| `goga init --upgrade` | scaffold migration only (copier `run_update`); no onboarding |
+| `goga init <tpl>` | scaffold (`Scaffold.generate`) → conditional onboarding |
+| `goga init --upgrade` | scaffold migration only (`Scaffold.upgrade`); no onboarding |
 | `goga init` (when `.goga/` already exists, no `<tpl>`) | non-zero exit: "Project already initialized" |
 | `goga init <tpl> --upgrade` | non-zero exit: "<tpl> and --upgrade are mutually exclusive" (`--upgrade` updates existing state tied to a specific repository) |
 | `goga init --ref <ref>` (no `<tpl>`, no `--upgrade`) | non-zero exit: "--ref requires <tpl> or --upgrade" (ref is meaningful only with a template source) |
@@ -28,11 +28,11 @@ goga init [<tpl>] [--upgrade] [--ref <git-ref>]
 
 - `<tpl>` — optional positional. Git URL of a copier template, optionally with
   a ref fragment (`url.git#v1.0`).
-- `--upgrade` — boolean. Run template migration (copier `run_update`) from
+- `--upgrade` — boolean. Run template migration (`Scaffold.upgrade`) from
   `.goga/scaffold.yml`. No onboarding. Mutually exclusive with `<tpl>` (`--upgrade` updates
   existing state tied to a specific repository). Requires a git-tracked destination (a git repo,
   clean — no uncommitted changes) and a git-trackable template (a git URL) with a non-decreasing
-  version; copier enforces these and exits nonzero on violation.
+  version; the scaffold engine enforces these and exits nonzero on violation.
 - `--ref <git-ref>` — override the ref: with `<tpl>` it overrides the URL fragment; with
   `--upgrade` it overrides the migration target ref. A bare `--ref` (without `<tpl>` and without
   `--upgrade`) is rejected with a nonzero exit.
