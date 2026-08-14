@@ -62,7 +62,7 @@ The wizard will prompt you for:
 
 ### Starting from a template (optional)
 
-Instead of the bare wizard, you can scaffold a project from a [copier](https://copier.readthedocs.io/) template first. Copier writes the template files plus a `.goga/scaffold.yml` state file, then the same questionnaire runs — with questions skipped when the template already brought the corresponding artifact (`.goga/config.yml` or `.goga/usages/conventions.md`):
+Instead of the bare wizard, you can scaffold a project from a [copier](https://copier.readthedocs.io/) template first. Copier writes the template files plus a `.goga/scaffold.yml` state file, then the same questionnaire runs — with questions skipped when the template already brought the corresponding artifact (`.goga/config.yml` or `.goga/usages/conventions.md`). During scaffolding, copier interactively asks every template question that has no programmatic answer (the project name is resolved from the git remote and supplied for you) — run it in a terminal, not a pipe/CI. On `--upgrade` the survey is skipped and defaults are used:
 
 ```bash
 # Latest commit on the template's default branch

@@ -14,7 +14,7 @@ goga init --upgrade [--ref REF]
 `goga init` initializes a new goga project. It runs in one of three modes depending on the arguments:
 
 - **Bare onboarding** (`goga init`) — launches an interactive questionnaire that walks you through setting up a new goga project. It collects configuration values and generates the necessary project files. Refuses to run when `.goga/` already exists ("Project already initialized").
-- **Scaffold then onboarding** (`goga init <tpl>`) — scaffolds boilerplate from a [copier](https://copier.readthedocs.io/) template first (a git URL, optionally carrying a `#ref` fragment), then runs the onboarding questionnaire. Onboarding is filesystem-conditional: questions whose artifacts the template already brought (`.goga/config.yml`, `.goga/usages/conventions.md`) are skipped. The already-initialized guard does **not** fire in this mode — a template may be applied to an existing tree.
+- **Scaffold then onboarding** (`goga init <tpl>`) — scaffolds boilerplate from a [copier](https://copier.readthedocs.io/) template first (a git URL, optionally carrying a `#ref` fragment), then runs the onboarding questionnaire. Copier asks template questions not answered programmatically interactively. Onboarding is filesystem-conditional: questions whose artifacts the template already brought (`.goga/config.yml`, `.goga/usages/conventions.md`) are skipped. The already-initialized guard does **not** fire in this mode — a template may be applied to an existing tree.
 - **Upgrade only** (`goga init --upgrade`) — migrates a previously scaffolded project to a newer template version via copier `run_update`. No onboarding runs. The template source is read from the `.goga/scaffold.yml` state file written by an earlier `goga init <tpl>`; if that file is absent the command exits nonzero.
 
 `<tpl>` and `--upgrade` are mutually exclusive: `--upgrade` updates state tied to a specific repository already recorded in `.goga/scaffold.yml`. `--ref` is meaningful only with `<tpl>` or `--upgrade` (a bare `--ref` is rejected).
@@ -110,7 +110,9 @@ goga init --upgrade
 goga init --upgrade --ref v2.0
 ```
 
-The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort. Copier template questions are bypassed (answers supplied programmatically with `defaults=True`).
+The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort.
+
+With a template (`goga init <tpl>`), copier asks every template question that has no programmatic answer interactively (the project name is resolved from the git remote, falling back to a prompt, and supplied programmatically). A template question with neither a programmatic answer nor a default **must** be answered by the user — generation does not fail on it. The survey requires a TTY: in a non-interactive environment (CI, pipe) copier fails and the error cause is echoed to stderr. On migration (`--upgrade`) the survey is bypassed (`defaults=True`) — a new required template question without a default fails migration with a nonzero exit.
 
 ## Options
 

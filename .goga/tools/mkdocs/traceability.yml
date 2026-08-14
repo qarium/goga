@@ -21,6 +21,7 @@ docs/getting-started.md:
   - goga/onboarding
   - goga/config
   - goga/config/git
+  - goga/scaffold
   - goga/pipeline
   - goga/commands/pipeline
 
@@ -88,6 +89,7 @@ docs/cli/index.md:
 docs/cli/init.md:
   - goga/commands/init
   - goga/onboarding
+  - goga/scaffold
   - goga/config/git
 
 docs/cli/lint.md:
