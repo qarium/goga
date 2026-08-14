@@ -7,6 +7,10 @@ import pytest
 from goga.onboarding.answers import GogaConfigAnswers, InitAnswers
 from goga.onboarding.questionnaire import Questionnaire
 
+# Apply the `_clean_cwd` fixture (tests/onboarding/conftest.py) to every test
+# in this module: survey tests need a CWD without .goga/config.yml.
+pytestmark = pytest.mark.usefixtures("_clean_cwd")
+
 
 class TestContract:
     """Contract-level tests for Questionnaire."""
@@ -77,7 +81,8 @@ class TestLogic:
     11. (If custom pipeline env: key, value, in loop)
     """
 
-    # The `_clean_cwd` autouse fixture lives in tests/onboarding/conftest.py.
+    # The `_clean_cwd` fixture lives in tests/onboarding/conftest.py and is
+    # applied module-wide via `pytestmark` (see the top of this file).
 
     def test_questionnaire_ask_goga_config_python_with_convention(self) -> None:
         prompts = iter(

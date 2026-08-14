@@ -74,14 +74,17 @@ def _resolve_mode(
 ) -> str | None:
     """Resolve the execution mode, rejecting the mutually-exclusive combination.
 
+    The mode constant is ``_UPGRADE`` / ``_SCAFFOLD_THEN_ONBOARDING`` /
+    ``_BARE_ONBOARDING``; ``None`` is returned when the combination is invalid
+    (the error is emitted and ``ctx.exit(1)`` called before returning ``None``).
+
     Args:
         tpl: the optional copier template source argument, or ``None``.
         upgrade: whether ``--upgrade`` was passed.
         ctx: the click context, used to exit with code 1 on invalid input.
 
-    Returns the mode constant (``_UPGRADE`` / ``_SCAFFOLD_THEN_ONBOARDING`` /
-    ``_BARE_ONBOARDING``), or ``None`` when the combination is invalid (the
-    error is emitted and ``ctx.exit(1)`` called before returning ``None``).
+    Returns:
+        The mode constant, or ``None`` for an invalid combination.
     """
     if upgrade and tpl is not None:
         click.echo(
