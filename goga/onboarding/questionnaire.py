@@ -153,6 +153,7 @@ class Questionnaire:
             usages_prefill, annotations_prefill = None, None
         else:
             usages_prefill, annotations_prefill = self.ask_base_convention()
+
         codemanifest_usages = self.ask_codemanifest_usages(usages_prefill)
         codemanifest_annotations = self.ask_codemanifest_annotations(annotations_prefill)
 

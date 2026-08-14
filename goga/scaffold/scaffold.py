@@ -30,6 +30,12 @@ class Scaffold:
         dst_path: str = ".",
         answers_file: str = ".goga/scaffold.yml",
     ) -> None:
+        """Store the scaffolding target directory and copier state file path.
+
+        Args:
+            dst_path: target directory copier generates into.
+            answers_file: copier state file path passed to both operations.
+        """
         self.dst_path = dst_path
         self.answers_file = answers_file
 
@@ -57,6 +63,7 @@ class Scaffold:
         template_url, vcs_ref = parse_template_ref(template_input, ref_override)
         project_name = resolve_scaffold_name()
         data = {"project_name": project_name}
+
         try:
             copier.run_copy(
                 template_url,
@@ -67,9 +74,7 @@ class Scaffold:
                 defaults=True,
             )
         except Exception as exc:
-            logger.error(
-                "scaffold generate failed", extra={"error": str(exc)}
-            )
+            logger.error("scaffold generate failed", extra={"error": str(exc)})
             return 1
         return 0
 
@@ -90,10 +95,9 @@ class Scaffold:
             ``0`` on success, ``1`` on error or when the state file is missing.
         """
         if not Path(self.answers_file).is_file():
-            logger.error(
-                "missing scaffold state file", extra={"path": self.answers_file}
-            )
+            logger.error("missing scaffold state file", extra={"path": self.answers_file})
             return 1
+
         try:
             copier.run_update(
                 self.dst_path,
@@ -103,8 +107,6 @@ class Scaffold:
                 defaults=True,
             )
         except Exception as exc:
-            logger.error(
-                "scaffold upgrade failed", extra={"error": str(exc)}
-            )
+            logger.error("scaffold upgrade failed", extra={"error": str(exc)})
             return 1
         return 0

@@ -125,5 +125,4 @@ The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort. Copie
 | Code | Meaning |
 |---|---|
 | `0` | Success — files generated (onboarding), template scaffolded, or migration applied. |
-| `1` | Error or user abort (`Ctrl+C`). Includes: project already initialized (bare `init` with `.goga/` present); `<tpl>` and `--upgrade` given together (mutually exclusive); `--ref` given without `<tpl>` or `--upgrade`; copier scaffold/upgrade failure (bad template URL, git error, missing `.goga/scaffold.yml` on upgrade); or onboarding failure. |
-| other | A nonzero exit code returned by a delegate (`Scaffold.generate`/`Scaffold.upgrade`, `InitLogic.run`) is propagated verbatim. |
+| `1` | Error or user abort (`Ctrl+C`). Includes: project already initialized (bare `init` with `.goga/` present); `<tpl>` and `--upgrade` given together (mutually exclusive); `--ref` given without `<tpl>` or `--upgrade`; copier scaffold/upgrade failure (bad template URL, git error, missing `.goga/scaffold.yml` on upgrade); or onboarding failure (a nonzero exit code from a delegate — `Scaffold.generate`/`Scaffold.upgrade`, `InitLogic.run` — is propagated verbatim). |

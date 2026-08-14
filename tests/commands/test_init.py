@@ -119,9 +119,7 @@ class TestLogic:
         assert result.exit_code == 0
         mock_logic.run.assert_called_once()
 
-    def test_init_scaffold_then_onboarding_runs_scaffold_first(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_init_scaffold_then_onboarding_runs_scaffold_first(self, tmp_path, monkeypatch) -> None:
         """SCAFFOLD_THEN_ONBOARDING: Scaffold.generate runs before InitLogic.run."""
         from goga.commands.init import init
 
@@ -154,15 +152,11 @@ class TestLogic:
             result = runner.invoke(init, ["https://example.com/tpl.git"])
 
         assert result.exit_code == 0
-        mock_scaffold.generate.assert_called_once_with(
-            "https://example.com/tpl.git", None
-        )
+        mock_scaffold.generate.assert_called_once_with("https://example.com/tpl.git", None)
         mock_logic.run.assert_called_once()
         assert order == ["generate", "run"]
 
-    def test_init_scaffold_passes_ref_override_to_generate(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_init_scaffold_passes_ref_override_to_generate(self, tmp_path, monkeypatch) -> None:
         """--ref is wired end-to-end to Scaffold.generate as ref_override."""
         from goga.commands.init import init
 
@@ -184,13 +178,9 @@ class TestLogic:
             )
 
         assert result.exit_code == 0
-        mock_scaffold.generate.assert_called_once_with(
-            "https://example.com/tpl.git#v1.0", "main"
-        )
+        mock_scaffold.generate.assert_called_once_with("https://example.com/tpl.git#v1.0", "main")
 
-    def test_init_upgrade_passes_ref_to_scaffold_upgrade(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_init_upgrade_passes_ref_to_scaffold_upgrade(self, tmp_path, monkeypatch) -> None:
         """UPGRADE + --ref passes ref to Scaffold.upgrade; no onboarding."""
         from goga.commands.init import init
 
@@ -296,9 +286,7 @@ class TestLogic:
         assert result.exit_code == 1
         mock_logic.run.assert_not_called()
 
-    def test_init_scaffold_generate_nonzero_skips_onboarding(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_init_scaffold_generate_nonzero_skips_onboarding(self, tmp_path, monkeypatch) -> None:
         """SCAFFOLD_THEN_ONBOARDING: Scaffold.generate returns nonzero → that
         exit code propagates and onboarding does not run."""
         from goga.commands.init import init
@@ -320,9 +308,7 @@ class TestLogic:
         mock_scaffold.generate.assert_called_once_with("https://example.com/tpl.git", None)
         mock_logic.run.assert_not_called()
 
-    def test_init_tpl_skips_already_init_guard_in_existing_project(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_init_tpl_skips_already_init_guard_in_existing_project(self, tmp_path, monkeypatch) -> None:
         """SCAFFOLD_THEN_ONBOARDING: the already-init guard does NOT fire."""
         from goga.commands.init import init
 

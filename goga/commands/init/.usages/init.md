@@ -17,7 +17,7 @@ goga init [<tpl>] [--upgrade] [--ref <git-ref>]
 
 | Invocation | Behaviour |
 |------------|-----------|
-| `goga init` | onboarding only (interactive survey; current behaviour in a clean directory) |
+| `goga init` | onboarding only (interactive survey in a clean directory) |
 | `goga init <tpl>` | scaffold (copier `run_copy`) → conditional onboarding |
 | `goga init --upgrade` | scaffold migration only (copier `run_update`); no onboarding |
 | `goga init` (when `.goga/` already exists, no `<tpl>`) | non-zero exit: "Project already initialized" |

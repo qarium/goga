@@ -281,9 +281,7 @@ class TestLogic:
         # .goga directory itself should not be created by generate on the skip path.
         assert (tmp_path / ".goga").exists() is False
 
-    def test_file_generator_generate_none_does_not_call_generate_goga_config(
-        self, tmp_path: Path
-    ) -> None:
+    def test_file_generator_generate_none_does_not_call_generate_goga_config(self, tmp_path: Path) -> None:
         """On the None path, generate_goga_config must not be invoked at all."""
         gen = self._make_gen(tmp_path)
         answers = InitAnswers(goga_config=None)

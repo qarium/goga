@@ -86,8 +86,11 @@ def _resolve_mode(
         )
         ctx.exit(1)
         return None
+
     if upgrade:
         return _UPGRADE
+
     if tpl is not None:
         return _SCAFFOLD_THEN_ONBOARDING
+
     return _BARE_ONBOARDING

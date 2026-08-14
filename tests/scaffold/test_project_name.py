@@ -52,16 +52,12 @@ class TestLogic:
     ) -> None:
         from goga.scaffold import project_name
 
-        monkeypatch.setattr(
-            "goga.scaffold.project_name.resolve_project_name", lambda: None
-        )
+        monkeypatch.setattr("goga.scaffold.project_name.resolve_project_name", lambda: None)
 
         def fake_prompt(*_args: object, **_kwargs: object) -> str:
             return "typed-name"
 
-        monkeypatch.setattr(
-            "goga.scaffold.project_name.click.prompt", fake_prompt
-        )
+        monkeypatch.setattr("goga.scaffold.project_name.click.prompt", fake_prompt)
 
         assert project_name.resolve_scaffold_name() == "typed-name"
 
@@ -71,16 +67,12 @@ class TestLogic:
     ) -> None:
         from goga.scaffold import project_name
 
-        monkeypatch.setattr(
-            "goga.scaffold.project_name.resolve_project_name", lambda: None
-        )
+        monkeypatch.setattr("goga.scaffold.project_name.resolve_project_name", lambda: None)
 
         def fake_prompt(*_args: object, **_kwargs: object) -> str:
             return "fallback-name"
 
-        monkeypatch.setattr(
-            "goga.scaffold.project_name.click.prompt", fake_prompt
-        )
+        monkeypatch.setattr("goga.scaffold.project_name.click.prompt", fake_prompt)
 
         # No exception propagates on the git-None path (constraint honored).
         assert project_name.resolve_scaffold_name() == "fallback-name"

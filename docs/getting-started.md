@@ -79,7 +79,7 @@ goga init --upgrade            # re-apply at the recorded ref
 goga init --upgrade --ref v2.0 # migrate to a specific ref
 ```
 
-`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](https://qarium.github.io/goga/cli/init/) for details.
+`<tpl>` and `--upgrade` are mutually exclusive; `--ref` requires one of them. See [`goga init`](cli/init.md) for details.
 
 ## Develop your first feature
 
@@ -96,6 +96,8 @@ propose → review(task)
                → change (bugfix loop)
                   → accept
 ```
+
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated.
 
 ### Automated cycle
 

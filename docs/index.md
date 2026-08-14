@@ -68,8 +68,8 @@ goga pipeline feature
 The `feature` pipeline walks the whole SDD lifecycle stage by stage:
 
 ```
-propose → task-review → brainstorm → architecture-review → apply-architecture →
-code-design → design-review → coding-plan → plan-review → commit-architecture → accept-result
+discover → propose → task-review → brainstorm → architecture-review → apply-architecture →
+code-design → design-review → coding-plan → plan-review → prepare-build → accept-result
 ```
 
 Three more pipelines cover the remaining lifecycles:

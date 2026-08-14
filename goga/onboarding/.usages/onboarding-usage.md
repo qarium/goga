@@ -44,7 +44,7 @@ Run an interactive user survey and generate project files.
 
 ### Data
 
-`InitAnswers` — response container holding `GogaConfigAnswers` (now Optional).
+`InitAnswers` — response container holding `GogaConfigAnswers`.
 `goga_config`: `GogaConfigAnswers | None`. `None` = do not write .goga/config.yml
 (used when the file already exists).
 
@@ -56,9 +56,7 @@ Run an interactive user survey and generate project files.
 
 `Questionnaire.ask_goga_config()` returns `GogaConfigAnswers | None`: If
 .goga/config.yml already exists -> returns None (the whole config survey is
-skipped). Otherwise proceeds:
-
-`Questionnaire.ask_goga_config()` proceeds: language → convention →
+skipped). Otherwise proceeds: language → convention →
 codemanifest_usages → codemanifest_annotations → agent → dockerfile → (image branch)
 → env → pipeline_agent → pipeline_env.
 
@@ -67,10 +65,10 @@ The image branch depends on the Dockerfile decision:
   - `ask_base_image(language)` — the `FROM` baseline (language hints, default = last entry).
   - `ask_image_name(language=None, default=<git-project-name>:latest)` — the name/tag for
     the image built from the Dockerfile. The default is resolved from the git project name
-    via the shared `resolve_project_name` helper:
+    (falling back to no default when the name is unavailable):
     `<name>:latest` when the git remote is available; **when the git name is unavailable,
-    no default is offered and `image` is required**. Passing `language` retains the
-    `{language}-image:latest` default (compatibility behavior).
+    no default is offered and `image` is required**. Passing `language` uses the
+    `{language}-image:latest` default.
 - **Without a Dockerfile** (`dockerfile_path` None): `ask_image(language)` — pre-built
   image to PULL.
 

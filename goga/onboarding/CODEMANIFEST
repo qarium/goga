@@ -48,23 +48,23 @@ Annotations: |
   Use `agent_env_defaults` to suggest env keys for the selected agent (Questionnaire).
   All types must be immutable dataclasses (frozen=True, kw_only=True).
   Onboarding is filesystem-conditional: it skips sections whose artefacts already exist (see
-  Questionnaire, FileGenerator). Onboarding is no longer the sole producer of .goga/config.yml
-  — a scaffold template may bring it; where both would write, the template wins (it ran first).
+  Questionnaire, FileGenerator). A scaffold template may also produce .goga/config.yml;
+  where both would write, the template wins (it ran first).
 
 ---
 
-"InitAnswers(goga_config: GogaConfigAnswers | None)":
+"InitAnswers(goga_config: GogaConfigAnswers | None = None)":
   location: answers.py
   annotations: |
     User response container. Extend with new properties for additional config files
     as needed.
 
     `goga_config`: responses for generating .goga/config.yml, or None when config.yml is not
-    written (artifact already exists / produced by scaffold)
+    written (artifact already exists / produced by scaffold); defaults to None
   properties:
     "goga_config -> GogaConfigAnswers | None": |
       Responses for generating .goga/config.yml. None signals 'do not write the file' to
-      FileGenerator (used when .goga/config.yml already exists).
+      FileGenerator (used when .goga/config.yml already exists). Defaults to None.
 
 "GogaConfigAnswers(language: str, image: str, agent: str | None, pipeline_agent: str | None, pipeline_env: dict | None, env: dict | None, codemanifest_usages: dict | None, codemanifest_annotations: str | None, dockerfile_path: str | None, dockerfile_base_image: str | None)":
   location: answers.py

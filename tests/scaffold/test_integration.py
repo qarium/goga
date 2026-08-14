@@ -36,9 +36,7 @@ class TestCopierCallContract:
         # Guard against them ever being positional (a real-API mismatch would
         # silently bind a positional value to the wrong parameter).
         for name in ("answers_file", "vcs_ref", "defaults", "overwrite"):
-            assert params[name].kind == inspect.Parameter.KEYWORD_ONLY, (
-                f"run_copy {name} must be keyword-only"
-            )
+            assert params[name].kind == inspect.Parameter.KEYWORD_ONLY, f"run_copy {name} must be keyword-only"
 
     def test_copier_run_update_has_no_src_path_and_accepts_goga_kwargs(self) -> None:
         params = inspect.signature(copier.run_update).parameters
@@ -49,9 +47,7 @@ class TestCopierCallContract:
 
         for name in ("answers_file", "vcs_ref", "defaults", "overwrite"):
             assert name in params, f"run_update must accept {name}"
-            assert params[name].kind == inspect.Parameter.KEYWORD_ONLY, (
-                f"run_update {name} must be keyword-only"
-            )
+            assert params[name].kind == inspect.Parameter.KEYWORD_ONLY, f"run_update {name} must be keyword-only"
 
         # overwrite=True is REQUIRED on run_update (copier raises
         # UserMessageError("Enable overwrite to update a subproject.") without

@@ -5,7 +5,7 @@ host-side launchers (goga/commands/pipeline, goga/commands/build) that assemble
 docker container environments and docker CLI commands.
 
 The home config is an OPTIONAL, narrow docker-only layer. Its absence is normal —
-load_home_config() returns an empty HomeConfig and behavior is unchanged.
+load_home_config() returns an empty HomeConfig and never raises.
 
 ## Schema
 

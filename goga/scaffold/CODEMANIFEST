@@ -114,16 +114,20 @@ Annotations: |
 
     `template_input`: raw template source — a git URL, optionally carrying a ref fragment
       (url.git#ref)
-    `ref_override`: explicit git ref from --ref, or None when not given
+    `ref_override`: explicit git ref from --ref, or None when not given; an empty string is
+      treated as not given
     `parsed`: (template_url, effective_vcs_ref) — the clean URL and the resolved ref
 
     Algorithm:
-    1. Split `template_input` on the ref fragment; extract base_ref and the clean template_url
-    2. effective_ref = `ref_override` when not None, else base_ref
+    1. Split `template_input` on the ref fragment; extract base_ref and the clean template_url;
+       an empty fragment (url.git#) normalizes to None
+    2. effective_ref = `ref_override` when a non-empty string, else base_ref
     3. Return (template_url, effective_ref)
 
     Requirements:
     - `ref_override` takes precedence over the URL fragment when both are present
+    - An empty-string `ref_override` and an empty URL fragment normalize to None (the copier
+      default ref), not to the empty string
 
     Constraints:
     - Do not fetch or validate the URL — parsing only

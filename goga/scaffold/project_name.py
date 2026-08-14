@@ -12,18 +12,16 @@ def resolve_scaffold_name() -> str:
     (:func:`goga.config.resolve_project_name`). When the git name is
     unavailable (``None``), falls back to an interactive ``click.prompt`` (no
     default, so it re-prompts on empty input). ``click`` is used only for the
-    fallback prompt.
+    fallback prompt. On the git-None path nothing is raised — an unavailable
+    git name falls back to the prompt rather than propagating
+    (``resolve_project_name`` is itself tolerant and never raises). In a
+    non-interactive shell with no usable input the prompt exhausts stdin and
+    raises ``click.Abort``; that is caught by ``InitLogic.run`` and surfaced
+    as a nonzero exit, not here.
 
     Returns:
         The resolved project name — the git-derived name when available, else
         the value supplied at the fallback prompt.
-
-    Raises:
-        Nothing on the git-None path: an unavailable git name falls back to the
-        prompt rather than propagating. (``resolve_project_name`` is itself
-        tolerant and never raises.) In a non-interactive shell with no usable
-        input the prompt exhausts stdin and raises ``click.Abort``; that is
-        caught by ``InitLogic.run`` and surfaced as a nonzero exit, not here.
     """
     name = resolve_project_name()
     if name is None:

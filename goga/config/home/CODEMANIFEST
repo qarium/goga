@@ -45,8 +45,7 @@ Annotations: |
     entry is shell-tokenized (shlex.split) at load by `load_home_config`, so a
     user authors entries as shell-like fragments: an entry such as
     -v /host:/container becomes two argv tokens ["-v", "/host:/container"],
-    while the --flag=value form and already-split single tokens stay unchanged
-    (backward compatible).
+    while the --flag=value form and already-split single tokens stay unchanged.
 
     `run`: tokens appended to every docker run (pipeline + build containers)
     `build`: tokens appended to docker build (image build)

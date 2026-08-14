@@ -85,19 +85,18 @@ class TestContract:
 class TestLogic:
     """Logic tests — verbatim scenarios from the design (copier mocked)."""
 
-    def test_scaffold_generate_invokes_copier_run_copy_and_returns_zero(
-        self, tmp_path
-    ) -> None:
-        with mock.patch("goga.scaffold.scaffold.copier") as copier, mock.patch(
-            "goga.scaffold.scaffold.resolve_scaffold_name",
-            return_value="my-proj",
+    def test_scaffold_generate_invokes_copier_run_copy_and_returns_zero(self, tmp_path) -> None:
+        with (
+            mock.patch("goga.scaffold.scaffold.copier") as copier,
+            mock.patch(
+                "goga.scaffold.scaffold.resolve_scaffold_name",
+                return_value="my-proj",
+            ),
         ):
             from goga.scaffold import Scaffold
 
             answers_file = str(tmp_path / ".goga" / "scaffold.yml")
-            scaffold = Scaffold(
-                dst_path=str(tmp_path), answers_file=answers_file
-            )
+            scaffold = Scaffold(dst_path=str(tmp_path), answers_file=answers_file)
 
             result = scaffold.generate("https://example.com/tpl.git#v1.0", None)
 
@@ -111,9 +110,7 @@ class TestLogic:
             assert call_args.kwargs["vcs_ref"] == "v1.0"
             assert call_args.kwargs["defaults"] is True
 
-    def test_scaffold_upgrade_invokes_copier_run_update_with_overwrite_and_vcs_ref(
-        self, tmp_path
-    ) -> None:
+    def test_scaffold_upgrade_invokes_copier_run_update_with_overwrite_and_vcs_ref(self, tmp_path) -> None:
         state_file = tmp_path / ".goga" / "scaffold.yml"
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text("_src_path: https://example.com/tpl.git\n")
@@ -121,9 +118,7 @@ class TestLogic:
         with mock.patch("goga.scaffold.scaffold.copier") as copier:
             from goga.scaffold import Scaffold
 
-            scaffold = Scaffold(
-                dst_path=str(tmp_path), answers_file=str(state_file)
-            )
+            scaffold = Scaffold(dst_path=str(tmp_path), answers_file=str(state_file))
 
             result = scaffold.upgrade("v2.0")
 
@@ -136,9 +131,7 @@ class TestLogic:
             assert call_args.kwargs["overwrite"] is True
             assert call_args.kwargs["defaults"] is True
 
-    def test_scaffold_upgrade_missing_state_file_is_nonzero(
-        self, tmp_path
-    ) -> None:
+    def test_scaffold_upgrade_missing_state_file_is_nonzero(self, tmp_path) -> None:
         with mock.patch("goga.scaffold.scaffold.copier") as copier:
             from goga.scaffold import Scaffold
 
@@ -152,14 +145,13 @@ class TestLogic:
             assert result == 1
             copier.run_update.assert_not_called()
 
-    def test_scaffold_generate_returns_nonzero_on_copier_error(
-        self, tmp_path
-    ) -> None:
-        with mock.patch(
-            "goga.scaffold.scaffold.copier"
-        ) as copier, mock.patch(
-            "goga.scaffold.scaffold.resolve_scaffold_name",
-            return_value="my-proj",
+    def test_scaffold_generate_returns_nonzero_on_copier_error(self, tmp_path) -> None:
+        with (
+            mock.patch("goga.scaffold.scaffold.copier") as copier,
+            mock.patch(
+                "goga.scaffold.scaffold.resolve_scaffold_name",
+                return_value="my-proj",
+            ),
         ):
             copier.run_copy.side_effect = RuntimeError("bad template")
 
@@ -174,12 +166,13 @@ class TestLogic:
 
             assert result == 1
 
-    def test_scaffold_generate_ref_override_wins_over_fragment(
-        self, tmp_path
-    ) -> None:
-        with mock.patch("goga.scaffold.scaffold.copier") as copier, mock.patch(
-            "goga.scaffold.scaffold.resolve_scaffold_name",
-            return_value="my-proj",
+    def test_scaffold_generate_ref_override_wins_over_fragment(self, tmp_path) -> None:
+        with (
+            mock.patch("goga.scaffold.scaffold.copier") as copier,
+            mock.patch(
+                "goga.scaffold.scaffold.resolve_scaffold_name",
+                return_value="my-proj",
+            ),
         ):
             from goga.scaffold import Scaffold
 
@@ -188,20 +181,19 @@ class TestLogic:
                 answers_file=str(tmp_path / ".goga" / "scaffold.yml"),
             )
 
-            result = scaffold.generate(
-                "https://example.com/tpl.git#v1.0", "main"
-            )
+            result = scaffold.generate("https://example.com/tpl.git#v1.0", "main")
 
             assert result == 0
             call_kwargs = copier.run_copy.call_args.kwargs
             assert call_kwargs["vcs_ref"] == "main"
 
-    def test_scaffold_generate_no_fragment_no_override_yields_none_vcs_ref(
-        self, tmp_path
-    ) -> None:
-        with mock.patch("goga.scaffold.scaffold.copier") as copier, mock.patch(
-            "goga.scaffold.scaffold.resolve_scaffold_name",
-            return_value="my-proj",
+    def test_scaffold_generate_no_fragment_no_override_yields_none_vcs_ref(self, tmp_path) -> None:
+        with (
+            mock.patch("goga.scaffold.scaffold.copier") as copier,
+            mock.patch(
+                "goga.scaffold.scaffold.resolve_scaffold_name",
+                return_value="my-proj",
+            ),
         ):
             from goga.scaffold import Scaffold
 
@@ -216,9 +208,7 @@ class TestLogic:
             call_kwargs = copier.run_copy.call_args.kwargs
             assert call_kwargs["vcs_ref"] is None
 
-    def test_scaffold_upgrade_ref_override_none_passes_none_vcs_ref(
-        self, tmp_path
-    ) -> None:
+    def test_scaffold_upgrade_ref_override_none_passes_none_vcs_ref(self, tmp_path) -> None:
         state_file = tmp_path / ".goga" / "scaffold.yml"
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text("_src_path: https://example.com/tpl.git\n")
@@ -226,9 +216,7 @@ class TestLogic:
         with mock.patch("goga.scaffold.scaffold.copier") as copier:
             from goga.scaffold import Scaffold
 
-            scaffold = Scaffold(
-                dst_path=str(tmp_path), answers_file=str(state_file)
-            )
+            scaffold = Scaffold(dst_path=str(tmp_path), answers_file=str(state_file))
 
             result = scaffold.upgrade(None)
 
@@ -236,23 +224,17 @@ class TestLogic:
             call_kwargs = copier.run_update.call_args.kwargs
             assert call_kwargs["vcs_ref"] is None
 
-    def test_scaffold_upgrade_returns_nonzero_on_copier_error(
-        self, tmp_path
-    ) -> None:
+    def test_scaffold_upgrade_returns_nonzero_on_copier_error(self, tmp_path) -> None:
         state_file = tmp_path / ".goga" / "scaffold.yml"
         state_file.parent.mkdir(parents=True, exist_ok=True)
         state_file.write_text("_src_path: https://example.com/tpl.git\n")
 
-        with mock.patch(
-            "goga.scaffold.scaffold.copier"
-        ) as copier:
+        with mock.patch("goga.scaffold.scaffold.copier") as copier:
             copier.run_update.side_effect = RuntimeError("bad update")
 
             from goga.scaffold import Scaffold
 
-            scaffold = Scaffold(
-                dst_path=str(tmp_path), answers_file=str(state_file)
-            )
+            scaffold = Scaffold(dst_path=str(tmp_path), answers_file=str(state_file))
 
             result = scaffold.upgrade()
 

@@ -24,8 +24,7 @@ Annotations: |
   - organizing test infrastructure
   - understanding general development and testing principles/rules in the project
   Use the `click` practice to create the command.
-  The command delegates business logic through `InitLogic` and `Scaffold` (scaffold).
-  Use `onboarding-usage` to understand the InitLogic API.
+  The command delegates business logic through `InitLogic` and `Scaffold`.
   The command is the integration point of two independent domains — onboarding
   and scaffold — and owns the mode routing, the scaffold→onboarding execution
   order, and the already-initialized guard. Use `onboarding-usage` to

@@ -60,9 +60,7 @@ class TestToolNotFoundThroughApp:
         with mock.patch.object(
             importlib,
             "import_module",
-            side_effect=ModuleNotFoundError(
-                "No module named 'goga_tool_nonexistent'", name="goga_tool_nonexistent"
-            ),
+            side_effect=ModuleNotFoundError("No module named 'goga_tool_nonexistent'", name="goga_tool_nonexistent"),
         ):
             result = runner.invoke(app, ["tool", "nonexistent"])
 

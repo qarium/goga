@@ -41,6 +41,7 @@ def _shell_split(entries: list[str]) -> list[str]:
         The flattened list of shell-tokenized argv tokens.
     """
     tokens: list[str] = []
+
     for entry in entries:
         tokens.extend(shlex.split(str(entry)))
     return tokens

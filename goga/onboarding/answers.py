@@ -23,4 +23,4 @@ class GogaConfigAnswers:
 class InitAnswers:
     """User answers container. Extensible for future config files."""
 
-    goga_config: GogaConfigAnswers | None
+    goga_config: GogaConfigAnswers | None = None
