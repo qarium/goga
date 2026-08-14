@@ -59,7 +59,7 @@ resolved by the `--force-overwrite` flag passed to `goga connect`:
 | `true`              | The tool's pipeline overwrites the existing file at `<tool>:<name>.yml`. |
 
 This mirrors the residual-conflict semantics used for tool-skill
-installation.
+installation — see [`goga connect`](../cli/connect.md).
 
 ### Idempotency
 
