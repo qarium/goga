@@ -1,93 +1,93 @@
-# Скаффолдинг шаблонов с copier
+# Template-based project scaffolding with copier
 
 ## Library
 
-**copier** — движок для генерации проектов из шаблонов с поддержкой миграций (обновления ранее сгенерированного проекта более новой версией того же шаблона).
+**copier** — a template-driven project generation engine with migration support (a migration updates a previously generated project to a newer version of the same template).
 
 Installation: `pip install copier`
 
-**IMPORTANT** — библиотека должна быть добавлена в main-зависимости проекта (не в extras).
+**IMPORTANT** — the library must be declared in the project's main dependencies (never in extras).
 
-copier транзитивно тянет `pydantic`, `questionary`, `prompt-toolkit`. goga использует copier **только программно**, через две операции: `run_copy` (создание проекта) и `run_update` (миграция ранее созданного). Интерактивный опрос copier (`questionary`) используется на первичной генерации для вопросов, не покрытых программными ответами; goga программно передаёт только `project_name`.
+copier transitively pulls `pydantic`, `questionary`, `prompt-toolkit`. goga uses copier **programmatically only**, through two operations: `run_copy` (project creation) and `run_update` (migrating a previously created project). During primary generation, the copier interactive survey (`questionary`) asks every template question not covered by programmatic answers; goga passes only `project_name` programmatically.
 
-## Две операции
+## Two operations
 
-goga различает два домена — **onboarding** (сбор ответов для `.goga/config.yml`) и **scaffold** (генерация boilerplate проекта из шаблона). Scaffold заворачивает copier и предоставляет ровно две операции:
+goga distinguishes two domains — **onboarding** (collecting answers for `.goga/config.yml`) and **scaffold** (generating the project boilerplate from a template). Scaffold wraps copier and provides exactly two operations:
 
-| Операция copier | CLI goga | Назначение |
-|-----------------|----------|------------|
-| `run_copy` | `goga init <tpl>` | Создать проект из шаблона (первичная генерация) |
-| `run_update` | `goga init --upgrade` | Обновить ранее созданный проект более новой версией того же шаблона |
+| copier operation | goga CLI | Purpose |
+|-----------------|----------|---------|
+| `run_copy` | `goga init <tpl>` | Create a project from a template (primary generation) |
+| `run_update` | `goga init --upgrade` | Update a previously created project to a newer version of the same template |
 
-`run_update` читает ранее записанные шаблон + ответы из файла состояния (см. ниже) — это и есть «история миграций» шаблона, ради которой выбран copier, а не cookiecutter.
+`run_update` reads the previously recorded template + answers from the state file (see below) — this is the template's "migration history", the reason copier was chosen over cookiecutter.
 
-## run_copy — первичная генерация
+## run_copy — primary generation
 
 ```python
 from copier import run_copy
 
 run_copy(
-    template,            # git URL шаблона (опционально с ref-фрагментом: url.git#v1.0) либо локальный путь
-    ".",                 # dst_path — целевая директория (текущая для goga init)
-    data={"project_name": project_name},   # программно собранные ответы
-    answers_file=".goga/scaffold.yml",     # goga диктует расположение файла состояния
-    vcs_ref=ref,         # опционально: переопределяет ref, разобранный из URL-фрагмента
-    defaults=False,      # ОБЯЗАТЕЛЬНО False: опрос для вопросов, не покрытых data
+    template,            # template git URL (optionally with a ref fragment: url.git#v1.0) or a local path
+    ".",                 # dst_path — target directory (the current one for goga init)
+    data={"project_name": project_name},   # programmatically assembled answers
+    answers_file=".goga/scaffold.yml",     # goga dictates the state file location
+    vcs_ref=ref,         # optional: overrides the ref parsed from the URL fragment
+    defaults=False,      # MANDATORY False: the survey asks questions not covered by data
 )
 ```
 
-- `dst_path="."` — проект генерируется в текущую директорию (где вызвана `goga init`).
-- `data` — словарь предзаполненных ответов шаблона; объединяется с дефолтами из `copier.yml` шаблона. `project_name` резолвится из имени git-проекта с fallback на интерактивный prompt, когда имя не резолвится.
-- `vcs_ref` — ветка/тег/коммит шаблона. Когда ref задан и в URL-фрагменте, и явно через CLI `--ref`, явный `--ref` имеет приоритет.
-- `defaults=False` **обязателен** на первичной генерации — вопросы, не покрытые `data`, задаются интерактивно (questionary, нужен TTY). required-вопрос без программного ответа и без дефолта не роняет генерацию, а спрашивается у пользователя. В неинтерактивной среде (pipe/CI) questionary получает EOF, copier кидает `InteractiveSessionError` — причина выводится в stderr.
+- `dst_path="."` — the project is generated into the current directory (where `goga init` runs).
+- `data` — a dictionary of prefilled template answers; merged with the defaults from the template's `copier.yml`. `project_name` is resolved from the git project name with a fallback to an interactive prompt when the name cannot be resolved.
+- `vcs_ref` — the template's branch/tag/commit. When the ref is given both in the URL fragment and explicitly via the CLI `--ref`, the explicit `--ref` takes precedence.
+- `defaults=False` is **mandatory** on primary generation — questions not covered by `data` are asked interactively (questionary, a TTY is required). A required question without a programmatic answer and without a default does not fail the generation — it is asked of the user. In a non-interactive environment (pipe/CI) questionary receives EOF, copier raises `InteractiveSessionError` — the cause is echoed to stderr.
 
-## run_update — миграция шаблона
+## run_update — template migration
 
 ```python
 from copier import run_update
 
 run_update(
-    ".",                               # dst_path — целевая директория ранее созданного проекта
-    answers_file=".goga/scaffold.yml", # тот же файл состояния, что записал run_copy
-    vcs_ref=ref,                       # опционально: переопределяет целевой ref миграции (--ref)
-    overwrite=True,                    # ОБЯЗАТЕЛЬНО — без него copier кидает UserMessageError
-    defaults=True,                     # не вызывать интерактивный опрос для новых вопросов шаблона
+    ".",                               # dst_path — target directory of the previously created project
+    answers_file=".goga/scaffold.yml", # the same state file run_copy wrote
+    vcs_ref=ref,                       # optional: overrides the migration target ref (--ref)
+    overwrite=True,                    # MANDATORY — without it copier raises UserMessageError
+    defaults=True,                     # do not invoke the interactive survey for new template questions
 )
 ```
 
-- `run_update` не принимает `template` и `data` явно: он читает шаблон и ответы, записанные `run_copy` в `answers_file`, и повторно применяет более свежую версию шаблона.
-- Поэтому `answers_file` для `run_copy` и `run_update` должен совпадать — это одно и то же состояние.
-- `overwrite=True` **обязателен**: copier `Worker.run_update` без него кидает `UserMessageError("Enable overwrite to update a subproject.")` — пользователь смотрит diff миграции через git в целевом проекте.
-- `vcs_ref`, если задан, переопределяет целевой ref миграции (по умолчанию миграция идёт к свежему коммиту ветки шаблона, записанной в файле состояния).
-- `defaults=True` на миграции **сохраняется** (в отличие от генерации): миграция неинтерактивна, новый required-вопрос более свежей версии шаблона без дефолта роняет миграцию с ненулевым exit и выводом причины в stderr.
-- copier проверяет precondition'ы и кидает `UserMessageError` (→ nonzero) при нарушении: целевая директория должна быть git-репозиторием, чистой (нет незакоммиченных изменений), а шаблон должен быть git-trackable (git URL, не локальный путь) с неубывающей версией.
+- `run_update` takes no explicit `template` and `data`: it reads the template and answers recorded by `run_copy` in `answers_file` and re-applies a newer version of the template.
+- Therefore the `answers_file` for `run_copy` and `run_update` must be the same — it is one shared state.
+- `overwrite=True` is **mandatory**: copier's `Worker.run_update` without it raises `UserMessageError("Enable overwrite to update a subproject.")` — the user reviews the migration diff via git in the destination project.
+- `vcs_ref`, when given, overrides the migration target ref (by default the migration goes to the latest commit of the template branch recorded in the state file).
+- `defaults=True` is **kept** on migration (unlike generation): the migration is non-interactive; a new required question of a newer template version without a default fails the migration with a nonzero exit and the cause echoed to stderr.
+- copier verifies preconditions and raises `UserMessageError` (→ nonzero) on violation: the target directory must be a git repository, clean (no uncommitted changes), and the template must be git-trackable (a git URL, not a local path) with a non-decreasing version.
 
-## answers_file — программный override (ключевая конвенция goga)
+## answers_file — programmatic override (the key goga convention)
 
-`answers_file=".goga/scaffold.yml"` передаётся **программно** в обе операции. Copier даёт программному аргументу приоритет над любым `answers_file`, объявленным в `copier.yml` шаблона. Поэтому goga диктует расположение файла состояния независимо от того, что написал автор шаблона.
+`answers_file=".goga/scaffold.yml"` is passed **programmatically** to both operations. copier gives the programmatic argument priority over any `answers_file` declared in the template's `copier.yml`. Thus goga dictates the state file location regardless of what the template author wrote.
 
 ```python
-# goga всегда передаёт answers_file программно — это хард-конвенция, enforced движком
+# goga always passes answers_file programmatically — a hard convention enforced by the engine
 answers_file = ".goga/scaffold.yml"
 ```
 
-- `.goga/scaffold.yml` — это файл состояния goga: какой шаблон и какие ответы были применены. Его читает `--upgrade`.
-- Файл состояния **не должен** попадать в `.gitignore` пользовательского проекта — `goga init --upgrade` зависит от него.
+- `.goga/scaffold.yml` is the goga state file: which template and which answers were applied. `--upgrade` reads it.
+- The state file must **not** end up in the user project's `.gitignore` — `goga init --upgrade` depends on it.
 
-## Файл состояния .goga/scaffold.yml
+## The state file .goga/scaffold.yml
 
-copier рендерит `answers_file` из шаблона: YAML с источником шаблона (URL + `_commit`) и словарём применённых ответов. **Ключевая конвенция шаблона**: state file создаётся только если шаблон сам содержит файл-запись ответов — `{{ _copier_conf.answers_file }}.jinja`, рендерящий `_copier_answers` (для не-jinja файлов см. документацию copier). Без такой записи `.goga/scaffold.yml` не появляется, и `goga init --upgrade` завершится с «missing scaffold state file». goga не управляет содержимым напрямую — copier пишет и читает его сам; goga лишь фиксирует путь программным `answers_file`.
+copier renders `answers_file` from the template: YAML with the template source (URL + `_commit`) and the dictionary of applied answers. **The key template convention**: the state file is created only if the template itself contains an answers-file entry — `{{ _copier_conf.answers_file }}.jinja` rendering `_copier_answers` (for non-jinja files see the copier documentation). Without such an entry `.goga/scaffold.yml` never appears, and `goga init --upgrade` fails with "missing scaffold state file". goga does not manage the contents directly — copier writes and reads it itself; goga only fixes the path via the programmatic `answers_file`.
 
-## Состав с onboarding
+## Composition with onboarding
 
-При `goga init <tpl>` **сначала выполняется scaffold, затем onboarding**. Шаблон может сам положить `.goga/config.yml` (и другие `.goga/`-артефакты); тогда onboarding обнаружит уже существующие артефакты и пропустит соответствующие секции опроса. Это композиция, а не арбитраж: шаблон и goga каждый владеют своими записями; где оба хотят писать `config.yml`, выигрывает шаблон, т.к. он выполнился первым и пользователь на него подписался.
+On `goga init <tpl>` **scaffold runs first, then onboarding**. The template may itself place `.goga/config.yml` (and other `.goga/` artifacts); onboarding then detects the existing artifacts and skips the corresponding survey sections. This is composition, not arbitration: the template and goga each own their own entries; where both want to write `config.yml`, the template wins because it ran first and the user subscribed to it.
 
 ## Anti-patterns
 
-- Не делегировать расположение `answers_file` шаблону через `copier.yml` — goga передаёт его программно как хард-конвенцию, иначе расположение файла состояния зависело бы от дисциплины автора шаблона.
-- Не передавать `defaults=True` в `run_copy` — required-вопрос шаблона без дефолта, не покрытый `data`, роняет генерацию `ValueError` вместо интерактивного вопроса.
-- Не поставлять шаблон без answers-записи (`{{ _copier_conf.answers_file }}.jinja`) — state file не будет создан, `--upgrade` не сможет работать.
-- Не передавать разные `answers_file` для `run_copy` и `run_update` — это одно состояние; `--upgrade` читает то, что записал первичный `run_copy`.
-- Не гитигнорировать `.goga/scaffold.yml` в пользовательских проектах — `goga init --upgrade` перестанет работать.
-- Не запускать `goga init <tpl>` неинтерактивно (pipe/CI) для шаблона с непокрытыми вопросами — опрос questionary требует TTY и завершится `InteractiveSessionError`.
-- Не реализовывать собственный Jinja2 + `git clone` поверх copier — движок уже корректно обрабатывает рекурсивный clone, разрешение ref, очистку `.git/`, бинарные файлы, симлинки и условное включение файлов.
+- Do not delegate the `answers_file` location to the template via `copier.yml` — goga passes it programmatically as a hard convention; otherwise the state file location would depend on the template author's discipline.
+- Do not pass `defaults=True` to `run_copy` — a required template question without a default, not covered by `data`, fails the generation with `ValueError` instead of being asked interactively.
+- Do not ship a template without an answers-file entry (`{{ _copier_conf.answers_file }}.jinja`) — the state file will not be created and `--upgrade` will not work.
+- Do not pass different `answers_file` values to `run_copy` and `run_update` — it is one shared state; `--upgrade` reads what the primary `run_copy` wrote.
+- Do not git-ignore `.goga/scaffold.yml` in user projects — `goga init --upgrade` will stop working.
+- Do not run `goga init <tpl>` non-interactively (pipe/CI) for a template with uncovered questions — the questionary survey requires a TTY and will fail with `InteractiveSessionError`.
+- Do not implement your own Jinja2 + `git clone` on top of copier — the engine already handles recursive clone, ref resolution, `.git/` cleanup, binary files, symlinks, and conditional file inclusion correctly.
