@@ -43,9 +43,10 @@ Annotations: |
     Extra docker CLI tokens from the home config docker block. Structural
     validation only (list[str]); docker surfaces flag conflicts. Each YAML list
     entry is shell-tokenized (shlex.split) at load by `load_home_config`, so a
-    user authors entries as shell-like fragments: `-v /host:/container` becomes
-    two argv tokens `["-v", "/host:/container"]`, while the `--flag=value` form
-    and already-split single tokens stay unchanged (backward compatible).
+    user authors entries as shell-like fragments: an entry such as
+    -v /host:/container becomes two argv tokens ["-v", "/host:/container"],
+    while the --flag=value form and already-split single tokens stay unchanged
+    (backward compatible).
 
     `run`: tokens appended to every docker run (pipeline + build containers)
     `build`: tokens appended to docker build (image build)
@@ -77,7 +78,7 @@ Annotations: |
     5. Extract optional env (mapping, default {}); non-mapping -> ValueError
     6. Extract optional docker; when present build DockerArgsConfig from run
        (list[str], default []) and build (list[str], default []); non-list ->
-       ValueError; absent -> empty DockerArgsConfig. Each `run`/`build` entry is
+       ValueError; absent -> empty DockerArgsConfig. Each run/build entry is
        shell-tokenized via shlex.split (coerced to str first so a non-string
        YAML scalar never crashes the loader) into argv tokens — a malformed
        entry (e.g. unterminated quote) raises ValueError
@@ -89,8 +90,9 @@ Annotations: |
     - A missing file is NOT an error — return an empty HomeConfig
     - Structural validation only: env a mapping; docker.run/docker.build lists of str
     - Each docker.run/docker.build entry is shell-tokenized (shlex.split) at load
-      so a shell-like fragment `-v /host:/container` reaches docker as two argv
-      tokens; single-token entries and the --flag=value form are unchanged
+      so a shell-like fragment such as -v /host:/container reaches docker as
+      two argv tokens; single-token entries and the --flag=value form are
+      unchanged
     - Unknown keys ignored (forward-compat)
 
     Constraints:
