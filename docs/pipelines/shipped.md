@@ -173,16 +173,16 @@ commits the untracked changes accumulated during the previous stages.
 In `feature` the stage carries `communication: true`
 and asks the user whether the implementation is built and ready for
 acceptance — it never autoconfirms the user's answer and genuinely waits
-for explicit confirmation before `accept-result` runs; in `bugfix` and
-`patch` the stage has no `communication` field and runs autonomously. (The authoring
-field is `communication`; the compiled flow-file still carries the afm
-key `interactive`.) In `review` the stage runs without `communication`:
-it simply commits the accumulated review fixes, with no acceptance stage
-to follow.
+for explicit confirmation before `accept-result` runs. In `bugfix` and
+`patch` the stage has no `communication` field and runs autonomously.
+(The authoring field is `communication`; the compiled flow-file still
+carries the afm key `interactive`.) In `review` the stage also has no
+`communication` field: it simply commits the accumulated review fixes,
+with no acceptance stage to follow.
 
-The stage explicitly excludes `docs/<proposals|tasks|arch|design|plans>` from the
-commit path, so in-flight design artifacts that live outside the source
-tree are not bundled into the implementation commit.
+The stage explicitly excludes `docs/<proposals|tasks|arch|design|plans>`
+from the commit path, so in-flight design artifacts that live outside the
+source tree are not bundled into the implementation commit.
 
 ## Using them as templates
 

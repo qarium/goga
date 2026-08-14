@@ -19,6 +19,12 @@ goga init --upgrade [--ref REF]
 
 `<tpl>` and `--upgrade` are mutually exclusive: `--upgrade` updates state tied to a specific repository already recorded in `.goga/scaffold.yml`. `--ref` is meaningful only with `<tpl>` or `--upgrade` (a bare `--ref` is rejected).
 
+### Interactivity
+
+The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort.
+
+With a template (`goga init <tpl>`), copier asks every template question that has no programmatic answer interactively. The project name is resolved from the git remote, falling back to a prompt, and supplied programmatically. A template question with neither a programmatic answer nor a default **must** be answered by the user — generation does not fail on it. The survey requires a TTY: in a non-interactive environment (CI, pipe) copier fails and the error cause is echoed to stderr. On migration (`--upgrade`) the survey is bypassed (`defaults=True`) — a new required template question without a default fails migration with a nonzero exit.
+
 ### Modes
 
 `goga init` branches on the presence of `<tpl>` and `--upgrade`:
@@ -109,10 +115,6 @@ goga init --upgrade
 # Migrate to a specific target ref
 goga init --upgrade --ref v2.0
 ```
-
-The bare wizard is fully interactive. Press `Ctrl+C` at any time to abort.
-
-With a template (`goga init <tpl>`), copier asks every template question that has no programmatic answer interactively (the project name is resolved from the git remote, falling back to a prompt, and supplied programmatically). A template question with neither a programmatic answer nor a default **must** be answered by the user — generation does not fail on it. The survey requires a TTY: in a non-interactive environment (CI, pipe) copier fails and the error cause is echoed to stderr. On migration (`--upgrade`) the survey is bypassed (`defaults=True`) — a new required template question without a default fails migration with a nonzero exit.
 
 ## Options
 
