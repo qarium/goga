@@ -69,3 +69,8 @@ Challenge terms as you go. Specifically:
 ### Why
 
 The ADR's "why" only makes sense if the vocabulary it uses is sharp.
+
+## Constrains
+
+- To understand the project, read only the architectural diagram, CODEMANIFEST and usage files.
+- Don't design cells, it's beyond your expertise

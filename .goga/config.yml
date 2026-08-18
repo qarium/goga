@@ -30,3 +30,7 @@ codemanifest:
     - Debugging and testing
     - Organizing the test infrastructure
     - Understanding the general principles and rules of development and testing in the project
+
+lint:
+  ignore:
+    - build/

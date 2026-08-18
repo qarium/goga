@@ -1,0 +1,14 @@
+name: GogaSync
+description: "Sync specifications & tests"
+---
+
+- name: resolve
+  title: "Resolve drift between code and specification, tests"
+  communication: true
+  skills:
+    - goga-accept
+
+- name: commit-changes
+  title: "Fix all changes"
+  prompt: |
+    Commit all added and modified files
