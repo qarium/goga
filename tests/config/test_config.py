@@ -35,6 +35,11 @@ class TestFacadeAvailability:
         assert hasattr(goga_config_mod, "CodemanifestConfig")
         assert "CodemanifestConfig" in goga_config_mod.__all__
 
+    def test_review_executor_config_importable(self):
+        """ReviewExecutorConfig is importable from goga.config and in __all__."""
+        assert hasattr(goga_config_mod, "ReviewExecutorConfig")
+        assert "ReviewExecutorConfig" in goga_config_mod.__all__
+
     def test_load_config_importable(self):
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")

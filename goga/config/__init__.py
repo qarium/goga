@@ -8,6 +8,7 @@ from .project.config import (
     LintConfig,
     PipelineConfig,
     ProjectConfig,
+    ReviewExecutorConfig,
     TaskExecutorConfig,
 )
 from .project.loader import load_project_config
@@ -21,6 +22,7 @@ __all__ = [
     "LintConfig",
     "PipelineConfig",
     "ProjectConfig",
+    "ReviewExecutorConfig",
     "TaskExecutorConfig",
     "load_home_config",
     "load_project_config",
