@@ -3,6 +3,7 @@ from .config import (
     CodemanifestConfig,
     PipelineConfig,
     ProjectConfig,
+    ReviewExecutorConfig,
     TaskExecutorConfig,
 )
 from .loader import load_project_config
@@ -12,6 +13,7 @@ __all__ = [
     "CodemanifestConfig",
     "PipelineConfig",
     "ProjectConfig",
+    "ReviewExecutorConfig",
     "TaskExecutorConfig",
     "load_project_config",
 ]

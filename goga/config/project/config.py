@@ -54,6 +54,22 @@ class DepConfig:
 
 
 @dataclass(kw_only=True, frozen=True)
+class ReviewExecutorConfig:
+    """Value-object for the optional ``build.review_executor`` section of .goga/config.yml.
+
+    Immutable verbatim container — structural typing only. Fields are stored exactly
+    as parsed: no empty-value normalization, no role/agent whitelists. ``roles=[]``
+    is NOT coerced to None (the "full default set" reading belongs to the consumer);
+    semantic validation (role whitelist, agent existence) also belongs to consumers,
+    not to this dataclass or the loader.
+    """
+
+    skip: bool | None = None
+    agent: str | None = None
+    roles: list[str] | None = None
+
+
+@dataclass(kw_only=True, frozen=True)
 class BuildConfig:
     """Build pipeline settings including agent, worktree, and timeout options."""
 
@@ -68,6 +84,7 @@ class BuildConfig:
     prompts_dir: str | None = None
     agents_dir: str | None = None
     codex_review: bool | None = None
+    review_executor: ReviewExecutorConfig | None = None
     proxy: str | None = None
     hosts: dict[str, str] = field(default_factory=dict)
 
