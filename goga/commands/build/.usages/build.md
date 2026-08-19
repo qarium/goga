@@ -10,6 +10,7 @@ CLI wrapper for the build command. Parses click options, loads configuration, an
 goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
                  [--max-iterations N] [--review-patience N]
+                 [--skip-review | --no-skip-review]
                  [-e KEY=VALUE ...]
                  [--proxy URL] [--add-host HOST:IP ...] [--clean] [--update | -u]
 ```
@@ -33,6 +34,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `--wait` | str | from config | Wait on rate limit |
 | `--max-iterations` | int | from config | Maximum iterations |
 | `--review-patience` | int | from config | Review stop threshold |
+| `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review_executor.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
 | `--add-host` | str (multiple) | — | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict |
@@ -80,6 +82,20 @@ goga build docs/plans/my-plan.md  # second run reuses .ralphex/ from the first
 - Git config (user.name, user.email) is automatically passed to the container as GIT_AUTHOR_NAME/EMAIL, GIT_COMMITTER_NAME/EMAIL. If git config is absent, the build continues without error
 - Credential mounts are detected automatically via `resolve_credential_mounts()` — there is no `--credential`/`--mount` flag. The routine scans the host filesystem for known AI-agent credential files (claude `~/.claude/.credentials.json`, codex `~/.codex/auth.json`, opencode `~/.local/share/opencode/auth.json`), is agent-agnostic (it is not filtered by the configured `task_executor.agent`), and returns only files that exist. Every returned file is bind-mounted read-only into the container at the mirrored path under `/home/goga/`. When none exist, no credential mount is added — see the `resolve-credential-mounts` and `docker-auth-mounts` practices for details
 - Ralphex state (`.ralphex/`) is isolated from the project directory: the host directory `~/.goga/runtime/builds/<normalized_project>/<branch>/` is bind-mounted into the container at `/workspace/.ralphex`. No `.ralphex/` appears in the project directory, even on crash/SIGKILL. By default the directory persists across runs; pass `--clean` to wipe it before launch
+
+## Review-phase flags
+
+goga build docs/plans/plan.md --skip-review      # skip review (overrides config)
+goga build docs/plans/plan.md --no-skip-review   # force full cycle (overrides skip: true)
+goga build docs/plans/plan.md                    # tri-state: config decides
+
+Both flags are forwarded into the container; tri-state resolution against
+build.review_executor.skip happens in-container (CLI wins). The reviewer
+composition (roles) and the review executor agent are configured only via
+.goga/config.yml build.review_executor — no CLI flags for them.
+
+A differing build.review_executor.agent combined with --worktree is rejected
+before the container starts (the review pass cannot follow the worktree branch).
 
 ## Proxy and hosts
 

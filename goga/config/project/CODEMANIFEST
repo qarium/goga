@@ -31,6 +31,11 @@ Annotations: |
   strings; glob interpretation, path normalization, and existence are deferred
   to the owning consumer.
 
+  The optional build.review_executor sub-section follows the same structural-only
+  stance: field types and a list-of-strings check for roles; an empty roles list
+  passes through verbatim (the empty-to-full-set meaning belongs to the consuming
+  cell).
+
 ---
 
 "load_project_config() -> config: ProjectConfig":
@@ -65,6 +70,14 @@ Annotations: |
        default empty dict), and finally construct a `BuildConfig` from
        task_executor, proxy (optional, default None), hosts (optional, default
        empty dict), plus the remaining optional build fields
+    6.5. Extract the optional review_executor sub-block of build: absent or
+       YAML-null → review_executor None. Present but not a mapping → ValueError.
+       skip: absent/null → None; a non-bool value → ValueError. agent:
+       absent/YAML-null/empty/whitespace → None; a non-string value → ValueError.
+       roles: absent/YAML-null → None; present but not a list or a non-string
+       element → ValueError; an empty list passes through as [] verbatim.
+       Construct a `ReviewExecutorConfig` from the resolved fields and pass it into
+       `BuildConfig`.
     7. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     8. Extract the optional lint block. When the lint key is absent or
@@ -166,6 +179,8 @@ Annotations: |
       only the structural type (list of strings)
     - Do NOT reject glob characters in ignore entries — they are stored
       verbatim; the consumer (lint/AST) documents them as unsupported
+    - Do NOT validate review_executor values (role whitelist, agent existence)
+      at the loader level — semantics belong to the consumer
     - The final `ProjectConfig` assembly MUST include lint
 
 "ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None)":
@@ -247,7 +262,7 @@ Annotations: |
       `LintConfig`, or None when the lint section is absent. Defaults to None
       (kw_only) so ProjectConfig(...) callers may omit lint=.
 
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, proxy: str | None, hosts: dict[str, str])":
+"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Build execution configuration. Constructed by load_project_config from the build section of .goga/config.yml.
@@ -287,6 +302,10 @@ Annotations: |
       Custom ralphex agent directory path.
     "codex_review -> bool | None": |
       Enable external codex review.
+    "review_executor -> ReviewExecutorConfig | None": |
+      Review-executor configuration. Instance of `ReviewExecutorConfig`, or None
+      when the review_executor section is absent. Structural validity is owned
+      by `load_project_config`; semantic checks belong to the consumer.
     "proxy -> str | None": |
       Optional HTTP/HTTPS proxy URL for the build container.
       When non-None, consumers add HTTP_PROXY, HTTPS_PROXY, and NO_PROXY to the
@@ -322,6 +341,38 @@ Annotations: |
       Environment variable dictionary ({str: str}).
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
+
+"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None)":
+  location: config.py
+  annotations: |
+    Review-executor configuration of the build — whether the review phase is
+    skipped, which agent runs it, and which reviewer roles participate.
+
+    `skip`: tri-state source for skipping the review phase — None when the
+            field is absent
+    `agent`: review executor name — None when unset (review runs on the task
+             executor)
+    `roles`: declared reviewer composition — None when unset; an empty list is
+             stored verbatim and means the full default set to the consumer
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
+    - Fields are stored verbatim — no normalization of emptiness, no whitelist
+
+    Constraints:
+    - Do not validate role names or agent names at this level — structural
+      typing only
+  properties:
+    "skip -> bool | None": |
+      Tri-state source for skipping the review phase. None when the field is
+      absent in .goga/config.yml.
+    "agent -> str | None": |
+      Review executor name matching the /home/goga/bin/<agent>-as-claude.sh
+      wrapper convention. No resolution or validation here. None when unset.
+    "roles -> list[str] | None": |
+      Declared reviewer composition, verbatim from .goga/config.yml. None when
+      unset; an empty list stays an empty list (full default set is the
+      consumer-side meaning).
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py
@@ -456,5 +507,6 @@ CreatedAt: 24/07/26
 
 Description: |
   Project configuration model + loader for .goga/config.yml. Structural
-  validation only; semantic validation of version-grammar values and of the
-  `lint.ignore` paths is deferred to the owning consumer.
+  validation only; semantic validation of version-grammar values, of the
+  `lint.ignore` paths, and of the `build.review_executor` fields is deferred
+  to the owning consumer.

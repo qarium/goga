@@ -20,10 +20,23 @@ options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
     "worktree": True,
     "max_iterations": 50,
     "session_timeout": "30m",
+    "tasks_only": False,  # True → --tasks-only (skip all review phases)
+    "review": False,      # True → --review (review-only pass)
 }
 dry_run = False
 
 exit_code = run_ralphex(plan, options, dry_run)
+```
+
+Two-pass composition when the task executor and the review executor differ:
+
+```python
+# Pass 1 — tasks only (task wrapper in .ralphex/config claude_command)
+exit_code = run_ralphex(plan, {**options, "tasks_only": True}, dry_run)
+# Pass 2 (only on pass-1 success) — review only (review wrapper rewritten
+# into claude_command)
+if exit_code == 0:
+    exit_code = run_ralphex(plan, {**options, "review": True}, dry_run)
 ```
 
 ## Parameters
@@ -33,7 +46,9 @@ exit_code = run_ralphex(plan, options, dry_run)
 - `options: dict` — resolved ralphex options. The caller has already applied CLI >
   ProjectConfig > omit precedence; `run_ralphex` maps each resolved key to its ralphex
   CLI flag (see the option→flag table in its CODEMANIFEST contract) — it performs no
-  precedence resolution.
+  precedence resolution. Bool keys include `tasks_only` (True → bare `--tasks-only`,
+  tasks without any review) and `review` (True → bare `--review`, review-only pass);
+  False or absent omits the flag.
 - `dry_run: bool` — when True, print the assembled ralphex command to sys.stderr and
   return 0 without launching.
 

@@ -5,6 +5,7 @@ Imports:
       - BuildConfig
       - PipelineConfig
       - TaskExecutorConfig
+      - ReviewExecutorConfig
       - CodemanifestConfig
       - DepConfig
       - LintConfig
@@ -43,6 +44,7 @@ Annotations: |
 ->BuildConfig: {}
 ->PipelineConfig: {}
 ->TaskExecutorConfig: {}
+->ReviewExecutorConfig: {}
 ->CodemanifestConfig: {}
 ->DepConfig: {}
 ->LintConfig: {}

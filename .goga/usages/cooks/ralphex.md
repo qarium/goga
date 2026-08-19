@@ -52,6 +52,13 @@ ralphex --review docs/plans/my-feature.md
 
 ```
 
+Two-pass orchestration is the standard composition when the task executor and the
+review executor differ: pass 1 `--tasks-only` with the task wrapper, then on
+its success pass 2 `--review` with the review wrapper (different
+`claude_command` values, shared `--config-dir`). The `--review` mode does not
+touch the branch and does not move the plan itself when
+`move_plan_on_completion = false`.
+
 ralphex automatically:
 1. Creates a branch from the plan file name
 2. Executes tasks one by one
@@ -100,6 +107,12 @@ ralphex will find the first incomplete task (`- [ ]`) and continue from there.
 | `-d, --debug`        | Debug output                                    | false        |
 | `--no-color`         | Disable colored output                          | false        |
 
+Note: `--review` ignores `--worktree` — the review runs against the current
+branch/repository state, not the worktree branch.
+
+Note: `--tasks-only` skips every review phase — the internal review agents and
+the external codex review alike; `codex_enabled` has no effect in that mode.
+
 ## Configuration
 
 ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (local).
@@ -128,6 +141,7 @@ ralphex uses `~/.config/ralphex/` (global) or `.ralphex/` in the project root (l
 | `codex_enabled`     | Enable codex review phase            | `true`       |
 | `task_retry_count`  | Number of retries per task           | `1`          |
 | `finalize_enabled`  | Final step after review              | `false`      |
+| `move_plan_on_completion` | Move the plan file to `completed/` after a successful run. goga always sets this to `false` and moves the plan itself after any successful run | `true` |
 | `preserve_anthropic_api_key` | Keep `ANTHROPIC_API_KEY` in the agent subprocess env instead of unsetting it before invoking the wrapper. goga always sets this to `true` so the agent wrapper receives the key directly from the environment | `false`      |
 
 ## Review agents
@@ -143,6 +157,33 @@ By default, ralphex launches 5 parallel agents:
 | `documentation`     | Documentation update needs               |
 
 Agents are customizable — you can add, remove, and modify them via `~/.config/ralphex/agents/`.
+
+## Vendorable defaults
+
+ralphex ships its built-in defaults (4 prompts: `task.txt`, `review_first.txt`,
+`review_second.txt`, `codex.txt`; 5 review agents: `quality`, `implementation`,
+`testing`, `simplification`, `documentation`).
+
+- `ralphex --dump-defaults` — the stable documented interface for extracting
+  the built-in defaults. Re-extraction under a new ralphex version is a manual
+  maintainer step; the committed copies live in `goga/assets/ralphex/`
+  (`prompts/` and `agents/`).
+- The `prompts/` and `agents/` directories live under `--config-dir` — their
+  paths are derived from `--config-dir`; there is no separate flag or config
+  key for the prompts directory.
+
+## Review prompt composition
+
+Which review agents participate is determined **solely** by `{{agent:X}}`
+lines in `review_first.txt` / `review_second.txt`:
+
+- A missing `{{agent:X}}` line means the phase runs without that subagent —
+  no error, no special handling.
+- Default composition: the first pass (`review_first`) engages all 5 agents;
+  the second pass (`review_second`) engages `quality` + `implementation`.
+- The accompanying prompt text (wait counters, "Launch ALL N Review Agents")
+  is not interpreted by ralphex — when filtering `{{agent:X}}` lines, adapt it
+  manually to the actual number of agents.
 
 ## Anti-patterns
 

@@ -38,6 +38,8 @@ Annotations: |
               to exactly one ralphex CLI flag:
               - worktree (bool)        → --worktree         (bare flag)
               - skip_finalize (bool)   → --skip-finalize    (bare flag)
+              - review (bool)          → --review            (bare flag)
+              - tasks_only (bool)      → --tasks-only        (bare flag)
               - session_timeout (str)  → --session-timeout  (value flag)
               - idle_timeout (str)     → --idle-timeout     (value flag)
               - wait (str)             → --wait             (value flag)
