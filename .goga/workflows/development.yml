@@ -17,3 +17,15 @@ stages:
       - Annotations does not contains implementation details
       - Annotations must not use "X from Imports" phrasing
       - Footer Description does not contains details
+  architecture-review:
+    approve: auto
+  apply-architecture:
+    approve: auto
+  code-design:
+    approve: auto
+  design-review:
+    approve: auto
+  coding-plan:
+    approve: auto
+  plan-review:
+    approve: auto
