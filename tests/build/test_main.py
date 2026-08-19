@@ -177,6 +177,21 @@ class TestMainEntry:
 class TestContract:
     """Contract-surface lock: the in-container guard is wired as step 0 of main()."""
 
+    def test_main_accepts_skip_review_pair(self, monkeypatch) -> None:
+        """Contract: --skip-review/--no-skip-review parse into one dest and land in cli_options."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check", "--skip-review"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["skip_review"] is True
+
     def test_main_calls_ensure_in_docker_first(self, monkeypatch) -> None:
         monkeypatch.setenv("GOGA_DOCKER", "1")
 
@@ -199,3 +214,59 @@ class TestContract:
 
         assert mock_ensure.call_count == 1
         assert call_order == ["ensure_in_docker", "build"]
+
+    def test_main_cli_options_contain_skip_review_key(self, monkeypatch) -> None:
+        """Contract: cli_options always carries `skip_review` (None when neither flag is passed)."""
+
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("goga.build.__main__.build", return_value=0) as mock_build,
+            mock.patch("goga.build.__main__.load_project_config"),
+            mock.patch("sys.argv", ["goga.build", "plan.md", "--skip-manifest-check"]),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert "skip_review" in cli_options
+        assert cli_options["skip_review"] is None
+
+
+class TestMainSkipReviewPair:
+    """Tri-state --skip-review/--no-skip-review pair: None/True/False without parser conflicts."""
+
+    @pytest.mark.parametrize(
+        ("flag", "expected"),
+        [("--skip-review", True), ("--no-skip-review", False), (None, None)],
+    )
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_skip_review_pair_tri_state(self, mock_build, mock_config, monkeypatch, flag, expected) -> None:
+        argv = ["goga.build", "plan.md", "--skip-manifest-check"]
+        if flag is not None:
+            argv.append(flag)
+
+        with (
+            mock.patch.dict(os.environ, {"GOGA_DOCKER": "1"}),
+            mock.patch("sys.argv", argv),
+        ):
+            main()
+
+        cli_options = mock_build.call_args[0][2]
+        assert cli_options["skip_review"] is expected
+
+    @mock.patch("goga.build.__main__.load_project_config")
+    @mock.patch("goga.build.__main__.build", return_value=0)
+    def test_main_help_lists_both_flags(self, mock_build, mock_config, monkeypatch, capsys) -> None:
+        monkeypatch.setenv("GOGA_DOCKER", "1")
+
+        with (
+            mock.patch("sys.argv", ["goga.build", "--help"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+
+        assert exc_info.value.code == 0
+        help_text = capsys.readouterr().out
+        assert "--skip-review" in help_text
+        assert "--no-skip-review" in help_text

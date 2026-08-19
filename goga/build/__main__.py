@@ -22,6 +22,8 @@ def main() -> int:
     parser.add_argument("--worktree", action="store_true")
     parser.add_argument("--skip-finalize", action="store_true")
     parser.add_argument("--skip-manifest-check", action="store_true")
+    parser.add_argument("--skip-review", dest="skip_review", action="store_true", default=None)
+    parser.add_argument("--no-skip-review", dest="skip_review", action="store_false")
     parser.add_argument("--session-timeout", type=str, default=None)
     parser.add_argument("--idle-timeout", type=str, default=None)
     parser.add_argument("--wait", type=str, default=None)
@@ -35,6 +37,7 @@ def main() -> int:
         "worktree": args.worktree,
         "skip_finalize": args.skip_finalize,
         "skip_manifest_check": args.skip_manifest_check,
+        "skip_review": args.skip_review,
         "session_timeout": args.session_timeout,
         "idle_timeout": args.idle_timeout,
         "wait": args.wait,
