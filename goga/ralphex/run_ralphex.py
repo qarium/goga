@@ -11,6 +11,8 @@ import sys
 _BOOL_FLAGS: tuple[tuple[str, str], ...] = (
     ("worktree", "--worktree"),
     ("skip_finalize", "--skip-finalize"),
+    ("review", "--review"),
+    ("tasks_only", "--tasks-only"),
 )
 _SCALAR_FLAGS: tuple[tuple[str, str], ...] = (
     ("session_timeout", "--session-timeout"),

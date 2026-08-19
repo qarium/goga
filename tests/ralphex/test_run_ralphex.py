@@ -74,6 +74,8 @@ class TestBuildCommand:
         [
             ("worktree", "--worktree"),
             ("skip_finalize", "--skip-finalize"),
+            ("review", "--review"),
+            ("tasks_only", "--tasks-only"),
         ],
     )
     def test_bool_flag_mapping_is_exact(self, key: str, flag: str) -> None:
@@ -152,3 +154,28 @@ class TestRunRalphexLogic:
 
         assert "env" not in mock_call.call_args.kwargs
         assert mock_call.call_args.args[0][0] == "ralphex"
+
+    def test_run_ralphex_maps_new_bool_flags(self) -> None:
+        """The review/tasks_only mode flags map to their bare ralphex flags;
+        False is equivalent to absent (bool-mapping rule regression guard)."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("p.md", {"review": True}, False)
+            review_argv = list(mock_call.call_args.args[0])
+
+            run_ralphex("p.md", {"tasks_only": True}, False)
+            tasks_argv = list(mock_call.call_args.args[0])
+
+            run_ralphex("p.md", {"review": False, "tasks_only": False}, False)
+            neither_argv = list(mock_call.call_args.args[0])
+
+        assert "--review" in review_argv
+        assert "--tasks-only" not in review_argv
+
+        assert "--tasks-only" in tasks_argv
+        assert "--review" not in tasks_argv
+
+        assert "--review" not in neither_argv
+        assert "--tasks-only" not in neither_argv
