@@ -1,12 +1,12 @@
 name: GogaDevelopment
-description: "Feature development"
+description: "Development process"
 ---
 
 - name: brainstorm
   title: "Task-based architecture development"
   communication: true
   prompt: |
-    Use the task `<git branch --show-current>.md`, if it exists
+    Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
     Save the architecture plan as `<git branch --show-current>.md`
 
     Communication:
