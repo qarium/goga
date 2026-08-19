@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
+from contextlib import contextmanager
 from pathlib import Path
+from unittest import mock
 
 import pytest
 from goga.build import build
@@ -35,6 +36,29 @@ def _write_config(
         lines.append(f"  prompts_dir: {prompts_dir}")
 
     (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
+
+
+@contextmanager
+def _mock_vendored_sources(tmp_path: Path):
+    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary)."""
+    from goga.build import ralphex_runtime
+
+    prompts_dir = tmp_path / "vendored-prompts"
+    agents_dir = tmp_path / "vendored-agents"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    (prompts_dir / "task.txt").write_text("# task prompt\n")
+    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
+    (prompts_dir / "review_first.txt").write_text("# first review prompt\n")
+    (prompts_dir / "review_second.txt").write_text("# second review prompt\n")
+    for role in ("quality", "implementation", "testing", "simplification", "documentation"):
+        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
+
+    with (
+        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
+        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
+    ):
+        yield
 
 
 def _load_config(tmp_path: Path, monkeypatch):
@@ -81,10 +105,13 @@ class TestBuildWritesResolvedWrapper:
         """
         _write_config(tmp_path, agent=agent)
         config = _load_config(tmp_path, monkeypatch)
-        monkeypatch.setattr(shutil, "which", lambda *_: True)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
-        result = build("plan.md", config, cli_options)
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
+            result = build("plan.md", config, cli_options)
 
         assert result == 0
         config_text = (tmp_path / ".ralphex" / "config").read_text()
@@ -131,10 +158,9 @@ class TestBuildReturns1WhenRalphexMissing:
         tmp_path: Path,
         monkeypatch,
     ) -> None:
-        """A missing ralphex binary aborts build without invoking subprocess.call."""
+        """A missing ralphex binary aborts the pass without invoking subprocess.call."""
         _write_config(tmp_path, agent="claude")
         config = _load_config(tmp_path, monkeypatch)
-        monkeypatch.setattr(shutil, "which", lambda *_: None)
 
         def _fail(*args, **kwargs):
             pytest.fail("must not invoke subprocess.call")
@@ -142,32 +168,38 @@ class TestBuildReturns1WhenRalphexMissing:
         monkeypatch.setattr(subprocess, "call", _fail)
         cli_options = {"dry_run": False, "skip_manifest_check": True}
 
-        result = build("plan.md", config, cli_options)
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=1) as mock_run,
+        ):
+            result = build("plan.md", config, cli_options)
 
         assert result == 1
+        mock_run.assert_called_once()
 
 
-class TestBuildSkipsInvalidPromptsDir:
-    def test_build_skips_invalid_prompts_dir(
+class TestBuildMissingCustomPromptsDir:
+    def test_build_missing_custom_prompts_dir_returns_1(
         self,
         tmp_path: Path,
         monkeypatch,
     ) -> None:
-        """A non-existent prompts_dir is skipped while agents are still copied."""
+        """A non-existent custom prompts_dir aborts the run: the sync contract
+        requires the source to exist (the old silent skip is superseded)."""
         _write_config(tmp_path, agent="claude", prompts_dir="/nonexistent/prompts-path")
         config = _load_config(tmp_path, monkeypatch)
-        monkeypatch.setattr(shutil, "which", lambda *_: True)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
-        result = build("plan.md", config, cli_options)
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = build("plan.md", config, cli_options)
 
-        assert result == 0
-        agents_dir = tmp_path / ".ralphex" / "agents"
-        assert agents_dir.is_dir()
-        assert any(agents_dir.iterdir())
-
-        prompts_dir = tmp_path / ".ralphex" / "prompts"
-        assert not prompts_dir.exists() or not any(prompts_dir.iterdir())
+        assert result == 1
+        mock_run.assert_not_called()
+        # The failure happens before any .ralphex side effect.
+        assert not (tmp_path / ".ralphex" / "prompts").exists()
 
 
 class TestBuildCodexReviewMapping:
@@ -179,10 +211,13 @@ class TestBuildCodexReviewMapping:
         """BuildConfig.codex_review=True maps to codex_enabled = true in ralphex config."""
         _write_config(tmp_path, agent="claude", codex_review=True)
         config = _load_config(tmp_path, monkeypatch)
-        monkeypatch.setattr(shutil, "which", lambda *_: True)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
-        result = build("plan.md", config, cli_options)
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
+            result = build("plan.md", config, cli_options)
 
         assert result == 0
         config_text = (tmp_path / ".ralphex" / "config").read_text()
