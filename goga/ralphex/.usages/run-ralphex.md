@@ -21,7 +21,7 @@ options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
     "max_iterations": 50,
     "session_timeout": "30m",
     "tasks_only": False,  # True → --tasks-only (skip all review phases)
-    "review": False,      # True → --review (review-only pass)
+    "review": False,  # True → --review (review-only pass)
 }
 dry_run = False
 

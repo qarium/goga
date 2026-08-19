@@ -138,17 +138,9 @@ class TestBuildContract:
         assert not hasattr(config.build, "image")
         assert config.image == "goga:latest"
 
-    def test_private_config_and_defaults_helpers_removed(self) -> None:
-        """The private helpers are absorbed by the public contract routines.
-
-        Use sys.modules because goga/build/__init__.py shadows the `build`
-        attribute with the function of the same name.
-        """
-        build_module = sys.modules["goga.build.build"]
-        assert not hasattr(build_module, "_write_ralphex_config")
-        assert not hasattr(build_module, "_copy_defaults")
-        assert not hasattr(build_module, "DEFAULTS_PACKAGE_DIR")
-        assert not hasattr(build_module, "_DEFAULT_CLAUDE_ARGS")
+    # The absorbed-private-helpers assertion lives in test_contract.py
+    # (test_absorbed_private_helpers_removed_from_module) — the plan assigns
+    # that contract check to the contract file.
 
 
 class TestResolveOptions:
@@ -908,6 +900,36 @@ class TestBuildReviewPhaseOrchestration:
         assert (tmp_path / "plan.md").is_file()
         assert not (tmp_path / "completed").exists()
 
+    def test_build_two_pass_pass2_failure_propagates_and_keeps_plan(self, tmp_path, monkeypatch) -> None:
+        """Pass 1 succeeded but pass 2 failed — the run is a failure.
+
+        The returned code is the LAST pass's code and the relocation outcome is
+        computed from it, so a failed review pass must keep the plan in place
+        exactly like a failed task pass.
+        """
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", side_effect=[0, 1]) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        assert mock_run.call_count == 2
+        second = self._passes(mock_run)[1]
+        assert second["review"] is True
+        assert "tasks_only" not in second
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
+
     def test_build_invalid_review_config_returns_1_before_side_effects(self, tmp_path, monkeypatch) -> None:
         config = _make_config(review_executor=ReviewExecutorConfig(roles=["bogus"]))
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
@@ -992,3 +1014,50 @@ class TestBuildReviewPhaseOrchestration:
         assert "review" not in options
         assert not (tmp_path / "plan.md").exists()
         assert (tmp_path / "completed" / "plan.md").is_file()
+
+    def test_build_cli_no_skip_review_overrides_config_skip(self, tmp_path, monkeypatch) -> None:
+        """CLI False beats config `skip: true` — the full cycle runs with validation."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, roles=["bogus"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "skip_review": False},
+            )
+
+        # The forced full pass activates validation, which rejects the bogus role.
+        assert result == 1
+        mock_run.assert_not_called()
+
+    def test_build_cli_no_skip_review_forces_full_pass(self, tmp_path, monkeypatch) -> None:
+        """CLI False against a valid config-skip runs the full single pass."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "skip_review": False},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        options = mock_run.call_args.args[1]
+        assert "tasks_only" not in options
+        assert "review" not in options
+
+    def test_build_skip_run_skips_validation(self, tmp_path, monkeypatch) -> None:
+        """A skipped run never validates roles — a bogus role is never read."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, roles=["bogus"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["tasks_only"] is True

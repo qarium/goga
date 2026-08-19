@@ -56,6 +56,11 @@ def _filter_review_prompt(text: str, selected: list[str]) -> str:
 
     result = "".join(kept)
 
+    if n == 0:
+        # A phase without subagents is a regular case — the accompanying text
+        # is left as filtered, with no counter rewrites.
+        return result
+
     if n != _FIRST_PASS_AGENT_COUNT:
         # review_first counters — each rewrite is a no-op for the full 5-role set
         # and for any text not carrying the fragment; the guard preserves
@@ -122,13 +127,11 @@ def sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> None:
         logger.info("synced ralphex defaults", extra={"prompts": str(prompts_src), "agents": str(agents_src)})
         return
 
-    custom = config.prompts_dir is not None
-    for name in ("review_first.txt", "review_second.txt"):
-        if custom:
-            continue
-        prompt_file = ralphex_dir / "prompts" / name
-        filtered = _filter_review_prompt(prompt_file.read_text(), list(roles))
-        prompt_file.write_text(filtered)
+    if config.prompts_dir is None:
+        for name in ("review_first.txt", "review_second.txt"):
+            prompt_file = ralphex_dir / "prompts" / name
+            filtered = _filter_review_prompt(prompt_file.read_text(), roles)
+            prompt_file.write_text(filtered)
 
     logger.info(
         "synced ralphex defaults",

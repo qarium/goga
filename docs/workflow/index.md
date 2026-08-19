@@ -76,7 +76,7 @@ Does the work require deep technical elaboration
 | [`apply`](apply.md) | `docs/arch/<topic>.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
 | [`design`](design.md) | Modified CODEMANIFEST | `docs/design/<topic>.md` |
 | [`plan`](plan.md) | `docs/design/<topic>.md` | `docs/plans/<topic>.md` |
-| [`build`](build.md) | `docs/plans/<topic>.md` | Implemented code (via ralphex) |
+| [`build`](build.md) | `docs/plans/<topic>.md` | Implemented code (via ralphex); the plan moves to `docs/plans/completed/` on success |
 | [`change`](change.md) | Change description | Modified code + reconciled contracts and usages |
 | [`accept`](accept.md) | Completed implementation | Final acceptance report |
 

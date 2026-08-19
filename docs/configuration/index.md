@@ -28,6 +28,10 @@ build:
   session_timeout: 30m
   idle_timeout: 10m
   max_iterations: 10
+  # review_executor:              # optional review-phase control
+  #   skip: false                 # true → tasks-only run (ralphex --tasks-only)
+  #   agent: codex                # differing agent → two-pass run (tasks, then --review)
+  #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
   # proxy: http://corp:3128        # optional HTTP/HTTPS proxy URL for the build container
   # hosts:                         # optional docker run --add-host entries
   #   foo.local: 127.0.0.1
@@ -103,8 +107,21 @@ codemanifest:
 | `codex_review` | `bool` | No | Enable external codex review |
 | `proxy` | `string` | No | HTTP/HTTPS proxy URL for the build container. When set, `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` are written to the container env-file. Overridden by the `--proxy` CLI option |
 | `hosts` | mapping | No | Host→IP mapping for `docker run --add-host`. Defaults to `{}`. Augmented by the repeatable `--add-host` CLI option (CLI wins on key conflict) |
+| `review_executor` | mapping | No | Review-phase configuration. See [build.review_executor](#buildreview_executor) |
 
 > The deprecated `build.image` field is rejected with a `ValueError`. Set the top-level `image` field instead.
+
+### build.review_executor
+
+Optional section controlling the review phase of `goga build`. When absent, the full cycle (tasks + review) runs in a single pass with the task executor's wrapper.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `skip` | `bool` | No | Skip the review phase entirely — the run executes tasks only (ralphex `--tasks-only`). Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML `1` is rejected |
+| `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.task_executor.agent`; its wrapper must exist in the image). When it differs from `task_executor.agent`, the build runs two passes: tasks with the task wrapper, then `ralphex --review` with the review wrapper. Combining this with an active worktree (`--worktree` or `build.worktree: true`) is rejected with exit 1 on the host |
+| `roles` | list of `string` | No | Reviewer composition for the review prompts: keeps only the `{{agent:X}}` lines of the selected roles and adapts the counters of the accompanying text. Whitelist: `quality`, `implementation`, `testing`, `simplification`, `documentation`. Absent or `[]` means the full default set (prompts stay byte-identical to the vendored defaults) |
+
+Precedence: the `--skip-review`/`--no-skip-review` CLI pair overrides `skip`; an explicit `--no-skip-review` forces the full cycle even when the config sets `skip: true`. Role names and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).
 
 ### build.task_executor
 
@@ -173,7 +190,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, or `roles` that is not a list of strings |
 
 ## Implementation details
 

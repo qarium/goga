@@ -1,6 +1,6 @@
 # Agents
 
-Wherever you set `agent: <name>` — in `.goga/config.yml` (`build.task_executor.agent`, `pipeline.agent`) or in a workflow-file (`workflow.stages.<name>.agent`, `workflow.extend.<name>.agent`) — goga resolves that name into a wrapper script **inside the Docker container**. The wrapper is what actually runs the AI agent during `goga build` and `goga pipeline`; it presents the agent's CLI in a uniform shape so goga does not care which concrete agent is underneath.
+Wherever you set `agent: <name>` — in `.goga/config.yml` (`build.task_executor.agent`, `build.review_executor.agent`, `pipeline.agent`) or in a workflow-file (`workflow.stages.<name>.agent`, `workflow.extend.<name>.agent`) — goga resolves that name into a wrapper script **inside the Docker container**. The wrapper is what actually runs the AI agent during `goga build` and `goga pipeline`; it presents the agent's CLI in a uniform shape so goga does not care which concrete agent is underneath.
 
 Resolution is pure string concatenation — there is no whitelist and no validation. A missing wrapper surfaces as a runtime error when the container tries to invoke it, not from goga itself. The full mechanic, baseline wrappers, per-agent env variables, and the custom-agent path are covered below.
 
@@ -12,7 +12,7 @@ Resolution invariant:
 <agent>  →  /home/goga/bin/<agent>-as-claude.sh
 ```
 
-The `agent` field is **optional** in both `build.task_executor` and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs an agent), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or afm's own default cover the absent global agent.
+The `agent` field is **optional** in `build.task_executor`, `build.review_executor`, and `pipeline`: at config load, an absent / YAML-null / empty / whitespace-only value resolves to `None` (it is not an error). `resolve_wrapper_path` is invoked only for a non-`None` value — it strips surrounding whitespace and forwards the result verbatim (no case-folding or other normalization), so an empty value never reaches resolution. What `None` means differs by consumer: `goga build` raises a `ClickException` (the build needs an agent), whereas `goga pipeline` carries `None` through and lets a per-stage workflow agent or afm's own default cover the absent global agent. A `None` (or same-as-task) `build.review_executor.agent` means the review phase runs on the task executor's wrapper in the same pass; a differing agent runs a second, review-only pass on that agent's wrapper (its existence is validated in-container before the pass).
 
 Edge cases:
 

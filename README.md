@@ -523,7 +523,10 @@ Customize the run with the usual flags:
 goga build plan.md --update               # refresh the image first (build from config dockerfile, else pull)
 goga build plan.md --clean                # wipe persistent loop state for a fresh run
 goga build plan.md -e ENV_VAR=value       # forward an extra env var into the container
+goga build plan.md --skip-review          # run tasks only, skip the review phase
 ```
+
+The review phase is configurable beyond the on/off flag: a `build.review_executor` section in `.goga/config.yml` can hand review to a different agent (`agent: codex` runs a second, review-only pass on the codex wrapper), skip it by default (`skip: true` — `--no-skip-review` forces the full cycle), and select the reviewer composition (`roles: [quality, testing]`). After a successful run the plan file itself moves to `docs/plans/completed/`.
 
 A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
 

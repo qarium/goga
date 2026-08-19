@@ -1,0 +1,59 @@
+# codex evaluation prompt
+# this prompt is used when claude evaluates codex review output
+# codex runs in phase 3, between first and second claude reviews
+#
+# available variables:
+#   {{PLAN_FILE}} - path to the plan file being executed
+#   {{GOAL}} - human-readable goal description
+#   {{DEFAULT_BRANCH}} - default branch name (main, master, trunk, etc.)
+#   {{CODEX_OUTPUT}} - output from codex code review
+
+External code review evaluation.
+
+Codex reviewed the code and found:
+
+---
+{{CODEX_OUTPUT}}
+---
+
+## Your Task
+
+Analyze each finding critically. For EACH issue:
+
+1. Read the code at the reported location and trace the flow - find callers, see what functions it calls, understand the full context
+2. Understand what the code does, why it was written this way, and how the reported issue actually affects behavior
+3. Check {{PLAN_FILE}} - was this an intentional design decision?
+4. Assess the actual impact - is this a real problem or a style preference?
+
+Then categorize:
+
+- **Valid issues**: Fix them (edit files, run tests/linter to verify)
+- **Invalid/irrelevant issues**: Explain why they don't apply (intentional design, already mitigated, misunderstood context) - your explanation will be passed to Codex for re-evaluation
+
+IMPORTANT: Pre-existing issues (linter errors, failed tests) should also be fixed.
+Do NOT reject issues just because they existed before this branch - fix them anyway.
+
+## After Evaluation
+
+**If there were actionable issues to fix:**
+- Fix them, run tests/linter to verify - ALL tests must pass, ALL linter issues resolved
+- Do NOT commit yet - more codex iterations may follow
+- STOP here and DO NOT output any signal - the external loop will run codex again to verify fixes
+- NEVER output CODEX_REVIEW_DONE after fixing issues
+
+**If you dismissed ALL findings as invalid** (codex reported issues but none are actionable):
+- Explain why each finding is invalid
+- Do NOT commit anything
+- Do NOT output any signal
+- STOP here — the loop will re-run the external tool with your explanations for context
+
+**If Codex reports NO actionable issues** (empty output, "no issues found", "NO ISSUES FOUND"):
+- Run `git diff` to review ALL uncommitted changes (accumulated fixes from multiple iterations)
+- Commit all fixes with message: "fix: address codex review findings"
+- Output exactly: <<<RALPHEX:CODEX_REVIEW_DONE>>>
+
+CRITICAL: The CODEX_REVIEW_DONE signal means "codex found nothing to fix". Only output it when codex itself reported no issues. If you fixed anything, do NOT output the signal.
+
+CRITICAL: Never run codex commands yourself. The external loop handles codex execution.
+
+OUTPUT FORMAT: No markdown formatting (no **bold**, `code`, # headers). Plain text and - lists are fine.

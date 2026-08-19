@@ -57,7 +57,7 @@ include = ["goga*"]
 
 [tool.setuptools.package-data]
 "*" = [".usages/**/*"]
-goga = ["assets/**/*", "config/defaults/**/*"]
+goga = ["assets/**/*"]
 
 [tool.ruff]
 target-version = "py310"

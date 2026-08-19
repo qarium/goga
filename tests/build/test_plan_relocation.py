@@ -101,3 +101,28 @@ class TestMoveCompletedPlanLogic:
         move_completed_plan(str(plan), True, False)
 
         assert (plans_dir / "completed").is_dir()
+
+    def test_move_completed_plan_missing_plan_raises(self, tmp_path) -> None:
+        """A vanished plan surfaces its OSError to the caller — no silent no-op."""
+        plans_dir = tmp_path / "docs" / "plans"
+        plans_dir.mkdir(parents=True)
+
+        with pytest.raises(FileNotFoundError):
+            move_completed_plan(str(plans_dir / "gone.md"), True, False)
+
+    def test_move_completed_plan_read_only_parent_raises(self, tmp_path) -> None:
+        """A completed/ that cannot be created propagates the OSError."""
+        import os
+
+        if os.geteuid() == 0:  # pragma: no cover - skip when chmod is not enforced
+            pytest.skip("permission bits are not enforced for root")
+        plans_dir = tmp_path / "docs" / "plans"
+        plans_dir.mkdir(parents=True)
+        plan = plans_dir / "x.md"
+        plan.write_text("P")
+        plans_dir.chmod(0o500)
+        try:
+            with pytest.raises(PermissionError, match="completed"):
+                move_completed_plan(str(plan), True, False)
+        finally:
+            plans_dir.chmod(0o700)

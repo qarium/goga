@@ -1,0 +1,52 @@
+Review test coverage and quality for the code changed in this branch. Report pre-existing test gaps only where they intersect the changed code.
+
+## Test Existence and Coverage
+
+1. Missing tests - new code paths without corresponding tests
+2. Untested error paths - error conditions not verified
+3. Coverage gaps - changed functions or branches without tests
+4. Integration test needs - system boundaries requiring integration tests
+5. Skipped or disabled tests - tests turned off without justification
+
+## Test Quality
+
+1. Tests verify behavior, not implementation details
+2. Descriptive test names that explain what is being tested
+
+## Fake Test Detection
+
+Watch for tests that don't actually verify code:
+- Tests that always pass regardless of code changes
+- Tests checking hardcoded values instead of actual output
+- Tests verifying mock behavior instead of code using the mock
+- Ignored errors (e.g. Go's _ assignment, empty catch blocks)
+- Conditional assertions that always pass
+- Commented out failing test cases
+
+## Test Independence
+
+1. No shared mutable state between tests
+2. Proper setup and teardown
+3. No order dependencies between tests
+4. Resources properly cleaned up
+
+## Edge Case Coverage
+
+1. Empty inputs and collections
+2. Null/nil values
+3. Boundary values (zero, max, min)
+4. Concurrent access scenarios
+5. Timeout and cancellation handling
+
+You may run the project's test suite to check for failing or flaky tests - report failures, do not fix them.
+
+## What to Report
+
+For each finding:
+- Location: file path and line number - the untested code for coverage gaps, the test for quality issues
+- Severity: critical/major/minor
+- Issue: what's wrong
+- Impact: what bugs could slip through
+- Fix: how to improve
+
+Focus on gaps that could let real bugs ship; treat naming and style observations as minor.

@@ -318,3 +318,23 @@ class TestSyncRalphexDefaultsLogic:
         first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
         assert "{{agent:testing}}" in first
         assert "Launch ALL 1 Review Agents" in first
+
+    def test_filter_review_prompt_zero_remaining_lines_leaves_counters_untouched(
+        self, tmp_path, monkeypatch, vendored_sources
+    ) -> None:
+        """A whitelisted role absent from a phase (testing is not in review_second's
+        default set) leaves n == 0 — a regular phase without subagents, so the
+        accompanying text keeps its source wording, with no counter rewrites."""
+        monkeypatch.chdir(tmp_path)
+
+        sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["testing"]))
+
+        second = (tmp_path / ".ralphex" / "prompts" / "review_second.txt").read_text()
+        for role in _SECOND_ROLES:
+            assert f"{{{{agent:{role}}}}}" not in second
+        assert "uses 2 agents" in second
+        assert "Both agent invocations" in second
+        assert "until BOTH agents" in second
+        assert "uses 0 agents" not in second
+        assert "The agent invocation" not in second
+        assert "until the agent" not in second

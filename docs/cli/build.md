@@ -17,8 +17,8 @@ The build pipeline performs these steps:
 1. **Docker check** -- Verifies Docker is installed and accessible.
 2. **Config loading** -- Reads `.goga/config.yml` for build settings.
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
-4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude).
-5. **Defaults copy** -- Copies default prompts and agent configurations to `.ralphex/`.
+4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude). A review executor whose `agent` differs from the task executor combined with an active worktree (`--worktree` or `build.worktree: true`) is rejected here with exit 1, before any container launch — ralphex review mode cannot follow a worktree branch.
+5. **Defaults copy** -- Fully rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured `build.prompts_dir`/`build.agents_dir`, or from the vendored ralphex defaults shipped with goga (`goga/assets/ralphex/`). When `build.review_executor.roles` is set, the review prompts are filtered to the selected roles.
 6. **Image refresh (optional)** -- When `--update`/`-u` is set, the image is refreshed: if a top-level `dockerfile` is declared in `.goga/config.yml`, `docker build` runs against it (build failure is fatal — exit 1); otherwise `docker pull` runs (a pull failure is logged as a warning and the build proceeds with the locally available image). By default no refresh happens and the local image is used as-is.
 7. **Docker execution** -- Launches the ralphex command inside the configured Docker image. Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag).
 
@@ -36,6 +36,7 @@ The build pipeline performs these steps:
 | `--worktree` | flag | off | Enable ralphex worktree mode |
 | `--skip-finalize` | flag | off | Skip finalization step |
 | `--skip-manifest-check` | flag | off | Skip check for uncommitted CODEMANIFEST files |
+| `--skip-review` / `--no-skip-review` | bool pair (tri-state) | unset | Skip the review phase (`--skip-review`, ralphex `--tasks-only`) or force the full cycle (`--no-skip-review`). Overrides `build.review_executor.skip` in `.goga/config.yml`; when neither is given, the config decides |
 | `--session-timeout` | string | config | Session timeout duration |
 | `--idle-timeout` | string | config | Idle timeout duration |
 | `--wait` | string | config | Wait time before starting |
@@ -105,6 +106,12 @@ Skip the uncommitted CODEMANIFEST check:
 goga build plan.md --skip-manifest-check
 ```
 
+Skip the review phase (run tasks only):
+
+```bash
+goga build plan.md --skip-review
+```
+
 Pull the latest image, then build (default skips the pull):
 
 ```bash
@@ -149,4 +156,4 @@ Only `language` is required by the loader. `goga build` additionally requires a 
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, precondition failure, ralphex error, or a fatal `docker build` under `--update`) |
+| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, ralphex error, or a fatal `docker build` under `--update`) |

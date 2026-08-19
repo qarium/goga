@@ -1021,6 +1021,27 @@ class TestTwoPassWorktreeGuard:
         assert result.exit_code == 0
         mock_runner.return_value.run.assert_called_once()
 
+    def test_host_guard_fires_even_with_explicit_skip_review(self, tmp_path, monkeypatch) -> None:
+        """--skip-review does not defuse the guard — pinned semantics.
+
+        The guard is config-driven by contract (step 2.3): it never consults
+        the tri-state, because the host must not resolve skip against the
+        config — resolution belongs to the in-container build. Even a run that
+        would skip the review phase entirely is rejected here when the config
+        declares differing executors AND worktree.
+        """
+        self._write_two_pass_config(tmp_path)
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree", "--skip-review"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
 
 class TestSkipReviewPairForwarding:
     """The tri-state pair reaches the in-container entrypoint verbatim: True →
