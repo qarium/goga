@@ -1,0 +1,21 @@
+prompt: |
+  Answer (feedbacks, proposes, questions and etc) in Russian language.
+
+stages:
+  define:
+    skip: true
+  discover:
+    skip: true
+  propose:
+    prompt: |
+      Task formalization process.
+
+      Requirements:
+      - Ask user about input task first
+      - When setting the task, it is necessary to develop stack technologies more carefully.
+      - Carefully examine all the link connections between cells
+
+      Constraints:
+      - Don't write code examples in the task
+      - Don't build architecture in the task
+      - Don't research project before request task
