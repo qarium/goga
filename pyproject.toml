@@ -114,6 +114,9 @@ line-ending = "lf"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+# The default norecursedirs pattern includes "build", which silently skipped
+# tests/build/ and tests/commands/build/ on the bare `pytest tests/` run.
+norecursedirs = ["*.egg", ".*", "_darcs", "CVS", "dist", "node_modules", "venv", "{arch}"]
 
 [tool.coverage.run]
 source = ["goga"]
