@@ -3,14 +3,9 @@ from __future__ import annotations
 import logging
 import shutil
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from ..config import BuildConfig
-
-if TYPE_CHECKING:
-    # Lands as a real import in Task 7; the module works by duck-typing on
-    # `review.roles` alone, so no runtime dependency is created here.
-    from .review_options import ReviewOptions
+from .review_options import ReviewOptions
 
 logger = logging.getLogger(__name__)
 

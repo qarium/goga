@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from goga.build.ralphex_runtime import sync_ralphex_defaults
+from goga.build.review_options import ReviewOptions
 from goga.config import BuildConfig, TaskExecutorConfig
 
 _PROMPT_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
@@ -146,7 +147,7 @@ class TestSyncRalphexDefaultsContract:
         assert sig.parameters["config"].annotation == "BuildConfig"
 
     def test_sync_ralphex_defaults_review_param_is_string_annotation(self) -> None:
-        """ReviewOptions lands in Task 7 — annotation is a TYPE_CHECKING-only name, no runtime import."""
+        """`from __future__ import annotations` keeps every annotation a string, import or not."""
         sig = inspect.signature(sync_ralphex_defaults)
         assert sig.parameters["review"].annotation == "ReviewOptions"
 
@@ -154,11 +155,11 @@ class TestSyncRalphexDefaultsContract:
         sig = inspect.signature(sync_ralphex_defaults)
         assert sig.return_annotation == "None"
 
-    def test_review_options_not_imported_at_runtime(self) -> None:
-        """Duck-typing only — the module must not import the Task 7 type at runtime."""
+    def test_review_options_imported_from_sibling_module(self) -> None:
+        """Since Task 7 the parameter type is a real relative import, not a duck-typed placeholder."""
         import goga.build.ralphex_runtime as module
 
-        assert "ReviewOptions" not in vars(module)
+        assert module.ReviewOptions is ReviewOptions
 
     def test_vendored_constants_point_into_assets(self) -> None:
         from goga.build.ralphex_runtime import _VENDORED_AGENTS, _VENDORED_PROMPTS
