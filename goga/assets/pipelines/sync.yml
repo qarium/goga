@@ -5,6 +5,8 @@ description: "Sync specifications & tests process"
 - name: resolve
   title: "Resolve drift between code and specification, tests"
   communication: true
+  prompt: |
+    First of all, observe uncommitted changes.
   skills:
     - goga-accept
 
