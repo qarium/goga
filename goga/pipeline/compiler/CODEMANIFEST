@@ -63,15 +63,20 @@ Annotations: |
   communication key in a stage body (pipeline-file stage AND embedded
   extend-stage) and translated to the output interactive key in its canonical
   position; an authoring interactive key is a structural error "interactive key
-  is forbidden in stage body; use communication". The output canonical key order
+  is forbidden in stage body; use communication". Equally, the afm auto_run key
+  is authored as the trigger key in a stage body and translated to the output
+  auto_run key (trigger: manual ⇒ auto_run: false; trigger: on_success or
+  absent ⇒ no auto_run key) — the authoring trigger key is consumed by the
+  translation and never leaks into the output as an unknown key. The output
+  canonical key order
   keeps interactive (afm contract stable). All other step content fields
   (command, prompt, description, agents, skills, and any extra fields) are passed
   through verbatim — no validation of their contents, no schema enforcement.
   References in depends_on (dangling ids, cycles, duplicates) are afm's
   responsibility, not this cell's.
 
-  Canonical `FlowStage` fields key order: interactive, auto_approve, command,
-  prompt, description, agents, supervisor, supervisor_prompt, skills,
+  Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
+  command, prompt, description, agents, supervisor, supervisor_prompt, skills,
   script_before, script, script_after, then alphabetically-sorted unknown
   keys. command is populated from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
@@ -226,6 +231,29 @@ Annotations: |
   emission (roles effect). Each effect fires on its own trigger; baseline
   no-op when neither trigger (or neither directive subset) applies; uniform
   across every loop-expanded copy.
+
+  Stage trigger directive: a stage body (pipeline-file stage AND embedded
+  extend-stage) may carry the trigger key with the value on_success or manual;
+  an absent key equals on_success. Any other value is a structural error
+  "trigger must be one of: on_success, manual". An authoring auto_run key in a
+  stage body is a structural error "auto_run key is forbidden in stage body;
+  use trigger: manual". Translation: trigger manual assembles auto_run: false
+  into the FlowStage fields in the canonical slot immediately after
+  auto_approve; trigger on_success (explicit or by default) emits NO auto_run
+  key — auto_run: true is never emitted. The runtime meaning of auto_run: false
+  (the stage pauses until manually launched) belongs to afm — goga only
+  compiles the directive.
+
+  Workflow manual instruction: when the workflow stages block carries manual
+  for a stage, the compiler applies it in the per-stage override pass: manual
+  true forces the manual state over any trigger of the stage body (idempotent
+  on an already-manual stage — no error); manual false cancels the RESULTING
+  manual state regardless of its source (pipeline-file body or extend-stage
+  body); manual false on a stage whose resulting state is not manual is a
+  structural error "manual: false on non-manual stage <NAME>". skip removal
+  runs before this pass — a skipped stage never reaches the manual application.
+  Loop-expanded copies carry the stage's effective trigger, so every copy of a
+  manual stage assembles auto_run: false.
 
   Stage script directives: before_script, script, after_script are string
   stage-body directives translated to script_before, script, script_after (the
@@ -519,9 +547,12 @@ Annotations: |
     `depends_on`: predecessor step ids, or None. None produces no depends_on
                   key in output; an empty list produces depends_on [].
     `fields`: extra step fields in canonical key order (interactive,
-              auto_approve, command, prompt, description, agents, supervisor,
-              supervisor_prompt, skills, script_before, script, script_after,
-              then alphabetically-sorted unknown keys). Insertion order of
+              auto_approve, auto_run, command, prompt, description, agents,
+              supervisor, supervisor_prompt, skills, script_before, script,
+              script_after, then alphabetically-sorted unknown keys).
+              auto_run (bool) is present only when the stage's effective
+              trigger is manual — the value is always False; auto_run: true
+              is never assembled. Insertion order of
               this dict IS the output order — the
               serializer iterates it as-is. command is populated from the
               agent field of `WorkflowStage` (composed as the in-container
@@ -564,16 +595,19 @@ Annotations: |
     "depends_on -> list[str] | None": |
       Predecessor step ids, or None when absent.
     "fields -> dict[str, Any]": |
-      Extra fields in canonical key order: interactive, auto_approve, command,
-      prompt, description, agents, supervisor, supervisor_prompt, skills,
-      script_before, script, script_after, then alphabetically-sorted unknown
-      keys. auto_approve (bool) is present only when the effective approve
-      directive drives the roles effect ("auto"/"dialog") + planner-in-roles
-      fired; script_before/script/script_after (str) are present
-      only when the corresponding stage directive was authored. Insertion order
-      IS the output order — the serializer iterates as-is. command/description
-      from WorkflowStage; agents default-injected to ["auto"]; supervisor/
-      supervisor_prompt only when authored.
+      Extra fields in canonical key order: interactive, auto_approve,
+      auto_run, command, prompt, description, agents, supervisor,
+      supervisor_prompt, skills, script_before, script, script_after, then
+      alphabetically-sorted unknown keys. auto_approve (bool) is present only
+      when the effective approve directive drives the roles effect
+      ("auto"/"dialog") + planner-in-roles fired; auto_run (bool) is present
+      only when the stage's effective trigger is manual — the value is always
+      False, auto_run: true is never assembled; script_before/script/
+      script_after (str) are present only when the corresponding stage
+      directive was authored. Insertion order IS the output order — the
+      serializer iterates as-is. command/description from WorkflowStage;
+      agents default-injected to ["auto"]; supervisor/supervisor_prompt only
+      when authored.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, stages: list[FlowStage])":
   location: flow_document.py
@@ -745,16 +779,16 @@ Annotations: |
        - name, then description, then stages (per step 2)
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
-       canonical order — interactive, auto_approve, command, prompt,
-       description, agents, supervisor, supervisor_prompt, skills,
+       canonical order — interactive, auto_approve, auto_run, command,
+       prompt, description, agents, supervisor, supervisor_prompt, skills,
        script_before, script, script_after, then alphabetically-sorted
        unknown keys), then depends_on when it is not None. The serializer
        does NOT reorder — canonical order is fixed at `FlowStage` assembly
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
-       depends_on, and the top-level prompt; auto_approve as a plain bool
-       scalar; script_before / script / script_after as plain scalars when
-       single-line and block-literal scalars when multi-line
+       depends_on, and the top-level prompt; auto_approve and auto_run as
+       plain bool scalars; script_before / script / script_after as plain
+       scalars when single-line and block-literal scalars when multi-line
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -765,10 +799,10 @@ Annotations: |
     - Output is canonical afm flow-file YAML: optional prompt (first,
       when present), optional root_dir (second, when supplied), then
       fixed top-level key order (name, description, stages), canonical
-      per-stage key order (including auto_approve, command,
+      per-stage key order (including auto_approve, auto_run, command,
       description, and script_before/script/script_after), flow-style for
-      agents, block-style for skills and depends_on, auto_approve as a
-      plain bool scalar, single trailing newline
+      agents, block-style for skills and depends_on, auto_approve and
+      auto_run as plain bool scalars, single trailing newline
     - When `doc` prompt is None — the output omits the prompt key
       entirely (no top-level prompt key in the output)
     - When `doc` root_dir is None — the output omits the root_dir key
@@ -780,6 +814,9 @@ Annotations: |
     - Empty list values (e.g. an explicit empty depends_on) are written
       explicitly, not omitted
     - All other key-value pairs follow `beautiful_yaml` defaults
+    - a stage without a manual-effective trigger serializes without the
+      auto_run key (byte-identical output for trigger-free pipelines);
+      auto_run serializes only as auto_run: false
 
     Constraints:
     - Do not reorder keys — the fields order is the caller's responsibility
@@ -1010,6 +1047,20 @@ Annotations: |
                 carrying one, else None. Thread the effective approve into
                 the per-stage body for step 5 (it drives the interactive-
                 suppress / auto_approve effects there)
+              - effective manual = the stages-block entry's manual for this
+                name (None when the entry provides no manual key or the name
+                has no entry). Application on the WORKING body copy:
+                * None — the stage body's trigger stands unchanged
+                * True — set the working body's trigger to manual (forcing;
+                  setting it on an already-manual stage is an idempotent
+                  no-op)
+                * False — when the stage body (pipeline-file body OR
+                  extend-stage body) carries trigger manual, set the working
+                  body's trigger to on_success (cancellation: the assembled
+                  stage carries no auto_run key); otherwise raise a structural
+                  error "manual: false on non-manual stage <NAME>"
+                The rewrite targets the working body copy only — the original
+                parsed body and PipelineDocument stay untouched
        4b. Build a new ordered list of steps with loop-expansion applied —
            unchanged; now also expands an extend-stage when the effective
            loop for that name is >= 2 (producing NAME-1..N):
@@ -1117,11 +1168,27 @@ Annotations: |
          AND its own directive subset; baseline no-op when the effective
          approve is None or neither trigger applies; uniform across every
          loop-expanded copy
+       - validate the trigger field of the (effective) body of every stage
+         (pipeline-file stages, embedded extend-stages, and every
+         loop-expanded copy): when present, its value must be exactly
+         on_success or manual; otherwise raise a structural error "trigger
+         must be one of: on_success, manual". An authoring auto_run key in
+         the body (pipeline-file stage OR embedded extend-stage) raises a
+         structural error "auto_run key is forbidden in stage body; use
+         trigger: manual"
+       - Stage trigger translation: a body whose (effective) trigger is
+         manual assembles auto_run: false into fields in the canonical slot
+         immediately after auto_approve; a body with trigger on_success or
+         without a trigger assembles NO auto_run key. auto_run: true is never
+         emitted. The authoring trigger key is consumed by the translation —
+         it never reaches the output as an unknown key. Uniform across every
+         loop-expanded copy
        - In both branches, assemble the fields of each `FlowStage` in the
-         EXTENDED canonical key order (interactive, auto_approve, command,
-         prompt, description, agents, supervisor, supervisor_prompt, skills,
-         script_before, script, script_after, then alphabetically-sorted
-         unknown keys), copying from the (defaults-injected) step body.
+         EXTENDED canonical key order (interactive, auto_approve, auto_run,
+         command, prompt, description, agents, supervisor, supervisor_prompt,
+         skills, script_before, script, script_after, then
+         alphabetically-sorted unknown keys), copying from the
+         (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
          fired; script_before / script / script_after
@@ -1306,6 +1373,25 @@ Annotations: |
     - auto_approve, script_before, script, and script_after appear only when
       their source directive is present; flow-files without those directives
       carry none of these keys
+    - trigger (when present in a stage body or extend body) must be exactly
+      on_success or manual; any other value (including on_failure) is a
+      structural error "trigger must be one of: on_success, manual"
+    - An authoring auto_run key in a stage body (incl. an extend body) is a
+      structural error raised by `compile_flow` — use trigger: manual
+    - Workflow manual true forces the manual state idempotently; manual false
+      cancels the resulting manual state from either source (pipeline-file
+      body or extend body) and is a structural error "manual: false on
+      non-manual stage <NAME>" on a non-manual stage
+    - skip: true on an entry carrying any trigger/manual combination removes
+      the stage entirely — the manual instruction never applies to a removed
+      stage
+    - Loop-expanded copies of a manual stage each assemble auto_run: false
+    - auto_run appears in the canonical fields order immediately after
+      auto_approve, as a plain bool scalar, ONLY for a manual-effective stage;
+      a pipeline without trigger/manual compiles byte-identically to before
+      (no auto_run key anywhere)
+    - auto_run and the trigger rewrite are output-side only — PipelineDocument
+      body stays the faithful mirror of the source pipeline-file
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -1382,11 +1468,21 @@ Annotations: |
       pass through to output as unknown keys — they are consumed and
       translated to script_before / script / script_after
     - Canonical key order is fixed at `FlowStage` assembly — the full
-      order (interactive, auto_approve, command, prompt, description, agents,
-      supervisor, supervisor_prompt, skills, script_before, script,
-      script_after, then alphabetically-sorted unknown keys)
+      order (interactive, auto_approve, auto_run, command, prompt,
+      description, agents, supervisor, supervisor_prompt, skills,
+      script_before, script, script_after, then alphabetically-sorted
+      unknown keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
       are output-side `FlowStage` fields only
+    - Do not emit auto_run: true — the afm contract treats the key's absence
+      as the norm; only a manual-effective trigger assembles auto_run: false
+    - Do not let the authoring trigger key pass through to output as an
+      unknown key — it is consumed by the translation (as communication is)
+    - Do not apply the workflow manual instruction to a skipped stage — skip
+      removal runs before the override pass
+    - Do not mutate the original parsed body when applying manual — the
+      rewrite lives on the working copy; PipelineDocument carries the source
+      bodies
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py

@@ -44,23 +44,37 @@ Annotations: |
   effects). This cell performs NO approval logic — the import graph stays
   one-directional.
 
+  manual is a declarative manual-launch instruction (strictly bool, validated
+  structurally, stages-block only). This cell extracts it into `WorkflowStage`;
+  the compiler consumes it to force or cancel the manual launch mode of a
+  stage. This cell performs NO manual-launch logic — the import graph stays
+  one-directional.
+
+  trigger is a full stage-body field, not a workflow key. In the stages block
+  it is an unknown key; in an extend-entry body it passes through verbatim
+  inside the extend-stage body and its value (on_success | manual) is
+  validated at compilation. manual is forbidden in an extend-entry: the
+  launch mode of a new stage is authored in its body via trigger, not via
+  workflow instructions.
+
 ---
 
-"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None)":
+"WorkflowStage(agent: str | None = None, prompt: str | None = None, loop: int | None = None, skills: list[str] | None = None, skip: bool = False, approve: str | None = None, manual: bool | None = None)":
   location: workflow_stage.py
   annotations: |
     Data model of a single per-stage override instruction in a workflow-file —
     which agent, which prompt, how many loop iterations, which skills to merge,
-    whether to SKIP (delete) the stage, and an optional auto-approval directive.
-    Constructed by `parse_workflow` from one entry of the workflow-file stages
-    map; carried verbatim inside `WorkflowDocument`.
+    whether to SKIP (delete) the stage, an optional auto-approval directive,
+    and an optional manual-launch instruction. Constructed by `parse_workflow`
+    from one entry of the workflow-file stages map; carried verbatim inside
+    `WorkflowDocument`.
 
-    `agent`: agent name consumed by the compiler to compose the per-stage command
-             wrapper path, or None when not specified
+    `agent`: agent name consumed by the compiler to compose the per-stage
+             command wrapper path, or None when not specified
     `prompt`: per-stage prompt text consumed by the compiler as the stage
               description field, or None when not specified
-    `loop`: positive integer (>= 1) instructing the compiler to expand the stage
-            into N copies, or None when not specified
+    `loop`: positive integer (>= 1) instructing the compiler to expand the
+            stage into N copies, or None when not specified
     `skills`: list of skill names the compiler merges with the stage's
               pipeline-file skills, or None when not specified
     `skip`: bool flag instructing the compiler to DELETE the stage. False by
@@ -69,33 +83,47 @@ Annotations: |
     `approve`: optional auto-approval directive consumed by the compiler.
                Accepted values are "auto", "plan", and "dialog" (validated by
                `parse_workflow`; any other value is a structural error). The
-               compiler applies two INDEPENDENT effects, and each value drives a
-               subset of them: "auto" drives BOTH (suppress the stage's
+               compiler applies two INDEPENDENT effects, and each value drives
+               a subset of them: "auto" drives BOTH (suppress the stage's
                interactive flag when the stage body has communication: true, AND
                emit auto_approve: true when the stage body's roles contain
                planner); "plan" drives ONLY the interactive-suppression effect;
                "dialog" drives ONLY the auto_approve effect. This cell does NOT
                act on `approve` — it is declarative; the compiler applies it.
                None when not specified.
+    `manual`: optional manual-launch instruction consumed by the compiler.
+              None means the instruction is not given — the stage's own body
+              decides the launch mode; True forces the manual launch mode;
+              False explicitly cancels the resulting manual state of the stage
+              regardless of which side authored it. Accepted file values are
+              strictly bool (validated by `parse_workflow`; any other value is
+              a structural error). This cell does NOT act on `manual` — the
+              compiler applies the force / cancel logic. None when not
+              specified.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
 
     Requirements:
     - Use @dataclass(kw_only=True) (per `convention`)
-    - All fields default to None; `skip` defaults to False (NOT None)
-    - Field order is fixed: agent, prompt, loop, skills, skip, approve — matches
-      the canonical order of the per-stage keys in the workflow-file
-    - `approve` accepts ONLY "auto"/"plan"/"dialog"; any other value is rejected
-      by `parse_workflow` as a structural error before this dataclass is built
+    - Fields agent/prompt/loop/skills/approve/manual default to None; `skip`
+      defaults to False (NOT None); `manual` defaults to None (NOT False) — an
+      absent key and an explicit manual: false are DIFFERENT instructions and
+      must stay distinguishable to the compiler
+    - Field order is fixed: agent, prompt, loop, skills, skip, approve, manual
+      — matches the canonical order of the per-stage keys in the workflow-file
+    - `approve` accepts ONLY "auto"/"plan"/"dialog"; `manual` accepts ONLY
+      True/False — any other value is rejected by `parse_workflow` as a
+      structural error before this dataclass is built
 
     Constraints:
-    - Do not validate loop >= 1 / skills list[str] / skip bool here — `parse_workflow`
-      enforces these during parsing
-    - Do not resolve agent to a wrapper path, merge skills, DELETE the stage, or
-      RECONNECT dependents here — all the compiler's job
-    - Do not act on `approve` here — it is declarative; the compiler performs the
-      interactive-suppress / auto_approve logic when applying the workflow
+    - Do not validate loop >= 1 / skills list[str] / skip bool / manual bool
+      here — `parse_workflow` enforces these during parsing
+    - Do not resolve agent to a wrapper path, merge skills, DELETE the stage,
+      or RECONNECT dependents here — all the compiler's job
+    - Do not act on `approve` or `manual` here — they are declarative; the
+      compiler performs the approval and manual-launch logic when applying
+      the workflow
   properties:
     "agent -> str | None": |
       Agent name consumed by the compiler to compose the wrapper path, or None.
@@ -112,6 +140,11 @@ Annotations: |
       Declarative — extracted here, consumed by the compiler to suppress
       interactive / emit auto_approve (each value drives a subset of the two
       effects). None when not specified.
+    "manual -> bool | None": |
+      Optional manual-launch instruction (None = not given, True = force,
+      False = cancel). Declarative — extracted here, consumed by the compiler
+      to force or cancel the stage's manual launch mode. None when not
+      specified.
 
 "WorkflowExtendStage(before: list[str] | None = None, after: list[str] | None = None, agent: str | None = None, loop: int | None = None, approve: str | None = None, body: dict[str, Any])":
   location: workflow_extend_stage.py
@@ -133,9 +166,12 @@ Annotations: |
                override; the compiler consumes it against the extend-stage body
                (each value drives a subset of the two effects). None when not
                specified.
-    `body`: verbatim copy of the stage body EXCLUDING before, after, agent, loop,
-            approve, and depends_on. Open-ended — this cell does not know the
-            stage field schema.
+    `body`: verbatim copy of the stage body EXCLUDING before, after, agent,
+            loop, approve, and depends_on. Open-ended — this cell does not
+            know the stage field schema. trigger is a legal full stage-body
+            field: it stays in body verbatim, and its value is validated at
+            compilation. The entry carries no manual instruction — the launch
+            mode of the new stage is authored in its body via trigger.
 
     Build the data model with the standard library dataclasses module
     (NOT pydantic, per `convention`). Use @dataclass(kw_only=True).
@@ -148,6 +184,8 @@ Annotations: |
     - `approve` is EXTRACTED from the extend-entry (excluded from body) — like
       agent/loop; it never leaks into body as a stray stage field
     - `approve` accepts ONLY "auto"/"plan"/"dialog"
+    - No manual field on this model — manual is rejected in an extend-entry
+      before the model is built; the extend-stage body owns the launch mode
 
     Constraints:
     - Do not embed the stage or derive depends_on here — the compiler does both
@@ -269,8 +307,9 @@ Annotations: |
        6.1.1. If the stage value is not a dict — raise a structural error
           "non-mapping stage NAME in workflow.stages"
        6.1.2. Validate the key set of the stage value against agent, prompt,
-          loop, skills, skip, approve: an unknown key raises "unknown key in
-          workflow.stages.NAME: KEY; valid keys: agent, prompt, loop, skills, skip, approve"
+          loop, skills, skip, approve, manual: an unknown key raises "unknown
+          key in workflow.stages.NAME: KEY; valid keys: agent, prompt, loop,
+          skills, skip, approve, manual"
        6.1.3. agent (when present) must be a str; otherwise raise
           "non-str value in workflow.stages.NAME.agent"
        6.1.4. prompt (when present) must be a str; otherwise raise
@@ -286,8 +325,11 @@ Annotations: |
           otherwise raise "non-str value in workflow.stages.NAME.approve"
           (non-str) or "approve must be one of: auto, plan, dialog in
           workflow.stages.NAME" (str outside the set)
-       6.1.9. Build a `WorkflowStage` from the validated values (agent, prompt,
-          loop, skills, skip, approve)
+       6.1.9. manual (when present) must be a bool; otherwise raise a structural
+          error "non-bool value in workflow.stages.NAME.manual"
+       6.1.10. Build a `WorkflowStage` from the validated values (agent, prompt,
+           loop, skills, skip, approve, manual); an absent manual key yields
+           None (NOT False)
     6.2. For each entry of extend (when present), identified by stage name
         and entry value:
         6.2.1. If the entry value is not a dict — raise a structural error
@@ -296,25 +338,28 @@ Annotations: |
            error "depends_on is forbidden in workflow.extend.NAME"
         6.2.3. If the entry value contains a skip key — raise a structural
             error "skip is forbidden in workflow.extend.NAME"
-        6.2.4. before (when present) must be a list[str]; otherwise raise
+        6.2.4. If the entry value contains a manual key — raise a structural
+            error "manual is forbidden in workflow.extend.NAME"
+        6.2.5. before (when present) must be a list[str]; otherwise raise
            "non-list-of-str before in workflow.extend.NAME"
-        6.2.5. after (when present) must be a list[str]; otherwise raise
+        6.2.6. after (when present) must be a list[str]; otherwise raise
            "non-list-of-str after in workflow.extend.NAME"
-        6.2.6. agent (when present) must be a str; otherwise raise
+        6.2.7. agent (when present) must be a str; otherwise raise
            "non-str value in workflow.extend.NAME.agent"
-        6.2.7. loop (when present) must be an int and >= 1; otherwise raise
+        6.2.8. loop (when present) must be an int and >= 1; otherwise raise
            "non-int value in workflow.extend.NAME.loop" (non-int) or
            "loop must be >= 1 in workflow.extend.NAME" (int < 1)
-        6.2.8. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
+        6.2.9. approve (when present) must be a str and one of "auto"/"plan"/"dialog";
            otherwise raise "non-str value in workflow.extend.NAME.approve"
            (non-str) or "approve must be one of: auto, plan, dialog in
            workflow.extend.NAME" (str outside the set)
-        6.2.9. If neither before nor after is present — raise a structural error
+        6.2.10. If neither before nor after is present — raise a structural error
            "extend entry NAME requires at least one of before/after"
-        6.2.10. Other keys of the entry value are NOT validated (open-ended:
-           title, prompt, skills, roles, communication, and any other stage
-           field) and pass through verbatim
-        6.2.11. Build a `WorkflowExtendStage` from the validated before/after,
+        6.2.11. Other keys of the entry value are NOT validated (open-ended:
+           title, prompt, skills, roles, communication, trigger — a full
+           stage-body field — and any other stage field) and pass through
+           verbatim
+        6.2.12. Build a `WorkflowExtendStage` from the validated before/after,
            agent/loop/approve, and the REMAINING entry value (excluding before,
            after, agent, loop, approve, and depends_on) as body — agent/loop/
            approve are extracted into the model, not carried in body, so they
@@ -336,7 +381,7 @@ Annotations: |
       before/after names pass through; the compiler decides whether to apply
       or ignore (silently with a warning)
     - Per-stage unknown keys are a structural error — only agent, prompt,
-      loop, skills, skip, approve are accepted
+      loop, skills, skip, approve, manual are accepted
     - skip (when present) must be a bool; a non-bool value is a structural
       error
     - skip is forbidden in an extend-entry — a structural error (skip is
@@ -347,6 +392,11 @@ Annotations: |
       are structural errors
     - approve (stages-block entry AND inline extend) must be a str and one of
       "auto"/"plan"/"dialog"; any other value or a non-str is a structural error
+    - manual is accepted ONLY in the stages block; a non-bool manual is a
+      structural error; manual in an extend-entry is a structural error
+    - trigger in the stages block is an unknown-key structural error; trigger
+      in an extend-entry body passes through verbatim (validated at compile
+      time, not here)
     - An extend-entry's inline agent (when present) must be a str, its
       inline loop (when present) must be an int >= 1, and its inline
       approve (when present) must be a str and one of "auto"/"plan"/"dialog" —
@@ -387,6 +437,8 @@ Annotations: |
       and reconnection
     - Do not act on approve here — it is declarative; the compiler applies
       the interactive-suppress / auto_approve logic
+    - Do not act on manual here — it is declarative; the compiler applies the
+      force / cancel logic
     - Do not let an inline extend approve reach the extend-stage body —
       it is extracted into the model (like agent/loop)
     - Do not skip structural validation on missing files — OSError

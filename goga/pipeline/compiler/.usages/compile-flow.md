@@ -8,15 +8,51 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 ## Stage-body field translation (canonical order)
 
 Output FlowStage fields, canonical order:
-interactive, auto_approve, command, prompt, description, agents, supervisor,
+interactive, auto_approve, auto_run, command, prompt, description, agents, supervisor,
 supervisor_prompt, skills, script_before, script, script_after, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
+- trigger → auto_run (manual ⇒ auto_run: false; on_success/absent ⇒ no key)
 - before_script → script_before
 - script → script
 - after_script → script_after
 - roles → agents (via translate_role; default ["auto"] when absent/empty)
+
+An authoring auto_run key is rejected ("auto_run key is forbidden in stage body;
+use trigger: manual") — auto_run is a runtime key, authored as trigger.
+
+## trigger (stage-body: on_success | manual) & manual (workflow: bool)
+
+`trigger` is a full stage-body field (pipeline-file stage or extend-stage body);
+`manual` is a workflow stages-block instruction (strictly bool). Together they
+control the manual (human-triggered) launch mode of a stage, compiled into the
+afm per-stage key `auto_run: false`.
+
+Stage body:
+
+- `trigger: manual` → the flow stage carries `auto_run: false` in the canonical
+  slot immediately after `auto_approve`
+- `trigger: on_success` (explicit) or no trigger → no `auto_run` key
+  (byte-identical output for pipelines without trigger/manual)
+- any other value (incl. `on_failure`) → structural error "trigger must be one
+  of: on_success, manual"
+- authoring `auto_run` in a stage body → structural error "auto_run key is
+  forbidden in stage body; use trigger: manual"
+
+Workflow `stages.<name>.manual` (applied after embed and skip-removal):
+
+| manual | Effect |
+|--------|--------|
+| (absent) | the stage body's trigger decides |
+| `true` | force manual — `auto_run: false` over any trigger; idempotent on an already-manual stage (no error) |
+| `false` | cancel the RESULTING manual state (pipeline-file body OR extend body) — the `auto_run` key disappears; on a non-manual stage → structural error "manual: false on non-manual stage <name>" |
+
+Interactions:
+
+- `skip: true` wins — the stage is removed entirely; trigger/manual never apply
+- loop-expansion: every copy of a manual stage carries `auto_run: false`
+- `PipelineDocument` is unaffected (output-side only; source bodies never mutated)
 
 ## approve (workflow directive: auto | plan | dialog)
 
@@ -64,6 +100,7 @@ with prompt/skills/script (no error).
 
 ## Key presence
 
-Stages without approve, without script directives, and without
-communication/roles changes produce no auto_approve / script_* keys — those
-keys appear only when their source directive is present.
+Stages without approve, without script directives, without communication/roles
+changes, and without a manual-effective trigger produce no auto_approve /
+auto_run / script_* keys — those keys appear only when their source directive
+is present.

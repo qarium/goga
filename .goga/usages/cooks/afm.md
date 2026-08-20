@@ -101,18 +101,19 @@ The override is per-stage only; stages without `command:` keep using the global 
 
 The goga host-side launcher still writes the global `client.command` tmpfile — it serves as the default for every stage that does not override. Per-stage overrides are authored by the goga workflow layer (not the launcher): they appear in the serialized flow-file as a stage field.
 
-## Per-stage auto-approval and script directives (flow-file)
+## Per-stage auto-approval, launch, and script directives (flow-file)
 
 afm honors the following additional per-stage keys inside each stage of a flow-file:
 
 | Key | Type | Purpose |
 |-----|------|---------|
 | `auto_approve` | bool | When true, afm auto-approves the stage plan (no manual `afm approve` step). Authored by the goga workflow layer from an `approve: auto` directive. |
+| `auto_run` | bool | When false, the stage pauses and starts only manually (Continue in the dashboard); dependents wait. Authored by the goga pipeline compiler from a `trigger: manual` stage directive or a workflow `manual: true` instruction. Never emitted as true (omitempty contract — absence is the norm). |
 | `script_before` | str | Shell script run before the stage's agent invocation. |
 | `script` | str | Shell script run as the stage's action (mutually exclusive with the stage's `prompt`/`skills`). |
 | `script_after` | str | Shell script run after the stage's agent invocation. |
 
-These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive and translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`.
+These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive, translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`, and authors `auto_run: false` from a `trigger: manual` stage directive or a workflow `manual: true` instruction (never `true`; the key's absence is the norm).
 
 ## Integration pattern — running afm in a container
 
