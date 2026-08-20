@@ -123,26 +123,31 @@ class TestPipelineWorkflowFlagValidation:
         assert "invalid workflow name" in result.output
         mock_run.assert_not_called()
 
-    def test_pipeline_command_discovery_mode_missing_workflow_exits_one(
+    def test_pipeline_command_list_mode_missing_workflow_exits_one(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Discovery mode still runs the host-side ``--workflow`` validation.
+        """The listing form still runs the host-side ``--workflow`` validation.
 
-        Per CODEMANIFEST, steps 5 (mutual exclusion) and 6 (existence) are
-        unconditional — they run BEFORE dispatch regardless of whether ``name``
-        is set. So ``goga pipeline --workflow missing`` (no name) exits 1 when
-        the file is absent; the workflow LAYER (env-file/log line) is the part
-        that is a no-op in discovery, not the flag validation.
+        Per CODEMANIFEST, steps 2.3 (mutual exclusion) and 2.4 (existence) are
+        unconditional — they run BEFORE dispatch regardless of the form. So
+        ``goga pipeline --list --workflow missing`` exits 1 when the file is
+        absent; neither launcher runs. (The former discovery-mode variant — a
+        bare ``--workflow`` with no name — now names no form at all and exits 1
+        at step 2.2 instead.)
         """
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
-        with mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run:
-            result = runner.invoke(pipeline, ["--workflow", "missing"])
+        with (
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
+        ):
+            result = runner.invoke(pipeline, ["--list", "--workflow", "missing"])
 
         assert result.exit_code == 1
         assert "workflow 'missing' not found" in result.output
         mock_run.assert_not_called()
+        mock_info.assert_not_called()
 
 
 # --- Edge cases (no host-side validation; dispatch proceeds) ---

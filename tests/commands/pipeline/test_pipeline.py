@@ -107,31 +107,6 @@ class TestPipelineContract:
 
 
 class TestPipelineLogic:
-    def test_pipeline_delegates_to_run_pipeline_container_discovery(self) -> None:
-        """pipeline (no name) delegates to run_pipeline_container with (None, config, ())."""
-        config = _make_config()
-        runner = CliRunner()
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
-        ):
-            result = runner.invoke(pipeline, [])
-
-        assert result.exit_code == 0
-        mock_rpc.assert_called_once_with(
-            name=None,
-            config=config,
-            extra_env=(),
-            proxy=None,
-            hosts={},
-            clean=False,
-            update=False,
-            workflow=None,
-            no_workflow=False,
-            skip=(),
-            parallel=None,
-        )
-
     def test_pipeline_delegates_to_run_pipeline_container_run(self) -> None:
         """pipeline <name> delegates to run_pipeline_container with (name, config, ())."""
         config = _make_config()
@@ -254,21 +229,6 @@ class TestPipelineLogic:
         assert result.exit_code == 0
         assert mock_rpc.call_args.kwargs["parallel"] is None
 
-    def test_pipeline_discovery_forces_empty_skip(self) -> None:
-        """In discovery mode (no name) --skip is a no-op: skip forced to ()."""
-        config = _make_config()
-        runner = CliRunner()
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
-        ):
-            result = runner.invoke(pipeline, ["--skip", "build"])
-
-        assert result.exit_code == 0
-        # Discovery (name is None) ignores --skip, mirroring the clean=False forcing.
-        assert mock_rpc.call_args.kwargs["name"] is None
-        assert mock_rpc.call_args.kwargs["skip"] == ()
-
     def test_pipeline_clean_short_alias_equivalent(self) -> None:
         """`-c` and `--clean` produce the same clean=True dispatch value."""
         config = _make_config()
@@ -333,7 +293,7 @@ class TestPipelineLogic:
             mock.patch.object(_pipeline_module, "load_project_config", side_effect=FileNotFoundError("no config")),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_rpc,
         ):
-            result = runner.invoke(pipeline, [])
+            result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code != 0
         assert "no config" in result.output
@@ -348,6 +308,7 @@ class TestPipelineBoundary:
         source = Path(_pipeline_module.__file__).read_text()
         assert "from ...pipeline import" not in source
         assert "from goga.pipeline import" not in source
-        # The only goga imports are config + intra-cell run_pipeline_container.
+        # The only goga imports are config + the two intra-cell launchers.
         assert "from ...config import load_project_config" in source
         assert "from .run_pipeline_container import run_pipeline_container" in source
+        assert "from .run_pipeline_info_container import run_pipeline_info_container" in source

@@ -7,10 +7,27 @@ import yaml
 
 from ...config import load_project_config
 from .run_pipeline_container import run_pipeline_container
+from .run_pipeline_info_container import run_pipeline_info_container
 
 
 @click.command()
 @click.argument("name", required=False)
+@click.option(
+    "-l",
+    "--list",
+    "list_requested",
+    is_flag=True,
+    default=False,
+    help="List available pipelines (add --info for a one-line description each)",
+)
+@click.option(
+    "-i",
+    "--info",
+    "info",
+    is_flag=True,
+    default=False,
+    help="Show pipeline descriptions (--list) or a pipeline card (NAME) instead of running",
+)
 @click.option(
     "-e",
     "--env",
@@ -28,7 +45,7 @@ from .run_pipeline_container import run_pipeline_container
     "--add-host",
     "add_host",
     multiple=True,
-    help="Add a docker run --add-host HOST:IP entry; merges on top of config.pipeline.hosts",
+    help="Add a docker run --add-host HOST:IP entry; merges on top of config.pipeline.hosts (run mode only)",
 )
 @click.option(
     "-c",
@@ -76,9 +93,11 @@ from .run_pipeline_container import run_pipeline_container
     help="cap concurrently executing stages (run mode only; threads to afm --max-parallel)",
 )
 @click.pass_context
-def pipeline(  # noqa: PLR0913, PLR0917
+def pipeline(  # noqa: C901, PLR0913, PLR0917
     ctx: click.Context,
     name: str | None,
+    list_requested: bool,
+    info: bool,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -89,16 +108,19 @@ def pipeline(  # noqa: PLR0913, PLR0917
     skip: tuple[str, ...],
     parallel: int | None,
 ) -> None:
-    """Run a goga pipeline by name, or list available pipelines when no name is given.
+    """Run a goga pipeline, or inspect the available ones.
 
-    Both modes launch the goga Docker container and delegate execution there —
-    the host never reads pipeline files directly.
+    Without flags beyond NAME: runs the named pipeline inside the goga Docker
+    container and propagates its exit code.
 
-    Without ``name`` (discovery mode): prints the ``Available pipelines:`` header
-    followed by one pipeline per line.
+    With -l/--list: prints the available pipelines; add -i/--info for a
+    one-line description of each.
 
-    With ``name`` (run mode): runs the named pipeline inside the container and
-    propagates its exit code.
+    With NAME and -i/--info: prints the pipeline card (name, description,
+    stages in execution order) without running anything.
+
+    All forms launch the goga Docker container and delegate there — the host
+    never reads pipeline files directly.
     """
     try:
         config = load_project_config()
@@ -108,11 +130,11 @@ def pipeline(  # noqa: PLR0913, PLR0917
     # Step 1.1 — host-side None-guard: the pipeline section is optional at the
     # loader level (load_project_config returns config.pipeline=None when absent), but
     # `goga pipeline` cannot run without it. Raise a clean ClickException BEFORE
-    # any config.pipeline.* access and BEFORE dispatch into
-    # run_pipeline_container, so a pipeline-less config surfaces as a clean
-    # message + exit 1 in both discovery and run modes rather than an
-    # AttributeError. This also covers run_pipeline_container transitively — it
-    # is only reachable through this command, so a single check here is enough.
+    # any config.pipeline.* access and BEFORE dispatch into either launcher, so a
+    # pipeline-less config surfaces as a clean message + exit 1 in every form
+    # rather than an AttributeError. This also covers both launchers
+    # transitively — they are only reachable through this command, so a single
+    # check here is enough.
     if config.pipeline is None:
         raise click.ClickException("pipeline section is required in .goga/config.yml to run 'goga pipeline'")
 
@@ -124,32 +146,35 @@ def pipeline(  # noqa: PLR0913, PLR0917
     # the afm-config `client.command` only when an agent is present, and lets
     # per-stage workflow agents (or afm's own defaults) cover its absence.
 
-    # Resolve the proxy: the --proxy CLI value wins over config.pipeline.proxy.
-    resolved_proxy = proxy if proxy is not None else config.pipeline.proxy
+    # Step 2 — form validation, BEFORE any docker activity (no image refresh,
+    # no first-run build, no container launch can precede a form error). The
+    # checks are ordered 2.1 → 2.4 and act in EVERY form.
 
-    # Resolve hosts: merge config.pipeline.hosts with parsed --add-host entries.
-    # Each "HOST:IP" string is split on the first colon; CLI entries override
-    # config entries on host-key conflict. Format is not validated beyond the
-    # split — Docker reports malformed entries itself.
-    merged_hosts: dict[str, str] = {**config.pipeline.hosts}
-    for entry in add_host:
-        host, _, ip = entry.partition(":")
-        merged_hosts[host] = ip
+    # Step 2.1 — --list addresses the listing subcommand; a positional name
+    # addresses the card/run subcommand. Both at once is a contradiction.
+    if list_requested and name is not None:
+        raise click.ClickException("--list and a pipeline name are mutually exclusive")
 
-    # Step 5 — workflow flag combination: --workflow and --no-workflow are
-    # mutually exclusive. Verified BEFORE the host-side existence check and
-    # BEFORE container launch so a contradictory CLI surface exits 1 with a
-    # readable message rather than reaching docker. This runs after
-    # load_project_config / pipeline-section / proxy / hosts resolution but always
-    # before dispatch — no docker side effects can precede it.
+    # Step 2.2 — a bare `goga pipeline` names no form at all.
+    if name is None and not list_requested:
+        raise click.ClickException(
+            'Missing pipeline name. Use "goga pipeline --list" to list available pipelines, '
+            "or provide a pipeline name."
+        )
+
+    # Step 2.3 — workflow flag combination: --workflow and --no-workflow are
+    # mutually exclusive. Verified BEFORE the existence check and BEFORE
+    # dispatch so a contradictory CLI surface exits 1 with a readable message
+    # rather than reaching docker. This fires regardless of whether the named
+    # workflow file exists.
     if workflow is not None and no_workflow:
         raise click.ClickException("--workflow and --no-workflow are mutually exclusive")
 
-    # Step 6 — host-side existence validation for an explicit --workflow. The
+    # Step 2.4 — host-side existence validation for an explicit --workflow. The
     # basename auto-match (no flags) and --no-workflow alone perform NO
-    # host-side validation: both are resolved in-container by the run_pipeline
-    # routine. Only an explicit --workflow <name> is validated here so a typo
-    # surfaces as a clean message + exit 1 BEFORE the container is launched.
+    # host-side validation: both are resolved in-container. Only an explicit
+    # --workflow <name> is validated here so a typo surfaces as a clean message
+    # + exit 1 BEFORE the container is launched — in every form (run and card).
     # Workflow paths are project-only — resolved from Path.cwd() (which is
     # /workspace in-container), mirroring the in-container resolution. A name
     # that escapes the workflows dir (``..`` segment or absolute prefix) is
@@ -164,24 +189,61 @@ def pipeline(  # noqa: PLR0913, PLR0917
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 
-    # Dispatch with explicit keyword arguments so the click surface — and its
-    # tests — can assert on each argument by name rather than by position.
-    # In discovery mode (name is None) clean and skip are no-ops, so they are
-    # forced to False / () regardless of the CLI flags. The workflow flags are
-    # forwarded unconditionally — run_pipeline_container decides per mode
-    # (discovery is a no-op for the workflow layer; run mode writes the
-    # env-file entries).
-    exit_code = run_pipeline_container(
-        name=name,
-        config=config,
-        extra_env=extra_env,
-        proxy=resolved_proxy,
-        hosts=merged_hosts,
-        clean=clean if name is not None else False,
-        update=update,
-        workflow=workflow,
-        no_workflow=no_workflow,
-        skip=skip if name is not None else (),
-        parallel=parallel,
-    )
+    # Step 3 — dispatch. The info forms receive hosts from the config ONLY:
+    # --add-host is a run-form surface (an info container is read-only, so
+    # extra host aliases there would be dead weight) and is a deliberate no-op.
+    info_hosts: dict[str, str] = {**config.pipeline.hosts}
+
+    if list_requested:
+        # Flat list or overview — the listing subcommand in-container.
+        exit_code = run_pipeline_info_container(
+            name=None,
+            info=info,
+            config=config,
+            hosts=info_hosts,
+            update=update,
+            workflow=None,
+            no_workflow=False,
+        )
+    elif info:
+        # Card form — NAME --info with the workflow decision forwarded as given.
+        exit_code = run_pipeline_info_container(
+            name=name,
+            info=True,
+            config=config,
+            hosts=info_hosts,
+            update=update,
+            workflow=workflow,
+            no_workflow=no_workflow,
+        )
+    else:
+        # Run form. Resolve the proxy: the --proxy CLI value wins over
+        # config.pipeline.proxy. Resolve hosts: merge config.pipeline.hosts
+        # with parsed --add-host entries. Each "HOST:IP" string is split on
+        # the first colon; CLI entries override config entries on host-key
+        # conflict. Format is not validated beyond the split — Docker reports
+        # malformed entries itself.
+        resolved_proxy = proxy if proxy is not None else config.pipeline.proxy
+        merged_hosts: dict[str, str] = {**config.pipeline.hosts}
+        for entry in add_host:
+            host, _, ip = entry.partition(":")
+            merged_hosts[host] = ip
+
+        # Dispatch with explicit keyword arguments so the click surface — and
+        # its tests — can assert on each argument by name rather than by
+        # position. clean/skip are run-form state; --clean never deletes
+        # anything in the info forms (they dispatch above).
+        exit_code = run_pipeline_container(
+            name=name,
+            config=config,
+            extra_env=extra_env,
+            proxy=resolved_proxy,
+            hosts=merged_hosts,
+            clean=clean,
+            update=update,
+            workflow=workflow,
+            no_workflow=no_workflow,
+            skip=skip,
+            parallel=parallel,
+        )
     ctx.exit(exit_code)
