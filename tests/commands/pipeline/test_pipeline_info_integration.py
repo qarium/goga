@@ -130,7 +130,7 @@ class TestHostArgvIsContainerParseable:
     @pytest.mark.parametrize(
         ("host_argv", "expected_lines"),
         [
-            (["--list"], ["Available pipelines:", "  deploy (project)"]),
+            (["--list"], ["* deploy (project)"]),
             (
                 ["--list", "--info"],
                 ["* deploy (project)", "    name: Deploy", "    description: Deploy the service"],

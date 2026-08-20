@@ -135,13 +135,13 @@ class TestPipelineCliContract:
 
 
 class TestPipelineCliLogic:
-    def test_pipeline_cli_list_prints_header_and_entries(
+    def test_pipeline_cli_list_prints_bullet_entries(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """list echoes the header then one entry per line, project source suffixed."""
+        """list prints one `* <name>` bullet per pipeline, project source suffixed."""
         project_root = tmp_path / "project"
         project_root.mkdir()
         project_dir = project_root / ".goga" / "pipelines"
@@ -161,17 +161,15 @@ class TestPipelineCliLogic:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert captured.out.startswith("Available pipelines:\n")
-        assert "  deploy (project)" in captured.out
-        assert "  rollback" in captured.out
+        assert captured.out == "* deploy (project)\n* rollback\n"
 
-    def test_pipeline_cli_list_prints_header_on_empty_dir(
+    def test_pipeline_cli_list_prints_nothing_on_empty_dir(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """An empty set of directories still prints the header line and returns 0."""
+        """An empty set of directories prints nothing (no header) and returns 0."""
         project_root = tmp_path / "project"
         project_root.mkdir()
         user_root = tmp_path / "user"
@@ -184,7 +182,7 @@ class TestPipelineCliLogic:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert captured.out == "Available pipelines:\n"
+        assert captured.out == ""
 
     def test_pipeline_cli_run_passes_name_dirs_and_port_to_run_pipeline(
         self,

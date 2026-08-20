@@ -666,9 +666,9 @@ Annotations: |
     3. Resolve the project pipelines directory (<cwd>/.goga/pipelines/) and
        the user pipelines directory (~/.goga/pipelines/)
     4. Dispatch:
-       - list without --info — call `list_pipelines`; print the "Available
-         pipelines:" header followed by one entry per line (project source
-         entries suffixed with " (project)"); return 0
+       - list without --info — call `list_pipelines`; print the flat list:
+         one bullet line per entry — the marker line "* <name>" (with the
+         " (project)" suffix for project source entries); return 0
        - list with --info — call `describe_pipelines`; print the overview: one
          bullet block per pipeline — the marker line "* <name>" (with the
          " (project)" suffix for project source entries) followed by indented
@@ -690,6 +690,9 @@ Annotations: |
       missing --port without --info is an argparse-style error (exit 2);
       --port is ignored in info mode
     - Long and short flag forms behave identically
+    - The flat list template: one marker line "* <name>" per pipeline (with
+      the " (project)" suffix for project-source entries) and no header line
+      (example: "* deploy (project)" / "* rollback")
     - The overview template: the marker line "* <name>" (with the
       " (project)" suffix for project-source entries) followed by "name:"
       and "description:" field lines indented by four spaces; the name field
@@ -700,10 +703,9 @@ Annotations: |
       a "---" separator, a blank line, then per ordered stage the marker line
       "* <id>:" and a "title:" line indented by four spaces; the separator
       block is printed even when the card carries no stages
-    - An empty discovery is not an error: the flat list prints the header
-      with no entries (transferred verbatim from the current discovery
-      output); the overview prints nothing and returns 0
-    - Echo the header BEFORE the list in flat list mode (predictable UX)
+    - An empty discovery is not an error: the flat list prints nothing —
+      zero discovered pipelines, zero lines; the overview likewise prints
+      nothing; both return 0
     - Card stage bullet blocks follow execution order; loop-expanded copies
       appear as separate blocks
     - Overview and card output stays within terminal width — no horizontal

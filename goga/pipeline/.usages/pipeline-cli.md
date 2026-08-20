@@ -11,16 +11,16 @@ host-side docker launcher through the runpy entrypoint in `__main__.py`.
 
 `list [--info]`
 
-- Without `--info`: prints the "Available pipelines:" header followed by one
-  entry per line (project source entries suffixed with " (project)") — the
-  flat list.
+- Without `--info`: prints the flat list — one bullet line per pipeline:
+  `* <name>` (with the " (project)" suffix for project source entries); no
+  header line.
 - With `--info`/`-i`: prints the overview — one bullet block per pipeline:
   the marker line `* <name>` (with the " (project)" suffix for project source
   entries) followed by `name:` and `description:` field lines indented by
   four spaces; `name:` carries the authored header name, `description:` the
   header description.
-- An empty discovery prints the header only (flat list) / nothing (overview);
-  exit code 0.
+- An empty discovery prints nothing (flat list and overview alike); exit
+  code 0.
 
 ### run
 
