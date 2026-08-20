@@ -447,7 +447,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     if "approve" in value:
         approve = _validate_approve(f"workflow.extend.{name}", value["approve"])
 
-    # At-least-one is the LAST structural check (contract step 6.2.9): a
+    # At-least-one is the LAST structural check (contract step 6.2.10): a
     # multi-defect entry (no positioning AND a bad inline agent/loop/approve)
     # must surface the more specific type error raised above, not this
     # positional one.
