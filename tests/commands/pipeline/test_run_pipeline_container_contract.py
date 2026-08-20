@@ -6,7 +6,11 @@ parameters added to ``run_pipeline_container``:
 - the signature exposes ``workflow: str | None`` and ``no_workflow: bool`` as the
   final two parameters (after ``update``)
 - ``workflow`` defaults to ``None`` and ``no_workflow`` defaults to ``False``
-- the function still returns the container exit code (an ``int``) in both modes
+- the function still returns the container exit code (an ``int``)
+
+The launcher is RUN-ONLY: ``name`` is a required ``str`` (never ``None``) and
+the module no longer defines the ``_run_discovery`` helper — the listing and
+info forms live in ``run_pipeline_info_container``.
 
 The dispatch target (``DockerRunner.run`` / ``subprocess.Popen``) is mocked so
 these tests stay focused on the launcher signature surface (no docker
@@ -54,6 +58,19 @@ class TestRunPipelineContainerWorkflowSignature:
         assert params[-3] == "no_workflow"
         assert params[-2] == "skip"
         assert params[-1] == "parallel"
+
+
+class TestRunPipelineContainerRunOnlySignature:
+    def test_name_param_is_required_str(self) -> None:
+        """``name`` is a plain ``str`` — the launcher is run-only (no ``None`` mode)."""
+        param = inspect.signature(rpc).parameters["name"]
+        assert param.default is inspect.Parameter.empty
+        type_hints = typing.get_type_hints(rpc)
+        assert type_hints["name"] is str
+
+    def test_module_has_no_run_discovery_helper(self) -> None:
+        """The ``_run_discovery`` helper is gone — its coverage moved to ``run_pipeline_info_container``."""
+        assert not hasattr(_rpc_mod, "_run_discovery")
 
 
 class TestRunPipelineContainerParallelSignature:
@@ -106,19 +123,3 @@ class TestRunPipelineContainerStillReturnsExitCode:
 
         assert exit_code == 42
         assert isinstance(exit_code, int)
-
-    def test_discovery_mode_returns_container_exit_code(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode ignores the workflow flags and returns the exit code."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 7
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            exit_code = rpc(None, config, workflow="custom", no_workflow=True)
-
-        assert exit_code == 7

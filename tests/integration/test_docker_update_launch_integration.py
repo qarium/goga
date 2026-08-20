@@ -305,45 +305,7 @@ def _patch_pipeline_common(monkeypatch, runtime_dir: Path) -> object:
 
 
 class TestPipelineUpdateLaunchIntegration:
-    """``goga pipeline`` → docker_update → DockerRunner.run in both modes."""
-
-    def test_pipeline_discovery_update_delegates_to_docker_update_and_launches(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Discovery mode (name None): docker_update(image, dockerfile) on --update,
-        and DockerRunner.run launches the list command (captured via global
-        subprocess.Popen, which DockerRunner.run routes through)."""
-        config = _make_config(dockerfile=None)
-        runtime_dir = tmp_path / "afm-state-discovery"
-        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
-        monkeypatch.chdir(tmp_path)
-
-        popen_cmds: list[list[str]] = []
-
-        def popen_side_effect(cmd, *args, **kwargs):
-            popen_cmds.append(list(cmd))
-            mock_proc = mock.Mock()
-            mock_proc.wait.return_value = 0
-            return mock_proc
-
-        with (
-            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
-            mock.patch.object(subprocess, "Popen", side_effect=popen_side_effect),
-            mock.patch.object(subprocess, "run", side_effect=patches),
-        ):
-            result = rpc(None, config, update=True)
-
-        assert result == 0
-        # pull branch (dockerfile None) — extra_args=home.docker.build (empty when no home file)
-        mock_update.assert_called_once_with("qarium/goga:latest", None, extra_args=[])
-        # launch happened with the discovery list command, no port/env-file/-p
-        assert popen_cmds, "DockerRunner.run never launched the container"
-        cmd = popen_cmds[-1]
-        assert "goga.pipeline" in cmd
-        assert "list" in cmd
-        assert "-p" not in cmd
-        assert "--env-file" not in cmd
-        assert "--workdir" in cmd
+    """``goga pipeline`` → docker_update → DockerRunner.run."""
 
     def test_pipeline_run_update_delegates_to_docker_update_and_launches(self, tmp_path: Path, monkeypatch) -> None:
         """Run mode: docker_update(image, dockerfile) on --update (build branch when
@@ -445,28 +407,6 @@ class TestPipelineUpdateLaunchIntegration:
         sigint = [s for s, _ in sig_calls if s == signal.SIGINT]
         assert len(sigterm) == 2
         assert len(sigint) == 2
-
-    def test_pipeline_discovery_fatal_build_surfaces_clickexception_and_skips_launch(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """D5 (discovery): a fatal build surfaces as click.ClickException (not a raw
-        traceback) and DockerRunner.run is never reached."""
-        config = _make_config(dockerfile="Dockerfile")
-        runtime_dir = tmp_path / "afm-state-discovery-fatal"
-        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
-        monkeypatch.chdir(tmp_path)
-
-        with (
-            mock.patch.object(_rpc_mod, "docker_update", side_effect=RuntimeError("pipeline build failed")),
-            mock.patch.object(subprocess, "Popen") as mock_popen,
-            mock.patch.object(subprocess, "run", side_effect=patches),
-            pytest.raises(click.ClickException) as exc,
-        ):
-            rpc(None, config, update=True)
-
-        assert "pipeline build failed" in exc.value.message
-        # launch skipped on build failure
-        mock_popen.assert_not_called()
 
     def test_pipeline_run_fatal_build_surfaces_clickexception_and_skips_launch(
         self, tmp_path: Path, monkeypatch
@@ -642,34 +582,7 @@ class TestBuildFirstRunAutoBuildIntegration:
 
 class TestPipelineFirstRunAutoBuildIntegration:
     """``goga pipeline`` (no --update) auto-builds a missing local image via
-    ``docker_build_if_not_exist`` in BOTH modes — discovery and run."""
-
-    def test_pipeline_discovery_without_update_calls_safety_net_with_primitives(
-        self, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Discovery + no --update + dockerfile set -> safety net called; docker_update
-        NOT called; launch proceeds with the list command."""
-        config = _make_config(dockerfile="Dockerfile")
-        runtime_dir = tmp_path / "afm-state-discovery-ensure"
-        patches = _patch_pipeline_common(monkeypatch, runtime_dir)
-        # Reset docker_build_if_not_exist to a tracking mock — _patch_pipeline_common
-        # stubs it to a plain no-op lambda; here we need call assertions.
-        monkeypatch.setattr(_rpc_mod, "docker_build_if_not_exist", mock.Mock())
-        monkeypatch.setattr(_rpc_mod, "docker_update", mock.Mock())
-        monkeypatch.chdir(tmp_path)
-
-        with (
-            mock.patch.object(subprocess, "Popen") as mock_popen,
-            mock.patch.object(subprocess, "run", side_effect=patches),
-        ):
-            mock_popen.return_value.wait.return_value = 0
-            result = rpc(None, config, update=False)  # NO --update
-
-        assert result == 0
-        _rpc_mod.docker_build_if_not_exist.assert_called_once_with("qarium/goga:latest", "Dockerfile", extra_args=[])
-        _rpc_mod.docker_update.assert_not_called()
-        # launch happened
-        mock_popen.assert_called_once()
+    ``docker_build_if_not_exist``."""
 
     def test_pipeline_run_without_update_calls_safety_net_with_primitives(self, tmp_path: Path, monkeypatch) -> None:
         """Run + no --update + dockerfile set -> safety net called; docker_update

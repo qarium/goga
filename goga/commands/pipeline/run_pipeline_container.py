@@ -1,15 +1,15 @@
 """Host-side docker launcher for ``goga pipeline``.
 
-Launches the goga Docker container to run ``python -m goga.pipeline`` in either
-discovery (``name is None``) or run (``name`` provided) mode, and returns the
-container's exit code. Image acquisition (``--update``) delegates to
-``docker_update`` (build when a project Dockerfile is declared, else pull) and
-container launch delegates to ``DockerRunner``, which owns the SIGTERM/SIGINT
-lifecycle and the guaranteed ``docker kill``. Run mode installs its own
-SIGTERM/SIGINT handler BEFORE writing the secret tmpfile/env-file (D7) — so a
-signal during the setup window, including the ``docker_update`` build, unwinds
-to the caller ``finally`` and unlinks the secret files. Discovery mode writes no
-secret files, so it installs no caller-side handler (only the runner's applies).
+Launches the goga Docker container to run ``python -m goga.pipeline run <name>``
+and returns the container's exit code. Image acquisition (``--update``)
+delegates to ``docker_update`` (build when a project Dockerfile is declared,
+else pull) and container launch delegates to ``DockerRunner``, which owns the
+SIGTERM/SIGINT lifecycle and the guaranteed ``docker kill``. The launcher
+installs its own SIGTERM/SIGINT handler BEFORE writing the secret
+tmpfile/env-file (D7) — so a signal during the setup window, including the
+``docker_update`` build, unwinds to the caller ``finally`` and unlinks the
+secret files. The listing and info forms live in
+``run_pipeline_info_container``.
 
 The runtime boundary to ``goga/pipeline`` is docker — this module imports no
 Type from ``goga/pipeline``.
@@ -259,85 +259,6 @@ def clean_pipeline_runtime_dir(pipeline_runtime_dir: Path) -> None:
     pipeline_runtime_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _run_discovery(
-    config: ProjectConfig,
-    home: HomeConfig,
-    container_name: str,
-    hosts: dict[str, str] | None,
-    update: bool,
-) -> int:
-    """Launch the container in discovery mode (``-m goga.pipeline list``).
-
-    Discovery honours ``hosts`` (``--add-host`` flags) and ``update``
-    (image refresh via ``docker_update``), and ignores ``extra_env``, ``proxy``,
-    ``clean``, ``workflow``, ``no_workflow``, and ``skip`` — no env-file is
-    written and no afm state directory is involved. ``home.env`` is therefore
-    NOT applied here (no env-file); ``home.docker.run`` is forwarded to
-    ``DockerRunner.run`` as the separate ``extra_args`` keyword, and
-    ``home.docker.build`` is forwarded to ``docker_build_if_not_exist`` and
-    ``docker_update`` (build branch only). Discovery writes no secret files,
-    so it installs NO caller-side SIGTERM/SIGINT handler: only the runner's
-    handler applies (it performs the guaranteed ``docker kill`` and restores
-    the previous handlers).
-
-    Args:
-        config: Loaded project configuration (provides ``image``, ``dockerfile``).
-        home: Loaded machine-wide home config. ``home.env`` is ignored in
-            discovery (no env-file is written); ``home.docker.run`` is forwarded
-            to ``DockerRunner.run`` as ``extra_args``; ``home.docker.build`` is
-            forwarded to image build (build branch only).
-        container_name: Name assigned to the container.
-        hosts: Resolved host→IP mapping forwarded as ``--add-host`` flags.
-        update: When True, refresh the image before launch via ``docker_update``
-            (build when a Dockerfile is declared, else pull).
-
-    Returns:
-        The container's exit code.
-    """
-    project_dir = Path.cwd().resolve()
-    mounts = [f"{project_dir}:/workspace"]
-
-    # args = the post-image command (the in-container goga.pipeline list call);
-    # params = the docker-run options the runner translates to flags via the
-    # shared param→flag rule.
-    args = ["-m", "goga.pipeline", "list"]
-    params = {
-        "name": container_name,
-        "rm": True,
-        "entrypoint": "python3",
-        "workdir": "/workspace",
-        "v": mounts,
-        "add_host": [f"{host}:{ip}" for host, ip in (hosts or {}).items()],
-    }
-
-    # First-run safety net: build the local image if it is absent and a project
-    # Dockerfile is declared. No-op when the image exists or no Dockerfile is
-    # set. Fatal build surfaces as ClickException (D5 — clean message + exit 1).
-    # Discovery writes no secret files, so no D7 caller-side handler applies.
-    # home.docker.build is forwarded to image build (build branch only).
-    try:
-        docker_build_if_not_exist(config.image, config.dockerfile, extra_args=home.docker.build)
-    except Exception as exc:
-        raise click.ClickException(str(exc)) from exc
-
-    if update:
-        # docker_update owns the build-vs-pull branch (build when a project
-        # Dockerfile is declared — fatal; else pull — WARNING, non-fatal). D5: a
-        # fatal build surfaces as a clean message + exit 1 rather than a
-        # traceback; pull-branch failures stay a WARNING inside docker_pull.
-        # home.docker.build forwarded in the build branch only (ignored on pull).
-        try:
-            docker_update(config.image, config.dockerfile, extra_args=home.docker.build)
-        except Exception as exc:
-            raise click.ClickException(str(exc)) from exc
-
-    # extra_args is a SEPARATE keyword to DockerRunner.run (NOT part of params,
-    # which is unpacked via **). home.docker.run tokens are appended verbatim
-    # AFTER the translated flags and BEFORE the image, never translated to an
-    # --extra-args flag. Discovery applies NO env-file, so home.env is unused.
-    return DockerRunner(config.image).run(args, extra_args=home.docker.run, **params)
-
-
 def _resolve_workflow_env(
     workflow: str | None,
     no_workflow: bool,
@@ -468,7 +389,7 @@ def _build_env_file(  # noqa: PLR0913, PLR0917
     # GOGA_SKIP_STAGES carries the -s/--skip directives to the in-container
     # run_pipeline routine (step 6e applies apply_skip_stages over the resolved
     # workflow). Written ONLY when `skip` is non-empty; an empty tuple leaves
-    # the env-file skip-free (discovery writes no env-file at all).
+    # the env-file skip-free.
     if skip:
         env["GOGA_SKIP_STAGES"] = ",".join(skip)
     env_file = _write_env_file(env, extra_env)
@@ -679,7 +600,7 @@ def _run_named(  # noqa: PLR0913, PLR0917
 
 
 def run_pipeline_container(  # noqa: PLR0913, PLR0917
-    name: str | None,
+    name: str,
     config: ProjectConfig,
     extra_env: tuple[str, ...] = (),
     proxy: str | None = None,
@@ -694,22 +615,15 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     """Launch the goga Docker container to run ``python -m goga.pipeline``.
 
     Home (machine-wide) config from ``~/.goga/config.yml`` is loaded once up
-    front (both modes) — an absent file yields an empty ``HomeConfig`` (no-op).
-    ``home.env`` is the lowest-priority container env layer in RUN mode only
-    (project ``pipeline.env`` and CLI win on key conflict); discovery writes no
-    env-file, so ``home.env`` does not apply there. ``home.docker.run`` is
-    forwarded to every ``DockerRunner.run`` as a separate ``extra_args`` keyword
-    (both modes). ``home.docker.build`` is forwarded to image build
+    front — an absent file yields an empty ``HomeConfig`` (no-op). ``home.env``
+    is the lowest-priority container env layer (project ``pipeline.env`` and CLI
+    win on key conflict). ``home.docker.run`` is forwarded to
+    ``DockerRunner.run`` as a separate ``extra_args`` keyword.
+    ``home.docker.build`` is forwarded to image build
     (``docker_build_if_not_exist`` first-run safety net, ``docker_update``
     ``--update``) in the build branch only.
 
-    Discovery mode (``name is None``) runs ``-m goga.pipeline list`` and ignores
-    ``extra_env``, ``proxy``, ``clean``, ``workflow``, ``no_workflow``,
-    ``skip``, and ``parallel`` — it honours only ``hosts`` (``--add-host`` flags)
-    and ``update`` (conditional image pull); no env-file is written and no afm
-    state directory is involved.
-
-    Run mode (``name`` provided) allocates a free port, writes a private
+    The launcher allocates a free port, writes a private
     afm-config tmpfile (``client.command: <resolved wrapper path>`` — the
     absolute ``resolve_wrapper_path(config.pipeline.agent)`` value, never a bare
     agent name; the ``client:`` block is OMITTED when ``config.pipeline.agent``
@@ -731,56 +645,53 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
     ``-m goga.pipeline run <name> --port <port>`` via ``DockerRunner`` (forwarding
     ``home.docker.run`` as ``extra_args``).
 
-    Both modes mount the project at ``/workspace``. User pipelines are NOT
+    The project is mounted at ``/workspace``. User pipelines are NOT
     bind-mounted from the host: the image is populated at build time via
     ``RUN goga connect ...`` in the Dockerfile, so ``/home/goga/.goga/pipelines``
-    inside the container reflects the image's user pipelines and discovery/run
-    operate entirely in-container.
+    inside the container reflects the image's user pipelines and the run
+    operates entirely in-container. The listing and info forms live in
+    ``run_pipeline_info_container``.
 
     Args:
-        name: Pipeline name without extension. ``None`` selects discovery mode.
+        name: Pipeline name without extension.
         config: Loaded project configuration (provides ``image``,
             ``pipeline.agent``, ``pipeline.env``).
         extra_env: Additional raw KEY=VALUE strings forwarded into the container
-            env-file in run mode (e.g. agent authorization tokens supplied via
-            the host-side ``-e/--env`` Click option). Default is empty. Ignored
-            in discovery mode (``name is None``), which never writes an env-file.
+            env-file (e.g. agent authorization tokens supplied via the host-side
+            ``-e/--env`` Click option). Default is empty.
         proxy: Resolved HTTP/HTTPS proxy URL (CLI overrides config in the
-            caller). When non-None in run mode, the launcher writes
-            ``HTTP_PROXY``, ``HTTPS_PROXY``, and ``NO_PROXY=localhost,127.0.0.1``
-            into the env-file. Ignored in discovery mode.
+            caller). When non-None, the launcher writes ``HTTP_PROXY``,
+            ``HTTPS_PROXY``, and ``NO_PROXY=localhost,127.0.0.1`` into the
+            env-file.
         hosts: Resolved host→IP dict (CLI entries merged on top of
             ``config.pipeline.hosts`` by the caller). Each entry becomes a
-            docker ``--add-host HOST:IP`` flag. Effective in both modes.
-        clean: When True in run mode, wipe the persistent afm state host
-            directory before launch via ``clean_pipeline_runtime_dir``. No-op in
-            discovery mode.
+            docker ``--add-host HOST:IP`` flag.
+        clean: When True, wipe the persistent afm state host directory before
+            launch via ``clean_pipeline_runtime_dir``.
         update: When True, refresh the image before launch via ``docker_update``
             (build when a project Dockerfile is declared, else pull). When False
-            (default), skip the refresh. Effective in both modes.
+            (default), skip the refresh.
         workflow: optional workflow name forwarded from the ``--workflow`` CLI
-            flag. In run mode, the env-file carries ``GOGA_WORKFLOW_NAME=<workflow>``
-            and the workflow log line names it (file existence already validated
-            by the caller). Ignored in discovery mode (``name is None``).
-        no_workflow: flag forwarded from the ``--no-workflow`` CLI flag. In run
-            mode, the env-file carries ``GOGA_WORKFLOW_DISABLED=1`` and no
-            workflow log line is emitted; mutually exclusive with ``workflow``
-            (enforced by the caller). Ignored in discovery mode.
+            flag. The env-file carries ``GOGA_WORKFLOW_NAME=<workflow>`` and the
+            workflow log line names it (file existence already validated by the
+            caller).
+        no_workflow: flag forwarded from the ``--no-workflow`` CLI flag. The
+            env-file carries ``GOGA_WORKFLOW_DISABLED=1`` and no workflow log
+            line is emitted; mutually exclusive with ``workflow`` (enforced by
+            the caller).
         skip: raw stage names forwarded from the repeatable ``-s/--skip`` CLI
-            option (default empty). In run mode, the env-file carries
+            option (default empty). The env-file carries
             ``GOGA_SKIP_STAGES=<comma-joined>`` when non-empty so the
             in-container ``run_pipeline`` routine applies ``apply_skip_stages``
             over the resolved workflow; the host does NOT validate the names
             (validation is in-container). Omitted from the env-file when empty.
-            Ignored in discovery mode.
         parallel: optional int (None when absent) capping concurrently executing
-            stages, forwarded from the ``-p/--parallel`` CLI option. In run mode,
-            appended to the in-container run argv as ``--parallel <parallel>``
-            ONLY when not None (the in-container ``pipeline_cli`` forwards it to
-            afm's ``--max-parallel``); omitted when None so afm runs unbounded
-            (backward compatible). Not defaulted — None ⇒ unbounded. Ignored in
-            discovery mode (no afm). Distinct from the Docker
-            ``-p <port>:<port>`` port-publish token.
+            stages, forwarded from the ``-p/--parallel`` CLI option. Appended to
+            the in-container run argv as ``--parallel <parallel>`` ONLY when not
+            None (the in-container ``pipeline_cli`` forwards it to afm's
+            ``--max-parallel``); omitted when None so afm runs unbounded
+            (backward compatible). Not defaulted — None ⇒ unbounded. Distinct
+            from the Docker ``-p <port>:<port>`` port-publish token.
 
     Returns:
         The container's exit code.
@@ -810,9 +721,6 @@ def run_pipeline_container(  # noqa: PLR0913, PLR0917
         raise click.ClickException("image in .goga/config.yml is not set")
 
     container_name = f"goga-pipeline-{os.getpid()}"
-
-    if name is None:
-        return _run_discovery(config, home, container_name, hosts, update)
 
     return _run_named(
         name,

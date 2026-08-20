@@ -70,28 +70,6 @@ class TestPipelineHomeIntegrationContract:
 
     @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
     @mock.patch.object(_rpc_mod, "DockerRunner")
-    def test_discovery_forwards_extra_args_as_separate_keyword(
-        self, mock_runner, mock_build, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Discovery forwards ``home.docker.run`` to DockerRunner.run as a SEPARATE
-        keyword (captured via the run call kwargs), not folded into ``params``."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-        _write_home_yml(Path.home(), {"docker": {"run": ["--network=host"]}})
-        mock_runner.return_value.run.return_value = 0
-
-        rpc(None, config)
-
-        run_kwargs = mock_runner.return_value.run.call_args.kwargs
-        assert run_kwargs["extra_args"] == ["--network=host"]
-        # extra_args is a SEPARATE keyword, not inside the unpacked params map —
-        # the standard params (name, rm, ...) remain independent keys.
-        assert "name" in run_kwargs
-        assert "rm" in run_kwargs
-
-    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
-    @mock.patch.object(_rpc_mod, "DockerRunner")
     def test_run_forwards_extra_args_as_separate_keyword(
         self, mock_runner, mock_build, tmp_path: Path, monkeypatch
     ) -> None:
@@ -114,34 +92,6 @@ class TestPipelineHomeIntegrationContract:
 
 
 # --- Logic tests ---
-
-
-class TestDiscoveryHomeDockerRunOnly:
-    """Discovery forwards home.docker.run (extra_args) and applies NO home.env
-    (no env-file is written)."""
-
-    @mock.patch.object(_rpc_mod, "_write_env_file")
-    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
-    @mock.patch.object(_rpc_mod, "DockerRunner")
-    def test_discovery_forwards_home_docker_run_and_writes_no_env_file(
-        self, mock_runner, mock_build, mock_env_write, tmp_path: Path, monkeypatch
-    ) -> None:
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-        _write_home_yml(
-            Path.home(),
-            {"env": {"SHOULD_NOT_APPEAR": "1"}, "docker": {"run": ["--network=host"]}},
-        )
-        mock_runner.return_value.run.return_value = 0
-
-        rpc(None, config)
-
-        # home.docker.run reaches DockerRunner.run as a SEPARATE keyword.
-        run_kwargs = mock_runner.return_value.run.call_args.kwargs
-        assert run_kwargs["extra_args"] == ["--network=host"]
-        # Discovery writes NO env-file, so home.env does NOT apply here.
-        mock_env_write.assert_not_called()
 
 
 class TestRunModeHomeEnvBaseLayer:
@@ -251,30 +201,6 @@ class TestPipelineForwardsHomeDockerBuild:
     @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
     @mock.patch.object(_rpc_mod, "docker_update")
     @mock.patch.object(_rpc_mod, "DockerRunner")
-    def test_discovery_mode_forwards_home_docker_build(
-        self, mock_runner, mock_update, mock_build, tmp_path: Path, monkeypatch
-    ) -> None:
-        """Discovery mode forwards home.docker.build to docker_build_if_not_exist
-        and docker_update (build branch only)."""
-        config = _make_config(dockerfile="Dockerfile")
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-        _write_home_yml(
-            Path.home(),
-            {"docker": {"run": ["--network=host"], "build": ["--squash"]}},
-        )
-        mock_runner.return_value.run.return_value = 0
-
-        rpc(None, config, update=True)
-
-        _, kwargs = mock_build.call_args
-        assert kwargs["extra_args"] == ["--squash"]
-        _, kwargs = mock_update.call_args
-        assert kwargs["extra_args"] == ["--squash"]
-
-    @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
-    @mock.patch.object(_rpc_mod, "docker_update")
-    @mock.patch.object(_rpc_mod, "DockerRunner")
     def test_empty_home_build_yields_empty_extra_args(
         self, mock_runner, mock_update, mock_build, tmp_path: Path, monkeypatch
     ) -> None:
@@ -302,7 +228,7 @@ class TestPipelineAbsentHomeIsNoop:
 
     @mock.patch.object(_rpc_mod, "docker_build_if_not_exist")
     @mock.patch.object(_rpc_mod, "DockerRunner")
-    def test_absent_home_file_yields_empty_extra_args_in_both_modes(
+    def test_absent_home_file_yields_empty_extra_args(
         self, mock_runner, mock_build, tmp_path: Path, monkeypatch
     ) -> None:
         config = _make_config()
@@ -312,10 +238,6 @@ class TestPipelineAbsentHomeIsNoop:
         monkeypatch.chdir(tmp_path)
         # No home file written under the isolated HOME.
         mock_runner.return_value.run.return_value = 0
-
-        rpc(None, config)
-        discovery_kwargs = mock_runner.return_value.run.call_args.kwargs
-        assert discovery_kwargs["extra_args"] == []
 
         rpc("deploy", config)
         run_kwargs = mock_runner.return_value.run.call_args.kwargs

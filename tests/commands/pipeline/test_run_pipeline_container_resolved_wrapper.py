@@ -297,31 +297,6 @@ class TestPipelineFailureModes:
         assert "docker not found" in str(result.exception)
 
 
-# --- Discovery mode ignores extra_env ---
-
-
-class TestPipelineDiscoveryExtraEnv:
-    def test_pipeline_discovery_ignores_extra_env(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode (no name) never writes an env-file, ignoring `-e/--env`."""
-        _write_config(tmp_path)
-        monkeypatch.chdir(tmp_path)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.setattr(_rpc_mod, "docker_update", lambda *_: None)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            runner = CliRunner()
-            result = runner.invoke(pipeline_cmd, ["-e", "FOO=bar"])
-
-        assert result.exit_code == 0
-        cmd = mock_popen.call_args[0][0]
-        assert "--env-file" not in cmd
-
-
 # --- codex auth mount ---
 
 
