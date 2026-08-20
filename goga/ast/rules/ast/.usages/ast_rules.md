@@ -43,4 +43,5 @@ errors = rule.check(document)
 ```
 
 Valid: document at `level-1/` embeds a type from `level-1/level-2/`.
+Valid: document at the repository root (`.`) embeds a type from any nested package.
 Invalid: document at `level-1/level-2/` embeds a type from `level-1/`.
