@@ -81,7 +81,7 @@ description: "Development process"
 
     Constraints:
       - Don't autoconfirm user answer.
-      - Except changes in `docs/<proposals|tasks|arch|design|plans>`.
+      - Except changes in `docs/<defines|proposals|tasks|arch|design|plans>`.
 
 - name: accept-result
   title: "Contracts & coverage audit"
