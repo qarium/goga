@@ -16,6 +16,8 @@ class PipelineSummary:
     author-facing ``name`` from the DSL header. ``source`` records whether the
     pipeline was discovered in the project-level or user-level pipelines
     directory, and ``description`` is the pipeline's DSL header description.
+    ``display_name`` carries the author-facing ``name`` from the DSL header —
+    it may differ from the discovered stem.
 
     Args:
         name: discovered pipeline name without extension; validated with the
@@ -23,6 +25,8 @@ class PipelineSummary:
         source: origin of the pipeline (``PipelineSource.PROJECT`` or
             ``PipelineSource.USER``).
         description: description from the pipeline DSL header; may be empty.
+        display_name: author-facing pipeline name from the DSL header; may
+            differ from the discovered stem. Defaults to an empty string.
 
     Raises:
         ValueError: if ``name`` carries a path separator, ends with ``.yml``,
@@ -32,6 +36,7 @@ class PipelineSummary:
     name: str
     source: PipelineSource
     description: str
+    display_name: str = ""
 
     def __post_init__(self) -> None:
         """Validate ``name`` — reject separators, ``.yml`` suffix, and empty values."""

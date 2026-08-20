@@ -1,7 +1,8 @@
 # describe_pipelines — pipeline overview with descriptions
 
 `describe_pipelines` composes the informational overview of every discovered
-pipeline: each pipeline paired with the description from its DSL header. Use
+pipeline: each pipeline paired with the authored name and description from
+its DSL header. Use
 this when you need to show users what each available pipeline does — without
 running anything. Inside the goga Docker image, the source directories resolve
 to `/workspace/.goga/pipelines/` and `/home/goga/.goga/pipelines/`.
@@ -18,7 +19,9 @@ summaries = describe_pipelines(
 )
 for s in summaries:
     marker = " (project)" if s.source.value == "project" else ""
-    print(f"{s.name}{marker} — {s.description}")
+    print(f"* {s.name}{marker}")
+    print(f"    name: {s.display_name}")
+    print(f"    description: {s.description}")
 ```
 
 ## Parameters
@@ -31,11 +34,13 @@ order (project source wins on name conflicts).
 
 ## The PipelineSummary model
 
-`PipelineSummary` is a `@dataclass(kw_only=True)` with three fields:
+`PipelineSummary` is a `@dataclass(kw_only=True)` with four fields:
 
 - `name: str` — pipeline name without extension
 - `source: PipelineSource` — `PipelineSource.PROJECT` or `PipelineSource.USER`
 - `description: str` — description from the pipeline-file header
+- `display_name: str` — authored `name` from the pipeline-file header; may
+  differ from `name` (the discovered stem); defaults to an empty string
 
 ## Side effects
 

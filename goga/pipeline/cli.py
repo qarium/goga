@@ -53,7 +53,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "-i",
         action="store_true",
         default=False,
-        help="print the overview: one line per pipeline with its description.",
+        help="print the overview: one bullet per pipeline with name and description fields.",
     )
 
     run_parser = subparsers.add_parser("run", help="run a pipeline by name")
@@ -106,29 +106,40 @@ def _run_flat_list(project_dir: Path, user_dir: Path) -> int:
 
 
 def _run_overview(project_dir: Path, user_dir: Path) -> int:
-    """Operation (b): the overview — one `{name}[ (project)] — {description}` line per pipeline."""
+    """Operation (b): the overview — one `* {name}[ (project)]` bullet with name/description fields per pipeline."""
     try:
         summaries = describe_pipelines(project_dir, user_dir)
     except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
     for summary in summaries:
         suffix = " (project)" if summary.source == PipelineSource.PROJECT else ""
-        print(f"{summary.name}{suffix} — {summary.description}")
+        print(f"* {summary.name}{suffix}")
+        print(f"    name: {summary.display_name}")
+        print(f"    description: {summary.description}")
+
     return 0
 
 
 def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
-    """Operation (c): the card — name / description / one `{id}: {title}` line per stage."""
+    """Operation (c): the card — name/description fields, a `---` separator, stage bullets."""
     try:
         card = describe_pipeline(args.name, project_dir, user_dir, workflow=args.workflow, no_workflow=args.no_workflow)
     except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
-    print(card.name)
-    print(card.description)
+
+    print(f"name: {card.name}")
+    print(f"description: {card.description}")
+    print()
+    print("---")
+    print()
+
     for stage in card.stages:
-        print(f"{stage.id}: {stage.title}")
+        print(f"* {stage.id}:")
+        print(f"    title: {stage.title}")
+
     return 0
 
 

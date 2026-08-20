@@ -120,7 +120,24 @@ class TestDescribePipelinesLogic:
         assert summaries[0].description == "Deploy the service"
         assert summaries[1].description == "Implement a feature"
         assert summaries[2].description == "Cut a release"
+        # The authored header name lands in display_name, never in name.
+        assert summaries[0].display_name == "Deploy"
+        assert summaries[1].name == "feature"
+        assert summaries[1].display_name == "Goga feature"
+        assert summaries[2].display_name == "Release"
         assert all(isinstance(summary, PipelineSummary) for summary in summaries)
+
+    def test_describe_pipelines_carries_authored_header_name(self, tmp_path: Path) -> None:
+        """``display_name`` is the authored header ``name`` — it may differ from the discovered stem."""
+        project_dir = tmp_path / "project_pipelines"
+        user_dir = tmp_path / "user_pipelines"
+        _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
+        _write_pipeline(project_dir, "feature", _FEATURE_YML)
+        _write_pipeline(user_dir, "release", _RELEASE_YML)
+
+        summaries = describe_pipelines(project_dir, user_dir)
+
+        assert [summary.display_name for summary in summaries] == ["Deploy", "Goga feature", "Release"]
 
     def test_describe_pipelines_project_wins_on_name_conflict(self, tmp_path: Path) -> None:
         """A name present in both directories yields one PROJECT summary with the project description."""
@@ -137,6 +154,7 @@ class TestDescribePipelinesLogic:
         assert summaries[0].name == "deploy"
         assert summaries[0].source is PipelineSource.PROJECT
         assert summaries[0].description == "Deploy the service"
+        assert summaries[0].display_name == "Deploy"
 
     def test_describe_pipelines_empty_description_is_preserved(self, tmp_path: Path) -> None:
         """An explicitly empty header description survives — there is no falsy filter."""

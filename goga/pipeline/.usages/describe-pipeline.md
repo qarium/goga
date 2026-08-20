@@ -19,10 +19,14 @@ card = describe_pipeline(
     workflow="hardening",   # explicit workflow; None → basename auto-match
     no_workflow=False,
 )
-print(card.name)
-print(card.description)
+print(f"name: {card.name}")
+print(f"description: {card.description}")
+print()
+print("---")
+print()
 for stage in card.stages:
-    print(f"{stage.id}: {stage.title}")
+    print(f"* {stage.id}:")
+    print(f"    title: {stage.title}")
 ```
 
 ## Parameters

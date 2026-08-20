@@ -184,15 +184,17 @@ Annotations: |
     "USER = \"user\"": |
       Origin = user-level ~/.goga/pipelines/.
 
-"PipelineSummary(name: str, source: PipelineSource, description: str)":
+"PipelineSummary(name: str, source: PipelineSource, description: str, display_name: str = \"\")":
   location: pipeline_summary.py
   annotations: |
     Describe one row of the overview: the discovered pipeline name, its
-    origin, and its DSL header description.
+    origin, its DSL header description, and the authored header name.
 
     `name`: pipeline name without extension
     `source`: origin of the pipeline — `PipelineSource` value
     `description`: pipeline description taken from the DSL header
+    `display_name`: authored pipeline name from the DSL header; may differ
+                    from `name`; defaults to an empty string
 
     Build with the standard library dataclasses module and
     @dataclass(kw_only=True) (per `convention`).
@@ -201,6 +203,8 @@ Annotations: |
     - Use @dataclass(kw_only=True)
     - `name` follows the `PipelineEntry` validation rules — non-empty, no
       path separators, no .yml suffix
+    - `display_name` defaults to an empty string — constructions without it
+      remain valid
 
   properties:
     "name -> str": |
@@ -209,6 +213,9 @@ Annotations: |
       Origin of the pipeline.
     "description -> str": |
       Description from the DSL header.
+    "display_name -> str": |
+      Authored pipeline name from the DSL header; may differ from the
+      discovered stem.
 
 "PipelineCard(name: str, description: str, stages: list[CardStage])":
   location: pipeline_card.py
@@ -294,7 +301,7 @@ Annotations: |
   location: describe_pipelines.py
   annotations: |
     Compose the overview of every discovered pipeline: each entry paired with
-    the description from its DSL header.
+    the authored name and description from its DSL header.
 
     `project_dir`: project-level pipelines directory (absolute)
     `user_dir`: user-level pipelines directory (absolute)
@@ -307,14 +314,15 @@ Annotations: |
     1. Discover entries via `list_pipelines`
     2. For each entry: compose the pipeline-file path inside its source
        directory, read the file, parse it via `parse_dsl`, and take the header
-       description
-    3. Build a `PipelineSummary` from the entry name, entry source, and header
-       description
+       name and description
+    3. Build a `PipelineSummary` from the entry name, entry source, the
+       header description, and the authored header name (the summary
+       display_name field)
     4. Return the summaries in discovery order
 
     Requirements:
-    - The description comes from the DSL header; the name is the discovered
-      stem
+    - The description and the authored header name (summary display_name
+      field) come from the DSL header; the name is the discovered stem
     - A damaged pipeline file (unreadable or structurally invalid) aborts the
       whole overview with a readable error — no partial list, no silent
       skips, no placeholder markers
@@ -662,11 +670,14 @@ Annotations: |
          pipelines:" header followed by one entry per line (project source
          entries suffixed with " (project)"); return 0
        - list with --info — call `describe_pipelines`; print the overview: one
-         pipeline per line — name, " (project)" suffix for project source
-         entries, description; return 0
+         bullet block per pipeline — the marker line "* <name>" (with the
+         " (project)" suffix for project source entries) followed by indented
+         "name:" and "description:" field lines; return 0
        - run with --info — call `describe_pipeline` with the name and the
-         parsed workflow flags; print the card: name, description, then one
-         line per stage — id and title in execution order; return 0
+         parsed workflow flags; print the card: "name:" and "description:"
+         field lines, a blank line, a "---" separator, a blank line, then one
+         bullet block per ordered stage — the marker line "* <id>:" and an
+         indented "title:" field line; return 0
        - run without --info — call `run_pipeline` with name, port, and
          parallel; return its exit code
     5. Render an operation failure as a clean readable message to stderr (no
@@ -679,17 +690,22 @@ Annotations: |
       missing --port without --info is an argparse-style error (exit 2);
       --port is ignored in info mode
     - Long and short flag forms behave identically
-    - The overview line template: the name, then the " (project)" suffix for
-      project-source entries, then " — " and the description (example:
-      deploy (project) — Deploy the service)
-    - The card template: one line with the name, one line with the
-      description, then one line per ordered stage as "id: title"
+    - The overview template: the marker line "* <name>" (with the
+      " (project)" suffix for project-source entries) followed by "name:"
+      and "description:" field lines indented by four spaces; the name field
+      carries the authored header name, the description field the header
+      description (example: "* deploy (project)" / "    name: Deploy" /
+      "    description: Deploy the service")
+    - The card template: a "name:" line, a "description:" line, a blank line,
+      a "---" separator, a blank line, then per ordered stage the marker line
+      "* <id>:" and a "title:" line indented by four spaces; the separator
+      block is printed even when the card carries no stages
     - An empty discovery is not an error: the flat list prints the header
       with no entries (transferred verbatim from the current discovery
       output); the overview prints nothing and returns 0
     - Echo the header BEFORE the list in flat list mode (predictable UX)
-    - Card stage lines follow execution order; loop-expanded copies appear as
-      separate lines
+    - Card stage bullet blocks follow execution order; loop-expanded copies
+      appear as separate blocks
     - Overview and card output stays within terminal width — no horizontal
       scrolling
 

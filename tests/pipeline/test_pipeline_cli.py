@@ -441,7 +441,7 @@ class TestPipelineCliInfoOperations:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """`list --info` prints one `{name}[ (project)] — {description}` line per pipeline."""
+        """`list --info` prints one `* {name}[ (project)]` bullet with name/description fields per pipeline."""
         _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
@@ -451,7 +451,7 @@ class TestPipelineCliInfoOperations:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert captured.out == "deploy (project) — Deploy the service\n"
+        assert captured.out == "* deploy (project)\n    name: Deploy\n    description: Deploy the service\n"
 
     def test_pipeline_cli_list_info_short_flag_identical(
         self,
@@ -478,7 +478,7 @@ class TestPipelineCliInfoOperations:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """`run NAME --info` prints name / description / `{id}: {title}` per stage; no port needed."""
+        """`run NAME --info` prints card fields, a `---` separator, and `* {id}:` stage bullets; no port needed."""
         _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
 
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
@@ -488,7 +488,10 @@ class TestPipelineCliInfoOperations:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert captured.out == "Deploy\nDeploy the service\nbuild: Build\ntest: Test\n"
+        assert captured.out == (
+            "name: Deploy\ndescription: Deploy the service\n\n---\n\n"
+            "* build:\n    title: Build\n* test:\n    title: Test\n"
+        )
 
     def test_pipeline_cli_run_info_threads_workflow_flags(
         self,
@@ -588,7 +591,10 @@ class TestPipelineCliInfoOperations:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert captured.out == "Deploy\nDeploy the service\nbuild: Build\ntest: Test\n"
+        assert captured.out == (
+            "name: Deploy\ndescription: Deploy the service\n\n---\n\n"
+            "* build:\n    title: Build\n* test:\n    title: Test\n"
+        )
 
     def test_pipeline_cli_list_info_reports_missing_pipeline_cleanly(
         self,
@@ -614,7 +620,7 @@ class TestPipelineCliInfoOperations:
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
     ) -> None:
-        """The overview line uses the discovered stem, and the user source carries no suffix."""
+        """The overview bullet uses the discovered stem, and the user source carries no suffix."""
         _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
         user_dir = tmp_path / "home" / ".goga" / "pipelines"
         user_dir.mkdir(parents=True)
@@ -627,8 +633,8 @@ class TestPipelineCliInfoOperations:
 
         assert exit_code == 0
         captured = capsys.readouterr()
-        assert "deploy (project) — Deploy the service\n" in captured.out
-        assert "release — Cut a release\n" in captured.out
+        assert "* deploy (project)\n    name: Deploy\n    description: Deploy the service\n" in captured.out
+        assert "* release\n    name: Release\n    description: Cut a release\n" in captured.out
 
     def test_pipeline_cli_non_utf8_pipeline_renders_clean_error(
         self,

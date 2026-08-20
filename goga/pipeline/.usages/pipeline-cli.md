@@ -14,9 +14,11 @@ host-side docker launcher through the runpy entrypoint in `__main__.py`.
 - Without `--info`: prints the "Available pipelines:" header followed by one
   entry per line (project source entries suffixed with " (project)") — the
   flat list.
-- With `--info`/`-i`: prints the overview — one line per pipeline: the name,
-  the " (project)" suffix for project source entries, then " — " and the
-  description.
+- With `--info`/`-i`: prints the overview — one bullet block per pipeline:
+  the marker line `* <name>` (with the " (project)" suffix for project source
+  entries) followed by `name:` and `description:` field lines indented by
+  four spaces; `name:` carries the authored header name, `description:` the
+  header description.
 - An empty discovery prints the header only (flat list) / nothing (overview);
   exit code 0.
 
@@ -25,9 +27,11 @@ host-side docker launcher through the runpy entrypoint in `__main__.py`.
 `run NAME [--info] [-w WORKFLOW | --no-workflow] [--port PORT] [--parallel N]`
 
 - NAME (positional, required) — pipeline name without extension.
-- `--info`/`-i` (flag) — print the card instead of running: one line with the
-  name, one line with the description, then one line per stage as "id: title"
-  in execution order. `-w WORKFLOW` applies a
+- `--info`/`-i` (flag) — print the card instead of running: `name:` and
+  `description:` field lines, a blank line, a `---` separator, a blank line,
+  then one bullet block per stage in execution order — the marker line
+  `* <id>:` and a `title:` field line indented by four spaces.
+  `-w WORKFLOW` applies a
   workflow to the card composition; `--no-workflow` reports the raw DSL
   composition; neither flag resolves the basename auto-match. Both flags are
   card-mode only — a run (no `--info`) picks its workflow decision up from

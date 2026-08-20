@@ -131,8 +131,22 @@ class TestHostArgvIsContainerParseable:
         ("host_argv", "expected_lines"),
         [
             (["--list"], ["Available pipelines:", "  deploy (project)"]),
-            (["--list", "--info"], ["deploy (project) — Deploy the service"]),
-            (["deploy", "--info"], ["Deploy", "Deploy the service", "build: Build", "test: Test"]),
+            (
+                ["--list", "--info"],
+                ["* deploy (project)", "    name: Deploy", "    description: Deploy the service"],
+            ),
+            (
+                ["deploy", "--info"],
+                [
+                    "name: Deploy",
+                    "description: Deploy the service",
+                    "---",
+                    "* build:",
+                    "    title: Build",
+                    "* test:",
+                    "    title: Test",
+                ],
+            ),
         ],
         ids=["flat-list", "overview", "card"],
     )
@@ -243,13 +257,15 @@ class TestWorkflowDecisionEquivalence:
         # And the printed card rows equal the run's compiled composition in
         # execution order (loop copies would appear as separate rows here).
         expected_rows = [
-            f"{stage.id}: {stage.name}" for stage in order_stages(run_captured["flow_doc"].stages)
+            line
+            for stage in order_stages(run_captured["flow_doc"].stages)
+            for line in (f"* {stage.id}:", f"    title: {stage.name}")
         ]
-        card_rows = card_out.splitlines()[2:]
+        card_rows = card_out.splitlines()[5:]
         assert card_rows == expected_rows
         # The workflow actually bent the composition away from the raw DSL —
         # otherwise both assertions above would hold trivially.
-        assert card_rows == ["build: Build", "audit: Audit"]
+        assert card_rows == ["* build:", "    title: Build", "* audit:", "    title: Audit"]
 
 
 # --- Edge case: host form errors precede any docker activity ---

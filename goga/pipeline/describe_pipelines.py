@@ -34,7 +34,8 @@ def describe_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineSummar
     conflicts collapsed in favor of the project source) is inherited from it.
     For every entry the pipeline-file of its own source directory is read and
     only its header parsed; the summary ``name`` is the discovered stem, not
-    the authored header ``name``.
+    the authored header ``name`` — the authored header ``name`` lands in the
+    summary ``display_name``.
 
     Args:
         project_dir: project-level pipelines directory (typically
@@ -64,7 +65,12 @@ def describe_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineSummar
             extra={"pipeline": entry.name, "source": entry.source.value},
         )
         summaries.append(
-            PipelineSummary(name=entry.name, source=entry.source, description=header.description)
+            PipelineSummary(
+                name=entry.name,
+                source=entry.source,
+                description=header.description,
+                display_name=header.name,
+            )
         )
 
     logger.debug("pipeline overview composed", extra={"count": len(summaries)})

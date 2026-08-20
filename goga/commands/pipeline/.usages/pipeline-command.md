@@ -11,8 +11,8 @@ boundary to goga/pipeline is docker.
 |---|---|
 | `goga pipeline` (no name, no `--list`) | error: `Missing pipeline name. Use "goga pipeline --list" to list available pipelines, or provide a pipeline name.` — stderr, exit 1, no docker activity |
 | `goga pipeline --list` / `-l` | flat list of pipeline names (project source entries suffixed with ` (project)`) |
-| `goga pipeline --list --info` / `-l -i` | overview: every pipeline with its description |
-| `goga pipeline NAME --info` / `-i` | card of one pipeline: name, description, stages (id + title) in execution order; nothing runs |
+| `goga pipeline --list --info` / `-l -i` | overview: every pipeline as a `* <name>` bullet block with indented `name:`/`description:` field lines |
+| `goga pipeline NAME --info` / `-i` | card of one pipeline: `name:`/`description:` fields, a `---` separator, then `* <id>:` stage bullets with indented `title:` lines in execution order; nothing runs |
 | `goga pipeline NAME` | run |
 
 `--list` and a name together is an error (mutually exclusive, clean message,

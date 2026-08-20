@@ -29,10 +29,10 @@ class TestPipelineSummaryContract:
         assert summary.description == "Deploy the service"
 
     def test_pipeline_summary_exposes_declared_field_names(self) -> None:
-        """The dataclass declares exactly name, source, and description."""
+        """The dataclass declares exactly name, source, description, and display_name."""
         fields = {f.name for f in PipelineSummary.__dataclass_fields__.values()}
 
-        assert fields == {"name", "source", "description"}
+        assert fields == {"name", "source", "description", "display_name"}
 
 
 class TestPipelineSummaryLogic:
@@ -43,6 +43,20 @@ class TestPipelineSummaryLogic:
         assert summary.name == "deploy"
         assert summary.source is PipelineSource.PROJECT
         assert summary.description == "Deploy the service"
+
+    def test_pipeline_summary_display_name_defaults_to_empty_string(self) -> None:
+        """The authored header name is optional — omitted constructions default to an empty string."""
+        summary = PipelineSummary(name="deploy", source=PipelineSource.PROJECT, description="Deploy the service")
+
+        assert summary.display_name == ""
+
+    def test_pipeline_summary_round_trips_display_name(self) -> None:
+        """A well-formed summary round-trips the authored header name."""
+        summary = PipelineSummary(
+            name="deploy", source=PipelineSource.PROJECT, description="Deploy the service", display_name="Deploy"
+        )
+
+        assert summary.display_name == "Deploy"
 
     def test_pipeline_summary_rejects_positional_arguments(self) -> None:
         """kw_only is enforced: positional construction is rejected."""
