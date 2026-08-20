@@ -589,6 +589,39 @@ class TestPipelineDispatchForms:
         assert mock_info.call_args.kwargs["hosts"] == {}
 
 
+# --- Facade contract: goga/commands/pipeline exports the info launcher ---
+
+
+class TestCommandsFacadeExportsInfoLauncher:
+    def test_commands_facade_exports_info_launcher(self) -> None:
+        """The package facade defines all three public names and lists them in ``__all__``.
+
+        ``goga.commands.pipeline`` is shadowed on the ``goga.commands`` package
+        by the pipeline Click command (see the module-level note above), so the
+        facade module is resolved via ``sys.modules`` — the same identifier the
+        ``from goga.commands.pipeline import ...`` obligation resolves through.
+        """
+        commands_facade = sys.modules["goga.commands.pipeline"]
+
+        for name in ("pipeline", "run_pipeline_container", "run_pipeline_info_container"):
+            assert hasattr(commands_facade, name), f"{name} is not defined on goga.commands.pipeline"
+            assert name in commands_facade.__all__, f"{name} is missing from goga.commands.pipeline.__all__"
+
+    def test_commands_facade_all_is_alphabetical_and_complete(self) -> None:
+        """``__all__`` holds exactly the three names in alphabetical order."""
+        commands_facade = sys.modules["goga.commands.pipeline"]
+        assert commands_facade.__all__ == ["pipeline", "run_pipeline_container", "run_pipeline_info_container"]
+
+    def test_commands_facade_info_launcher_is_importable_by_name(self) -> None:
+        """The consumer form ``from goga.commands.pipeline import run_pipeline_info_container`` works."""
+        from goga.commands.pipeline import run_pipeline_info_container as from_facade
+        from goga.commands.pipeline.run_pipeline_info_container import (
+            run_pipeline_info_container as from_module,
+        )
+
+        assert from_facade is from_module
+
+
 # --- Logic tests: exit-code propagation ---
 
 
