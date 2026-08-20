@@ -13,13 +13,23 @@ it returns instructions, never their resolution.
 
 A workflow-file is structurally malformed when its YAML is invalid, its root is
 not a mapping, it carries an unknown top-level or per-stage key, a field has the
-wrong type, an extend-entry forbids ``depends_on`` / mistypes ``before`` /
-``after`` / omits both / mistypes an inline ``agent`` / ``loop`` / ``approve``,
-a ``loop`` is below one, or it provides neither a top-level prompt, any stage
-entry, nor any extend entry. Each of those raises ``WorkflowSyntaxError`` (a
+wrong type (including a non-bool ``manual``), an extend-entry forbids
+``depends_on`` / ``skip`` / ``manual`` / mistypes ``before`` / ``after`` / omits
+both / mistypes an inline ``agent`` / ``loop`` / ``approve``, a ``loop`` is
+below one, or it provides neither a top-level prompt, any stage entry, nor any
+extend entry. Each of those raises ``WorkflowSyntaxError`` (a
 ``ValueError`` subclass, mirroring the compiler cell's ``StructuralError``)
 with an authored-time message. A missing or unreadable file lets the underlying
 ``OSError`` propagate unchanged — consistent with the compiler behavior.
+
+``manual`` is accepted ONLY in the ``stages`` block (strictly a bool; an absent
+key builds ``None``, NOT ``False`` — the three states stay distinguishable for
+the compiler). A ``manual`` key in an extend-entry is a structural error: the
+launch mode of a NEW stage is authored in its body via ``trigger`` (a full
+stage-body field that passes through the extend body verbatim here — the
+compiler validates its value), never via a workflow instruction. This cell
+does not act on ``manual`` — it is declarative; the compiler applies the
+force / cancel logic.
 """
 
 from __future__ import annotations
@@ -38,7 +48,7 @@ _TOP_LEVEL_KEYS = ("prompt", "stages", "extend")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
-_STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve")
+_STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve", "manual")
 
 # Keys extracted out of an extend-entry's body before construction: the
 # positioning keys (``before``/``after``) and the inline default overrides
@@ -64,9 +74,10 @@ class WorkflowSyntaxError(ValueError):
 
     A structural error is an authored-time defect in the workflow-file: invalid
     YAML, a non-mapping root, an unknown top-level or per-stage key, a
-    wrong-typed field, an extend-entry that forbids ``depends_on`` / mistypes
-    ``before`` / ``after`` / an inline ``agent`` / an inline ``loop`` / an
-    inline ``approve`` / omits both ``before`` and ``after``, a ``loop`` below
+    wrong-typed field (including a non-bool ``manual``), an extend-entry that
+    forbids ``depends_on`` / ``skip`` / ``manual`` / mistypes ``before`` /
+    ``after`` / an inline ``agent`` / an inline ``loop`` / an inline
+    ``approve`` / omits both ``before`` and ``after``, a ``loop`` below
     one, or a workflow that provides neither a top-level prompt, any stage
     entry, nor any extend entry. Agent-name resolution, loop expansion,
     extend-stage embedding, and ``depends_on`` rewriting are the compiler's
@@ -79,17 +90,23 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
 
     Read the file at ``workflow_path``, parse it as YAML, validate the expected
     top-level keys (``prompt``, ``stages``, ``extend``) and the per-stage key
-    set (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve``),
-    type-check each present field, validate each extend-entry's positioning
+    set (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve``,
+    ``manual``),
+    type-check each present field (``manual`` strictly a bool; an absent key
+    builds ``None``, NOT ``False``), validate each extend-entry's positioning
     (``before``/``after`` as ``list[str]``, ``depends_on`` forbidden, ``skip``
-    forbidden, at least one of ``before``/``after`` required) and any inline
+    forbidden, ``manual`` forbidden, at least one of ``before``/``after``
+    required) and any inline
     ``agent`` (str) / ``loop`` (int >= 1) / ``approve`` (one of ``auto``/
     ``plan``/``dialog``), enforce
     ``loop >= 1``, build one ``WorkflowStage`` per ``stages`` entry and one
     ``WorkflowExtendStage`` per ``extend`` entry, and return the aggregated
     ``WorkflowDocument``. No content validation beyond the structural schema; no
     agent-name resolution, no loop expansion, no extend-stage embedding, no
-    ``depends_on`` rewriting, no stage removal.
+    ``depends_on`` rewriting, no stage removal. A ``trigger`` key in the
+    ``stages`` block is an unknown-key structural error; a ``trigger`` key in
+    an extend-entry body passes through verbatim (the compiler validates its
+    value). This cell does not act on ``manual`` — it is declarative.
 
     Args:
         workflow_path: Absolute path to the workflow-file.
@@ -103,9 +120,11 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
             (propagated unchanged).
         WorkflowSyntaxError: If the file is invalid YAML, the root is not a
             mapping, an unknown top-level or per-stage key is present, a field
-            has the wrong type (including a non-bool ``skip``), an extend-entry
+            has the wrong type (including a non-bool ``skip`` or a non-bool
+            ``manual``), an extend-entry
             is malformed (non-mapping value, ``depends_on`` present, ``skip``
-            present, ``before``/``after`` not a ``list[str]``, an inline
+            present, ``manual`` present, ``before``/``after`` not a
+            ``list[str]``, an inline
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
             not one of ``auto``/``plan``/``dialog``, neither ``before`` nor
             ``after``), ``loop`` is
@@ -210,12 +229,16 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     """Validate one ``stages`` entry and build a ``WorkflowStage`` from it.
 
     The entry value must be a mapping. Its key set is validated against
-    ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve`` (unknown
+    ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve``,
+    ``manual`` (unknown
     key → structural error); each present field is then type-checked, ``loop``
     must be an ``int >= 1``, ``skills`` must be a ``list[str]``, ``skip`` must be
-    a ``bool``, and ``approve`` must be one of ``auto``/``plan``/``dialog``. Absent fields
+    a ``bool``, ``approve`` must be one of ``auto``/``plan``/``dialog``, and
+    ``manual`` must be a ``bool``. Absent fields
     stay ``None`` on the built ``WorkflowStage`` (``skip`` stays ``False`` — its
-    default — since absence is equivalent to ``False``).
+    default — since absence is equivalent to ``False``; ``manual`` stays
+    ``None`` — NOT ``False`` — since an absent key and an explicit
+    ``manual: false`` are DIFFERENT instructions the compiler must tell apart).
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -228,8 +251,9 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
         WorkflowSyntaxError: If the entry value is not a mapping, an unknown
             per-stage key is present, ``agent``/``prompt`` is not a str,
             ``loop`` is not an ``int >= 1``, ``skills`` is not a
-            ``list[str]``, ``skip`` is not a ``bool``, or ``approve`` is not
-            one of ``auto``/``plan``/``dialog``.
+            ``list[str]``, ``skip`` is not a ``bool``, ``approve`` is not
+            one of ``auto``/``plan``/``dialog``, or ``manual`` is not a
+            ``bool``.
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping stage {name} in workflow.stages")
@@ -240,6 +264,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     skills: list[str] | None = None
     skip: bool = False
     approve: str | None = None
+    manual: bool | None = None
 
     for key, field_value in value.items():
         validated = _validate_stage_field(name, key, field_value)
@@ -255,8 +280,18 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             skip = validated
         elif key == "approve":
             approve = validated
+        elif key == "manual":
+            manual = validated
 
-    return WorkflowStage(agent=agent, prompt=prompt, loop=loop, skills=skills, skip=skip, approve=approve)
+    return WorkflowStage(
+        agent=agent,
+        prompt=prompt,
+        loop=loop,
+        skills=skills,
+        skip=skip,
+        approve=approve,
+        manual=manual,
+    )
 
 
 def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
@@ -264,9 +299,12 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
     Dispatches by ``key`` over the ``_STAGE_KEYS`` set, enforcing each field's
     type (``agent``/``prompt`` str, ``loop`` int >= 1, ``skills`` list[str],
-    ``skip`` bool, ``approve`` one of ``auto``/``plan``/``dialog``). An unknown key raises
+    ``skip`` bool, ``approve`` one of ``auto``/``plan``/``dialog``, ``manual``
+    bool). An unknown key raises
     the unknown-key structural error with the full valid-set fragment
-    (``_STAGE_KEYS`` is the single source of that fragment). Returns the
+    (``_STAGE_KEYS`` is the single source of that fragment — ``trigger`` is a
+    full stage-body field, NOT a workflow key, so it lands here as an unknown
+    key). Returns the
     validated value unchanged (only ``loop`` is normalized via
     ``_validate_loop``, which already returns an ``int``).
 
@@ -277,19 +315,18 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
 
     Returns:
         The validated field value (``agent``/``prompt`` str, ``loop`` int,
-        ``skills`` list[str], ``skip`` bool, or ``approve`` str equal to one of
-        ``auto``/``plan``/``dialog``).
+        ``skills`` list[str], ``skip`` bool, ``approve`` str equal to one of
+        ``auto``/``plan``/``dialog``, or ``manual`` bool).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
             field value has the wrong type (non-str agent/prompt, non-int/<1
-            loop, non-list[str] skills, non-bool skip, or an ``approve`` that
-            is not a str equal to ``auto``/``plan``/``dialog``).
+            loop, non-list[str] skills, non-bool skip, an ``approve`` that
+            is not a str equal to ``auto``/``plan``/``dialog``, or a non-bool
+            ``manual``).
     """
-    if key == "agent":
-        return _validate_str_field(f"workflow.stages.{name}", "agent", field_value)
-    elif key == "prompt":
-        return _validate_str_field(f"workflow.stages.{name}", "prompt", field_value)
+    if key in ("agent", "prompt"):
+        return _validate_str_field(f"workflow.stages.{name}", key, field_value)
     elif key == "loop":
         return _validate_loop(f"workflow.stages.{name}", field_value)
     elif key == "skills":
@@ -297,9 +334,11 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
             raise WorkflowSyntaxError(f"non-list-of-str skills in workflow.stages.{name}")
 
         return field_value
-    elif key == "skip":
+    elif key in ("skip", "manual"):
+        # Both are strictly-bool flags sharing the same message shape; the
+        # field name lands verbatim in the location fragment.
         if not isinstance(field_value, bool):
-            raise WorkflowSyntaxError(f"non-bool value in workflow.stages.{name}.skip")
+            raise WorkflowSyntaxError(f"non-bool value in workflow.stages.{name}.{key}")
 
         return field_value
     elif key == "approve":
@@ -335,6 +374,10 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     (positioning is declared via ``before``/``after`` instead); ``skip`` is
     likewise forbidden (a new stage has no existing stage to delete, and skip is
     defined only for existing pipeline stages via the ``stages`` block);
+    ``manual`` is forbidden too (the launch mode of a NEW stage is authored in
+    its body via ``trigger`` — a full stage-body field that passes through
+    verbatim and is validated by the compiler — never via a workflow
+    instruction);
     ``before`` and ``after`` (when present) must each be a ``list[str]``; an
     inline ``agent`` (when present) must be a ``str``; an inline ``loop`` (when
     present) must be an ``int >= 1`` (``bool`` rejected first, symmetric with
@@ -344,10 +387,12 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     at least one of ``before``/``after`` must be present. Every other key passes
     through verbatim as the stage body. ``before``, ``after``, ``agent``,
     ``loop`` and ``approve`` are removed from the body before construction
-    (``depends_on`` and ``skip`` never reach it: they are rejected outright).
+    (``depends_on``, ``skip`` and ``manual`` never reach it: they are rejected
+    outright).
 
     The structural checks run in the CODEMANIFEST order (step 6.2):
-    non-mapping → ``depends_on`` → ``skip`` → ``before`` → ``after`` →
+    non-mapping → ``depends_on`` → ``skip`` → ``manual`` → ``before`` →
+    ``after`` →
     ``agent`` → ``loop`` → ``approve`` → at-least-one-of-before/after. The
     at-least-one check runs LAST so an entry carrying BOTH a positioning defect
     (no ``before``/``after``) AND a type defect (a bad inline
@@ -363,7 +408,8 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
 
     Raises:
         WorkflowSyntaxError: If the entry value is not a mapping, it contains a
-            ``depends_on`` key, it contains a ``skip`` key, ``before`` is not a
+            ``depends_on`` key, it contains a ``skip`` key, it contains a
+            ``manual`` key, ``before`` is not a
             ``list[str]``, ``after`` is not a ``list[str]``, an inline
             ``agent`` is not a ``str``, an inline ``loop`` is not an
             ``int >= 1``, an inline ``approve`` is not a str equal to one of
@@ -373,11 +419,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping extend entry {name} in workflow.extend")
 
-    if "depends_on" in value:
-        raise WorkflowSyntaxError(f"depends_on is forbidden in workflow.extend.{name}")
-
-    if "skip" in value:
-        raise WorkflowSyntaxError(f"skip is forbidden in workflow.extend.{name}")
+    _reject_forbidden_extend_keys(name, value)
 
     before = value.get("before")
     if before is not None and not _is_list_of_str(before):
@@ -415,6 +457,30 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     body = {key: entry_value for key, entry_value in value.items() if key not in _EXTEND_BODY_EXCLUDED}
 
     return WorkflowExtendStage(before=before, after=after, agent=agent, loop=loop, approve=approve, body=body)
+
+
+def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
+    """Reject the keys an extend-entry must never carry (contract 6.2.1 - 6.2.4).
+
+    Three keys are forbidden outright, each with its own message, checked in the
+    CODEMANIFEST order before any positioning/type validation: ``depends_on``
+    (positioning is declared via ``before``/``after`` instead), ``skip`` (a new
+    stage has no existing stage to delete — skip is defined only for existing
+    pipeline stages via the ``stages`` block), and ``manual`` (the launch mode
+    of a new stage is authored in its body via ``trigger``, never via a
+    workflow instruction). All three never reach the extend body.
+
+    Args:
+        name: The stage-name map key (used in error messages).
+        value: The raw entry value for this extend stage.
+
+    Raises:
+        WorkflowSyntaxError: If the entry carries ``depends_on``, ``skip``, or
+            ``manual`` (checked in that order).
+    """
+    for forbidden_key in ("depends_on", "skip", "manual"):
+        if forbidden_key in value:
+            raise WorkflowSyntaxError(f"{forbidden_key} is forbidden in workflow.extend.{name}")
 
 
 def _is_list_of_str(value: Any) -> bool:

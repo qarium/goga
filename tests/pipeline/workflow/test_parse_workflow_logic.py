@@ -216,6 +216,72 @@ class TestParseWorkflowPositive:
         assert deploy.skills == ["goga-deploy"]
         assert deploy.skip is False
 
+    def test_parse_workflow_manual_true_stages(self, tmp_path: Path) -> None:
+        """``manual: true`` on a stages entry builds WorkflowStage(manual=True).
+
+        Trace: parse_workflow → _extract_top_level → _build_stages →
+        _build_stage("deploy", {"manual": True}) → _validate_stage_field (the
+        manual branch: bool ok, returns True) → WorkflowStage(manual=True).
+        manual is independent of the other fields — they keep their defaults
+        (agent None, skip False).
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    manual: true\n")
+
+        document = parse_workflow(workflow_path)
+
+        deploy = document.stages["deploy"]
+        assert deploy.manual is True
+        # manual is independent of the other fields; they stay at their defaults.
+        assert deploy.agent is None
+        assert deploy.skip is False
+
+    def test_parse_workflow_manual_false_stages(self, tmp_path: Path) -> None:
+        """``manual: false`` on a stages entry builds WorkflowStage(manual=False).
+
+        An explicit ``manual: false`` is the cancel instruction — it must build
+        exactly ``False``, NOT ``None`` (losing the False → None distinction
+        would silently drop the cancel semantics for the compiler).
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    manual: false\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert document.stages["deploy"].manual is False
+
+    def test_parse_workflow_manual_absent_yields_none(self, tmp_path: Path) -> None:
+        """An absent ``manual`` key yields None (NOT False) — three distinguishable states.
+
+        Anchors the tri-state contract (6.1.10): absence is ``None``, so an
+        absent key and an explicit ``manual: false`` remain DIFFERENT
+        instructions.
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    agent: codex\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert document.stages["deploy"].manual is None
+
+    def test_parse_workflow_manual_coexists_with_other_fields(self, tmp_path: Path) -> None:
+        """``manual`` coexists with ``agent``/``loop``/``skills``/``approve`` in one entry."""
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n"
+            "  deploy:\n"
+            "    agent: codex\n"
+            "    loop: 2\n"
+            "    skills: [web-search]\n"
+            "    approve: auto\n"
+            "    manual: true\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        deploy = document.stages["deploy"]
+        assert deploy.manual is True
+        assert deploy.approve == "auto"
+        assert deploy.loop == 2
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -357,6 +423,29 @@ class TestParseWorkflowPositive:
         assert document.stages == {}
         assert set(document.extend) == {"warmup"}
 
+    def test_parse_workflow_trigger_in_extend_body_passes_verbatim(self, tmp_path: Path) -> None:
+        """A ``trigger`` key in an extend-entry body passes through to ``body`` verbatim.
+
+        Trace: _build_extend_stage: trigger is neither a validated positioning
+        key nor an excluded/forbidden key, so it lands in
+        ``body = {key: value for key not in _EXTEND_BODY_EXCLUDED}``. The
+        workflow cell does not know the stage field schema — ``trigger`` is a
+        full stage-body field whose value the compiler validates at compile
+        time, not here.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  extra:\n    after: [deploy]\n    trigger: manual\n    prompt: do extra\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        extra = document.extend["extra"]
+        assert "trigger" in extra.body
+        assert extra.body["trigger"] == "manual"
+        assert extra.body["prompt"] == "do extra"
+
     def test_parse_workflow_extend_body_passes_through_unknown_fields(self, tmp_path: Path) -> None:
         """An extend-entry body carries arbitrary stage fields verbatim; before/after are stripped."""
         workflow_path = _write(
@@ -469,10 +558,11 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        # The full valid-keys list now includes ``skip`` (5th) and ``approve``
-        # (6th); the substring ``agent, prompt, loop, skills`` alone would pass
-        # even without them, so assert the full trailing fragment.
-        assert "valid keys: agent, prompt, loop, skills, skip, approve" in message
+        # The full valid-keys list now includes ``skip`` (5th), ``approve``
+        # (6th), and ``manual`` (7th); the substring ``agent, prompt, loop,
+        # skills`` alone would pass even without them, so assert the full
+        # trailing fragment.
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
@@ -569,6 +659,64 @@ class TestParseWorkflowNegative:
 
         with pytest.raises(WorkflowSyntaxError, match=r"skip is forbidden in workflow\.extend\.x"):
             parse_workflow(workflow_path)
+
+    def test_parse_workflow_non_bool_manual_stages(self, tmp_path: Path) -> None:
+        """A non-bool ``manual`` raises WorkflowSyntaxError('non-bool value ... manual').
+
+        Trace: ``isinstance("yes", bool)`` is False → the new manual branch in
+        ``_validate_stage_field`` raises. The strict bool check (contract
+        6.1.9) cuts off int/str values that YAML could otherwise coerce; an
+        unquoted ``yes`` would parse as a bool, so it is quoted to exercise the
+        non-bool path.
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", 'stages:\n  deploy:\n    manual: "yes"\n')
+
+        with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.deploy\.manual"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_manual_forbidden_in_extend(self, tmp_path: Path) -> None:
+        """A ``manual`` key inside an extend entry raises WorkflowSyntaxError naming the entry.
+
+        The launch mode of a NEW stage is authored in its body via ``trigger``,
+        not via a workflow instruction. The check sits at contract position
+        6.2.4 — right after the skip check (6.2.3) and BEFORE the
+        before/after checks (6.2.5–6.2.6) — so the more specific manual error
+        is primary over the positional one.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "extend:\n  extra:\n    after: [deploy]\n    manual: true\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError, match=r"manual is forbidden in workflow\.extend\.extra"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_trigger_in_stages_is_unknown_key(self, tmp_path: Path) -> None:
+        """A ``trigger`` key in the stages block is an unknown-key structural error.
+
+        ``trigger`` is a full stage-body field, not a workflow modifier: in the
+        ``stages`` block it lands in the unknown-key branch of
+        ``_validate_stage_field`` (its extend-body counterpart passes through
+        verbatim instead). The valid-keys fragment comes from ``_STAGE_KEYS``,
+        so it must now include ``manual`` — pinning the tuple itself, not just
+        a prefix of the message.
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    trigger: manual\n")
+
+        with pytest.raises(WorkflowSyntaxError, match=r"unknown key in workflow\.stages\.deploy: trigger"):
+            parse_workflow(workflow_path)
+
+    def test_parse_workflow_trigger_unknown_key_message_lists_manual(self, tmp_path: Path) -> None:
+        """The unknown-key message for ``trigger`` lists the full valid-keys fragment with ``manual``."""
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    trigger: manual\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        message = str(exc_info.value)
+        assert "unknown key in workflow.stages.deploy: trigger" in message
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message
 
     def test_parse_workflow_approve_non_auto_rejected(self, tmp_path: Path) -> None:
         """An ``approve`` value outside the accepted set is rejected (stages entry).
