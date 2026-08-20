@@ -104,7 +104,7 @@ goga pipeline patch         # refactoring or minimal change with a plan
 goga pipeline review        # scoped review of code, contracts, docs, then lint/format/tests
 ```
 
-Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, stage skipping, new stages).
+Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, new stages).
 
 **4. Drive the cycle by hand (optional)** — if you want explicit control over each step instead of running a full pipeline, formulate the task and step through each command manually:
 
@@ -186,7 +186,7 @@ A running pipeline executes inside a Docker container, where its flows, run-stat
 
 ### Workflows — configure and extend a pipeline
 
-A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Five levers, each with a short example.
+A **workflow-file** (`.goga/workflows/<name>.yml`) configures and extends a compiled pipeline at run time, without touching the pipeline-file. Six levers, each with a short example.
 
 **`agent` — hire a different agent per stage.** Authoring on `codex`, reviews on `claude`, no pipeline duplication:
 
@@ -218,6 +218,14 @@ stages:
     approve: auto   # the stage will not prompt the user and will self-approve
 ```
 
+**`manual` — hold a stage for manual launch.** `manual: true` compiles the stage with `auto_run: false` — the run pauses when it reaches the stage and continues only after you launch it; `manual: false` cancels a `trigger: manual` authored in the stage body:
+
+```yaml
+stages:
+  deploy:
+    manual: true    # the pipeline pauses before deploy until launched manually
+```
+
 **`skills` — add skills to a stage.** Merged with the pipeline stage's own skills (pipeline-first, deduplicated by value):
 
 ```yaml
@@ -242,7 +250,7 @@ stages:
       - Do not build architecture in the task.
 ```
 
-Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning. The full model is in the [Workflows](https://qarium.github.io/goga/pipelines/workflows/) documentation.
+Additionally: `skip: true` removes a stage with transparent reconnection of dependents, and `extend:` adds brand-new stages with `before`/`after` positioning (a new stage's own launch mode is authored in its body via `trigger: manual`). The full model is in the [Workflows](https://qarium.github.io/goga/pipelines/workflows/) documentation.
 
 Run with a workflow:
 

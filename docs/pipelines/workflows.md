@@ -4,7 +4,8 @@ A **workflow-file** is an optional YAML document that layers project-specific
 behavior on top of a compiled pipeline at run time. A workflow can inject a
 top-level prompt, override the agent or prompt of specific stages, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**,
-declare per-stage **auto-approval** via `approve`, and **declaratively add
+declare per-stage **auto-approval** via `approve`, force or cancel a stage's
+**manual launch mode** via `manual`, and **declaratively add
 new stages** to the pipeline via `extend`.
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
@@ -61,7 +62,7 @@ Unknown top-level keys are rejected with
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to six
+Each entry under `stages` is keyed by stage name and accepts up to seven
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -72,12 +73,13 @@ fields:
 | `skills`| string list | —   | Skill names merged with the pipeline stage's own `skills` (pipeline-first, deduplicated by value). See [Skills merge](#skills-merge). |
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
 | `approve` | string | —     | Auto-approval directive. Accepted values are `auto`, `plan`, and `dialog`; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)): (1) **communication effect** — if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) **roles effect** — if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. `auto` drives BOTH effects; `plan` drives only the communication effect; `dialog` drives only the roles effect. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
+| `manual` | bool | —     | Manual-launch instruction, `stages` block only. `true` forces the manual launch mode: the compiler emits `auto_run: false` for the stage, overriding any authored `trigger` in its body. `false` cancels a manual state coming from either body source (a pipeline-file `trigger: manual` or an extend body `trigger: manual`) and is a structural error (`manual: false on non-manual stage <NAME>`) when the stage is not manual. An absent key means no instruction — the stage's own `trigger` decides. The three states (`true`/`false`/absent) are distinct; a non-bool value (including `null`) is a structural error. Allowed ONLY in `stages` — it is a structural error under `extend` (a new stage's launch mode is authored in its body via `trigger`). `skip` wins over `manual`: a skipped stage is removed before the manual instruction is applied. See [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve` are valid. An unknown key
+- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual` are valid. An unknown key
   is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip, approve`.
+  agent, prompt, loop, skills, skip, approve, manual`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -91,6 +93,10 @@ Rules:
   workflow.stages.<NAME>.approve`; any other string raises `approve must be
   one of: auto, plan, dialog in workflow.stages.<NAME>` (see
   [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)).
+- `manual` (when present) must be a `bool`. A non-bool value (including an
+  explicit `null`) raises `non-bool value in workflow.stages.<NAME>.manual`.
+  `manual` is allowed only in the `stages` block — it is a structural error
+  under `extend`.
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
@@ -256,6 +262,40 @@ Under `extend`, `approve` is an inline default override exactly like inline
 it is extracted from the entry (never reaches the body), and a `stages` entry
 naming the same stage wins per-field.
 
+### Manual launch (`manual` and `trigger`)
+
+A stage's launch mode has two authoring surfaces that meet in the compiler:
+
+- The **stage body** (a pipeline-file stage or an `extend` body) carries a
+  `trigger` field — `on_success` (the default) or `manual`. `trigger: manual`
+  compiles to the afm `auto_run: false` key (see
+  [Pipeline files](pipeline-file.md)): the stage pauses when reached and runs
+  only when launched manually. An authoring `auto_run` key in a body is a
+  structural error — the output key is assembled by the compiler, never
+  authored.
+- The **workflow `stages` block** carries `manual` — a force/cancel instruction
+  applied ON TOP of the body, without editing the pipeline-file:
+
+| `manual`     | Effect on the stage                                            |
+|--------------|----------------------------------------------------------------|
+| *(absent)*   | No instruction — the body's own `trigger` decides.             |
+| `true`       | Forces manual: the stage compiles with `auto_run: false`, overriding any authored `trigger`. Idempotent on a stage that is already manual. |
+| `false`      | Cancels manual: an effective `trigger: manual` (from the pipeline-file body or an `extend` body) is rewritten to `on_success`, so no `auto_run` key is emitted. A structural error when the stage is NOT manual (`manual: false on non-manual stage <NAME>`) — cancelling a state that does not exist is an authoring mistake, not a no-op. |
+
+```yaml
+stages:
+  deploy:
+    manual: true   # hold the deploy stage for manual launch
+```
+
+`manual` is allowed ONLY in the `stages` block — under `extend` it is a
+structural error (`manual is forbidden in workflow.extend.<NAME>`): a new
+stage's launch mode is authored in its own body via `trigger`, never via a
+workflow instruction. `skip` wins over `manual`: a skipped stage is removed
+before the manual instruction is applied, so `skip: true` + `manual: true`
+on one entry simply deletes the stage. On a `loop`-expanded stage every copy
+carries the launch mode of the original.
+
 ## Extending the pipeline with new stages
 
 The `stages` block only overrides stages that already exist in the target
@@ -284,12 +324,17 @@ Positioning (`before` / `after`), default overrides (`agent` / `loop` /
 - `agent`, `loop`, and `approve` are optional **default overrides** extracted
   from the entry (see [Inline agent, loop, and approve overrides](#inline-agent-loop-and-approve-overrides)).
 - Everything else in the entry (`title`, `prompt`, `skills`, `roles`,
-  `communication`, or any other stage field) is the **verbatim body** of the new
+  `communication`, `trigger`, or any other stage field) is the **verbatim body** of the new
   stage. It is carried through unchanged and embedded as an ordinary stage in
   the compiled output. `before`, `after`, `agent`, `loop`, `approve`, and
   `depends_on` are never part of the body — `agent`/`loop`/`approve` are
   extracted as override fields, and `depends_on` is forbidden here (positioning
-  is declared structurally, not as a dependency edge).
+  is declared structurally, not as a dependency edge). `trigger` IS part of the
+  body: a new stage's launch mode is authored right there (`trigger: manual`
+  compiles to `auto_run: false`), which is why the workflow `manual` key is
+  forbidden in an `extend` entry (see
+  [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger));
+  `skip` is likewise forbidden (a new stage has nothing to skip).
 - The `title` field, when omitted, falls back to the entry key — so a stage
   declared under `extend: warmup:` without a `title` is still labeled
   `warmup` in the output.
@@ -518,6 +563,15 @@ For each `(stage_name, effective_stage)` pair in the effective override map:
      approve effects (each on its own directive subset) and never reaches the
      output. See
      [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog).
+   - The effective `manual` instruction is applied to the WORKING copy of the
+     body (the parsed `PipelineDocument` is never mutated): `true` sets the
+     working body's trigger to `manual` over any authored value (idempotent on
+     an already-manual stage); `false` rewrites an effective `trigger: manual`
+     back to `on_success` or raises `manual: false on non-manual stage <NAME>`
+     when the stage is not manual; absent is a no-op. The resulting trigger is
+     translated during canonical field assembly (Pass 4) into the afm
+     `auto_run: false` key. See
+     [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger).
 
 ### Skills merge
 
@@ -735,16 +789,19 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
 | Inline `approve` in an extend entry not one of `auto`/`plan`/`dialog` | `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>` |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
 | `loop` is an int but `< 1`                                      | `loop must be >= 1 in workflow.stages.<NAME>`                               |
 | `skills` present but not a `list[str]`                          | `non-list-of-str skills in workflow.stages.<NAME>`                          |
 | `skip` is not a bool                                            | `non-bool value in workflow.stages.<NAME>.skip`                             |
+| `manual` is not a bool                                          | `non-bool value in workflow.stages.<NAME>.manual`                           |
 | `approve` present but not a string                              | `non-str value in workflow.stages.<NAME>.approve`                           |
 | `approve` present but not one of `auto`/`plan`/`dialog`         | `approve must be one of: auto, plan, dialog in workflow.stages.<NAME>`      |
 | `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
+| `manual` present under `extend`                                 | `manual is forbidden in workflow.extend.<NAME>`                             |
+| `manual: false` on a stage that is not manual                   | `manual: false on non-manual stage <NAME>`                                  |
 | Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
 | Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |
 | Unknown ref in `workflow.extend.<NAME>.after`                  | `unknown stage name in workflow.extend.<NAME>.after: <REF>`                |

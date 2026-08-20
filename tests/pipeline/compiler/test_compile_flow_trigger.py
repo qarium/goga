@@ -250,6 +250,33 @@ class TestCompileFlowTriggerTranslation:
         with pytest.raises(StructuralError, match="trigger must be one of: on_success, manual"):
             compile_flow(pipeline_path, tmp_path / "flow.yml")
 
+    def test_compile_flow_extend_body_trigger_invalid_value_rejected(self, tmp_path: Path) -> None:
+        """A ``trigger`` value outside the closed set is rejected on the extend path too.
+
+        The extend body passes through the embed's body filtering
+        (``_extend_step_title_and_body`` strips ``title``/``name``/``id``) —
+        this pins that ``trigger`` survives it and still reaches
+        ``_validate_trigger`` in step 5, exactly like a pipeline-file body. A
+        typo'd trigger on the extend path must not silently compile as
+        ``on_success`` and auto-run instead of pausing.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "extend:\n"
+            "  extra:\n"
+            "    after: [deploy]\n"
+            "    trigger: on_failure\n"
+            "    prompt: do extra\n",
+        )
+
+        with pytest.raises(StructuralError, match="trigger must be one of: on_success, manual"):
+            compile_flow(pipeline_path, tmp_path / "flow.yml", workflow=parse_workflow(workflow_path))
+
     def test_compile_flow_authoring_auto_run_forbidden(self, tmp_path: Path) -> None:
         """An authoring ``auto_run`` key in a pipeline-file body is rejected."""
         pipeline_path = tmp_path / "pipeline.yml"
@@ -578,7 +605,7 @@ class TestCompileFlowWorkflowManual:
         assert "auto_run: false" in deploy_block
 
     def test_compile_flow_workflow_manual_true_forces_extend_stage(self, tmp_path: Path) -> None:
-        """Force × extend body: the instruction CREATES the manual state.
+        """Force over extend body: the instruction CREATES the manual state.
 
         The extend body carries no trigger at all; the stages-block ``manual:
         true`` (merged over the extend seed) installs it. Exercises the merged

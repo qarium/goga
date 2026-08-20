@@ -53,8 +53,8 @@ _STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve", "manual")
 # Keys extracted out of an extend-entry's body before construction: the
 # positioning keys (``before``/``after``) and the inline default overrides
 # (``agent``/``loop``/``approve``). Every other key passes through verbatim as
-# the stage body (``depends_on`` and ``skip`` never reach the body — they are
-# rejected outright).
+# the stage body (``depends_on``, ``skip`` and ``manual`` never reach the body —
+# they are rejected outright).
 _EXTEND_BODY_EXCLUDED = ("before", "after", "agent", "loop", "approve")
 
 # Accepted values for the ``approve`` directive (per-stage AND inline extend),
@@ -460,7 +460,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
 
 
 def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
-    """Reject the keys an extend-entry must never carry (contract 6.2.1 - 6.2.4).
+    """Reject the keys an extend-entry must never carry (contract 6.2.2 - 6.2.4).
 
     Three keys are forbidden outright, each with its own message, checked in the
     CODEMANIFEST order before any positioning/type validation: ``depends_on``

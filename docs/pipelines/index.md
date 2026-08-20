@@ -34,7 +34,8 @@ The pipelines layer is split into two authoring surfaces:
   (user).
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
-  prompt overrides, loop expansion, stage skipping via `skip`, and new stages declared via `extend`.
+  prompt overrides, loop expansion, stage skipping via `skip`, manual launch
+  via `manual`, and new stages declared via `extend`.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -75,9 +76,12 @@ When a workflow is in scope, the compiler reconstructs the parsed body
 positioned via `before`/`after`, per-stage `agent` overrides choose which
 CLI agent runs the stage, per-stage `prompt` overrides layer additional
 context alongside the stage's own prompt, `skip: true` removes the stage and reconnects its dependents' `depends_on`, `loop: N` expands the stage
-into N chained copies, and per-stage `approve: auto|plan|dialog` drives
+into N chained copies, per-stage `approve: auto|plan|dialog` drives
 the afm auto-approval effects (interactive suppression and/or
-`auto_approve` emission). The pipeline-file itself can also carry
+`auto_approve` emission), and per-stage `manual: true|false` forces or
+cancels the stage's manual launch mode (a stage-body `trigger: manual`
+compiles to the afm `auto_run: false` key — the stage pauses until
+launched). The pipeline-file itself can also carry
 `before_script` / `script` / `after_script` shell directives on any stage
 — compiled to the afm `script_*` keys. See [Workflows](workflows.md) and
 [Pipeline File — Script directives](pipeline-file.md#script-directives)

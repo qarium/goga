@@ -40,7 +40,7 @@ from dataclasses import dataclass
 class WorkflowStage:
     """A single per-stage override instruction from a workflow-file.
 
-    The five fields ``agent``, ``prompt``, ``loop``, ``skills``, ``approve``,
+    The six fields ``agent``, ``prompt``, ``loop``, ``skills``, ``approve``,
     and ``manual`` default to ``None`` — a workflow-file may omit any of them,
     and ``parse_workflow`` produces ``None`` for missing fields; ``skip``
     defaults to ``False``. Field order is fixed (``agent``, ``prompt``,

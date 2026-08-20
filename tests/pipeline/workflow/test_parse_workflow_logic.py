@@ -660,16 +660,28 @@ class TestParseWorkflowNegative:
         with pytest.raises(WorkflowSyntaxError, match=r"skip is forbidden in workflow\.extend\.x"):
             parse_workflow(workflow_path)
 
-    def test_parse_workflow_non_bool_manual_stages(self, tmp_path: Path) -> None:
+    @pytest.mark.parametrize(
+        "manual_yaml",
+        ['"yes"', "1", "~"],
+        ids=["str", "int", "explicit-null"],
+    )
+    def test_parse_workflow_rejects_non_bool_manual(self, tmp_path: Path, manual_yaml: str) -> None:
         """A non-bool ``manual`` raises WorkflowSyntaxError('non-bool value ... manual').
 
-        Trace: ``isinstance("yes", bool)`` is False → the new manual branch in
+        Trace: ``isinstance("yes", bool)`` is False → the manual branch in
         ``_validate_stage_field`` raises. The strict bool check (contract
         6.1.9) cuts off int/str values that YAML could otherwise coerce; an
         unquoted ``yes`` would parse as a bool, so it is quoted to exercise the
-        non-bool path.
+        non-bool path. An explicit ``null`` is likewise a non-bool structural
+        type error — symmetric with ``skip: ~``: presence of the key forces the
+        type check, and an absent-vs-null distinction must NOT collapse the
+        tri-state (``None`` means "no instruction", the compiler's no-op).
         """
-        workflow_path = _write(tmp_path, "workflow.yml", 'stages:\n  deploy:\n    manual: "yes"\n')
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"stages:\n  deploy:\n    manual: {manual_yaml}\n",
+        )
 
         with pytest.raises(WorkflowSyntaxError, match=r"non-bool value in workflow\.stages\.deploy\.manual"):
             parse_workflow(workflow_path)
@@ -680,13 +692,16 @@ class TestParseWorkflowNegative:
         The launch mode of a NEW stage is authored in its body via ``trigger``,
         not via a workflow instruction. The check sits at contract position
         6.2.4 — right after the skip check (6.2.3) and BEFORE the
-        before/after checks (6.2.5–6.2.6) — so the more specific manual error
-        is primary over the positional one.
+        before/after checks (6.2.5-6.2.6) — so the more specific manual error
+        is primary over the positional one. The entry deliberately carries NO
+        ``before``/``after``: both defects (the forbidden key and the missing
+        positioning) are present, so only the documented ordering surfaces the
+        ``manual`` error rather than the at-least-one positional error (6.2.10).
         """
         workflow_path = _write(
             tmp_path,
             "workflow.yml",
-            "extend:\n  extra:\n    after: [deploy]\n    manual: true\n",
+            "extend:\n  extra:\n    manual: true\n",
         )
 
         with pytest.raises(WorkflowSyntaxError, match=r"manual is forbidden in workflow\.extend\.extra"):

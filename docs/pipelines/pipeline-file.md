@@ -123,6 +123,12 @@ assigned semantics:
 > translates it to the afm output key `interactive` (which stays stable in the
 > compiled flow-file). Authoring `interactive` directly is rejected with a
 > structural error — use `communication`.
+>
+> Symmetrically, the authoring field for the launch mode is `trigger`. The
+> compiler translates `trigger: manual` to the afm output key `auto_run: false`
+> (the stage pauses when reached and runs only when launched manually). Authoring
+> `auto_run` directly is rejected with a structural error — use
+> `trigger: manual`.
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
@@ -135,6 +141,7 @@ assigned semantics:
 | `script`      | string           | —                           | Shell script run as the stage body; compiles to the afm `script` field. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
 | `after_script`  | string         | —                           | Shell script run after the stage; compiles to the afm `script_after` field. See [Script directives](#script-directives). |
 | `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
+| `trigger`     | string (`on_success` \| `manual`) | `on_success` (no key emitted) | Launch mode of the stage. `trigger: manual` compiles to the afm `auto_run: false` key (canonical slot right after `auto_approve`) — the stage pauses when reached and runs only when launched manually; `trigger: on_success` (or an absent key) emits no `auto_run` key. Authoring `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
 
 ### Body step `title` field
@@ -414,6 +421,9 @@ workflow-agent semantics.
 | Non-mapping `roles` block in header                      | `non-mapping roles block in header`                             |
 | Non-string value in header `roles.<key>`                 | `non-str value in header.roles.<key>`                           |
 | Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
+| Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
+| Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
+| `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
 | `script` authored together with `prompt` and/or `skills` | `script is mutually exclusive with prompt/skills in stage <NAME>` |
 | Body shape is neither list nor dict                      | `unsupported body format`                                       |
 | Body has zero steps                                      | `empty body`                                                    |

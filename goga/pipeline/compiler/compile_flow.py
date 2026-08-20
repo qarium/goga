@@ -510,8 +510,6 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
-        # Inline extend carries agent/loop/approve only — no prompt/skills
-        # override, and no manual (forbidden in an extend-entry by the parser).
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():

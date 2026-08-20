@@ -115,7 +115,7 @@ At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mo
 
 ## Workflow files
 
-A pipeline run (or card) can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, loop-expansion, stage skipping via `skip`, and new stages via `extend` on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
+A pipeline run (or card) can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, loop-expansion, stage skipping via `skip`, manual launch via `manual`, and new stages via `extend` on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
 
 Three invocation modes (mutually exclusive in the explicit cases), honored by both the run and the card form:
 
@@ -127,7 +127,7 @@ For a run, the decision reaches the container via the env-file (`GOGA_WORKFLOW_N
 
 When a workflow will actually be applied to a run (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line and the `docker` output stream.
 
-Inside the container the goga in-container process resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, `skip: true` removes the stage and reconnects its dependents' `depends_on`, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
+Inside the container the goga in-container process resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, `skip: true` removes the stage and reconnects its dependents' `depends_on`, a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id), and `manual: true|false` forces or cancels the stage's manual launch mode (compiling to the afm `auto_run` key).
 
 Example workflow-file:
 
