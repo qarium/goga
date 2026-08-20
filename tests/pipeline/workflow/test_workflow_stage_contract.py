@@ -56,6 +56,18 @@ class TestWorkflowStageContract:
         assert hasattr(WorkflowStage(), "approve")
         assert WorkflowStage(approve="auto").approve == "auto"
 
+    def test_workflow_stage_has_manual_property(self) -> None:
+        """WorkflowStage exposes a ``manual`` property defaulting to None (NOT False).
+
+        The property is declared by the workflow-cell CODEMANIFEST as the last
+        field of the fixed canonical order; the tri-state default keeps an
+        absent key and an explicit ``manual: false`` distinguishable.
+        """
+        assert hasattr(WorkflowStage(), "manual")
+        assert WorkflowStage().manual is None
+        assert WorkflowStage(manual=True).manual is True
+        assert WorkflowStage(manual=False).manual is False
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -67,7 +79,7 @@ class TestWorkflowStageContract:
         assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all six fields as keyword-only arguments."""
+        """WorkflowStage accepts all seven fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
             prompt="text",
@@ -75,6 +87,7 @@ class TestWorkflowStageContract:
             skills=["web-search", "goga-propose"],
             skip=True,
             approve="auto",
+            manual=True,
         )
 
         assert stage.agent == "codex"
@@ -83,3 +96,4 @@ class TestWorkflowStageContract:
         assert stage.skills == ["web-search", "goga-propose"]
         assert stage.skip is True
         assert stage.approve == "auto"
+        assert stage.manual is True
