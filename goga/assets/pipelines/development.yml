@@ -68,24 +68,19 @@ description: "Development process"
   skills:
     - goga-review-plan
 
-- name: prepare-build
-  title: "Commit changes and wait for the coding plan was built"
+- name: commit-changes
+  title: "Commit changes"
   communication: true
   prompt: |
-    Steps:
-      1. Commit all added and modified files.
-      2. Ask the user whether the implementation is built and ready for acceptance.
-
-    Requirements:
-      - If the user confirms it is ready for acceptance — complete the execution.
+    Commit all added and modified files.
 
     Constraints:
-      - Don't autoconfirm user answer.
-      - Except changes in `docs/<defines|proposals|tasks|arch|design|plans>`.
+    - Except changes in `docs/<defines|proposals|tasks|arch|design|plans>`.
 
 - name: accept-result
   title: "Contracts & coverage audit"
   communication: true
+  trigger: manual
   prompt: |
     Commit changes after fixes
   skills:
