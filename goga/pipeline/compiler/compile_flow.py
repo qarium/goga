@@ -28,7 +28,17 @@ compiled afm output field is ``interactive``. A step body carrying
 ``communication`` is translated into the output ``interactive`` slot; an
 authoring ``interactive`` key is rejected with ``StructuralError("interactive key
 is forbidden in stage body; use communication")`` — the afm output key
-``interactive`` is stable, so only ``communication`` is ever authored. ``auto`` is a
+``interactive`` is stable, so only ``communication`` is ever authored. Symmetrically,
+the authoring-side stage-body field for the launch mode is ``trigger``; the compiled
+afm output field is ``auto_run``. A step body carrying ``trigger: manual`` is
+translated into the output ``auto_run: false`` slot (canonical position immediately
+after ``auto_approve``); ``trigger: on_success`` (or no trigger) assembles NO
+``auto_run`` key, and ``auto_run: true`` is never emitted. An authoring ``auto_run``
+key is rejected with ``StructuralError("auto_run key is forbidden in stage body; use
+trigger: manual")``; a ``trigger`` value outside ``on_success``/``manual`` is rejected
+with ``StructuralError("trigger must be one of: on_success, manual")`` — the
+authoring key is consumed by the translation, never passed through as an unknown
+key. ``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
 but they pass through the canonical slot when the source body carries them. The
@@ -83,13 +93,17 @@ logger = logging.getLogger(__name__)
 # so the supervisor block reads as a continuation of the agents block.
 # ``auto_approve`` (bool) sits right after ``interactive`` and is present only
 # when an approve directive driving the roles effect (``auto``/``dialog``) +
-# planner-in-roles fired (workflow-driven). The author
+# planner-in-roles fired (workflow-driven). ``auto_run`` (bool) sits right after
+# ``auto_approve`` and is present ONLY when the stage's effective trigger is
+# ``manual`` (the value is always ``False`` — ``auto_run: true`` is never
+# assembled; afm pauses such a stage until a manual launch). The author
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
 # they appear only when authored, so flow-files without them compile byte-identically.
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
+    "auto_run",
     "command",
     "prompt",
     "description",
@@ -244,6 +258,61 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
+    """Reject authoring-side stage-body keys that duplicate output-only afm fields.
+
+    Three authoring keys are forbidden because each names an afm OUTPUT field
+    whose authoring-side counterpart is a different key: ``agents`` (author the
+    ``roles`` field — translated element-wise), ``interactive`` (author the
+    ``communication`` field — renamed), and ``auto_run`` (author the ``trigger``
+    field — ``trigger: manual`` assembles ``auto_run: false``). Checking them in
+    one place, at the very start of ``_canonical_fields``, keeps every
+    prohibition ahead of any translation, exactly as the contract orders it.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl`` (or an embedded
+            extend body).
+
+    Raises:
+        StructuralError: When ``body`` carries any of the three authoring keys,
+            with the contract message naming the authoring-side field to use.
+    """
+    if "agents" in body:
+        raise StructuralError("agents key is forbidden in stage body; use roles")
+    if "interactive" in body:
+        raise StructuralError("interactive key is forbidden in stage body; use communication")
+    if "auto_run" in body:
+        raise StructuralError("auto_run key is forbidden in stage body; use trigger: manual")
+
+
+def _validate_trigger(body: dict[str, Any]) -> str | None:
+    """Return the effective ``trigger`` of ``body``, validating the closed value set.
+
+    Validation gates on the VALUE, not key presence: a ``trigger:`` with no
+    value parses to ``None`` and is treated as ABSENT — symmetrically to
+    ``roles: null``. Any non-``None`` value outside the closed set
+    ``on_success``/``manual`` — including non-str values, which can never be
+    members of a str tuple — raises.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl`` (workflow path: a
+            reconstructed deep copy, possibly already rewritten by the manual
+            override pass).
+
+    Returns:
+        The effective trigger (``"on_success"``, ``"manual"``), or ``None``
+        when the key is absent or carries a null value.
+
+    Raises:
+        StructuralError: When ``body`` carries a non-null ``trigger`` value
+            outside ``on_success``/``manual``.
+    """
+    effective_trigger = body.get("trigger")
+    if effective_trigger is not None and effective_trigger not in ("on_success", "manual"):
+        raise StructuralError("trigger must be one of: on_success, manual")
+    return effective_trigger
+
+
 def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
@@ -253,7 +322,20 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     Likewise, an authoring ``interactive`` key is rejected with
     ``StructuralError("interactive key is forbidden in stage body; use
     communication")`` — the authoring-side field is ``communication``; ``interactive``
-    is the output-only afm field.
+    is the output-only afm field. Likewise, an authoring ``auto_run`` key is
+    rejected with ``StructuralError("auto_run key is forbidden in stage body; use
+    trigger: manual")`` — the authoring-side field for the launch mode is
+    ``trigger``; ``auto_run`` is the output-only afm field.
+
+    The ``trigger`` key (when present in a pipeline-file body, an embedded
+    extend body, or a loop-expanded copy) is read and validated: any non-``None``
+    value outside the closed set ``on_success``/``manual`` — including non-str
+    values, which can never be members of the set — raises
+    ``StructuralError("trigger must be one of: on_success, manual")``. Validation
+    gates on the VALUE, not key presence: ``trigger:`` with no value parses to
+    ``None`` and is treated as ABSENT (symmetrically to ``roles: null``). The key
+    is consumed (excluded from the rebuilt dict, like ``_APPROVE_SENTINEL``), so
+    the authoring key never reaches the output as an unknown key.
 
     The ``_APPROVE_SENTINEL`` key (if present — threaded by
     ``_apply_per_stage_overrides`` only on the workflow path) is read and
@@ -277,7 +359,11 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     body lacks a usable ``roles`` value. Under an approve directive driving the
     roles effect (``auto``/``dialog``) + ``planner`` in the raw ``roles``,
     ``auto_approve: true`` is emitted (canonical slot right after
-    ``interactive``). Known keys (``interactive``, ``auto_approve``, ``command``,
+    ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
+    ``auto_run: false`` (canonical slot immediately after ``auto_approve``);
+    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key —
+    ``auto_run: true`` is never emitted. Known keys (``interactive``,
+    ``auto_approve``, ``auto_run``, ``command``,
     ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
     ``skills``, ``script_before``, ``script``, ``script_after``) are emitted in
     that fixed order; any remaining keys are appended alphabetically. The
@@ -308,13 +394,15 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             authoring-side field is ``roles``; ``agents`` is output-only. Or if
             ``body`` carries an authoring ``interactive`` key — the authoring-side
             field is ``communication``; ``interactive`` is output-only. Or if
+            ``body`` carries an authoring ``auto_run`` key — the authoring-side
+            field for the launch mode is ``trigger``; ``auto_run`` is
+            output-only. Or if ``body`` carries a ``trigger`` value outside the
+            closed set ``on_success``/``manual`` (a ``None`` value counts as
+            absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
             — they are mutually exclusive.
     """
-    if "agents" in body:
-        raise StructuralError("agents key is forbidden in stage body; use roles")
-    if "interactive" in body:
-        raise StructuralError("interactive key is forbidden in stage body; use communication")
+    _reject_authoring_output_keys(body)
 
     # Read the approve sentinel (output-only plumbing) WITHOUT mutating ``body``
     # — reading (not popping) keeps this function non-mutating on every path.
@@ -324,18 +412,23 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # non-workflow path carries no sentinel).
     effective_approve = body.get(_APPROVE_SENTINEL)
 
+    # Read and validate the stage trigger directive WITHOUT mutating ``body``
+    # (see ``_validate_trigger`` — a null value counts as absent).
+    effective_trigger = _validate_trigger(body)
+
     # Capture the raw roles list BEFORE translation — the auto_approve effect
     # matches the authored role "planner", not its translated stem "planning".
     raw_roles = body.get("roles")
 
     # Translate the authoring script directives into their output keys (the
     # authoring keys are consumed, never passed through as unknown keys) and drop
-    # the approve sentinel so it never reaches the output. A fresh dict is built
-    # rather than mutating ``body`` in place.
+    # the approve sentinel and the authoring ``trigger`` key — both consumed by
+    # their translations, so neither ever reaches the output. A fresh dict is
+    # built rather than mutating ``body`` in place.
     body = {
         ("script_before" if key == "before_script" else "script_after" if key == "after_script" else key): value
         for key, value in body.items()
-        if key != _APPROVE_SENTINEL
+        if key not in (_APPROVE_SENTINEL, "trigger")
     }
 
     # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
@@ -368,6 +461,13 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     has_planner = isinstance(raw_roles, list) and "planner" in raw_roles
     if effective_approve in _APPROVE_EMIT_AUTO_APPROVE and has_planner:
         source["auto_approve"] = True
+
+    # A body whose effective trigger is ``manual`` assembles ``auto_run: false``
+    # — the canonical loop slots it immediately after ``auto_approve``. A body
+    # with ``trigger: on_success`` (or no trigger) assembles NO ``auto_run`` key;
+    # ``auto_run: true`` is never emitted on any path.
+    if effective_trigger == "manual":
+        source["auto_run"] = False
 
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:
@@ -1195,7 +1295,13 @@ def compile_flow(
     ``roles`` list is translated element-wise; a missing ``roles`` key, ``null``,
     or empty list injects the single default ``agents=["auto"]``. A legacy
     ``agents`` key in a step body is rejected with ``StructuralError`` — the
-    authoring-side field is ``roles``. ``supervisor``/``supervisor_prompt`` are
+    authoring-side field is ``roles``. Likewise, a ``trigger`` value outside the
+    closed set ``on_success``/``manual`` is rejected with ``StructuralError`` and
+    an authoring ``auto_run`` key is rejected with ``StructuralError`` (the launch
+    mode is authored as ``trigger: manual`` and translated into the output
+    ``auto_run: false`` slot immediately after ``auto_approve`` — a body with
+    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key).
+    ``supervisor``/``supervisor_prompt`` are
     authored-only — never injected, but they pass through the canonical slot when
     the source body carries them. The translation/injection is local to
     ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
@@ -1265,8 +1371,11 @@ def compile_flow(
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
-            ``parse_dsl``), on an empty body, or on a legacy ``agents`` key in a
-            stage body.
+            ``parse_dsl``), on an empty body, on a legacy ``agents`` key in a
+            stage body, on an authoring ``interactive``/``auto_run`` key in a
+            stage body (the authoring-side fields are ``communication``/
+            ``trigger``), or on a ``trigger`` value outside
+            ``on_success``/``manual``.
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
         PermissionError: If ``pipeline_path`` is unreadable (propagated).
