@@ -21,6 +21,7 @@ build→test) and ``hardening.yml`` (``stages.test.skip: true`` +
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from typing import get_type_hints
 from unittest import mock
@@ -31,6 +32,13 @@ from goga.pipeline.describe_pipeline import describe_pipeline
 from goga.pipeline.order_stages import order_stages
 from goga.pipeline.pipeline_card import CardStage, PipelineCard
 from goga.pipeline.workflow import parse_workflow
+
+# The package __init__ re-exports ``describe_pipeline`` (the function), which
+# shadows the ``describe_pipeline`` submodule name in attribute access —
+# ``import goga.pipeline.describe_pipeline as module`` binds the function.
+# Resolve the real module via ``sys.modules`` instead. Per
+# [[feedback_mock_patch_module_shadowing]].
+_describe_pipeline_module = sys.modules["goga.pipeline.describe_pipeline"]
 
 # General Setup fixtures (STAGES DSL file + workflow files).
 _DEPLOY_YML = """\
@@ -82,9 +90,7 @@ def _write_workflow(cwd: Path, name: str, text: str) -> Path:
 class TestDescribePipelineContract:
     def test_describe_pipeline_is_importable_from_module(self) -> None:
         """The routine lives at its declared location ``goga.pipeline.describe_pipeline``."""
-        import goga.pipeline.describe_pipeline as module
-
-        assert module.describe_pipeline is describe_pipeline
+        assert _describe_pipeline_module.describe_pipeline is describe_pipeline
 
     def test_describe_pipeline_signature(self) -> None:
         """Signature: (name, project_dir, user_dir, workflow, no_workflow) -> PipelineCard."""
@@ -195,14 +201,14 @@ class TestDescribePipelineLogic:
         The card's only write is the temp flow-file: it never touches the
         project tree or the user's home, and it does not outlive the call.
         """
-        import goga.pipeline.describe_pipeline as module
-
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
 
         before = sorted(str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*"))
 
-        with mock.patch.object(module, "compile_flow", wraps=module.compile_flow) as spy:
+        with mock.patch.object(
+            _describe_pipeline_module, "compile_flow", wraps=_describe_pipeline_module.compile_flow
+        ) as spy:
             describe_pipeline("deploy", project_dir, tmp_path / "user_pipelines", None, False)
 
         flow_path = spy.call_args.args[1]

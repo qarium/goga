@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import inspect
 import os
+import sys
 from pathlib import Path
 from typing import get_type_hints
 
@@ -29,6 +30,13 @@ from goga.pipeline.describe_pipelines import describe_pipelines
 from goga.pipeline.list_pipelines import list_pipelines
 from goga.pipeline.pipeline_entry import PipelineSource
 from goga.pipeline.pipeline_summary import PipelineSummary
+
+# The package __init__ re-exports ``describe_pipelines`` (the function), which
+# shadows the ``describe_pipelines`` submodule name in attribute access —
+# ``import goga.pipeline.describe_pipelines as module`` binds the function.
+# Resolve the real module via ``sys.modules`` instead. Per
+# [[feedback_mock_patch_module_shadowing]].
+_describe_pipelines_module = sys.modules["goga.pipeline.describe_pipelines"]
 
 # General Setup fixtures (STAGES / PHASES / empty-body DSL files).
 _DEPLOY_YML = """\
@@ -77,9 +85,7 @@ def _write_pipeline(directory: Path, name: str, text: str) -> Path:
 class TestDescribePipelinesContract:
     def test_describe_pipelines_is_importable_from_module(self) -> None:
         """The routine lives at its declared location ``goga.pipeline.describe_pipelines``."""
-        import goga.pipeline.describe_pipelines as module
-
-        assert module.describe_pipelines is describe_pipelines
+        assert _describe_pipelines_module.describe_pipelines is describe_pipelines
 
     def test_describe_pipelines_signature(self) -> None:
         """Signature: (project_dir: Path, user_dir: Path) -> list[PipelineSummary]."""
@@ -153,14 +159,14 @@ class TestDescribePipelinesLogic:
         """
         from unittest import mock
 
-        import goga.pipeline.describe_pipelines as module
-
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir, "deploy", "name: Deploy\ndescription: d\n---\n:\n  [broken\n")
         _write_pipeline(project_dir, "feature", _FEATURE_YML)
 
         with (
-            mock.patch.object(module, "parse_dsl", wraps=module.parse_dsl) as spy,
+            mock.patch.object(
+                _describe_pipelines_module, "parse_dsl", wraps=_describe_pipelines_module.parse_dsl
+            ) as spy,
             pytest.raises(yaml.YAMLError),
         ):
             describe_pipelines(project_dir, tmp_path / "user_pipelines")

@@ -22,12 +22,20 @@ each rule with ``monkeypatch.chdir`` controlling the CWD-based workflows root
 from __future__ import annotations
 
 import inspect
+import sys
 from pathlib import Path
 from typing import get_type_hints
 
 import pytest
 from goga.pipeline.resolve_workflow import resolve_workflow
 from goga.pipeline.workflow import WorkflowDocument, WorkflowSyntaxError
+
+# The package __init__ re-exports ``resolve_workflow`` (the function), which
+# shadows the ``resolve_workflow`` submodule name in attribute access —
+# ``import goga.pipeline.resolve_workflow as module`` binds the function.
+# Resolve the real module via ``sys.modules`` instead. Per
+# [[feedback_mock_patch_module_shadowing]].
+_resolve_workflow_module = sys.modules["goga.pipeline.resolve_workflow"]
 
 
 @pytest.fixture
@@ -49,9 +57,7 @@ def _write_workflow(cwd: Path, name: str, text: str) -> Path:
 class TestResolveWorkflowContract:
     def test_resolve_workflow_is_importable_from_module(self) -> None:
         """The routine lives at its declared location ``goga.pipeline.resolve_workflow``."""
-        import goga.pipeline.resolve_workflow as module
-
-        assert module.resolve_workflow is resolve_workflow
+        assert _resolve_workflow_module.resolve_workflow is resolve_workflow
 
     def test_resolve_workflow_signature(self) -> None:
         """Signature: (pipeline_name: str, workflow_name: str | None, no_workflow: bool)."""
@@ -132,11 +138,9 @@ class TestResolveWorkflowLogic:
         """A traversal-carrying name is a containment-guard silent miss; nothing outside is read."""
         from unittest import mock
 
-        import goga.pipeline.resolve_workflow as module
-
         (isolated_cwd / ".goga" / "workflows").mkdir(parents=True)
 
-        with mock.patch.object(module, "parse_workflow") as mock_parse:
+        with mock.patch.object(_resolve_workflow_module, "parse_workflow") as mock_parse:
             result = resolve_workflow("deploy", "../../etc/passwd", False)
 
         assert result is None

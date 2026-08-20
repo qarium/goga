@@ -19,10 +19,18 @@ each algorithm branch.
 from __future__ import annotations
 
 import inspect
+import sys
 from typing import get_type_hints
 
 from goga.pipeline.compiler import FlowStage
 from goga.pipeline.order_stages import order_stages
+
+# The package __init__ re-exports ``order_stages`` (the function), which
+# shadows the ``order_stages`` submodule name in attribute access —
+# ``import goga.pipeline.order_stages as module`` binds the function. Resolve
+# the real module via ``sys.modules`` instead. Per
+# [[feedback_mock_patch_module_shadowing]].
+_order_stages_module = sys.modules["goga.pipeline.order_stages"]
 
 
 def _stage(stage_id: str, depends_on: list[str] | None = None) -> FlowStage:
@@ -38,9 +46,7 @@ def _snapshot(stages: list[FlowStage]) -> list[tuple[str, str, list[str] | None,
 class TestOrderStagesContract:
     def test_order_stages_is_importable_from_module(self) -> None:
         """The routine lives at its declared location ``goga.pipeline.order_stages``."""
-        import goga.pipeline.order_stages as module
-
-        assert module.order_stages is order_stages
+        assert _order_stages_module.order_stages is order_stages
 
     def test_order_stages_signature(self) -> None:
         """Signature: (stages: list[FlowStage]) -> list[FlowStage]."""
