@@ -233,6 +233,30 @@ class TestPipelineCliLogic:
         user_dir = tmp_path / ".goga" / "pipelines"
         mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=4)
 
+    def test_pipeline_cli_run_ignores_workflow_flags(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A plain run accepts `-w`/`--no-workflow` but ignores them — the decision travels via env."""
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+        with mock.patch.object(
+            _cli_module,
+            "run_pipeline",
+            return_value=0,
+        ) as mock_run_pipeline:
+            exit_code = pipeline_cli(["run", "deploy", "--port", "50321", "-w", "hardening"])
+
+        assert exit_code == 0
+        project_dir = tmp_path / ".goga" / "pipelines"
+        user_dir = tmp_path / ".goga" / "pipelines"
+        # run_pipeline receives no workflow argument — the host launcher owns
+        # the decision and delivers it through GOGA_WORKFLOW_* env vars.
+        mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=None)
+
+
     def test_pipeline_cli_parallel_defaults_none(
         self,
         tmp_path: Path,
@@ -605,3 +629,54 @@ class TestPipelineCliInfoOperations:
         captured = capsys.readouterr()
         assert "deploy (project) — Deploy the service\n" in captured.out
         assert "release — Cut a release\n" in captured.out
+
+    def test_pipeline_cli_non_utf8_pipeline_renders_clean_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A non-UTF-8 pipeline-file renders `Error: ...` (exit 1) in both info forms — no traceback."""
+        pipeline_path = _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
+        raw = pipeline_path.read_bytes()
+        pipeline_path.write_bytes(raw.replace(raw[len(raw) // 2 : len(raw) // 2 + 1], b"\xff", 1))
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        exit_code = pipeline_cli(["list", "--info"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+        exit_code = pipeline_cli(["run", "deploy", "--info"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "Traceback" not in captured.err
+        assert captured.out == ""
+
+    def test_pipeline_cli_run_non_utf8_pipeline_renders_clean_error(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        """A non-UTF-8 pipeline-file in run mode renders `Error: ...` (exit 1) — no traceback."""
+        pipeline_path = _write_pipeline(tmp_path, "deploy", _DEPLOY_YML)
+        raw = pipeline_path.read_bytes()
+        pipeline_path.write_bytes(raw.replace(raw[len(raw) // 2 : len(raw) // 2 + 1], b"\xff", 1))
+
+        monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
+        monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+
+        exit_code = pipeline_cli(["run", "deploy", "--port", "50321"])
+
+        assert exit_code == 1
+        captured = capsys.readouterr()
+        assert captured.err.startswith("Error:")
+        assert "Traceback" not in captured.err

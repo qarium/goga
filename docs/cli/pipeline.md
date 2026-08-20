@@ -1,22 +1,56 @@
 # goga pipeline
 
-Run a goga pipeline by name, or list available pipelines when no name is given.
+Run a goga pipeline by name, or inspect the available ones (`--list`, `--info`).
 
 `goga pipeline` is a host-side launcher: it assembles a `docker run` invocation and delegates all in-container work to the goga in-container process. The `afm` binary runs inside the container — it is not required on the host.
 
 ## Synopsis
 
 ```bash
-goga pipeline           # discovery mode: list available pipelines (in-container)
-goga pipeline <name>    # run mode: run a pipeline by name (in-container)
+goga pipeline --list              # flat list: available pipeline names (in-container)
+goga pipeline --list --info       # overview: one line per pipeline with its description
+goga pipeline <name> --info       # card: name, description, stages in execution order
+goga pipeline <name>              # run: execute the pipeline (in-container)
 ```
 
-## Description
+## Forms
 
-The `pipeline` command is a single Click command (not a group). Its behavior depends on whether a name is given:
+The command is a single Click command (not a group) with five forms. Form validation happens on the host **before** any docker activity — a form error exits 1 without touching the image or launching a container:
 
-- **Without `name` (discovery mode):** launches the goga Docker image, which prints the `Available pipelines:` header followed by one pipeline per line. Project pipelines are annotated with `(project)`; user pipelines are printed bare.
-- **With `name` (run mode):** allocates a free localhost port, writes a private afm-config tmpfile mounted read-only at the fixed path `/home/goga/.afm/config.yaml`. The tmpfile's `client.command` is set to the absolute `resolve_wrapper_path(config.pipeline.agent)` value (never a bare agent name) **only when `pipeline.agent` is configured** — the field is optional, and when it is `None` the `client` block is omitted so a per-stage workflow agent (see [Workflow files](#workflow-files)) or afm's own default covers the absent global agent; `goga pipeline` does not require it. The tmpfile also carries the static launcher fields (`theme: goga`, `open_browser: false`, `proxy.enabled: false`, `prompts_dir: /home/goga/pipeline/prompts`). The launcher then ensures a persistent afm state host directory exists (wiping it first when `--clean` is set) and mounts it read-write at `/home/goga/pipeline`, writes a private env-file combining the machine-wide `home.env` (lowest-priority base layer, see [Home configuration](../configuration/index.md#home-configuration)) with `config.pipeline.env`, git identity, `extra_env`, `AFM_DIR=/home/goga/pipeline`, the workflow env vars (see [Workflow files](#workflow-files)), `GOGA_SKIP_STAGES=<csv>` when `--skip`/`-s` is passed, and — when a proxy is set — the proxy env vars, prints a workflow log line when a workflow is applied, and launches the goga Docker image. Credential files for claude/codex/opencode are detected on the host and bind-mounted read-only into the container automatically. Inside the container the goga in-container process resolves the pipeline to its absolute path, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and invokes `afm run --port <port> [--max-parallel <N>] <compiled-flow-path>` (the `--max-parallel` is forwarded only when `-p/--parallel` is passed; otherwise afm runs unbounded). The container's exit code is propagated via `ctx.exit`.
+| Form | Invocation | What it does |
+|---|---|---|
+| Flat list | `goga pipeline --list` | Prints the `Available pipelines:` header followed by one pipeline per line. Project pipelines are annotated with `(project)`; user pipelines are printed bare. |
+| Overview | `goga pipeline --list --info` | One line per pipeline: `{name}[ (project)] — {description}` (an em-dash separates the description). |
+| Card | `goga pipeline <name> --info` | Prints the pipeline's name, description, then one `{stage-id}: {title}` line per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). Nothing runs. |
+| Run | `goga pipeline <name>` | Executes the pipeline (see [Run Mode](#run-mode-goga-pipeline-name)). |
+| Error | `goga pipeline` (bare) | Exits 1: `Missing pipeline name. Use "goga pipeline --list" …`. `--list` plus a name is also rejected (mutually exclusive). |
+
+The list/info forms launch the container in a minimal **read-only** shape: the project bind-mount and one `--add-host` per configured host, and nothing else — no published port, no env-file, no afm state mount, no credential mounts. Nothing is written on the host.
+
+Example info output:
+
+```
+$ goga pipeline --list
+Available pipelines:
+  deploy (project)
+  build
+
+$ goga pipeline --list --info
+deploy (project) — Deploy the service
+build — Build the artifact
+
+$ goga pipeline deploy --info
+Deploy
+Deploy the service
+build: Build
+test: Test
+```
+
+The card and the run share the same workflow rule set and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
+
+## Run Mode (`goga pipeline <name>`)
+
+Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; otherwise the launcher prints no status line.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -26,39 +60,6 @@ Pipelines are flat `*.yml` files (one per pipeline) resolved from two directorie
 | user    | `~/.goga/pipelines/`     | Installed centrally by `goga connect` (see [connect](connect.md)) |
 
 Only top-level `*.yml` is scanned — subdirectories are ignored, and `.yaml` files are excluded. Pipeline path resolution and discovery happen **inside** the container (the host does not resolve pipeline paths).
-
-## Prerequisites
-
-Both modes launch a Docker container via the host **`docker`** CLI:
-
-```bash
-docker info
-```
-
-The top-level `image` field in `.goga/config.yml` must be set (the command exits with an error mentioning `image` when it is unset). The `afm` binary is provided by the container image and is invoked via `PATH` inside the container — it is not required on the host.
-
-## Discovery Mode (`goga pipeline`)
-
-List available pipeline names inside the container. The `Available pipelines:` header is always printed, even when the list is empty.
-
-```bash
-goga pipeline
-```
-
-Example output:
-
-```
-Available pipelines:
-  deploy (project)
-  build
-  test
-```
-
-Project pipelines are annotated with `(project)`; user pipelines are printed bare.
-
-## Run Mode (`goga pipeline <name>`)
-
-Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/`, and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; otherwise the launcher prints no status line.
 
 Pipelines installed from `goga_tool_*` packages are namespaced as `<tool>:<name>.yml` and addressed as `goga pipeline <tool>:<name>` — the colon is part of the bare filename stem, not a separator. Internal pipelines stay un-prefixed.
 
@@ -78,7 +79,17 @@ Pipeline running with workflow "feature-phases"
 
 If the name exists in both sources, the project source wins. The container exit code is propagated as the command's exit code.
 
-### Custom agent prompts
+## Prerequisites
+
+All forms launch a Docker container via the host **`docker`** CLI:
+
+```bash
+docker info
+```
+
+The top-level `image` field in `.goga/config.yml` must be set (the command exits with an error mentioning `image` when it is unset), and the `pipeline` section must be present. The `afm` binary is provided by the container image and is invoked via `PATH` inside the container — it is not required on the host.
+
+## Custom agent prompts
 
 A pipeline-file header may carry an optional `roles` block with three fixed keys — `planner`, `executor`, `reviewer` — each an inline prompt that fully **replaces** (does not merge with) the corresponding shipped default prompt (`goga/assets/afm/prompts/<stem>.md`, where the planner/executor/reviewer keys map to the planning/implementation/review stems). The `summary` prompt is not overridable — it is always the shipped default.
 
@@ -102,19 +113,21 @@ Only those three keys are valid; an unknown key (including `summary`), a non-str
 
 At run time the four prompt files are materialized into `<AFM_DIR>/prompts/` (mounted at `/home/goga/pipeline/prompts`) before `afm` starts, and `afm` reads them through the `prompts_dir` field in its config. That `prompts/` directory is wiped and rebuilt from the defaults plus any `roles` overrides on every run, so files manually placed there do not persist.
 
-### Workflow files
+## Workflow files
 
-A pipeline run can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, loop-expansion, stage skipping via `skip`, and new stages via `extend` on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
+A pipeline run (or card) can optionally apply a *workflow-file* — a declarative YAML document that layers a top-level prompt, per-stage `agent`/`prompt` overrides, loop-expansion, stage skipping via `skip`, and new stages via `extend` on top of the compiled flow-file. Workflow-files live at `<cwd>/.goga/workflows/<name>.yml` and are project-only (the name must be a bare filename resolved inside that directory; path traversal via `..` or an absolute prefix is rejected).
 
-Three invocation modes (mutually exclusive in the explicit cases):
+Three invocation modes (mutually exclusive in the explicit cases), honored by both the run and the card form:
 
 - `goga pipeline deploy` (no flags) — *auto-match*: if `<cwd>/.goga/workflows/deploy.yml` exists it is applied silently; otherwise no workflow. No host-side validation.
 - `goga pipeline deploy --workflow custom` — apply `<cwd>/.goga/workflows/custom.yml`. The host validates the file exists **before** launch (exit 1 if missing).
-- `goga pipeline deploy --no-workflow` — disable workflow application entirely (writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file).
+- `goga pipeline deploy --no-workflow` — disable workflow application entirely (the run writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file).
 
-When a workflow will actually be applied (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line and the `docker` output stream.
+For a run, the decision reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). For a card (`<name> --info`), the same flags travel in the `docker run` argv — the composition the card prints is exactly the composition a run with the same flags executes.
 
-The workflow name reaches the container via the env-file (`GOGA_WORKFLOW_NAME=<name>` for `--workflow`; `GOGA_WORKFLOW_DISABLED=1` for `--no-workflow`; neither for auto-match). Inside the container the goga in-container process resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, `skip: true` removes the stage and reconnects its dependents' `depends_on`, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
+When a workflow will actually be applied to a run (explicit `--workflow`, or an auto-match file that exists), the launcher prints `Pipeline running with workflow "<name>"` to stdout. When no workflow applies, the launcher prints no workflow line. The launcher surfaces only the workflow log line and the `docker` output stream.
+
+Inside the container the goga in-container process resolves and parses the workflow-file, then forwards it to the compiler, which reconstructs the parsed body: `extend` entries inject new stages positioned via `before`/`after`, per-stage `agent` overrides compose the in-container wrapper path into the stage's `command` slot, per-stage `prompt` overrides fill its `description` slot, `skip: true` removes the stage and reconnects its dependents' `depends_on`, and a `loop: N` (N ≥ 2) expands the stage into `NAME-1`..`NAME-N` copies with chained internal `depends_on` (external references are rewritten to the LAST expanded id).
 
 Example workflow-file:
 
@@ -135,16 +148,18 @@ stages:
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `name` (positional) | string | — | Pipeline name without extension. When omitted, runs discovery mode |
-| `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`) forwarded into the container env-file. Run mode only (ignored in discovery) |
-| `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run mode only |
-| `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Effective in both modes |
-| `-c`, `--clean` | flag | off | Wipe the persistent afm state directory before launch. Run mode only (no-op in discovery) |
-| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in both modes |
-| `-w`, `--workflow` | string | — | Apply an explicit workflow at `<cwd>/.goga/workflows/<name>.yml`. The file must exist on the host (exit 1 if missing). Mutually exclusive with `--no-workflow`. Run mode only |
-| `--no-workflow` | flag | off | Disable workflow application entirely (writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file). Mutually exclusive with `--workflow`. Run mode only |
-| `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded into the container env-file as `GOGA_SKIP_STAGES=<name>,...`. Not mutually exclusive with `--workflow`/`--no-workflow`. Run mode only (no-op in discovery); the host performs no name validation — unknown names surface in-container as a structural error |
-| `-p`, `--parallel` | int | — | Cap the number of stages afm executes concurrently (run mode only). Threads through the container as `--parallel <N>`, which the in-container CLI forwards to `afm run --max-parallel <N>`. Omitted/absent (the default) ⇒ afm runs unbounded (backward compatible). No-op in discovery mode. The `-p` short alias is a separate namespace from the Docker `-p <port>:<port>` port-publish token, which is assembled inside the launcher |
+| `name` (positional) | string | — | Pipeline name without extension. Selects the card (`--info`) or run form; omit it and pass `--list` for the listing forms. `--list` and a name together are rejected (exit 1) |
+| `-l`, `--list` | flag | off | List available pipelines (flat list). Add `--info` for a one-line description per pipeline |
+| `-i`, `--info` | flag | off | With `--list`: print the overview. With `NAME`: print the pipeline card instead of running it |
+| `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`) forwarded into the container env-file. Run form only |
+| `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run form only |
+| `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Run form only — the info forms receive the configured `pipeline.hosts` only |
+| `-c`, `--clean` | flag | off | Wipe the persistent afm state directory before launch. Run form only |
+| `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Effective in the run and flat-list forms; a deliberate no-op in the `--info` forms |
+| `-w`, `--workflow` | string | — | Apply an explicit workflow at `<cwd>/.goga/workflows/<name>.yml`. The file must exist on the host (exit 1 if missing). Mutually exclusive with `--no-workflow`. Honored by the run and card forms |
+| `--no-workflow` | flag | off | Disable workflow application entirely (a run writes `GOGA_WORKFLOW_DISABLED=1` into the container env-file). Mutually exclusive with `--workflow`. Honored by the run and card forms |
+| `-s`, `--skip` | string (repeatable) | — | Exclude a stage from the compiled pipeline (one name per invocation). The stage is removed and its dependents' `depends_on` are reconnected. Forwarded into the container env-file as `GOGA_SKIP_STAGES=<name>,...`. Not mutually exclusive with `--workflow`/`--no-workflow`. Run form only; the host performs no name validation — unknown names surface in-container as a structural error. The card does not read it (the card answers "what is this pipeline?", not "what would this particular run skip?") |
+| `-p`, `--parallel` | int | — | Cap the number of stages afm executes concurrently (run form only). Threads through the container as `--parallel <N>`, which the in-container CLI forwards to `afm run --max-parallel <N>`. Omitted/absent (the default) ⇒ afm runs unbounded (backward compatible). The `-p` short alias is a separate namespace from the Docker `-p <port>:<port>` port-publish token, which is assembled inside the launcher |
 
 ### Persistent afm state
 
@@ -164,7 +179,7 @@ Note that the `prompts/` subdirectory inside it is regenerated on every run (wip
 
 ### Credential mounts
 
-Credential files for claude (`~/.claude/.credentials.json`), codex (`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`) are detected on the host and bind-mounted read-only into the container automatically (no flag). Detection is agent-agnostic; only files that exist are mounted.
+Credential files for claude (`~/.claude/.credentials.json`), codex (`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`) are detected on the host and bind-mounted read-only into the container automatically (no flag) in the **run form only**. Detection is agent-agnostic; only files that exist are mounted. The info forms mount no credentials (they execute nothing).
 
 ### Examples
 
@@ -172,6 +187,13 @@ Refresh the image, then run (default skips the refresh):
 
 ```bash
 goga pipeline deploy --update
+```
+
+Inspect without running:
+
+```bash
+goga pipeline --list --info       # every pipeline with its description
+goga pipeline deploy --info       # the card: stages in execution order
 ```
 
 Route container traffic through a corporate proxy and add a local host entry:
@@ -186,29 +208,35 @@ Wipe persistent afm state for this pipeline/branch before launch:
 goga pipeline deploy --clean
 ```
 
-## Exit Codes (run mode)
+## Exit Codes
+
+Host side (all forms):
+
+| Code | Meaning |
+|------|---------|
+| `0` | The operation completed (container exit 0) |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, or a fatal image build/refresh |
+| other| The container's exit code, propagated unchanged (including the run-mode codes below) |
+
+Container side, run form:
 
 | Code | Meaning                                                                  |
 |------|--------------------------------------------------------------------------|
 | `0`  | The pipeline ran successfully                                            |
-| `1`  | A `ClickException` before launch: the `pipeline` section is missing in `.goga/config.yml`, the named pipeline was not found in either source directory, `--workflow` and `--no-workflow` were both set, or an explicit `--workflow <name>` named a file that does not exist |
+| `1`  | The pipeline was not found, or a handled compile/malformed-file failure rendered as a clean `Error: ...` stderr message |
+| `2`  | In-container argparse error (missing `NAME`, non-integer `--port`, missing `--port` without `--info`) |
 | `126`| `afm` was present but could not be invoked (e.g. not executable)         |
 | `127`| The `afm` binary is missing inside the container                         |
 | `130`| Interrupted by SIGINT (`128 + 2`)                                        |
 | `143`| Interrupted by SIGTERM (`128 + 15`)                                      |
-| other| The container / `afm` exit code, propagated unchanged                    |
+
+Container side, info forms: `0` on success; `1` for a damaged pipeline-file (unreadable, non-YAML, structurally invalid, or not UTF-8) rendered as `Error: ...` on stderr; `2` for an in-container argparse error.
 
 On SIGTERM/SIGINT during run mode the running container is killed and the process exits with `128 + signum`.
 
-## Exit Codes (discovery mode)
-
-| Code | Meaning                                   |
-|------|-------------------------------------------|
-| `0`  | Always (even when the pipeline list is empty) |
-
 ## Notes
 
-- Do not expect `ls` or `run` subcommands — `goga pipeline` is a single command.
-- Do not expect auto-`--help` when no name is given — discovery mode prints the `Available pipelines:` header + list instead.
-- Do not pass a file path or a name ending in `.yml` in run mode — pass the bare pipeline name only.
+- Do not expect `ls` or `run` host subcommands — `goga pipeline` is a single command (`list`/`run` are the in-container subcommands behind docker, not host ones).
+- A bare `goga pipeline` is an error — use `goga pipeline --list` to list available pipelines.
+- Do not pass a file path or a name ending in `.yml` — pass the bare pipeline name only.
 - The host does not import any code from `goga/pipeline`; the runtime boundary to `goga/pipeline` is Docker.

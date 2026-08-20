@@ -267,6 +267,81 @@ class TestGuardChecks:
 
         mocks["runner_cls"].assert_not_called()
 
+    def test_run_pipeline_info_container_fatal_build_surfaces_clickexception(self, tmp_path: Path, monkeypatch) -> None:
+        """A fatal first-run image build surfaces as ClickException; no container launches."""
+        import click
+
+        monkeypatch.chdir(tmp_path)
+        mocks = _install_happy_path(monkeypatch)
+        mocks["build"].side_effect = RuntimeError("docker build failed")
+
+        with pytest.raises(click.ClickException, match="docker build failed"):
+            rpic(None, False, _make_config(), {}, update=False, workflow=None, no_workflow=False)
+
+        mocks["runner_cls"].assert_not_called()
+        mocks["update"].assert_not_called()
+
+    def test_run_pipeline_info_container_fatal_update_surfaces_clickexception(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A fatal image refresh in the flat list surfaces as ClickException; no container launches."""
+        import click
+
+        monkeypatch.chdir(tmp_path)
+        mocks = _install_happy_path(monkeypatch)
+        mocks["update"].side_effect = RuntimeError("docker pull failed")
+
+        with pytest.raises(click.ClickException, match="docker pull failed"):
+            rpic(None, False, _make_config(), {}, update=True, workflow=None, no_workflow=False)
+
+        mocks["runner_cls"].assert_not_called()
+
+
+class TestExitCodePropagation:
+    @pytest.mark.parametrize(
+        ("name", "info"),
+        [(None, False), (None, True), ("deploy", True)],
+        ids=["flat-list", "overview", "card"],
+    )
+    def test_run_pipeline_info_container_propagates_nonzero_exit_code(
+        self, tmp_path: Path, monkeypatch, name, info
+    ) -> None:
+        """A non-zero container exit code is the launcher's return value in every info form."""
+        _install_happy_path(monkeypatch, exit_code=7)
+        monkeypatch.chdir(tmp_path)
+
+        result = rpic(
+            name=name,
+            info=info,
+            config=_make_config(),
+            hosts={},
+            update=False,
+            workflow=None,
+            no_workflow=False,
+        )
+
+        assert result == 7
+
+
+class TestHomeDockerThreading:
+    def test_run_pipeline_info_container_threads_home_docker_run_and_build(self, tmp_path: Path, monkeypatch) -> None:
+        """``home.docker.run`` reaches ``DockerRunner.run`` as separate ``extra_args``; build reaches the builders."""
+        from goga.config import DockerArgsConfig, HomeConfig
+
+        monkeypatch.chdir(tmp_path)
+        mocks = _install_happy_path(monkeypatch)
+        home = HomeConfig(docker=DockerArgsConfig(run=["--network=host"], build=["--squash"]))
+        monkeypatch.setattr(_rpic_mod, "load_home_config", mock.Mock(return_value=home))
+
+        result = rpic(None, False, _make_config(), {}, update=True, workflow=None, no_workflow=False)
+
+        assert result == 0
+        kwargs = mocks["runner_instance"].run.call_args.kwargs
+        # extra_args is a SEPARATE keyword — never folded into params.
+        assert kwargs["extra_args"] == ["--network=host"]
+        assert mocks["build"].call_args.kwargs["extra_args"] == ["--squash"]
+        assert mocks["update"].call_args.kwargs["extra_args"] == ["--squash"]
+
 
 class TestHostPurity:
     def test_run_pipeline_info_container_writes_no_host_files(self, tmp_path: Path, monkeypatch) -> None:

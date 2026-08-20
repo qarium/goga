@@ -62,6 +62,17 @@ _HARDENING_YML = "stages:\n  test:\n    skip: true\nextend:\n  audit:\n    after
 # chained copies (``build-1``/``build-2``), each a separate card row.
 _LOOP_YML = "stages:\n  build:\n    loop: 2\n"
 
+# A user-source pipeline-file — distinct header values prove the card was
+# composed from the user dir, not an identically named project file.
+_USER_DEPLOY_YML = """\
+name: User Deploy
+description: User-level deploy pipeline
+---
+
+build:
+  title: Build
+"""
+
 
 @pytest.fixture
 def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -132,6 +143,22 @@ class TestDescribePipelineLogic:
         assert all(isinstance(stage, CardStage) for stage in card.stages)
         # The pipeline-file itself was consumed read-only.
         assert pipeline_path.exists()
+
+    def test_describe_pipeline_user_source_composes_from_user_dir(
+        self, tmp_path: Path, isolated_cwd: Path
+    ) -> None:
+        """A pipeline discovered in the user dir composes its card from the user file."""
+        user_dir = tmp_path / "user_pipelines"
+        user_path = _write_pipeline(user_dir, "deploy", _USER_DEPLOY_YML)
+
+        card = describe_pipeline("deploy", tmp_path / "project_pipelines", user_dir, None, False)
+
+        # The header values come from the USER file — proving the source-dir
+        # selection followed the discovered entry's source, not project_dir.
+        assert card.name == "User Deploy"
+        assert card.description == "User-level deploy pipeline"
+        assert [stage.id for stage in card.stages] == ["build"]
+        assert user_path.exists()
 
     def test_describe_pipeline_applies_explicit_workflow(
         self, tmp_path: Path, isolated_cwd: Path

@@ -61,7 +61,7 @@ from .run_pipeline_info_container import run_pipeline_info_container
     "update",
     is_flag=True,
     default=False,
-    help="Pull the image before launching the container",
+    help="Pull the image before launching the container (run and --list forms; no-op with --info)",
 )
 @click.option(
     "--workflow",
@@ -158,8 +158,7 @@ def pipeline(  # noqa: C901, PLR0913, PLR0917
     # Step 2.2 — a bare `goga pipeline` names no form at all.
     if name is None and not list_requested:
         raise click.ClickException(
-            'Missing pipeline name. Use "goga pipeline --list" to list available pipelines, '
-            "or provide a pipeline name."
+            'Missing pipeline name. Use "goga pipeline --list" to list available pipelines, or provide a pipeline name.'
         )
 
     # Step 2.3 — workflow flag combination: --workflow and --no-workflow are

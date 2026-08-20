@@ -498,17 +498,25 @@ class TestPipelineDispatchForms:
         assert mock_info.call_args.kwargs["workflow"] is None
         assert mock_info.call_args.kwargs["no_workflow"] is True
 
-    def test_pipeline_info_forms_forward_update_in_flat_list(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    @pytest.mark.parametrize(
+        ("argv", "form"),
+        [
+            (["--list", "-u"], "flat-list"),
+            (["--list", "--info", "-u"], "overview"),
+            (["deploy", "--info", "-u"], "card"),
+        ],
+    )
+    def test_pipeline_info_forms_forward_update_in_every_form(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, argv: list[str], form: str
     ) -> None:
-        """``-u`` is forwarded as ``update=True`` in every form; the launcher applies it."""
+        """``-u`` is forwarded as ``update=True`` in every info form; the launcher applies it."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
-            result = runner.invoke(pipeline, ["--list", "-u"])
+            result = runner.invoke(pipeline, argv)
 
-        assert result.exit_code == 0
+        assert result.exit_code == 0, f"failed for {form}: {result.output}"
         assert mock_info.call_args.kwargs["update"] is True
 
     def test_pipeline_run_form_dispatches_full_shape(

@@ -146,6 +146,20 @@ class TestResolveWorkflowLogic:
         assert result is None
         mock_parse.assert_not_called()
 
+    def test_resolve_workflow_absolute_name_returns_none(
+        self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An absolute-path name is a containment-guard silent miss; nothing outside is read."""
+        from unittest import mock
+
+        (isolated_cwd / ".goga" / "workflows").mkdir(parents=True)
+
+        with mock.patch.object(_resolve_workflow_module, "parse_workflow") as mock_parse:
+            result = resolve_workflow("deploy", "/etc/passwd", False)
+
+        assert result is None
+        mock_parse.assert_not_called()
+
     def test_resolve_workflow_reads_no_environment_variables(
         self, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

@@ -600,6 +600,13 @@ file exists before launch (exit 1 if missing).
 `--workflow` and `--no-workflow` are mutually exclusive — passing both
 exits with code 1 before launch.
 
+The card form honors the same three modes: `goga pipeline deploy --info
+[-w <wf> | --no-workflow]` resolves the workflow through the identical
+rule set, with the same host-side validation. The decision travels as
+`docker run` argv (not the env-file), and the stage list the card prints
+is exactly the composition a run with the same flags executes. See
+[pipeline](../cli/pipeline.md).
+
 ### Log line
 
 When a workflow will actually be applied (explicit `--workflow`, or an

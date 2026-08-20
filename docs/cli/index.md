@@ -34,7 +34,7 @@ python -m goga --help
 | [`goga connect`](connect.md) | Install goga skills for AI agents |
 | [`goga upgrade`](upgrade.md) | Upgrade goga and re-sync connected agents |
 | [`goga usages`](usages.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
-| [`goga pipeline`](pipeline.md) | Run a goga pipeline (or list them) |
+| [`goga pipeline`](pipeline.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 
 ## Global Options

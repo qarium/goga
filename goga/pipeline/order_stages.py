@@ -54,10 +54,11 @@ def order_stages(stages: list[FlowStage]) -> list[FlowStage]:
     Returns:
         A new list holding the SAME stage objects in execution order.
     """
-    # Step 1 — the declaration index. The LAST position wins for a duplicated
-    # id, matching how a scan for "the first ready stage in declaration order"
-    # treats re-declarations; duplicates are not validated here.
-    decl_index = {stage.id: position for position, stage in enumerate(stages)}
+    # Step 1 — the set of declared ids. Duplicated ids are not validated
+    # here (the compiler's strict checks own that); membership is all this
+    # routine needs — tie-breaking among ready stages is the in-order scan
+    # of ``remaining`` below.
+    declared_ids = {stage.id for stage in stages}
 
     result: list[FlowStage] = []
     emitted: set[str] = set()
@@ -69,7 +70,7 @@ def order_stages(stages: list[FlowStage]) -> list[FlowStage]:
         next_stage: FlowStage | None = None
         for candidate in remaining:
             dependencies = candidate.depends_on or []
-            if all(dep in emitted or dep not in decl_index for dep in dependencies):
+            if all(dep in emitted or dep not in declared_ids for dep in dependencies):
                 next_stage = candidate
                 break
 

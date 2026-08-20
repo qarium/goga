@@ -28,8 +28,10 @@ host-side docker launcher through the runpy entrypoint in `__main__.py`.
 - `--info`/`-i` (flag) — print the card instead of running: one line with the
   name, one line with the description, then one line per stage as "id: title"
   in execution order. `-w WORKFLOW` applies a
-  workflow to the composition; `--no-workflow` reports the raw DSL
-  composition; neither flag resolves the basename auto-match.
+  workflow to the card composition; `--no-workflow` reports the raw DSL
+  composition; neither flag resolves the basename auto-match. Both flags are
+  card-mode only — a run (no `--info`) picks its workflow decision up from
+  the `GOGA_WORKFLOW_*` env vars set by the host launcher.
 - `--port PORT` (int) — dashboard port, allocated by the host launcher.
   Required only when `--info` is absent; ignored in info mode.
 - `--parallel N` (int, optional) — max concurrently executing stages; run

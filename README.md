@@ -174,6 +174,14 @@ goga pipeline feature -p 4       # cap parallelism (subject to the pipeline's de
 goga pipeline feature --clean    # wipe persistent state for a fresh run
 ```
 
+Inspect pipelines without running anything:
+
+```bash
+goga pipeline --list             # available pipeline names
+goga pipeline --list --info      # every pipeline with its description
+goga pipeline feature --info     # the pipeline card: stages in execution order
+```
+
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
 
 ### Workflows — configure and extend a pipeline

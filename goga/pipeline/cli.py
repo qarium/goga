@@ -69,13 +69,14 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
         "--workflow",
         "-w",
         default=None,
-        help="apply this workflow to the composition (info mode) or the run.",
+        help="apply this workflow to the card composition (--info mode only; "
+        "a run picks its workflow up from the GOGA_WORKFLOW_* env vars).",
     )
     run_parser.add_argument(
         "--no-workflow",
         action="store_true",
         default=False,
-        help="disable any workflow: report/execute the raw DSL composition.",
+        help="disable any workflow: report the raw DSL composition (--info mode only).",
     )
     run_parser.add_argument(
         "--port",
@@ -108,7 +109,7 @@ def _run_overview(project_dir: Path, user_dir: Path) -> int:
     """Operation (b): the overview — one `{name}[ (project)] — {description}` line per pipeline."""
     try:
         summaries = describe_pipelines(project_dir, user_dir)
-    except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError) as exc:
+    except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     for summary in summaries:
@@ -120,10 +121,8 @@ def _run_overview(project_dir: Path, user_dir: Path) -> int:
 def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
     """Operation (c): the card — name / description / one `{id}: {title}` line per stage."""
     try:
-        card = describe_pipeline(
-            args.name, project_dir, user_dir, workflow=args.workflow, no_workflow=args.no_workflow
-        )
-    except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError) as exc:
+        card = describe_pipeline(args.name, project_dir, user_dir, workflow=args.workflow, no_workflow=args.no_workflow)
+    except (StructuralError, WorkflowSyntaxError, RuntimeError, yaml.YAMLError, OSError, UnicodeDecodeError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     print(card.name)
@@ -133,7 +132,7 @@ def _run_card(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> in
     return 0
 
 
-def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:
+def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) -> int:  # noqa: PLR0911
     """Operation (d): the run — compile and launch via ``afm``, exit code propagated."""
     try:
         return run_pipeline(args.name, project_dir, user_dir, args.port, parallel=args.parallel)
@@ -151,6 +150,9 @@ def _run_execution(args: argparse.Namespace, project_dir: Path, user_dir: Path) 
         return 1
     except OSError as exc:
         print(f"Error: pipeline '{args.name}' could not be read or written: {exc}", file=sys.stderr)
+        return 1
+    except UnicodeDecodeError as exc:
+        print(f"Error: pipeline '{args.name}' is not valid UTF-8: {exc}", file=sys.stderr)
         return 1
 
 
@@ -171,9 +173,10 @@ def pipeline_cli(argv: list[str]) -> int:
         missing ``NAME``, a non-integer ``--port``, or a missing ``--port``
         on a run without ``--info``); ``1`` when an info operation raises
         :class:`StructuralError`, :class:`WorkflowSyntaxError`,
-        :class:`RuntimeError`, :class:`yaml.YAMLError`, or
-        :class:`OSError` — these are caught here and reported as a clean
-        stderr message rather than propagated as a traceback; ``1`` likewise
+        :class:`RuntimeError`, :class:`yaml.YAMLError`,
+        :class:`OSError`, or :class:`UnicodeDecodeError` — these are
+        caught here and reported as a clean stderr message rather than
+        propagated as a traceback; ``1`` likewise
         when :func:`run_pipeline` raises one of its handled failures;
         otherwise the ``exit_code`` propagated from :func:`run_pipeline`.
     """

@@ -101,6 +101,21 @@ class TestOrderStagesLogic:
 
         assert [s.id for s in result] == ["a", "b"]
 
+    def test_order_stages_duplicate_ids_pass_through_unjudged(self) -> None:
+        """Duplicate ids are not validated: every input object survives, dependency lookup still satisfies."""
+        stages = [
+            _stage("dup", None),
+            _stage("b", ["dup"]),
+            _stage("dup", None),
+        ]
+
+        result = order_stages(stages)
+
+        # Every input object appears exactly once, declaration order preserved
+        # among the ready stages (both "dup" copies are ready; "b" follows once
+        # its dependency id has been emitted).
+        assert result == stages
+
     def test_order_stages_is_pure(self) -> None:
         """The input list and its stages are untouched; the result holds the same objects."""
         stages = [
