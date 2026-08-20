@@ -36,6 +36,7 @@ from goga.pipeline.compiler import (
 )
 from goga.pipeline.workflow import (
     WorkflowDocument,
+    WorkflowExtendStage,
     WorkflowStage,
     parse_workflow,
 )
@@ -107,6 +108,50 @@ class TestCompileFlowTriggerContract:
 
         assert "auto_run: false" in text
         assert "auto_run: 'false'" not in text
+
+    def test_compile_flow_workflow_manual_true_forces_over_body_trigger(self, tmp_path: Path) -> None:
+        """``manual: true`` forces the manual state over any authored trigger.
+
+        The workflow instruction rewrites the working body's ``trigger`` to
+        ``manual`` regardless of the authored value, so step 5 assembles
+        ``auto_run: false`` for the stage.
+        """
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: on_success\n  prompt: ship it\n",
+            "stages:\n  deploy:\n    manual: true\n",
+        )
+
+        deploy_block = flow_text[flow_text.index("- id: deploy") :]
+
+        assert "auto_run: false" in deploy_block
+
+    def test_effective_overrides_merged_entry_carries_manual(self) -> None:
+        """The merged overlay branch must carry ``manual`` explicitly.
+
+        The extend seed cannot carry ``manual`` (``parse_workflow`` forbids it
+        in an extend-entry), so the effective ``manual`` is always the
+        stages-block value — but the merged-branch constructor defaults
+        ``manual`` to ``None``, so an overlay that forgets ``manual=stg.manual``
+        silently loses the instruction (Design Applied Fix #2).
+        """
+        from goga.pipeline.compiler.compile_flow import _effective_overrides
+
+        workflow = WorkflowDocument(
+            stages={"extra": WorkflowStage(manual=True)},
+            extend={"extra": WorkflowExtendStage(after=["deploy"], body={"title": "E"})},
+        )
+
+        effective = _effective_overrides(workflow)
+
+        assert effective["extra"].manual is True
+
+        extend_only = _effective_overrides(
+            WorkflowDocument(extend={"x": WorkflowExtendStage(after=["deploy"], body={"title": "X"})}),
+        )
+
+        assert extend_only["x"].manual is None
 
 
 class TestCompileFlowTriggerTranslation:
@@ -313,3 +358,271 @@ class TestCompileFlowTriggerTranslation:
         assert "auto_run" not in flow_text
         assert "trigger" not in flow_text
         assert list(flow_doc.stages[0].fields.keys()) == ["prompt", "agents"]
+
+
+class TestCompileFlowWorkflowManual:
+    """Step 4a — the tri-state workflow ``manual`` instruction application."""
+
+    def test_compile_flow_workflow_manual_true_idempotent_on_manual_stage(self, tmp_path: Path) -> None:
+        """Forcing an already-manual stage is an idempotent no-op (no error)."""
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: manual\n  prompt: ship it\n",
+            "stages:\n  deploy:\n    manual: true\n",
+        )
+
+        deploy_block = flow_text[flow_text.index("- id: deploy") :]
+
+        assert deploy_block.count("auto_run: false") == 1
+
+    def test_compile_flow_workflow_manual_false_cancels_body_trigger(self, tmp_path: Path) -> None:
+        """``manual: false`` cancels an authored ``trigger: manual``.
+
+        The cancel rewrites the working body's trigger to ``on_success``, so
+        step 5 assembles NO ``auto_run`` key and the consumed authoring key
+        never reaches the output.
+        """
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: manual\n  prompt: ship it\n",
+            "stages:\n  deploy:\n    manual: false\n",
+        )
+
+        assert "auto_run" not in flow_text
+        assert "trigger" not in flow_text
+
+    def test_compile_flow_workflow_manual_false_cancels_extend_body_trigger(self, tmp_path: Path) -> None:
+        """``manual: false`` cancels a manual state sourced from an extend body.
+
+        The cancel contract is "regardless of which side authored it" — the
+        extend body's ``trigger: manual`` is rewritten to ``on_success`` the
+        same way a pipeline-file body's is.
+        """
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  prompt: ship it\n",
+            "stages:\n"
+            "  extra:\n"
+            "    manual: false\n"
+            "extend:\n"
+            "  extra:\n"
+            "    after: [deploy]\n"
+            "    trigger: manual\n"
+            "    title: Extra\n",
+        )
+
+        assert "auto_run" not in flow_text
+
+    def test_compile_flow_manual_stage_loop_expansion_all_copies_auto_run(self, tmp_path: Path) -> None:
+        """Every loop-expanded copy of a manual stage carries ``auto_run: false``.
+
+        The authored ``trigger`` sits in the body that 4b deep-copies, so each
+        copy NAME-1..NAME-N lands in step 5 with the same effective trigger.
+        """
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: review\n  title: Review\n  trigger: manual\n  prompt: check it\n",
+            "stages:\n  review:\n    loop: 2\n",
+        )
+
+        review_1 = flow_text[flow_text.index("- id: review-1") : flow_text.index("- id: review-2")]
+        review_2 = flow_text[flow_text.index("- id: review-2") :]
+
+        assert "auto_run: false" in review_1
+        assert "auto_run: false" in review_2
+
+    def test_compile_flow_manual_true_with_loop_expansion(self, tmp_path: Path) -> None:
+        """Force + loop: the 4a rewrite lands on the working body BEFORE 4b.
+
+        The expansion deep-copies the already-rewritten body, so both copies
+        carry the effective manual trigger.
+        """
+        flow_text = _compile(
+            tmp_path,
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: review\n  title: Review\n  prompt: check it\n",
+            "stages:\n  review:\n    manual: true\n    loop: 2\n",
+        )
+
+        review_1 = flow_text[flow_text.index("- id: review-1") : flow_text.index("- id: review-2")]
+        review_2 = flow_text[flow_text.index("- id: review-2") :]
+
+        assert "auto_run: false" in review_1
+        assert "auto_run: false" in review_2
+
+    def test_compile_flow_workflow_manual_false_on_non_manual_stage(self, tmp_path: Path) -> None:
+        """Cancelling a stage with no manual state is a structural error."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  deploy:\n    manual: false\n")
+
+        with pytest.raises(StructuralError, match="manual: false on non-manual stage deploy"):
+            compile_flow(
+                pipeline_path,
+                tmp_path / "flow.yml",
+                workflow=parse_workflow(workflow_path),
+            )
+
+    def test_compile_flow_workflow_manual_false_on_explicit_on_success_stage(self, tmp_path: Path) -> None:
+        """An explicit ``trigger: on_success`` is not a manual state either.
+
+        The cancel gates on the RESULTING state (the body's effective trigger),
+        not on the mere presence of an authored trigger key.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: on_success\n  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  deploy:\n    manual: false\n")
+
+        with pytest.raises(StructuralError, match="manual: false on non-manual stage deploy"):
+            compile_flow(
+                pipeline_path,
+                tmp_path / "flow.yml",
+                workflow=parse_workflow(workflow_path),
+            )
+
+    def test_compile_flow_skip_wins_over_manual(self, tmp_path: Path) -> None:
+        """``skip: true`` removes the stage before the manual instruction applies.
+
+        Any trigger/manual combination on a skipped entry never reaches 4a, so
+        a would-be "manual: false on non-manual" conflict never fires and the
+        surviving stages compile normally.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\n"
+            "description: Feature implementation\n"
+            "---\n"
+            "- name: build\n"
+            "  title: Build\n"
+            "  prompt: make it\n"
+            "- name: deploy\n"
+            "  title: Deploy\n"
+            "  trigger: manual\n"
+            "  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  deploy:\n    manual: false\n    skip: true\n")
+
+        _, flow_doc = compile_flow(
+            pipeline_path,
+            tmp_path / "flow.yml",
+            workflow=parse_workflow(workflow_path),
+        )
+
+        flow_text = (tmp_path / "flow.yml").read_text()
+
+        assert len(flow_doc.stages) == 1
+        assert flow_doc.stages[0].id == "build"
+        assert "deploy" not in flow_text
+        assert "auto_run" not in flow_text
+
+    def test_compile_flow_pipeline_document_not_mutated_by_manual_rewrite(self, tmp_path: Path) -> None:
+        """The manual rewrite lives on the working copy only.
+
+        ``PipelineDocument`` mirrors the authored source verbatim — the cancel
+        rewrites the copy, never the original parsed body.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: manual\n  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  deploy:\n    manual: false\n")
+
+        pipeline_doc, flow_doc = compile_flow(
+            pipeline_path,
+            tmp_path / "flow.yml",
+            workflow=parse_workflow(workflow_path),
+        )
+
+        assert pipeline_doc.body.steps[0].body["trigger"] == "manual"
+        assert "auto_run" not in flow_doc.stages[0].fields
+
+    def test_compile_flow_manual_true_overrides_invalid_trigger_value(self, tmp_path: Path) -> None:
+        """Force rewrites even an invalid authored trigger value.
+
+        4a runs before step 5's value validation, so after the rewrite the
+        effective value is ``manual`` — in the closed set — and the compile
+        succeeds (the deterministic 4a → 5 ordering).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\ndescription: Feature implementation\n---\n"
+            "- name: deploy\n  title: Deploy\n  trigger: on_failure\n  prompt: ship it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  deploy:\n    manual: true\n")
+
+        compile_flow(
+            pipeline_path,
+            tmp_path / "flow.yml",
+            workflow=parse_workflow(workflow_path),
+        )
+
+        flow_text = (tmp_path / "flow.yml").read_text()
+        deploy_block = flow_text[flow_text.index("- id: deploy") :]
+
+        assert "auto_run: false" in deploy_block
+
+    def test_compile_flow_workflow_manual_true_forces_extend_stage(self, tmp_path: Path) -> None:
+        """Force × extend body: the instruction CREATES the manual state.
+
+        The extend body carries no trigger at all; the stages-block ``manual:
+        true`` (merged over the extend seed) installs it. Exercises the merged
+        branch of ``_effective_overrides`` end-to-end — a regression that drops
+        ``manual=stg.manual`` there degrades this into "no auto_run for extra".
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: Feature\n"
+            "description: Feature implementation\n"
+            "---\n"
+            "build:\n"
+            "  title: Build\n"
+            "  prompt: make it\n"
+            "review:\n"
+            "  title: Review\n"
+            "  depends_on: [build]\n"
+            "  prompt: check it\n",
+        )
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "stages:\n"
+            "  extra:\n"
+            "    manual: true\n"
+            "extend:\n"
+            "  extra:\n"
+            "    after: [build]\n"
+            "    title: Extra\n"
+            "    prompt: do extra\n",
+        )
+
+        _, flow_doc = compile_flow(
+            pipeline_path,
+            tmp_path / "flow.yml",
+            workflow=parse_workflow(workflow_path),
+        )
+
+        flow_text = (tmp_path / "flow.yml").read_text()
+        extra_stage = next(stage for stage in flow_doc.stages if stage.id == "extra")
+
+        assert extra_stage.fields["auto_run"] is False
+        assert list(extra_stage.fields.keys()).index("auto_run") < list(extra_stage.fields.keys()).index("prompt")
+        assert "auto_run: false" in flow_text
+        assert "trigger" not in flow_text
+        by_id = {stage.id: stage for stage in flow_doc.stages}
+        assert "auto_run" not in by_id["build"].fields
+        assert "auto_run" not in by_id["review"].fields

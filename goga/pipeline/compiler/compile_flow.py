@@ -490,20 +490,28 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     overlays per-field and WINS whenever its field is not ``None`` (the inline
     value is the fallback only). ``prompt``/``skills`` have no inline equivalent,
     so a stages-block entry's own values always pass straight through, and a name
-    with only an extend entry carries ``prompt``/``skills`` as ``None``.
+    with only an extend entry carries ``prompt``/``skills`` as ``None``. The
+    manual-launch instruction is stages-block-only: the extend seed CANNOT carry
+    ``manual`` (``parse_workflow`` rejects it in an extend-entry), so the merged
+    branch passes ``manual=stg.manual`` EXPLICITLY — the ``WorkflowStage``
+    constructor defaults it to ``None``, and an overlay that omitted it would
+    silently drop the instruction.
 
     Args:
         workflow: The declarative workflow instructions.
 
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
-        entries carry only ``agent``/``loop``/``approve``; stages-block entries
-        carry their full ``WorkflowStage``; merged entries combine them per-field.
+        entries carry only ``agent``/``loop``/``approve`` (``manual`` stays
+        ``None``); stages-block entries carry their full ``WorkflowStage``;
+        merged entries combine them per-field, always carrying the stages-block
+        ``manual``.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
-        # Inline extend carries agent/loop/approve only — no prompt/skills override.
+        # Inline extend carries agent/loop/approve only — no prompt/skills
+        # override, and no manual (forbidden in an extend-entry by the parser).
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
@@ -513,12 +521,15 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             effective[name] = stg
             continue
         # Per-field overlay: stages-block wins whenever its field is not None.
+        # ``manual`` is passed explicitly — the extend seed carries none, and the
+        # constructor default (None) would silently drop the instruction.
         effective[name] = WorkflowStage(
             agent=stg.agent if stg.agent is not None else base.agent,
             prompt=stg.prompt,
             loop=stg.loop if stg.loop is not None else base.loop,
             skills=stg.skills,
             approve=stg.approve if stg.approve is not None else base.approve,
+            manual=stg.manual,
         )
 
     return effective
@@ -590,16 +601,28 @@ def _apply_per_stage_overrides(
     ``_canonical_fields`` to drive the two approve effects (interactive
     suppression and ``auto_approve`` emission, each on its own directive subset);
     writing ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel
-    as no directive). ``effective`` already folds the inline-extend default together
-    with the explicit stages-block, so inline ``agent``/``loop``/``approve``
-    apply even without a stages-block, and an explicit stages-block wins
-    per-field. Operates on the supplied (already deep-copied) working sequence so
-    the ORIGINAL parsed body stays untouched.
+    as no directive). The effective tri-state ``manual`` instruction is then
+    applied to the step body's ``trigger`` on this same working copy: ``True``
+    forces ``trigger: manual`` over any authored value (an idempotent no-op on
+    an already-manual stage); ``False`` cancels a manual state from EITHER body
+    source (pipeline-file body OR embedded extend body) by rewriting
+    ``trigger: manual`` to ``trigger: on_success``, and raises
+    ``StructuralError("manual: false on non-manual stage <name>")`` when the
+    body carries no manual state to cancel; ``None`` (no instruction) leaves
+    the authored trigger unchanged. ``effective`` already folds the
+    inline-extend default together with the explicit stages-block, so inline
+    ``agent``/``loop``/``approve`` apply even without a stages-block, and an
+    explicit stages-block wins per-field. Operates on the supplied (already
+    deep-copied) working sequence so the ORIGINAL parsed body stays untouched.
 
     Args:
         steps: The working (deep-copied) step sequence to mutate in place.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name.
+
+    Raises:
+        StructuralError: When a ``manual: false`` entry targets a stage whose
+            working body carries no ``trigger: manual`` (nothing to cancel).
     """
     steps_by_name = {step.name: step for step in steps}
 
@@ -625,6 +648,21 @@ def _apply_per_stage_overrides(
         # simple (the sentinel always reflects the resolved directive). It never
         # reaches the output — read and dropped in ``_canonical_fields``.
         step.body[_APPROVE_SENTINEL] = stage.approve
+
+        # Tri-state manual-launch instruction (4a manual). The rewrite targets
+        # this WORKING body copy only — the original parsed body and the
+        # ``PipelineDocument`` mirror stay untouched. ``True`` forces the manual
+        # state over any authored trigger (idempotent on an already-manual
+        # stage); ``False`` cancels a manual state from either body source
+        # (pipeline-file OR extend body) or is an error when there is nothing to
+        # cancel; ``None`` (no instruction) leaves the authored trigger alone.
+        if stage.manual is True:
+            step.body["trigger"] = "manual"
+        elif stage.manual is False:
+            if step.body.get("trigger") == "manual":
+                step.body["trigger"] = "on_success"
+            else:
+                raise StructuralError(f"manual: false on non-manual stage {name}")
 
 
 def _make_expanded_copy(
