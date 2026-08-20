@@ -9,6 +9,10 @@ description: "Development process"
     Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
     Save the architecture plan as `<git branch --show-current>.md`
 
+    Cell convention:
+    - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
+    - Highly complex and nested algorithms should be decomposed into smaller, single-responsibility components.
+
     Communication:
     - When approving report content gates (PRIMARY_ANALYSIS_REPORT, TYPE_MAP_REPORT, CELL_DISTRIBUTION_REPORT, TYPE_DETAIL_REPORT, CELL_ASSEMBLY_REPORT),
       please provide full artifacts in the format specified in a question or propose to user.

@@ -5,6 +5,9 @@ description: "Bug fixing process"
 - name: hotfix
   title: "Root-cause analysis and resolution"
   communication: true
+  prompt: |
+    Cell convention:
+    - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
   skills:
     - goga-change
 

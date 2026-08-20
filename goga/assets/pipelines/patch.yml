@@ -5,6 +5,9 @@ description: "Refactoring or miniman changes process"
 - name: ad-hoc
   title: "Formalize the task, make the plan and implement it"
   communication: true
+  prompt: |
+    Cell convention:
+    - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
   skills:
     - goga-change
 
