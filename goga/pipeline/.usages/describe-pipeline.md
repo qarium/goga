@@ -74,7 +74,10 @@ copies appear as separate rows with their generated ids.
 
 ## Anti-patterns
 
-- Do not apply skip directives before reading the card — skip is a run-only
-  concern and the card ignores it.
+- Do not feed the run-only skip channel (`GOGA_SKIP_STAGES`, the host `-s`
+  option) to the card — the card never reads it. Workflow-file
+  `skip: true` directives DO apply through the shared compilation machine
+  and are reflected in the stage list, exactly as a run with the same
+  workflow flags would execute them.
 - Do not treat the card as a launch — no afm invocation, no agents, no state
   changes.

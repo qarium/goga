@@ -164,7 +164,10 @@ Annotations: |
             build
        2.3. `workflow` provided AND `no_workflow` set → mutually-exclusive
             error (exit 1)
-       2.4. `workflow` provided → verify
+       2.4. `workflow` provided → reject a name whose resolved path escapes
+            <cwd>/.goga/workflows/ (a ".." segment or an absolute prefix)
+            as a clean "invalid workflow name" error (exit 1) — never
+            resolve into the wider filesystem; then verify
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
     3. Dispatch by form:
@@ -306,9 +309,14 @@ Annotations: |
        `afm` practices). The tmpfile is a read-only overlay over the
        persistent afm state directory mounted in step 11
     7. Resolve the persistent afm state host directory via
-       `resolve_pipeline_runtime_dir` and ensure it exists (idempotent)
+       `resolve_pipeline_runtime_dir` and ensure it exists (idempotent).
+       Executed BEFORE the step-6 signal handler and temp files — no secret
+       file exists yet at this point, and the directory must be on disk
+       under every exit path
     8. When `clean` is True: wipe the resolved directory via
-       `clean_pipeline_runtime_dir` before launch
+       `clean_pipeline_runtime_dir` before launch (also before the step-6
+       handler and temp files — the wipe is strictly pre-launch, never in
+       finally)
     9. Compute the workflow env-file entries (host-side, BEFORE container
        launch):
        - When `no_workflow` is True:

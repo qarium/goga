@@ -134,8 +134,12 @@ Annotations: |
   Informational surface: the overview lists every discovered pipeline with
   its description from the DSL header; the card reports the name, the
   description, and the post-workflow stage composition produced by the same
-  compilation machine a run uses. The card applies no skip directives and
-  writes nothing into the project or runtime directories.
+  compilation machine a run uses. The card reads no run-only
+  GOGA_SKIP_STAGES environment variable — the CLI skip channel is a run
+  concern — while workflow-file skip directives apply through the shared
+  compilation machine (they are part of the composition a run with the same
+  workflow flags executes). The card writes nothing into the project or
+  runtime directories.
 
 ---
 
@@ -341,19 +345,26 @@ Annotations: |
     Algorithm:
     1. When `no_workflow` is True — return None
     2. Compose the workflow-file path under <cwd>/.goga/workflows/: named
-       `workflow_name`.yml when provided, otherwise the pipeline basename
-       `pipeline_name`.yml
-    3. When the composed file exists — parse it via `parse_workflow` and
+       `workflow_name`.yml when provided (an empty string counts as not
+       provided), otherwise the pipeline basename `pipeline_name`.yml
+    3. Containment guard: when the composed path resolves outside the
+       <cwd>/.goga/workflows/ directory (a ".." segment or an absolute
+       prefix in the name) — return None (silent miss; workflow files are
+       project-only, never resolved into the wider filesystem)
+    4. When the composed file exists — parse it via `parse_workflow` and
        return the resulting `WorkflowDocument`; structural errors propagate
        with their readable messages
-    4. Otherwise — return None (silent miss; an absent workflow-file is not an
+    5. Otherwise — return None (silent miss; an absent workflow-file is not an
        error)
 
     Requirements:
     - The resolution rules are exactly: disabled → None; explicit name → that
-      file; otherwise basename auto-match; missing file → None
+      file (an empty string counts as no name — the basename auto-match
+      applies); otherwise basename auto-match; a name escaping the workflows
+      directory → None; missing file → None
     - Workflow files are project-only — the directory resolves from the
-      current working directory
+      current working directory, and a composed path outside it is a silent
+      miss, never a traversal into the wider filesystem
 
     Constraints:
     - Do not treat a missing workflow-file as an error — the auto-match is
@@ -431,7 +442,10 @@ Annotations: |
       with the same workflow flags would execute — the same compilation
       machine produces both
     - Loop-expanded stage copies appear as separate stages
-    - No skip directives are applied — skip is a run-only concern
+    - The run-only GOGA_SKIP_STAGES environment variable is not read — the
+      CLI skip channel is a run concern; workflow-file skip directives DO
+      apply through the shared compilation machine (part of the composition
+      a run with the same workflow flags executes)
     - The temporary flow-file lives outside the project and runtime
       directories and is removed afterwards
     - The card name and description are the authored DSL header values
