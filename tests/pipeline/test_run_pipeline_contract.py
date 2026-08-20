@@ -86,6 +86,73 @@ class TestRunPipelineWorkflowContract:
         assert mock_compile.call_args.kwargs["workflow"] is None
 
 
+class TestRunPipelineDelegatesWorkflowResolution:
+    """Contract: step 6 delegates to the shared ``resolve_workflow`` rule set.
+
+    The private ``_resolve_workflow`` helper was REMOVED; its parameterized
+    contract lives in ``goga/pipeline/resolve_workflow.py`` (Task 2).
+    ``run_pipeline`` now reads the environment decision
+    (``GOGA_WORKFLOW_DISABLED`` > ``GOGA_WORKFLOW_NAME``) and hands it to the
+    shared resolver as ``(pipeline_name, workflow_name, no_workflow)`` — the
+    same entry point ``describe_pipeline`` uses with CLI flags.
+    """
+
+    def test_run_pipeline_signature_unchanged(self) -> None:
+        """The public signature stays (name, project_dir, user_dir, port, parallel=None)."""
+        signature = inspect.signature(run_pipeline)
+        parameters = list(signature.parameters)
+        assert parameters == ["name", "project_dir", "user_dir", "port", "parallel"]
+        assert signature.parameters["parallel"].default is None
+
+    def test_run_pipeline_module_has_no_private_resolver(self) -> None:
+        """The private _resolve_workflow helper no longer exists on the module."""
+        assert not hasattr(_run_pipeline_module, "_resolve_workflow")
+
+    def test_run_pipeline_delegates_workflow_resolution(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The env decision reaches resolve_workflow as exact kwargs."""
+        monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "resolve_workflow", return_value=None) as mock_resolve,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_resolve.assert_called_once_with("deploy", "hardening", False)
+
+    def test_run_pipeline_disabled_env_nulls_the_explicit_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """GOGA_WORKFLOW_DISABLED=1 → the name is nulled before resolve_workflow.
+
+        The DISABLED priority is enforced in the input (workflow_name=None) as
+        well as inside the rule set (no_workflow=True) — double protection.
+        """
+        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("AFM_DIR", str((tmp_path / ".afm").resolve()))
+        project_dir = tmp_path / "pipelines"
+        _write_pipeline(project_dir)
+
+        with (
+            mock.patch.object(_run_pipeline_module, "resolve_workflow", return_value=None) as mock_resolve,
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()),
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        mock_resolve.assert_called_once_with("deploy", None, True)
+
+
 class TestRunPipelineProjectNameContract:
     """Contract: run_pipeline forwards a ``project_name=`` kwarg to compile_flow.
 
