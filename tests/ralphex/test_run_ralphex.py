@@ -225,6 +225,42 @@ class TestRunRalphexLogic:
         assert result == 1
         assert "ralphex binary not found in PATH" in captured.err
 
+    def test_run_ralphex_env_path_override_non_executable_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override resolves a non-executable ralphex
+        surfaces as the clean failed-invoke message and exit 1 — not a
+        PermissionError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=PermissionError("[Errno 13] Permission denied: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/non-executable-dir"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_env_layer_illegal_variable_name_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer key that is not a legal environment variable name
+        (contains "=") is rejected by exec before the launch — a clean message
+        and exit 1, not a ValueError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=ValueError("illegal environment variable name"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"A=B": "x"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
     def test_run_ralphex_maps_new_bool_flags(self) -> None:
         """The review/tasks_only mode flags map to their bare ralphex flags;
         False is equivalent to absent (bool-mapping rule regression guard)."""

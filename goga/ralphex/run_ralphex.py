@@ -97,7 +97,9 @@ def run_ralphex(
     Returns:
         ``0`` on success or on a dry run; ``1`` when the ``ralphex`` binary is
         missing from ``PATH`` — including when an ``env`` layer's ``PATH``
-        override hides it from the exec; otherwise ralphex's own exit code.
+        override hides or disables it from the exec, or when the layer carries
+        an illegal environment variable name; otherwise ralphex's own exit
+        code.
     """
     cmd = _build_command(plan, options)
 
@@ -119,4 +121,12 @@ def run_ralphex(
         # even though the guard above resolved it in the inherited PATH — the
         # same clean message and exit code, not a traceback.
         print("Error: ralphex binary not found in PATH", file=sys.stderr)
+        return 1
+    except (PermissionError, ValueError) as e:
+        # The sibling PATH-override failure (the overlaid PATH resolves a
+        # ralphex that is present but not executable) and an env layer key
+        # that is not a legal environment variable name (e.g. contains "=")
+        # are both rejected by the exec before the launch — a clean message
+        # and exit 1, not a traceback escaping to the caller.
+        print(f"Error: failed to invoke ralphex: {e}", file=sys.stderr)
         return 1
