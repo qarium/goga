@@ -103,10 +103,12 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     of the final pass; the exit code of the last pass is returned.
 
     Pass modes: a skipped run makes exactly one tasks-only pass (no review phase
-    of any kind); a two-pass run (review executor differs from the task executor)
-    runs tasks-only first and, when it succeeds, a review-only pass with the
-    review wrapper — a pass-1 failure exits with its code and skips pass 2;
-    anything else is one full pass.
+    of any kind, the review env ignored entirely); a two-pass run (review
+    executor with a differing agent OR a non-empty review env) runs tasks-only
+    first — without an env layer — and, when it succeeds, a review-only pass
+    with the review wrapper and the review env as its environment layer; a
+    pass-1 failure exits with its code and skips pass 2 (and its env layer);
+    anything else is one full pass, without a layer.
 
     Args:
         plan: Path to the build plan file.
@@ -155,7 +157,9 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
         review_wrapper = resolve_wrapper_path(review.review_agent)
         exit_code = run_build_pass(plan, config.build, {**base, "tasks_only": True}, task_wrapper, dry_run)
         if exit_code == 0:
-            exit_code = run_build_pass(plan, config.build, {**base, "review": True}, review_wrapper, dry_run)
+            exit_code = run_build_pass(
+                plan, config.build, {**base, "review": True}, review_wrapper, dry_run, env=review.review_env
+            )
     else:
         exit_code = run_build_pass(plan, config.build, base, task_wrapper, dry_run)
 

@@ -878,6 +878,127 @@ class TestBuildReviewPhaseOrchestration:
         assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
         assert "move_plan_on_completion = false" in config_text
 
+    def test_build_two_pass_pass2_carries_review_env(self, tmp_path, monkeypatch) -> None:
+        """Contract: the second call to run_ralphex of a two-pass run carries the
+        review env layer; the build() signature itself stays (plan, config, cli_options)."""
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"M": "r"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        assert mock_run.call_args_list[1].kwargs["env"] == {"M": "r"}
+
+    def test_build_two_pass_pass2_carries_review_env_pass1_without(self, tmp_path, monkeypatch) -> None:
+        """Pass 1 runs without the env layer, pass 2 carries it — the asymmetry
+        keeps review-only variables out of the tasks pass."""
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        first, second = mock_run.call_args_list
+        assert "env" not in first.kwargs or first.kwargs["env"] is None
+        assert second.kwargs["env"] == {"ANTHROPIC_MODEL": "reviewer"}
+
+    def test_build_env_only_induction_two_pass(self, tmp_path, monkeypatch) -> None:
+        """Same agent on both executors: the two-pass mode is induced by the env
+        alone, and the pass-2 wrapper resolves via that same (matching) agent."""
+        config = _make_config(
+            review_executor=ReviewExecutorConfig(agent="claude", env={"M": "r"}),
+        )
+        review_wrapper = tmp_path / "claude-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        second = mock_run.call_args_list[1]
+        assert second.args[1]["review"] is True
+        assert second.kwargs["env"] == {"M": "r"}
+
+    def test_build_env_requires_agent_returns_1_without_launch(self, tmp_path, monkeypatch) -> None:
+        """A review env without a review agent is rejected by the validation gate
+        before any side effect: no launch, no .ralphex/ sync."""
+        config = _make_config(review_executor=ReviewExecutorConfig(env={"X": "y"}))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        assert mock_run.call_count == 0
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_skip_run_ignores_review_env(self, tmp_path, monkeypatch) -> None:
+        """A skipped run ignores the review env entirely: one tasks-only pass,
+        no env layer, no validation of it."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, agent="codex", env={"X": "y"}))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        first = mock_run.call_args_list[0]
+        assert "env" not in first.kwargs or first.kwargs["env"] is None
+        assert first.args[1]["tasks_only"] is True
+
+    def test_build_full_pass_no_env_layer(self, tmp_path, monkeypatch) -> None:
+        """No review executor at all: a single full pass, never an env layer."""
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(review_executor=None),
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        # No layer is delivered: env arrives as the default None, never a dict.
+        assert mock_run.call_args.kwargs["env"] is None
+
     def test_build_two_pass_pass1_failure_skips_pass2(self, tmp_path, monkeypatch) -> None:
         config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
         review_wrapper = tmp_path / "codex-as-claude.sh"
