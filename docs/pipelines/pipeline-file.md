@@ -206,7 +206,7 @@ Goga ships six ready-to-use pipelines — `bugfix`, `development`, `patch`,
 `refinement`, `review`, and `sync` — that cover the most common authoring
 lifecycles. See
 [Shipped Pipelines](shipped.md) for the per-pipeline walkthrough and how
-to use them as templates.
+project pipelines override the global ones.
 
 ## Roles
 

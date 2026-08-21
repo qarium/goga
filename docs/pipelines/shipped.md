@@ -195,19 +195,27 @@ resolve → commit-changes
 changes, it resolves the drift between code, contracts, and tests.
 `commit-changes` then commits the accumulated fixes.
 
-## Using them as templates
+## Project overrides
 
-Copy any shipped pipeline into the project pipeline directory and edit
-the copy:
+Shipped pipelines are global defaults, not the only way to run a
+process. To customize how a process behaves in your project, prefer a
+[workflow](workflows.md) — it layers project-specific behavior (extra
+prompt context, per-stage agent, loop expansion, stage skipping) on top
+of the shipped pipeline-file without forking it, so your project keeps
+tracking upstream changes to the base pipeline.
+
+When a workflow is not enough and you need a different pipeline
+structure, put your own pipeline-file into the project pipeline
+directory:
 
 ```bash
 cp ~/.goga/pipelines/development.yml .goga/pipelines/my-development.yml
 ```
 
-The copy becomes a **project** pipeline and shadows the shipped one only
-when both share a name — otherwise they coexist as two distinct
-pipelines. See [Pipeline File](pipeline-file.md) for the authoring
-reference.
+Project pipelines take precedence over global ones: on a name conflict
+the project pipeline wins and shadows the shipped one; without a name
+conflict they coexist as two distinct pipelines. See
+[Pipeline File](pipeline-file.md) for the authoring reference.
 
 To distribute a pipeline **across projects** alongside other goga
 tooling, ship it inside a `goga_tool_*` package under
