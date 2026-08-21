@@ -103,6 +103,7 @@ goga pipeline development    # the development cycle: brainstorm → … → acc
 goga pipeline bugfix         # root-cause analysis and defect resolution
 goga pipeline patch          # refactoring or minimal change with a plan
 goga pipeline review         # scoped review of code, contracts, docs, then lint/format/tests
+goga pipeline sync           # sync specifications & tests with the code after changes
 ```
 
 Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, new stages).
