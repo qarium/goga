@@ -23,11 +23,12 @@ class TestRunRalphexContract:
         assert run_ralphex is not None
 
     def test_run_ralphex_signature_matches_contract(self) -> None:
-        """run_ralphex exposes the (plan, options, dry_run) -> int signature."""
+        """run_ralphex exposes the (plan, options, dry_run, env) -> int signature."""
         signature = inspect.signature(run_ralphex)
-        parameters = list(signature.parameters)
+        parameters = signature.parameters
 
-        assert parameters == ["plan", "options", "dry_run"]
+        assert list(parameters) == ["plan", "options", "dry_run", "env"]
+        assert parameters["env"].default is None
         assert signature.return_annotation in ("int", int)
 
 
@@ -151,6 +152,57 @@ class TestRunRalphexLogic:
             mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/local/bin/ralphex"),
         ):
             run_ralphex("plan.md", {}, False)
+
+        assert "env" not in mock_call.call_args.kwargs
+        assert mock_call.call_args.args[0][0] == "ralphex"
+
+    def test_run_ralphex_env_layer_overlays_inherited_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A non-empty env layer overlays os.environ for the subprocess only:
+        layer keys win, everything else is inherited, the parent is untouched."""
+        monkeypatch.setenv("INHERITED_VAR", "base")
+        monkeypatch.setenv("SHARED_VAR", "inherited")
+
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("plan.md", {}, False, env={"SHARED_VAR": "layer", "LAYER_ONLY": "x"})
+
+        subprocess_env = mock_call.call_args.kwargs["env"]
+        assert subprocess_env["SHARED_VAR"] == "layer"
+        assert subprocess_env["LAYER_ONLY"] == "x"
+        assert subprocess_env["INHERITED_VAR"] == "base"
+        # The layer never mutates the parent environment.
+        import os
+
+        assert os.environ["SHARED_VAR"] == "inherited"
+
+    def test_run_ralphex_dry_run_never_prints_env_values(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """dry_run prints the argv (built from options only) and never leaks
+        env layer values; no subprocess machinery is touched."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex") as mock_which,
+        ):
+            result = run_ralphex("plan.md", {"review": True}, True, env={"SECRET_TOKEN": "s3cr3t"})
+
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "s3cr3t" not in captured.err
+        assert "ralphex plan.md" in captured.err
+        mock_call.assert_not_called()
+        mock_which.assert_not_called()
+
+    @pytest.mark.parametrize("env", [None, {}], ids=["none", "empty"])
+    def test_run_ralphex_env_none_and_empty_no_env_kwarg(self, env: dict[str, str] | None) -> None:
+        """env=None and env={} both mean pure inheritance: subprocess.call is
+        invoked without an env kwarg (invariant pinned alongside
+        test_run_ralphex_inherits_env_no_env_kwarg)."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("p.md", {}, False, env=env)
 
         assert "env" not in mock_call.call_args.kwargs
         assert mock_call.call_args.args[0][0] == "ralphex"
