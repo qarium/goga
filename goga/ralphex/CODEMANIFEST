@@ -56,8 +56,12 @@ Annotations: |
            same-named inherited variables, every other inherited variable passes through
            unchanged. None or an empty dict means pure inheritance with no layer. The
            layer scopes to this subprocess only.
-    `exit_code`: 0 on success, 1 when the ralphex binary is missing from PATH, otherwise
-                ralphex's own exit code
+    `exit_code`: 0 on success, 1 when the ralphex binary is missing from PATH —
+                including when an `env` layer's PATH override hides it from the
+                exec — or when the launch is rejected before the exec (an `env`
+                layer key that is not a legal environment variable name, an
+                oversized layer, or a PATH override resolving a non-executable
+                or non-directory ralphex), otherwise ralphex's own exit code
 
     Algorithm:
     1. Receive `plan`, `options`, `dry_run`, and `env` from the caller
@@ -69,7 +73,12 @@ Annotations: |
     4. Verify `ralphex` is on PATH via the `ralphex` practice; when absent — return `exit_code` 1
     5. Execute `ralphex` via subprocess with the environment composed as the inherited
        process environment overlaid with `env` (a None or empty `env` leaves the inherited
-       environment untouched) and propagate its exit code
+       environment untouched) and propagate its exit code. A launch rejected before the
+       exec — FileNotFoundError when the layer's PATH override hides the binary, or
+       OSError/ValueError on an illegal env-variable name, an oversized layer, or a
+       PATH override resolving a non-executable/non-directory ralphex — is reported as a
+       clean one-line message to sys.stderr and exit code 1, never a traceback, and the
+       message never reveals the `env` layer contents
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
     Apply the `ralphex` practice for the general ralphex CLI contract (binary invocation,
@@ -86,6 +95,8 @@ Annotations: |
     - Compose the subprocess environment as the inherited os.environ overlaid with `env`;
       apply the layer only to this subprocess
     - On `dry_run`, the printed command carries no environment values
+    - A launch rejection (see Algorithm step 5) surfaces as a clean message plus exit
+      code 1 — no traceback escapes to the caller, and no `env` layer value is printed
     - Apply the `ralphex` practice's exit-code rules verbatim
 
     Constraints:

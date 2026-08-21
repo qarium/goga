@@ -68,7 +68,7 @@ exit_code = run_ralphex(plan, {**options, "review": True}, dry_run,
 | Exit code | Condition |
 |-----------|-----------|
 | 0 | ralphex ran the plan successfully |
-| 1 | `ralphex` not on `$PATH` inside the container |
+| 1 | `ralphex` not on `$PATH` inside the container — including when an `env` layer's `PATH` override hides it from the exec — or the launch was rejected before the exec (an `env` key that is not a legal variable name, an oversized layer, or a `PATH` override resolving a non-executable/non-directory ralphex); either way a clean one-line message goes to stderr, never a traceback |
 | non-zero | ralphex itself returned a non-zero exit code |
 
 ## Side Effects
