@@ -29,3 +29,11 @@ stages:
     approve: auto
   plan-review:
     approve: auto
+
+extend:
+  build:
+    title: "Build implementation"
+    after:
+      - commit-changes
+    timeout: "8h"
+    script: python3 -m goga.build docs/plans/$(git branch --show-current).md
