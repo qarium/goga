@@ -56,7 +56,7 @@ Annotations: |
   Use the `agent-wrappers` practice for the in-container wrapper naming convention referenced
   when writing claude_command into .ralphex/config.
   Use the `resolve-wrapper-path` practice when calling `resolve_wrapper_path`.
-  Use the `run-ralphex` practice from Imports to delegate the launch.
+  Use the `run-ralphex` practice to delegate the launch.
   Write all output to sys.stderr (click is not used).
   Run git external commands via subprocess (the manifest pre-check).
 

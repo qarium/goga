@@ -71,7 +71,7 @@ Annotations: |
        default empty dict), and finally construct a `BuildConfig` from
        task_executor, proxy (optional, default None), hosts (optional, default
        empty dict), plus the remaining optional build fields
-    6.5. Extract the optional review_executor sub-block of build: absent or
+    7. Extract the optional review_executor sub-block of build: absent or
        YAML-null → review_executor None. Present but not a mapping → ValueError.
        skip: absent/null → None; a non-bool value → ValueError. agent:
        absent/YAML-null/empty/whitespace → None; a non-string value → ValueError.
@@ -83,17 +83,17 @@ Annotations: |
        mapping — null-tolerance mirrors agent and roles of this step).
        Construct a `ReviewExecutorConfig` from the resolved fields and pass it
        into `BuildConfig`.
-    7. Extract the optional codemanifest block; when present, construct a
+    8. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
-    8. Extract the optional lint block. When the lint key is absent or
+    9. Extract the optional lint block. When the lint key is absent or
        YAML-null → lint=None. When present but not a mapping → raise
        ValueError. When a mapping → extract the optional ignore:
        absent/YAML-null/empty → empty list; present → must be a list whose every
        element is a string (otherwise ValueError). Perform NO semantic validation
        of path contents (glob, existence, normalization) — only the structural
        "list of strings" check. Construct a `LintConfig` from the resolved ignore list.
-    9. Extract the optional commands mapping (defaults to empty)
-    10. Extract the optional tools mapping via the `yaml` practice. When the key
+    10. Extract the optional commands mapping (defaults to empty)
+    11. Extract the optional tools mapping via the `yaml` practice. When the key
         is absent or YAML-null → set tools to None. When the key is present but
         the value is not a mapping → raise ValueError. When the value is a
         mapping → validate structurally that every key is a string and every
@@ -104,7 +104,7 @@ Annotations: |
         non-grammar strings pass through the loader verbatim. The loader is NOT
         the validation authority for the version grammar — that responsibility
         belongs to the consumer.
-    11. Extract the optional usages block. When the usages key is absent → set
+    12. Extract the optional usages block. When the usages key is absent → set
         usages to None. When present but not a mapping → raise ValueError. When a mapping
         → for each group (str key → mapping) and each dep (str key → mapping):
         - require dep.git (non-empty str) — KeyError when missing, ValueError when invalid
@@ -119,7 +119,7 @@ Annotations: |
           .goga/usages/<group>/<dep>/ segments in the downstream usages-sync consumer
         - construct a `DepConfig`(git, ref, root) per dep, preserving group/dep as dict keys
         Build usages as dict[str, dict[str, DepConfig]]; empty mapping when present-but-empty
-    12. Construct and return a `ProjectConfig` from all assembled parts, including
+    13. Construct and return a `ProjectConfig` from all assembled parts, including
         dockerfile, tools, usages, and lint
 
     Requirements:

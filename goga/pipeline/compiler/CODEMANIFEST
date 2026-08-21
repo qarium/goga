@@ -138,36 +138,36 @@ Annotations: |
   Workflow application (when `compile_flow` is called with a non-None
   workflow argument): the cell reconstructs the body per the workflow
   instructions BEFORE building the `FlowDocument`. The reconstruction is:
-  (0) extend-stages from the workflow's extend map embedded into the body
+  (1) extend-stages from the workflow's extend map embedded into the body
   and positioned via before/after — BEFORE per-stage overrides,
   loop-expansion, skip-removal, and reference rewriting, so the existing
   machinery applies to extend-stages uniformly. STAGES positions an
   extend-stage by deriving its explicit depends_on from before/after; PHASES
   positions an extend-stage by list insertion (no depends_on field on
   `PhaseStep`).
-  (0.45) STRICT VALIDATION of workflow.extend.<name>.before/.after refs
+  (2) STRICT VALIDATION of workflow.extend.<name>.before/.after refs
   against the FULL name set (every step name/id present in the ORIGINAL body,
   plus every extend-stage name in workflow.extend): for each before/after ref,
   an unknown ref (naming no original step and no extend-stage) raises a
   structural error "unknown stage name in workflow.extend.<name>.before: <ref>"
-  (or .after). The check runs BEFORE the (0) embed (extend names come from
+  (or .after). The check runs BEFORE the (1) embed (extend names come from
   workflow.extend keys, so cross-references between extend-stages resolve
   without embedding) and BEFORE any skip removal, so a ref to a stage that
   exists in the original body — even if also marked skip: true — is NOT flagged
   (referencing a skipped stage is not a dangling ref). Existence only is
   checked — cycles, self-references, and duplicate refs remain afm's
   responsibility.
-  (0.5) STRICT VALIDATION of workflow.stages names against the FULL name set
+  (3) STRICT VALIDATION of workflow.stages names against the FULL name set
   (every step name/id present in the ORIGINAL body, plus every extend-stage
-  name embedded at (0)): for each name in workflow.stages, an unknown name
+  name embedded at (1)): for each name in workflow.stages, an unknown name
   (absent from both the original body and the extend-stages) raises a
   structural error "unknown stage name in workflow.stages: <name>". The check
   runs on the FULL set
   BEFORE any skip removal, so a stage that exists in the original body —
   even if also marked skip: true — is NOT flagged as unknown. Extend-stage
   names are valid here (embedded before this check). Strictness over
-  extend.<name>.before/.after refs is enforced separately at (0.45).
-  (0.6) SKIP REMOVAL + transparent depends_on reconnection: stages whose
+  extend.<name>.before/.after refs is enforced separately at (2).
+  (4) SKIP REMOVAL + transparent depends_on reconnection: stages whose
   workflow.stages[name].skip is True (and which exist) are removed from
   the working body. STAGES: each remaining stage's depends_on is
   transparently reconnected — a reference to a removed stage S is replaced
@@ -175,19 +175,19 @@ Annotations: |
   (chains resolved; no dangling references or duplicates). PHASES: removed
   steps drop from the body list and depends_on re-derives by list position
   in step 5 (automatic collapse). skip wins over agent/prompt/loop/skills
-  overrides on the same entry (removal runs before (a)). If the
+  overrides on the same entry (removal runs before (5)). If the
   reconstructed body becomes empty (every stage skipped), raise a
   structural error "empty body".
-  (a) per-stage overrides applied in-place to the body of `PhaseStep` /
+  (5) per-stage overrides applied in-place to the body of `PhaseStep` /
   `StageStep`, matching embedded extend-stages by name. A stage
-  not found here can only be an intentionally skipped one (removed at (0.6)),
-  so the lookup is SILENT; unknown names are errors at (0.5). The agent
+  not found here can only be an intentionally skipped one (removed at (4)),
+  so the lookup is SILENT; unknown names are errors at (3). The agent
   override FALLS BACK to an extend-entry's inline agent, and a skills merge
   is applied;
-  (b) loop-expansion producing N copies with ids NAME-1..N and chain-style
+  (6) loop-expansion producing N copies with ids NAME-1..N and chain-style
   internal depends_on, expanding extend-stages when the effective loop for
   that name is >= 2 (stages-block loop OR the extend-entry's inline loop);
-  (c) external depends_on references rewritten via the expanded_ids map,
+  (7) external depends_on references rewritten via the expanded_ids map,
   rewriting before/after-derived refs as well: both after and before
   → LAST expanded id — any reference to a loop-expanded chain points to its
   completion). Unknown stage names in workflow.stages and dangling refs in
@@ -909,7 +909,7 @@ Annotations: |
     3. If the body has zero steps — raise a structural error "empty body"
     4. When `workflow` is not None — reconstruct the body per the `workflow`
        instructions (BEFORE building FlowStages):
-       4a0. Embed extend-stages and position them via before/after — STAGES
+       4.1. Embed extend-stages and position them via before/after — STAGES
             derives their explicit depends_on, PHASES inserts them into the
             body list (only when the workflow's extend map is non-empty):
             1. Build the set of known names: every step name/id present in
@@ -947,7 +947,7 @@ Annotations: |
                     steps shift down. Step 5's positional derivation then
                     yields the correct depends_on: the extend-stage depends
                     on its positional predecessor (the after-target, or the
-                    after-target's last loop-expanded copy once 4b runs),
+                    after-target's last loop-expanded copy once 4.6 runs),
                     and each before-target gains the extend-stage as its
                     positional predecessor. Multi-target before/after in
                     PHASES reduces to a single positional predecessor per
@@ -956,7 +956,7 @@ Annotations: |
                     after the last of A and B, so it runs after both via the
                     positional chain).
                - Dangling reference (a before/after name absent from the
-                 known-names set) — cannot occur at this step: step (0.45)
+                 known-names set) — cannot occur at this step: step 4.2
                  strict-validates every before/after ref BEFORE the embed and
                  raises a structural error "unknown stage name in
                  workflow.extend.<name>.before/.after: <ref>". The embed thus
@@ -968,29 +968,29 @@ Annotations: |
                  computed positions; depends_on is derived purely by list
                  position in step 5 (no explicit depends_on is carried).
 
-       4a0-pre. Strict-validation of workflow.extend.<name>.before/.after refs:
+       4.2. Strict-validation of workflow.extend.<name>.before/.after refs:
                 build the valid-name set = { every step name/id in the
                 ORIGINAL body } ∪ { every extend-stage name in workflow.extend }.
                 For each before/after ref: if the ref is NOT in the valid-name
                 set — raise a structural error "unknown stage name in
-                workflow.extend.<name>.before/.after: <ref>". Runs BEFORE the 4a0
+                workflow.extend.<name>.before/.after: <ref>". Runs BEFORE the 4.1
                 embed (extend names come from workflow.extend keys, so cross-
                 references between extend-stages resolve without embedding) and
                 BEFORE any skip removal, so a really-existing skipped stage is
                 NOT flagged (referencing a skipped stage is not a dangling ref).
                 Existence only — cycles, self-references, and duplicate refs
                 remain afm's responsibility.
-       4pre. Strict-validation of workflow.stages names: build the valid-name
+       4.3. Strict-validation of workflow.stages names: build the valid-name
              set = { every step name/id in the ORIGINAL body } ∪ { every
-             extend-stage name embedded at 4a0 }. For each name in
+             extend-stage name embedded at 4.1 }. For each name in
              workflow.stages: if the name is NOT in the valid-name set — raise
              a structural error "unknown stage name in workflow.stages: <name>".
              The check runs on the FULL set BEFORE any skip removal, so a
              really-existing skipped stage is NOT flagged as unknown. Extend-
              stage names are valid here (embedded before this check). Strictness
-             over extend.<name>.before/.after refs is enforced at 4a0-pre
+             over extend.<name>.before/.after refs is enforced at 4.2
              (above); a workflow must not carry a dangling extend ref.
-       4skip. Skip removal + transparent depends_on reconnection: determine the
+       4.4. Skip removal + transparent depends_on reconnection: determine the
              skipped-name set = { name : workflow.stages[name].skip is True
              AND name exists in the working body }. Then:
              - STAGES branch (explicit depends_on reconnection):
@@ -1017,7 +1017,7 @@ Annotations: |
                from the positional chain — automatic collapse, no explicit
                reconnection).
              skip wins over agent/prompt/loop/skills overrides on the same
-             entry — removal runs BEFORE 4a, so the skipped stage's overrides
+             entry — removal runs BEFORE 4.5, so the skipped stage's overrides
              are never applied (they target a stage already gone).
              Guard: after removal, if the reconstructed body has zero steps —
              raise a structural error "empty body" (consistent with the
@@ -1025,12 +1025,12 @@ Annotations: |
              covers the edge-case where skip removes every stage of the
              pipeline.
 
-       4a. Apply per-stage overrides (in-place mutation of the body's step
-           bodies) — unchanged; now also matches embedded extend-stages by
-           name; the agent override now falls back to an extend-entry's
+       4.5. Apply per-stage overrides (in-place mutation of the body's step
+           bodies) — matches embedded extend-stages by
+           name; the agent override falls back to an extend-entry's
            inline agent; a skills merge is applied. A name not found in the
            body is SILENTLY skipped (it can only be an intentionally skipped
-           stage removed at 4skip; unknown names already errored at 4pre).
+           stage removed at 4.4; unknown names already errored at 4.3).
            Compute the EFFECTIVE
            override for each stage name by merging, per field, the explicit
            stages entry (when present and providing the field) OVER the
@@ -1040,7 +1040,7 @@ Annotations: |
             loop, or approve), determine the effective values:
             * Find the step in the body whose name/id equals the stage name
             * If not found — silent (it can only be an intentionally skipped
-              stage removed at 4skip; unknown names already errored at 4pre)
+              stage removed at 4.4; unknown names already errored at 4.3)
             * If found:
               - effective agent = the stages-block agent when the entry
                 provides it (not None), else the extend-entry's inline
@@ -1083,8 +1083,8 @@ Annotations: |
                   error "manual: false on non-manual stage <NAME>"
                 The rewrite targets the working body copy only — the original
                 parsed body and PipelineDocument stay untouched
-       4b. Build a new ordered list of steps with loop-expansion applied —
-           unchanged; now also expands an extend-stage when the effective
+       4.6. Build a new ordered list of steps with loop-expansion applied —
+           expands an extend-stage when the effective
            loop for that name is >= 2 (producing NAME-1..N):
           - Maintain an expanded-ids map from each base-name to the list
             of ids produced for it
@@ -1098,7 +1098,7 @@ Annotations: |
               containing only the base-name
             * When loop_count >= 2 — append N copies with id
               NAME-1, NAME-2, ..., NAME-N. The FIRST copy inherits the
-              original step's external depends_on (rewritten in step 4c);
+              original step's external depends_on (rewritten in step 4.7);
               each subsequent copy gets an internal depends_on pointing to
               the previous copy (chain). Record the base-name mapped to
               the list [NAME-1, ..., NAME-N]
@@ -1109,8 +1109,8 @@ Annotations: |
             subsequent copies depend on their predecessor copy by list
             position; the next ORIGINAL step after the expanded one
             naturally depends on the LAST copy via list position)
-       4c. Rewrite external depends_on references — unchanged mechanism,
-           now also rewriting before/after-derived refs (symmetric — both
+       4.7. Rewrite external depends_on references — including
+           before/after-derived refs (symmetric — both
            point to the chain's completion). STAGES only — PHASES format is
            handled by position in step 5:
           - For each StageStep in the new sequence with non-None
@@ -1119,7 +1119,7 @@ Annotations: |
               with the LAST id from that base-name's expanded-ids list
             * When ref matches a base-name whose loop_count == 1 — keep
               the ref as-is; it points to the single unexpanded copy whose
-              id equals the base-name (see step 4b)
+              id equals the base-name (see step 4.6)
             * Otherwise (ref does not match any base-name in the body) —
               keep ref as-is and let afm surface a dangling-reference
               error if applicable
@@ -1129,11 +1129,11 @@ Annotations: |
             extend-stage whose loop_count >= 2, both resolve to the LAST
             expanded id (depends_on means "runs after", so any reference
             to a loop-expanded chain points to its LAST copy). PHASES
-            extend-stages were positionally inserted at 4a0; loop-expansion
-            at 4b chains their copies in place, so each extend-stage's
+            extend-stages were positionally inserted at 4.1; loop-expansion
+            at 4.6 chains their copies in place, so each extend-stage's
             positional predecessor is the after-target's last expanded
             copy — no explicit rewrite needed for PHASES.
-       4d. Replace the body's step list with the new (embedded + expanded +
+       4.8. Replace the body's step list with the new (embedded + expanded +
            rewritten) sequence.
     5. Build FlowStages from the (possibly reconstructed) body:
        - PHASES: for each `PhaseStep`, build a `FlowStage` with depends_on
@@ -1185,7 +1185,7 @@ Annotations: |
            when both timeout and a direct script_timeout are authored, the
            translated timeout value wins
        - approve effects: for a stage whose EFFECTIVE approve is "auto"
-         (threaded in at step 4a), read the trigger fields from THAT STAGE'S
+         (threaded in at step 4.5), read the trigger fields from THAT STAGE'S
          body and apply two INDEPENDENT effects:
          * interactive translation: communication → interactive, EXCEPT
            when the effective approve directive drives the communication
@@ -1277,7 +1277,7 @@ Annotations: |
       — the cell does NOT call any host-side wrapper resolver
     - `FlowStage` fields are assembled directly from the step body dict
       at step 5 — workflow overrides (command, description) are
-      injected INTO the body at step 4a before this assembly, so a single
+      injected INTO the body at step 4.5 before this assembly, so a single
       body dict is the sole source for fields. Pipeline-file fields
       and workflow-injected fields coexist in the same dict without
       merging or collision
@@ -1318,7 +1318,7 @@ Annotations: |
     - Dangling refs in before/after (names in neither the body nor the
       extend-stages) raise a structural error "unknown stage name in
       workflow.extend.<name>.before/.after: <ref>" — strict validation at
-      4a0-pre (a workflow must not carry a dangling extend ref; symmetric
+      4.2 (a workflow must not carry a dangling extend ref; symmetric
       with workflow.stages strictness)
     - Cross-references between extend-stages (one extend-stage's
       before/after names another extend-stage) are resolved
@@ -1334,7 +1334,7 @@ Annotations: |
       per step; transitive execution order still respects every target
     - extend-stages compile into ordinary `FlowStage` instances — no change
       to `FlowDocument`, `FlowStage`, or `serialize_flow`
-    - When `workflow` is None, step 4a0 is skipped entirely (as is the whole
+    - When `workflow` is None, step 4.1 is skipped entirely (as is the whole
       reconstruction)
     - Consumers must NOT re-invoke `parse_dsl` to obtain the roles — they
       read header roles from `PipelineDocument` returned by this routine
@@ -1459,9 +1459,9 @@ Annotations: |
     - Do not silently skip unknown workflow.stages names — strict validation
       raises a structural error (a workflow does not silently cover multiple
       pipelines); dangling extend.<name>.before/.after refs are likewise a
-      structural error at 4a0-pre (symmetric strictness, no silent WARNING+skip)
+      structural error at 4.2 (symmetric strictness, no silent WARNING+skip)
     - Do not validate before/after refs for cycles, self-references, or
-      duplicates — existence only is checked at 4a0-pre; ordering/cycle concerns
+      duplicates — existence only is checked at 4.2; ordering/cycle concerns
       remain afm's responsibility
     - Do not leave dangling depends_on after a skip — dependents are
       transparently reconnected to the skipped stage's predecessors
@@ -1484,14 +1484,14 @@ Annotations: |
       roles value — authored roles always wins; the compiler must not
       second-guess the user's choice of roles
     - Do not embed extend-stages after loop-expansion — the order
-      4a0 → 4a → 4b → 4c is mandatory (correctness of the symmetric
+      4.1 → 4.5 → 4.6 → 4.7 is mandatory (correctness of the symmetric
       before/after → LAST expanded-id rewriting in STAGES, and of PHASES
       positional insertion preceding loop-expansion, depends on it)
     - Do not add a depends_on field to PhaseStep or carry explicit depends_on
       for PHASES extend-stages — PHASES positioning is achieved by list
       insertion only (positional derivation in step 5)
     - Do not validate before/after refs for cycles, self-references, or
-      duplicates after the existence check — existence IS validated at 4a0-pre
+      duplicates after the existence check — existence IS validated at 4.2
       (a dangling ref is a structural error); only cycles, self-references, and
       duplicates remain afm's responsibility (as for ordinary depends_on)
     - Do not change the stages block contract — overrides/loop/silent-skip
