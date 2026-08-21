@@ -177,6 +177,15 @@ either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
 compatible with both `script` and `prompt`/`skills` — they bracket the stage
 regardless of how its body is defined.
 
+A stage whose body carries `script` compiles with **no `agents` key at all**:
+afm rejects `agents` combined with `script`, so the default `auto` agent is
+not injected and an authored body `roles` value (see
+[Roles](#roles)) is element-validated but not emitted — body `roles` has no
+effect on a script stage's compiled output. Only `script` opens this
+suppression: `before_script`/`after_script` alone keep the default
+`agents: [auto]` injection. The rule is uniform across both body formats and
+in workflow `extend` bodies.
+
 `timeout` scopes to the script action: it requires `script` in the same body
 (`before_script`/`after_script` do not open the directive — a `timeout`
 without `script` is a structural error, as is a non-string value, including

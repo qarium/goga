@@ -253,6 +253,19 @@ class TestUpgradeLogicNegative:
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
 
+    def test_upgrade_unresolvable_line_raises_before_pip(self) -> None:
+        with (
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value="1"),
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+            pytest.raises(click.ClickException, match=r"cannot resolve the version line: .* no minor segment"),
+        ):
+            _upgrade(patch_line=True)
+        # A readable base whose line cannot be resolved is a hard fail — a
+        # major-only installed version has no minor line, and none is invented.
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
 
 class TestUpgradeLogicEdge:
     """Edge-case behavioral scenarios (delegation wiring, unknown user, rich installed bases)."""

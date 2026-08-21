@@ -99,12 +99,13 @@ class TestTimeoutTranslation:
     """Step 5 — timeout validation and ``script_timeout`` translation across body sources."""
 
     def test_timeout_translates_to_script_timeout_in_canonical_slot(self, tmp_path: Path) -> None:
-        """The translated value lands in the canonical slot right after the script family.
+        """The translated value lands in the canonical slot right after the script.
 
-        ``agents`` is injected by default and sits BEFORE the script family, so
-        a minimal ``{title, script, timeout}`` body assembles
-        ``[agents, script, script_timeout]`` and the flow-file prints the
-        script before its timeout.
+        A body carrying ``script`` assembles NO ``agents`` key (afm rejects
+        ``agents`` combined with ``script``), so a minimal
+        ``{title, script, timeout}`` body assembles ``[script,
+        script_timeout]`` and the flow-file prints the script before its
+        timeout.
         """
         flow_text = _compile(
             tmp_path,
@@ -124,11 +125,11 @@ class TestTimeoutTranslation:
         assert list(flow_doc.stages[0].fields) == ["script", "script_timeout"]
 
     def test_timeout_full_script_family_canonical_order(self, tmp_path: Path) -> None:
-        """The whole script family sits contiguously, immediately after ``agents``.
+        """The whole script family sits contiguously, with the translated timeout closing it.
 
         ``before_script``/``script``/``after_script``/``timeout`` in one body
-        assembles ``[agents, script_before, script, script_after,
-        script_timeout]`` — the translated timeout closes the family.
+        assembles ``[script_before, script, script_after, script_timeout]`` —
+        no ``agents`` key is assembled for a body carrying ``script``.
         """
         _pipeline_doc, flow_doc = compile_flow(
             _write(

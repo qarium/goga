@@ -51,6 +51,8 @@ Upgrade goga later and re-sync every connected agent — no need to call pip dir
 goga upgrade
 ```
 
+Line-constrained upgrades (`--patch` / `--minor`) and the other options are covered in [`goga upgrade`](cli/upgrade.md).
+
 Initialize a project — the interactive wizard sets up `.goga/config.yml`, language conventions, and (optionally) a `Dockerfile`:
 
 ```bash

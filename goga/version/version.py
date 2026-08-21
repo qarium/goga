@@ -22,7 +22,19 @@ _CONCRETE_MAX_SEGMENTS = 3
 # Leading release segments of an installed version (see resolve_relative_spec):
 # the first numeric segment is the major, the optional second numeric segment
 # is the minor; anything after them (pre/post/local/dev tails) is not consumed.
-_RELEASE_PREFIX_RE = re.compile(r"(\d+)(?:\.(\d+))?")
+# re.ASCII keeps \d to 0-9: without it \d also matches Unicode decimal digits
+# (e.g. Arabic-Indic U+0661), which are not PEP 440.
+_RELEASE_PREFIX_RE = re.compile(r"(\d+)(?:\.(\d+))?", re.ASCII)
+
+
+def _is_ascii_digits(segment: str) -> bool:
+    """Return ``True`` for a non-empty run of ASCII digits ``0-9``.
+
+    ``str.isdigit`` alone also accepts non-ASCII Unicode digits (Arabic-Indic
+    U+0661, superscript U+00B2); those pass a shape check yet are not PEP 440,
+    so the grammar rejects them.
+    """
+    return segment != "" and segment.isascii() and segment.isdigit()
 
 
 def resolve_version(form: str | None) -> str | None:
@@ -73,22 +85,20 @@ def resolve_version(form: str | None) -> str | None:
     segments = form.split(".")
 
     # 3. Major x-range "N.x": exactly one dot, last segment "x", major numeric.
-    if len(segments) == _XRANGE_MAJOR_SEGMENTS and segments[1] == "x" and segments[0].isdigit() and segments[0] != "":
+    if len(segments) == _XRANGE_MAJOR_SEGMENTS and segments[1] == "x" and _is_ascii_digits(segments[0]):
         return f"~={segments[0]}.0"
 
     # 4. Minor x-range "N.M.x": exactly two dots, last segment "x", both numeric.
     if (
         len(segments) == _XRANGE_MINOR_SEGMENTS
         and segments[2] == "x"
-        and segments[0].isdigit()
-        and segments[1].isdigit()
+        and _is_ascii_digits(segments[0])
+        and _is_ascii_digits(segments[1])
     ):
         return f"~={segments[0]}.{segments[1]}.0"
 
     # 5. Concrete "N(.M)?(.K)?": 1-3 numeric segments, no trailing "x".
-    if _CONCRETE_MIN_SEGMENTS <= len(segments) <= _CONCRETE_MAX_SEGMENTS and all(
-        s.isdigit() and s != "" for s in segments
-    ):
+    if _CONCRETE_MIN_SEGMENTS <= len(segments) <= _CONCRETE_MAX_SEGMENTS and all(_is_ascii_digits(s) for s in segments):
         return f"=={form}"
 
     # 6. Anything else is malformed.

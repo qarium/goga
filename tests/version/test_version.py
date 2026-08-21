@@ -172,6 +172,21 @@ class TestResolveVersionLogicNegative:
         with pytest.raises(ValueError, match="malformed"):
             resolve_version(form)
 
+    @pytest.mark.parametrize(
+        "form",
+        [
+            "١.x",  # Arabic-Indic digit — major x-range gate
+            "١.٢.x",  # Arabic-Indic digits — minor x-range gate
+            "1٢",  # mixed ASCII/Arabic-Indic — concrete gate
+            "1²",  # superscript digit: isdigit() yet not even a Unicode decimal
+        ],
+    )
+    def test_resolve_version_non_ascii_digits_raise(self, form: str) -> None:
+        # str.isdigit accepts non-ASCII Unicode digits, but they are not PEP 440 —
+        # the grammar recognises ASCII digits 0-9 only (shape check, not Unicode).
+        with pytest.raises(ValueError, match="malformed"):
+            resolve_version(form)
+
     def test_resolve_version_empty_string_raises(self) -> None:
         # "" is not a valid form — not None, not "latest", not a grammar form.
         with pytest.raises(ValueError, match="malformed"):
@@ -219,7 +234,7 @@ class TestResolveRelativeSpecLogic:
         with pytest.raises(ValueError, match="no minor segment"):
             resolve_relative_spec("1", patch=True)
 
-    @pytest.mark.parametrize("base", ["", "abc", "v1.2"])
+    @pytest.mark.parametrize("base", ["", "abc", "v1.2", "١.٢"])
     def test_resolve_relative_spec_non_numeric_base(self, base: str) -> None:
         with pytest.raises(ValueError, match="cannot determine version line"):
             resolve_relative_spec(base, minor=True)

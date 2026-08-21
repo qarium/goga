@@ -94,6 +94,20 @@ class TestUpgradeCliIntegration:
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
 
+    def test_upgrade_cli_unresolvable_line_rejected(self) -> None:
+        """A readable base without a minor segment exits 1 under ``--patch`` — no invented line, no pip."""
+        with (
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value="1"),
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--patch"])
+        assert result.exit_code == 1
+        assert "cannot resolve the version line" in result.output
+        assert "no minor segment" in result.output
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
     def test_upgrade_cli_delegates_to_resync_after_pip_success(self, tmp_path: Path) -> None:
         """Successful pip → ``goga upgrade`` delegates activation to the routine with the resolved home."""
         with (

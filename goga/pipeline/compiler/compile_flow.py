@@ -274,13 +274,6 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
     """
     out = {key: value for key, value in body.items() if key != "roles"}
 
-    if suppress_agents:
-        if _has_usable_roles(body):
-            for role in body["roles"]:
-                if not isinstance(role, str):
-                    raise StructuralError(f"non-str value in stage roles list: {role!r}")
-        return out
-
     if _has_usable_roles(body):
         # The pipeline-file body is parsed verbatim (``parse_dsl`` performs no
         # field-content validation by design), so an authored ``roles`` list may
@@ -290,13 +283,14 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
         # non-str (e.g. an int) would pollute the ``list[str]`` output unchanged.
         # Reject non-str elements here with a clean ``StructuralError`` instead —
         # mirroring the header ``roles`` validation in ``parse_dsl._extract_roles``.
-        agents: list[str] = []
+        # The validation runs under ``suppress_agents`` too, so authoring defects
+        # surface identically whether or not the value is emitted.
         for role in body["roles"]:
             if not isinstance(role, str):
                 raise StructuralError(f"non-str value in stage roles list: {role!r}")
-            agents.append(translate_role(role))
-        out["agents"] = agents
-    else:
+        if not suppress_agents:
+            out["agents"] = [translate_role(role) for role in body["roles"]]
+    elif not suppress_agents:
         out["agents"] = list(_DEFAULT_AGENTS)
 
     return out

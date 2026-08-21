@@ -81,6 +81,8 @@ To upgrade goga later and re-sync all connected agents, use:
 goga upgrade
 ```
 
+To stay within your current version line while upgrading, use `goga upgrade --patch` (latest patch of the installed minor line) or `goga upgrade --minor` (latest release of the installed major line). See [`goga upgrade`](https://qarium.github.io/goga/cli/upgrade/) for the full surface.
+
 ## Quick start
 
 Start a new project from scratch and ship your first piece of work end-to-end.

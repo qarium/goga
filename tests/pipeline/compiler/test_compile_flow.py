@@ -805,6 +805,27 @@ class TestCompileFlowScriptDirectives:
         with pytest.raises(StructuralError, match=r"non-str value in stage roles list"):
             compile_flow(pipeline_path, flow_path)
 
+    def test_compile_script_family_without_script_keeps_default_agents(self, tmp_path: Path) -> None:
+        """Only ``script`` opens the suppression — ``before_script``/``after_script`` alone do not.
+
+        The predicate keys on the translated ``script`` key itself, so a body
+        bracketing an agent-driven stage with scripts still gets the default
+        ``agents=["auto"]`` injected.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: p\n"
+            "  before_script: prep\n  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["script_before"] == "prep"
+        assert fields["script_after"] == "cleanup"
+        assert fields["agents"] == ["auto"]
+
     def test_compile_workflow_extend_script_suppresses_agents(self, tmp_path: Path) -> None:
         """An extend-stage body with ``script`` assembles no ``agents`` key.
 

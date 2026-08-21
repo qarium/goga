@@ -27,6 +27,8 @@ Move to a new goga release and re-sync every connected agent in one step — no 
 goga upgrade
 ```
 
+To stay within your current version line, add `--patch` (latest patch of the installed minor line) or `--minor` (latest release of the installed major line). See [`goga upgrade`](cli/upgrade.md) for details.
+
 ## Initialize a project
 
 Run the interactive initialization wizard:
