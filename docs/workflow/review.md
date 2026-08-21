@@ -25,16 +25,19 @@ If the argument is empty, the dispatcher asks which type to review via `AskUserQ
 
 ## When to use
 
-After each command that produces an artifact, before moving to the next step:
+After each command that produces an artifact, before moving to the next step. Reviews belong to both workrounds — see [Workflow](index.md):
 
 ```
-propose → review(task)    → brainstorm
+# refinement
+propose → review(task)    → development starts
+
+# development
 brainstorm → review(arch) → apply
 design → review(design)   → plan
 plan → review(plan)       → build
 ```
 
-Review is a checkpoint — it catches drift while changes are still cheap.
+The task review `review(task)` is the checkpoint that closes refinement: it verifies the task before implementation effort is spent. Review is a checkpoint — it catches drift while changes are still cheap.
 
 ---
 

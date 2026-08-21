@@ -72,5 +72,4 @@ If a decision is easy to reverse, skip it. If it is not surprising, nobody will 
 
 ## What happens next
 
-- Run [`review`](review.md) on the resulting ADR.
-- Proceed to [`propose`](propose.md) to turn the settled decision into a structured task.
+- Proceed to [`propose`](propose.md) to turn the settled decision into a structured task — the task review at the end of refinement verifies the result, the settled decisions included.

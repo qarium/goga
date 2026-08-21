@@ -36,17 +36,20 @@ nav:
   - Home: index.md
   - Getting Started: getting-started.md
   - Workflow:
-      - workflow/index.md
-      - Discover: workflow/discover.md
-      - Propose: workflow/propose.md
-      - Review: workflow/review.md
-      - Brainstorm: workflow/brainstorm.md
-      - Apply: workflow/apply.md
-      - Design: workflow/design.md
-      - Plan: workflow/plan.md
-      - Build: workflow/build.md
-      - Change: workflow/change.md
-      - Accept: workflow/accept.md
+      - Overview: workflow/index.md
+      - Refinement:
+          - Define: workflow/define.md
+          - Discover: workflow/discover.md
+          - Propose: workflow/propose.md
+          - Task Review: workflow/review.md
+      - Development:
+          - Brainstorm: workflow/brainstorm.md
+          - Apply: workflow/apply.md
+          - Design: workflow/design.md
+          - Plan: workflow/plan.md
+          - Build: workflow/build.md
+          - Change: workflow/change.md
+          - Accept: workflow/accept.md
   - Pipelines:
       - pipelines/index.md
       - Pipeline File: pipelines/pipeline-file.md
