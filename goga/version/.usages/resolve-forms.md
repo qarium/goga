@@ -27,6 +27,7 @@ logs or prints.
 ```python
 from goga.version import resolve_version
 
+
 def compose_identifier(name: str, form: str | None) -> str:
     """Compose a pip package identifier from a name and a version form."""
     spec = resolve_version(form)
@@ -34,10 +35,10 @@ def compose_identifier(name: str, form: str | None) -> str:
 ```
 
 ```python
-compose_identifier("goga-tool-hello", "1.2.x")   # "goga-tool-hello~=1.2.0"
+compose_identifier("goga-tool-hello", "1.2.x")  # "goga-tool-hello~=1.2.0"
 compose_identifier("goga-tool-hello", "latest")  # "goga-tool-hello"
-compose_identifier("goga-tool-hello", None)      # "goga-tool-hello"
-compose_identifier("goga-tool-hello", "==1.2")   # raises ValueError
+compose_identifier("goga-tool-hello", None)  # "goga-tool-hello"
+compose_identifier("goga-tool-hello", "==1.2")  # raises ValueError
 ```
 
 ## Consumer constraints

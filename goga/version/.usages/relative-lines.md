@@ -27,9 +27,9 @@ from importlib.metadata import version
 
 from goga.version import resolve_relative_spec
 
-base = version("goga")                    # may raise PackageNotFoundError
+base = version("goga")  # may raise PackageNotFoundError
 spec = resolve_relative_spec(base, patch=True)
-identifier = f"goga{spec}"                # e.g. "goga~=1.2.0"
+identifier = f"goga{spec}"  # e.g. "goga~=1.2.0"
 ```
 
 ## Error cases to surface at the CLI layer
