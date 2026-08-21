@@ -261,6 +261,43 @@ class TestRunRalphexLogic:
         assert result == 1
         assert "failed to invoke ralphex" in captured.err
 
+    def test_run_ralphex_env_path_override_not_a_directory_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override contains a file component resolves
+        a ralphex path that is not a directory — the clean failed-invoke
+        message and exit 1, not a NotADirectoryError traceback."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=NotADirectoryError("[Errno 20] Not a directory: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/etc/hosts/bin"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_env_layer_oversized_value_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer value too large to exec (e.g. a pasted secret) is
+        rejected before the launch — the clean failed-invoke message and
+        exit 1, not an OSError (E2BIG) traceback. The message carries argv
+        only, never the layer value."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=OSError(7, "Argument list too long", "ralphex"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"BIG": "x" * 300000})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
     def test_run_ralphex_maps_new_bool_flags(self) -> None:
         """The review/tasks_only mode flags map to their bare ralphex flags;
         False is equivalent to absent (bool-mapping rule regression guard)."""
