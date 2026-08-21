@@ -47,7 +47,7 @@ class TestFacadeWiringIntegration:
 
     def test_install_facade_surface_unchanged(self) -> None:
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install", "resolve_version"]
+        assert facade.__all__ == ["install"]
 
     def test_upgrade_facade_surface_unchanged(self) -> None:
         facade = importlib.import_module("goga.commands.upgrade")
