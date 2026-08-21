@@ -120,8 +120,8 @@ class TestTimeoutTranslation:
             tmp_path / "flow2.yml",
         )
 
-        assert flow_doc.stages[0].fields == {"script": "make test", "script_timeout": "30m", "agents": ["auto"]}
-        assert list(flow_doc.stages[0].fields) == ["agents", "script", "script_timeout"]
+        assert flow_doc.stages[0].fields == {"script": "make test", "script_timeout": "30m"}
+        assert list(flow_doc.stages[0].fields) == ["script", "script_timeout"]
 
     def test_timeout_full_script_family_canonical_order(self, tmp_path: Path) -> None:
         """The whole script family sits contiguously, immediately after ``agents``.
@@ -144,7 +144,6 @@ class TestTimeoutTranslation:
         )
 
         assert list(flow_doc.stages[0].fields) == [
-            "agents",
             "script_before",
             "script",
             "script_after",
@@ -303,7 +302,7 @@ class TestTimeoutTranslation:
 
         assert "script_timeout" not in flow_text
         stage = yaml.safe_load(flow_text)["stages"][0]
-        assert list(stage) == ["id", "name", "agents", "script", "script_after"]
+        assert list(stage) == ["id", "name", "script", "script_after"]
 
     @pytest.mark.parametrize(
         ("body", "expected"),

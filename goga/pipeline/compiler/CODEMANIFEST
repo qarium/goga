@@ -94,7 +94,11 @@ Annotations: |
   usable roles value (key absent, explicit null, or an empty list), the
   compiler injects
   a SINGLE default into the assembled `FlowStage` fields —
-  "agents=[\"auto\"]". auto is a sentinel agent mode: goga emits the
+  "agents=[\"auto\"]" — EXCEPT in a body carrying script, where NO
+  agents key is assembled at all (afm rejects agents combined with
+  script): neither the ["auto"] default NOR a translated roles value
+  reaches the output, while the roles elements are still validated.
+  auto is a sentinel agent mode: goga emits the
   literal string auto verbatim and does NOT interpret it — the actual
   agent selection is performed on the afm side. supervisor and
   supervisor_prompt are not default-injected; they are valid
@@ -580,7 +584,10 @@ Annotations: |
               separate fields in the same stage. agents is populated by the
               default-injection rule of `compile_flow` (to the single value
               ["auto"]) when the source step body has no usable agents value
-              (missing key, explicit null, or empty list); supervisor and
+              (missing key, explicit null, or empty list); a body carrying
+              script assembles NO agents key at all (afm rejects the
+              combination — both the ["auto"] default and a translated
+              roles value are suppressed); supervisor and
               supervisor_prompt appear ONLY when the source step body authors
               them.
 
@@ -623,7 +630,8 @@ Annotations: |
       script_after/script_timeout (str) are present only when the corresponding
       stage directive was authored. Insertion order IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
-      agents default-injected to ["auto"]; supervisor/supervisor_prompt only
+      agents default-injected to ["auto"], absent entirely in a body
+      carrying script; supervisor/supervisor_prompt only
       when authored.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, stages: list[FlowStage])":
@@ -1154,7 +1162,12 @@ Annotations: |
        - In both branches, BEFORE canonical ordering, inject default stage
          fields when the source step body has no usable roles value
          (missing key, explicit null, or empty list): set agents to
-         ["auto"]. The input stage-body field for the afm agents list is
+         ["auto"] — EXCEPT in a body carrying script, where NO agents key
+         is assembled at all (afm rejects agents combined with script):
+         neither the ["auto"] default NOR the translated roles value
+         reaches the output, while the roles elements are still validated
+         (a non-str element raises the same structural error). The input
+         stage-body field for the afm agents list is
          roles; an authored non-empty roles value is translated entry-
          by-entry via `translate_role` (known aliases mapped, all other
          values passed through verbatim) into the output agents value.
@@ -1340,7 +1353,10 @@ Annotations: |
       read header roles from `PipelineDocument` returned by this routine
     - Default stage-field injection: a step body with no usable roles
       value (missing key, explicit null, or empty list) yields a
-      `FlowStage` carrying a single injected default — agents=["auto"].
+      `FlowStage` carrying a single injected default — agents=["auto"] —
+      while a body carrying script assembles NO agents key (afm rejects
+      agents combined with script; both the default and a translated
+      roles value are suppressed, roles elements still validated).
       supervisor and supervisor_prompt are NOT default-injected (authored
       values pass through). auto is emitted verbatim; goga does not
       resolve it.
