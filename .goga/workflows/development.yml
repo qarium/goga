@@ -29,6 +29,8 @@ stages:
     approve: auto
   plan-review:
     approve: auto
+  accept-result:
+    manual: false
 
 extend:
   build:
