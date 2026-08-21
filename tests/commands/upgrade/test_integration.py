@@ -27,13 +27,72 @@ class TestUpgradeCliIntegration:
     integration suites respectively.
     """
 
-    def test_upgrade_cli_command_registered(self) -> None:
-        """``goga upgrade --help`` exits 0 and lists all three options."""
+    def test_upgrade_cli_help_lists_line_flags(self) -> None:
+        """``goga upgrade --help`` exits 0 and lists all five options including the line flags."""
         result = CliRunner().invoke(app, ["upgrade", "--help"])
         assert result.exit_code == 0
         assert "--sudo" in result.output
         assert "--user" in result.output
         assert "--tools" in result.output
+        assert "--patch" in result.output
+        assert "--minor" in result.output
+
+    def test_upgrade_cli_patch_end_to_end(self, tmp_path: Path) -> None:
+        """``--patch`` reads the installed base, constrains argv to the minor line, and re-syncs."""
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value="1.2.3"),
+            mock.patch.object(_upgrade_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--patch"])
+        assert result.exit_code == 0
+        cmd = mock_run.call_args[0][0]
+        assert "goga~=1.2.0" in cmd
+        mock_resync.assert_called_once_with(tmp_path / ".goga")
+
+    def test_upgrade_cli_minor_end_to_end(self, tmp_path: Path) -> None:
+        """``--minor`` constrains argv to the major line and re-syncs the resolved home."""
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value="1.2.3"),
+            mock.patch.object(_upgrade_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--minor"])
+        assert result.exit_code == 0
+        cmd = mock_run.call_args[0][0]
+        assert "goga~=1.0" in cmd
+        mock_resync.assert_called_once_with(tmp_path / ".goga")
+
+    def test_upgrade_cli_mutex_rejected(self) -> None:
+        """``--patch --minor`` exits 1 with a clean error before pip or re-sync run."""
+        with (
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--patch", "--minor"])
+        assert result.exit_code == 1
+        assert "mutually exclusive" in result.output
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
+    def test_upgrade_cli_undeterminable_base_rejected(self) -> None:
+        """An unreadable installed base exits 1 with a clean error — no fallback, no pip."""
+        with (
+            mock.patch.object(
+                _upgrade_module.importlib.metadata,
+                "version",
+                side_effect=importlib.metadata.PackageNotFoundError("goga"),
+            ),
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--minor"])
+        assert result.exit_code == 1
+        assert "cannot determine the installed goga version" in result.output
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
 
     def test_upgrade_cli_delegates_to_resync_after_pip_success(self, tmp_path: Path) -> None:
         """Successful pip → ``goga upgrade`` delegates activation to the routine with the resolved home."""
