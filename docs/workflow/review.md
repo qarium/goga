@@ -92,7 +92,7 @@ Verifies `docs/design/<feature-name>.md` for logical correctness by tracing the 
 
 ## Algorithm — Plan review (`goga-review-plan`)
 
-Verifies `docs/plans/<feature-name>.md` for completeness and correctness before passing to ralphex.
+Verifies `docs/plans/<feature-name>.md` for completeness and correctness before passing to the ralph-loop.
 
 | Phase | Action |
 |---|---|

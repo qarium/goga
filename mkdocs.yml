@@ -58,6 +58,8 @@ nav:
   - Tools: tools.md
   - Configuration:
       - configuration/index.md
+      - Project: configuration/project.md
+      - Home: configuration/home.md
       - Agents: configuration/agents.md
   - Cell:
       - cell/index.md

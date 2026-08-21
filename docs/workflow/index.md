@@ -31,7 +31,7 @@ Every stage is optional on its own — a workround may start at `discover` or `p
 
 Development takes a verified task to accepted code. Its length depends on how much technical elaboration the task needs — three depths again:
 
-- **Full path** — the task requires new architecture, new cells, or contract changes. [`brainstorm`](brainstorm.md) produces the architecture plan, [`apply`](apply.md) materializes it into cell file structure, [`design`](design.md) details the modified CODEMANIFESTs, [`plan`](plan.md) compiles the ralphex execution plan, and [`build`](build.md) implements it.
+- **Full path** — the task requires new architecture, new cells, or contract changes. [`brainstorm`](brainstorm.md) produces the architecture plan, [`apply`](apply.md) materializes it into cell file structure, [`design`](design.md) details the modified CODEMANIFESTs, [`plan`](plan.md) compiles the ralph-loop execution plan, and [`build`](build.md) implements it.
 - **Short path** — the architecture is clear and contracts stay stable (for example, an external dependency changes and the implementation is rewritten against a new usage file). Start at [`change`](change.md) directly.
 - **Point fix** — a bug fix or behavior tweak that does not touch contracts: [`change`](change.md) alone.
 
@@ -98,7 +98,7 @@ define → discover → propose → review(task)
 | [`apply`](apply.md) | Development | `docs/arch/<topic>.md` | Cell file structure (CODEMANIFEST, `.usages/`) |
 | [`design`](design.md) | Development | Modified CODEMANIFEST | `docs/design/<topic>.md` |
 | [`plan`](plan.md) | Development | `docs/design/<topic>.md` | `docs/plans/<topic>.md` |
-| [`build`](build.md) | Development | `docs/plans/<topic>.md` | Implemented code (via ralphex); the plan moves to `docs/plans/completed/` on success |
+| [`build`](build.md) | Development | `docs/plans/<topic>.md` | Implemented code (via a ralph-loop); the plan moves to `docs/plans/completed/` on success |
 | [`change`](change.md) | Development | Change description | Modified code + reconciled contracts and usages |
 | [`accept`](accept.md) | Development | Completed implementation | Final acceptance report |
 
