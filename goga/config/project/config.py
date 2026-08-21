@@ -62,11 +62,16 @@ class ReviewExecutorConfig:
     is NOT coerced to None (the "full default set" reading belongs to the consumer);
     semantic validation (role whitelist, agent existence) also belongs to consumers,
     not to this dataclass or the loader.
+
+    ``env`` is the review-pass environment layer, stored verbatim from
+    ``.goga/config.yml``: an empty dict when the field is absent, YAML-null, or an
+    empty mapping. The env-requires-agent rule belongs to the consumer, not here.
     """
 
     skip: bool | None = None
     agent: str | None = None
     roles: list[str] | None = None
+    env: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(kw_only=True, frozen=True)

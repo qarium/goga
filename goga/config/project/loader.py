@@ -404,19 +404,25 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
     while ``1 == True``); ``agent`` reuses ``_parse_optional_agent`` so an empty
     string normalizes to None; ``roles`` must be a list of strings and — when
     empty — is passed through as an empty list verbatim (NOT coerced to None;
-    the "full default set" reading belongs to the consumer). No role/agent
-    whitelists live here — semantic validation belongs to the consumer.
+    the "full default set" reading belongs to the consumer). ``env`` must be a
+    mapping with string keys and values — note the null-tolerance deliberately
+    differs from ``build.task_executor.env``: a YAML-null ``env`` here is a
+    VALID empty mapping (it resolves to ``{}``, not an error). No role/agent
+    whitelists and no env semantics live here — validation beyond structure
+    belongs to the consumer.
 
     Args:
         build_data: The already-parsed ``build`` mapping.
 
     Returns:
-        A ``ReviewExecutorConfig`` storing every field verbatim, or None when
-        the section is absent or YAML-null.
+        A ``ReviewExecutorConfig`` storing every field verbatim (``env`` as a
+        fresh dict, ``{}`` when absent/YAML-null/empty), or None when the
+        section is absent or YAML-null.
 
     Raises:
         ValueError: When the section is present but not a mapping, or when
-            ``skip``/``agent``/``roles`` is present with an invalid type.
+            ``skip``/``agent``/``roles``/``env`` is present with an invalid
+            type.
     """
     raw = build_data.get("review_executor")
     if raw is None:
@@ -438,7 +444,17 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
     else:
         roles = list(roles_raw)
 
-    return ReviewExecutorConfig(skip=skip, agent=agent, roles=roles)
+    env_raw = raw.get("env")
+    if env_raw is None:
+        env = {}
+    elif not isinstance(env_raw, dict):
+        raise ValueError("build.review_executor.env must be a mapping in .goga/config.yml")
+    elif not all(isinstance(k, str) and isinstance(v, str) for k, v in env_raw.items()):
+        raise ValueError("build.review_executor.env must have string keys and values")
+    else:
+        env = dict(env_raw)
+
+    return ReviewExecutorConfig(skip=skip, agent=agent, roles=roles, env=env)
 
 
 def _parse_build(build_data: dict) -> BuildConfig:

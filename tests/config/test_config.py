@@ -123,6 +123,22 @@ class TestBuildConfigAPIShape:
     def test_has_task_executor_field(self):
         assert "task_executor" in BuildConfig.__dataclass_fields__
 
+    def test_review_executor_env_type_is_dict_str_str(self):
+        """ReviewExecutorConfig.env is annotated dict[str, str] with a dict factory default."""
+        from goga.config import ReviewExecutorConfig
+
+        env_field = ReviewExecutorConfig.__dataclass_fields__["env"]
+        assert env_field.type == dict[str, str]
+        assert env_field.default_factory is not dataclasses.MISSING
+        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
+
+    def test_review_executor_declared_fields(self):
+        """ReviewExecutorConfig declares exactly skip, agent, roles, env (in order)."""
+        from goga.config import ReviewExecutorConfig
+
+        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
+        assert names == ["skip", "agent", "roles", "env"]
+
     def test_has_worktree_field(self):
         assert "worktree" in BuildConfig.__dataclass_fields__
 
