@@ -23,12 +23,12 @@ Annotations: |
   loop-expansion, skills merging, stage REMOVAL or depends_on RECONNECTION).
   It returns instructions (per-stage overrides for stages — agent, prompt,
   loop, skills, AND a skip flag that instructs the compiler to DELETE the
-  stage; NEW stages for extend — now carrying extracted inline agent/loop);
+  stage; NEW stages for extend — carrying the extracted inline agent/loop);
   the consumer
   (compiler) consumes them. This keeps the import graph one-directional: the
   compiler imports `WorkflowDocument` (and `WorkflowExtendStage`) from this
   cell, never the reverse. The cell extracts inline agent/loop from an
-  extend-entry into the model (as it extracts before/after today) but does
+  extend-entry into the model (as it extracts before/after) but does
   not resolve agent names to wrapper paths, does not embed extend-stages,
   does not derive depends_on, does not apply loop-expansion, does not merge
   skills, does not DELETE stages, and does not rewrite depends_on — all of
@@ -430,7 +430,7 @@ Annotations: |
     - Do not rewrite depends_on here — the compiler handles external
       references after expansion
     - Do not validate stage names against any pipeline schema — the compiler
-      performs the match (now raising a structural error on names absent from
+      performs the match (raising a structural error on names absent from
       both the pipeline and the extend-stages)
     - Do not DELETE a stage or RECONNECT dependents when skip is True —
       skip is a declarative instruction; the compiler performs the removal

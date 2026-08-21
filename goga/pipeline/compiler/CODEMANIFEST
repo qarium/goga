@@ -86,7 +86,7 @@ Annotations: |
   supervisor and supervisor_prompt sit between agents and skills so an
   authored supervisor block reads as a continuation of the agents block;
   they appear in their canonical slots ONLY when the source step body
-  authors them — they are NO LONGER populated by default injection.
+  authors them.
 
   Default stage-field injection: the input stage-body field for the afm
   agents list is roles (an authoring agents key in a stage body is a
@@ -97,7 +97,7 @@ Annotations: |
   "agents=[\"auto\"]". auto is a sentinel agent mode: goga emits the
   literal string auto verbatim and does NOT interpret it — the actual
   agent selection is performed on the afm side. supervisor and
-  supervisor_prompt are NO LONGER default-injected; they remain valid
+  supervisor_prompt are not default-injected; they are valid
   authored fields that pass through to their canonical slots when the
   source step body carries them. An authored non-empty roles value (any
   list with at least one entry) always wins and disables injection
@@ -582,7 +582,7 @@ Annotations: |
               ["auto"]) when the source step body has no usable agents value
               (missing key, explicit null, or empty list); supervisor and
               supervisor_prompt appear ONLY when the source step body authors
-              them (no longer default-injected).
+              them.
 
     The description slot in `fields` is a distinct channel from
     `FlowStage` name: the name field carries the display label sourced

@@ -221,7 +221,7 @@ Annotations: |
     13. Generate a unique container_name
     14. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: the post-image command — -m goga.build <plan> + cli_flags
-        - params: the pre-refactor docker-run options, translated to flags by the
+        - params: the docker-run options, translated to flags by the
           shared rule in `docker-runner` — name=<container_name>, rm=True,
           entrypoint=python3, workdir=/workspace, v=[CWD:/workspace, the resolved
           host runtime dir (step 11) read-write at /workspace/.ralphex, and each
@@ -232,7 +232,7 @@ Annotations: |
           appended verbatim AFTER the translated params flags and BEFORE the
           image, and are NEVER translated to an --extra-args flag). Empty list
           when the home file is absent
-        - The assembled form preserves the pre-refactor launcher exactly (same
+        - The assembled form preserves the launcher behavior exactly (same
           options, same effect): --rm, --name, --entrypoint, mounts via -v
           (project at /workspace; the resolved host runtime dir at
           /workspace/.ralphex as a nested bind-mount, so ralphex auto-detects
@@ -245,8 +245,8 @@ Annotations: |
         UNCONDITIONALLY at launch entry. No-op when the image already exists or
         when no Dockerfile is set (extra_args forwarded in the build branch only).
         When the image is absent and a Dockerfile is declared: build it (fatal on failure
-        — surfaces as a ClickException via the D5 mapper, exit 1, launch
-        skipped). Runs inside the try so the D7 leak-prevention invariant covers
+        — surfaces as a ClickException, exit 1, launch
+        skipped). Runs inside the try so the leak-prevention invariant covers
         this window: the secret env-file is already written (step 10), and a
         fatal build unwinds to the finally which unlinks it
     17. When `update` is True: call `docker_update` with config.image,
