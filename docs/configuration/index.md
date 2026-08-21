@@ -113,6 +113,13 @@ codemanifest:
 
 > The deprecated `build.image` field is rejected with a `ValueError`. Set the top-level `image` field instead.
 
+### build.task_executor
+
+| Field   | Type     | Required  | Description                                                                                                             |
+|---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
+| `agent` | `string` | No        | AI executor that runs the build inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; `goga build` raises a `ClickException` when it is `None` (the build needs an agent to resolve the in-container wrapper). Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
+| `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
+
 ### build.review_executor
 
 Optional section controlling the review phase of `goga build`. When absent, the full cycle (tasks + review) runs in a single pass with the task executor's wrapper.
@@ -125,13 +132,6 @@ Optional section controlling the review phase of `goga build`. When absent, the 
 | `env` | mapping of `string` | No | Review-pass environment layer (`{str: str}`). Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/`{}` all resolve to `{}` (unlike `build.task_executor.env`, where YAML-null is an error). A non-empty `env` induces a two-pass run like a differing agent does, and requires `agent` — a non-empty `env` without `agent` fails in-container validation when the review phase runs; a skipped run ignores the layer entirely |
 
 Precedence: the `--skip-review`/`--no-skip-review` CLI pair overrides `skip`; an explicit `--no-skip-review` forces the full cycle even when the config sets `skip: true`. Role names, the env-requires-agent rule, and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).
-
-### build.task_executor
-
-| Field   | Type     | Required  | Description                                                                                                             |
-|---------|----------|-----------|-------------------------------------------------------------------------------------------------------------------------|
-| `agent` | `string` | No        | AI executor that runs the build inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to `None`; `goga build` raises a `ClickException` when it is `None` (the build needs an agent to resolve the in-container wrapper). Resolved to `/home/goga/bin/<agent>-as-claude.sh` — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: `claude`, `codex`, `cursor`, `opencode`, `qwen`. See [Agents](./agents.md) for the resolution mechanic, per-agent env variables, and how to add a custom agent. |
-| `env`   | mapping  | No        | Environment variables passed to the agent. Keys and values must be strings. Defaults to `{}`                            |
 
 ### pipeline
 
