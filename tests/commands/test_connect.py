@@ -150,7 +150,7 @@ class TestLogicPositive:
         assert (claude_dir / "skills" / "goga-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cells-by-brainstorm" / "SKILL.md").is_file()
         assert (claude_dir / "skills" / "goga-cell" / "dsl.md").is_file()
-        assert "Installed 10 commands" in result.output
+        assert "Installed 11 commands" in result.output
         installed_skills = int(result.output.split("Installed ")[-1].split(" skills")[0])
         assert installed_skills >= 46
 
@@ -314,6 +314,7 @@ class TestIntegration:
             "apply.md",
             "brainstorm.md",
             "change.md",
+            "define.md",
             "design.md",
             "discover.md",
             "plan.md",

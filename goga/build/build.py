@@ -156,6 +156,7 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
     elif review.two_pass:
         review_wrapper = resolve_wrapper_path(review.review_agent)
         exit_code = run_build_pass(plan, config.build, {**base, "tasks_only": True}, task_wrapper, dry_run)
+
         if exit_code == 0:
             exit_code = run_build_pass(
                 plan, config.build, {**base, "review": True}, review_wrapper, dry_run, env=review.review_env

@@ -59,6 +59,7 @@ def _compile(tmp_path: Path, pipeline_text: str, workflow_text: str | None = Non
     flow_path = tmp_path / "flow.yml"
 
     workflow = None
+
     if workflow_text is not None:
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(workflow_text)
@@ -210,12 +211,7 @@ class TestCompileFlowTriggerTranslation:
             tmp_path,
             "name: Feature\ndescription: Feature implementation\n---\n"
             "- name: deploy\n  title: Deploy\n  prompt: ship it\n",
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    trigger: manual\n"
-            "    title: Extra\n"
-            "    prompt: do extra\n",
+            "extend:\n  extra:\n    after: [deploy]\n    trigger: manual\n    title: Extra\n    prompt: do extra\n",
         )
 
         extra_block = flow_text[flow_text.index("- id: extra") :]
@@ -267,11 +263,7 @@ class TestCompileFlowTriggerTranslation:
         )
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "extend:\n"
-            "  extra:\n"
-            "    after: [deploy]\n"
-            "    trigger: on_failure\n"
-            "    prompt: do extra\n",
+            "extend:\n  extra:\n    after: [deploy]\n    trigger: on_failure\n    prompt: do extra\n",
         )
 
         with pytest.raises(StructuralError, match="trigger must be one of: on_success, manual"):

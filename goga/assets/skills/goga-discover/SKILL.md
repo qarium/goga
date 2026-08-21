@@ -71,7 +71,7 @@ Challenge terms as you go. Specifically:
 
 The ADR's "why" only makes sense if the vocabulary it uses is sharp.
 
-## Constrains
+## Constraints
 
 - To understand the project, read only the architectural diagram, CODEMANIFEST and usage files.
 - Never design cells or CODEMANIFEST contracts — even when the user's constraints sound architectural. That is outside this skill's scope.

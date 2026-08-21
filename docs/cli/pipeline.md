@@ -8,7 +8,7 @@ Run a goga pipeline by name, or inspect the available ones (`--list`, `--info`).
 
 ```bash
 goga pipeline --list              # flat list: available pipeline names (in-container)
-goga pipeline --list --info       # overview: one line per pipeline with its description
+goga pipeline --list --info       # overview: one bullet block per pipeline with its description
 goga pipeline <name> --info       # card: name, description, stages in execution order
 goga pipeline <name>              # run: execute the pipeline (in-container)
 ```
@@ -19,9 +19,9 @@ The command is a single Click command (not a group) with five forms. Form valida
 
 | Form | Invocation | What it does |
 |---|---|---|
-| Flat list | `goga pipeline --list` | Prints the `Available pipelines:` header followed by one pipeline per line. Project pipelines are annotated with `(project)`; user pipelines are printed bare. |
-| Overview | `goga pipeline --list --info` | One line per pipeline: `{name}[ (project)] — {description}` (an em-dash separates the description). |
-| Card | `goga pipeline <name> --info` | Prints the pipeline's name, description, then one `{stage-id}: {title}` line per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). Nothing runs. |
+| Flat list | `goga pipeline --list` | Prints one `* {name}[ (project)]` bullet per pipeline. Project pipelines are annotated with `(project)`; user pipelines are printed bare. |
+| Overview | `goga pipeline --list --info` | One bullet block per pipeline: `* {name}[ (project)]` followed by indented `name:` and `description:` fields (the authored header values). |
+| Card | `goga pipeline <name> --info` | Prints `name:` and `description:` fields, a `---` separator, then one `* {stage-id}:` bullet with an indented `title:` field per stage **in execution order** (workflow `skip`/`extend`/`loop` applied; loop copies appear as separate `NAME-1..N` rows). Nothing runs. |
 | Run | `goga pipeline <name>` | Executes the pipeline (see [Run Mode](#run-mode-goga-pipeline-name)). |
 | Error | `goga pipeline` (bare) | Exits 1: `Missing pipeline name. Use "goga pipeline --list" …`. `--list` plus a name is also rejected (mutually exclusive). |
 
@@ -31,19 +31,27 @@ Example info output:
 
 ```
 $ goga pipeline --list
-Available pipelines:
-  deploy (project)
-  build
+* deploy (project)
+* build
 
 $ goga pipeline --list --info
-deploy (project) — Deploy the service
-build — Build the artifact
+* deploy (project)
+    name: Deploy
+    description: Deploy the service
+* build
+    name: Build
+    description: Build the artifact
 
 $ goga pipeline deploy --info
-Deploy
-Deploy the service
-build: Build
-test: Test
+name: Deploy
+description: Deploy the service
+
+---
+
+* build:
+    title: Build
+* test:
+    title: Test
 ```
 
 The card and the run share the same workflow rule set and the same compiler, so the stages the card lists are structurally the stages a run executes (see [Workflow files](#workflow-files)).
@@ -64,8 +72,8 @@ Only top-level `*.yml` is scanned — subdirectories are ignored, and `.yaml` fi
 Pipelines installed from `goga_tool_*` packages are namespaced as `<tool>:<name>.yml` and addressed as `goga pipeline <tool>:<name>` — the colon is part of the bare filename stem, not a separator. Internal pipelines stay un-prefixed.
 
 ```bash
-goga pipeline feature
-goga pipeline feature -s discover  # skip the discovery stage, start at propose
+goga pipeline refinement
+goga pipeline refinement -s discover  # skip the discovery stage
 goga pipeline acme:deploy
 ```
 

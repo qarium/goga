@@ -3240,6 +3240,7 @@ build:
   {section}""",
         )
         config = load_project_config()
+
         if expected is None:
             assert config.build.review_executor is None
         else:

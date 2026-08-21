@@ -263,6 +263,7 @@ class TestSyncRalphexDefaultsLogic:
 
         first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
         second = (tmp_path / ".ralphex" / "prompts" / "review_second.txt").read_text()
+
         for role in _PROMPT_ROLES:
             assert f"{{{{agent:{role}}}}}" not in first
             assert f"{{{{agent:{role}}}}}" not in second
@@ -330,6 +331,7 @@ class TestSyncRalphexDefaultsLogic:
         sync_ralphex_defaults(_make_build_config(), _StubReview(roles=["testing"]))
 
         second = (tmp_path / ".ralphex" / "prompts" / "review_second.txt").read_text()
+
         for role in _SECOND_ROLES:
             assert f"{{{{agent:{role}}}}}" not in second
         assert "uses 2 agents" in second

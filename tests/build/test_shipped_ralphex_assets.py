@@ -64,8 +64,10 @@ def test_shipped_review_prompts_carry_agent_lines() -> None:
     """
     first = (_PROMPTS_DIR / "review_first.txt").read_text()
     second = (_PROMPTS_DIR / "review_second.txt").read_text()
+
     for role in _AGENT_ROLES:
         assert f"{{{{agent:{role}}}}}" in first
+
     for role in ("quality", "implementation"):
         assert f"{{{{agent:{role}}}}}" in second
 
@@ -78,8 +80,10 @@ def test_shipped_review_prompts_carry_counter_fragments() -> None:
     """
     first = (_PROMPTS_DIR / "review_first.txt").read_text()
     second = (_PROMPTS_DIR / "review_second.txt").read_text()
+
     for fragment in _FIRST_PASS_FRAGMENTS:
         assert fragment in first, f"review_first.txt lost the fragment {fragment!r}"
+
     for fragment in _SECOND_PASS_FRAGMENTS:
         assert fragment in second, f"review_second.txt lost the fragment {fragment!r}"
 

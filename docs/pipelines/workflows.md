@@ -675,7 +675,7 @@ When no workflow applies, the launcher prints no workflow line.
 ## Example
 
 A workflow that layers a Russian-language answer directive and two
-per-stage prompts on top of a `feature` pipeline:
+per-stage prompts on top of a pipeline:
 
 ```yaml
 prompt: |
@@ -705,9 +705,9 @@ stages:
 
       Constraints:
       - Annotations must not reference previous functionality
-      - Annotations does not contains implementation details
+      - Annotations do not contain implementation details
       - Annotations must not use "X from Imports" phrasing
-      - Footer Description does not contains details
+      - Footer Description does not contain details
 ```
 
 A workflow that expands a `propose-review` stage into two passes and pins

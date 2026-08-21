@@ -107,9 +107,7 @@ class TestResolveReviewOptionsLogic:
 
         result = resolve_review_options(config, {})
 
-        assert result == ReviewOptions(
-            skip=False, review_agent=None, roles=None, two_pass=False, review_env={}
-        )
+        assert result == ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={})
 
     def test_resolve_review_options_empty_roles_verbatim(self) -> None:
         config = _make_build_config(review_executor=ReviewExecutorConfig(roles=[]))

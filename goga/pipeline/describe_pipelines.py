@@ -56,6 +56,7 @@ def describe_pipelines(project_dir: Path, user_dir: Path) -> list[PipelineSummar
     entries = list_pipelines(project_dir, user_dir)
 
     summaries: list[PipelineSummary] = []
+
     for entry in entries:
         source_dir = project_dir if entry.source is PipelineSource.PROJECT else user_dir
         text = (source_dir / f"{entry.name}.yml").read_text()

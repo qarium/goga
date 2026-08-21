@@ -38,13 +38,6 @@ from goga.pipeline.workflow import WorkflowDocument, WorkflowSyntaxError
 _resolve_workflow_module = sys.modules["goga.pipeline.resolve_workflow"]
 
 
-@pytest.fixture
-def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """chdir into tmp_path — the workflows root resolves to ``<tmp>/.goga/workflows``."""
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
 def _write_workflow(cwd: Path, name: str, text: str) -> Path:
     """Write a workflow-file at ``<cwd>/.goga/workflows/<name>.yml`` and return it."""
     workflows_dir = cwd / ".goga" / "workflows"

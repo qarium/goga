@@ -98,10 +98,11 @@ You can also start from a [copier](https://copier.readthedocs.io/) template (`go
 **3. Run a pipeline** — pick one of the shipped cycles and let goga walk the agent through its stages, pausing at every `communication` checkpoint for your input. Credentials for `claude`, `codex`, and `opencode` are detected on the host and forwarded into the container automatically:
 
 ```bash
-goga pipeline feature       # the full SDD cycle: propose → … → accept
-goga pipeline bugfix        # root-cause analysis and defect resolution
-goga pipeline patch         # refactoring or minimal change with a plan
-goga pipeline review        # scoped review of code, contracts, docs, then lint/format/tests
+goga pipeline refinement     # product definition: define → discover → propose → task-review
+goga pipeline development    # the development cycle: brainstorm → … → accept
+goga pipeline bugfix         # root-cause analysis and defect resolution
+goga pipeline patch          # refactoring or minimal change with a plan
+goga pipeline review         # scoped review of code, contracts, docs, then lint/format/tests
 ```
 
 Each pipeline is a flat YAML file describing the stages; layer project-specific behavior on top via an optional [workflow](https://qarium.github.io/goga/pipelines/workflows/) file (per-stage agent, additional skills, prompt context, loop expansion, auto-approval, manual stage launch, stage skipping, new stages).
@@ -156,22 +157,24 @@ description: End-to-end feature development
     - goga-accept
 ```
 
-Four definitions ship with goga:
+Six definitions ship with goga:
 
-| Pipeline  | Purpose                                              |
-|-----------|------------------------------------------------------|
-| `feature` | End-to-end feature implementation lifecycle          |
-| `bugfix`  | Root-cause analysis and resolution for a defect      |
-| `patch`   | Refactoring or minimal change with a formalized plan |
-| `review`  | Scoped review of code, contracts, docs, then lint/format/tests |
+| Pipeline      | Purpose                                                                  |
+|---------------|--------------------------------------------------------------------------|
+| `development` | End-to-end development lifecycle: architecture, design, plan, accept     |
+| `refinement`  | Product definition and task refinement: define, discover, propose        |
+| `bugfix`      | Root-cause analysis and resolution for a defect                          |
+| `patch`       | Refactoring or minimal change with a formalized plan                     |
+| `review`      | Scoped review of code, contracts, docs, then lint/format/tests           |
+| `sync`        | Sync specifications and tests with the implementation                    |
 
 Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipelines/` (user); the project source wins on name conflicts.
 
 ```bash
-goga pipeline feature            # run the full cycle (opens with discover)
-goga pipeline feature -s discover # shorter run: skip discovery, start at propose
-goga pipeline feature -p 4       # cap parallelism (subject to the pipeline's dependency rules)
-goga pipeline feature --clean    # wipe persistent state for a fresh run
+goga pipeline development             # run the development cycle (opens with brainstorm)
+goga pipeline refinement -s discover  # shorter run: skip technical discovery
+goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
+goga pipeline development --clean     # wipe persistent state for a fresh run
 ```
 
 Inspect pipelines without running anything:
@@ -179,7 +182,7 @@ Inspect pipelines without running anything:
 ```bash
 goga pipeline --list             # available pipeline names
 goga pipeline --list --info      # every pipeline with its description
-goga pipeline feature --info     # the pipeline card: stages in execution order
+goga pipeline development --info # the pipeline card: stages in execution order
 ```
 
 A running pipeline executes inside a Docker container, where its flows, run-state, and logs are written to a persistent host directory and survive across runs of the same pipeline on the same project and branch — so an interrupted run can be resumed.
@@ -255,9 +258,9 @@ Additionally: `skip: true` removes a stage with transparent reconnection of depe
 Run with a workflow:
 
 ```bash
-goga pipeline feature                   # auto-match: .goga/workflows/feature.yml if present
-goga pipeline feature --workflow custom # explicit
-goga pipeline feature --no-workflow     # disable workflow application entirely
+goga pipeline development                    # auto-match: .goga/workflows/development.yml if present
+goga pipeline development --workflow custom  # explicit
+goga pipeline development --no-workflow      # disable workflow application entirely
 ```
 
 Read the full functional model in the [Pipelines](https://qarium.github.io/goga/pipelines/) section of the docs.
@@ -376,7 +379,7 @@ Tool pipelines are namespaced on install. A file `<name>.yml` in a tool's `pipel
 
 | Source                                    | Destination in `~/.goga/pipelines/`  | Addressable as                |
 |-------------------------------------------|--------------------------------------|-------------------------------|
-| Internal goga source (`goga/assets/pipelines/`) | `feature.yml` (un-prefixed)     | `goga pipeline feature`       |
+| Internal goga source (`goga/assets/pipelines/`) | `development.yml` (un-prefixed) | `goga pipeline development`   |
 | Tool package `goga_tool_acme/pipelines/deploy.yml` | `acme:deploy.yml`             | `goga pipeline acme:deploy`   |
 
 Namespacing structurally prevents collisions — between a tool pipeline and an internal-source pipeline, and between two tools shipping the same name. See [Shipped Pipelines](https://qarium.github.io/goga/pipelines/shipped/) for the full installation algorithm.
@@ -463,12 +466,12 @@ Description: |
 
 ### Extending the cycle
 
-The SDD cycle is not monolithic — every part of it is extensible through the same workflow mechanisms described in the [Pipelines](#workflows--configure-and-extend-a-pipeline) section, applied to the shipped `feature` pipeline.
+The SDD cycle is not monolithic — every part of it is extensible through the same workflow mechanisms described in the [Pipelines](#workflows--configure-and-extend-a-pipeline) section, applied to the shipped `development` pipeline.
 
 **Add an external skill to a stage.** `brainstorm` gains an extra skill from the `acme` tool alongside `goga-brainstorm`:
 
 ```yaml
-# .goga/workflows/feature.yml
+# .goga/workflows/development.yml
 stages:
   brainstorm:
     skills: [acme-explore]
@@ -486,13 +489,13 @@ stages:
     skills: [acme-apply]
 ```
 
-**Insert new stages from a tool's arsenal.** Between `propose` and `brainstorm`, run `acme-explore` to walk the spec; after `accept-result`, run `acme-archive` to archive the delivered spec snapshot:
+**Insert new stages from a tool's arsenal.** Between `plan-review` and `commit-changes`, run `acme-explore` to walk the spec; after `accept-result`, run `acme-archive` to archive the delivered spec snapshot:
 
 ```yaml
 extend:
   spec-explore:
-    after: [propose]
-    before: [brainstorm]
+    after: [plan-review]
+    before: [commit-changes]
     title: Spec exploration
     skills: [acme-explore]
     prompt: |

@@ -125,6 +125,7 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     # Tri-state review pair: True → --skip-review, False → --no-skip-review,
     # None → neither (the in-container build resolves None against the config).
     sr = cli_flags.get("skip_review")
+
     if sr is True:
         args.append("--skip-review")
     elif sr is False:
@@ -326,6 +327,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     # in-container build, which also owns the env-without-agent gate).
     review_exec = config.build.review_executor
     worktree_active = worktree or bool(config.build.worktree)
+
     if (
         review_exec is not None
         and review_exec.agent is not None
@@ -333,8 +335,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         and worktree_active
     ):
         raise click.ClickException(
-            "build.review_executor two-pass review (differing agent or review env) "
-            "cannot follow a --worktree branch"
+            "build.review_executor two-pass review (differing agent or review env) cannot follow a --worktree branch"
         )
 
     cli_flags = {

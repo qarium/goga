@@ -48,6 +48,7 @@ def resolve_review_options(config: BuildConfig, cli_options: dict) -> ReviewOpti
     review_executor = config.review_executor
 
     cli_skip = cli_options.get("skip_review")
+
     if cli_skip is not None:
         skip = cli_skip
     elif review_executor is not None and review_executor.skip is not None:
@@ -58,9 +59,7 @@ def resolve_review_options(config: BuildConfig, cli_options: dict) -> ReviewOpti
     review_agent = review_executor.agent if review_executor is not None else None
     roles = review_executor.roles if review_executor is not None else None
     review_env = review_executor.env if review_executor is not None else {}
-    two_pass = review_agent is not None and (
-        review_agent != config.task_executor.agent or bool(review_env)
-    )
+    two_pass = review_agent is not None and (review_agent != config.task_executor.agent or bool(review_env))
 
     return ReviewOptions(
         skip=skip,

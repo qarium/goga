@@ -64,11 +64,13 @@ def _compose_argv(
     """
     if name is None:
         argv = ["-m", "goga.pipeline", "list"]
+
         if info:
             argv += ["--info"]
         return argv
 
     argv = ["-m", "goga.pipeline", "run", name, "--info"]
+
     if workflow is not None:
         argv += ["-w", workflow]
     elif no_workflow:
@@ -174,7 +176,7 @@ def run_pipeline_info_container(  # noqa: PLR0913, PLR0917
         except Exception as exc:
             raise click.ClickException(str(exc)) from exc
 
-    logger.debug("launching read-only info container: argv=%s", argv)
+    logger.debug("launching read-only info container", extra={"argv": argv})
 
     # Minimal read-only shape: the project as /workspace (the working dir) and
     # one --add-host per resolved host — no port publish, no env-file, no afm

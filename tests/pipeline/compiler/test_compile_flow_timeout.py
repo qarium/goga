@@ -61,6 +61,7 @@ def _compile(tmp_path: Path, pipeline_text: str, workflow_text: str | None = Non
     flow_path = tmp_path / "flow.yml"
 
     workflow = None
+
     if workflow_text is not None:
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(workflow_text)
@@ -107,11 +108,7 @@ class TestTimeoutTranslation:
         """
         flow_text = _compile(
             tmp_path,
-            _HEADER
-            + "build:\n"
-            + "  title: Build\n"
-            + "  script: make test\n"
-            + "  timeout: 30m\n",
+            _HEADER + "build:\n" + "  title: Build\n" + "  script: make test\n" + "  timeout: 30m\n",
         )
 
         assert "script: make test" in flow_text
@@ -162,11 +159,7 @@ class TestTimeoutTranslation:
         """
         flow_text = _compile(
             tmp_path,
-            _HEADER
-            + "test:\n"
-            + "  title: Test\n"
-            + "  script: go test ./...\n"
-            + "  timeout: 10m\n",
+            _HEADER + "test:\n" + "  title: Test\n" + "  script: go test ./...\n" + "  timeout: 10m\n",
             "stages:\n  test:\n    loop: 2\n",
         )
 
@@ -182,11 +175,7 @@ class TestTimeoutTranslation:
         with pytest.raises(StructuralError, match=r"timeout must be a string in stage test-1"):
             _compile(
                 tmp_path,
-                _HEADER
-                + "test:\n"
-                + "  title: Test\n"
-                + "  script: go test ./...\n"
-                + "  timeout: 5\n",
+                _HEADER + "test:\n" + "  title: Test\n" + "  script: go test ./...\n" + "  timeout: 5\n",
                 "stages:\n  test:\n    loop: 2\n",
             )
 
@@ -231,10 +220,7 @@ class TestTimeoutTranslation:
         _pipeline_doc, flow_doc = compile_flow(
             _write(
                 tmp_path,
-                "- name: build\n"
-                "  title: Build\n"
-                "  script: make\n"
-                "  timeout: 20m\n",
+                "- name: build\n  title: Build\n  script: make\n  timeout: 20m\n",
             ),
             tmp_path / "flow.yml",
         )
@@ -292,12 +278,7 @@ class TestTimeoutTranslation:
         """
         flow_text = _compile(
             tmp_path,
-            _HEADER
-            + "build:\n"
-            + "  title: Build\n"
-            + "  script: s\n"
-            + "  timeout: 30m\n"
-            + "  custom: u\n",
+            _HEADER + "build:\n" + "  title: Build\n" + "  script: s\n" + "  timeout: 30m\n" + "  custom: u\n",
         )
 
         stage = yaml.safe_load(flow_text)["stages"][0]
@@ -317,11 +298,7 @@ class TestTimeoutTranslation:
         """
         flow_text = _compile(
             tmp_path,
-            _HEADER
-            + "build:\n"
-            + "  title: Build\n"
-            + "  script: make\n"
-            + "  after_script: echo done\n",
+            _HEADER + "build:\n" + "  title: Build\n" + "  script: make\n" + "  after_script: echo done\n",
         )
 
         assert "script_timeout" not in flow_text

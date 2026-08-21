@@ -202,8 +202,9 @@ deploy:
 
 ## Shipped pipelines
 
-Goga ships three ready-to-use pipelines — `feature`, `bugfix`, `patch` —
-that cover the most common authoring lifecycles. See
+Goga ships six ready-to-use pipelines — `bugfix`, `development`, `patch`,
+`refinement`, `review`, and `sync` — that cover the most common authoring
+lifecycles. See
 [Shipped Pipelines](shipped.md) for the per-pipeline walkthrough and how
 to use them as templates.
 
@@ -437,6 +438,8 @@ workflow-agent semantics.
 | Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
 | Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
 | `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
+| `timeout` value is not a string (including YAML-null)   | `timeout must be a string in stage <NAME>`                      |
+| `timeout` without `script` in the same body             | `timeout requires script in stage <NAME>`                       |
 | `script` authored together with `prompt` and/or `skills` | `script is mutually exclusive with prompt/skills in stage <NAME>` |
 | Body shape is neither list nor dict                      | `unsupported body format`                                       |
 | Body has zero steps                                      | `empty body`                                                    |

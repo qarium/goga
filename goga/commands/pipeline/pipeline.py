@@ -224,6 +224,7 @@ def pipeline(  # noqa: C901, PLR0913, PLR0917
         # malformed entries itself.
         resolved_proxy = proxy if proxy is not None else config.pipeline.proxy
         merged_hosts: dict[str, str] = {**config.pipeline.hosts}
+
         for entry in add_host:
             host, _, ip = entry.partition(":")
             merged_hosts[host] = ip

@@ -100,13 +100,13 @@ Execute the following pipeline in order:
 2. goga-define-problem
 3. goga-define-users
 4. goga-define-goals
-4. goga-define-experience
-5. goga-define-requirements
-6. goga-define-constraints
-7. goga-define-scope
-8. goga-define-success
-9. goga-define-challenge
-10. goga-define-prd
+5. goga-define-experience
+6. goga-define-requirements
+7. goga-define-constraints
+8. goga-define-scope
+9. goga-define-success
+10. goga-define-challenge
+11. goga-define-prd
 ```
 
 `goga-define-resolve` is not part of the normal pipeline.

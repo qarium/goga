@@ -108,9 +108,7 @@ class TestRunPipelineDelegatesWorkflowResolution:
         """The private _resolve_workflow helper no longer exists on the module."""
         assert not hasattr(_run_pipeline_module, "_resolve_workflow")
 
-    def test_run_pipeline_delegates_workflow_resolution(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_run_pipeline_delegates_workflow_resolution(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The env decision reaches resolve_workflow as exact kwargs."""
         monkeypatch.delenv("GOGA_WORKFLOW_DISABLED", raising=False)
         monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")

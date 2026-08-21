@@ -74,6 +74,7 @@ _REVIEW_SECOND_TEMPLATE = (
 def _write_goga_yml(tmp_path: Path, review_executor: dict | None = None) -> None:
     """Materialize a .goga/config.yml with the optional build.review_executor section."""
     build_section: dict = {"task_executor": {"agent": "claude"}}
+
     if review_executor is not None:
         build_section["review_executor"] = review_executor
 
@@ -144,6 +145,7 @@ class TestTriStateSurvivesHostToContainer:
         ):
             mock_runner.return_value.run.return_value = 0
             cli_args = ["plan.md"]
+
             if host_flag is not None:
                 cli_args.append(host_flag)
             runner.invoke(build_cmd, cli_args)

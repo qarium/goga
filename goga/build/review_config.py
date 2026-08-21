@@ -49,6 +49,7 @@ def validate_review_config(
 
     if review.two_pass:
         wrapper = resolve_wrapper_path(review.review_agent)
+
         if not Path(wrapper).is_file():
             raise ValueError(
                 f"review executor wrapper not found: {wrapper} (agent {review.review_agent!r})",

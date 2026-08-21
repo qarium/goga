@@ -169,6 +169,7 @@ class EmbeddedTypeHasLowLevel(ASTRule):
 
         for entity in embedded_entities:
             source_path = _resolve_source(entity.name)
+
             if source_path is not None and not _is_nested_below(source_path, current_path):
                 errors.append(
                     ASTRuleError(
@@ -185,6 +186,7 @@ class EmbeddedTypeHasLowLevel(ASTRule):
 
         for routine in embedded_routines:
             source_path = _resolve_source(routine.name)
+
             if source_path is not None and not _is_nested_below(source_path, current_path):
                 errors.append(
                     ASTRuleError(

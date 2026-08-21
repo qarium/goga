@@ -98,6 +98,7 @@ def _build_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
 def _run_flat_list(project_dir: Path, user_dir: Path) -> int:
     """Operation (a): the flat listing — one `* {name}[ (project)]` bullet per pipeline."""
     entries = list_pipelines(project_dir, user_dir)
+
     for entry in entries:
         suffix = " (project)" if entry.source == PipelineSource.PROJECT else ""
         print(f"* {entry.name}{suffix}")

@@ -74,13 +74,6 @@ build:
 """
 
 
-@pytest.fixture
-def isolated_cwd(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """chdir into tmp_path — the workflows root resolves to ``<tmp>/.goga/workflows``."""
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
 def _write_pipeline(project_dir: Path, name: str, text: str) -> Path:
     """Write a pipeline-file into ``project_dir`` and return its path."""
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -120,9 +113,7 @@ class TestDescribePipelineContract:
 
 
 class TestDescribePipelineLogic:
-    def test_describe_pipeline_returns_card_from_header_and_stages(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_returns_card_from_header_and_stages(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """Name/description are the author-facing header values; stages are the compiled rows.
 
         No ``.goga/workflows`` directory exists, so no workflow applies — the
@@ -144,9 +135,7 @@ class TestDescribePipelineLogic:
         # The pipeline-file itself was consumed read-only.
         assert pipeline_path.exists()
 
-    def test_describe_pipeline_user_source_composes_from_user_dir(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_user_source_composes_from_user_dir(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """A pipeline discovered in the user dir composes its card from the user file."""
         user_dir = tmp_path / "user_pipelines"
         user_path = _write_pipeline(user_dir, "deploy", _USER_DEPLOY_YML)
@@ -160,9 +149,7 @@ class TestDescribePipelineLogic:
         assert [stage.id for stage in card.stages] == ["build"]
         assert user_path.exists()
 
-    def test_describe_pipeline_applies_explicit_workflow(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_applies_explicit_workflow(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """An explicit workflow name resolves that file — skip removes test, extend adds audit."""
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
@@ -174,9 +161,7 @@ class TestDescribePipelineLogic:
         # the card exactly as it applies to the run.
         assert [stage.id for stage in card.stages] == ["build", "audit"]
 
-    def test_describe_pipeline_composition_equals_run_composition(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_composition_equals_run_composition(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """The card's stage composition equals an independently compiled run's — AC-3.
 
         The loop workflow (``stages.build.loop: 2``) makes the case nontrivial:
@@ -202,9 +187,7 @@ class TestDescribePipelineLogic:
         ]
         assert [stage.id for stage in card.stages] == ["build-1", "build-2", "test"]
 
-    def test_describe_pipeline_no_workflow_reports_raw_composition(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_no_workflow_reports_raw_composition(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """``no_workflow=True`` suppresses even a basename auto-match that would apply."""
         project_dir = tmp_path / "project_pipelines"
         _write_pipeline(project_dir, "deploy", _DEPLOY_YML)
@@ -220,9 +203,7 @@ class TestDescribePipelineLogic:
         with pytest.raises(RuntimeError, match="pipeline 'ghost' is missing"):
             describe_pipeline("ghost", tmp_path / "project_pipelines", tmp_path / "user_pipelines", None, False)
 
-    def test_describe_pipeline_removes_temp_flow_file(
-        self, tmp_path: Path, isolated_cwd: Path
-    ) -> None:
+    def test_describe_pipeline_removes_temp_flow_file(self, tmp_path: Path, isolated_cwd: Path) -> None:
         """The compiled flow-file lands in a throwaway temp dir and is removed after.
 
         The card's only write is the temp flow-file: it never touches the

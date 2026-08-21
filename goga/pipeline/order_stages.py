@@ -68,8 +68,10 @@ def order_stages(stages: list[FlowStage]) -> list[FlowStage]:
     # full pass makes no progress.
     while remaining:
         next_stage: FlowStage | None = None
+
         for candidate in remaining:
             dependencies = candidate.depends_on or []
+
             if all(dep in emitted or dep not in declared_ids for dep in dependencies):
                 next_stage = candidate
                 break
@@ -78,8 +80,8 @@ def order_stages(stages: list[FlowStage]) -> list[FlowStage]:
             # Step 3 — a dependency cycle blocks every remaining stage: append
             # them in declaration order and stop (no error, no reordering).
             logger.debug(
-                "dependency cycle among %d stage(s); appending in declaration order",
-                len(remaining),
+                "dependency cycle; appending in declaration order",
+                extra={"stages": len(remaining)},
             )
             result.extend(remaining)
             break
@@ -88,5 +90,5 @@ def order_stages(stages: list[FlowStage]) -> list[FlowStage]:
         emitted.add(next_stage.id)
         remaining.remove(next_stage)
 
-    logger.debug("stages ordered: %d emitted", len(result))
+    logger.debug("stages ordered", extra={"count": len(result)})
     return result

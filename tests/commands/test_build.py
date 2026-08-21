@@ -949,6 +949,7 @@ class TestTwoPassWorktreeGuard:
             },
             "pipeline": {"agent": "claude"},
         }
+
         if worktree is not None:
             data["build"]["worktree"] = worktree
         (tmp_path / ".goga").mkdir(exist_ok=True)
@@ -1066,8 +1067,10 @@ class TestTwoPassWorktreeGuard:
     def _write_env_induced_config(tmp_path: Path, *, review_env: dict | None, agent: str | None = "claude") -> None:
         """Same task/review agents; only a non-empty review env induces two-pass."""
         review_executor: dict = {}
+
         if agent is not None:
             review_executor["agent"] = agent
+
         if review_env is not None:
             review_executor["env"] = review_env
         _write_goga_yml(tmp_path, extra={"review_executor": review_executor})
@@ -1176,6 +1179,7 @@ class TestSkipReviewPairForwarding:
             _run_build_in_tmp(tmp_path, monkeypatch, cli_args)
 
         args = mock_runner.return_value.run.call_args.args[0]
+
         if expected_flag is not None:
             assert expected_flag in args
             assert absent_flag not in args

@@ -26,6 +26,7 @@ def _rewrite_dir(src: Path, dest: Path) -> None:
     """Bring `dest` to exactly the regular files of `src` (full rewrite, no accumulation)."""
     shutil.rmtree(dest, ignore_errors=True)
     dest.mkdir(parents=True, exist_ok=True)
+
     for src_file in sorted(src.iterdir()):
         if src_file.is_file():
             shutil.copy2(src_file, dest / src_file.name)
@@ -34,6 +35,7 @@ def _rewrite_dir(src: Path, dest: Path) -> None:
 def _agent_name(line: str) -> str | None:
     """Role name of a `{{agent:X}}` line, None for any other line."""
     stripped = line.strip()
+
     if not (stripped.startswith(_AGENT_LINE_PREFIX) and stripped.endswith(_AGENT_LINE_SUFFIX)):
         return None
     return stripped[len(_AGENT_LINE_PREFIX) : -len(_AGENT_LINE_SUFFIX)]
@@ -123,6 +125,7 @@ def sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> None:
     _rewrite_dir(agents_src, ralphex_dir / "agents")
 
     roles = review.roles
+
     if not roles:
         logger.info("synced ralphex defaults", extra={"prompts": str(prompts_src), "agents": str(agents_src)})
         return

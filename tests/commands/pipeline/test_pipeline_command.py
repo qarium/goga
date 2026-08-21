@@ -323,8 +323,10 @@ class TestPipelineFormValidation:
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
         argv = []
+
         if info:
             argv.append("--info")
+
         if update:
             argv.append("-u")
         with (
@@ -369,13 +371,12 @@ class TestPipelineFormValidation:
         mock_run.assert_not_called()
         mock_info.assert_not_called()
 
-    def test_pipeline_list_short_flag_equivalent_to_long(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_list_short_flag_equivalent_to_long(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``-l`` and ``--list`` dispatch identically (same kwargs, same exit code)."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         for flag in ("-l", "--list"):
             with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
                 result = runner.invoke(pipeline, [flag])
@@ -384,13 +385,12 @@ class TestPipelineFormValidation:
             assert mock_info.call_args.kwargs["name"] is None
             assert mock_info.call_args.kwargs["info"] is False
 
-    def test_pipeline_info_short_flag_equivalent_to_long(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_info_short_flag_equivalent_to_long(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """``-i`` and ``--info`` dispatch identically (same kwargs, same exit code)."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
         runner = CliRunner()
+
         for flag in ("-i", "--info"):
             with mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info:
                 result = runner.invoke(pipeline, ["--list", flag])
@@ -474,9 +474,7 @@ class TestPipelineDispatchForms:
         assert kwargs["workflow"] is None
         assert kwargs["no_workflow"] is False
 
-    def test_pipeline_card_form_threads_workflow_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_card_form_threads_workflow_flags(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The card form forwards ``-w NAME`` / ``--no-workflow`` to the info launcher."""
         _write_config(tmp_path)
         workflows_dir = tmp_path / ".goga" / "workflows"
@@ -519,9 +517,7 @@ class TestPipelineDispatchForms:
         assert result.exit_code == 0, f"failed for {form}: {result.output}"
         assert mock_info.call_args.kwargs["update"] is True
 
-    def test_pipeline_run_form_dispatches_full_shape(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_run_form_dispatches_full_shape(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The run form resolves proxy/hosts as before and dispatches to ``run_pipeline_container``."""
         _write_config(tmp_path)
         monkeypatch.chdir(tmp_path)
@@ -553,9 +549,7 @@ class TestPipelineDispatchForms:
         assert kwargs["skip"] == ("build",)
         assert kwargs["parallel"] == 4
 
-    def test_pipeline_info_forms_ignore_run_flags(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_pipeline_info_forms_ignore_run_flags(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Run flags are not forwarded into info forms; ``--clean`` deletes nothing.
 
         ``-p/-s/-c/-e/--proxy/--add-host`` are run-form surface: in the info

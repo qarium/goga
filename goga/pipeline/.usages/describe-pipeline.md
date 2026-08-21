@@ -16,7 +16,7 @@ card = describe_pipeline(
     name="deploy",
     project_dir=Path("/workspace/.goga/pipelines"),
     user_dir=Path("/home/goga/.goga/pipelines"),
-    workflow="hardening",   # explicit workflow; None → basename auto-match
+    workflow="hardening",  # explicit workflow; None → basename auto-match
     no_workflow=False,
 )
 print(f"name: {card.name}")

@@ -243,6 +243,7 @@ class TestMainSkipReviewPair:
     @mock.patch("goga.build.__main__.build", return_value=0)
     def test_main_skip_review_pair_tri_state(self, mock_build, mock_config, monkeypatch, flag, expected) -> None:
         argv = ["goga.build", "plan.md", "--skip-manifest-check"]
+
         if flag is not None:
             argv.append(flag)
 

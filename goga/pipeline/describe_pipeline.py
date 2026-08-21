@@ -14,6 +14,7 @@ loop copies appear as separate ``NAME-1..N`` rows, while the run-only
 The compiled flow-file is written to a throwaway temp directory (never the
 project tree or a runtime directory) and removed once the card is composed.
 """
+
 from __future__ import annotations
 
 import logging
@@ -86,6 +87,7 @@ def describe_pipeline(
     # Step 1 — locate the pipeline by name (project source wins on conflicts).
     entries = list_pipelines(project_dir, user_dir)
     match = next((entry for entry in entries if entry.name == name), None)
+
     if match is None:
         raise RuntimeError(f"pipeline '{name}' is missing")
 

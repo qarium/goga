@@ -69,7 +69,7 @@ def resolve_workflow(
         exists, or ``None`` when workflow is disabled or no file is found.
     """
     if no_workflow:
-        logger.debug("workflow disabled for pipeline %s", pipeline_name)
+        logger.debug("workflow disabled", extra={"pipeline": pipeline_name})
         return None
 
     workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
@@ -84,12 +84,12 @@ def resolve_workflow(
     try:
         workflow_path.resolve().relative_to(workflows_root)
     except ValueError:
-        logger.debug("workflow path escapes the workflows dir: %s", wf_name)
+        logger.debug("workflow path escapes the workflows dir", extra={"workflow": wf_name})
         return None
 
     if not workflow_path.exists():
-        logger.debug("workflow file missing (silent miss): %s", workflow_path.name)
+        logger.debug("workflow file missing (silent miss)", extra={"workflow": workflow_path.name})
         return None
 
-    logger.debug("workflow file resolved: %s", workflow_path.name)
+    logger.debug("workflow file resolved", extra={"workflow": workflow_path.name})
     return parse_workflow(workflow_path)

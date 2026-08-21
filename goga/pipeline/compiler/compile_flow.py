@@ -306,8 +306,10 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
     """
     if "agents" in body:
         raise StructuralError("agents key is forbidden in stage body; use roles")
+
     if "interactive" in body:
         raise StructuralError("interactive key is forbidden in stage body; use communication")
+
     if "auto_run" in body:
         raise StructuralError("auto_run key is forbidden in stage body; use trigger: manual")
 
@@ -335,6 +337,7 @@ def _validate_trigger(body: dict[str, Any]) -> str | None:
             outside ``on_success``/``manual``.
     """
     effective_trigger = body.get("trigger")
+
     if effective_trigger is not None and effective_trigger not in ("on_success", "manual"):
         raise StructuralError("trigger must be one of: on_success, manual")
     return effective_trigger
@@ -370,6 +373,7 @@ def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_valu
     """
     if not isinstance(timeout_value, str):
         raise StructuralError(f"timeout must be a string in stage {stage_name}")
+
     if "script" not in body:
         raise StructuralError(f"timeout requires script in stage {stage_name}")
     body["script_timeout"] = timeout_value

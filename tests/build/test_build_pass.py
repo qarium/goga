@@ -122,9 +122,7 @@ class TestRunBuildPassLogic:
         config = _make_build_config()
 
         with mock.patch("goga.build.build_pass.run_ralphex", return_value=7) as mock_run:
-            exit_code = run_build_pass(
-                "p.md", config, {"review": True}, "/w/codex.sh", False, env={"A": "1"}
-            )
+            exit_code = run_build_pass("p.md", config, {"review": True}, "/w/codex.sh", False, env={"A": "1"})
 
         assert exit_code == 7
         mock_run.assert_called_once_with("p.md", {"review": True}, False, env={"A": "1"})

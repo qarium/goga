@@ -425,18 +425,22 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
             type.
     """
     raw = build_data.get("review_executor")
+
     if raw is None:
         return None
+
     if not isinstance(raw, dict):
         raise ValueError("build.review_executor must be a mapping in .goga/config.yml")
 
     skip = raw.get("skip")
+
     if skip is not None and not isinstance(skip, bool):
         raise ValueError("build.review_executor.skip must be a bool in .goga/config.yml")
 
     agent = _parse_optional_agent(raw.get("agent"), "build.review_executor")
 
     roles_raw = raw.get("roles")
+
     if roles_raw is None:
         roles = None
     elif not isinstance(roles_raw, list) or not all(isinstance(x, str) for x in roles_raw):
@@ -445,6 +449,7 @@ def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
         roles = list(roles_raw)
 
     env_raw = raw.get("env")
+
     if env_raw is None:
         env = {}
     elif not isinstance(env_raw, dict):

@@ -356,7 +356,7 @@ class TestInstallPipelinesLogic:
         Unlike the other cases the internal-source resolver is NOT patched, so
         this exercises the real packaged assets. A packaging break (an example
         fixture deleted or the package-data glob broken) fails this test. The
-        shipped example is the goga DSL fixture ``feature.yml``. Tool-package
+        shipped example is the goga DSL fixture ``development.yml``. Tool-package
         discovery is stubbed to an empty set to keep the test hermetic.
         """
         pipelines_dir = tmp_path / "pipelines"
@@ -369,7 +369,7 @@ class TestInstallPipelinesLogic:
         exit_code = install_pipelines(pipelines_dir)
 
         assert exit_code == 0
-        assert (pipelines_dir / "feature.yml").is_file()
+        assert (pipelines_dir / "development.yml").is_file()
         # The installed content is byte-identical to the shipped asset (verbatim copy).
         internal_dir = _install_pipelines_mod._get_internal_pipelines_dir()
-        assert (pipelines_dir / "feature.yml").read_bytes() == (internal_dir / "feature.yml").read_bytes()
+        assert (pipelines_dir / "development.yml").read_bytes() == (internal_dir / "development.yml").read_bytes()

@@ -42,8 +42,7 @@ if exit_code == 0:
 ```python
 # Review pass with an env layer: keys of env override the inherited
 # environment for this subprocess only; the tasks pass runs without a layer.
-exit_code = run_ralphex(plan, {**options, "review": True}, dry_run,
-                        env={"ANTHROPIC_MODEL": "reviewer-model"})
+exit_code = run_ralphex(plan, {**options, "review": True}, dry_run, env={"ANTHROPIC_MODEL": "reviewer-model"})
 ```
 
 ## Parameters

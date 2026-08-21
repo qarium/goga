@@ -10,7 +10,7 @@ goga build PLAN [OPTIONS]
 
 ## Description
 
-`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to [ralphex](https://github.com/qarium/ralphex) running inside a Docker container with the goga in-container process as the entry point.
+`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to `ralphex` running inside a Docker container with the goga in-container process as the entry point.
 
 The build pipeline performs these steps:
 
@@ -97,7 +97,7 @@ goga build plan.md --dry-run
 Run with custom timeouts and an extra environment variable:
 
 ```bash
-goga build plan.md --session-timeout 3600 --max-iterations 50 -e ANTHROPIC_API_KEY=sk-xxx
+goga build plan.md --session-timeout 1h --max-iterations 50 -e ANTHROPIC_API_KEY=sk-xxx
 ```
 
 Skip the uncommitted CODEMANIFEST check:

@@ -68,9 +68,7 @@ class TestPipelineCliContract:
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with mock.patch.object(
-            _cli_module, "describe_pipelines", return_value=[]
-        ) as mock_describe:
+        with mock.patch.object(_cli_module, "describe_pipelines", return_value=[]) as mock_describe:
             exit_code = pipeline_cli(["list", "--info"])
 
         assert exit_code == 0
@@ -253,7 +251,6 @@ class TestPipelineCliLogic:
         # run_pipeline receives no workflow argument — the host launcher owns
         # the decision and delivers it through GOGA_WORKFLOW_* env vars.
         mock_run_pipeline.assert_called_once_with("deploy", project_dir, user_dir, 50321, parallel=None)
-
 
     def test_pipeline_cli_parallel_defaults_none(
         self,
