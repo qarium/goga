@@ -156,4 +156,4 @@ Only `language` is required by the loader. `goga build` additionally requires a 
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, ralphex error, or a fatal `docker build` under `--update`) |
+| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, a ralphex error — a missing `ralphex` binary or a rejected launch surfaces as a clean one-line message with exit code 1 — or a fatal `docker build` under `--update`) |
