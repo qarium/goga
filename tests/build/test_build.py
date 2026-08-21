@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -1182,3 +1183,56 @@ class TestBuildReviewPhaseOrchestration:
         assert result == 0
         assert mock_run.call_count == 1
         assert mock_run.call_args.args[1]["tasks_only"] is True
+
+
+# --- Integration: secret-safe dry-run across the orchestration/launcher seam ---
+
+
+class TestBuildDryRunSecretSafeIntegration:
+    """Cross-entity scenario joining the orchestrator (goga/build) with the
+    launcher's print (goga/ralphex): a two-pass dry run prints the argv of both
+    passes and never the contents of the review env layer.
+
+    `run_ralphex` is replaced by a stand-in that reproduces the launcher's
+    dry-run print verbatim — `shlex.join(_build_command(...))` to stderr — so
+    the seam under test is exactly what the real launcher emits, without
+    depending on the external ralphex binary."""
+
+    def test_build_dry_run_two_pass_no_env_in_output(self, tmp_path, monkeypatch, capsys) -> None:
+        from goga.ralphex.run_ralphex import _build_command
+
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        def _dry_run_launcher(plan, options, dry_run, env=None):
+            # Emulate run_ralphex: on a dry run print the argv only — the env
+            # layer is never part of the printed command.
+            if dry_run:
+                print(shlex.join(_build_command(plan, options)), file=sys.stderr)
+                return 0
+            return 0
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", side_effect=_dry_run_launcher),
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "dry_run": True},
+            )
+
+        assert result == 0
+        captured = capsys.readouterr()
+        # Both planned passes had their argv printed to stderr.
+        assert captured.err.count("ralphex") >= 2
+        assert "--tasks-only" in captured.err
+        assert "--review" in captured.err
+        # The env layer value never reaches the dry-run output.
+        assert "reviewer" not in captured.err
+        assert "ANTHROPIC_MODEL" not in captured.err
+        # A dry run relocates nothing.
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
