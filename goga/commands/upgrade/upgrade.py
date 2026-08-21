@@ -124,6 +124,11 @@ def _upgrade(
             base = importlib.metadata.version("goga")
         except importlib.metadata.PackageNotFoundError as exc:
             raise click.ClickException("cannot determine the installed goga version in this interpreter") from exc
+        if not base:
+            # A broken dist-info (missing or headerless METADATA) makes
+            # importlib.metadata.version return None instead of raising — the
+            # same undeterminable-base contract applies, never a TypeError.
+            raise click.ClickException("cannot determine the installed goga version in this interpreter")
         try:
             spec = resolve_relative_spec(base, patch=patch_line, minor=minor_line)
         except ValueError as exc:

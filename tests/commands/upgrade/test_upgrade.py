@@ -253,6 +253,19 @@ class TestUpgradeLogicNegative:
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
 
+    def test_upgrade_none_base_raises_before_pip(self) -> None:
+        with (
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value=None),
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+            pytest.raises(click.ClickException, match="cannot determine the installed goga version"),
+        ):
+            _upgrade(patch_line=True)
+        # A broken dist-info yields None instead of raising — same hard fail as
+        # the missing-package case: no fallback to latest, no pip, no TypeError.
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
     def test_upgrade_unresolvable_line_raises_before_pip(self) -> None:
         with (
             mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value="1"),

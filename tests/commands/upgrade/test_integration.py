@@ -94,6 +94,19 @@ class TestUpgradeCliIntegration:
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
 
+    def test_upgrade_cli_none_base_rejected(self) -> None:
+        """A broken dist-info (``version() -> None``) exits 1 with a clean error — no traceback, no pip."""
+        with (
+            mock.patch.object(_upgrade_module.importlib.metadata, "version", return_value=None),
+            mock.patch.object(_upgrade_module.subprocess, "run") as mock_run,
+            mock.patch.object(_upgrade_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["upgrade", "--minor"])
+        assert result.exit_code == 1
+        assert "cannot determine the installed goga version" in result.output
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
     def test_upgrade_cli_unresolvable_line_rejected(self) -> None:
         """A readable base without a minor segment exits 1 under ``--patch`` — no invented line, no pip."""
         with (
