@@ -57,8 +57,10 @@ class TestReviewOptionsContract:
         assert env_field.default_factory is dataclasses.MISSING
 
     def test_review_options_is_kw_only_and_frozen(self) -> None:
+        """kw_only is enforced: positional construction is rejected."""
         assert ReviewOptions.__dataclass_params__.frozen is True
-        assert ReviewOptions.__dataclass_params__.kw_only is True
+        with pytest.raises(TypeError):
+            ReviewOptions(False, None, None, False, {})  # type: ignore[misc]
 
 
 class TestResolveReviewOptionsLogic:
