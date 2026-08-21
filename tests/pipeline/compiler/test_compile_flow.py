@@ -816,12 +816,7 @@ class TestCompileFlowScriptDirectives:
         flow_path = tmp_path / "flow.yml"
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text(
-            "extend:\n"
-            "  b:\n"
-            "    after:\n"
-            "      - a\n"
-            "    title: B\n"
-            "    script: run\n",
+            "extend:\n  b:\n    after:\n      - a\n    title: B\n    script: run\n",
         )
         workflow = parse_workflow(workflow_path)
 
