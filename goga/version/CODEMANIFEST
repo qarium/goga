@@ -64,10 +64,6 @@ Annotations: |
     Requirements:
     - The four accepted forms are: "N.x" (major x-range), "N.M.x" (minor
       x-range), "N(.M)?(.K)?" (concrete numeric), "latest"
-    - Numeric segments are non-empty runs of ASCII digits 0-9. Unicode digits
-      (e.g. Arabic-Indic ١ U+0661, superscript ² U+00B2) pass str.isdigit but
-      are not PEP 440 digits, so forms containing them are rejected as
-      malformed instead of reaching pip as invalid specifiers
     - None input is accepted and resolves to None — the marker for an absent
       version input; "latest" is the only canonical no-specifier marker inside
       declarative configuration
