@@ -50,34 +50,36 @@ class TestValidateReviewConfigContract:
 class TestValidateReviewConfigLogic:
     def test_validate_review_config_passes_whitelist_roles(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["quality", "testing"], two_pass=False)
+        review = ReviewOptions(
+            skip=False, review_agent=None, roles=["quality", "testing"], two_pass=False, review_env={}
+        )
 
         validate_review_config(config, review)
 
     def test_validate_review_config_unknown_role_raises(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False)
+        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False, review_env={})
 
         with pytest.raises(ValueError, match="bogus"):
             validate_review_config(config, review)
 
     def test_validate_review_config_unknown_role_message_lists_whitelist(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False)
+        review = ReviewOptions(skip=False, review_agent=None, roles=["bogus"], two_pass=False, review_env={})
 
         with pytest.raises(ValueError, match=r"quality.*simplification"):
             validate_review_config(config, review)
 
     def test_validate_review_config_missing_review_wrapper_raises(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True)
+        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True, review_env={})
 
         with pytest.raises(ValueError, match=r"ghost-as-claude\.sh"):
             validate_review_config(config, review)
 
     def test_validate_review_config_missing_review_wrapper_message_names_agent(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True)
+        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=True, review_env={})
 
         with pytest.raises(ValueError, match="ghost"):
             validate_review_config(config, review)
@@ -90,20 +92,20 @@ class TestValidateReviewConfigLogic:
         monkeypatch.setattr("goga.build.review_config.resolve_wrapper_path", lambda _agent: str(wrapper))
 
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="codex", roles=None, two_pass=True)
+        review = ReviewOptions(skip=False, review_agent="codex", roles=None, two_pass=True, review_env={})
 
         validate_review_config(config, review)
 
     def test_validate_review_config_skipped_run_no_checks(self) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=True, roles=["bogus"], review_agent="ghost", two_pass=True)
+        review = ReviewOptions(skip=True, roles=["bogus"], review_agent="ghost", two_pass=True, review_env={})
 
         validate_review_config(config, review)
 
     @pytest.mark.parametrize("roles", [None, []])
     def test_validate_review_config_none_and_empty_roles_no_iteration(self, roles: list[str] | None) -> None:
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False)
+        review = ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False, review_env={})
 
         validate_review_config(config, review)
 
@@ -114,6 +116,7 @@ class TestValidateReviewConfigLogic:
             review_agent=None,
             roles=["quality", "implementation", "testing", "simplification", "documentation"],
             two_pass=False,
+            review_env={},
         )
 
         validate_review_config(config, review)
@@ -121,7 +124,7 @@ class TestValidateReviewConfigLogic:
     def test_validate_review_config_checks_roles_before_wrapper(self, tmp_path: Path) -> None:
         """The role check runs first — an unknown role raises even when two_pass would also fail."""
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=["bogus"], two_pass=True)
+        review = ReviewOptions(skip=False, review_agent="ghost", roles=["bogus"], two_pass=True, review_env={})
 
         with pytest.raises(ValueError, match="bogus"):
             validate_review_config(config, review)
@@ -129,6 +132,6 @@ class TestValidateReviewConfigLogic:
     def test_validate_review_config_no_two_pass_skips_wrapper_check(self) -> None:
         """two_pass False never resolves the wrapper — the task executor stays out of scope."""
         config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=False)
+        review = ReviewOptions(skip=False, review_agent="ghost", roles=None, two_pass=False, review_env={})
 
         validate_review_config(config, review)

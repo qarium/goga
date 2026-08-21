@@ -362,7 +362,7 @@ class TestSyncDefaults:
     """Migrated from TestCopyDefaults onto the public sync_ralphex_defaults."""
 
     def _review(self, roles: list[str] | None = None) -> ReviewOptions:
-        return ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False)
+        return ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False, review_env={})
 
     def test_prompts_copied(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)

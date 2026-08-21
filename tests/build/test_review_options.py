@@ -38,7 +38,7 @@ class TestReviewOptionsContract:
 
     def test_review_options_declared_fields(self) -> None:
         fields = {f.name for f in dataclasses.fields(ReviewOptions)}
-        assert fields == {"skip", "review_agent", "roles", "two_pass"}
+        assert fields == {"skip", "review_agent", "roles", "two_pass", "review_env"}
 
     def test_review_options_field_types(self) -> None:
         hints = typing.get_type_hints(ReviewOptions)
@@ -46,6 +46,15 @@ class TestReviewOptionsContract:
         assert hints["review_agent"] == str | None
         assert hints["roles"] == list[str] | None
         assert hints["two_pass"] is bool
+        assert hints["review_env"] == dict[str, str]
+
+    def test_review_options_declared_fields_include_review_env(self) -> None:
+        """`review_env` is the fifth field, required — no default factory."""
+        names = [f.name for f in dataclasses.fields(ReviewOptions)]
+        assert names == ["skip", "review_agent", "roles", "two_pass", "review_env"]
+        env_field = next(f for f in dataclasses.fields(ReviewOptions) if f.name == "review_env")
+        assert env_field.default is dataclasses.MISSING
+        assert env_field.default_factory is dataclasses.MISSING
 
     def test_review_options_is_kw_only_and_frozen(self) -> None:
         assert ReviewOptions.__dataclass_params__.frozen is True
@@ -98,7 +107,9 @@ class TestResolveReviewOptionsLogic:
 
         result = resolve_review_options(config, {})
 
-        assert result == ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False)
+        assert result == ReviewOptions(
+            skip=False, review_agent=None, roles=None, two_pass=False, review_env={}
+        )
 
     def test_resolve_review_options_empty_roles_verbatim(self) -> None:
         config = _make_build_config(review_executor=ReviewExecutorConfig(roles=[]))
@@ -119,7 +130,43 @@ class TestResolveReviewOptionsLogic:
         assert result.skip is True
 
     def test_review_options_is_frozen(self) -> None:
-        options = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False)
+        options = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={})
 
         with pytest.raises(dataclasses.FrozenInstanceError):
             options.skip = True
+
+    def test_resolve_review_options_env_nonempty_same_agent_two_pass(self) -> None:
+        """A non-empty review env induces two_pass even when both agents match."""
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", env={"M": "r"}),
+        )
+
+        result = resolve_review_options(config, {"skip_review": None})
+
+        assert result.two_pass is True
+        assert result.review_agent == "claude"
+        assert result.review_env == {"M": "r"}
+
+    def test_resolve_review_options_env_equal_to_task_env_still_two_pass(self) -> None:
+        """Induction checks non-emptiness, not dictionary equality with task env."""
+        config = BuildConfig(
+            task_executor=TaskExecutorConfig(agent="claude", env={"M": "r"}),
+            review_executor=ReviewExecutorConfig(agent="claude", env={"M": "r"}),
+        )
+
+        result = resolve_review_options(config, {})
+
+        assert result.two_pass is True
+        assert result.review_env == {"M": "r"}
+
+    def test_resolve_review_options_env_empty_same_agent_single_pass(self) -> None:
+        """An empty review env keeps the single-pass path for matching agents."""
+        config = _make_build_config(
+            task_agent="claude",
+            review_executor=ReviewExecutorConfig(agent="claude", env={}),
+        )
+
+        result = resolve_review_options(config, {})
+
+        assert result.two_pass is False
+        assert result.review_env == {}

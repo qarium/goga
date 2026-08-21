@@ -93,7 +93,9 @@ def test_shipped_assets_sync_byte_identical_without_roles(tmp_path, monkeypatch)
     monkeypatch.chdir(tmp_path)
     config = BuildConfig(task_executor=TaskExecutorConfig(agent="claude", env={}))
 
-    sync_ralphex_defaults(config, ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False))
+    sync_ralphex_defaults(
+        config, ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={})
+    )
 
     assert (_PROMPTS_DIR / "task.txt").read_bytes() == (tmp_path / ".ralphex" / "prompts" / "task.txt").read_bytes()
     assert (_PROMPTS_DIR / "review_first.txt").read_bytes() == (
