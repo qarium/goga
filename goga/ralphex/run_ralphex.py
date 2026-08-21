@@ -96,7 +96,8 @@ def run_ralphex(
 
     Returns:
         ``0`` on success or on a dry run; ``1`` when the ``ralphex`` binary is
-        missing from ``PATH``; otherwise ralphex's own exit code.
+        missing from ``PATH`` — including when an ``env`` layer's ``PATH``
+        override hides it from the exec; otherwise ralphex's own exit code.
     """
     cmd = _build_command(plan, options)
 
@@ -108,7 +109,14 @@ def run_ralphex(
         print("Error: ralphex binary not found in PATH", file=sys.stderr)
         return 1
 
-    if env:
-        return subprocess.call(cmd, env={**os.environ, **env})
+    try:
+        if env:
+            return subprocess.call(cmd, env={**os.environ, **env})
 
-    return subprocess.call(cmd)
+        return subprocess.call(cmd)
+    except FileNotFoundError:
+        # An env layer that overrides PATH can hide the binary from the exec
+        # even though the guard above resolved it in the inherited PATH — the
+        # same clean message and exit code, not a traceback.
+        print("Error: ralphex binary not found in PATH", file=sys.stderr)
+        return 1

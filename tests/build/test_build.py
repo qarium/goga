@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import inspect
-import shlex
 import subprocess
 import sys
 from contextlib import contextmanager
@@ -879,31 +878,11 @@ class TestBuildReviewPhaseOrchestration:
         assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
         assert "move_plan_on_completion = false" in config_text
 
-    def test_build_two_pass_pass2_carries_review_env(self, tmp_path, monkeypatch) -> None:
-        """Contract: the second call to run_ralphex of a two-pass run carries the
-        review env layer; the build() signature itself stays (plan, config, cli_options)."""
-        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"M": "r"}))
-        review_wrapper = tmp_path / "codex-as-claude.sh"
-        review_wrapper.write_text("#!/bin/sh\n")
-
-        with (
-            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
-            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
-        ):
-            result = _run_build_in_tmp(
-                tmp_path,
-                monkeypatch,
-                config=config,
-                cli_options={"skip_manifest_check": True},
-            )
-
-        assert result == 0
-        assert mock_run.call_count == 2
-        assert mock_run.call_args_list[1].kwargs["env"] == {"M": "r"}
-
     def test_build_two_pass_pass2_carries_review_env_pass1_without(self, tmp_path, monkeypatch) -> None:
         """Pass 1 runs without the env layer, pass 2 carries it — the asymmetry
-        keeps review-only variables out of the tasks pass."""
+        keeps review-only variables out of the tasks pass. Contract: the second
+        call to run_ralphex of a two-pass run carries the review env layer; the
+        build() signature itself stays (plan, config, cli_options)."""
         config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
@@ -1001,7 +980,9 @@ class TestBuildReviewPhaseOrchestration:
         assert mock_run.call_args.kwargs["env"] is None
 
     def test_build_two_pass_pass1_failure_skips_pass2(self, tmp_path, monkeypatch) -> None:
-        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
+        """A failed pass 1 exits with its code — pass 2 (and its env layer)
+        never launches, even with a declared review env."""
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"X": "y"}))
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
 
@@ -1018,6 +999,8 @@ class TestBuildReviewPhaseOrchestration:
 
         assert result == 1
         assert mock_run.call_count == 1
+        # The single call is the tasks pass — no env layer anywhere.
+        assert "env" not in mock_run.call_args.kwargs or mock_run.call_args.kwargs["env"] is None
         # A failed run keeps the plan in place for ralphex to resume.
         assert (tmp_path / "plan.md").is_file()
         assert not (tmp_path / "completed").exists()
@@ -1193,30 +1176,17 @@ class TestBuildDryRunSecretSafeIntegration:
     launcher's print (goga/ralphex): a two-pass dry run prints the argv of both
     passes and never the contents of the review env layer.
 
-    `run_ralphex` is replaced by a stand-in that reproduces the launcher's
-    dry-run print verbatim — `shlex.join(_build_command(...))` to stderr — so
-    the seam under test is exactly what the real launcher emits, without
-    depending on the external ralphex binary."""
+    The real launcher runs here: its dry-run branch performs no PATH check and
+    no subprocess, so the seam under test is the actual print the container
+    would emit — a regression in either the orchestration (folding the env into
+    the options) or the launcher's print fails this test."""
 
     def test_build_dry_run_two_pass_no_env_in_output(self, tmp_path, monkeypatch, capsys) -> None:
-        from goga.ralphex.run_ralphex import _build_command
-
         config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
         review_wrapper = tmp_path / "codex-as-claude.sh"
         review_wrapper.write_text("#!/bin/sh\n")
 
-        def _dry_run_launcher(plan, options, dry_run, env=None):
-            # Emulate run_ralphex: on a dry run print the argv only — the env
-            # layer is never part of the printed command.
-            if dry_run:
-                print(shlex.join(_build_command(plan, options)), file=sys.stderr)
-                return 0
-            return 0
-
-        with (
-            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
-            mock.patch("goga.build.build_pass.run_ralphex", side_effect=_dry_run_launcher),
-        ):
+        with mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)):
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,

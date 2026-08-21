@@ -176,6 +176,32 @@ class TestTimeoutTranslation:
         assert stages[0]["script_timeout"] == "10m"
         assert stages[1]["script_timeout"] == "10m"
 
+    def test_timeout_loop_copy_structural_error_names_expanded_stage(self, tmp_path: Path) -> None:
+        """A structural error inside a loop-expanded copy names the copy
+        (``test-1``), not the base stage — the validation re-runs per copy."""
+        with pytest.raises(StructuralError, match=r"timeout must be a string in stage test-1"):
+            _compile(
+                tmp_path,
+                _HEADER
+                + "test:\n"
+                + "  title: Test\n"
+                + "  script: go test ./...\n"
+                + "  timeout: 5\n",
+                "stages:\n  test:\n    loop: 2\n",
+            )
+
+    def test_compile_timeout_multiline_value_block_literal_in_flow_file(self, tmp_path: Path) -> None:
+        """A multi-line timeout travels through the compile→serialize seam and
+        takes the script-family block-literal style in the written flow-file
+        (the authored `|` block keeps its trailing newline — verbatim)."""
+        flow_text = _compile(
+            tmp_path,
+            _HEADER + "build:\n  title: Build\n  script: make\n  timeout: |\n    a\n    b\n",
+        )
+
+        assert "script_timeout: |" in flow_text
+        assert yaml.safe_load(flow_text)["stages"][0]["script_timeout"] == "a\nb\n"
+
     def test_timeout_extend_stage_body_translates(self, tmp_path: Path) -> None:
         """An embedded extend-stage body runs through the same translation pass.
 

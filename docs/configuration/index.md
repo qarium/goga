@@ -32,6 +32,8 @@ build:
   #   skip: false                 # true → tasks-only run (ralphex --tasks-only)
   #   agent: codex                # differing agent → two-pass run (tasks, then --review)
   #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
+  #   env:                        # review-pass env layer (requires agent when non-empty)
+  #     ANTHROPIC_MODEL: reviewer
   # proxy: http://corp:3128        # optional HTTP/HTTPS proxy URL for the build container
   # hosts:                         # optional docker run --add-host entries
   #   foo.local: 127.0.0.1
@@ -118,10 +120,11 @@ Optional section controlling the review phase of `goga build`. When absent, the 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `skip` | `bool` | No | Skip the review phase entirely — the run executes tasks only (ralphex `--tasks-only`). Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML `1` is rejected |
-| `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.task_executor.agent`; its wrapper must exist in the image). When it differs from `task_executor.agent`, the build runs two passes: tasks with the task wrapper, then `ralphex --review` with the review wrapper. Combining this with an active worktree (`--worktree` or `build.worktree: true`) is rejected with exit 1 on the host |
+| `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.task_executor.agent`; its wrapper must exist in the image). When it differs from `task_executor.agent`, **or when a non-empty `env` is declared alongside it**, the build runs two passes: tasks with the task wrapper, then `ralphex --review` with the review wrapper. Combining either two-pass form with an active worktree (`--worktree` or `build.worktree: true`) is rejected with exit 1 on the host |
 | `roles` | list of `string` | No | Reviewer composition for the review prompts: keeps only the `{{agent:X}}` lines of the selected roles and adapts the counters of the accompanying text. Whitelist: `quality`, `implementation`, `testing`, `simplification`, `documentation`. Absent or `[]` means the full default set (prompts stay byte-identical to the vendored defaults) |
+| `env` | mapping of `string` | No | Review-pass environment layer (`{str: str}`). Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/`{}` all resolve to `{}` (unlike `build.task_executor.env`, where YAML-null is an error). A non-empty `env` induces a two-pass run like a differing agent does, and requires `agent` — a non-empty `env` without `agent` fails in-container validation when the review phase runs; a skipped run ignores the layer entirely |
 
-Precedence: the `--skip-review`/`--no-skip-review` CLI pair overrides `skip`; an explicit `--no-skip-review` forces the full cycle even when the config sets `skip: true`. Role names and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).
+Precedence: the `--skip-review`/`--no-skip-review` CLI pair overrides `skip`; an explicit `--no-skip-review` forces the full cycle even when the config sets `skip: true`. Role names, the env-requires-agent rule, and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).
 
 ### build.task_executor
 
@@ -190,7 +193,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, or `roles` that is not a list of strings |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), or `env` with non-string keys/values (`build.review_executor.env must have string keys and values`) |
 
 ## Implementation details
 

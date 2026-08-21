@@ -150,10 +150,12 @@ class TestValidateReviewConfigLogic:
         validate_review_config(config, review)
 
     def test_validate_review_config_env_without_agent_raises(self) -> None:
+        """The gate names the offending value and the config key to set — both
+        halves of the error literal are pinned in one raise."""
         config = _make_build_config()
         review = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={"X": "y"})
 
-        with pytest.raises(ValueError, match=r"review env requires a review agent"):
+        with pytest.raises(ValueError, match=r"review env requires a review agent: set build\.review_executor\.agent"):
             validate_review_config(config, review)
 
     def test_validate_review_config_env_gate_skipped_run_silent(self) -> None:
@@ -162,13 +164,6 @@ class TestValidateReviewConfigLogic:
         review = ReviewOptions(skip=True, review_agent=None, roles=None, two_pass=False, review_env={"X": "y"})
 
         validate_review_config(config, review)
-
-    def test_validate_review_config_env_gate_names_config_key(self) -> None:
-        config = _make_build_config()
-        review = ReviewOptions(skip=False, review_agent=None, roles=None, two_pass=False, review_env={"X": "y"})
-
-        with pytest.raises(ValueError, match=r"set build\.review_executor\.agent"):
-            validate_review_config(config, review)
 
     def test_validate_review_config_empty_env_no_agent_passes(self) -> None:
         """An empty review env never triggers the gate — byte-compat with configs without env."""

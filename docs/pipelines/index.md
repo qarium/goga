@@ -83,7 +83,9 @@ cancels the stage's manual launch mode (a stage-body `trigger: manual`
 compiles to the afm `auto_run: false` key — the stage pauses until
 launched). The pipeline-file itself can also carry
 `before_script` / `script` / `after_script` shell directives on any stage
-— compiled to the afm `script_*` keys. See [Workflows](workflows.md) and
+— compiled to the afm `script_*` keys — and a `timeout` directive (Go
+duration string) that compiles to the afm `script_timeout` key and bounds
+the stage's script action. See [Workflows](workflows.md) and
 [Pipeline File — Script directives](pipeline-file.md#script-directives)
 for the full semantics.
 

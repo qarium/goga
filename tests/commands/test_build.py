@@ -705,6 +705,26 @@ class TestGitConfigMergedInBuild:
         env_dict = mock_env.call_args[0][0]
         assert env_dict["GIT_AUTHOR_NAME"] == "override"
 
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    def test_review_env_not_in_container_env_file(self, mock_git, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+        """The review env layer reaches ONLY the pass-2 subprocess — it is never
+        part of the container env-file, so the tasks pass cannot see it."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"review_executor": {"agent": "codex", "env": {"ANTHROPIC_MODEL": "reviewer"}}},
+        )
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        env_dict = mock_env.call_args[0][0]
+        assert "ANTHROPIC_MODEL" not in env_dict
+        assert "reviewer" not in env_dict.values()
+
 
 # --- Image update (--update → docker_update) tests ---
 
@@ -1050,17 +1070,7 @@ class TestTwoPassWorktreeGuard:
             review_executor["agent"] = agent
         if review_env is not None:
             review_executor["env"] = review_env
-        data: dict = {
-            "language": "python",
-            "image": "qarium/goga:latest",
-            "build": {
-                "task_executor": {"agent": "claude"},
-                "review_executor": review_executor,
-            },
-            "pipeline": {"agent": "claude"},
-        }
-        (tmp_path / ".goga").mkdir(exist_ok=True)
-        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+        _write_goga_yml(tmp_path, extra={"review_executor": review_executor})
 
     def test_host_guard_env_induced_two_pass_worktree_conflict_cli(self, tmp_path, monkeypatch) -> None:
         """Same agents + non-empty review env → two-pass is induced by env alone;
@@ -1086,6 +1096,25 @@ class TestTwoPassWorktreeGuard:
             mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
         ):
             result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree", "--skip-review"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_host_guard_env_induced_two_pass_worktree_conflict_config_flag(self, tmp_path, monkeypatch) -> None:
+        """The config-driven worktree variant: `build.worktree: true` with a
+        non-empty review env is the same rejected combination — the guard is a
+        config-level projection, not a CLI-flag check."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"worktree": True, "review_executor": {"agent": "claude", "env": {"M": "r"}}},
+        )
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
 
         assert result.exit_code == 1
         assert "review_executor" in result.output

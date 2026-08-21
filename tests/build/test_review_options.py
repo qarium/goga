@@ -170,3 +170,18 @@ class TestResolveReviewOptionsLogic:
 
         assert result.two_pass is False
         assert result.review_env == {}
+
+    def test_resolve_review_options_env_without_agent_single_pass(self) -> None:
+        """A non-empty env without an agent does NOT induce two_pass — the
+        formula requires an agent; the env-without-agent misconfiguration is
+        the consumer's gate (validate_review_config), not this reduction."""
+        config = _make_build_config(
+            task_agent="claude",
+            review_executor=ReviewExecutorConfig(env={"X": "y"}),
+        )
+
+        result = resolve_review_options(config, {})
+
+        assert result.two_pass is False
+        assert result.review_agent is None
+        assert result.review_env == {"X": "y"}

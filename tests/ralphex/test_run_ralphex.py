@@ -207,6 +207,24 @@ class TestRunRalphexLogic:
         assert "env" not in mock_call.call_args.kwargs
         assert mock_call.call_args.args[0][0] == "ralphex"
 
+    def test_run_ralphex_env_path_override_hiding_binary_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override hides the binary from the exec
+        surfaces as the clean missing-binary message and exit 1 — not a
+        FileNotFoundError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=FileNotFoundError("[Errno 2] No such file or directory: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/nonexistent-dir"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "ralphex binary not found in PATH" in captured.err
+
     def test_run_ralphex_maps_new_bool_flags(self) -> None:
         """The review/tasks_only mode flags map to their bare ralphex flags;
         False is equivalent to absent (bool-mapping rule regression guard)."""

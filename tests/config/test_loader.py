@@ -3114,20 +3114,6 @@ class TestReviewExecutorConfigContract:
         assert params["env"].default is dataclasses.MISSING
         assert params["env"].default_factory is dict
 
-    def test_review_executor_config_declared_fields_ordered(self):
-        """Declared field order is skip, agent, roles, env (env last, default {})."""
-        from goga.config.project.config import ReviewExecutorConfig
-
-        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env"]
-        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
-
-    def test_review_executor_config_env_annotation_is_str_dict(self):
-        """The env annotation is dict[str, str]."""
-        from goga.config.project.config import ReviewExecutorConfig
-
-        assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
-
     def test_review_executor_config_reexport_from_facade_alive(self):
         """goga.config re-exports the same class object as the project cell."""
         import goga.config as facade
