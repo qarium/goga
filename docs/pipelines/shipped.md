@@ -195,26 +195,6 @@ resolve → commit-changes
 changes, it resolves the drift between code, contracts, and tests.
 `commit-changes` then commits the accumulated fixes.
 
-## Shared `commit-changes` stage
-
-The `bugfix`, `patch`, `review`, and `sync` pipelines share the same
-`commit-changes` stage, and `development` ships its own stage with the
-same name and behavior. Each of these stages commits the untracked
-changes accumulated during the previous stages.
-In `development` the stage carries `communication: true`
-and asks the user whether the implementation is built and ready for
-acceptance — it never autoconfirms the user's answer and genuinely waits
-for explicit confirmation before `accept-result` runs. In `bugfix`,
-`patch`, `review`, and `sync` the stage has no `communication` field and
-runs autonomously.
-(The authoring field is `communication`; the compiled flow-file still
-carries the afm key `interactive`.)
-
-In `development` the stage explicitly excludes
-`docs/<defines|proposals|tasks|arch|design|plans>` from the commit path,
-so in-flight design artifacts that live outside the source tree are not
-bundled into the implementation commit.
-
 ## Using them as templates
 
 Copy any shipped pipeline into the project pipeline directory and edit
