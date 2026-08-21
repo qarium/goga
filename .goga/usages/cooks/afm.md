@@ -112,8 +112,9 @@ afm honors the following additional per-stage keys inside each stage of a flow-f
 | `script_before` | str | Shell script run before the stage's agent invocation. |
 | `script` | str | Shell script run as the stage's action (mutually exclusive with the stage's `prompt`/`skills`). |
 | `script_after` | str | Shell script run after the stage's agent invocation. |
+| `script_timeout` | str | Timeout for the stage's script action (Go duration), applied via afm's script-timeout defaults. Authored by the goga pipeline compiler from a `timeout` stage directive; the value passes verbatim — a malformed duration surfaces at runtime. |
 
-These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive, translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`, and authors `auto_run: false` from a `trigger: manual` stage directive or a workflow `manual: true` instruction (never `true`; the key's absence is the norm).
+These keys are optional per stage; stages that do not carry them behave as before (backward compatible). goga authors `auto_approve` from its `approve: auto` workflow directive, translates its authoring `before_script`/`script`/`after_script` stage-body keys into `script_before`/`script`/`script_after`, compiles its authoring `timeout` stage directive into `script_timeout` (verbatim), and authors `auto_run: false` from a `trigger: manual` stage directive or a workflow `manual: true` instruction (never `true`; the key's absence is the norm).
 
 ## Integration pattern — running afm in a container
 

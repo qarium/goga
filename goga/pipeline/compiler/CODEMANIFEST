@@ -77,8 +77,8 @@ Annotations: |
 
   Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
   command, prompt, description, agents, supervisor, supervisor_prompt, skills,
-  script_before, script, script_after, then alphabetically-sorted unknown
-  keys. command is populated from the agent
+  script_before, script, script_after, script_timeout, then alphabetically-
+  sorted unknown keys. command is populated from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
   description is populated from the prompt field of `WorkflowStage`. Both
   are independent channels — pipeline-file prompt and workflow-file prompt
@@ -261,6 +261,19 @@ Annotations: |
   script together with prompt and/or skills is a structural error "script is
   mutually exclusive with prompt/skills in stage <name>"; before_script /
   after_script are compatible with prompt / skills / script (no error).
+
+  Stage timeout directive: timeout is a string stage-body directive (pipeline-file
+  stage AND embedded extend-stage) translated to script_timeout of the assembled
+  `FlowStage`. A non-string value is a structural error; timeout without script in
+  the same stage body is a structural error naming the stage (before_script /
+  after_script do not open the directive — script_timeout scopes to the script
+  action). The authoring key is consumed, never passed through; the value passes
+  verbatim with no format validation (the duration grammar belongs to afm at
+  runtime). The output key occupies the canonical slot immediately after
+  script_after and is present only when authored. Direct authoring of
+  script_timeout in a stage body is not forbidden. Loop-expanded copies inherit
+  the translated value verbatim; PipelineDocument bodies stay untouched
+  (output-side only).
 
 ---
 
@@ -549,10 +562,14 @@ Annotations: |
     `fields`: extra step fields in canonical key order (interactive,
               auto_approve, auto_run, command, prompt, description, agents,
               supervisor, supervisor_prompt, skills, script_before, script,
-              script_after, then alphabetically-sorted unknown keys).
+              script_after, script_timeout, then alphabetically-sorted
+              unknown keys).
               auto_run (bool) is present only when the stage's effective
               trigger is manual — the value is always False; auto_run: true
-              is never assembled. Insertion order of
+              is never assembled. script_before/script/script_after (str)
+              are present only when the corresponding stage directive was
+              authored; script_timeout (str) is present only when the
+              corresponding directive was authored. Insertion order of
               this dict IS the output order — the
               serializer iterates it as-is. command is populated from the
               agent field of `WorkflowStage` (composed as the in-container
@@ -597,14 +614,14 @@ Annotations: |
     "fields -> dict[str, Any]": |
       Extra fields in canonical key order: interactive, auto_approve,
       auto_run, command, prompt, description, agents, supervisor,
-      supervisor_prompt, skills, script_before, script, script_after, then
-      alphabetically-sorted unknown keys. auto_approve (bool) is present only
-      when the effective approve directive drives the roles effect
-      ("auto"/"dialog") + planner-in-roles fired; auto_run (bool) is present
-      only when the stage's effective trigger is manual — the value is always
-      False, auto_run: true is never assembled; script_before/script/
-      script_after (str) are present only when the corresponding stage
-      directive was authored. Insertion order IS the output order — the
+      supervisor_prompt, skills, script_before, script, script_after,
+      script_timeout, then alphabetically-sorted unknown keys. auto_approve
+      (bool) is present only when the effective approve directive drives the
+      roles effect ("auto"/"dialog") + planner-in-roles fired; auto_run (bool)
+      is present only when the stage's effective trigger is manual — the value
+      is always False, auto_run: true is never assembled; script_before/script/
+      script_after/script_timeout (str) are present only when the corresponding
+      stage directive was authored. Insertion order IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
       agents default-injected to ["auto"]; supervisor/supervisor_prompt only
       when authored.
@@ -781,14 +798,17 @@ Annotations: |
        key order: id, name, then the stage fields as-is (already in
        canonical order — interactive, auto_approve, auto_run, command,
        prompt, description, agents, supervisor, supervisor_prompt, skills,
-       script_before, script, script_after, then alphabetically-sorted
-       unknown keys), then depends_on when it is not None. The serializer
-       does NOT reorder — canonical order is fixed at `FlowStage` assembly
+       script_before, script, script_after, script_timeout, then
+       alphabetically-sorted unknown keys), then depends_on when it is not
+       None. The serializer does NOT reorder — canonical order is fixed at
+       `FlowStage` assembly
     3. Serialize the representation to YAML per `beautiful_yaml`, with the
        flow-style applied to agents and block-style applied to skills,
        depends_on, and the top-level prompt; auto_approve and auto_run as
        plain bool scalars; script_before / script / script_after as plain
-       scalars when single-line and block-literal scalars when multi-line
+       scalars when single-line and block-literal scalars when multi-line;
+       script_timeout as a plain scalar when single-line and a block-literal
+       scalar when multi-line (the script-family pattern)
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -800,9 +820,9 @@ Annotations: |
       when present), optional root_dir (second, when supplied), then
       fixed top-level key order (name, description, stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
-      description, and script_before/script/script_after), flow-style for
-      agents, block-style for skills and depends_on, auto_approve and
-      auto_run as plain bool scalars, single trailing newline
+      description, and script_before/script/script_after/script_timeout),
+      flow-style for agents, block-style for skills and depends_on,
+      auto_approve and auto_run as plain bool scalars, single trailing newline
     - When `doc` prompt is None — the output omits the prompt key
       entirely (no top-level prompt key in the output)
     - When `doc` root_dir is None — the output omits the root_dir key
@@ -817,6 +837,8 @@ Annotations: |
     - a stage without a manual-effective trigger serializes without the
       auto_run key (byte-identical output for trigger-free pipelines);
       auto_run serializes only as auto_run: false
+    - a stage without an authored timeout serializes without the
+      script_timeout key
 
     Constraints:
     - Do not reorder keys — the fields order is the caller's responsibility
@@ -1149,6 +1171,19 @@ Annotations: |
          before_script → script_before, script → script, after_script →
          script_after (the authoring keys are consumed, not passed through
          to output)
+       - Stage timeout directives: validate and translate the timeout key of the
+         (effective) body of every stage (pipeline-file stages, embedded
+         extend-stages, and every loop-expanded copy) in the same pass as the
+         script exclusivity check:
+         * a present timeout whose value is not a string → structural error
+           naming the stage
+         * a present timeout without a script key in the same body → structural
+           error naming the stage
+         * translate timeout → script_timeout (the authoring key is consumed),
+           placing the value verbatim into the canonical slot immediately after
+           script_after; the key is emitted only when timeout is authored, and
+           when both timeout and a direct script_timeout are authored, the
+           translated timeout value wins
        - approve effects: for a stage whose EFFECTIVE approve is "auto"
          (threaded in at step 4a), read the trigger fields from THAT STAGE'S
          body and apply two INDEPENDENT effects:
@@ -1186,14 +1221,14 @@ Annotations: |
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, auto_run,
          command, prompt, description, agents, supervisor, supervisor_prompt,
-         skills, script_before, script, script_after, then
+         skills, script_before, script, script_after, script_timeout, then
          alphabetically-sorted unknown keys), copying from the
          (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
-         fired; script_before / script / script_after
-         (str) are present only when the corresponding stage directive was
-         authored. Stage-body field translation: the input communication key
+         fired; script_before / script / script_after / script_timeout (str)
+         are present only when the corresponding stage directive was authored.
+         Stage-body field translation: the input communication key
          maps to the output interactive key in its canonical slot; an input
          interactive key (pipeline-file stage OR embedded extend-stage) is a
          structural error "interactive key is forbidden in stage body; use
@@ -1392,6 +1427,14 @@ Annotations: |
       (no auto_run key anywhere)
     - auto_run and the trigger rewrite are output-side only — PipelineDocument
       body stays the faithful mirror of the source pipeline-file
+    - timeout (when present in a stage body or extend body) must be a string and
+      requires script in the same body — violations are structural errors naming
+      the stage
+    - script_timeout is emitted only when timeout (or a direct script_timeout)
+      is authored; the value is carried verbatim with no format validation
+    - script_timeout occupies the canonical fields slot immediately after
+      script_after — a pipeline without timeout compiles byte-identically
+      (no script_timeout key anywhere)
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -1467,11 +1510,17 @@ Annotations: |
     - Do not let authoring script keys (before_script / script / after_script)
       pass through to output as unknown keys — they are consumed and
       translated to script_before / script / script_after
+    - Do not let the authoring timeout key pass through to output as an unknown
+      key — it is consumed by the translation
+    - Do not validate the timeout string grammar (Go duration) — the format
+      error belongs to afm at runtime
+    - Do not leak script_timeout into `PipelineDocument` — output-side
+      `FlowStage` field only
     - Canonical key order is fixed at `FlowStage` assembly — the full
       order (interactive, auto_approve, auto_run, command, prompt,
       description, agents, supervisor, supervisor_prompt, skills,
-      script_before, script, script_after, then alphabetically-sorted
-      unknown keys)
+      script_before, script, script_after, script_timeout, then
+      alphabetically-sorted unknown keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
       are output-side `FlowStage` fields only
     - Do not emit auto_run: true — the afm contract treats the key's absence

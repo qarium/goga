@@ -9,7 +9,7 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 
 Output FlowStage fields, canonical order:
 interactive, auto_approve, auto_run, command, prompt, description, agents, supervisor,
-supervisor_prompt, skills, script_before, script, script_after, <unknown A-Z>.
+supervisor_prompt, skills, script_before, script, script_after, script_timeout, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
 - communication → interactive (value true/false)
@@ -17,6 +17,7 @@ Authoring key → output key (the authoring key is consumed, not passed through)
 - before_script → script_before
 - script → script
 - after_script → script_after
+- timeout → script_timeout (verbatim str; requires script; omitempty)
 - roles → agents (via translate_role; default ["auto"] when absent/empty)
 
 An authoring auto_run key is rejected ("auto_run key is forbidden in stage body;
@@ -98,9 +99,31 @@ and/or skills is rejected at compile time — "script is mutually exclusive with
 prompt/skills in stage <name>". before_script/after_script are compatible
 with prompt/skills/script (no error).
 
+## Stage timeout directive
+
+`timeout` is a string stage-body directive (pipeline-file stage or extend-stage
+body) translated to the afm per-stage key `script_timeout`.
+
+- `timeout: "30m"` with `script` in the same body → the flow stage carries
+  `script_timeout: 30m` in the canonical slot immediately after `script_after`
+- a non-string value (int/bool/null/list/map) → structural error naming the stage
+- `timeout` without `script` (before_script/after_script do not open the
+  directive — script_timeout scopes to the script action) → structural error
+  naming the stage
+- the value passes verbatim — goga does not validate the Go duration grammar;
+  a malformed string (e.g. "3 min") reaches the flow-file as-is and fails in
+  afm at runtime
+- the key is emitted only when authored (omitempty); a pipeline without
+  `timeout` compiles byte-identically (no script_timeout key anywhere)
+- direct authoring of `script_timeout` in a stage body is not forbidden
+  (same stance as direct `script_before`); when both `timeout` and a direct
+  `script_timeout` are authored, the translated `timeout` value wins
+- loop-expanded copies inherit `script_timeout` verbatim; `PipelineDocument`
+  is unaffected (output-side only)
+
 ## Key presence
 
 Stages without approve, without script directives, without communication/roles
 changes, and without a manual-effective trigger produce no auto_approve /
-auto_run / script_* keys — those keys appear only when their source directive
-is present.
+auto_run / script_* / script_timeout keys — those keys appear only when their
+source directive is present.

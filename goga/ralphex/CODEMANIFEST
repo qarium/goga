@@ -19,12 +19,16 @@ Annotations: |
   Use the `ralphex` practice to interact with the external ralphex binary (CLI contract,
   invocation shape, flag set, PATH-resolved invocation, exit-code propagation).
 
-  The standard library subprocess and shutil modules are used for invoking the binary and
-  the PATH check. All output goes to sys.stderr (click is not used).
+  The launcher inherits the process environment for the ralphex subprocess; an
+  optional env layer (dict of strings), supplied by the caller, is applied on
+  top of the inherited environment for that subprocess only. The layer is never
+  logged and never printed on dry-run (secret-safe). The standard library
+  subprocess and shutil modules are used for invoking the binary and the PATH
+  check. All output goes to sys.stderr (click is not used).
 
 ---
 
-"run_ralphex(plan: str, options: dict[str, str | int | bool], dry_run: bool) -> exit_code: int":
+"run_ralphex(plan: str, options: dict[str, str | int | bool], dry_run: bool, env: dict[str, str] | None = None) -> exit_code: int":
   location: run_ralphex.py
   annotations: |
     Launch the external `ralphex` binary to execute the given build plan with the resolved
@@ -47,18 +51,25 @@ Annotations: |
               - review_patience (int)  → --review-patience  (value flag)
     `dry_run`: when True, print the assembled ralphex command to sys.stderr and return 0
               without launching.
+    `env`: optional environment layer ({str: str}) applied on top of the inherited
+           process environment for the ralphex subprocess — keys of `env` override
+           same-named inherited variables, every other inherited variable passes through
+           unchanged. None or an empty dict means pure inheritance with no layer. The
+           layer scopes to this subprocess only.
     `exit_code`: 0 on success, 1 when the ralphex binary is missing from PATH, otherwise
                 ralphex's own exit code
 
     Algorithm:
-    1. Receive `plan`, `options`, and `dry_run` from the caller
+    1. Receive `plan`, `options`, `dry_run`, and `env` from the caller
     2. Invoke ralphex via the `ralphex` practice with `plan` as the positional argument,
        --config-dir .ralphex/, and the flags mapped from `options` (precedence already
        applied by the caller)
-    3. On `dry_run`: print the assembled command to sys.stderr and return 0
+    3. On `dry_run`: print the assembled command to sys.stderr and return 0 — never print
+       the `env` layer values
     4. Verify `ralphex` is on PATH via the `ralphex` practice; when absent — return `exit_code` 1
-    5. Execute `ralphex` via subprocess (env inherited from os.environ — the build env is
-       delivered through the container env-file by the host launcher) and propagate its exit code
+    5. Execute `ralphex` via subprocess with the environment composed as the inherited
+       process environment overlaid with `env` (a None or empty `env` leaves the inherited
+       environment untouched) and propagate its exit code
 
     Apply the `conventions` practice for error-handling style and docstring formatting.
     Apply the `ralphex` practice for the general ralphex CLI contract (binary invocation,
@@ -72,8 +83,9 @@ Annotations: |
       True emits a bare --<flag> (False or absent → omit the flag); a scalar key emits
       --<flag> <value> and is omitted when the value is None, an empty string, or 0
     - Invoke ralphex through PATH — do not hard-code the ralphex binary path
-    - Inherit the process environment (os.environ) — the build env arrives via the docker
-      env-file, not via a settings file
+    - Compose the subprocess environment as the inherited os.environ overlaid with `env`;
+      apply the layer only to this subprocess
+    - On `dry_run`, the printed command carries no environment values
     - Apply the `ralphex` practice's exit-code rules verbatim
 
     Constraints:
@@ -81,7 +93,9 @@ Annotations: |
     - Do not resolve ralphex options (CLI > ProjectConfig > omit) — caller's responsibility
     - Do not resolve the agent wrapper path — caller's responsibility
     - Do not hard-code the ralphex binary path — rely on PATH inside the container
-    - Do not construct the env from a config object — inherit os.environ
+    - Do not construct the environment from a config object — `env` is an explicitly
+      passed primitive layer, not a config-derived environment
+    - Do not log or otherwise expose the `env` layer contents
 
 ---
 

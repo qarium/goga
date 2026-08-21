@@ -75,7 +75,8 @@ Annotations: |
   command's own finally.
 
   The command surfaces the review-phase tri-state flags to the user and rejects
-  the two-pass × worktree combination before any container work.
+  the two-pass × worktree combination — whether induced by a differing review
+  agent or by a declared review env — before any container work.
 
   The command runs goga.build inside a Docker container.
 
@@ -176,10 +177,15 @@ Annotations: |
         without it. Host-side guard — runs BEFORE any agent access to avoid a
         downstream TypeError.
     2.3. Review-worktree guard: when config.build.review_executor is present, its
-        agent is set and differs from task_executor.agent, and the worktree option
-        is active (CLI --worktree or config.build.worktree) → raise ClickException
-        naming the conflict (the ralphex --review mode ignores worktree — the review
-        would run against the wrong branch) — BEFORE the docker command is assembled.
+        agent is set and (the agent differs from task_executor.agent OR the
+        review_executor env is non-empty), and the worktree option is active (CLI
+        --worktree or config.build.worktree) → raise ClickException naming the
+        conflict (the ralphex --review mode ignores worktree — the review would
+        run against the wrong branch) — BEFORE the docker command is assembled.
+        The condition is config-level and skip-independent: the host does not
+        resolve the tri-state --skip-review, so an env-declaring run is rejected
+        here regardless of the skip flags (skip-time env handling belongs to the
+        in-container orchestrator).
     3. Collect cli_flags from click parameters; forward the review pair by the
        --worktree pattern: skip_review True → --skip-review; False →
        --no-skip-review; None → neither flag (the tri-state survives to the container)
@@ -314,6 +320,9 @@ Annotations: |
       in-container build
     - The two-pass × worktree conflict is a host-side guard — it fires before
       docker run, before any filesystem or container work
+    - The env-induced two-pass × worktree conflict is the same host-side guard
+      as the differing-agent one — it fires before docker run, before any
+      filesystem or container work, regardless of --skip-review
 
     Constraints:
     - Do not refresh an EXISTING image by default — refresh only when `update`

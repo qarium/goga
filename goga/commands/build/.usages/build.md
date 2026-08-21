@@ -94,8 +94,10 @@ build.review_executor.skip happens in-container (CLI wins). The reviewer
 composition (roles) and the review executor agent are configured only via
 .goga/config.yml build.review_executor — no CLI flags for them.
 
-A differing build.review_executor.agent combined with --worktree is rejected
-before the container starts (the review pass cannot follow the worktree branch).
+A differing build.review_executor.agent OR a non-empty build.review_executor.env
+(with agent set) combined with --worktree is rejected before the container starts
+(the review pass cannot follow the worktree branch). The guard is config-level and
+skip-independent — the host does not resolve the tri-state --skip-review.
 
 ## Proxy and hosts
 
