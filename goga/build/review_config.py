@@ -18,20 +18,24 @@ def validate_review_config(
     """Semantically validate the review configuration of a run whose review phase will run.
 
     Raises ValueError naming the invalid value: an unknown reviewer role (the
-    whitelist is synchronized with the default ralphex review agents) or, in a
-    two-pass run, a review executor whose wrapper script does not exist. A
-    skipped run returns without any checks — no review phase of it will
-    execute, so no review field of it is validated.
+    whitelist is synchronized with the default ralphex review agents), a
+    non-empty review env declared without a review agent (the env-requires-
+    agent gate), or, in a two-pass run, a review executor whose wrapper script
+    does not exist. A skipped run returns without any checks — no review phase
+    of it will execute, so no review field of it is validated.
 
-    The wrapper existence check lives here by design: `resolve_wrapper_path`
-    stays a pure string builder (the boundary owned by goga/agents), while
-    this routine is what must fail before any side effect — before .ralphex/
-    is written and before ralphex is launched. The task executor wrapper is
-    deliberately not validated; its absence surfaces at ralphex time.
+    The checks run in a fixed order — roles, then the env gate, then the
+    wrapper existence check — so the first violated rule is the one reported.
+    All of them live here by design: this routine is what must fail before any
+    side effect — before .ralphex/ is written and before ralphex is launched.
+    `resolve_wrapper_path` stays a pure string builder (the boundary owned by
+    goga/agents); the task executor wrapper is deliberately not validated, its
+    absence surfaces at ralphex time.
 
     Args:
         config: Build configuration of the run (context of the review decision).
-        review: Resolved review options; skip, roles and two_pass are read.
+        review: Resolved review options; skip, roles, review_env, review_agent
+            and two_pass are read.
     """
     if review.skip:
         return
@@ -39,6 +43,9 @@ def validate_review_config(
     for role in review.roles or []:
         if role not in ROLE_WHITELIST:
             raise ValueError(f"unknown review role: {role!r}; expected one of {sorted(ROLE_WHITELIST)}")
+
+    if review.review_env and review.review_agent is None:
+        raise ValueError("review env requires a review agent: set build.review_executor.agent")
 
     if review.two_pass:
         wrapper = resolve_wrapper_path(review.review_agent)
