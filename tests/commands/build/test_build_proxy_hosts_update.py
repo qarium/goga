@@ -86,9 +86,9 @@ class TestBuildProxyHostsUpdateContract:
         update_param = next(p for p in build_cmd.params if p.name == "update")
         assert "-u" in update_param.opts
 
-    def test_build_fourteen_options(self) -> None:
+    def test_build_fifteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 14
+        assert len(options) == 15
 
     def test_help_lists_new_options(self) -> None:
         runner = CliRunner()

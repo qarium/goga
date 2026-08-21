@@ -158,11 +158,12 @@ class TestCompileFlowContract:
         """The extended canonical order slots ``auto_approve`` and the script_* keys."""
         from goga.pipeline.compiler.compile_flow import _CANONICAL_KEY_ORDER
 
-        # ``auto_approve`` immediately follows ``interactive``; the script_* trio
-        # trails ``skills`` in authored order (before/script/after).
+        # ``auto_approve`` immediately follows ``interactive``; the script_*
+        # family trails ``skills`` in authored order (before/script/after) and
+        # closes with the translated ``script_timeout``.
         assert "auto_approve" in _CANONICAL_KEY_ORDER
         assert _CANONICAL_KEY_ORDER.index("auto_approve") == _CANONICAL_KEY_ORDER.index("interactive") + 1
-        assert _CANONICAL_KEY_ORDER[-3:] == ["script_before", "script", "script_after"]
+        assert _CANONICAL_KEY_ORDER[-4:] == ["script_before", "script", "script_after", "script_timeout"]
         assert _CANONICAL_KEY_ORDER.index("skills") < _CANONICAL_KEY_ORDER.index("script_before")
 
     def test_approve_sentinel_constant_exists(self) -> None:

@@ -24,14 +24,14 @@ _SHIPPED_PIPELINES = sorted(_ASSETS_DIR.glob("*.yml"))
 
 
 def test_shipped_pipeline_assets_exist() -> None:
-    """The assets directory carries the four canonical pipeline-files.
+    """The assets directory carries the six canonical pipeline-files.
 
     Guards against the assets path moving unnoticed (which would silently turn
     the parametrized compile test into a no-op over an empty collection).
     """
     names = {path.name for path in _SHIPPED_PIPELINES}
 
-    assert names == {"feature.yml", "bugfix.yml", "patch.yml", "review.yml"}
+    assert names == {"development.yml", "refinement.yml", "sync.yml", "bugfix.yml", "patch.yml", "review.yml"}
 
 
 def test_every_shipped_pipeline_compiles(tmp_path: Path) -> None:

@@ -69,63 +69,6 @@ class TestRunPipelineContainerContract:
         assert sig.default == ()
 
 
-# --- Discovery mode ---
-
-
-class TestPipelineDiscovery:
-    def test_pipeline_discovery_launches_container_with_list_command(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode assembles `-m goga.pipeline list` with no port/env-file/-p."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            result = run_pipeline_container(None, config)
-
-        assert result == 0
-        cmd = mock_popen.call_args[0][0]
-        # discovery runs the list subcommand
-        assert "-m" in cmd
-        assert "goga.pipeline" in cmd
-        assert "list" in cmd
-        # discovery has no port publishing, no env-file, no --port
-        assert "-p" not in cmd
-        assert "--port" not in cmd
-        assert "--env-file" not in cmd
-        # project mounted as /workspace working directory (workdir param → --workdir)
-        assert "--workdir" in cmd
-        assert "/workspace" in cmd
-
-    def test_pipeline_discovery_installs_and_restores_signal_handlers(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode installs SIGTERM/SIGINT handlers and kills the container on cleanup."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(_rpc_mod.signal, "signal") as mock_signal,
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run") as mock_run,
-        ):
-            run_pipeline_container(None, config)
-
-        # handlers installed at start and restored at end
-        sigterm_calls = [c for c in mock_signal.call_args_list if c.args and c.args[0] == signal.SIGTERM]
-        sigint_calls = [c for c in mock_signal.call_args_list if c.args and c.args[0] == signal.SIGINT]
-        assert len(sigterm_calls) == 2
-        assert len(sigint_calls) == 2
-        # the finally cleanup ran `docker kill <container>`
-        kill_calls = [c for c in mock_run.call_args_list if c.args and c.args[0][:2] == ["docker", "kill"]]
-        assert kill_calls
-
-
 # --- Run mode docker command shape ---
 
 
@@ -210,27 +153,6 @@ class TestPipelineRunCommand:
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container("deploy", config)
-
-        cmd = mock_popen.call_args[0][0]
-        assert not any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
-        assert not any(arg.endswith(":/home/goga/.goga/pipelines") for arg in cmd)
-
-    def test_pipeline_discovery_does_not_mount_host_user_pipelines(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode never bind-mounts the host's ~/.goga/pipelines into the container."""
-        config = _make_config()
-        fake_home = tmp_path / "home"
-        (fake_home / ".goga" / "pipelines").mkdir(parents=True)
-        monkeypatch.setattr(Path, "home", lambda: fake_home)
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config)
 
         cmd = mock_popen.call_args[0][0]
         assert not any(arg.endswith(":/home/goga/.goga/pipelines:ro") for arg in cmd)
@@ -536,20 +458,6 @@ class TestPipelineRunParallel:
         assert args[args.index("--parallel") + 1] == "4"
         # the Docker -p <port>:<port> port-publish token is isolated from parallel
         assert captured["params"]["p"] == "50321:50321"
-
-    def test_run_pipeline_container_discovery_omits_parallel(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode ignores ``parallel`` — never writes ``--parallel``."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-        captured = self._capture_docker(monkeypatch)
-
-        with mock.patch.object(subprocess, "run"):
-            result = run_pipeline_container(None, config, parallel=4)
-
-        assert result == 0
-        assert captured["args"] == ["-m", "goga.pipeline", "list"]
-        assert "--parallel" not in captured["args"]
 
     def test_pipeline_container_parallel_none_omitted_in_run(self, tmp_path: Path, monkeypatch) -> None:
         """``parallel=None`` (default) omits ``--parallel`` entirely (backward compat)."""

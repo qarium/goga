@@ -1,0 +1,41 @@
+prompt: |
+  Answer (feedbacks, proposes, questions and etc) in Russian language.
+
+stages:
+  brainstorm:
+    prompt: |
+      Architectural design process.
+
+      Requirements:
+      - Annotations describe the high-level order of actions
+      - Every usage file is connected through Imports and referenced in annotations
+      - Usage files are self-contained
+      - Footer Description describes the responsibility zone
+
+      Constraints:
+      - Annotations must not reference previous functionality
+      - Annotations does not contains implementation details
+      - Annotations must not use "X from Imports" phrasing
+      - Footer Description does not contains details
+  architecture-review:
+    approve: auto
+  apply-architecture:
+    approve: auto
+  code-design:
+    approve: auto
+  design-review:
+    approve: auto
+  coding-plan:
+    approve: auto
+  plan-review:
+    approve: auto
+  accept-result:
+    manual: false
+
+extend:
+  build:
+    title: "Build implementation"
+    after:
+      - commit-changes
+    timeout: "8h"
+    script: python3 -m goga.build docs/plans/$(git branch --show-current).md

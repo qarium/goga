@@ -1,0 +1,87 @@
+name: GogaDevelopment
+description: "Development process"
+---
+
+- name: brainstorm
+  title: "Task-based architecture development"
+  communication: true
+  prompt: |
+    Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
+    Save the architecture plan as `<git branch --show-current>.md`
+
+    Cell convention:
+    - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
+    - Highly complex and nested algorithms should be decomposed into smaller, single-responsibility components.
+    - Avoid creating single-function files. Functions/Classes should be logically grouped into modules based on high cohesion and shared context.
+
+    Communication:
+    - When approving report content gates (PRIMARY_ANALYSIS_REPORT, TYPE_MAP_REPORT, CELL_DISTRIBUTION_REPORT, TYPE_DETAIL_REPORT, CELL_ASSEMBLY_REPORT),
+      please provide full artifacts in the format specified in a question or propose to user.
+  skills:
+    - goga-brainstorm
+
+- name: architecture-review
+  title: "Review of the created architectural plan"
+  communication: true
+  prompt: |
+    Review the architecture plan `<git branch --show-current>.md`
+  skills:
+    - goga-review-arch
+
+- name: apply-architecture
+  title: "Apply the created architectural plan"
+  prompt: |
+    Apply the architecture plan `<git branch --show-current>.md`
+  skills:
+    - goga-apply
+
+- name: code-design
+  title: "Designing architecture into code"
+  communication: true
+  prompt: |
+    Save the design document as `<git branch --show-current>.md`
+  skills:
+    - goga-design
+
+- name: design-review
+  title: "Review of the created design plan"
+  communication: true
+  prompt: |
+    Review the design document `<git branch --show-current>.md`
+  skills:
+    - goga-review-design
+
+- name: coding-plan
+  title: "Create the coding plan"
+  communication: true
+  prompt: |
+    Use the design document `<git branch --show-current>.md`
+    Save the plan as `<git branch --show-current>.md`
+  skills:
+    - goga-plan
+
+- name: plan-review
+  title: "Review of the created coding plan"
+  communication: true
+  prompt: |
+    Review the plan `<git branch --show-current>.md`
+  skills:
+    - goga-review-plan
+
+- name: commit-changes
+  title: "Commit changes"
+  communication: true
+  prompt: |
+    Commit all added and modified files.
+
+    Constraints:
+    - Except changes in `docs/<defines|proposals|tasks|arch|design|plans>`.
+
+- name: accept-result
+  title: "Contracts & coverage audit"
+  communication: true
+  trigger: manual
+  prompt: |
+    Commit changes after fixes
+  skills:
+    - goga-accept

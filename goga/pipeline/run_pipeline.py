@@ -11,7 +11,7 @@ from .apply_skip_stages import apply_skip_stages
 from .compiler import compile_flow, translate_role
 from .list_pipelines import list_pipelines
 from .pipeline_entry import PipelineSource
-from .workflow import WorkflowDocument, parse_workflow
+from .resolve_workflow import resolve_workflow
 
 # The three overridable pipeline roles. Each role resolves to its afm prompt-file
 # stem via the single source of truth ``translate_role`` (planner→planning,
@@ -30,63 +30,15 @@ def _resolve_defaults_dir() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "afm" / "prompts"
 
 
-def _resolve_workflow(name: str) -> WorkflowDocument | None:
-    """Resolve an optional workflow per the workflow environment contract.
-
-    Precedence: ``GOGA_WORKFLOW_DISABLED`` (value ``"1"`` wins — workflow
-    disabled) > ``GOGA_WORKFLOW_NAME`` (explicit workflow name) > basename
-    fallback (the same name as the pipeline). The workflow-file path is
-    project-only and CWD-based — ``Path.cwd() / ".goga" / "workflows" /
-    "<name>.yml"`` — NOT derived from ``project_dir.parent``: ``project_dir``
-    is ``/workspace/.goga/pipelines``, so ``project_dir.parent`` is
-    ``/workspace/.goga`` and a parent-based composition would produce a double
-    ``.goga`` segment. ``Path.cwd()`` is ``/workspace`` in-container, i.e. the
-    project root. The host-side launcher performs explicit ``--workflow``
-    existence validation before launch; inside the container a missing file is
-    a defensive silent miss, not an error.
-
-    A structurally malformed workflow-file surfaces its
-    :class:`~goga.pipeline.workflow.WorkflowSyntaxError` from
-    :func:`parse_workflow` unchanged.
-
-    Args:
-        name: The pipeline name — used only for the basename fallback path.
-
-    Returns:
-        The parsed :class:`WorkflowDocument` when a workflow-file resolves and
-        exists, or ``None`` when workflow is disabled or no file is found.
-    """
-    if os.environ.get("GOGA_WORKFLOW_DISABLED") == "1":
-        return None
-
-    workflows_root = (Path.cwd() / ".goga" / "workflows").resolve()
-    workflow_name = os.environ.get("GOGA_WORKFLOW_NAME")
-    workflow_path = workflows_root / f"{workflow_name or name}.yml"
-
-    # Containment guard — workflow paths are project-only by design (CODEMANIFEST
-    # step 6b). A name carrying a ``..`` segment or an absolute prefix that
-    # escapes the workflows dir is a silent miss, never a traversal into the
-    # wider filesystem (``GOGA_WORKFLOW_NAME`` may originate from a less-trusted
-    # source than the host CLI).
-    try:
-        workflow_path.resolve().relative_to(workflows_root)
-    except ValueError:
-        return None
-
-    if not workflow_path.exists():
-        return None
-
-    return parse_workflow(workflow_path)
-
-
 def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> int:
     """Resolve, compile, and run a goga pipeline by name via the external ``afm`` binary.
 
     Resolves the pipeline name to a file via :func:`list_pipelines`, builds the
     pipeline file path from the matching entry's source directory, resolves an
-    optional workflow per the environment contract
-    (``GOGA_WORKFLOW_DISABLED`` > ``GOGA_WORKFLOW_NAME`` > basename fallback),
-    compiles the goga DSL pipeline-file into an afm flow-file via
+    optional workflow via :func:`~goga.pipeline.resolve_workflow.resolve_workflow`
+    from the environment decision (``GOGA_WORKFLOW_DISABLED`` >
+    ``GOGA_WORKFLOW_NAME`` > basename fallback), compiles the goga DSL
+    pipeline-file into an afm flow-file via
     :func:`compile_flow` at the path ``<AFM_DIR>/flow.yml`` (forwarding the
     parsed workflow when one resolved), materializes the four agent prompt files
     into ``<AFM_DIR>/prompts/`` (step 8), then launches ``afm`` via
@@ -172,11 +124,17 @@ def run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parall
     afm_dir = Path(afm_env).resolve()
     flow_path = afm_dir / "flow.yml"
 
-    # Step 6: resolve an optional workflow per the workflow environment contract
-    # (GOGA_WORKFLOW_DISABLED > GOGA_WORKFLOW_NAME > basename fallback). When a
-    # workflow-file resolves and exists, the parsed WorkflowDocument is forwarded
-    # to compile_flow; structural workflow errors propagate from parse_workflow.
-    workflow = _resolve_workflow(name)
+    # Step 6: resolve an optional workflow via ``resolve_workflow`` from the
+    # environment decision (GOGA_WORKFLOW_DISABLED > GOGA_WORKFLOW_NAME > basename
+    # fallback). The decision is read here and the shared rule set applies it —
+    # the same entry point the info-card path (describe_pipeline) uses with CLI
+    # flags, so what the card shows is what the run executes. DISABLED priority
+    # is enforced twice: in the input (the name is nulled when disabled) and as
+    # step 1 of the rule set. Structural workflow errors propagate from
+    # parse_workflow unchanged.
+    no_workflow = os.environ.get("GOGA_WORKFLOW_DISABLED") == "1"
+    workflow_name = None if no_workflow else os.environ.get("GOGA_WORKFLOW_NAME")
+    workflow = resolve_workflow(name, workflow_name, no_workflow)
 
     # Step 6e: merge CLI skip directives (the comma-split ``GOGA_SKIP_STAGES``
     # container env var) onto the resolved workflow without mutating it. An empty

@@ -62,7 +62,7 @@ Values are read from `.goga/config.yml`. A minimal configuration:
 
 ```yaml
 language: python
-image: qarium/goga-python-3.12:1.1   # top-level image, shared by build and pipeline (build.image is rejected)
+image: qarium/goga-python-3.12:1.2   # top-level image, shared by build and pipeline (build.image is rejected)
 build:
   task_executor:
     agent: claude                    # optional at the loader level; goga build raises a ClickException when it is None

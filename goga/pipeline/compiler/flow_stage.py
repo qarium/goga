@@ -9,7 +9,13 @@ type during compilation.
 ``depends_on`` is tristate: ``None`` produces no depends_on key in output;
 an empty list produces ``depends_on: []``. ``fields`` insertion order IS the
 output order — the serializer iterates it as-is, so the compiler must build it
-in canonical order.
+in canonical order: ``interactive``, ``auto_approve``, ``auto_run``, ``command``,
+``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+``skills``, ``script_before``, ``script``, ``script_after``, ``script_timeout``,
+then any unknown
+keys alphabetically. ``auto_run`` (bool) is present only when the stage's
+effective trigger is ``manual`` — the value is always ``False``;
+``auto_run: true`` is never assembled.
 """
 
 from __future__ import annotations
@@ -26,7 +32,15 @@ class FlowStage:
         id: Step identifier (output as a dash-prefixed id item).
         name: Display label (output as the name field).
         depends_on: Predecessor step ids, or ``None`` when absent.
-        fields: Extra step fields in canonical key order.
+        fields: Extra step fields in canonical key order
+            (``interactive``, ``auto_approve``, ``auto_run``, ``command``,
+            ``prompt``, ``description``, ``agents``, ``supervisor``,
+            ``supervisor_prompt``, ``skills``, ``script_before``, ``script``,
+            ``script_after``, ``script_timeout``, then unknown keys
+            alphabetically). ``auto_run``
+            (bool) is present only when the stage's effective trigger is
+            ``manual`` — the value is always ``False``; ``auto_run: true`` is
+            never assembled.
     """
 
     id: str

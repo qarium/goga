@@ -35,6 +35,11 @@ class TestFacadeAvailability:
         assert hasattr(goga_config_mod, "CodemanifestConfig")
         assert "CodemanifestConfig" in goga_config_mod.__all__
 
+    def test_review_executor_config_importable(self):
+        """ReviewExecutorConfig is importable from goga.config and in __all__."""
+        assert hasattr(goga_config_mod, "ReviewExecutorConfig")
+        assert "ReviewExecutorConfig" in goga_config_mod.__all__
+
     def test_load_config_importable(self):
         """load_project_config is importable from goga.config."""
         assert hasattr(goga_config_mod, "load_project_config")
@@ -117,6 +122,21 @@ class TestPipelineConfigAPIShape:
 class TestBuildConfigAPIShape:
     def test_has_task_executor_field(self):
         assert "task_executor" in BuildConfig.__dataclass_fields__
+
+    def test_review_executor_declared_fields(self):
+        """ReviewExecutorConfig declares exactly skip, agent, roles, env (in
+        order), env annotated dict[str, str] with a dict factory default.
+
+        The full shape pin (names, annotation, MISSING default, dict factory,
+        `{}` for an unset env) lives in
+        tests/config/test_loader.py::test_review_executor_config_declared_fields_include_env;
+        this facade-side check keeps one presence assertion per fact."""
+        from goga.config import ReviewExecutorConfig
+
+        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
+        assert names == ["skip", "agent", "roles", "env"]
+        assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
+        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
 
     def test_has_worktree_field(self):
         assert "worktree" in BuildConfig.__dataclass_fields__

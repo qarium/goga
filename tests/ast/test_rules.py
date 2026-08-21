@@ -1209,6 +1209,140 @@ class TestEmbeddedTypeHasLowLevel:
         assert isinstance(errors[0], ASTRuleError)
         assert errors[0].rule == "embedded_type_has_low_level"
 
+    def test_positive_embedded_from_root_via_import(self):
+        """Embedded type from a nested package of the repository root — no error."""
+        root_doc = DocumentRoot(
+            path=".",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(
+                            type_name={"Helper"},
+                            from_path="./helper",
+                            data={"Types": ["Helper"], "From": "./helper"},
+                        ),
+                    ],
+                ),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=True)],
+                routines=[],
+            ),
+        )
+        helper_doc = DocumentRoot(
+            path="helper",
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=False)],
+                routines=[],
+            ),
+        )
+        rule = EmbeddedTypeHasLowLevel(tree=[root_doc, helper_doc])
+        errors = rule.check(root_doc)
+        assert errors == []
+
+    def test_positive_embedded_from_root_via_name_map(self):
+        """Embedded type resolved via the global name map at root — no error."""
+        root_doc = DocumentRoot(
+            path=".",
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=True)],
+                routines=[],
+            ),
+        )
+        helper_doc = DocumentRoot(
+            path="helper",
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=False)],
+                routines=[],
+            ),
+        )
+        rule = EmbeddedTypeHasLowLevel(tree=[root_doc, helper_doc])
+        errors = rule.check(root_doc)
+        assert errors == []
+
+    def test_positive_embedded_routine_from_root(self):
+        """Embedded routine from a nested package of the root — no error."""
+        root_doc = DocumentRoot(
+            path=".",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(
+                            type_name={"helper_func"},
+                            from_path="helper",
+                            data={"Types": ["helper_func"], "From": "helper"},
+                        ),
+                    ],
+                ),
+            ),
+            body=BodyNode(
+                entities=[],
+                routines=[RoutineTypeNode(name="helper_func", embedded=True)],
+            ),
+        )
+        helper_doc = DocumentRoot(
+            path="helper",
+            body=BodyNode(
+                entities=[],
+                routines=[RoutineTypeNode(name="helper_func", embedded=False)],
+            ),
+        )
+        rule = EmbeddedTypeHasLowLevel(tree=[root_doc, helper_doc])
+        errors = rule.check(root_doc)
+        assert errors == []
+
+    def test_negative_embedded_at_root_from_same_cell(self):
+        """Embedded type sourced from the root package itself at root — error."""
+        root_doc = DocumentRoot(
+            path=".",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(
+                            type_name={"Helper"},
+                            from_path=".",
+                            data={"Types": ["Helper"], "From": "."},
+                        ),
+                    ],
+                ),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=True)],
+                routines=[],
+            ),
+        )
+        rule = EmbeddedTypeHasLowLevel(tree=[root_doc])
+        errors = rule.check(root_doc)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ASTRuleError)
+        assert errors[0].rule == "embedded_type_has_low_level"
+
+    def test_negative_embedded_at_root_from_outside_project(self):
+        """Embedded type sourced outside the project at root — error."""
+        root_doc = DocumentRoot(
+            path=".",
+            header=HeaderNode(
+                imports=ImportsNode(
+                    types=[
+                        ImportTypeItemNode(
+                            type_name={"Helper"},
+                            from_path="..",
+                            data={"Types": ["Helper"], "From": ".."},
+                        ),
+                    ],
+                ),
+            ),
+            body=BodyNode(
+                entities=[EntityTypeNode(name="Helper", embedded=True)],
+                routines=[],
+            ),
+        )
+        rule = EmbeddedTypeHasLowLevel(tree=[root_doc])
+        errors = rule.check(root_doc)
+        assert len(errors) == 1
+        assert isinstance(errors[0], ASTRuleError)
+        assert errors[0].rule == "embedded_type_has_low_level"
+
 
 # ---------------------------------------------------------------------------
 # 20. ImportsHasOnlyValidKeys

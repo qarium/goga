@@ -23,11 +23,12 @@ class TestRunRalphexContract:
         assert run_ralphex is not None
 
     def test_run_ralphex_signature_matches_contract(self) -> None:
-        """run_ralphex exposes the (plan, options, dry_run) -> int signature."""
+        """run_ralphex exposes the (plan, options, dry_run, env) -> int signature."""
         signature = inspect.signature(run_ralphex)
-        parameters = list(signature.parameters)
+        parameters = signature.parameters
 
-        assert parameters == ["plan", "options", "dry_run"]
+        assert list(parameters) == ["plan", "options", "dry_run", "env"]
+        assert parameters["env"].default is None
         assert signature.return_annotation in ("int", int)
 
 
@@ -74,6 +75,8 @@ class TestBuildCommand:
         [
             ("worktree", "--worktree"),
             ("skip_finalize", "--skip-finalize"),
+            ("review", "--review"),
+            ("tasks_only", "--tasks-only"),
         ],
     )
     def test_bool_flag_mapping_is_exact(self, key: str, flag: str) -> None:
@@ -152,3 +155,170 @@ class TestRunRalphexLogic:
 
         assert "env" not in mock_call.call_args.kwargs
         assert mock_call.call_args.args[0][0] == "ralphex"
+
+    def test_run_ralphex_env_layer_overlays_inherited_environment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A non-empty env layer overlays os.environ for the subprocess only:
+        layer keys win, everything else is inherited, the parent is untouched."""
+        monkeypatch.setenv("INHERITED_VAR", "base")
+        monkeypatch.setenv("SHARED_VAR", "inherited")
+
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("plan.md", {}, False, env={"SHARED_VAR": "layer", "LAYER_ONLY": "x"})
+
+        subprocess_env = mock_call.call_args.kwargs["env"]
+        assert subprocess_env["SHARED_VAR"] == "layer"
+        assert subprocess_env["LAYER_ONLY"] == "x"
+        assert subprocess_env["INHERITED_VAR"] == "base"
+        # The layer never mutates the parent environment.
+        import os
+
+        assert os.environ["SHARED_VAR"] == "inherited"
+
+    def test_run_ralphex_dry_run_never_prints_env_values(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """dry_run prints the argv (built from options only) and never leaks
+        env layer values; no subprocess machinery is touched."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex") as mock_which,
+        ):
+            result = run_ralphex("plan.md", {"review": True}, True, env={"SECRET_TOKEN": "s3cr3t"})
+
+        captured = capsys.readouterr()
+        assert result == 0
+        assert "s3cr3t" not in captured.err
+        assert "ralphex plan.md" in captured.err
+        mock_call.assert_not_called()
+        mock_which.assert_not_called()
+
+    @pytest.mark.parametrize("env", [None, {}], ids=["none", "empty"])
+    def test_run_ralphex_env_none_and_empty_no_env_kwarg(self, env: dict[str, str] | None) -> None:
+        """env=None and env={} both mean pure inheritance: subprocess.call is
+        invoked without an env kwarg (invariant pinned alongside
+        test_run_ralphex_inherits_env_no_env_kwarg)."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("p.md", {}, False, env=env)
+
+        assert "env" not in mock_call.call_args.kwargs
+        assert mock_call.call_args.args[0][0] == "ralphex"
+
+    def test_run_ralphex_env_path_override_hiding_binary_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override hides the binary from the exec
+        surfaces as the clean missing-binary message and exit 1 — not a
+        FileNotFoundError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=FileNotFoundError("[Errno 2] No such file or directory: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/nonexistent-dir"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "ralphex binary not found in PATH" in captured.err
+
+    def test_run_ralphex_env_path_override_non_executable_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override resolves a non-executable ralphex
+        surfaces as the clean failed-invoke message and exit 1 — not a
+        PermissionError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=PermissionError("[Errno 13] Permission denied: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/non-executable-dir"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_env_layer_illegal_variable_name_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer key that is not a legal environment variable name
+        (contains "=") is rejected by exec before the launch — a clean message
+        and exit 1, not a ValueError traceback escaping to the caller."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=ValueError("illegal environment variable name"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"A=B": "x"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_env_path_override_not_a_directory_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer whose PATH override contains a file component resolves
+        a ralphex path that is not a directory — the clean failed-invoke
+        message and exit 1, not a NotADirectoryError traceback."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=NotADirectoryError("[Errno 20] Not a directory: 'ralphex'"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"PATH": "/etc/hosts/bin"})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_env_layer_oversized_value_returns_1(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """An env layer value too large to exec (e.g. a pasted secret) is
+        rejected before the launch — the clean failed-invoke message and
+        exit 1, not an OSError (E2BIG) traceback. The message carries argv
+        only, never the layer value."""
+        with (
+            mock.patch.object(
+                _run_ralphex_module.subprocess,
+                "call",
+                side_effect=OSError(7, "Argument list too long", "ralphex"),
+            ),
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            result = run_ralphex("plan.md", {}, False, env={"BIG": "x" * 300000})
+
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "failed to invoke ralphex" in captured.err
+
+    def test_run_ralphex_maps_new_bool_flags(self) -> None:
+        """The review/tasks_only mode flags map to their bare ralphex flags;
+        False is equivalent to absent (bool-mapping rule regression guard)."""
+        with (
+            mock.patch.object(_run_ralphex_module.subprocess, "call", return_value=0) as mock_call,
+            mock.patch.object(_run_ralphex_module.shutil, "which", return_value="/usr/bin/ralphex"),
+        ):
+            run_ralphex("p.md", {"review": True}, False)
+            review_argv = list(mock_call.call_args.args[0])
+
+            run_ralphex("p.md", {"tasks_only": True}, False)
+            tasks_argv = list(mock_call.call_args.args[0])
+
+            run_ralphex("p.md", {"review": False, "tasks_only": False}, False)
+            neither_argv = list(mock_call.call_args.args[0])
+
+        assert "--review" in review_argv
+        assert "--tasks-only" not in review_argv
+
+        assert "--tasks-only" in tasks_argv
+        assert "--review" not in tasks_argv
+
+        assert "--review" not in neither_argv
+        assert "--tasks-only" not in neither_argv

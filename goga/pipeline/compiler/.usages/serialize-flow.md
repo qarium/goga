@@ -6,8 +6,9 @@ flow-style agents, block-style skills/depends_on/top-level prompt).
 
 ## Canonical per-stage key order
 
-interactive, auto_approve, command, prompt, description, agents, supervisor,
-supervisor_prompt, skills, script_before, script, script_after, <unknown A-Z>.
+interactive, auto_approve, auto_run, command, prompt, description, agents,
+supervisor, supervisor_prompt, skills, script_before, script, script_after,
+script_timeout, <unknown A-Z>.
 
 The serializer does NOT reorder — canonical order is fixed at `FlowStage`
 assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
@@ -16,12 +17,16 @@ assembly (`compile_flow`); `serialize_flow` iterates `fields` as-is.
 
 - agents: flow-style
 - skills, depends_on, top-level prompt: block-style
-- auto_approve: plain bool scalar
+- auto_approve, auto_run: plain bool scalars
 - script_before/script/script_after: plain scalars when single-line;
   block-literal scalars when multi-line
+- script_timeout: plain scalar when single-line; block-literal scalar when
+  multi-line (the script-family pattern)
 - empty list values (e.g. explicit empty depends_on) written explicitly
 
 ## Key presence
 
-Stages without auto_approve / script_before / script / script_after serialize
-without those keys — each appears only when its source directive is present.
+Stages without auto_approve / auto_run / script_before / script / script_after /
+script_timeout serialize without those keys — each appears only when its source
+directive is present. `auto_run` appears only for a manual-effective stage,
+always as `auto_run: false`.

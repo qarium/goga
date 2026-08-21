@@ -57,33 +57,35 @@ Initialize a project — the interactive wizard sets up `.goga/config.yml`, lang
 goga init
 ```
 
-### Ship a feature in one command
+### Ship a feature in two commands
 
-Goga ships ready-to-use pipelines that run the full feature cycle inside an isolated container. After `goga init`, from inside your agent:
-
-```bash
-goga pipeline feature
-```
-
-The `feature` pipeline walks the whole SDD lifecycle stage by stage:
-
-```
-discover → propose → task-review → brainstorm → architecture-review → apply-architecture →
-code-design → design-review → coding-plan → plan-review → prepare-build → accept-result
-```
-
-When the work does not need deep technical elaboration, skip the discovery stage and start at `propose`:
+Goga ships ready-to-use pipelines that run the workrounds inside an isolated container. After `goga init`, from inside your agent:
 
 ```bash
-goga pipeline feature -s discover
+goga pipeline refinement
+goga pipeline development
 ```
 
-Three more pipelines cover the remaining lifecycles:
+The `refinement` pipeline walks the product side — define → discover → propose → task-review — and ends with a reviewed task. The `development` pipeline picks it up and walks the engineering side stage by stage:
+
+```
+brainstorm → architecture-review → apply-architecture → code-design → design-review →
+coding-plan → plan-review → commit-changes → accept-result
+```
+
+When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
+
+```bash
+goga pipeline refinement -s define
+```
+
+Four more pipelines cover the remaining lifecycles:
 
 ```bash
 goga pipeline bugfix     # root-cause analysis and defect resolution
 goga pipeline patch      # refactoring or minimal change with a plan
 goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
+goga pipeline sync       # sync specifications and tests with the implementation
 ```
 
 A pipeline-file answers **what** the pipeline does. An optional [workflow](pipelines/workflows.md) file answers **how the same pipeline should behave in this project** — per-stage agent, extra prompt context, loop expansion, stage skipping — without forking the base file. See [Pipelines](pipelines/index.md) for the full functional model.
@@ -96,7 +98,7 @@ If you want explicit control over each step instead of running the whole cycle a
 /goga:propose <what you want to create>
 ```
 
-> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the manual cycle, its full and short variants, and the standalone shortcut.
+> The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`). Each subsequent command takes the previous artifact as input and produces the next one. See [Workflow](workflow/index.md) for the two workrounds — refinement and development — and the entry depths each supports.
 
 ## Next steps
 

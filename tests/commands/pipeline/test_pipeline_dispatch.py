@@ -185,29 +185,32 @@ class TestPipelineDispatchLogic:
 
 
 class TestPipelineDispatchEdge:
-    def test_pipeline_dispatch_discovery_clean_noop(self) -> None:
-        """In discovery mode (name is None) clean is forced to False."""
+    def test_pipeline_dispatch_list_form_ignores_clean(self) -> None:
+        """The flat-list form never carries run state — --clean is not forwarded.
+
+        Under the five-form contract a bare ``--clean`` names no form (step 2.2
+        exits 1), and the listing forms dispatch to
+        ``run_pipeline_info_container`` whose signature has no ``clean`` slot at
+        all — the runtime dir is never wiped outside the run form. The former
+        discovery-mode ``clean forced to False`` behavior lives here now.
+        """
         config = _make_config()
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
         ):
-            result = runner.invoke(pipeline, ["--clean"])
+            result = runner.invoke(pipeline, ["--list", "--clean"])
 
         assert result.exit_code == 0
-        mock_run.assert_called_once_with(
+        mock_info.assert_called_once_with(
             name=None,
+            info=False,
             config=config,
-            extra_env=(),
-            proxy=None,
             hosts={},
-            clean=False,
             update=False,
             workflow=None,
             no_workflow=False,
-            skip=(),
-            parallel=None,
         )
 
     def test_pipeline_add_host_merges_over_config(self) -> None:

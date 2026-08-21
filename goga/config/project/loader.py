@@ -9,6 +9,7 @@ from .config import (
     LintConfig,
     PipelineConfig,
     ProjectConfig,
+    ReviewExecutorConfig,
     TaskExecutorConfig,
 )
 
@@ -393,6 +394,74 @@ def _optional_mapping(data: dict, key: str) -> dict | None:
     return section
 
 
+def _parse_review_executor(build_data: dict) -> ReviewExecutorConfig | None:
+    """Parse the optional ``build.review_executor`` section (loader step 6.5).
+
+    Structural-only validation, mirroring the style of the sibling ``_parse_*``
+    helpers: absent or YAML-null resolves to None; a present non-mapping is a
+    type error. ``skip`` must be a real bool (``isinstance(x, bool)`` — a YAML
+    int ``1`` is deliberately rejected, since ``isinstance(1, bool)`` is False
+    while ``1 == True``); ``agent`` reuses ``_parse_optional_agent`` so an empty
+    string normalizes to None; ``roles`` must be a list of strings and — when
+    empty — is passed through as an empty list verbatim (NOT coerced to None;
+    the "full default set" reading belongs to the consumer). ``env`` must be a
+    mapping with string keys and values — note the null-tolerance deliberately
+    differs from ``build.task_executor.env``: a YAML-null ``env`` here is a
+    VALID empty mapping (it resolves to ``{}``, not an error). No role/agent
+    whitelists and no env semantics live here — validation beyond structure
+    belongs to the consumer.
+
+    Args:
+        build_data: The already-parsed ``build`` mapping.
+
+    Returns:
+        A ``ReviewExecutorConfig`` storing every field verbatim (``env`` as a
+        fresh dict, ``{}`` when absent/YAML-null/empty), or None when the
+        section is absent or YAML-null.
+
+    Raises:
+        ValueError: When the section is present but not a mapping, or when
+            ``skip``/``agent``/``roles``/``env`` is present with an invalid
+            type.
+    """
+    raw = build_data.get("review_executor")
+
+    if raw is None:
+        return None
+
+    if not isinstance(raw, dict):
+        raise ValueError("build.review_executor must be a mapping in .goga/config.yml")
+
+    skip = raw.get("skip")
+
+    if skip is not None and not isinstance(skip, bool):
+        raise ValueError("build.review_executor.skip must be a bool in .goga/config.yml")
+
+    agent = _parse_optional_agent(raw.get("agent"), "build.review_executor")
+
+    roles_raw = raw.get("roles")
+
+    if roles_raw is None:
+        roles = None
+    elif not isinstance(roles_raw, list) or not all(isinstance(x, str) for x in roles_raw):
+        raise ValueError("build.review_executor.roles must be a list of strings in .goga/config.yml")
+    else:
+        roles = list(roles_raw)
+
+    env_raw = raw.get("env")
+
+    if env_raw is None:
+        env = {}
+    elif not isinstance(env_raw, dict):
+        raise ValueError("build.review_executor.env must be a mapping in .goga/config.yml")
+    elif not all(isinstance(k, str) and isinstance(v, str) for k, v in env_raw.items()):
+        raise ValueError("build.review_executor.env must have string keys and values")
+    else:
+        env = dict(env_raw)
+
+    return ReviewExecutorConfig(skip=skip, agent=agent, roles=roles, env=env)
+
+
 def _parse_build(build_data: dict) -> BuildConfig:
     """Parse and validate the build section into a BuildConfig instance.
 
@@ -410,6 +479,7 @@ def _parse_build(build_data: dict) -> BuildConfig:
         raise ValueError("build.task_executor must be a mapping in .goga/config.yml")
 
     task_executor = _parse_task_executor(task_executor_data)
+    review_executor = _parse_review_executor(build_data)
 
     proxy = _parse_proxy(build_data.get("proxy"), "build")
     hosts = _parse_hosts(build_data.get("hosts"), "build")
@@ -426,6 +496,7 @@ def _parse_build(build_data: dict) -> BuildConfig:
         prompts_dir=build_data.get("prompts_dir"),
         agents_dir=build_data.get("agents_dir"),
         codex_review=build_data.get("codex_review"),
+        review_executor=review_executor,
         proxy=proxy,
         hosts=hosts,
     )

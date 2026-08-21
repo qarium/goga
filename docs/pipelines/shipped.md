@@ -1,15 +1,17 @@
 # Shipped Pipelines
 
-Goga ships four pipeline-files inside the installed package at
+Goga ships six pipeline-files inside the installed package at
 `goga/assets/pipelines/`. They cover the most common authoring
 lifecycles and can be used as templates for project-specific pipelines.
 
 | Pipeline | Purpose                                                              |
 |----------|----------------------------------------------------------------------|
-| `feature` | End-to-end feature implementation lifecycle                        |
+| `refinement`  | Product definition and task refinement: define, discover, propose  |
+| `development` | End-to-end development lifecycle: architecture, design, plan, accept |
 | `bugfix`  | Root-cause analysis and resolution for a defect                    |
 | `patch`   | Refactoring or minimal change with a formalized plan               |
 | `review`  | Scoped review of code, contracts, docs, then lint/format/tests     |
+| `sync`    | Sync specifications and tests with the implementation              |
 
 ## How pipelines get installed
 
@@ -23,7 +25,7 @@ Two sources feed `~/.goga/pipelines/`, applied in this order:
 
 1. **Internal source** — flat `*.yml` files from `goga/assets/pipelines/`
    shipped with the goga package. These are always installed first, are
-   written **un-prefixed** (e.g. `feature.yml`), and establish the base.
+   written **un-prefixed** (e.g. `development.yml`), and establish the base.
 2. **Tool packages** — every installed Python package with the
    `goga_tool_*` prefix is scanned for a `pipelines/` directory. Each
    flat `*.yml` file `<name>.yml` in that directory is copied into
@@ -35,7 +37,7 @@ Two sources feed `~/.goga/pipelines/`, applied in this order:
 Namespacing makes every tool pipeline addressable as
 `goga pipeline <tool>:<name>` (e.g. `goga pipeline acme:deploy`), while
 internal pipelines stay un-prefixed and are addressed as
-`goga pipeline <name>` (e.g. `goga pipeline feature`). This structurally
+`goga pipeline <name>` (e.g. `goga pipeline development`). This structurally
 prevents collisions both between a tool pipeline and an internal-source
 pipeline and between two tools that ship the same pipeline name.
 
@@ -79,22 +81,39 @@ on with a [workflow](workflows.md), or shadowed by a same-named project
 pipeline (project source wins on name conflicts — see
 [Discovery](pipeline-file.md#document-shape)).
 
-## `feature`
+## `refinement`
 
-End-to-end feature implementation. Twelve stages that walk from
-technical discovery through acceptance:
+The refinement workround as a pipeline. Four stages that turn a product
+idea into a reviewed task:
 
 ```
-discover → propose → task-review → brainstorm → architecture-review → apply-architecture →
-code-design → design-review → coding-plan → plan-review → prepare-build → accept-result
+define → discover → propose → task-review
 ```
 
-The `discover` stage runs the `goga-discover` skill and records the
-settled decision as a short ADR. The `propose`, `brainstorm`,
-`code-design`, and `coding-plan` stages emit documents named after the
-current git branch; the `*-review` stages validate them; `prepare-build`
-commits the accumulated changes and waits for user confirmation that the
-implementation is built before acceptance runs.
+`define` runs the `goga-define` skill and produces a PRD; `discover`
+records the settled technical decisions as a short ADR; `propose`
+formulates the structured task; `task-review` verifies it. The `define`,
+`discover`, `propose`, and `task-review` stages emit and consume
+documents named after the current git branch (`docs/defines/`,
+`docs/proposals/`, `docs/tasks/`), and each later stage falls back to
+the earlier artifacts when they exist.
+
+## `development`
+
+The development workround as a pipeline. Nine stages that walk from a
+reviewed task through acceptance:
+
+```
+brainstorm → architecture-review → apply-architecture → code-design → design-review →
+coding-plan → plan-review → commit-changes → accept-result
+```
+
+The `brainstorm`, `code-design`, and `coding-plan` stages emit documents
+named after the current git branch; the `*-review` stages validate them;
+`commit-changes` commits the accumulated changes and waits for user
+confirmation that the implementation is built before acceptance runs.
+`accept-result` is triggered manually (`trigger: manual`) — it runs the
+acceptance audit only when you decide the implementation is done.
 
 ## `bugfix`
 
@@ -164,39 +183,39 @@ fabricate a finding priority when it is not obvious (set it as
 stage; fix findings only after user confirmation. The `testing` stage
 must not ignore any error.
 
-## Shared `commit-changes` stage
+## `sync`
 
-The `bugfix`, `patch`, and `review` pipelines share the same
-`commit-changes` stage, and `feature` ships a stage named
-`prepare-build` with the same behavior. Each of these stages
-commits the untracked changes accumulated during the previous stages.
-In `feature` the stage carries `communication: true`
-and asks the user whether the implementation is built and ready for
-acceptance — it never autoconfirms the user's answer and genuinely waits
-for explicit confirmation before `accept-result` runs. In `bugfix` and
-`patch` the stage has no `communication` field and runs autonomously.
-(The authoring field is `communication`; the compiled flow-file still
-carries the afm key `interactive`.) In `review` the stage also has no
-`communication` field: it simply commits the accumulated review fixes,
-with no acceptance stage to follow.
+Re-syncs specifications and tests with the implementation. Two stages:
 
-The stage explicitly excludes `docs/<proposals|tasks|arch|design|plans>`
-from the commit path, so in-flight design artifacts that live outside the
-source tree are not bundled into the implementation commit.
-
-## Using them as templates
-
-Copy any shipped pipeline into the project pipeline directory and edit
-the copy:
-
-```bash
-cp ~/.goga/pipelines/feature.yml .goga/pipelines/my-feature.yml
+```
+resolve → commit-changes
 ```
 
-The copy becomes a **project** pipeline and shadows the shipped one only
-when both share a name — otherwise they coexist as two distinct
-pipelines. See [Pipeline File](pipeline-file.md) for the authoring
-reference.
+`resolve` runs the `goga-accept` skill: starting from the uncommitted
+changes, it resolves the drift between code, contracts, and tests.
+`commit-changes` then commits the accumulated fixes.
+
+## Project overrides
+
+Shipped pipelines are global defaults, not the only way to run a
+process. To customize how a process behaves in your project, prefer a
+[workflow](workflows.md) — it layers project-specific behavior (extra
+prompt context, per-stage agent, loop expansion, stage skipping) on top
+of the shipped pipeline-file without forking it, so your project keeps
+tracking upstream changes to the base pipeline.
+
+When a workflow is not enough and you need a different pipeline
+structure, put your own pipeline-file into the project pipeline
+directory:
+
+```bash
+cp ~/.goga/pipelines/development.yml .goga/pipelines/my-development.yml
+```
+
+Project pipelines take precedence over global ones: on a name conflict
+the project pipeline wins and shadows the shipped one; without a name
+conflict they coexist as two distinct pipelines. See
+[Pipeline File](pipeline-file.md) for the authoring reference.
 
 To distribute a pipeline **across projects** alongside other goga
 tooling, ship it inside a `goga_tool_*` package under

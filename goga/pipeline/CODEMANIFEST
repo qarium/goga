@@ -2,6 +2,8 @@ Imports:
   - Types:
       - compile_flow
       - translate_role
+      - parse_dsl
+      - FlowStage
     Usages:
       - compile-flow
       - parse-dsl
@@ -29,10 +31,12 @@ Imports:
     From: goga/config
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   argparse: |
     Use the standard library argparse module for in-container CLI parsing.
-    Two subcommands: list (no args) and run NAME --port PORT [--parallel N].
+    Two subcommands: list (with an optional --info flag) and run (a required
+    name, an optional --info flag, optional workflow flags, --port required
+    only without --info, and an optional --parallel N).
   cli_entrypoint: |
     The in-container CLI is launched through the package runpy entrypoint
     (python -m goga.pipeline). The package __main__ module MUST stay a thin
@@ -74,89 +78,68 @@ Usages:
     fails with a readable error before launch.
 
 Annotations: |
-  The `conventions` practice is used for:
+  The `convention` practice is used for:
   - Working with the codebase
   - Organizing the REPL development cycle
   - Debugging and testing
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell owns the entire pipeline workflow: discovery of *.yml pipeline
+  This cell owns the pipeline workflow surface: discovery of *.yml pipeline
   files across the project and user pipeline directories, the pipeline-file
-  entity model, run coordination, and the in-container CLI entrypoint
-  pipeline_cli. It delegates subprocess execution to `run_flow` from
-  goga/afm (per the `run-flow` practice) — afm run is invoked inside the
-  container via `run_flow`, never directly from this cell.
+  entity model, the informational surface (overview and card), run
+  coordination, and the in-container CLI entrypoint `pipeline_cli`.
+  Subprocess execution is delegated to `run_flow` — afm run is invoked inside
+  the container, never directly.
 
-  Use the standard library dataclasses module (NOT pydantic) for
-  `PipelineEntry`, per project convention — pydantic is treated as tech debt.
-  Use the standard library enum module for `PipelineSource` (str-backed).
-  Use the `argparse` practice for the in-container CLI entrypoint.
-  Use the `cli_entrypoint` practice to keep the __main__ module a thin
-  wrapper and to ensure `pipeline_cli` is defined in the cli module — never
-  in __main__ — so that the python -m goga.pipeline invocation does not emit
-  a runpy RuntimeWarning about __main__ being pre-imported into sys.modules.
-  Use pathlib.Path for directory and path resolution.
+  Build the data models `PipelineEntry`, `PipelineSummary`, `PipelineCard`,
+  and `CardStage` with the standard library dataclasses module (kw_only=True
+  per `convention`); `PipelineSource` with the standard library enum module
+  (str-backed). Use pathlib.Path for directory and path resolution.
 
   The pipeline directories are <cwd>/.goga/pipelines/ (project-level,
-  user-authored) and ~/.goga/pipelines/ (user-level, populated by
-  goga connect). On a name conflict, the project source wins.
+  user-authored) and ~/.goga/pipelines/ (user-level, populated by goga
+  connect). On a name conflict, the project source wins. The workflow
+  directory is <cwd>/.goga/workflows/ (project-level).
 
-  The workflow directory is <cwd>/.goga/workflows/ (project-level,
-  user-authored). Workflows are an OPTIONAL extension layer applied during
-  pipeline compilation. Workflow resolution is environment-driven and
-  happens INSIDE the container in `run_pipeline` (per the `parse-workflow`
-  practice): GOGA_WORKFLOW_DISABLED=1 forces no workflow;
-  GOGA_WORKFLOW_NAME=<wf-name> overrides the workflow name (file path
-  resolves to <cwd>/.goga/workflows/<wf-name>.yml); when neither env var is
-  set, `run_pipeline` falls back to the basename of the pipeline name
-  (<cwd>/.goga/workflows/<pipeline_name>.yml) — silent miss if that file
-  does not exist (no error, workflow = None). When a workflow path resolves
-  and exists, `run_pipeline` calls `parse_workflow` to obtain a
-  `WorkflowDocument`, which is passed to `compile_flow` as the optional
-  workflow argument.
+  Workflow resolution is one rule set shared by run coordination and the
+  card: an explicit workflow name, forced disabling, and the basename
+  auto-match of the pipeline name are resolved by `resolve_workflow`, so the
+  card always reflects the workflow a run with the same flags would apply.
+  Use `parse-workflow` for the accepted workflow-file structure.
 
-  GOGA_SKIP_STAGES=<csv> carries the CLI --skip/-s names: `run_pipeline`
-  reads them and applies via `apply_skip_stages` as in-memory `WorkflowStage`
-  skip directives merged onto the resolved workflow (or a freshly constructed
-  `WorkflowDocument` when no workflow resolved, e.g. --no-workflow or no
-  auto-match), BEFORE `compile_flow`. The compiler then removes the skipped
-  stages and transparently reconnects their dependents' depends_on. Unset/empty
-  = no skip. The host performs NO stage-name validation — unknown names surface
-  as the compiler's structural error in-container.
+  GOGA_SKIP_STAGES=<csv> carries the CLI skip names in run coordination:
+  applied in-memory onto the resolved workflow before compilation. The CLI
+  performs no stage-name validation — unknown names surface as the
+  compiler's structural error.
 
-  This cell runs inside the goga Docker image when invoked through
-  python -m goga.pipeline. The host-side launcher lives in
+  The cell runs inside the goga Docker image when invoked through
+  python -m goga.pipeline; the host-side launcher lives in
   goga/commands/pipeline (docker runtime boundary — no Python Imports).
 
-  Compilation step: `run_pipeline` invokes `compile_flow` (per the
-  `compile-flow` practice) to transform the discovered pipeline-file from
-  goga DSL into an afm flow-file at runtime, inside the container. When a
-  workflow is resolved, the parsed `WorkflowDocument` is forwarded to
-  `compile_flow` so the compiler can reconstruct the body per the workflow
-  instructions before serializing the flow-file. The output path is the
-  flow.yml file inside the directory pointed to by the AFM_DIR environment
-  variable. Use the `parse-dsl` and `serialize-flow` practices to understand
-  the intermediate stages of the compilation pipeline when a lower-level
-  view is required.
+  Use the `argparse` practice for the in-container CLI parsing and the
+  `cli_entrypoint` practice for the thin __main__ delegation with the
+  in-container docker guard (`ensure-in-docker`).
 
-  Prompt materialization step: after `compile_flow`, `run_pipeline`
-  materializes the four default agent prompt files from the installed goga
-  package (goga/assets/afm/prompts/, per the `default_prompts` practice)
-  into the runtime directory at <AFM_DIR>/prompts/, then applies a
-  per-role override — for each non-None role field of the pipeline
-  document header (planner/executor/reviewer) of the documents tuple
-  returned by `compile_flow` (per the `compile-flow` practice), the
-  corresponding <stem>.md file — stem resolved via `translate_role`
-  (imported from goga/pipeline/compiler) — is overwritten with the inline
-  prompt text. summary has no override field; summary.md is always
-  copied from the default. The override is a full
-  replacement (no merge, no concatenation). All four files are written
-  unconditionally — when a default is missing from the package AND no
-  inline override is supplied for that key, materialization fails with a
-  readable error before `run_flow` is invoked. The compiled flow-file is
-  unaffected — inline prompts are a goga-side artifact, not part of the
-  afm flow-file contract.
+  Compilation step: run coordination invokes `compile_flow` (see
+  `compile-flow`) to transform the discovered pipeline-file into an afm
+  flow-file at runtime inside the container; use `parse-dsl` and
+  `serialize-flow` for the intermediate stages when a lower-level view is
+  required.
+
+  Prompt materialization step: after compilation, run coordination
+  materializes the four default agent prompt files (per `default_prompts`)
+  into <AFM_DIR>/prompts/ and applies per-role inline overrides.
+
+  Informational surface: the overview lists every discovered pipeline with
+  its description from the DSL header; the card reports the name, the
+  description, and the post-workflow stage composition produced by the same
+  compilation machine a run uses. The card reads no run-only
+  GOGA_SKIP_STAGES environment variable — the CLI skip channel is a run
+  concern — while workflow-file skip directives apply through the shared
+  compilation machine (they are part of the composition a run with the same
+  workflow flags executes). The card writes nothing into the project or
+  runtime directories.
 
 ---
 
@@ -176,7 +159,7 @@ Annotations: |
     (raising ValueError on invalid input).
 
     Requirements:
-    - Use @dataclass(kw_only=True) (per `conventions`)
+    - Use @dataclass(kw_only=True) (per `convention`)
     - `name` must not contain path separators ("/", "\\") or the .yml extension
     - `name` must not be empty
 
@@ -193,13 +176,91 @@ Annotations: |
     str-backed Enum declaring the origin of a pipeline-file.
 
     Modeled via the standard library enum module; str-mixin so values
-    serialize as plain strings (per the `conventions` practice).
+    serialize as plain strings (per the `convention` practice).
 
   properties:
     "PROJECT = \"project\"": |
       Origin = project-level <cwd>/.goga/pipelines/.
     "USER = \"user\"": |
       Origin = user-level ~/.goga/pipelines/.
+
+"PipelineSummary(name: str, source: PipelineSource, description: str, display_name: str = \"\")":
+  location: pipeline_summary.py
+  annotations: |
+    Describe one row of the overview: the discovered pipeline name, its
+    origin, its DSL header description, and the authored header name.
+
+    `name`: pipeline name without extension
+    `source`: origin of the pipeline — `PipelineSource` value
+    `description`: pipeline description taken from the DSL header
+    `display_name`: authored pipeline name from the DSL header; may differ
+                    from `name`; defaults to an empty string
+
+    Build with the standard library dataclasses module and
+    @dataclass(kw_only=True) (per `convention`).
+
+    Requirements:
+    - Use @dataclass(kw_only=True)
+    - `name` follows the `PipelineEntry` validation rules — non-empty, no
+      path separators, no .yml suffix
+    - `display_name` defaults to an empty string — constructions without it
+      remain valid
+
+  properties:
+    "name -> str": |
+      Pipeline name without extension.
+    "source -> PipelineSource": |
+      Origin of the pipeline.
+    "description -> str": |
+      Description from the DSL header.
+    "display_name -> str": |
+      Authored pipeline name from the DSL header; may differ from the
+      discovered stem.
+
+"PipelineCard(name: str, description: str, stages: list[CardStage])":
+  location: pipeline_card.py
+  annotations: |
+    Describe the card of a single pipeline: the authored name and
+    description plus the ordered stage rows.
+
+    `name`: pipeline name from the DSL header
+    `description`: pipeline description from the DSL header
+    `stages`: stage rows in execution order — one per compiled stage
+
+    Build with the standard library dataclasses module and
+    @dataclass(kw_only=True) (per `convention`).
+
+    Requirements:
+    - Use @dataclass(kw_only=True)
+
+  properties:
+    "name -> str": |
+      Pipeline name from the DSL header.
+    "description -> str": |
+      Pipeline description from the DSL header.
+    "stages -> list[CardStage]": |
+      Stage rows in execution order; loop-expanded copies appear as
+      separate rows.
+
+"CardStage(id: str, title: str)":
+  location: pipeline_card.py
+  annotations: |
+    Describe one stage row of the card.
+
+    `id`: stage identifier
+    `title`: stage display title
+
+    Build with the standard library dataclasses module and
+    @dataclass(kw_only=True) (per `convention`).
+
+    Requirements:
+    - Use @dataclass(kw_only=True)
+
+  properties:
+    "id -> str": |
+      Stage identifier.
+    "title -> str": |
+      Stage display title — the display name of the compiled `FlowStage`.
 
 "list_pipelines(project_dir: Path, user_dir: Path) -> entries: list[PipelineEntry]":
   location: list_pipelines.py
@@ -221,7 +282,7 @@ Annotations: |
        set to `PipelineSource`.USER.
     3. Return the combined `entries` list.
 
-    Apply the `conventions` practice for the filesystem scanning code
+    Apply the `convention` practice for the filesystem scanning code
     (relative imports, logging, docstring style).
 
     Requirements:
@@ -236,19 +297,186 @@ Annotations: |
     - When a name exists in both sources, the project source wins (no duplicate
       entries)
 
+"describe_pipelines(project_dir: Path, user_dir: Path) -> summaries: list[PipelineSummary]":
+  location: describe_pipelines.py
+  annotations: |
+    Compose the overview of every discovered pipeline: each entry paired with
+    the authored name and description from its DSL header.
+
+    `project_dir`: project-level pipelines directory (absolute)
+    `user_dir`: user-level pipelines directory (absolute)
+    `summaries`: one `PipelineSummary` per discovered pipeline, in discovery
+                 order
+
+    Apply `convention` for filesystem reading, logging, and docstring style.
+
+    Algorithm:
+    1. Discover entries via `list_pipelines`
+    2. For each entry: compose the pipeline-file path inside its source
+       directory, read the file, parse it via `parse_dsl`, and take the header
+       name and description
+    3. Build a `PipelineSummary` from the entry name, entry source, the
+       header description, and the authored header name (the summary
+       display_name field)
+    4. Return the summaries in discovery order
+
+    Requirements:
+    - The description and the authored header name (summary display_name
+      field) come from the DSL header; the name is the discovered stem
+    - A damaged pipeline file (unreadable or structurally invalid) aborts the
+      whole overview with a readable error — no partial list, no silent
+      skips, no placeholder markers
+    - Read the filesystem only; write nothing
+
+    Constraints:
+    - Do not sort or filter the summaries — discovery order is preserved
+    - Do not compile pipeline files — the overview reads headers only
+    - Do not extend the discovery contract — names and sources come from
+      `list_pipelines` unchanged
+
+"resolve_workflow(pipeline_name: str, workflow_name: str | None, no_workflow: bool) -> workflow: WorkflowDocument | None":
+  location: resolve_workflow.py
+  annotations: |
+    Resolve the optional workflow for a pipeline: the single rule set shared
+    by run coordination and the card.
+
+    `pipeline_name`: pipeline name without extension (the basename auto-match
+                     key)
+    `workflow_name`: optional explicit workflow name (without the .yml
+                     extension)
+    `no_workflow`: when True, workflow application is disabled
+    `workflow`: the parsed `WorkflowDocument`, or None when no workflow applies
+
+    Apply `parse-workflow` for the accepted structure and the parse contract.
+    Apply `convention` for docstring style.
+
+    Algorithm:
+    1. When `no_workflow` is True — return None
+    2. Compose the workflow-file path under <cwd>/.goga/workflows/: named
+       `workflow_name`.yml when provided (an empty string counts as not
+       provided), otherwise the pipeline basename `pipeline_name`.yml
+    3. Containment guard: when the composed path resolves outside the
+       <cwd>/.goga/workflows/ directory (a ".." segment or an absolute
+       prefix in the name) — return None (silent miss; workflow files are
+       project-only, never resolved into the wider filesystem)
+    4. When the composed file exists — parse it via `parse_workflow` and
+       return the resulting `WorkflowDocument`; structural errors propagate
+       with their readable messages
+    5. Otherwise — return None (silent miss; an absent workflow-file is not an
+       error)
+
+    Requirements:
+    - The resolution rules are exactly: disabled → None; explicit name → that
+      file (an empty string counts as no name — the basename auto-match
+      applies); otherwise basename auto-match; a name escaping the workflows
+      directory → None; missing file → None
+    - Workflow files are project-only — the directory resolves from the
+      current working directory, and a composed path outside it is a silent
+      miss, never a traversal into the wider filesystem
+
+    Constraints:
+    - Do not treat a missing workflow-file as an error — the auto-match is
+      opt-in
+    - Do not validate workflow contents beyond what `parse_workflow`
+      enforces
+    - Do not read environment variables — callers own their flag sources
+
+"order_stages(stages: list[FlowStage]) -> ordered: list[FlowStage]":
+  location: order_stages.py
+  annotations: |
+    Order flow stages for execution: a topological sort over the depends_on
+    references of each `FlowStage`.
+
+    `stages`: flow stages in declaration order
+    `ordered`: the same stages ordered for execution
+
+    Apply `convention` for docstring style.
+
+    Algorithm:
+    1. Build the ordering graph from the depends_on references of each
+       `FlowStage`
+    2. Repeatedly emit, among the stages whose references are all already
+       emitted, the one earliest in declaration order
+    3. Treat a reference naming no stage in the list as satisfied — dangling
+       references are the flow executor's concern, not an ordering error
+    4. When no remaining stage qualifies (a reference cycle), append the
+       remaining stages in declaration order
+
+    Requirements:
+    - Deterministic — declaration order is the tie-break at every step and
+      the fallback under cycles
+    - The result contains every input stage exactly once — none dropped,
+      none duplicated
+    - Pure — the input list and its stages are not mutated
+
+    Constraints:
+    - Do not validate references for dangling ids, cycles, or duplicates
+    - Do not rewrite depends_on — ordering only
+
+"describe_pipeline(name: str, project_dir: Path, user_dir: Path, workflow: str | None, no_workflow: bool) -> card: PipelineCard":
+  location: describe_pipeline.py
+  annotations: |
+    Compose the card of a single pipeline: name, description, and the
+    post-workflow stage composition as it would execute.
+
+    `name`: pipeline name without extension
+    `project_dir`: project-level pipelines directory (absolute)
+    `user_dir`: user-level pipelines directory (absolute)
+    `workflow`: optional explicit workflow name (without the .yml extension)
+    `no_workflow`: when True, workflow application is disabled
+    `card`: `PipelineCard` — the pipeline name and description from the DSL
+            header, one `CardStage` per stage in execution order
+
+    Apply `compile-flow` for the compilation contract and the documents tuple.
+    Apply `convention` for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Discover entries via `list_pipelines` and locate the matching name;
+       on no match report the missing pipeline with a readable error
+    2. Resolve the workflow via `resolve_workflow` with the pipeline name and
+       the workflow flags
+    3. Compile the pipeline-file via `compile_flow` into a temporary flow-file
+       located in a system temporary directory — outside the project
+       directory and outside every runtime directory — and receive the
+       documents tuple
+    4. Order the compiled stages via `order_stages`
+    5. Build the card: name and description from the parsed pipeline document
+       header; one `CardStage` per ordered stage — id from the `FlowStage`
+       id, title from the `FlowStage` name (the display label)
+    6. Discard the temporary flow-file and return the card
+
+    Requirements:
+    - The stage composition equals the composition a run of the same pipeline
+      with the same workflow flags would execute — the same compilation
+      machine produces both
+    - Loop-expanded stage copies appear as separate stages
+    - The run-only GOGA_SKIP_STAGES environment variable is not read — the
+      CLI skip channel is a run concern; workflow-file skip directives DO
+      apply through the shared compilation machine (part of the composition
+      a run with the same workflow flags executes)
+    - The temporary flow-file lives outside the project and runtime
+      directories and is removed afterwards
+    - The card name and description are the authored DSL header values
+
+    Constraints:
+    - Do not launch afm and do not run any stage — the card is read-only
+    - Do not write into the project directory or any runtime directory
+    - Do not re-parse the pipeline-file — header data comes from the documents
+      tuple
+    - Do not reorder stages beyond `order_stages`
+
 "run_pipeline(name: str, project_dir: Path, user_dir: Path, port: int, parallel: int | None = None) -> exit_code: int":
   location: run_pipeline.py
   annotations: |
     Resolve a pipeline name to an absolute file path via `list_pipelines`,
-    resolve an optional workflow-file per the workflow environment contract
-    (see the cell-level annotation) and parse it via `parse_workflow` when
-    applicable, compile the pipeline-file (optionally extended by the
-    workflow) from goga DSL into an afm flow-file at runtime via
-    `compile_flow`, materialize the four agent prompt files (defaults plus
-    inline overrides) into the runtime prompts directory, then launch afm
-    through `run_flow`. This is the run coordination routine — it performs
-    discovery, workflow resolution, path resolution, compilation, and prompt
-    materialization; the actual subprocess execution lives in `run_flow`.
+    resolve an optional workflow via `resolve_workflow` from the environment
+    decision, compile the pipeline-file (optionally extended by the workflow)
+    into an afm flow-file at runtime via `compile_flow`, materialize the four
+    agent prompt files (defaults plus inline overrides) into the runtime
+    prompts directory, then launch afm through `run_flow`. This is the run
+    coordination routine — it performs discovery, workflow resolution, path
+    resolution, compilation, and prompt materialization; the actual subprocess
+    execution lives in `run_flow`.
 
     `name`: pipeline name without extension
     `project_dir`: project-level pipelines directory (same meaning as in `list_pipelines`)
@@ -258,240 +486,101 @@ Annotations: |
     `parallel`: optional cap on concurrently executing stages, forwarded to
                 `run_flow` as its max_parallel argument. When None (default) —
                 afm runs unbounded (run_flow omits --max-parallel). Read from
-                the in-container CLI --parallel flag by `pipeline_cli`; run
-                mode only.
+                the in-container CLI --parallel flag
     `exit_code`: 0 on success, non-zero on error (missing pipeline, missing
                  binary, afm failure, structural DSL error, workflow parse
                  error, materialization error). 127 means afm is not on PATH
                  inside the container.
 
+    Apply `convention` for error-handling style and docstring formatting.
+    Apply `parse-workflow` for the workflow-file contract consumed through
+    `resolve_workflow`.
+    Apply `compile-flow` for the compilation step contract and the documents
+    tuple.
+    Apply `default_prompts` for resolving the packaged default prompt files.
+    Apply `run-flow` for the subprocess launch contract.
+
     Algorithm:
-    1. Discover pipelines via `list_pipelines` and find the `PipelineEntry`
-       whose name matches
+    1. Discover pipelines via `list_pipelines` and find the entry whose name
+       matches
     2. If no match — report that the pipeline is missing and return a
        non-zero exit code
     3. Build the absolute pipeline path from the matching entry's source
        directory and the pipeline name
     4. Resolve the in-container runtime directory from the AFM_DIR
-       environment variable. If AFM_DIR is not set — raise an error with
-       the readable message "AFM_DIR not set". Resolve the value to an
-       absolute path (via pathlib.Path.resolve) to guarantee the directory
-       is absolute regardless of whether the env value is relative
+       environment variable; when unset raise a readable "AFM_DIR not set"
+       error; resolve the value to an absolute path
     5. Compose the output flow path inside that directory
-    6. Resolve an optional workflow per the workflow environment contract:
-       a. Read GOGA_WORKFLOW_DISABLED from the environment. When its value
-          is "1" — set workflow = None (workflow disabled by the host
-          launcher via --no-workflow)
-       b. Otherwise determine the workflow-file path:
-          - When GOGA_WORKFLOW_NAME is set in the environment — compose
-            workflow_path as Path.cwd() / ".goga" / "workflows" /
-            <GOGA_WORKFLOW_NAME>.yml (= /workspace/.goga/workflows/
-            <wf-name>.yml inside the container). The CWD-based path is
-            mandatory: project_dir itself is /workspace/.goga/pipelines,
-            so project_dir.parent is /workspace/.goga and a parent-based
-            composition would produce a double .goga. Workflows are
-            project-only by design.
-          - Otherwise (GOGA_WORKFLOW_NAME not set) — compose workflow_path
-            via the basename fallback: Path.cwd() / ".goga" /
-            "workflows" / <name>.yml (the same basename as the pipeline
-            being run)
-       c. When workflow_path exists — call `parse_workflow`
-          (per the `parse-workflow` practice) on workflow_path to obtain a
-          `WorkflowDocument`. Structural errors from `parse_workflow`
-          propagate unchanged with their readable messages
-       d. When workflow_path does not exist — set workflow = None (silent
-          miss; this is the opt-in path — the absence of a workflow-file
-          is not an error)
-    6e. Read GOGA_SKIP_STAGES from the process environment. When unset or
-        empty — skip_stages = []. Otherwise split on ',' and drop empty
-        fragments to obtain skip_stages. Then call `apply_skip_stages` with the
-        resolved workflow and skip_stages — when skip_stages is non-empty, this
-        merges `WorkflowStage` skip directives into the resolved workflow (or
-        constructs a new `WorkflowDocument` when workflow is None, e.g.
-        --no-workflow or no resolved workflow-file); when empty, the workflow
-        is unchanged. The result is forwarded to `compile_flow` at step 7.
-    7. Resolve the in-container project name via `resolve_project_name` (None when the git origin remote is unavailable — mirroring the root_dir
-       pattern, never raises). Compile the pipeline-file via `compile_flow`
-       (per the `compile-flow` practice) with the resolved workflow as the
-       optional workflow argument, the in-container project root (Path.cwd(),
-       which resolves to /workspace inside the goga container — the single
-       source of truth mirroring the host-side mount decision) as the optional
-       root_dir argument, and project_name=resolve_project_name() — receive the
-       documents tuple as the return value (per the `compile-flow` practice).
-       When workflow is None, no workflow is applied. The root_dir is always
-       supplied (computed from Path.cwd()), so the compiled flow-file carries a
-       top-level root_dir directive; when project_name is None the compiled flow
-       description carries no prefix. Structural DSL errors propagate
-       unchanged; structural workflow errors propagate unchanged from
-       `parse_workflow`
-    8. Materialize agent prompts inline (atomic: validate-all, then wipe,
-       then write):
-       a. Resolve the default prompts directory in the installed goga
-          package (per the `default_prompts` practice) —
-          goga/assets/afm/prompts/
-       b. Validate (atomic, before wipe): for each overridable role
-          (planner, executor, reviewer) — stem = `translate_role`(role);
-          either the documents tuple returned by `compile_flow` carries a
-          non-None inline override for that role (per the
-          `compile-flow` practice), or the corresponding default prompt
-          file (defaults_dir / "<stem>.md") exists. summary has no
-          override field — its default file (defaults_dir / "summary.md")
-          MUST exist. A role with neither override nor default, or a
-          missing summary default, is a fatal error raised BEFORE the
-          directory is wiped or any prompt file is written — this is the
-          atomicity guarantee (no partial state on disk)
-       c. After step 8b succeeds, reset <AFM_DIR>/prompts/ to a clean
-          state (rmtree + mkdir) so the directory contains exactly four
-          files after step 8 succeeds, regardless of any leftover files
-          from previous runs or manual edits
-       d. For each overridable role (planner, executor, reviewer):
-          stem = `translate_role`(role); write the inline prompt override
-          for that role to <AFM_DIR>/prompts/<stem>.md when the
-          documents tuple carries one, otherwise copy the corresponding
-          (already-validated) default prompt from the installed package.
-          summary.md is always copied from the default (never overridden
-          from the DSL). By construction (step 8b) every source exists.
-       e. After step 8d succeeds, <AFM_DIR>/prompts/ contains exactly
-          four files (planning.md, implementation.md, review.md,
-          summary.md)
-    9. Launch afm via `run_flow` (per the `run-flow` practice) with the
-       compiled flow-file path, `port`, AND max_parallel=`parallel` (None ⇒
-       run_flow omits --max-parallel)
-    10. Return the exit code returned by `run_flow`
-
-    Apply `conventions` for error-handling style and docstring formatting.
-    Apply `parse-workflow` for the contract of `parse_workflow`
-    and the resulting `WorkflowDocument`.
-    Apply `compile-flow` for the compilation step contract (including the
-    new optional workflow parameter and the documents-tuple return value).
-    Apply `default_prompts` for resolving the path to the four packaged
-    default prompt files.
-    Apply `run-flow` for the subprocess launch contract.
+    6. Read the workflow decision from the environment —
+       GOGA_WORKFLOW_DISABLED="1" disables the workflow, otherwise
+       GOGA_WORKFLOW_NAME names an explicit workflow — and resolve via
+       `resolve_workflow` with the pipeline name
+    7. Read GOGA_SKIP_STAGES from the environment (unset/empty — no skip);
+       when non-empty split into names and apply via `apply_skip_stages`
+       onto the resolved workflow
+    8. Resolve the in-container project name via `resolve_project_name`
+       (None when the git origin remote is unavailable). Compile via
+       `compile_flow` with the resolved workflow, the in-container project
+       root (Path.cwd()) as root_dir, and the project name; receive the
+       documents tuple; structural errors propagate unchanged
+    9. Materialize agent prompts atomically (validate-all, then wipe, then
+       write): resolve the default prompts directory per `default_prompts`;
+       for each overridable role (planner, executor, reviewer) require an
+       inline override from the documents tuple or an existing default file
+       (stem via `translate_role`); require the summary default; then reset
+       <AFM_DIR>/prompts/ and write exactly four files — overrides where
+       present, defaults otherwise, summary always from the default
+    10. Launch afm via `run_flow` with the compiled flow-file path, `port`,
+        and max_parallel=`parallel`
+    11. Return the exit code returned by `run_flow`
 
     Requirements:
     - Always pass the absolute pipeline path to `compile_flow` — never the
       bare name
     - Always pass the absolute compiled flow path to `run_flow` — never the
       bare name or the DSL path
-    - Always forward `port` to `run_flow` — never omit it
-    - Forward `parallel` to `run_flow` as its max_parallel argument — None
-      propagates (no --max-parallel flag)
-    - Read AFM_DIR directly from the process environment
-    - Resolve AFM_DIR to an absolute path (via pathlib.Path.resolve) before
-      composing flow_path (so a relative env value still yields an absolute
-      flow_path that satisfies `compile_flow`'s absolute-paths precondition)
-    - Apply the `run-flow` practice's error-handling rules verbatim (as
-      propagated through `run_flow`)
-    - Apply the `compile-flow` practice's contract verbatim
-    - Always accept the return value of `compile_flow` (the documents
-      tuple); never re-invoke the parse-dsl routine to obtain inline
-      prompt overrides
-    - Read inline prompt overrides exclusively from the pipeline document
-      header's roles block (planner/executor/reviewer) of the documents tuple
-      returned by `compile_flow` (per the `compile-flow` practice — the
-      compiled flow-file carries no roles data)
-    - Resolve each overridable role to its prompt-file stem via
-      `translate_role` (imported from goga/pipeline/compiler);
-      planner→planning, executor→implementation, reviewer→review
-    - summary.md is always copied from the default — summary has no
-      override field and is not overridable from the DSL
-    - <AFM_DIR>/prompts/ must contain exactly four files after step 8
-      succeeds; partial state (fewer files) is an error condition that must
-      surface before `run_flow` is invoked. Wipe the directory clean in
-      step 8c (after validation in 8b) so leftover files from a previous
-      run or manual edits do not accumulate — idempotent end state: the
-      same four files after every run
-    - Default prompt files are read from the installed package location
-      (per `default_prompts`); the source path must NOT be derived from
-      AFM_DIR, CWD, or any environment variable
-    - The override is a full file replacement — no merge, no concatenation
-      with the default prompt text
-    - A missing default prompt (file absent in the package) for a key with
-      no inline override is a fatal error: raise with a readable message
-      naming the key in step 8b (validation phase), BEFORE the directory
-      is wiped or any prompt file is written. <AFM_DIR>/prompts/ remains in
-      its previous state on error — atomicity is guaranteed by validate-all
-      before wipe
-    - A missing default prompt for a key WITH an inline override is NOT an
-      error — the file is written from the override; the default's absence
-      is ignored for that key
-    - Read GOGA_WORKFLOW_DISABLED and GOGA_WORKFLOW_NAME directly from the
-      process environment; the host-side launcher sets them via the env-file
-    - Workflow path resolution is CWD-based:
-      Path.cwd() / ".goga" / "workflows" / "<name>.yml" — the
-      project_dir.parent IS NOT the project root; project_dir itself is
-      /workspace/.goga/pipelines, so Path.cwd() (= /workspace in-container)
-      is the project root. Workflows are project-only.
-    - root_dir resolution is CWD-based: the in-container project root
-      (Path.cwd(), which resolves to /workspace inside the goga container
-      because the host-side launcher sets workdir=/workspace and
-      bind-mounts the project there) is forwarded to `compile_flow` as
-      the root_dir argument. Path.cwd() is the single source of truth —
-      it mirrors the host-side mount decision rather than re-declaring
-      the literal, so a future change to the mount target propagates
-      automatically. The value is resolved via Path.cwd().resolve() to
-      guarantee an absolute path regardless of how the container's CWD
-      was set.
-    - A non-existent workflow-file is a silent miss (workflow = None), NOT
-      an error — the host-side launcher performs explicit --workflow
-      existence validation; the basename fallback is opt-in
-    - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME —
-      when both are set, workflow = None
-    - Read GOGA_SKIP_STAGES from the process environment (comma-separated;
-      unset/empty = no skip); apply via `apply_skip_stages` BEFORE
-      `compile_flow`
-    - --skip merges onto any resolved workflow and is NOT mutually exclusive
-      with --workflow; it also applies to a workflow-less pipeline
-      (--no-workflow / no auto-match) — `apply_skip_stages` constructs a
-      `WorkflowDocument` carrying only the skip entries then
-    - Unknown skip names surface as the compiler's structural error
-      "unknown stage name in workflow.stages: <name>" (raised in-container by
-      `compile_flow` step 4pre), propagated as a non-zero exit code
+    - Always forward `port` to `run_flow`; forward `parallel` (None
+      propagates — no --max-parallel flag)
+    - Read AFM_DIR, GOGA_WORKFLOW_DISABLED, GOGA_WORKFLOW_NAME, and
+      GOGA_SKIP_STAGES directly from the process environment
+    - GOGA_WORKFLOW_DISABLED="1" takes precedence over GOGA_WORKFLOW_NAME
+    - Workflow resolution and parsing go through `resolve_workflow` — one
+      rule set shared with the card
+    - A missing workflow-file is a silent miss, not an error
+    - Skip merges onto any resolved workflow and applies to a workflow-less
+      pipeline; unknown skip names surface as the compiler's structural
+      error
+    - <AFM_DIR>/prompts/ contains exactly four files after step 9 succeeds;
+      validation precedes any wipe or write — atomicity guarantees no
+      partial state on disk
+    - Inline prompt overrides come exclusively from the documents tuple
+      header roles; the override is a full file replacement — no merge, no
+      concatenation
+    - Default prompt files resolve from the installed package location per
+      `default_prompts` — never from AFM_DIR, CWD, or an environment
+      variable
+    - root_dir resolution is CWD-based (Path.cwd() resolves to /workspace
+      inside the goga container); project_name resolves in-container via
+      `resolve_project_name`
+    - Do not mutate the documents tuple returned by `compile_flow` — read
+      the inline prompt overrides as-is
 
     Constraints:
     - Do not invoke afm directly outside `run_flow`
     - Do not invoke the compiler outside `compile_flow`
-    - Do not allocate the port — the caller allocates it
-    - Do not default `parallel` — None ⇒ unbounded; the caller (pipeline_cli)
-      decides based on --parallel presence
-    - Do not copy pipeline files into any project-level directory
-    - Do not modify or parse pipeline-file contents directly — that is
-      `compile_flow`'s job
-    - Do not accept relative `project_dir` or `user_dir` — both must already
-      be absolute when passed in
-    - Do not mask or wrap exceptions from `compile_flow` — structural DSL
-      errors propagate with their readable messages
-    - Do not write prompts/ inside the project directory or /workspace —
-      always write to <AFM_DIR>/prompts/ (the in-container persistent state
-      directory)
-    - Do not write inline prompt overrides into the compiled flow-file —
-      they are a goga-side artifact, not part of the afm flow-file contract
-    - Do not silently skip a missing default when no inline override is
-      supplied for that key
-    - Do not perform any prompt-related work outside step 8 — the host
-      launcher writes prompts_dir into the afm config.yaml tmpfile but
-      does not know whether the pipeline-file contains a roles block
-    - Do not mutate the documents tuple returned by `compile_flow` — read
-      the inline prompt overrides from it as-is
     - Do not invoke the workflow parser outside `parse_workflow`
-    - Do not modify or parse workflow-file contents directly — that is
-      `parse_workflow`'s job
-    - Do not treat a missing workflow-file as an error when neither
-      GOGA_WORKFLOW_NAME nor GOGA_WORKFLOW_DISABLED="1" is set — the
-      basename fallback is opt-in
-    - Do not validate the workflow-file path on the host — workflow
-      resolution happens inside the container only; the host-side launcher
-      performs explicit --workflow existence validation before launch
-      when the user passes --workflow
-    - Do not delete skipped stages or rewrite depends_on in `run_pipeline` —
-      `compile_flow` does both; `run_pipeline` only prepares the workflow via
-      `apply_skip_stages`
+    - Do not allocate the port — the caller allocates it
+    - Do not default `parallel` — None means unbounded
+    - Do not accept relative `project_dir` or `user_dir`
+    - Do not mask or wrap exceptions from `compile_flow` or `parse_workflow`
+      — structural errors propagate with their readable messages
+    - Do not write prompts inside the project directory or /workspace —
+      always <AFM_DIR>/prompts/
+    - Do not write inline prompt overrides into the compiled flow-file
+    - Do not delete skipped stages or rewrite depends_on — `compile_flow`
+      does both
     - Do not write or generate a workflow-file for skip — the merge is
       in-memory only
-    - project_name is derived in-container via `resolve_project_name`
-      (mirroring the root_dir pattern — derived inside the container, not read
-      from config); None when the git origin remote is unavailable → the
-      compiled flow description carries no [<project-name>] prefix
 
 "apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str]) -> workflow: WorkflowDocument | None":
   location: apply_skip_stages.py
@@ -530,21 +619,19 @@ Annotations: |
     - Skip always wins — a name present in both the workflow stages and
       `skip_stages` is replaced with a `WorkflowStage` carrying skip=True
     - Do not mutate the input `workflow` or its stages/extend maps — build a
-      new `WorkflowDocument` and a new stages map (per the run-pipeline
-      anti-pattern against mutating `parse_workflow` output)
+      new `WorkflowDocument` and a new stages map
     - When `workflow` is None and `skip_stages` is non-empty — construct a
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
       None, extend empty); skip applies to a workflow-less pipeline
     - Construct `WorkflowStage` with skip=True and all other fields at their
       defaults
     - Stage-name validation is NOT performed here — the compiler's strict check
-      (`compile_flow` step 4pre) raises a structural error on a name absent
-      from the pipeline body; this routine stays declarative
-    - Apply `conventions` for code style and docstring formatting
+      raises a structural error on a name absent from the pipeline body; this
+      routine stays declarative
+    - Apply `convention` for code style and docstring formatting
 
     Constraints:
     - Do not delete stages or rewrite depends_on here — the compiler does both
-      (`compile_flow` step 4skip)
     - Do not validate stage names against any pipeline here
     - Do not write, read, or generate any workflow-file — the merge operates
       purely on in-memory Python objects
@@ -554,61 +641,90 @@ Annotations: |
   location: cli.py
   annotations: |
     In-container CLI implementation for python -m goga.pipeline. Parses argv
-    via argparse and dispatches to `list_pipelines` (discovery) or
-    `run_pipeline` (run). This routine is invoked by the host-side docker
-    launcher in goga/commands/pipeline through the runpy entrypoint in
-    __main__.py — never imported by Python from the host side (runtime
-    docker boundary, no Imports).
+    via argparse and dispatches to one of four operations: the flat listing
+    (`list_pipelines`), the overview (`describe_pipelines`), the card
+    (`describe_pipeline`), or run coordination (`run_pipeline`). Invoked
+    through the runpy entrypoint in __main__.py — never imported by Python
+    from the host side (runtime docker boundary, no Imports).
 
     `argv`: argument list (typically the process argv minus the program name)
-    `exit_code`: 0 on success, 2 on argparse error, non-zero on pipeline failure
-                 (propagated from `run_pipeline` / `list_pipelines`)
+    `exit_code`: 0 on success, 2 on argparse error, non-zero on operation
+                 failure
+
+    Apply the `argparse` practice for parser construction.
+    Apply the `cli_entrypoint` practice: this routine is defined in the cli
+    module; __main__ only delegates to it.
+    Apply `convention` for docstring style and intra-package imports.
 
     Algorithm:
-    1. Build an argparse parser with two subcommands: list and run
-       - list takes no positional arguments
-       - run takes a required name positional argument,
-         a required --port PORT integer option, AND an optional
-         --parallel N integer option (None when absent)
-    2. Parse argv; on argparse error — exit code 2 (argparse default)
-    3. Resolve the project pipelines directory (project working directory's
-       .goga/pipelines/) and the user pipelines directory (user home's
-       .goga/pipelines/)
+    1. Build the parser with two subcommands:
+       - list: an optional --info/-i flag
+       - run: a required name positional; an optional --info/-i flag; optional
+         --workflow/-w NAME and --no-workflow flags; a --port PORT integer
+         required only when --info is absent; an optional --parallel N integer
+    2. Parse argv; on argparse error exit with code 2
+    3. Resolve the project pipelines directory (<cwd>/.goga/pipelines/) and
+       the user pipelines directory (~/.goga/pipelines/)
     4. Dispatch:
-       - list → call `list_pipelines`(project_dir, user_dir), print
-         "Available pipelines:" header followed by one entry per line
-         (project source suffixed with " (project)"), return 0
-       - run NAME --port PORT [--parallel N] → call `run_pipeline`(NAME,
-         project_dir, user_dir, PORT, parallel=args.parallel) and return its
-         exit code (args.parallel is None when --parallel is absent; delegates
-         name resolution, compilation, and the .yml extension to `run_pipeline`)
-    5. Return the resulting exit code
-
-    Apply the `conventions` practice for docstring style and intra-package imports.
-    Apply the `argparse` practice for parser construction.
-    Apply the `cli_entrypoint` practice: this routine MUST be defined in the
-    cli module, and __main__ MUST only delegate to it — never define
-    `pipeline_cli` inside __main__.
+       - list without --info — call `list_pipelines`; print the flat list:
+         one bullet line per entry — the marker line "* <name>" (with the
+         " (project)" suffix for project source entries); return 0
+       - list with --info — call `describe_pipelines`; print the overview: one
+         bullet block per pipeline — the marker line "* <name>" (with the
+         " (project)" suffix for project source entries) followed by indented
+         "name:" and "description:" field lines; return 0
+       - run with --info — call `describe_pipeline` with the name and the
+         parsed workflow flags; print the card: "name:" and "description:"
+         field lines, a blank line, a "---" separator, a blank line, then one
+         bullet block per ordered stage — the marker line "* <id>:" and an
+         indented "title:" field line; return 0
+       - run without --info — call `run_pipeline` with name, port, and
+         parallel; return its exit code
+    5. Render an operation failure as a clean readable message to stderr (no
+       traceback) and return a non-zero exit code
 
     Requirements:
-    - run subcommand must accept --port PORT as an integer (required)
-    - run subcommand accepts an optional --parallel N integer (None when
-      absent)
-    - list subcommand takes no arguments
-    - Echo the header BEFORE the list in list mode (predictable UX)
+    - The run subcommand accepts --info/-i, --workflow/-w NAME,
+      --no-workflow, --parallel N
+    - --port is an integer option required only when --info is absent; a
+      missing --port without --info is an argparse-style error (exit 2);
+      --port is ignored in info mode
+    - Long and short flag forms behave identically
+    - The flat list template: one marker line "* <name>" per pipeline (with
+      the " (project)" suffix for project-source entries) and no header line
+      (example: "* deploy (project)" / "* rollback")
+    - The overview template: the marker line "* <name>" (with the
+      " (project)" suffix for project-source entries) followed by "name:"
+      and "description:" field lines indented by four spaces; the name field
+      carries the authored header name, the description field the header
+      description (example: "* deploy (project)" / "    name: Deploy" /
+      "    description: Deploy the service")
+    - The card template: a "name:" line, a "description:" line, a blank line,
+      a "---" separator, a blank line, then per ordered stage the marker line
+      "* <id>:" and a "title:" line indented by four spaces; the separator
+      block is printed even when the card carries no stages
+    - An empty discovery is not an error: the flat list prints nothing —
+      zero discovered pipelines, zero lines; the overview likewise prints
+      nothing; both return 0
+    - Card stage bullet blocks follow execution order; loop-expanded copies
+      appear as separate blocks
+    - Overview and card output stays within terminal width — no horizontal
+      scrolling
 
     Constraints:
-    - Do not allocate a port inside this CLI — --port is required and supplied
-      by the host-side launcher
+    - Do not allocate a port inside this CLI — run mode receives it from the
+      host-side launcher
+    - Do not validate workflow flag combinations — the host-side launcher
+      owns that validation
+    - Do not print tracebacks for operation failures — clean stderr messages
     - Do not import this cell from the host side — invoke via docker only
-      (docker run ... python -m goga.pipeline {list,run})
 
 ---
 
 Author: Goga
-CreatedAt: 29/06/26
+CreatedAt: 19/08/26
 Description: |
-  Cell that owns the entire pipeline workflow: discovery of *.yml pipeline
-  files across the project and user pipeline directories, the pipeline-file
-  entity model, run coordination (including optional workflow resolution),
+  Cell that owns the pipeline workflow: discovery of *.yml pipeline files
+  across the project and user pipeline directories, the pipeline-file entity
+  model, the informational surface (overview and card), run coordination,
   and the in-container CLI entrypoint pipeline_cli.

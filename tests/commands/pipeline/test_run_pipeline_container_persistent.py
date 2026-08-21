@@ -101,26 +101,6 @@ class TestRunPipelineContainerContract:
             "parallel",
         ]
 
-    def test_discovery_mode_does_not_write_env_file(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode never writes an env-file (no AFM_DIR, no afm mount)."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(_rpc_mod, "_write_env_file") as mock_env,
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config)
-
-        mock_env.assert_not_called()
-        cmd = mock_popen.call_args[0][0]
-        assert "--env-file" not in cmd
-        assert not any(arg.endswith(":/home/goga/.afm/config.yaml:ro") for arg in cmd)
-
     def test_run_mode_writes_env_file_with_afm_dir(self, tmp_path: Path, monkeypatch) -> None:
         """Run mode writes an env-file carrying AFM_DIR=/home/goga/pipeline."""
         config = _make_config()
@@ -218,38 +198,10 @@ class TestPersistentFailureModes:
             run_pipeline_container("deploy", config)
 
 
-# --- Logic tests (edge): discovery ignores proxy/clean/extra_env; clean wipes ---
+# --- Logic tests (edge): clean wipes ---
 
 
 class TestPersistentEdge:
-    def test_discovery_ignores_proxy_clean_and_extra_env(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery ignores proxy/clean/extra_env: no env-file, no afm mount, no AFM_DIR/HTTP_PROXY."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(_rpc_mod, "_write_env_file") as mock_env,
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(
-                None,
-                config,
-                ("TOKEN=sk-xxx",),
-                "http://corp:3128",
-                {},
-                True,  # clean=True — must be ignored in discovery
-            )
-
-        mock_env.assert_not_called()
-        cmd = mock_popen.call_args[0][0]
-        assert "--env-file" not in cmd
-        assert "-p" not in cmd
-        assert not any(arg.endswith(":/home/goga/.afm/config.yaml:ro") for arg in cmd)
-
     def test_clean_wipes_before_launch(self, tmp_path: Path, monkeypatch) -> None:
         """--clean wipes the persistent dir before launch (stale file absent afterward)."""
         config = _make_config()
@@ -297,24 +249,6 @@ class TestHostsFlags:
             mock.patch.object(subprocess, "run"),
         ):
             run_pipeline_container("deploy", config, (), None, {"foo.local": "127.0.0.1"}, False, False)
-
-        cmd = mock_popen.call_args[0][0]
-        assert "--add-host" in cmd
-        assert "foo.local:127.0.0.1" in cmd
-
-    def test_discovery_mode_emits_add_host_flags(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode also honours hosts (add-host flags)."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc) as mock_popen,
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config, (), None, {"foo.local": "127.0.0.1"}, False, False)
 
         cmd = mock_popen.call_args[0][0]
         assert "--add-host" in cmd
@@ -373,40 +307,6 @@ class TestConditionalUpdate:
 
         # dockerfile is None → docker_update(image, None, extra_args=[]) takes
         # the pull branch (home.docker.build default — empty when no home file).
-        mock_update.assert_called_once_with(config.image, config.dockerfile, extra_args=[])
-
-    def test_update_false_skips_docker_update_discovery(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode with update=False does not refresh the image."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config, (), None, {}, False, False)
-
-        mock_update.assert_not_called()
-
-    def test_update_true_delegates_docker_update_discovery(self, tmp_path: Path, monkeypatch) -> None:
-        """Discovery mode with update=True delegates to docker_update before launch."""
-        config = _make_config()
-        monkeypatch.setattr(_rpc_mod, "_check_docker", lambda: True)
-        monkeypatch.chdir(tmp_path)
-
-        mock_proc = mock.Mock()
-        mock_proc.wait.return_value = 0
-        with (
-            mock.patch.object(_rpc_mod, "docker_update") as mock_update,
-            mock.patch.object(subprocess, "Popen", return_value=mock_proc),
-            mock.patch.object(subprocess, "run"),
-        ):
-            run_pipeline_container(None, config, (), None, {}, False, True)
-
         mock_update.assert_called_once_with(config.image, config.dockerfile, extra_args=[])
 
 

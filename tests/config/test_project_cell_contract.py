@@ -32,7 +32,7 @@ def _write_goga_yml(path, content: str):
 
 class TestProjectCellReexports:
     def test_public_names_importable_from_project_cell(self):
-        """The 6 public names are importable from goga.config.project."""
+        """The 7 public names are importable from goga.config.project."""
         for name in (
             "ProjectConfig",
             "load_project_config",
@@ -40,6 +40,7 @@ class TestProjectCellReexports:
             "TaskExecutorConfig",
             "PipelineConfig",
             "CodemanifestConfig",
+            "ReviewExecutorConfig",
         ):
             assert hasattr(project_mod, name), f"{name} missing from goga.config.project"
             assert name in project_mod.__all__, f"{name} missing from project __all__"

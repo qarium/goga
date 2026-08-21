@@ -74,6 +74,10 @@ Annotations: |
   and passes them as params; host-side cleanup (env-file, .ralphex) stays in this
   command's own finally.
 
+  The command surfaces the review-phase tri-state flags to the user and rejects
+  the two-pass × worktree combination — whether induced by a differing review
+  agent or by a declared review env — before any container work.
+
   The command runs goga.build inside a Docker container.
 
   This command is the host-side launcher for `run_build`: it
@@ -96,7 +100,7 @@ Annotations: |
 
 ---
 
-"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool)":
+"build(plan: str, proxy: str | None, add_host: tuple[str, ...], update: bool, clean: bool, skip_review: bool | None)":
   location: build.py
   annotations: |
     CLI wrapper for the build command. Runs python -m goga.build inside a
@@ -122,11 +126,17 @@ Annotations: |
              `clean_build_runtime_dir` BEFORE docker run. When False (default),
              keep the existing directory as-is so ralphex progress files
              survive across runs of the same project on the same branch.
+    `skip_review`: tri-state from the --skip-review / --no-skip-review click pair —
+                   True / False / None (flag not given). Forwarded in-container as
+                   cli_flags by the --worktree pattern; combined in-container with
+                   build.review_executor.skip (CLI wins).
 
     CLI options (via click):
     - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
     - --session-timeout, --idle-timeout, --wait
     - --max-iterations, --review-patience
+    - --skip-review / --no-skip-review (bool pair) — skip the review phase;
+      tri-state, overrides build.review_executor.skip
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
     - --proxy URL (str) — HTTP/HTTPS proxy URL; overrides config.build.proxy
     - --add-host HOST:IP (multiple) — add a docker run --add-host entry; merges on top of config.build.hosts
@@ -166,7 +176,19 @@ Annotations: |
         build command resolves it into the in-container wrapper path and cannot run
         without it. Host-side guard — runs BEFORE any agent access to avoid a
         downstream TypeError.
-    3. Collect cli_flags from click parameters
+    2.3. Review-worktree guard: when config.build.review_executor is present, its
+        agent is set and (the agent differs from task_executor.agent OR the
+        review_executor env is non-empty), and the worktree option is active (CLI
+        --worktree or config.build.worktree) → raise ClickException naming the
+        conflict (the ralphex --review mode ignores worktree — the review would
+        run against the wrong branch) — BEFORE the docker command is assembled.
+        The condition is config-level and skip-independent: the host does not
+        resolve the tri-state --skip-review, so an env-declaring run is rejected
+        here regardless of the skip flags (skip-time env handling belongs to the
+        in-container orchestrator).
+    3. Collect cli_flags from click parameters; forward the review pair by the
+       --worktree pattern: skip_review True → --skip-review; False →
+       --no-skip-review; None → neither flag (the tri-state survives to the container)
     4. Resolve the proxy: take `proxy` when not None, otherwise fall back to
        config.build.proxy
     5. Resolve hosts: merge config.build.hosts with parsed `add_host` entries;
@@ -199,7 +221,7 @@ Annotations: |
     13. Generate a unique container_name
     14. Assemble the docker-run inputs to hand to `DockerRunner`:
         - args: the post-image command — -m goga.build <plan> + cli_flags
-        - params: the pre-refactor docker-run options, translated to flags by the
+        - params: the docker-run options, translated to flags by the
           shared rule in `docker-runner` — name=<container_name>, rm=True,
           entrypoint=python3, workdir=/workspace, v=[CWD:/workspace, the resolved
           host runtime dir (step 11) read-write at /workspace/.ralphex, and each
@@ -210,7 +232,7 @@ Annotations: |
           appended verbatim AFTER the translated params flags and BEFORE the
           image, and are NEVER translated to an --extra-args flag). Empty list
           when the home file is absent
-        - The assembled form preserves the pre-refactor launcher exactly (same
+        - The assembled form preserves the launcher behavior exactly (same
           options, same effect): --rm, --name, --entrypoint, mounts via -v
           (project at /workspace; the resolved host runtime dir at
           /workspace/.ralphex as a nested bind-mount, so ralphex auto-detects
@@ -223,8 +245,8 @@ Annotations: |
         UNCONDITIONALLY at launch entry. No-op when the image already exists or
         when no Dockerfile is set (extra_args forwarded in the build branch only).
         When the image is absent and a Dockerfile is declared: build it (fatal on failure
-        — surfaces as a ClickException via the D5 mapper, exit 1, launch
-        skipped). Runs inside the try so the D7 leak-prevention invariant covers
+        — surfaces as a ClickException, exit 1, launch
+        skipped). Runs inside the try so the leak-prevention invariant covers
         this window: the secret env-file is already written (step 10), and a
         fatal build unwinds to the finally which unlinks it
     17. When `update` is True: call `docker_update` with config.image,
@@ -293,6 +315,14 @@ Annotations: |
       in the setup window, including the `docker_update` build, must unwind to
       the finally block and unlink the env-file)
     - Expose -c as a short alias of --clean (equivalent behavior)
+    - The --skip-review/--no-skip-review pair is forwarded verbatim; the host does
+      NOT resolve the tri-state against config — resolution belongs to the
+      in-container build
+    - The two-pass × worktree conflict is a host-side guard — it fires before
+      docker run, before any filesystem or container work
+    - The env-induced two-pass × worktree conflict is the same host-side guard
+      as the differing-agent one — it fires before docker run, before any
+      filesystem or container work, regardless of --skip-review
 
     Constraints:
     - Do not refresh an EXISTING image by default — refresh only when `update`

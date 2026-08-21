@@ -144,19 +144,38 @@ class TestParseWorkflowContract:
 
         Pins the contract: ``_STAGE_KEYS`` is the single source of the accepted
         per-stage key set and of the unknown-key ``valid keys`` message fragment,
-        so it must carry ``approve`` (after ``skip``).
+        so it must carry ``approve`` (after ``skip``) and ``manual`` (after
+        ``approve``).
         """
         from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
 
         assert "approve" in _STAGE_KEYS
-        # Fixed canonical order: agent, prompt, loop, skills, skip, approve.
-        assert _STAGE_KEYS == ("agent", "prompt", "loop", "skills", "skip", "approve")
+        # Fixed canonical order: agent, prompt, loop, skills, skip, approve, manual.
+        assert _STAGE_KEYS == ("agent", "prompt", "loop", "skills", "skip", "approve", "manual")
+
+    def test_parse_workflow_manual_is_accepted_stage_key(self, tmp_path: Path) -> None:
+        """``manual`` is part of the accepted per-stage key set (contract surface).
+
+        Pins the contract: ``manual`` is a valid stage key (7th key, after
+        ``approve``), so a stage carrying ``manual: true`` parses successfully
+        and surfaces on the ``WorkflowStage`` model as the tri-state ``manual``
+        field. The bool check, the absent→``None`` (not ``False``) build, and
+        the extend-prohibition are pinned in the logic test module.
+        """
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text("stages:\n  propose:\n    manual: true\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert isinstance(document, WorkflowDocument)
+        assert document.stages["propose"].manual is True
 
     def test_parse_workflow_unknown_stage_key_message_lists_approve(self, tmp_path: Path) -> None:
         """The unknown per-stage key error message lists ``approve`` in the valid-keys fragment.
 
         Pins the contract: the ``valid keys`` fragment of the unknown-key message
-        is generated from ``_STAGE_KEYS`` and therefore includes ``approve``.
+        is generated from ``_STAGE_KEYS`` and therefore includes ``approve`` and
+        the trailing ``manual``.
         """
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text("stages:\n  propose:\n    bad: value\n")
@@ -166,4 +185,4 @@ class TestParseWorkflowContract:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        assert "valid keys: agent, prompt, loop, skills, skip, approve" in message
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message

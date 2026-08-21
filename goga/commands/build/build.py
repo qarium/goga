@@ -122,6 +122,15 @@ def _cli_flags_to_args(cli_flags: dict[str, bool | str | int | None]) -> list[st
     if cli_flags.get("skip_manifest_check"):
         args.append("--skip-manifest-check")
 
+    # Tri-state review pair: True → --skip-review, False → --no-skip-review,
+    # None → neither (the in-container build resolves None against the config).
+    sr = cli_flags.get("skip_review")
+
+    if sr is True:
+        args.append("--skip-review")
+    elif sr is False:
+        args.append("--no-skip-review")
+
     for flag in ("session_timeout", "idle_timeout", "wait", "max_iterations", "review_patience"):
         val = cli_flags.get(flag)
         if val is not None:
@@ -235,6 +244,13 @@ def _cleanup_ralphex_in_project(project_dir: Path) -> None:
     default=False,
     help="Refresh the image before launch (build if a project Dockerfile is declared, else pull)",
 )
+@click.option(
+    "--skip-review/--no-skip-review",
+    "skip_review",
+    default=None,
+    help="Skip the review phase (--skip-review) or force the full cycle (--no-skip-review); "
+    "overrides build.review_executor.skip in .goga/config.yml",
+)
 @click.pass_context
 def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     ctx: click.Context,
@@ -253,6 +269,7 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     add_host: tuple[str, ...],
     update: bool,
     clean: bool,
+    skip_review: bool | None,
 ) -> None:
     """Build code via a ralph-loop by launching goga.build inside a Docker container.
 
@@ -297,10 +314,35 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
     if config.build.task_executor.agent is None:
         raise click.ClickException("build.task_executor.agent is required in .goga/config.yml to run 'goga build'")
 
+    # Step 2.3 — two-pass x worktree guard: a review executor whose agent
+    # differs from the task executor, or that declares a non-empty review env,
+    # makes the in-container build run two passes (tasks, then `ralphex
+    # --review`). ralphex review mode cannot follow a --worktree branch, so
+    # the combination is rejected here — BEFORE the docker command is
+    # assembled (before the env-file write, before DockerRunner), so no
+    # container is ever launched for a run that is doomed to lose the review
+    # pass. The condition is the config-level projection of the two_pass
+    # formula in resolve_review_options; it is skip-independent — the host
+    # does not resolve the tri-state --skip-review (that belongs to the
+    # in-container build, which also owns the env-without-agent gate).
+    review_exec = config.build.review_executor
+    worktree_active = worktree or bool(config.build.worktree)
+
+    if (
+        review_exec is not None
+        and review_exec.agent is not None
+        and (review_exec.agent != config.build.task_executor.agent or bool(review_exec.env))
+        and worktree_active
+    ):
+        raise click.ClickException(
+            "build.review_executor two-pass review (differing agent or review env) cannot follow a --worktree branch"
+        )
+
     cli_flags = {
         "worktree": worktree,
         "skip_finalize": skip_finalize,
         "skip_manifest_check": skip_manifest_check,
+        "skip_review": skip_review,
         "session_timeout": session_timeout,
         "idle_timeout": idle_timeout,
         "wait": wait,

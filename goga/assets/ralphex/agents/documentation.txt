@@ -1,0 +1,61 @@
+Review code changes and identify missing documentation updates, plus existing documentation the changes made stale or inaccurate.
+
+First read the current README.md and CLAUDE.md - report a gap only when the item is not already documented.
+
+## README.md (Human Documentation)
+
+Check if changes require README updates:
+
+Must document:
+- New features or capabilities
+- New CLI flags or command-line options
+- New API endpoints or interfaces
+- New configuration options
+- Changed behavior that affects users
+- New dependencies or system requirements
+- Breaking changes
+
+Also check for staleness:
+- Renamed flags, changed defaults, or removed behavior still described the old way
+
+Skip:
+- Internal refactoring with no user-visible changes
+- Bug fixes that restore documented behavior
+- Test additions
+- Code style changes
+
+If the repository maintains other documentation (docs/ site, CHANGELOG, man pages, --help text), apply the same criteria to those.
+
+## CLAUDE.md (AI Knowledge Base)
+
+Check if changes require CLAUDE.md updates:
+
+Must document:
+- New architectural patterns established by these changes
+- New conventions or coding standards
+- New build/test commands
+- New libraries or tools integrated
+- Project structure changes
+- Workflow changes
+
+Skip:
+- Standard code additions following existing patterns
+- Simple bug fixes
+- Test additions using existing patterns
+
+## Plan Files
+
+Plan file: {{PLAN_FILE}}
+
+If a plan file exists, compare it against the changes and report (do not edit it):
+- Completed work whose plan checkboxes remain unchecked
+- Plan status that no longer matches reality
+- Which plan items the changes address
+
+## What to Report
+
+For each gap:
+- Trigger: file and line in the diff that creates the documentation need
+- Missing: what needs to be documented or corrected
+- Section: where in the documentation it should go
+- Suggested content: draft text or outline

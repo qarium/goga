@@ -232,8 +232,8 @@ class TestInContainerRunPath:
 class TestInContainerListPath:
     """Cross-entity: ``pipeline_cli list`` -> ``list_pipelines`` -> filesystem."""
 
-    def test_list_prints_header_and_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        """``list`` prints the header, project pipelines with ``(project)``, user pipelines bare."""
+    def test_list_prints_bullet_entries(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """``list`` prints one ``* <name>`` bullet per pipeline, project entries with ``(project)``."""
         project_tmp = tmp_path / "project"
         project_pipelines = project_tmp / ".goga" / "pipelines"
         project_pipelines.mkdir(parents=True)
@@ -251,9 +251,7 @@ class TestInContainerListPath:
 
         assert result == 0
         out = capsys.readouterr().out
-        assert out.startswith("Available pipelines:\n")
-        assert "  deploy (project)" in out
-        assert "  rollback" in out
+        assert out == "* deploy (project)\n* rollback\n"
         assert "rollback (project)" not in out
 
     def test_list_project_wins_on_name_conflict(self, tmp_path: Path, monkeypatch, capsys) -> None:
@@ -275,12 +273,12 @@ class TestInContainerListPath:
 
         assert result == 0
         out = capsys.readouterr().out
-        assert "  shared (project)" in out
+        assert "* shared (project)" in out
         # The user duplicate is suppressed.
         assert out.count("shared") == 1
 
-    def test_list_prints_header_when_empty(self, tmp_path: Path, monkeypatch, capsys) -> None:
-        """The header is printed before an empty list."""
+    def test_list_prints_nothing_when_empty(self, tmp_path: Path, monkeypatch, capsys) -> None:
+        """An empty discovery prints nothing (no header)."""
         monkeypatch.setattr(Path, "cwd", lambda: tmp_path)
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
@@ -288,7 +286,7 @@ class TestInContainerListPath:
 
         assert result == 0
         out = capsys.readouterr().out
-        assert out == "Available pipelines:\n"
+        assert out == ""
 
 
 class TestHostEndToEnd:
@@ -392,7 +390,7 @@ class TestPythonMEntrypoint:
 
         assert result.returncode == 0, result.stderr
         assert "RuntimeWarning" not in result.stderr
-        assert "Available pipelines:" in result.stdout
+        assert all(line.startswith("* ") for line in result.stdout.splitlines())
 
     def test_main_module_is_thin_wrapper_around_cli(self) -> None:
         """``__main__.py`` imports ``pipeline_cli`` from ``.cli`` and defines nothing else."""

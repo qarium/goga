@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import click
+import pytest
 import yaml
 from click.testing import CliRunner
 from goga.commands import build as build_cmd
@@ -76,9 +77,9 @@ class TestApiShape:
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
-    def test_build_has_fourteen_options(self) -> None:
+    def test_build_has_fifteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 14
+        assert len(options) == 15
 
     def test_build_has_dry_run_option(self) -> None:
         param_names = [p.name for p in build_cmd.params]
@@ -120,6 +121,10 @@ class TestApiShape:
         param_names = [p.name for p in build_cmd.params]
         assert "review_patience" in param_names
 
+    def test_build_has_skip_review_option(self) -> None:
+        param_names = [p.name for p in build_cmd.params]
+        assert "skip_review" in param_names
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -141,6 +146,8 @@ class TestHelpOutput:
             "--wait",
             "--max-iterations",
             "--review-patience",
+            "--skip-review",
+            "--no-skip-review",
             "-e",
         ):
             assert opt in output, f"Option {opt} not found in help output"
@@ -698,6 +705,26 @@ class TestGitConfigMergedInBuild:
         env_dict = mock_env.call_args[0][0]
         assert env_dict["GIT_AUTHOR_NAME"] == "override"
 
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    def test_review_env_not_in_container_env_file(self, mock_git, mock_env, mock_docker, tmp_path, monkeypatch) -> None:
+        """The review env layer reaches ONLY the pass-2 subprocess — it is never
+        part of the container env-file, so the tasks pass cannot see it."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"review_executor": {"agent": "codex", "env": {"ANTHROPIC_MODEL": "reviewer"}}},
+        )
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        env_dict = mock_env.call_args[0][0]
+        assert "ANTHROPIC_MODEL" not in env_dict
+        assert "reviewer" not in env_dict.values()
+
 
 # --- Image update (--update → docker_update) tests ---
 
@@ -898,3 +925,264 @@ class TestTopLevelImageContract:
         env_dict = mock_env.call_args[0][0]
         # With git config absent, only the task_executor env reaches the file.
         assert env_dict == {"FOO": "1"}
+
+
+# --- Review-phase control: guard 2.3 (two-pass x worktree) + flag forwarding ---
+
+
+class TestTwoPassWorktreeGuard:
+    """Step 2.3 — host-side guard: a review executor that differs from the task
+    executor means a two-pass run (tasks pass, then a review pass). ralphex
+    ``--review`` mode cannot follow a worktree branch, so the combination is
+    rejected BEFORE the docker command is assembled (right after guards 2.1/2.2,
+    before the env-file write and DockerRunner launch).
+    """
+
+    @staticmethod
+    def _write_two_pass_config(tmp_path: Path, *, worktree: bool | None = None) -> None:
+        data: dict = {
+            "language": "python",
+            "image": "qarium/goga:latest",
+            "build": {
+                "task_executor": {"agent": "claude"},
+                "review_executor": {"agent": "codex"},
+            },
+            "pipeline": {"agent": "claude"},
+        }
+
+        if worktree is not None:
+            data["build"]["worktree"] = worktree
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+    def test_host_guard_two_pass_worktree_conflict_cli_flag(self, tmp_path, monkeypatch) -> None:
+        """Worktree activated via the CLI --worktree flag → guard fires, no docker run."""
+        self._write_two_pass_config(tmp_path)
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_host_guard_two_pass_worktree_conflict_config_flag(self, tmp_path, monkeypatch) -> None:
+        """Worktree activated via build.worktree: true in config (no CLI flag) → guard fires too."""
+        self._write_two_pass_config(tmp_path, worktree=True)
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    def test_host_guard_negative_control_no_worktree(
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """Explicit build.worktree: false + no --worktree → guard silent, runner launched
+        (a two-pass run without worktree is legal)."""
+        self._write_two_pass_config(tmp_path, worktree=False)
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 0
+        mock_runner.return_value.run.assert_called_once()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    def test_host_guard_same_agents_with_worktree_passes(
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """review_executor.agent == task agent → single-pass run, worktree is fine."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"review_executor": {"agent": "claude"}},
+        )
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 0
+        mock_runner.return_value.run.assert_called_once()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    def test_host_guard_inactive_worktree_config_false(
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch
+    ) -> None:
+        """review_executor present but WITHOUT an agent → the "agent is set" condition
+        fails, so --worktree alone does not trip the guard."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"review_executor": {"skip": True}},
+        )
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 0
+        mock_runner.return_value.run.assert_called_once()
+
+    def test_host_guard_fires_even_with_explicit_skip_review(self, tmp_path, monkeypatch) -> None:
+        """--skip-review does not defuse the guard — pinned semantics.
+
+        The guard is config-driven by contract (step 2.3): it never consults
+        the tri-state, because the host must not resolve skip against the
+        config — resolution belongs to the in-container build. Even a run that
+        would skip the review phase entirely is rejected here when the config
+        declares differing executors AND worktree.
+        """
+        self._write_two_pass_config(tmp_path)
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree", "--skip-review"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    @staticmethod
+    def _write_env_induced_config(tmp_path: Path, *, review_env: dict | None, agent: str | None = "claude") -> None:
+        """Same task/review agents; only a non-empty review env induces two-pass."""
+        review_executor: dict = {}
+
+        if agent is not None:
+            review_executor["agent"] = agent
+
+        if review_env is not None:
+            review_executor["env"] = review_env
+        _write_goga_yml(tmp_path, extra={"review_executor": review_executor})
+
+    def test_host_guard_env_induced_two_pass_worktree_conflict_cli(self, tmp_path, monkeypatch) -> None:
+        """Same agents + non-empty review env → two-pass is induced by env alone;
+        combined with --worktree the guard fires BEFORE any docker call."""
+        self._write_env_induced_config(tmp_path, review_env={"M": "r"})
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_host_guard_env_conflict_skip_independent(self, tmp_path, monkeypatch) -> None:
+        """The env-induced conflict is skip-independent: the guard never reads
+        the skip tri-state (resolution belongs to the in-container build)."""
+        self._write_env_induced_config(tmp_path, review_env={"M": "r"})
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree", "--skip-review"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_host_guard_env_induced_two_pass_worktree_conflict_config_flag(self, tmp_path, monkeypatch) -> None:
+        """The config-driven worktree variant: `build.worktree: true` with a
+        non-empty review env is the same rejected combination — the guard is a
+        config-level projection, not a CLI-flag check."""
+        _write_goga_yml(
+            tmp_path,
+            extra={"worktree": True, "review_executor": {"agent": "claude", "env": {"M": "r"}}},
+        )
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @pytest.mark.parametrize(
+        ("review_env", "agent"),
+        [
+            ({"M": "r"}, None),  # env without an agent stays a container-side concern
+            ({}, "claude"),  # empty env → single-pass even under --worktree
+        ],
+    )
+    def test_host_guard_env_empty_and_env_without_agent_no_conflict(  # noqa: PLR0913, PLR0917
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch, review_env, agent
+    ) -> None:
+        """(a) empty review env with a matching agent, (b) env without any agent —
+        neither trips the guard; the run proceeds to docker."""
+        self._write_env_induced_config(tmp_path, review_env=review_env, agent=agent)
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 0
+        mock_runner.return_value.run.assert_called_once()
+
+
+class TestSkipReviewPairForwarding:
+    """The tri-state pair reaches the in-container entrypoint verbatim: True →
+    ``--skip-review``, False → ``--no-skip-review``, None → neither flag. The
+    host does NOT resolve the tri-state against the config — resolution belongs
+    to the in-container build.
+    """
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @pytest.mark.parametrize(
+        ("cli_args", "expected_flag", "absent_flag"),
+        [
+            (["plan.md", "--skip-review"], "--skip-review", "--no-skip-review"),
+            (["plan.md", "--no-skip-review"], "--no-skip-review", "--skip-review"),
+            (["plan.md"], None, None),
+        ],
+    )
+    def test_host_build_forwards_review_pair(  # noqa: PLR0913, PLR0917
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch, cli_args, expected_flag, absent_flag
+    ) -> None:
+        _write_goga_yml(tmp_path)
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            _run_build_in_tmp(tmp_path, monkeypatch, cli_args)
+
+        args = mock_runner.return_value.run.call_args.args[0]
+
+        if expected_flag is not None:
+            assert expected_flag in args
+            assert absent_flag not in args
+        else:
+            assert "--skip-review" not in args
+            assert "--no-skip-review" not in args

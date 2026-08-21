@@ -30,6 +30,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
@@ -64,6 +65,33 @@ def _write_config(tmp_path: Path, *, agent: str, image: str = "goga:latest") -> 
         f"    agent: {agent}",
     ]
     (goga_dir / "config.yml").write_text("\n".join(lines) + "\n")
+
+
+@contextmanager
+def _mock_vendored_sources(tmp_path: Path):
+    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary).
+
+    build() fully rewrites .ralphex/prompts|agents/ from the vendored defaults;
+    the real assets are a maintainers' artifact outside these tests.
+    """
+    from goga.build import ralphex_runtime
+
+    prompts_dir = tmp_path / "vendored-prompts"
+    agents_dir = tmp_path / "vendored-agents"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    (prompts_dir / "task.txt").write_text("# task prompt\n")
+    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
+    (prompts_dir / "review_first.txt").write_text("# first review prompt\n")
+    (prompts_dir / "review_second.txt").write_text("# second review prompt\n")
+    for role in ("quality", "implementation", "testing", "simplification", "documentation"):
+        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
+
+    with (
+        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
+        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
+    ):
+        yield
 
 
 def _load_config(tmp_path: Path, monkeypatch) -> object:
@@ -112,7 +140,8 @@ class TestBuildResolvedPathFlow:
         monkeypatch.setattr(shutil, "which", lambda *_: True)
         cli_options = {"dry_run": True, "skip_manifest_check": True}
 
-        result = build("plan.md", config, cli_options)
+        with _mock_vendored_sources(tmp_path):
+            result = build("plan.md", config, cli_options)
 
         assert result == 0
         config_text = (tmp_path / ".ralphex" / "config").read_text()
@@ -182,7 +211,8 @@ class TestResolvedPathConsistency:
         # --- build side: capture .ralphex/config claude_command ---
         monkeypatch.setattr(shutil, "which", lambda *_: True)
         build_options = {"dry_run": True, "skip_manifest_check": True}
-        build_result = build("plan.md", config, build_options)
+        with _mock_vendored_sources(tmp_path):
+            build_result = build("plan.md", config, build_options)
         assert build_result == 0
         build_config_text = (tmp_path / ".ralphex" / "config").read_text()
         build_path: str | None = None

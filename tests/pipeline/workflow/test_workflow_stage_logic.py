@@ -114,10 +114,10 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed: agent, prompt, loop, skills, skip, approve."""
+        """Field order is fixed: agent, prompt, loop, skills, skip, approve, manual."""
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve"]
+        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve", "manual"]
 
     def test_workflow_stage_approve_defaults_none(self) -> None:
         """Omitting ``approve`` yields None — no auto-approval directive."""
@@ -138,11 +138,25 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(approve="dialog").approve == "dialog"
 
     def test_approve_field_order_sixth_final(self) -> None:
-        """approve is the 6th and final field, after skip."""
+        """approve is the 6th field, before manual."""
         names = [field.name for field in fields(WorkflowStage)]
 
         assert names.index("skip") == 4
         assert names.index("approve") == 5
+        assert names.index("manual") == 6
+
+    def test_workflow_stage_manual_defaults_none_not_false(self) -> None:
+        """manual defaults to None (NOT False) — absent and explicit false are distinct states.
+
+        ``None`` anchors the tri-state contract: no instruction (the stage's
+        body decides the launch mode), ``True`` force, ``False`` explicit
+        cancel. ``WorkflowStage(skip=True)`` mirrors the ``apply_skip_stages``
+        consumer construction and must keep ``manual`` at ``None``.
+        """
+        assert WorkflowStage().manual is None
+        assert WorkflowStage(skip=True).manual is None
+        assert WorkflowStage(manual=True).manual is True
+        assert WorkflowStage(manual=False).manual is False
 
     def test_skip_accepts_true_and_false(self) -> None:
         """skip=True and skip=False round-trip verbatim."""

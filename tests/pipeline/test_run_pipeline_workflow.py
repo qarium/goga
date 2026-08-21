@@ -257,11 +257,49 @@ class TestRunPipelineWorkflowResolution:
         with (
             mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
             mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
-            # parse_workflow must never be invoked for a traversal name.
-            mock.patch.object(_run_pipeline_module, "parse_workflow") as mock_parse,
+            # Migrated off the deleted private helper: run_pipeline no longer
+            # imports parse_workflow — step 6 delegates to the shared
+            # ``resolve_workflow``, so the contractual point that calls
+            # parse_workflow is the resolver's own module. The assertion is
+            # unchanged: parse_workflow must never be invoked for a traversal name.
+            mock.patch.object(sys.modules["goga.pipeline.resolve_workflow"], "parse_workflow") as mock_parse,
         ):
             exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
 
         assert exit_code == 0
         assert mock_compile.call_args.kwargs["workflow"] is None
         mock_parse.assert_not_called()
+
+    def test_run_pipeline_env_disabled_takes_precedence_over_name(
+        self, tmp_path: Path, isolated_cwd: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """DISABLED=1 wins over GOGA_WORKFLOW_NAME even when the named file exists.
+
+        The named workflow-file (``hardening.yml``) is present on disk and
+        ``GOGA_WORKFLOW_NAME`` points at it, but the disable flag wins: the run
+        compiles with ``workflow=None``. The run is driven to completion with the
+        defaults-dir patched and ``run_flow`` mocked to 0, mirroring the other
+        tests in this class.
+        """
+        _patch_defaults(monkeypatch, tmp_path / "defaults")
+        monkeypatch.setenv("GOGA_WORKFLOW_DISABLED", "1")
+        monkeypatch.setenv("GOGA_WORKFLOW_NAME", "hardening")
+
+        workflows_dir = tmp_path / ".goga" / "workflows"
+        workflows_dir.mkdir(parents=True)
+        (workflows_dir / "hardening.yml").write_text(
+            "stages:\n  test:\n    skip: true\nextend:\n  audit:\n    after: [test]\n    title: Audit\n"
+        )
+
+        project_dir = tmp_path / ".goga" / "pipelines"
+        project_dir.mkdir(parents=True)
+        (project_dir / "deploy.yml").write_text("pipeline")
+
+        with (
+            mock.patch.object(_run_pipeline_module, "compile_flow", return_value=_fake_documents()) as mock_compile,
+            mock.patch.object(_run_pipeline_module, "run_flow", return_value=0),
+        ):
+            exit_code = run_pipeline("deploy", project_dir, tmp_path / "user", 50321)
+
+        assert exit_code == 0
+        assert mock_compile.call_args.kwargs["workflow"] is None

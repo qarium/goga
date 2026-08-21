@@ -123,6 +123,12 @@ assigned semantics:
 > translates it to the afm output key `interactive` (which stays stable in the
 > compiled flow-file). Authoring `interactive` directly is rejected with a
 > structural error — use `communication`.
+>
+> Symmetrically, the authoring field for the launch mode is `trigger`. The
+> compiler translates `trigger: manual` to the afm output key `auto_run: false`
+> (the stage pauses when reached and runs only when launched manually). Authoring
+> `auto_run` directly is rejected with a structural error — use
+> `trigger: manual`.
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
@@ -134,7 +140,9 @@ assigned semantics:
 | `before_script` | string         | —                           | Shell script run before the stage; compiles to the afm `script_before` field. See [Script directives](#script-directives). |
 | `script`      | string           | —                           | Shell script run as the stage body; compiles to the afm `script` field. Mutually exclusive with `prompt` and `skills`. See [Script directives](#script-directives). |
 | `after_script`  | string         | —                           | Shell script run after the stage; compiles to the afm `script_after` field. See [Script directives](#script-directives). |
+| `timeout`       | string         | — (no key emitted)          | Timeout for the stage's script action (Go duration, e.g. `30m`); compiles to the afm `script_timeout` field. Requires `script` in the same body; the value passes verbatim (the duration grammar is validated by afm at runtime). See [Script directives](#script-directives). |
 | `roles`       | list of strings  | autonomous mode when absent | Agent roles assigned to the stage. See [Roles](#roles).                     |
+| `trigger`     | string (`on_success` \| `manual`) | `on_success` (no key emitted) | Launch mode of the stage. `trigger: manual` compiles to the afm `auto_run: false` key (canonical slot right after `auto_approve`) — the stage pauses when reached and runs only when launched manually; `trigger: on_success` (or an absent key) emits no `auto_run` key. Authoring `auto_run` directly is a structural error. Valid in both body formats and in workflow `extend` bodies; a workflow `stages` block can force or cancel it per-stage via `manual` (see [Workflows](workflows.md)). |
 | `depends_on`  | list of strings  | auto (phases) / none (stages) | Stage dependencies.                                                        |
 
 ### Body step `title` field
@@ -154,12 +162,13 @@ output keys at compile time:
 | `before_script` | `script_before`  | Before the stage's agent work.  |
 | `script`        | `script`         | As the stage body itself.       |
 | `after_script`  | `script_after`   | After the stage's agent work.   |
+| `timeout`       | `script_timeout` | Bounds the stage's script action. |
 
 The authoring keys are consumed and never appear in the compiled flow-file —
 only the translated `script_*` keys do. A multi-line `script_before`,
-`script`, or `script_after` serializes as a YAML block-literal
-(e.g. `script: |`); a single-line value stays a plain scalar. The rule is
-uniform across all three slots.
+`script`, `script_after`, or `script_timeout` serializes as a YAML
+block-literal (e.g. `script: |`); a single-line value stays a plain scalar.
+The rule is uniform across all four slots.
 
 `script` is **mutually exclusive** with `prompt` and `skills`: a stage runs
 either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
@@ -167,6 +176,16 @@ either an agent-driven prompt (`prompt`/`skills`) or a literal shell script
 `skills` is a structural error. `before_script` and `after_script` are
 compatible with both `script` and `prompt`/`skills` — they bracket the stage
 regardless of how its body is defined.
+
+`timeout` scopes to the script action: it requires `script` in the same body
+(`before_script`/`after_script` do not open the directive — a `timeout`
+without `script` is a structural error, as is a non-string value, including
+YAML-null). The value passes verbatim with no duration-grammar validation on
+the goga side — a malformed string fails in afm at runtime. The key is
+emitted only when authored; authoring `script_timeout` directly is not
+forbidden, but when both are authored the translated `timeout` value wins.
+Valid in both body formats and in workflow `extend` bodies; loop-expanded
+copies inherit it.
 
 ```yaml
 deploy:
@@ -178,14 +197,16 @@ deploy:
     make build
     make deploy
   after_script: echo "done"
+  timeout: 30m
 ```
 
 ## Shipped pipelines
 
-Goga ships three ready-to-use pipelines — `feature`, `bugfix`, `patch` —
-that cover the most common authoring lifecycles. See
+Goga ships six ready-to-use pipelines — `bugfix`, `development`, `patch`,
+`refinement`, `review`, and `sync` — that cover the most common authoring
+lifecycles. See
 [Shipped Pipelines](shipped.md) for the per-pipeline walkthrough and how
-to use them as templates.
+project pipelines override the global ones.
 
 ## Roles
 
@@ -414,6 +435,11 @@ workflow-agent semantics.
 | Non-mapping `roles` block in header                      | `non-mapping roles block in header`                             |
 | Non-string value in header `roles.<key>`                 | `non-str value in header.roles.<key>`                           |
 | Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
+| Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
+| Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
+| `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
+| `timeout` value is not a string (including YAML-null)   | `timeout must be a string in stage <NAME>`                      |
+| `timeout` without `script` in the same body             | `timeout requires script in stage <NAME>`                       |
 | `script` authored together with `prompt` and/or `skills` | `script is mutually exclusive with prompt/skills in stage <NAME>` |
 | Body shape is neither list nor dict                      | `unsupported body format`                                       |
 | Body has zero steps                                      | `empty body`                                                    |

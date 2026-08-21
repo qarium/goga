@@ -36,6 +36,13 @@ docs/cell/usages.md:
 
 docs/configuration/index.md:
   - goga/config
+
+docs/configuration/project.md:
+  - goga/config
+  - goga/docker
+
+docs/configuration/home.md:
+  - goga/config/home
   - goga/docker
 
 docs/configuration/agents.md:
@@ -49,6 +56,9 @@ docs/tools.md:
   - goga/pipeline
 
 docs/workflow/index.md:
+  - goga/connect
+
+docs/workflow/define.md:
   - goga/connect
 
 docs/workflow/discover.md:

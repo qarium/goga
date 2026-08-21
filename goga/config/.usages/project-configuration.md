@@ -13,6 +13,7 @@ from goga.config import (
     ProjectConfig,
     BuildConfig,
     TaskExecutorConfig,
+    ReviewExecutorConfig,
     PipelineConfig,
     CodemanifestConfig,
     DepConfig,
@@ -44,6 +45,11 @@ config = load_project_config()
 - When `build` is present: it must be a mapping, and `build.task_executor` is required; `build.task_executor.agent` is OPTIONAL — absent/null/empty/whitespace resolves to `None`, and `goga build` raises `ClickException` when it needs an agent
 - A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `pipeline:` null, `build: true`) raises `ValueError`, not `AttributeError`
 - Raises `yaml.YAMLError` on invalid YAML syntax
+- Optional `build.review_executor` follows structural-only validation: field
+  types, a list-of-strings check for `roles`, and a strings-mapping check for
+  `env`; an empty `roles` list and an empty `env` mapping pass through verbatim
+  — the empty-to-full-set (roles) and env-requires-agent (env) semantics belong
+  to the consuming command
 
 **Error handling**:
 
@@ -129,6 +135,14 @@ build:
   prompts_dir: /custom/prompts
   agents_dir: /custom/agents
   codex_review: true
+  review_executor:        # optional review-phase control
+    skip: false           # bool | absent — tri-state source
+    agent: codex          # str | absent — review executor name
+    roles:                # list[str] | absent — reviewer composition
+      - quality
+      - testing
+    env:                  # mapping | absent — review-pass env layer
+      ANTHROPIC_MODEL: reviewer-model
 codemanifest:
   usages:
     usage_name: path/to/file.md
@@ -204,6 +218,11 @@ afm) that consume these fields.
 | `build.prompts_dir`         | str     | None                   | Custom prompt directory path                            |
 | `build.agents_dir`          | str     | None                   | Custom agent directory path                             |
 | `build.codex_review`        | bool    | None                   | Enable external codex review (mapped to ralphex `codex_enabled`) |
+| `build.review_executor`          | mapping | None  | Review-phase control block (structural validation only) |
+| `build.review_executor.skip`     | bool    | None  | Tri-state source for skipping the review phase |
+| `build.review_executor.agent`    | str     | None  | Review executor name (resolved by the consumer) |
+| `build.review_executor.roles`    | list    | None  | Reviewer composition; empty list passes verbatim (full default set is consumer semantics) |
+| `build.review_executor.env`     | mapping | `{}`  | Review-pass env layer ({str: str}); empty when absent/YAML-null/`{}`; requires `agent` when non-empty (enforced by the consumer) |
 | `codemanifest`              | mapping | None                   | CODEMANIFEST usage and annotation config                |
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |
@@ -258,6 +277,13 @@ config.build.hosts  # dict[str, str] — docker run --add-host entries
 # TaskExecutorConfig fields
 config.build.task_executor.agent  # str | None — None when not configured
 config.build.task_executor.env  # dict — {str: str}
+
+# ReviewExecutorConfig fields — None when the review_executor section is absent
+config.build.review_executor  # ReviewExecutorConfig | None
+config.build.review_executor.skip  # bool | None — tri-state skip source
+config.build.review_executor.agent  # str | None — review executor name
+config.build.review_executor.roles  # list[str] | None — verbatim; [] means the full default set to the consumer
+config.build.review_executor.env  # dict — {str: str}, empty when absent
 
 # CodemanifestConfig fields — None when the `codemanifest` section is absent
 config.codemanifest  # CodemanifestConfig | None

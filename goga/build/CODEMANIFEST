@@ -3,6 +3,7 @@ Imports:
       - ProjectConfig
       - BuildConfig
       - TaskExecutorConfig
+      - ReviewExecutorConfig
       - load_project_config
     From: goga/config
   - Types:
@@ -40,13 +41,22 @@ Annotations: |
   goga/ralphex (per the `run-ralphex` practice) — ralphex is launched through `run_ralphex`,
   never directly from this cell.
 
+  This cell also owns the review-phase orchestration of the build: tri-state
+  skip resolution, review-env handling (two-pass induction by a non-empty
+  review env, the env-requires-agent gate, the per-pass env layer of the
+  review pass), vendored ralphex defaults synced into .ralphex/, review-prompt
+  filtering by declared roles, single- and two-pass launch through `run_ralphex`
+  (the review pass carries the review env as its env layer), plan relocation
+  after a successful run, and semantic validation of the review configuration —
+  all expressed via the ralphex launch, with no review implementation of its own.
+
   Use the `conventions` practice for development and testing.
   Use the `ralphex` practice for the ralphex config-generation contract (the .ralphex/config
   key layout written before launch).
   Use the `agent-wrappers` practice for the in-container wrapper naming convention referenced
   when writing claude_command into .ralphex/config.
   Use the `resolve-wrapper-path` practice when calling `resolve_wrapper_path`.
-  Use the `run-ralphex` practice from Imports to delegate the launch.
+  Use the `run-ralphex` practice to delegate the launch.
   Write all output to sys.stderr (click is not used).
   Run git external commands via subprocess (the manifest pre-check).
 
@@ -61,43 +71,65 @@ Annotations: |
     `plan`: path to the plan file (markdown)
     `config`: loaded project configuration object
     `cli_options`: dictionary of CLI options (dry_run, worktree, skip_finalize,
-                   skip_manifest_check, session_timeout, idle_timeout,
-                   wait, max_iterations, review_patience)
+                   skip_manifest_check, skip_review, session_timeout,
+                   idle_timeout, wait, max_iterations, review_patience)
     `exit_code`: process exit code (0 = success, 1 = failure)
 
     Algorithm:
     0. (pre-check) When skip_manifest_check is not set:
        - Verify all project CODEMANIFEST files are committed to git
        - Reject with exit code 1 if any uncommitted manifests are found
-    1. Resolve the agent wrapper path by calling `resolve_wrapper_path` with the agent
-       field of `TaskExecutorConfig`, per the `resolve-wrapper-path` practice (absolute
+    1. Resolve the agent wrapper path by calling `resolve_wrapper_path` with the
+       agent field of `TaskExecutorConfig`, per the `resolve-wrapper-path` practice (absolute
        in-container path /home/goga/bin/<name>-as-claude.sh per `agent-wrappers`)
-    2. Generate the .ralphex/config file with the resolved agent, per the `ralphex` practice:
-       - set claude_command to the resolved wrapper path
-       - apply claude_args defaults when missing
-       - set codex_enabled from `BuildConfig`
-       - set preserve_anthropic_api_key to true
-    3. Copy default prompts and agents from the goga package to .ralphex/, using the
-       directory paths specified in `BuildConfig`
-    4. Resolve the ralphex options with precedence CLI options > `BuildConfig` > omit,
-       producing the resolved options for `run_ralphex` (precedence applied HERE in the
-       domain — `run_ralphex` performs no precedence resolution)
-    5. Delegate the launch to `run_ralphex` (per the `run-ralphex` practice), passing
-       `plan`, the resolved options, and dry_run, and return its exit code
+    2. Resolve the review options (skip, review agent, roles, review env,
+       two-pass mode) via `resolve_review_options`
+    3. Validate the review configuration via `validate_review_config` when the
+       review phase will run
+    4. Write .ralphex/config for the first pass via `write_ralphex_config`
+    5. Fully rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
+       defaults via `sync_ralphex_defaults`, applying the declared roles to the
+       review prompts
+    6. Resolve the ralphex options with precedence CLI options > `BuildConfig` > omit,
+       producing the resolved options for `run_ralphex`
+    7. Launch each planned pass via `run_build_pass` (which delegates the launch
+       to `run_ralphex`), forwarding the dry_run flag of `cli_options` so a dry
+       run prints the commands of every planned pass instead of launching:
+       - skip run: one pass with tasks_only — the review env is ignored
+         entirely; other phases unchanged
+       - two-pass run: pass 1 with tasks_only and the task wrapper, no env
+         layer; when pass 1 succeeds — pass 2 in the review-only mode (options
+         key review → the ralphex --review bare flag) with the review wrapper
+         and the review env as the env layer (the layer overlays the container
+         environment on the pass-2 subprocess only); a pass-1 failure exits
+         with its code and skips pass 2
+       - otherwise: one full pass, no env layer
+    8. Relocate the plan via `move_completed_plan` with outcome = success of
+       the final pass and the dry_run flag forwarded (a dry run leaves the plan
+       in place)
+    9. Return the exit code of the last pass
 
     Apply `conventions` for docstring style and intra-package imports.
     Apply `ralphex` for the config-generation contract.
-    Apply `agent-wrappers` for the wrapper path semantics in step 2.
+    Apply `agent-wrappers` for the wrapper path semantics in step 1.
     Apply `resolve-wrapper-path` when calling `resolve_wrapper_path` in step 1.
-    Apply `run-ralphex` when delegating the launch in step 5.
+    Apply `run-ralphex` when delegating the launch in step 7.
 
     Requirements:
     - `ralphex` is launched only through `run_ralphex` — never via a direct subprocess call
-    - Return code: the exit code returned by `run_ralphex` (ralphex exit code on success, 1 on error)
+    - Return code: the exit code returned by the last `run_build_pass` (ralphex exit code on success, 1 on error)
     - Minimal output: log each step to sys.stderr
     - claude_command in .ralphex/config MUST be the resolved wrapper path
     - preserve_anthropic_api_key in .ralphex/config MUST be true
+    - move_plan_on_completion in .ralphex/config MUST be false — goga relocates
+      the plan itself via `move_completed_plan`
     - Resolve ralphex option precedence (CLI > ProjectConfig > omit) before delegating
+    - A skipped run performs no review phase of any kind — internal agents,
+      second pass, codex review
+    - On dry-run print the commands of every planned pass and leave the plan
+      in place
+    - On dry-run print the commands of every planned pass without the env layer
+      contents — the review env never reaches logs or dry-run output
 
     Constraints:
     - Wrappers live in the image at /home/goga/bin/ and are referenced by absolute path
@@ -116,9 +148,12 @@ Annotations: |
     0. Call `ensure_in_docker` as the very first statement — refuse to proceed
        when the process is not running inside the goga Docker image (per the
        `ensure-in-docker` practice)
-    1. Parse CLI arguments via argparse (plan + options)
+    1. Parse CLI arguments via argparse (plan + options); the argparse surface
+       carries the --skip-review / --no-skip-review pair resolving to
+       skip_review: bool | None (None when neither flag is given)
     2. Load project configuration via `load_project_config`
-    3. Build cli_options from the parsed argparse results
+    3. Build cli_options from the parsed argparse results; cli_options carries
+       the skip_review key
     4. Invoke `build`(plan, `ProjectConfig`, cli_options)
     5. Return the resulting `exit_code`
 
@@ -130,10 +165,215 @@ Annotations: |
 
     Apply the `ensure-in-docker` practice at step 0.
 
+"resolve_review_options(config: BuildConfig, cli_options: dict) -> review: ReviewOptions":
+  location: review_options.py
+  annotations: |
+    Resolve the review-phase execution plan of one build from the tri-state CLI
+    value and the project configuration.
+
+    `config`: build configuration (`BuildConfig`) with the optional review_executor sub-configuration
+    `cli_options`: CLI options dictionary; the skip_review key is bool | None (None = flag not given)
+    `review`: resolved review options (`ReviewOptions`)
+
+    Algorithm:
+    1. Resolve skip: take cli_options skip_review when it is not None, otherwise
+       the skip field of `ReviewExecutorConfig`, otherwise False
+    2. Take review_agent from `ReviewExecutorConfig` verbatim
+    3. Compute two_pass: review_agent is set AND (review_agent differs from the
+       agent field of `TaskExecutorConfig` OR the env field of
+       `ReviewExecutorConfig` is non-empty)
+    4. Take roles verbatim (None or an empty list stay as they are)
+    5. Take the review env verbatim into review_env (an empty dict stays empty;
+       a review env equal to task_executor.env is still non-empty and keeps
+       two_pass true)
+
+    Requirements:
+    - Precedence CLI > ProjectConfig > omit
+    - An empty roles list reaches the consumers as an empty list
+    - A non-empty review env induces two_pass regardless of dictionary equality
+      with task_executor.env
+
+    Constraints:
+    - Pure — no side effects, no validation of values (separate routine)
+
+"ReviewOptions(skip: bool, review_agent: str | None, roles: list[str] | None, two_pass: bool, review_env: dict[str, str])":
+  location: review_options.py
+  annotations: |
+    Resolved review-phase execution plan of a single build.
+
+    `skip`: final skip decision (False when neither source is set)
+    `review_agent`: review executor name, None when unset
+    `roles`: declared reviewer composition, verbatim (None or [] = full default set to the consumer)
+    `two_pass`: True when the review executor differs from the task executor OR a
+                non-empty review env is declared (with an agent set)
+    `review_env`: review-pass environment layer, verbatim from
+                 `ReviewExecutorConfig` (an empty dict when unset); forwarded as
+                 the env layer of the review pass by the orchestrator
+
+    Requirements:
+    - Immutable frozen dataclass (frozen=True, kw_only=True), per `conventions`
+    - Computed by `resolve_review_options` — never loaded from YAML directly
+  properties:
+    "skip -> bool": |
+      Final skip decision of the tri-state resolution.
+    "review_agent -> str | None": |
+      Review executor name matching the wrapper convention; None when unset.
+    "roles -> list[str] | None": |
+      Declared reviewer composition, verbatim; None or empty list mean the full
+      default set to the consumer.
+    "two_pass -> bool": |
+      Whether the build runs as two ralphex passes (tasks pass + review pass).
+    "review_env -> dict[str, str]": |
+      Review-pass environment layer, verbatim; an empty dict when the
+      configuration declares no env. The layer overlays the container
+      environment on the review-pass subprocess only.
+
+"validate_review_config(config: BuildConfig, review: ReviewOptions) -> none: None":
+  location: review_config.py
+  annotations: |
+    Semantically validate the review configuration of a run whose review phase
+    will actually execute; raise ValueError naming the invalid value.
+
+    `config`: build configuration (`BuildConfig`)
+    `review`: resolved review options (`ReviewOptions`)
+
+    Algorithm:
+    1. Return without checks when `review` says skip — a skipped run does not
+       validate review fields
+    2. Check every role of `review` against the ralphex whitelist (quality,
+       implementation, testing, simplification, documentation); a role outside
+       the whitelist raises ValueError naming the role
+    3. When `review` carries a non-empty review_env and no review_agent — raise
+       ValueError naming the problem (env requires agent)
+    4. When two_pass: resolve the review-agent wrapper path via
+       `resolve_wrapper_path` and require the wrapper file to exist; absence
+       raises ValueError naming the agent
+
+    Requirements:
+    - Runs before any side effect — before writing .ralphex/ and before the
+      ralphex launch
+    - The error message names the invalid value
+    - The env-requires-agent gate fires only when the review phase will run —
+      a skipped run never validates env
+
+    Constraints:
+    - Do not validate the task executor wrapper here — its absence surfaces at
+      ralphex time
+    - Do not check review fields of a skipped run
+
+"sync_ralphex_defaults(config: BuildConfig, review: ReviewOptions) -> none: None":
+  location: ralphex_runtime.py
+  annotations: |
+    Fully rewrite .ralphex/prompts/ and .ralphex/agents/ from the vendored
+    ralphex defaults (or the configured custom directories) and apply the
+    declared reviewer composition to the review prompts.
+
+    `config`: build configuration (`BuildConfig`) with optional prompts_dir / agents_dir
+    `review`: resolved review options (`ReviewOptions`)
+
+    Algorithm:
+    1. Choose the prompts source: the prompts_dir field of `BuildConfig` when set,
+       otherwise the vendored package defaults under goga/assets/ralphex/prompts/;
+       choose the agents source the same way
+    2. Fully rewrite both target directories (clear, then copy)
+    3. When the roles of `review` are a non-empty list: filter both review prompts —
+       keep only the {{agent:X}} lines of the selected roles; adapt the
+       accompanying text (agent counters, launch wording) to the actual number
+       of remaining roles
+    4. Copy the definition files of all review agents regardless of the selection
+
+    Requirements:
+    - The full rewrite happens once per build run (the orchestrator calls this
+      routine before the pass loop), regardless of roles
+    - With the full default set (or no roles) the prompts are byte-identical
+      to the vendored defaults
+    - An empty intersection of roles with a phase's default set is a regular
+      phase without subagents — no error, no fallback
+    - Custom prompts_dir / agents_dir sources are copied as-is, without filtering
+
+    Constraints:
+    - Do not touch .ralphex/config — it is written by the config routine
+
+"write_ralphex_config(config: BuildConfig, wrapper_path: str) -> none: None":
+  location: ralphex_config.py
+  annotations: |
+    Generate .ralphex/config for one ralphex pass.
+
+    `config`: project configuration source fields (`BuildConfig`)
+    `wrapper_path`: executor wrapper path of the current pass (claude_command value)
+
+    Algorithm:
+    1. Set claude_command to `wrapper_path`
+    2. Apply claude_args defaults when missing
+    3. Set codex_enabled from `BuildConfig`
+    4. Set preserve_anthropic_api_key to true
+    5. Set move_plan_on_completion to false — always, for every pass
+
+    Requirements:
+    - In a two-pass run this routine is called twice — each pass passes its own
+      executor wrapper as `wrapper_path` (task wrapper for pass 1, review
+      wrapper for pass 2), so the claude_command rewrite between the passes is
+      expressed by the two calls themselves
+
+    Constraints:
+    - Do not duplicate the skip decision into codex_enabled — the tasks-only flag
+      is the single source of truth
+    - Do not write prompts or agents here
+
+"run_build_pass(plan: str, config: BuildConfig, options: dict[str, str | int | bool], wrapper_path: str, dry_run: bool, env: dict[str, str] | None = None) -> exit_code: int":
+  location: build_pass.py
+  annotations: |
+    Execute one ralphex pass: write the pass config, delegate the launch.
+
+    `plan`: path to the plan file (markdown)
+    `config`: build configuration (`BuildConfig`)
+    `options`: resolved ralphex options of the pass (may carry tasks_only or
+               review — the pass-mode bare flags)
+    `wrapper_path`: executor wrapper of the current pass (task wrapper or
+                    review wrapper)
+    `dry_run`: when True, print instead of launching
+    `env`: optional environment layer forwarded verbatim to `run_ralphex` — the
+           review pass receives the review env here; the tasks pass runs
+           without a layer
+    `exit_code`: the exit code returned by ralphex
+
+    Algorithm:
+    1. Write .ralphex/config via the config routine with `wrapper_path`
+    2. Delegate the launch to `run_ralphex` with `plan`, `options`, `dry_run`,
+       and `env`
+    3. Return the exit code of `run_ralphex`
+
+    Constraints:
+    - Do not assemble or invoke the ralphex command directly — only through `run_ralphex`
+
+"move_completed_plan(plan: str, outcome: bool, dry_run: bool) -> none: None":
+  location: plan_relocation.py
+  annotations: |
+    Relocate a completed plan file into the completed/ subdirectory of the
+    directory holding the plan.
+
+    `plan`: path to the plan file
+    `outcome`: True when the run succeeded
+    `dry_run`: when True, nothing was launched — leave the plan in place
+
+    Algorithm:
+    1. Return without changes when `outcome` is False or `dry_run` is True
+    2. Move the plan file to <plan_dir>/completed/<plan_name>, creating the
+       completed/ subdirectory when missing
+
+    Requirements:
+    - Called after any successful run (full, skip, two-pass — after the success
+      of the last pass)
+
+    Constraints:
+    - Do not hard-code docs/plans/ — the directory follows the plan file location
+
 ---
 
-Author: Mikhail Trifonov
-CreatedAt: 15/05/26
+Author: Goga
+CreatedAt: 18/08/26
 
 Description: |
-  Manifest describing the code build orchestration logic through ralphex
+  Manifest describing the code build orchestration logic through ralphex,
+  including the review-phase orchestration: skip resolution, vendored
+  defaults, reviewer composition, single/two-pass launch, and plan relocation.

@@ -99,28 +99,30 @@ propose → review(task)
                   → accept
 ```
 
-The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the cycle. For work that does not require deep technical elaboration, the shorter path starts directly at `propose` and cuts straight to `change` — see [Workflow](workflow/index.md).
+The cycle may open with [`discover`](workflow/discover.md) when a hard-to-reverse decision needs settling before the task is formulated — this makes discover the longest entry point into the refinement workround. For work that does not require deep technical elaboration, the shorter path starts directly at `propose` and cuts straight to `change` — see [Workflow](workflow/index.md).
 
 ### Automated cycle
 
-The fastest path. Goga ships ready-to-use pipelines that run the full cycle inside an isolated container, with agent credentials forwarded automatically. Run the `feature` pipeline from your agent:
+The fastest path. Goga ships ready-to-use pipelines that run the workrounds inside an isolated container, with agent credentials forwarded automatically. Run the `refinement` pipeline first, then `development`:
 
 ```bash
-goga pipeline feature
+goga pipeline refinement
+goga pipeline development
 ```
 
-The pipeline walks all twelve stages — discover → propose → task-review → brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → prepare-build → accept-result — and pauses at every `communication` stage to ask for your input before moving on. When the work does not need deep technical elaboration, skip the discovery stage and start at `propose`:
+`refinement` walks the product side — define → discover → propose → task-review — and pauses at every `communication` stage to ask for your input before moving on. `development` picks up the reviewed task and walks the engineering side — brainstorm → architecture-review → apply-architecture → code-design → design-review → coding-plan → plan-review → commit-changes → accept-result. When the work does not need product elaboration, skip the early stages — for example, start `refinement` at `discover`:
 
 ```bash
-goga pipeline feature -s discover
+goga pipeline refinement -s define
 ```
 
-Three more shipped pipelines cover other lifecycles:
+Four more shipped pipelines cover other lifecycles:
 
 ```bash
 goga pipeline bugfix     # root-cause analysis and defect resolution
 goga pipeline patch      # refactoring or minimal change with a plan
 goga pipeline review     # scoped review of code, contracts, docs, then lint/format/tests
+goga pipeline sync       # sync specifications and tests with the implementation
 ```
 
 See [Pipelines](pipelines/index.md) for the full functional model, and [Shipped Pipelines](pipelines/shipped.md) for the per-pipeline walkthrough.
@@ -135,7 +137,7 @@ If you want explicit control over each step instead of running the whole cycle a
 
 > The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
 
-The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step, including two shortcut paths for smaller changes.
+The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
 
 ## View
 

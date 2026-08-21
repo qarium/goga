@@ -1,35 +1,71 @@
 # pipeline — host-side goga pipeline command
 
-`goga pipeline` is a single Click command. Both discovery (no name) and run
-(name) modes launch the goga Docker container and invoke
-python -m goga.pipeline {list,run} inside it. The host never reads pipeline
-files directly — the runtime boundary to goga/pipeline is docker.
+`goga pipeline` is a single Click command with five explicit forms. Every
+form launches the goga Docker container and invokes python -m goga.pipeline
+inside it. The host never reads pipeline files directly — the runtime
+boundary to goga/pipeline is docker.
 
-## Usage
+## Forms
 
-goga pipeline [NAME] [OPTIONS]
+| Invocation | Behavior |
+|---|---|
+| `goga pipeline` (no name, no `--list`) | error: `Missing pipeline name. Use "goga pipeline --list" to list available pipelines, or provide a pipeline name.` — stderr, exit 1, no docker activity |
+| `goga pipeline --list` / `-l` | flat list of pipeline names (project source entries suffixed with ` (project)`) |
+| `goga pipeline --list --info` / `-l -i` | overview: every pipeline as a `* <name>` bullet block with indented `name:`/`description:` field lines |
+| `goga pipeline NAME --info` / `-i` | card of one pipeline: `name:`/`description:` fields, a `---` separator, then `* <id>:` stage bullets with indented `title:` lines in execution order; nothing runs |
+| `goga pipeline NAME` | run |
 
-When NAME is omitted → discovery mode. When provided → run mode.
+`--list` and a name together is an error (mutually exclusive, clean message,
+exit 1). `--info` is a modifier, not a mode: without a name and without
+`--list` it still yields the missing-name error.
 
 ## Options (selection)
 
 | Option | Type | Effect |
-|--------|------|--------|
-| -p / --parallel N | int (optional) | max concurrently executing stages; forwarded as the in-container --parallel, which threads to afm run --max-parallel N. Absent ⇒ afm unbounded. Run mode only (no-op in discovery). |
-| -s / --skip NAME | repeatable | exclude a stage (run mode only) |
-| -w / --workflow NAME | str | apply an explicit workflow |
-| --no-workflow | flag | disable workflow resolution |
-| -c / --clean | flag | wipe persistent afm state before launch (run mode only) |
+|---|---|---|
+| -l / --list | flag | select the listing forms |
+| -i / --info | flag | show instead of act (overview with --list, card with NAME) |
+| -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
+| --no-workflow | flag | disable workflow resolution (run and card) |
+| -p / --parallel N | int | max concurrently executing stages; run only |
+| -s / --skip NAME | repeatable | exclude a stage; run only |
+| -c / --clean | flag | wipe persistent afm state before launch; run only |
+| -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
+
+## Flag behavior in the list/info forms
+
+- Ignored (no-op, no side effects): `-e/--env`, `--proxy`, `-c/--clean`,
+  `-s/--skip`, `-p/--parallel`, `--add-host`.
+- `-u/--update`: works in `--list` without `--info`; no-op in both `--info`
+  forms.
+- `-w/--workflow` and `--no-workflow`: validated as usual (exclusivity and,
+  for -w, file existence) and honored by the card form.
+- All errors go to stderr with a non-zero exit code; stdout stays clean for
+  the listing, overview, and card output.
+
+## Docker shapes
+
+- Run form: full shape — allocated port, env-file, afm-config tmpfile,
+  persistent afm state mount, credential mounts, caller-side signal
+  handler.
+- List/info forms: minimal read-only shape — none of the above. The
+  decision travels in the subcommand argv: `-m goga.pipeline list [--info]`
+  or `-m goga.pipeline run NAME --info [-w WORKFLOW | --no-workflow]`.
 
 ## -p vs docker -p
 
 The user-facing -p/--parallel is a Click option. The Docker port-publish
 -p <port>:<port> is an internal translated docker token assembled by
-run_pipeline_container/DockerRunner from the allocated port. They are in
-different namespaces (Click CLI vs docker run argv) — no collision. The user
-never authors the docker -p.
+run_pipeline_container/DockerRunner from the allocated port (run form
+only). Different namespaces (Click CLI vs docker run argv) — no collision.
+The user never authors the docker -p.
 
-## Threading chain
+## Threading chains
+
+    goga pipeline NAME            → run (full shape)
+    goga pipeline --list          → minimal shape: list
+    goga pipeline --list --info   → minimal shape: list --info
+    goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow]
 
     goga pipeline NAME -p N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N

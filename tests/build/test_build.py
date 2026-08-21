@@ -1,21 +1,29 @@
 from __future__ import annotations
 
 import inspect
-import shutil
 import subprocess
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 from unittest import mock
 
+import pytest
 from goga.build.build import (
-    _copy_defaults,
     _parse_porcelain_path,
     _resolve_options,
     _unquote_git_path,
-    _write_ralphex_config,
     build,
 )
-from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.build.ralphex_config import write_ralphex_config
+from goga.build.ralphex_runtime import sync_ralphex_defaults
+from goga.build.review_options import ReviewOptions
+from goga.config import (
+    BuildConfig,
+    PipelineConfig,
+    ProjectConfig,
+    ReviewExecutorConfig,
+    TaskExecutorConfig,
+)
 
 TEST_ENV_VARS = {
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
@@ -24,14 +32,42 @@ TEST_ENV_VARS = {
     "ANTHROPIC_BASE_URL": "https://api.z.ai/api/anthropic",
 }
 
+# Synthetic stand-ins for the vendored ralphex v1.6.1 defaults, carrying the
+# literal counter fragments the role filter adapts (see .goga/usages/cooks/
+# ralphex.md § Review prompt composition). The real assets land with the
+# maintainers' artifact; tests never depend on it.
+_VENDORED_ROLES = ("quality", "implementation", "testing", "simplification", "documentation")
+
+_VENDORED_REVIEW_FIRST = (
+    "# first review prompt\n"
+    "# launches 5 parallel reviewer agents\n"
+    "Launch ALL 5 Review Agents\n"
+    "All 5 agent invocations\n"
+    + "".join(f"{{{{agent:{role}}}}}\n" for role in _VENDORED_ROLES)
+    + "until ALL 5 agents\n"
+)
+
+_VENDORED_REVIEW_SECOND = (
+    "# second review prompt\n"
+    "# uses 2 agents\n"
+    "Both agent invocations\n"
+    "{{agent:quality}}\n"
+    "{{agent:implementation}}\n"
+    "until both complete\n"
+    "until BOTH agents\n"
+    "emit them both in one response\n"
+)
+
 
 def _make_config(
     agent: str = "claude",
     env: dict | None = None,
-    **build_kwargs,
+    review_executor: ReviewExecutorConfig | None = None,
+    **build_kwargs: object,
 ) -> ProjectConfig:
+    """Build a ProjectConfig; review_executor defaults to None (no review section)."""
     task_executor = TaskExecutorConfig(agent=agent, env=env or {})
-    build = BuildConfig(task_executor=task_executor, **build_kwargs)
+    build = BuildConfig(task_executor=task_executor, review_executor=review_executor, **build_kwargs)  # type: ignore[arg-type]
     return ProjectConfig(
         lang="python",
         image="goga:latest",
@@ -41,6 +77,29 @@ def _make_config(
     )
 
 
+@contextmanager
+def _mock_vendored_sources(tmp_path: Path):
+    """Point the vendored ralphex defaults at synthetic tmp sources (external boundary)."""
+    from goga.build import ralphex_runtime
+
+    prompts_dir = tmp_path / "vendored-prompts"
+    agents_dir = tmp_path / "vendored-agents"
+    prompts_dir.mkdir(parents=True, exist_ok=True)
+    agents_dir.mkdir(parents=True, exist_ok=True)
+    (prompts_dir / "task.txt").write_text("# task prompt\n")
+    (prompts_dir / "codex.txt").write_text("# codex review prompt\n")
+    (prompts_dir / "review_first.txt").write_text(_VENDORED_REVIEW_FIRST)
+    (prompts_dir / "review_second.txt").write_text(_VENDORED_REVIEW_SECOND)
+    for role in _VENDORED_ROLES:
+        (agents_dir / f"{role}.txt").write_text(f"# {role} agent definition\n")
+
+    with (
+        mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", prompts_dir),
+        mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", agents_dir),
+    ):
+        yield prompts_dir, agents_dir
+
+
 def _run_build_in_tmp(
     tmp_path: Path,
     monkeypatch,
@@ -48,11 +107,13 @@ def _run_build_in_tmp(
     cli_options: dict | None = None,
     config: ProjectConfig | None = None,
 ) -> int:
+    """chdir into tmp_path, write a plan, and run build() with mocked defaults sources."""
     monkeypatch.chdir(tmp_path)
+    Path(plan).write_text("# plan\n")
     if config is None:
         config = _make_config()
-    result = build(plan, config, cli_options or {})
-    return result
+    with _mock_vendored_sources(tmp_path):
+        return build(plan, config, cli_options or {})  # type: ignore[arg-type]
 
 
 # --- Helper tests ---
@@ -76,6 +137,10 @@ class TestBuildContract:
         assert isinstance(config.build.task_executor, TaskExecutorConfig)
         assert not hasattr(config.build, "image")
         assert config.image == "goga:latest"
+
+    # The absorbed-private-helpers assertion lives in test_contract.py
+    # (test_absorbed_private_helpers_removed_from_module) — the plan assigns
+    # that contract check to the contract file.
 
 
 class TestResolveOptions:
@@ -138,6 +203,14 @@ class TestResolveOptions:
             "10",
         ]
 
+    def test_resolve_options_has_no_pass_mode_keys(self) -> None:
+        # tasks_only/review are pass-mode flags laid on by the orchestrator's
+        # dict copy, never resolved from CLI or config.
+        cli = {"tasks_only": True, "review": True}
+        resolved = _resolve_options(_make_config(), cli)
+        assert "tasks_only" not in resolved
+        assert "review" not in resolved
+
 
 class TestUnquoteGitPath:
     def test_unquoted(self) -> None:
@@ -170,7 +243,7 @@ class TestParsePorcelainPath:
         assert _parse_porcelain_path("M  ") is None
 
 
-# --- Ralphex config writer tests ---
+# --- Ralphex config writer tests (migrated to the public write_ralphex_config) ---
 
 
 class TestWriteRalphexConfig:
@@ -178,7 +251,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config(agent="codex")
 
-        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/codex-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
@@ -187,7 +260,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config()
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "claude_args = --dangerously-skip-permissions --output-format stream-json --verbose" in config_text
@@ -196,7 +269,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config()
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_text
@@ -205,7 +278,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config(codex_review=True)
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = true" in config_text
@@ -214,7 +287,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config(agent="codex")
 
-        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/codex-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "executor" not in config_text
@@ -226,7 +299,7 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config(agent="claude")
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         ralphex_dir = tmp_path / ".ralphex"
         entries = {p.name for p in ralphex_dir.iterdir()}
@@ -240,7 +313,7 @@ class TestWriteRalphexConfig:
         (ralphex_dir / "config").write_text("stale_key = stale_value\nclaude_command = OLD_PATH\n")
 
         config = _make_config(agent="codex")
-        _write_ralphex_config(config, "/home/goga/bin/codex-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/codex-as-claude.sh")
 
         config_text = (ralphex_dir / "config").read_text()
         assert "stale_key" not in config_text
@@ -251,14 +324,25 @@ class TestWriteRalphexConfig:
             "claude_args",
             "codex_enabled",
             "preserve_anthropic_api_key",
+            "move_plan_on_completion",
         }
+
+    def test_move_plan_on_completion_always_false(self, tmp_path, monkeypatch) -> None:
+        """goga relocates the plan itself, so ralphex never must."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
+
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "move_plan_on_completion = false" in config_text
 
     def test_codex_review_none_maps_to_codex_enabled_false(self, tmp_path, monkeypatch) -> None:
         """An explicit codex_review=None still renders codex_enabled = false."""
         monkeypatch.chdir(tmp_path)
         config = _make_config(codex_review=None)
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "codex_enabled = false" in config_text
@@ -268,17 +352,22 @@ class TestWriteRalphexConfig:
         monkeypatch.chdir(tmp_path)
         config = _make_config()
 
-        _write_ralphex_config(config, "/home/goga/bin/claude-as-claude.sh")
+        write_ralphex_config(config.build, "/home/goga/bin/claude-as-claude.sh")
 
         config_text = (tmp_path / ".ralphex" / "config").read_text()
         assert "preserve_anthropic_api_key = true" in config_text
 
 
-class TestCopyDefaults:
+class TestSyncDefaults:
+    """Migrated from TestCopyDefaults onto the public sync_ralphex_defaults."""
+
+    def _review(self, roles: list[str] | None = None) -> ReviewOptions:
+        return ReviewOptions(skip=False, review_agent=None, roles=roles, two_pass=False, review_env={})
+
     def test_prompts_copied(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        assert _copy_defaults(config) == 0
+        with _mock_vendored_sources(tmp_path):
+            sync_ralphex_defaults(_make_config().build, self._review())
 
         prompts_dir = tmp_path / ".ralphex" / "prompts"
         assert prompts_dir.is_dir()
@@ -288,18 +377,12 @@ class TestCopyDefaults:
 
     def test_agents_copied(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        assert _copy_defaults(config) == 0
+        with _mock_vendored_sources(tmp_path):
+            sync_ralphex_defaults(_make_config().build, self._review())
 
         agents_dir = tmp_path / ".ralphex" / "agents"
         assert agents_dir.is_dir()
-        expected = {
-            "quality.txt",
-            "implementation.txt",
-            "testing.txt",
-            "simplification.txt",
-            "documentation.txt",
-        }
+        expected = {f"{role}.txt" for role in _VENDORED_ROLES}
         actual = {f.name for f in agents_dir.iterdir() if f.is_file()}
         assert expected.issubset(actual)
 
@@ -309,26 +392,34 @@ class TestCopyDefaults:
         prompts_dir.mkdir(parents=True)
         (prompts_dir / "task.txt").write_text("ORIGINAL")
 
-        config = _make_config()
-        _copy_defaults(config)
+        with _mock_vendored_sources(tmp_path):
+            sync_ralphex_defaults(_make_config().build, self._review())
 
         assert (prompts_dir / "task.txt").read_text() != "ORIGINAL"
 
-    def test_defaults_dir_not_found_returns_1(self, tmp_path, monkeypatch) -> None:
+    def test_missing_vendored_source_raises_value_error(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        with mock.patch("goga.build.build.DEFAULTS_PACKAGE_DIR", Path("/nonexistent")):
-            assert _copy_defaults(config) == 1
+        from goga.build import ralphex_runtime
+
+        with (
+            mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", Path("/nonexistent")),
+            mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", Path("/nonexistent")),
+            pytest.raises(ValueError, match="dump-defaults"),
+        ):
+            sync_ralphex_defaults(_make_config().build, self._review())
 
     def test_empty_defaults_subdirs_no_error(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
-        fake_defaults = tmp_path / "fake_defaults"
-        (fake_defaults / "prompts").mkdir(parents=True)
-        (fake_defaults / "agents").mkdir(parents=True)
+        empty_prompts = tmp_path / "fake" / "prompts"
+        empty_agents = tmp_path / "fake" / "agents"
+        empty_prompts.mkdir(parents=True)
+        empty_agents.mkdir(parents=True)
+        config = _make_config(prompts_dir=str(empty_prompts), agents_dir=str(empty_agents))
 
-        config = _make_config()
-        with mock.patch("goga.build.build.DEFAULTS_PACKAGE_DIR", fake_defaults):
-            assert _copy_defaults(config) == 0
+        sync_ralphex_defaults(config.build, self._review())
+
+        assert (tmp_path / ".ralphex" / "prompts").is_dir()
+        assert (tmp_path / ".ralphex" / "agents").is_dir()
 
     def test_custom_prompts_dir(self, tmp_path, monkeypatch) -> None:
         monkeypatch.chdir(tmp_path)
@@ -337,22 +428,24 @@ class TestCopyDefaults:
         (custom_prompts / "custom_task.txt").write_text("custom content")
 
         config = _make_config(prompts_dir=str(custom_prompts))
-        assert _copy_defaults(config) == 0
+        with _mock_vendored_sources(tmp_path):
+            sync_ralphex_defaults(config.build, self._review())
 
-        assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").is_file()
-        assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text() == "custom content"
+        copied = tmp_path / ".ralphex" / "prompts" / "custom_task.txt"
+        assert copied.is_file()
+        assert copied.read_text() == "custom content"
 
 
 # --- Full build function tests ---
 
 
 class TestBuildDryRun:
-    """build() delegates dry_run to run_ralphex (the dry-run short-circuit now lives
-    in run_ralphex, not in build). These verify the delegation seam directly rather
-    than the internal subprocess call run_ralphex would make."""
+    """build() delegates dry_run to run_ralphex through run_build_pass (the
+    dry-run short-circuit lives in run_ralphex). Verified at the delegation
+    seam of the pass unit."""
 
     def test_dry_run_returns_0(self, tmp_path, monkeypatch) -> None:
-        with mock.patch("goga.build.build.run_ralphex", return_value=0):
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0):
             result = _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -361,7 +454,7 @@ class TestBuildDryRun:
         assert result == 0
 
     def test_dry_run_passes_dry_run_to_run_ralphex(self, tmp_path, monkeypatch) -> None:
-        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
             _run_build_in_tmp(
                 tmp_path,
                 monkeypatch,
@@ -372,12 +465,16 @@ class TestBuildDryRun:
 
 
 class TestBuildDelegation:
-    """build() delegates the ralphex launch to run_ralphex with resolved options."""
+    """build() delegates each pass to run_ralphex (via run_build_pass) with resolved options."""
 
     def test_build_delegates_to_run_ralphex_with_resolved_options(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
-            result = build("plan.md", _make_config(worktree=True), {"skip_manifest_check": True})
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(worktree=True),
+                cli_options={"skip_manifest_check": True},
+            )
 
         assert result == 0
         mock_run.assert_called_once()
@@ -388,31 +485,28 @@ class TestBuildDelegation:
         assert "dry_run" not in args[1]
 
     def test_build_returns_run_ralphex_exit_code(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.build.build.run_ralphex", return_value=42):
-            result = build("plan.md", _make_config(), {"skip_manifest_check": True})
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=42):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
 
         assert result == 42
 
     def test_build_dry_run_delegates_with_dry_run_true(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.chdir(tmp_path)
-        with mock.patch("goga.build.build.run_ralphex", return_value=0) as mock_run:
-            build("plan.md", _make_config(), {"dry_run": True, "skip_manifest_check": True})
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"dry_run": True, "skip_manifest_check": True})
 
         assert mock_run.call_args.args[2] is True
 
 
 class TestBuildFullExecution:
-    """build() returns whatever run_ralphex returns — mocked at the delegation seam
-    rather than at run_ralphex's internal subprocess.call, decoupling the build test
-    from ralphex internals."""
+    """build() returns whatever the last pass returns — mocked at the delegation
+    seam of the pass unit, decoupling the build tests from ralphex internals."""
 
-    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
     def test_full_execution_returns_0(self, mock_run, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
         assert result == 0
 
-    @mock.patch("goga.build.build.run_ralphex", return_value=42)
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=42)
     def test_propagates_exit_code(self, mock_run, tmp_path, monkeypatch) -> None:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
         assert result == 42
@@ -422,9 +516,8 @@ class TestBuildDoesNotWriteClaudeSettings:
     """build()/run_ralphex never writes a .claude/settings.json — env delivery is
     handled by the host launcher's docker env-file, not by this code path."""
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_does_not_write_claude_settings(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_does_not_write_claude_settings(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(env=TEST_ENV_VARS)
         _run_build_in_tmp(
             tmp_path,
@@ -460,9 +553,8 @@ class TestBuildCodexAgent:
         )
         assert result == 0
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_codex_no_claude_settings(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_codex_no_claude_settings(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(agent="codex")
         _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
 
@@ -470,22 +562,26 @@ class TestBuildCodexAgent:
 
 
 class TestBuildDefaultsDirNotFound:
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    @mock.patch.object(subprocess, "call", return_value=0)
-    def test_defaults_missing_returns_1(self, mock_call, mock_which, tmp_path, monkeypatch) -> None:
-        with mock.patch("goga.build.build.DEFAULTS_PACKAGE_DIR", Path("/nonexistent")):
-            result = _run_build_in_tmp(
-                tmp_path,
-                monkeypatch,
-                cli_options={"skip_manifest_check": True},
-            )
-            assert result == 1
+    def test_defaults_missing_returns_1(self, tmp_path, monkeypatch) -> None:
+        """Missing vendored defaults abort the run: the ValueError of the sync is
+        caught by the orchestrator, which logs and returns 1 before any pass."""
+        from goga.build import ralphex_runtime
+
+        monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
+        with (
+            mock.patch.object(ralphex_runtime, "_VENDORED_PROMPTS", Path("/nonexistent")),
+            mock.patch.object(ralphex_runtime, "_VENDORED_AGENTS", Path("/nonexistent")),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = build("plan.md", _make_config(), {"skip_manifest_check": True})
+        assert result == 1
+        mock_run.assert_not_called()
 
 
 class TestBuildRepeatedBuild:
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_repeated_build_overwrites(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_repeated_build_overwrites(self, mock_run, tmp_path, monkeypatch) -> None:
         cli_options = {"skip_manifest_check": True}
         _run_build_in_tmp(tmp_path, monkeypatch, cli_options=cli_options)
 
@@ -499,38 +595,44 @@ class TestBuildRepeatedBuild:
 
 # --- Ralphex lifecycle reuse tests ---
 #
-# The in-container build() must NOT wipe .ralphex/. The directory now arrives as
-# a prepared bind-mount owned by the host launcher (goga/commands/build); build()
-# reuses whatever state the mounted .ralphex/ provides. The host wipes it only
-# when `goga build --clean` is passed before launch.
+# The in-container build() must NOT wipe .ralphex/ itself. The directory
+# arrives as a prepared bind-mount owned by the host launcher
+# (goga/commands/build); build() only rewrites the prompts/agents subdirectories
+# (the sync contract) and the pass config. The host wipes .ralphex/ only when
+# `goga build --clean` is passed before launch.
 
 
 class TestRalphexLifecycleReuse:
-    """build() reuses the mounted .ralphex/ instead of wiping it."""
-
     def test_build_reuses_existing_ralphex_dir(self, tmp_path, monkeypatch) -> None:
-        """A pre-existing .ralphex/config is overwritten with the new claude_command,
-        but unrelated state under .ralphex/prompts/ is preserved (not wiped)."""
+        """A pre-existing .ralphex/config is overwritten with the new claude_command;
+        prompts/agents are brought to the source state (full rewrite), while
+        unrelated state directly under .ralphex/ survives — build() never wipes
+        the mounted directory itself."""
         monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
         ralphex_dir = tmp_path / ".ralphex"
         prompts_dir = ralphex_dir / "prompts"
         prompts_dir.mkdir(parents=True)
         (ralphex_dir / "config").write_text("claude_command = OLD_PATH\n")
         (prompts_dir / "custom.txt").write_text("user prompt")
+        (ralphex_dir / "keep.txt").write_text("unrelated state")
 
-        result = _run_build_in_tmp(
-            tmp_path,
-            monkeypatch,
-            cli_options={"dry_run": True, "skip_manifest_check": True},
-        )
+        with (
+            _mock_vendored_sources(tmp_path),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0),
+        ):
+            result = build("plan.md", _make_config(), {"dry_run": True, "skip_manifest_check": True})
         assert result == 0
 
         config_text = (ralphex_dir / "config").read_text()
         assert "claude_command = /home/goga/bin/claude-as-claude.sh" in config_text
         assert "OLD_PATH" not in config_text
-        # The cleanup step that previously wiped .ralphex/ is gone, so the user's
-        # custom prompt survives alongside the copied defaults.
-        assert (prompts_dir / "custom.txt").read_text() == "user prompt"
+        # The sync contract fully rewrites prompts/: the stale custom prompt is
+        # gone, replaced by the source files.
+        assert not (prompts_dir / "custom.txt").exists()
+        assert (prompts_dir / "task.txt").is_file()
+        # ... but state directly under .ralphex/ is untouched (host-owned).
+        assert (ralphex_dir / "keep.txt").read_text() == "unrelated state"
 
     def test_build_does_not_wipe_ralphex_on_manifest_check_failure(self, tmp_path, monkeypatch) -> None:
         """When the manifest check fails (not a git repo), build returns 1 without
@@ -546,17 +648,18 @@ class TestRalphexLifecycleReuse:
         assert result == 1
         assert (ralphex_dir / "keep.txt").read_text() == "survivor"
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_build_writes_ralphex_config_when_dir_exists(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_build_writes_ralphex_config_when_dir_exists(self, mock_run, tmp_path, monkeypatch) -> None:
         """Full execution writes .ralphex/config with the resolved wrapper path even
-        when .ralphex/ already exists (_write_ralphex_config uses idempotent mkdir)."""
+        when .ralphex/ already exists (write_ralphex_config uses idempotent mkdir)."""
         monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
         ralphex_dir = tmp_path / ".ralphex"
         ralphex_dir.mkdir()
         (ralphex_dir / "config").write_text("claude_command = STALE\n")
 
-        result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
+        with _mock_vendored_sources(tmp_path):
+            result = build("plan.md", _make_config(), {"skip_manifest_check": True})
         assert result == 0
 
         config_text = (ralphex_dir / "config").read_text()
@@ -566,7 +669,8 @@ class TestRalphexLifecycleReuse:
 
 class TestRalphexCleanupRemovedContract:
     """Contract: build() no longer owns the .ralphex/ lifecycle, so the cleanup
-    helper must be gone and ralphex paths must never be wiped during build()."""
+    helper must be gone and .ralphex/ itself is never wiped during build() —
+    only its prompts/ and agents/ subdirectories are rewritten by the sync."""
 
     def test_cleanup_ralphex_dir_not_defined_in_module(self) -> None:
         # Use sys.modules because goga/build/__init__.py shadows the `build`
@@ -574,22 +678,25 @@ class TestRalphexCleanupRemovedContract:
         build_module = sys.modules["goga.build.build"]
         assert not hasattr(build_module, "_cleanup_ralphex_dir")
 
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    @mock.patch.object(subprocess, "call", return_value=0)
-    def test_build_never_calls_rmtree_on_ralphex_path(self, mock_call, mock_which, tmp_path, monkeypatch) -> None:
-        """During a full build execution, shutil.rmtree is never called with a
-        .ralphex path — even when .ralphex/ already exists (which would have
-        triggered the old cleanup's rmtree)."""
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_build_never_calls_rmtree_on_ralphex_path(self, mock_run, tmp_path, monkeypatch) -> None:
+        """During a full build execution, shutil.rmtree is called only on
+        .ralphex/prompts and .ralphex/agents (the sync rewrite), never on
+        .ralphex/ itself — even when .ralphex/ already exists."""
         monkeypatch.chdir(tmp_path)
+        Path("plan.md").write_text("# plan\n")
         (tmp_path / ".ralphex").mkdir()
         (tmp_path / ".ralphex" / "keep.txt").write_text("survivor")
-        with mock.patch("shutil.rmtree") as mock_rmtree:
-            _run_build_in_tmp(tmp_path, monkeypatch, cli_options={"skip_manifest_check": True})
+        with mock.patch("shutil.rmtree") as mock_rmtree, _mock_vendored_sources(tmp_path):
+            build("plan.md", _make_config(), {"skip_manifest_check": True})
 
+        allowed_targets = {".ralphex/prompts", ".ralphex/agents"}
         ralphex_wipe_calls = [
-            call for call in mock_rmtree.call_args_list if call.args and ".ralphex" in str(call.args[0])
+            call for call in mock_rmtree.call_args_list if call.args and str(call.args[0]) not in allowed_targets
         ]
         assert ralphex_wipe_calls == []
+        # ... and the directory itself survived.
+        assert (tmp_path / ".ralphex" / "keep.txt").read_text() == "survivor"
 
 
 def _init_git_repo(path: Path) -> None:
@@ -599,9 +706,8 @@ def _init_git_repo(path: Path) -> None:
 
 
 class TestManifestCheck:
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_all_committed_proceeds(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_all_committed_proceeds(self, mock_run, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         manifest = tmp_path / "CODEMANIFEST"
         manifest.write_text("content")
@@ -619,9 +725,8 @@ class TestManifestCheck:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={})
         assert result == 1
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_skip_manifest_check(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_skip_manifest_check(self, mock_run, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         manifest = tmp_path / "CODEMANIFEST"
         manifest.write_text("content")
@@ -633,9 +738,8 @@ class TestManifestCheck:
         result = _run_build_in_tmp(tmp_path, monkeypatch, cli_options={})
         assert result == 1
 
-    @mock.patch.object(subprocess, "call", return_value=0)
-    @mock.patch.object(shutil, "which", return_value="/usr/local/bin/ralphex")
-    def test_no_codemanifest_files_proceeds(self, mock_which, mock_call, tmp_path, monkeypatch) -> None:
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
+    def test_no_codemanifest_files_proceeds(self, mock_run, tmp_path, monkeypatch) -> None:
         _init_git_repo(tmp_path)
         (tmp_path / ".gitkeep").write_text("")
         subprocess.run(["git", "add", ".gitkeep"], cwd=tmp_path, capture_output=True, check=True)
@@ -663,14 +767,14 @@ class TestBuildConfigFlags:
     resolved `options` dict. Verified at the delegation seam; the bool/scalar flag
     assembly itself is covered in tests/ralphex/test_run_ralphex.py."""
 
-    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
     def test_worktree_from_config(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(worktree=True)
         _run_build_in_tmp(tmp_path, monkeypatch, config=config, cli_options={"skip_manifest_check": True})
 
         assert mock_run.call_args.args[1]["worktree"] is True
 
-    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
     def test_cli_worktree_overrides_config(self, mock_run, tmp_path, monkeypatch) -> None:
         config = _make_config(worktree=False)
         _run_build_in_tmp(
@@ -683,7 +787,7 @@ class TestBuildConfigFlags:
         # CLI worktree=True overrides config=False via _resolve_options.
         assert mock_run.call_args.args[1]["worktree"] is True
 
-    @mock.patch("goga.build.build.run_ralphex", return_value=0)
+    @mock.patch("goga.build.build_pass.run_ralphex", return_value=0)
     def test_custom_prompts_dir(self, mock_run, tmp_path, monkeypatch) -> None:
         custom_prompts = tmp_path / "custom" / "prompts"
         custom_prompts.mkdir(parents=True)
@@ -694,3 +798,411 @@ class TestBuildConfigFlags:
 
         assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").is_file()
         assert (tmp_path / ".ralphex" / "prompts" / "custom_task.txt").read_text() == "custom content"
+
+
+# --- Review-phase orchestration (skip / two-pass / relocation) ---
+
+
+class TestBuildReviewPhaseOrchestration:
+    """The orchestrator's pass modes on top of run_build_pass."""
+
+    def _passes(self, mock_run) -> list[dict]:
+        return [call.args[1] for call in mock_run.call_args_list]
+
+    def test_build_skip_run_single_tasks_only_pass(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "skip_review": None},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        options = mock_run.call_args.args[1]
+        assert options["tasks_only"] is True
+        assert "review" not in options
+        # Success relocates the plan.
+        assert not (tmp_path / "plan.md").exists()
+        assert (tmp_path / "completed" / "plan.md").read_text() == "# plan\n"
+
+    def test_build_skip_run_still_syncs_and_filters_roles(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, roles=["quality"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["tasks_only"] is True
+        # The skip decision never suppresses the defaults sync: roles filter
+        # the review prompts even though no review pass will run.
+        review_first = (tmp_path / ".ralphex" / "prompts" / "review_first.txt").read_text()
+        assert "{{agent:quality}}" in review_first
+        assert "{{agent:implementation}}" not in review_first
+        assert not (tmp_path / "plan.md").exists()
+        assert (tmp_path / "completed" / "plan.md").is_file()
+
+    def test_build_two_pass_second_pass_review_mode(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        first, second = self._passes(mock_run)
+        assert first["tasks_only"] is True
+        assert "review" not in first
+        assert second["review"] is True
+        assert "tasks_only" not in second
+        # The final pass config carries the review executor wrapper; the real
+        # resolve_wrapper_path of the orchestrator built it (string resolve).
+        config_text = (tmp_path / ".ralphex" / "config").read_text()
+        assert "claude_command = /home/goga/bin/codex-as-claude.sh" in config_text
+        assert "move_plan_on_completion = false" in config_text
+
+    def test_build_two_pass_pass2_carries_review_env_pass1_without(self, tmp_path, monkeypatch) -> None:
+        """Pass 1 runs without the env layer, pass 2 carries it — the asymmetry
+        keeps review-only variables out of the tasks pass. Contract: the second
+        call to run_ralphex of a two-pass run carries the review env layer; the
+        build() signature itself stays (plan, config, cli_options)."""
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        first, second = mock_run.call_args_list
+        assert "env" not in first.kwargs or first.kwargs["env"] is None
+        assert second.kwargs["env"] == {"ANTHROPIC_MODEL": "reviewer"}
+
+    def test_build_env_only_induction_two_pass(self, tmp_path, monkeypatch) -> None:
+        """Same agent on both executors: the two-pass mode is induced by the env
+        alone, and the pass-2 wrapper resolves via that same (matching) agent."""
+        config = _make_config(
+            review_executor=ReviewExecutorConfig(agent="claude", env={"M": "r"}),
+        )
+        review_wrapper = tmp_path / "claude-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 2
+        second = mock_run.call_args_list[1]
+        assert second.args[1]["review"] is True
+        assert second.kwargs["env"] == {"M": "r"}
+
+    def test_build_env_requires_agent_returns_1_without_launch(self, tmp_path, monkeypatch) -> None:
+        """A review env without a review agent is rejected by the validation gate
+        before any side effect: no launch, no .ralphex/ sync."""
+        config = _make_config(review_executor=ReviewExecutorConfig(env={"X": "y"}))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        assert mock_run.call_count == 0
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_skip_run_ignores_review_env(self, tmp_path, monkeypatch) -> None:
+        """A skipped run ignores the review env entirely: one tasks-only pass,
+        no env layer, no validation of it."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, agent="codex", env={"X": "y"}))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        first = mock_run.call_args_list[0]
+        assert "env" not in first.kwargs or first.kwargs["env"] is None
+        assert first.args[1]["tasks_only"] is True
+
+    def test_build_full_pass_no_env_layer(self, tmp_path, monkeypatch) -> None:
+        """No review executor at all: a single full pass, never an env layer."""
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(review_executor=None),
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        # No layer is delivered: env arrives as the default None, never a dict.
+        assert mock_run.call_args.kwargs["env"] is None
+
+    def test_build_two_pass_pass1_failure_skips_pass2(self, tmp_path, monkeypatch) -> None:
+        """A failed pass 1 exits with its code — pass 2 (and its env layer)
+        never launches, even with a declared review env."""
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"X": "y"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", side_effect=[1]) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        assert mock_run.call_count == 1
+        # The single call is the tasks pass — no env layer anywhere.
+        assert "env" not in mock_run.call_args.kwargs or mock_run.call_args.kwargs["env"] is None
+        # A failed run keeps the plan in place for ralphex to resume.
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
+
+    def test_build_two_pass_pass2_failure_propagates_and_keeps_plan(self, tmp_path, monkeypatch) -> None:
+        """Pass 1 succeeded but pass 2 failed — the run is a failure.
+
+        The returned code is the LAST pass's code and the relocation outcome is
+        computed from it, so a failed review pass must keep the plan in place
+        exactly like a failed task pass.
+        """
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", side_effect=[0, 1]) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        assert mock_run.call_count == 2
+        second = self._passes(mock_run)[1]
+        assert second["review"] is True
+        assert "tasks_only" not in second
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
+
+    def test_build_invalid_review_config_returns_1_before_side_effects(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(roles=["bogus"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 1
+        mock_run.assert_not_called()
+        assert not (tmp_path / ".ralphex").exists()
+
+    def test_build_resolves_skip_from_config_when_cli_none(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["tasks_only"] is True
+
+    def test_build_skip_wins_over_two_pass(self, tmp_path, monkeypatch) -> None:
+        # agent differs from the task agent, so two_pass resolves True — but the
+        # skip branch takes priority: no review phase of any kind.
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, agent="codex"))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["tasks_only"] is True
+
+    def test_build_dry_run_two_pass_prints_both_and_keeps_plan(self, tmp_path, monkeypatch) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex"))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with (
+            mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)),
+            mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run,
+        ):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "dry_run": True},
+            )
+
+        assert result == 0
+        # A dry run prints the commands of EVERY planned pass.
+        assert mock_run.call_count == 2
+        assert all(call.args[2] is True for call in mock_run.call_args_list)
+        # ... and moves nothing.
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()
+
+    def test_build_no_review_config_single_full_pass(self, tmp_path, monkeypatch) -> None:
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(review_executor=None),
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        options = mock_run.call_args.args[1]
+        assert "tasks_only" not in options
+        assert "review" not in options
+        assert not (tmp_path / "plan.md").exists()
+        assert (tmp_path / "completed" / "plan.md").is_file()
+
+    def test_build_cli_no_skip_review_overrides_config_skip(self, tmp_path, monkeypatch) -> None:
+        """CLI False beats config `skip: true` — the full cycle runs with validation."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, roles=["bogus"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "skip_review": False},
+            )
+
+        # The forced full pass activates validation, which rejects the bogus role.
+        assert result == 1
+        mock_run.assert_not_called()
+
+    def test_build_cli_no_skip_review_forces_full_pass(self, tmp_path, monkeypatch) -> None:
+        """CLI False against a valid config-skip runs the full single pass."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "skip_review": False},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        options = mock_run.call_args.args[1]
+        assert "tasks_only" not in options
+        assert "review" not in options
+
+    def test_build_skip_run_skips_validation(self, tmp_path, monkeypatch) -> None:
+        """A skipped run never validates roles — a bogus role is never read."""
+        config = _make_config(review_executor=ReviewExecutorConfig(skip=True, roles=["bogus"]))
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["tasks_only"] is True
+
+
+# --- Integration: secret-safe dry-run across the orchestration/launcher seam ---
+
+
+class TestBuildDryRunSecretSafeIntegration:
+    """Cross-entity scenario joining the orchestrator (goga/build) with the
+    launcher's print (goga/ralphex): a two-pass dry run prints the argv of both
+    passes and never the contents of the review env layer.
+
+    The real launcher runs here: its dry-run branch performs no PATH check and
+    no subprocess, so the seam under test is the actual print the container
+    would emit — a regression in either the orchestration (folding the env into
+    the options) or the launcher's print fails this test."""
+
+    def test_build_dry_run_two_pass_no_env_in_output(self, tmp_path, monkeypatch, capsys) -> None:
+        config = _make_config(review_executor=ReviewExecutorConfig(agent="codex", env={"ANTHROPIC_MODEL": "reviewer"}))
+        review_wrapper = tmp_path / "codex-as-claude.sh"
+        review_wrapper.write_text("#!/bin/sh\n")
+
+        with mock.patch("goga.build.review_config.resolve_wrapper_path", return_value=str(review_wrapper)):
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "dry_run": True},
+            )
+
+        assert result == 0
+        captured = capsys.readouterr()
+        # Both planned passes had their argv printed to stderr.
+        assert captured.err.count("ralphex") >= 2
+        assert "--tasks-only" in captured.err
+        assert "--review" in captured.err
+        # The env layer value never reaches the dry-run output.
+        assert "reviewer" not in captured.err
+        assert "ANTHROPIC_MODEL" not in captured.err
+        # A dry run relocates nothing.
+        assert (tmp_path / "plan.md").is_file()
+        assert not (tmp_path / "completed").exists()

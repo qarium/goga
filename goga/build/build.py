@@ -1,19 +1,18 @@
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 from pathlib import Path
 
 from ..agents import resolve_wrapper_path
 from ..config import ProjectConfig
-from ..ralphex import run_ralphex
+from .build_pass import run_build_pass
+from .plan_relocation import move_completed_plan
+from .ralphex_runtime import sync_ralphex_defaults
+from .review_config import validate_review_config
+from .review_options import resolve_review_options
 
 logger = logging.getLogger(__name__)
-
-DEFAULTS_PACKAGE_DIR = Path(__file__).parent.parent / "config" / "defaults"
-
-_DEFAULT_CLAUDE_ARGS = "--dangerously-skip-permissions --output-format stream-json --verbose"
 
 
 def _unquote_git_path(raw: str) -> str | None:
@@ -59,65 +58,6 @@ def _find_uncommitted_manifests() -> list[str]:
     return uncommitted
 
 
-def _write_ralphex_config(config: ProjectConfig, wrapper_path: str) -> None:
-    """Write the .ralphex/config INI for ralphex with the resolved wrapper path.
-
-    Populates the ralphex config keys covered by the agent-wrappers contract:
-    `claude_command` set to the resolved absolute wrapper path, `claude_args`
-    set to its fixed default (no config field overrides it today),
-    `codex_enabled` derived from `BuildConfig`, and `preserve_anthropic_api_key`
-    pinned to `true` so the ralphex runner does not unset `ANTHROPIC_API_KEY`
-    before invoking the agent wrapper. No codex-specific ralphex keys
-    are written.
-
-    Args:
-        config: Project configuration with build settings.
-        wrapper_path: Resolved absolute in-container wrapper path.
-    """
-    ralphex_dir = Path(".ralphex")
-    ralphex_dir.mkdir(exist_ok=True)
-
-    codex_enabled = str(config.build.codex_review or False).lower()
-
-    config_lines = [
-        f"claude_command = {wrapper_path}",
-        f"claude_args = {_DEFAULT_CLAUDE_ARGS}",
-        f"codex_enabled = {codex_enabled}",
-        "preserve_anthropic_api_key = true",
-    ]
-
-    (ralphex_dir / "config").write_text("\n".join(config_lines) + "\n")
-    logger.info("wrote .ralphex/config", extra={"claude_command": wrapper_path})
-
-
-def _copy_defaults(config: ProjectConfig) -> int:
-    logger.info("copying defaults")
-
-    defaults_dir = DEFAULTS_PACKAGE_DIR.resolve()
-
-    if not defaults_dir.is_dir():
-        logger.error("defaults directory not found", extra={"path": str(defaults_dir)})
-        return 1
-
-    ralphex_dir = Path(".ralphex")
-
-    prompts_src = Path(config.build.prompts_dir) if config.build.prompts_dir else defaults_dir / "prompts"
-    agents_src = Path(config.build.agents_dir) if config.build.agents_dir else defaults_dir / "agents"
-
-    for src_dir, dest_name in ((prompts_src, "prompts"), (agents_src, "agents")):
-        if not src_dir.is_dir():
-            continue
-        dest_dir = ralphex_dir / dest_name
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        for src_file in src_dir.iterdir():
-            if not src_file.is_file():
-                continue
-            dest_file = dest_dir / src_file.name
-            shutil.copy2(src_file, dest_file)
-
-    return 0
-
-
 def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str | int | bool]:
     """Resolve ralphex options with precedence CLI > BuildConfig > omit.
 
@@ -127,6 +67,10 @@ def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str 
     ``if cli_value or getattr(config.build, ...)`` semantics. For scalar keys the
     CLI value wins when present (not None) and otherwise falls back to BuildConfig.
     This helper knows no ralphex flag names; `run_ralphex` maps the resolved keys.
+
+    The pass-mode keys `tasks_only`/`review` are deliberately NOT resolved here —
+    they are mode flags of a single pass, laid on top of the base options by the
+    orchestrator with a dict copy, never read from config or CLI passthrough.
 
     Args:
         config: Project configuration carrying BuildConfig option defaults.
@@ -148,20 +92,32 @@ def _resolve_options(config: ProjectConfig, cli_options: dict) -> dict[str, str 
 
 
 def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
-    """Execute the build pipeline for a given plan.
+    """Execute the build pipeline for a plan, orchestrating its review phase.
 
-    Validates uncommitted CODEMANIFEST files, resolves the agent wrapper path,
-    writes the ralphex config, copies default prompts and agents, resolves the
-    ralphex options (CLI > BuildConfig > omit), and delegates the ralphex launch
-    to `run_ralphex`.
+    Algorithm 0-9: git pre-check on uncommitted CODEMANIFEST files; task wrapper
+    resolution; review-option reduction (`resolve_review_options`); semantic
+    validation of the review configuration and the defaults sync — both before
+    any launch side effect; base option resolution (CLI > BuildConfig > omit);
+    the pass loop, where each pass writes its own `.ralphex/config` and delegates
+    the launch to `run_ralphex` via `run_build_pass`; plan relocation on success
+    of the final pass; the exit code of the last pass is returned.
+
+    Pass modes: a skipped run makes exactly one tasks-only pass (no review phase
+    of any kind, the review env ignored entirely); a two-pass run (review
+    executor with a differing agent OR a non-empty review env) runs tasks-only
+    first — without an env layer — and, when it succeeds, a review-only pass
+    with the review wrapper and the review env as its environment layer; a
+    pass-1 failure exits with its code and skips pass 2 (and its env layer);
+    anything else is one full pass, without a layer.
 
     Args:
         plan: Path to the build plan file.
         config: Project configuration with build settings and task executor.
-        cli_options: CLI flags such as dry_run, skip_manifest_check, worktree, etc.
+        cli_options: CLI flags such as dry_run, skip_manifest_check,
+            skip_review, worktree, etc.
 
     Returns:
-        0 on success, 1 on failure.
+        The exit code of the last executed pass; 1 on a pre-launch failure.
     """
     if not cli_options.get("skip_manifest_check"):
         try:
@@ -172,15 +128,42 @@ def build(plan: str, config: ProjectConfig, cli_options: dict) -> int:
             logger.error("uncommitted codemanifest files found", extra={"paths": uncommitted})
             return 1
 
-    wrapper_path = resolve_wrapper_path(config.build.task_executor.agent)
+    dry_run = cli_options.get("dry_run", False)
 
-    _write_ralphex_config(config, wrapper_path)
+    task_wrapper = resolve_wrapper_path(config.build.task_executor.agent)
 
-    copy_result = _copy_defaults(config)
-    if copy_result != 0:
-        return copy_result
+    review = resolve_review_options(config.build, cli_options)
 
-    options = _resolve_options(config, cli_options)
+    if not review.skip:
+        try:
+            validate_review_config(config.build, review)
+        except ValueError as error:
+            logger.error("invalid review configuration", extra={"detail": str(error)})
+            return 1
 
-    logger.info("delegating to run_ralphex", extra={"plan": plan, "dry_run": cli_options.get("dry_run", False)})
-    return run_ralphex(plan, options, cli_options.get("dry_run", False))
+    try:
+        sync_ralphex_defaults(config.build, review)
+    except ValueError as error:
+        logger.error("ralphex defaults unavailable", extra={"detail": str(error)})
+        return 1
+
+    base = _resolve_options(config, cli_options)
+
+    logger.info("launching build passes", extra={"plan": plan, "dry_run": dry_run})
+
+    if review.skip:
+        exit_code = run_build_pass(plan, config.build, {**base, "tasks_only": True}, task_wrapper, dry_run)
+    elif review.two_pass:
+        review_wrapper = resolve_wrapper_path(review.review_agent)
+        exit_code = run_build_pass(plan, config.build, {**base, "tasks_only": True}, task_wrapper, dry_run)
+
+        if exit_code == 0:
+            exit_code = run_build_pass(
+                plan, config.build, {**base, "review": True}, review_wrapper, dry_run, env=review.review_env
+            )
+    else:
+        exit_code = run_build_pass(plan, config.build, base, task_wrapper, dry_run)
+
+    move_completed_plan(plan, outcome=(exit_code == 0), dry_run=dry_run)
+
+    return exit_code

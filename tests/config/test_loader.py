@@ -3086,3 +3086,291 @@ lint: null
         assert config.build.task_executor.env == {"KEY": "value"}
         assert config.build.worktree is True
         assert config.commands == {"foo": "bar"}
+
+
+# --- Contract tests for ReviewExecutorConfig + build.review_executor (step 6.5) ---
+
+
+class TestReviewExecutorConfigContract:
+    def test_review_executor_config_importable_from_project_cell(self):
+        """ReviewExecutorConfig is importable from goga.config.project and in __all__."""
+        import goga.config.project as project_mod
+        from goga.config.project.config import ReviewExecutorConfig
+
+        assert hasattr(project_mod, "ReviewExecutorConfig")
+        assert "ReviewExecutorConfig" in project_mod.__all__
+        assert project_mod.ReviewExecutorConfig is ReviewExecutorConfig
+
+    def test_review_executor_config_is_frozen_kw_only_dataclass(self):
+        """ReviewExecutorConfig is a frozen kw_only dataclass with four fields."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        assert dataclasses.is_dataclass(ReviewExecutorConfig)
+        params = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}
+        assert set(params) == {"skip", "agent", "roles", "env"}
+        assert params["skip"].default is None
+        assert params["agent"].default is None
+        assert params["roles"].default is None
+        assert params["env"].default is dataclasses.MISSING
+        assert params["env"].default_factory is dict
+
+    def test_review_executor_config_reexport_from_facade_alive(self):
+        """goga.config re-exports the same class object as the project cell."""
+        import goga.config as facade
+        from goga.config.project.config import ReviewExecutorConfig
+
+        assert facade.ReviewExecutorConfig is ReviewExecutorConfig
+
+    def test_build_config_accepts_review_executor_kwarg(self):
+        """BuildConfig accepts the review_executor kw-arg and defaults it to None."""
+        from goga.config.project.config import BuildConfig, ReviewExecutorConfig
+
+        defaults = BuildConfig(task_executor=TaskExecutorConfig(agent="claude"))
+        assert defaults.review_executor is None
+
+        review = ReviewExecutorConfig(skip=True, agent="codex", roles=["quality"])
+        configured = BuildConfig(task_executor=TaskExecutorConfig(agent="claude"), review_executor=review)
+        assert configured.review_executor is review
+
+    def test_load_project_config_signature_unchanged(self):
+        """load_project_config still takes no arguments (signature unchanged)."""
+        sig = inspect.signature(load_project_config)
+        assert list(sig.parameters.keys()) == []
+        assert sig.return_annotation is ProjectConfig
+
+
+# --- Logic tests for build.review_executor parsing (loader step 6.5) ---
+
+
+class TestLoadConfigReviewExecutor:
+    def test_loader_parses_review_executor_full_section(self, goga_project):
+        """build.review_executor with all fields → ReviewExecutorConfig verbatim."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    skip: false
+    agent: codex
+    roles:
+      - quality
+      - testing
+    env:
+      ANTHROPIC_MODEL: reviewer-model
+      REVIEW_STRICT: "2"
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor == ReviewExecutorConfig(
+            skip=False,
+            agent="codex",
+            roles=["quality", "testing"],
+            env={"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"},
+        )
+
+    def test_loader_review_executor_not_mapping_raises(self, goga_project):
+        """review_executor: 5 → ValueError mentioning 'must be a mapping'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor must be a mapping"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("yaml_snippet", "match"),
+        [
+            ('skip: "yes"', r"review_executor\.skip must be a bool"),
+            ("skip: 1", r"review_executor\.skip must be a bool"),
+            ("agent: 7", r"review_executor\.agent must be a string"),
+            ("roles: quality", r"review_executor\.roles must be a list of strings"),
+            ("roles:\n      - 1", r"review_executor\.roles must be a list of strings"),
+        ],
+        ids=["skip-string", "skip-yaml-int", "agent-int", "roles-string", "roles-int-element"],
+    )
+    def test_loader_review_executor_field_type_errors(self, goga_project, yaml_snippet, match):
+        """Each structurally invalid field value raises ValueError naming the field."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {yaml_snippet}
+""",
+        )
+        with pytest.raises(ValueError, match=match):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("yaml_snippet", "expected"),
+        [
+            ("", None),
+            ("review_executor:\n", None),
+            ("review_executor: {}\n", "empty-instance"),
+        ],
+        ids=["absent", "yaml-null", "empty-mapping"],
+    )
+    def test_loader_review_executor_absent_and_null(self, goga_project, yaml_snippet, expected):
+        """Absent/null section → None; empty mapping → all-fields-None instance."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        section = yaml_snippet
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  {section}""",
+        )
+        config = load_project_config()
+
+        if expected is None:
+            assert config.build.review_executor is None
+        else:
+            assert config.build.review_executor == ReviewExecutorConfig(skip=None, agent=None, roles=None)
+
+    def test_loader_empty_roles_passthrough(self, goga_project):
+        """roles: [] → .roles == [] (empty list, NOT normalized to None)."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    roles: []
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor == ReviewExecutorConfig(skip=None, agent=None, roles=[])
+        assert config.build.review_executor.roles == []
+
+    def test_loader_parses_review_executor_env_mapping(self, goga_project):
+        """review_executor.env str:str mapping → stored verbatim as dict[str, str]."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+image: qarium/foo:1.0
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    skip: false
+    agent: codex
+    roles:
+      - quality
+    env:
+      ANTHROPIC_MODEL: reviewer-model
+      REVIEW_STRICT: "2"
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.env == {"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"}
+        assert all(isinstance(k, str) and isinstance(v, str) for k, v in config.build.review_executor.env.items())
+        assert config.build.review_executor == ReviewExecutorConfig(
+            skip=False,
+            agent="codex",
+            roles=["quality"],
+            env={"ANTHROPIC_MODEL": "reviewer-model", "REVIEW_STRICT": "2"},
+        )
+
+    def test_review_executor_config_declared_fields_include_env(self):
+        """Declared fields are skip, agent, roles, env; env is a factory-defaulted dict[str, str]."""
+        from goga.config.project.config import ReviewExecutorConfig
+
+        names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
+        assert names == ["skip", "agent", "roles", "env"]
+        assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
+        env_field = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}["env"]
+        assert env_field.default is dataclasses.MISSING
+        assert env_field.default_factory is dict
+        assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
+
+    def test_loader_review_executor_env_not_mapping_raises(self, goga_project):
+        """review_executor.env: 5 → ValueError mentioning 'must be a mapping'."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    env: 5
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor\.env must be a mapping"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        "env_snippet",
+        [
+            "env:\n      1: x",
+            "env:\n      A: 5",
+            "env:\n      A: true",
+        ],
+        ids=["int-key", "int-value", "bool-value"],
+    )
+    def test_loader_review_executor_env_non_string_key_or_value_raises(self, goga_project, env_snippet):
+        """Non-string env keys/values → ValueError 'must have string keys and values'."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {env_snippet}
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor\.env must have string keys and values"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        ("env_snippet", "env_id"),
+        [
+            ("", "absent"),
+            ("env:\n", "yaml-null"),
+            ("env: {}\n", "empty-mapping"),
+        ],
+    )
+    def test_loader_review_executor_env_absent_null_empty_all_empty_dict(self, goga_project, env_snippet, env_id):
+        """Absent, YAML-null and empty-mapping env all resolve to {} with no error."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    skip: null
+    {env_snippet}""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor is not None, env_id
+        assert config.build.review_executor.env == {}, env_id

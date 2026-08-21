@@ -103,6 +103,24 @@ class ImportTypeExists(ASTRule):
         return errors
 
 
+def _is_nested_below(source_path: str, current_path: str) -> bool:
+    """Check that a normalized source path lies strictly below the current package.
+
+    Args:
+        source_path: Normalized path of the package providing the embedded type.
+        current_path: Normalized path of the package declaring the embedding.
+
+    Returns:
+        True when the source package is nested strictly below the current one.
+    """
+    if current_path == ".":
+        escapes_root = source_path in (".", "..") or source_path.startswith(".." + os.sep)
+
+        return not escapes_root and not Path(source_path).is_absolute()
+
+    return source_path.startswith(current_path + os.sep)
+
+
 class EmbeddedTypeHasLowLevel(ASTRule):
     """Rule: embedded types must be defined in documents lower in the file hierarchy."""
 
@@ -151,7 +169,8 @@ class EmbeddedTypeHasLowLevel(ASTRule):
 
         for entity in embedded_entities:
             source_path = _resolve_source(entity.name)
-            if source_path is not None and not source_path.startswith(current_path + os.sep):
+
+            if source_path is not None and not _is_nested_below(source_path, current_path):
                 errors.append(
                     ASTRuleError(
                         message=(
@@ -167,7 +186,8 @@ class EmbeddedTypeHasLowLevel(ASTRule):
 
         for routine in embedded_routines:
             source_path = _resolve_source(routine.name)
-            if source_path is not None and not source_path.startswith(current_path + os.sep):
+
+            if source_path is not None and not _is_nested_below(source_path, current_path):
                 errors.append(
                     ASTRuleError(
                         message=(

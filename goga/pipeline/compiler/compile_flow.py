@@ -28,7 +28,40 @@ compiled afm output field is ``interactive``. A step body carrying
 ``communication`` is translated into the output ``interactive`` slot; an
 authoring ``interactive`` key is rejected with ``StructuralError("interactive key
 is forbidden in stage body; use communication")`` — the afm output key
-``interactive`` is stable, so only ``communication`` is ever authored. ``auto`` is a
+``interactive`` is stable, so only ``communication`` is ever authored. Symmetrically,
+the authoring-side stage-body field for the launch mode is ``trigger``; the compiled
+afm output field is ``auto_run``. A step body carrying ``trigger: manual`` is
+translated into the output ``auto_run: false`` slot (canonical position immediately
+after ``auto_approve``); ``trigger: on_success`` (or no trigger) assembles NO
+``auto_run`` key, and ``auto_run: true`` is never emitted. An authoring ``auto_run``
+key is rejected with ``StructuralError("auto_run key is forbidden in stage body; use
+trigger: manual")``; a ``trigger`` value outside ``on_success``/``manual`` is rejected
+with ``StructuralError("trigger must be one of: on_success, manual")`` — the
+authoring key is consumed by the translation, never passed through as an unknown
+key.
+
+Symmetrically, the authoring-side stage-body directive for the script timeout
+is ``timeout``; the compiled afm output field is ``script_timeout``. A step
+body carrying a string ``timeout`` (with ``script`` in the same body) is
+translated into the output ``script_timeout`` slot (canonical position
+immediately after ``script_after``); the value passes verbatim — the Go
+duration grammar is NOT validated here (a malformed string like ``"3 min"``
+reaches the flow-file as-is and fails in afm at runtime). A non-string value
+(including ``timeout: null`` — presence gates, not truthiness, unlike
+``trigger``) is rejected with ``StructuralError("timeout must be a string in
+stage {name}")``; a ``timeout`` without ``script`` is rejected with
+``StructuralError("timeout requires script in stage {name}")``
+(``before_script``/``after_script`` do not open the directive —
+``script_timeout`` scopes to the script action). The output key is present
+only when the directive is authored (omitempty), so pipelines without
+``timeout`` compile byte-identically. Directly authoring ``script_timeout`` is
+not forbidden (the same stance as direct ``script_before``); when both are
+authored, the translated ``timeout`` value wins. The directive applies to
+pipeline-file stage bodies AND embedded extend-stage bodies, and every
+loop-expanded copy (``NAME-i``) inherits the translated value verbatim. The
+translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
+returned to consumers keeps the authored ``timeout`` untouched.
+``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
 but they pass through the canonical slot when the source body carries them. The
@@ -83,13 +116,20 @@ logger = logging.getLogger(__name__)
 # so the supervisor block reads as a continuation of the agents block.
 # ``auto_approve`` (bool) sits right after ``interactive`` and is present only
 # when an approve directive driving the roles effect (``auto``/``dialog``) +
-# planner-in-roles fired (workflow-driven). The author
+# planner-in-roles fired (workflow-driven). ``auto_run`` (bool) sits right after
+# ``auto_approve`` and is present ONLY when the stage's effective trigger is
+# ``manual`` (the value is always ``False`` — ``auto_run: true`` is never
+# assembled; afm pauses such a stage until a manual launch). The author
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
 # they appear only when authored, so flow-files without them compile byte-identically.
+# ``script_timeout`` (str) sits immediately after ``script_after`` — the
+# translated form of the authoring ``timeout`` directive — and is likewise
+# present only when authored (or directly authored under its output name).
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
+    "auto_run",
     "command",
     "prompt",
     "description",
@@ -100,6 +140,7 @@ _CANONICAL_KEY_ORDER = [
     "script_before",
     "script",
     "script_after",
+    "script_timeout",
 ]
 
 # Sentinel key threaded by ``_apply_per_stage_overrides`` into a reconstructed
@@ -244,6 +285,100 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
+    """Reject authoring-side stage-body keys that duplicate output-only afm fields.
+
+    Three authoring keys are forbidden because each names an afm OUTPUT field
+    whose authoring-side counterpart is a different key: ``agents`` (author the
+    ``roles`` field — translated element-wise), ``interactive`` (author the
+    ``communication`` field — renamed), and ``auto_run`` (author the ``trigger``
+    field — ``trigger: manual`` assembles ``auto_run: false``). Checking them in
+    one place, at the very start of ``_canonical_fields``, keeps every
+    prohibition ahead of any translation, exactly as the contract orders it.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl`` (or an embedded
+            extend body).
+
+    Raises:
+        StructuralError: When ``body`` carries any of the three authoring keys,
+            with the contract message naming the authoring-side field to use.
+    """
+    if "agents" in body:
+        raise StructuralError("agents key is forbidden in stage body; use roles")
+
+    if "interactive" in body:
+        raise StructuralError("interactive key is forbidden in stage body; use communication")
+
+    if "auto_run" in body:
+        raise StructuralError("auto_run key is forbidden in stage body; use trigger: manual")
+
+
+def _validate_trigger(body: dict[str, Any]) -> str | None:
+    """Return the effective ``trigger`` of ``body``, validating the closed value set.
+
+    Validation gates on the VALUE, not key presence: a ``trigger:`` with no
+    value parses to ``None`` and is treated as ABSENT — symmetrically to
+    ``roles: null``. Any non-``None`` value outside the closed set
+    ``on_success``/``manual`` — including non-str values, which can never be
+    members of a str tuple — raises.
+
+    Args:
+        body: The step body dict produced by ``parse_dsl`` (workflow path: a
+            reconstructed deep copy, possibly already rewritten by the manual
+            override pass).
+
+    Returns:
+        The effective trigger (``"on_success"``, ``"manual"``), or ``None``
+        when the key is absent or carries a null value.
+
+    Raises:
+        StructuralError: When ``body`` carries a non-null ``trigger`` value
+            outside ``on_success``/``manual``.
+    """
+    effective_trigger = body.get("trigger")
+
+    if effective_trigger is not None and effective_trigger not in ("on_success", "manual"):
+        raise StructuralError("trigger must be one of: on_success, manual")
+    return effective_trigger
+
+
+def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_value: Any) -> None:
+    """Validate the captured ``timeout`` directive and assign ``script_timeout``.
+
+    The directive was captured from the ORIGINAL body by the caller (the
+    authoring key is consumed by the rebuild, so presence/value travel as
+    arguments). Validation runs in the fixed contract order — non-string →
+    requires-script → assign: a present non-string value (``timeout: null``
+    counts as PRESENT, unlike ``trigger`` whose null counts as absent) raises;
+    a ``timeout`` without ``script`` in the same (rebuilt) body raises —
+    ``script_timeout`` scopes to the script action, so ``before_script``/
+    ``after_script`` do not open the directive. Otherwise the value is
+    assigned verbatim to the output ``script_timeout`` key — the Go duration
+    grammar is NOT validated here (afm fails on a malformed string at
+    runtime). The assignment overwrites a directly authored
+    ``script_timeout`` (same output key — the translated value wins).
+
+    Args:
+        body: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        stage_name: The stage id (used in the structural error messages — for
+            loop-expanded copies this is ``NAME-i``).
+        timeout_value: The captured ``timeout`` value from the original body.
+
+    Raises:
+        StructuralError: When the value is not a string, or when the body
+            carries no ``script`` key.
+    """
+    if not isinstance(timeout_value, str):
+        raise StructuralError(f"timeout must be a string in stage {stage_name}")
+
+    if "script" not in body:
+        raise StructuralError(f"timeout requires script in stage {stage_name}")
+    body["script_timeout"] = timeout_value
+
+
 def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
@@ -253,7 +388,20 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     Likewise, an authoring ``interactive`` key is rejected with
     ``StructuralError("interactive key is forbidden in stage body; use
     communication")`` — the authoring-side field is ``communication``; ``interactive``
-    is the output-only afm field.
+    is the output-only afm field. Likewise, an authoring ``auto_run`` key is
+    rejected with ``StructuralError("auto_run key is forbidden in stage body; use
+    trigger: manual")`` — the authoring-side field for the launch mode is
+    ``trigger``; ``auto_run`` is the output-only afm field.
+
+    The ``trigger`` key (when present in a pipeline-file body, an embedded
+    extend body, or a loop-expanded copy) is read and validated: any non-``None``
+    value outside the closed set ``on_success``/``manual`` — including non-str
+    values, which can never be members of the set — raises
+    ``StructuralError("trigger must be one of: on_success, manual")``. Validation
+    gates on the VALUE, not key presence: ``trigger:`` with no value parses to
+    ``None`` and is treated as ABSENT (symmetrically to ``roles: null``). The key
+    is consumed (excluded from the rebuilt dict, like ``_APPROVE_SENTINEL``), so
+    the authoring key never reaches the output as an unknown key.
 
     The ``_APPROVE_SENTINEL`` key (if present — threaded by
     ``_apply_per_stage_overrides`` only on the workflow path) is read and
@@ -267,6 +415,23 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     with ``StructuralError("script is mutually exclusive with prompt/skills in
     stage {stage_name}")``; ``before_script``/``after_script`` are compatible.
 
+    The stage ``timeout`` directive is captured BEFORE the rebuild (from the
+    ORIGINAL body) and validated/translated by the same pass as script
+    exclusivity, in the fixed order: a present non-string value (including
+    ``timeout: null`` — presence gates, not truthiness, unlike ``trigger``)
+    raises ``StructuralError("timeout must be a string in stage
+    {stage_name}")``; a ``timeout`` without ``script`` in the same body raises
+    ``StructuralError("timeout requires script in stage {stage_name}")``
+    (``before_script``/``after_script`` do not open the directive —
+    ``script_timeout`` scopes to the script action); otherwise the value is
+    assigned verbatim to the output ``script_timeout`` key — the Go duration
+    grammar is NOT validated here (afm fails on a malformed string at runtime).
+    The authoring ``timeout`` key is consumed, never passed through as an
+    unknown key; the output key appears only when the directive is authored
+    (omitempty). Directly authoring ``script_timeout`` is legal (unvalidated,
+    the same stance as direct ``script_before``); when both are authored the
+    translated ``timeout`` value wins.
+
     The authoring ``communication`` field is then translated into the output
     ``interactive`` slot — EXCEPT under an approve directive driving the
     communication effect (``auto``/``plan``) + ``communication: true``, where it
@@ -277,9 +442,14 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     body lacks a usable ``roles`` value. Under an approve directive driving the
     roles effect (``auto``/``dialog``) + ``planner`` in the raw ``roles``,
     ``auto_approve: true`` is emitted (canonical slot right after
-    ``interactive``). Known keys (``interactive``, ``auto_approve``, ``command``,
+    ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
+    ``auto_run: false`` (canonical slot immediately after ``auto_approve``);
+    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key —
+    ``auto_run: true`` is never emitted. Known keys (``interactive``,
+    ``auto_approve``, ``auto_run``, ``command``,
     ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
-    ``skills``, ``script_before``, ``script``, ``script_after``) are emitted in
+    ``skills``, ``script_before``, ``script``, ``script_after``,
+    ``script_timeout``) are emitted in
     that fixed order; any remaining keys are appended alphabetically. The
     input-only ``roles`` key never reaches the output (dropped in
     ``_inject_defaults``); the input-only ``communication`` key never reaches the
@@ -308,13 +478,17 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             authoring-side field is ``roles``; ``agents`` is output-only. Or if
             ``body`` carries an authoring ``interactive`` key — the authoring-side
             field is ``communication``; ``interactive`` is output-only. Or if
+            ``body`` carries an authoring ``auto_run`` key — the authoring-side
+            field for the launch mode is ``trigger``; ``auto_run`` is
+            output-only. Or if ``body`` carries a ``trigger`` value outside the
+            closed set ``on_success``/``manual`` (a ``None`` value counts as
+            absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
-            — they are mutually exclusive.
+            — they are mutually exclusive. Or if ``body`` carries a present
+            non-string ``timeout`` value, or a ``timeout`` without ``script``
+            in the same body (``script_timeout`` scopes to the script action).
     """
-    if "agents" in body:
-        raise StructuralError("agents key is forbidden in stage body; use roles")
-    if "interactive" in body:
-        raise StructuralError("interactive key is forbidden in stage body; use communication")
+    _reject_authoring_output_keys(body)
 
     # Read the approve sentinel (output-only plumbing) WITHOUT mutating ``body``
     # — reading (not popping) keeps this function non-mutating on every path.
@@ -324,18 +498,31 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # non-workflow path carries no sentinel).
     effective_approve = body.get(_APPROVE_SENTINEL)
 
+    # Read and validate the stage trigger directive WITHOUT mutating ``body``
+    # (see ``_validate_trigger`` — a null value counts as absent).
+    effective_trigger = _validate_trigger(body)
+
     # Capture the raw roles list BEFORE translation — the auto_approve effect
     # matches the authored role "planner", not its translated stem "planning".
     raw_roles = body.get("roles")
 
+    # Capture the timeout directive BEFORE the rebuild — the authoring key is
+    # consumed by its translation below, so its presence/value must be read
+    # from the ORIGINAL body. Presence gates (``has_timeout``), not truthiness:
+    # ``timeout: null`` is a PRESENT non-string and raises (unlike ``trigger``,
+    # whose null counts as absent), and ``timeout: ""`` is a valid present string.
+    has_timeout = "timeout" in body
+    timeout_value = body.get("timeout")
+
     # Translate the authoring script directives into their output keys (the
     # authoring keys are consumed, never passed through as unknown keys) and drop
-    # the approve sentinel so it never reaches the output. A fresh dict is built
-    # rather than mutating ``body`` in place.
+    # the approve sentinel and the authoring ``trigger``/``timeout`` keys — all
+    # consumed by their translations, so none ever reaches the output. A fresh
+    # dict is built rather than mutating ``body`` in place.
     body = {
         ("script_before" if key == "before_script" else "script_after" if key == "after_script" else key): value
         for key, value in body.items()
-        if key != _APPROVE_SENTINEL
+        if key not in (_APPROVE_SENTINEL, "trigger", "timeout")
     }
 
     # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
@@ -344,6 +531,15 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # directly or — it cannot be — derived).
     if "script" in body and ("prompt" in body or "skills" in body):
         raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+
+    # The stage timeout directive — validated and translated by the same pass
+    # as script exclusivity (non-string → requires-script → assign; see
+    # ``_apply_timeout_directive``). ``script_timeout`` scopes to the script
+    # action: only ``script`` opens the directive. The value passes verbatim
+    # (the Go duration grammar belongs to afm at runtime) and the assignment
+    # overwrites a directly authored ``script_timeout`` (translated wins).
+    if has_timeout:
+        _apply_timeout_directive(body, stage_name, timeout_value)
 
     if "communication" in body:
         # Translate the authoring ``communication`` key into the output
@@ -369,6 +565,13 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     if effective_approve in _APPROVE_EMIT_AUTO_APPROVE and has_planner:
         source["auto_approve"] = True
 
+    # A body whose effective trigger is ``manual`` assembles ``auto_run: false``
+    # — the canonical loop slots it immediately after ``auto_approve``. A body
+    # with ``trigger: on_success`` (or no trigger) assembles NO ``auto_run`` key;
+    # ``auto_run: true`` is never emitted on any path.
+    if effective_trigger == "manual":
+        source["auto_run"] = False
+
     ordered: dict[str, Any] = {}
     for key in _CANONICAL_KEY_ORDER:
         if key in source:
@@ -390,20 +593,26 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     overlays per-field and WINS whenever its field is not ``None`` (the inline
     value is the fallback only). ``prompt``/``skills`` have no inline equivalent,
     so a stages-block entry's own values always pass straight through, and a name
-    with only an extend entry carries ``prompt``/``skills`` as ``None``.
+    with only an extend entry carries ``prompt``/``skills`` as ``None``. The
+    manual-launch instruction is stages-block-only: the extend seed CANNOT carry
+    ``manual`` (``parse_workflow`` rejects it in an extend-entry), so the merged
+    branch passes ``manual=stg.manual`` EXPLICITLY — the ``WorkflowStage``
+    constructor defaults it to ``None``, and an overlay that omitted it would
+    silently drop the instruction.
 
     Args:
         workflow: The declarative workflow instructions.
 
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
-        entries carry only ``agent``/``loop``/``approve``; stages-block entries
-        carry their full ``WorkflowStage``; merged entries combine them per-field.
+        entries carry only ``agent``/``loop``/``approve`` (``manual`` stays
+        ``None``); stages-block entries carry their full ``WorkflowStage``;
+        merged entries combine them per-field, always carrying the stages-block
+        ``manual``.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
-        # Inline extend carries agent/loop/approve only — no prompt/skills override.
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
@@ -413,12 +622,15 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             effective[name] = stg
             continue
         # Per-field overlay: stages-block wins whenever its field is not None.
+        # ``manual`` is passed explicitly — the extend seed carries none, and the
+        # constructor default (None) would silently drop the instruction.
         effective[name] = WorkflowStage(
             agent=stg.agent if stg.agent is not None else base.agent,
             prompt=stg.prompt,
             loop=stg.loop if stg.loop is not None else base.loop,
             skills=stg.skills,
             approve=stg.approve if stg.approve is not None else base.approve,
+            manual=stg.manual,
         )
 
     return effective
@@ -490,16 +702,28 @@ def _apply_per_stage_overrides(
     ``_canonical_fields`` to drive the two approve effects (interactive
     suppression and ``auto_approve`` emission, each on its own directive subset);
     writing ``None`` is harmless (``_canonical_fields`` treats a ``None`` sentinel
-    as no directive). ``effective`` already folds the inline-extend default together
-    with the explicit stages-block, so inline ``agent``/``loop``/``approve``
-    apply even without a stages-block, and an explicit stages-block wins
-    per-field. Operates on the supplied (already deep-copied) working sequence so
-    the ORIGINAL parsed body stays untouched.
+    as no directive). The effective tri-state ``manual`` instruction is then
+    applied to the step body's ``trigger`` on this same working copy: ``True``
+    forces ``trigger: manual`` over any authored value (an idempotent no-op on
+    an already-manual stage); ``False`` cancels a manual state from EITHER body
+    source (pipeline-file body OR embedded extend body) by rewriting
+    ``trigger: manual`` to ``trigger: on_success``, and raises
+    ``StructuralError("manual: false on non-manual stage <name>")`` when the
+    body carries no manual state to cancel; ``None`` (no instruction) leaves
+    the authored trigger unchanged. ``effective`` already folds the
+    inline-extend default together with the explicit stages-block, so inline
+    ``agent``/``loop``/``approve`` apply even without a stages-block, and an
+    explicit stages-block wins per-field. Operates on the supplied (already
+    deep-copied) working sequence so the ORIGINAL parsed body stays untouched.
 
     Args:
         steps: The working (deep-copied) step sequence to mutate in place.
         effective: The resolved per-stage override map (from
             ``_effective_overrides``), keyed by stage name.
+
+    Raises:
+        StructuralError: When a ``manual: false`` entry targets a stage whose
+            working body carries no ``trigger: manual`` (nothing to cancel).
     """
     steps_by_name = {step.name: step for step in steps}
 
@@ -525,6 +749,21 @@ def _apply_per_stage_overrides(
         # simple (the sentinel always reflects the resolved directive). It never
         # reaches the output — read and dropped in ``_canonical_fields``.
         step.body[_APPROVE_SENTINEL] = stage.approve
+
+        # Tri-state manual-launch instruction (4a manual). The rewrite targets
+        # this WORKING body copy only — the original parsed body and the
+        # ``PipelineDocument`` mirror stay untouched. ``True`` forces the manual
+        # state over any authored trigger (idempotent on an already-manual
+        # stage); ``False`` cancels a manual state from either body source
+        # (pipeline-file OR extend body) or is an error when there is nothing to
+        # cancel; ``None`` (no instruction) leaves the authored trigger alone.
+        if stage.manual is True:
+            step.body["trigger"] = "manual"
+        elif stage.manual is False:
+            if step.body.get("trigger") == "manual":
+                step.body["trigger"] = "on_success"
+            else:
+                raise StructuralError(f"manual: false on non-manual stage {name}")
 
 
 def _make_expanded_copy(
@@ -1195,7 +1434,13 @@ def compile_flow(
     ``roles`` list is translated element-wise; a missing ``roles`` key, ``null``,
     or empty list injects the single default ``agents=["auto"]``. A legacy
     ``agents`` key in a step body is rejected with ``StructuralError`` — the
-    authoring-side field is ``roles``. ``supervisor``/``supervisor_prompt`` are
+    authoring-side field is ``roles``. Likewise, a ``trigger`` value outside the
+    closed set ``on_success``/``manual`` is rejected with ``StructuralError`` and
+    an authoring ``auto_run`` key is rejected with ``StructuralError`` (the launch
+    mode is authored as ``trigger: manual`` and translated into the output
+    ``auto_run: false`` slot immediately after ``auto_approve`` — a body with
+    ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key).
+    ``supervisor``/``supervisor_prompt`` are
     authored-only — never injected, but they pass through the canonical slot when
     the source body carries them. The translation/injection is local to
     ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
@@ -1265,8 +1510,11 @@ def compile_flow(
 
     Raises:
         StructuralError: On a structural defect in the DSL (propagated from
-            ``parse_dsl``), on an empty body, or on a legacy ``agents`` key in a
-            stage body.
+            ``parse_dsl``), on an empty body, on a legacy ``agents`` key in a
+            stage body, on an authoring ``interactive``/``auto_run`` key in a
+            stage body (the authoring-side fields are ``communication``/
+            ``trigger``), or on a ``trigger`` value outside
+            ``on_success``/``manual``.
         FileNotFoundError: If ``pipeline_path`` does not exist or ``flow_path``'s
             parent is missing (propagated).
         PermissionError: If ``pipeline_path`` is unreadable (propagated).

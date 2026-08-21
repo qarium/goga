@@ -1,6 +1,6 @@
 # goga build
 
-Execute a build plan via ralphex inside a Docker container.
+Execute a build plan via a ralph-loop inside a Docker container.
 
 ## Synopsis
 
@@ -10,17 +10,17 @@ goga build PLAN [OPTIONS]
 
 ## Description
 
-`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to [ralphex](https://github.com/qarium/ralphex) running inside a Docker container with the goga in-container process as the entry point.
+`goga build` launches the goga build pipeline for a given plan file. It prepares the environment, validates preconditions, and delegates execution to a ralph-loop running inside a Docker container with the goga in-container process as the entry point.
 
 The build pipeline performs these steps:
 
 1. **Docker check** -- Verifies Docker is installed and accessible.
 2. **Config loading** -- Reads `.goga/config.yml` for build settings.
 3. **Uncommitted manifest check** -- Scans `git status` for uncommitted `CODEMANIFEST` files (can be skipped).
-4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude).
-5. **Defaults copy** -- Copies default prompts and agent configurations to `.ralphex/`.
+4. **Agent preconditions** -- Sets up agent-specific files (e.g., `.claude/settings.json`, `.ralphex/claude-wrapper.sh` for Claude). A review executor whose `agent` differs from the task executor, or that declares a non-empty `env`, combined with an active worktree (`--worktree` or `build.worktree: true`) is rejected here with exit 1, before any container launch — the ralph-loop review mode cannot follow a worktree branch. The guard is config-level and skip-independent: `--skip-review` does not bypass it.
+5. **Defaults copy** -- Fully rewrites `.ralphex/prompts/` and `.ralphex/agents/` from the configured `build.prompts_dir`/`build.agents_dir`, or from the vendored ralph-loop defaults shipped with goga (`goga/assets/ralphex/`). When `build.review_executor.roles` is set, the review prompts are filtered to the selected roles.
 6. **Image refresh (optional)** -- When `--update`/`-u` is set, the image is refreshed: if a top-level `dockerfile` is declared in `.goga/config.yml`, `docker build` runs against it (build failure is fatal — exit 1); otherwise `docker pull` runs (a pull failure is logged as a warning and the build proceeds with the locally available image). By default no refresh happens and the local image is used as-is.
-7. **Docker execution** -- Launches the ralphex command inside the configured Docker image. Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag).
+7. **Docker execution** -- Launches the ralph-loop command inside the configured Docker image. Credential files for claude, codex, and opencode are detected on the host and bind-mounted read-only into the container automatically (no flag).
 
 ## Arguments
 
@@ -33,9 +33,10 @@ The build pipeline performs these steps:
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `--dry-run` | flag | off | Print the assembled command without executing |
-| `--worktree` | flag | off | Enable ralphex worktree mode |
+| `--worktree` | flag | off | Enable ralph-loop worktree mode |
 | `--skip-finalize` | flag | off | Skip finalization step |
 | `--skip-manifest-check` | flag | off | Skip check for uncommitted CODEMANIFEST files |
+| `--skip-review` / `--no-skip-review` | bool pair (tri-state) | unset | Skip the review phase (`--skip-review`, the ralph-loop `--tasks-only`) or force the full cycle (`--no-skip-review`). Overrides `build.review_executor.skip` in `.goga/config.yml`; when neither is given, the config decides |
 | `--session-timeout` | string | config | Session timeout duration |
 | `--idle-timeout` | string | config | Idle timeout duration |
 | `--wait` | string | config | Wait time before starting |
@@ -45,7 +46,7 @@ The build pipeline performs these steps:
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
 | `--update`, `-u` | flag | off | Refresh the image before launch (build if a project Dockerfile is declared, else pull). Default skips the refresh |
-| `-c`, `--clean` | flag | off | Wipe the persistent ralphex runtime host directory before launch (default preserves state across runs) |
+| `-c`, `--clean` | flag | off | Wipe the persistent ralph-loop runtime host directory before launch (default preserves state across runs) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
 
@@ -67,7 +68,7 @@ Credential files for the supported AI agents are detected on the host and bind-m
 
 ### Ralphex runtime isolation
 
-ralphex writes its persistent state to a `.ralphex/` directory it auto-detects in its working directory. Rather than letting that state accumulate inside your project directory, `goga build` bind-mounts a centralized host directory over `/workspace/.ralphex`, so the bytes physically land on the host under:
+The ralph-loop writes its persistent state to a `.ralphex/` directory it auto-detects in its working directory. Rather than letting that state accumulate inside your project directory, `goga build` bind-mounts a centralized host directory over `/workspace/.ralphex`, so the bytes physically land on the host under:
 
 ```
 ~/.goga/runtime/builds/<normalized_project>/<branch>/
@@ -96,13 +97,19 @@ goga build plan.md --dry-run
 Run with custom timeouts and an extra environment variable:
 
 ```bash
-goga build plan.md --session-timeout 3600 --max-iterations 50 -e ANTHROPIC_API_KEY=sk-xxx
+goga build plan.md --session-timeout 1h --max-iterations 50 -e ANTHROPIC_API_KEY=sk-xxx
 ```
 
 Skip the uncommitted CODEMANIFEST check:
 
 ```bash
 goga build plan.md --skip-manifest-check
+```
+
+Skip the review phase (run tasks only):
+
+```bash
+goga build plan.md --skip-review
 ```
 
 Pull the latest image, then build (default skips the pull):
@@ -117,7 +124,7 @@ Route container traffic through a corporate proxy and add a local host entry:
 goga build plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
 ```
 
-Wipe persistent ralphex state before launching a fresh build:
+Wipe persistent ralph-loop state before launching a fresh build:
 
 ```bash
 goga build plan.md --clean
@@ -129,7 +136,7 @@ Build settings are loaded from `.goga/config.yml`. Example configuration:
 
 ```yaml
 language: python
-image: qarium/goga-python-3.12:1.1
+image: qarium/goga-python-3.12:1.2
 # dockerfile: .goga/Dockerfile   # optional — when set, `--update` builds the image from this Dockerfile instead of pulling
 pipeline:
   agent: claude
@@ -149,4 +156,4 @@ Only `language` is required by the loader. `goga build` additionally requires a 
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, precondition failure, ralphex error, or a fatal `docker build` under `--update`) |
+| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, a ralph-loop error — a missing `ralphex` binary or a rejected launch surfaces as a clean one-line message with exit code 1 — or a fatal `docker build` under `--update`) |

@@ -32,8 +32,9 @@ Once confirmed, write the ADR to `docs/proposals/<topic>.md` (slug name, lowerca
 Load these skills via the **Skill tool** before starting the interview.
 
 - **`goga-cell`** — DSL specification: cell and CODEMANIFEST structure, directives, and syntax.
-- **`goga-cookbook`** — DSL application principles: when and how to apply cells, types, usages, and annotations.
 - **`goga-lang-disp`** — language implementation rules: naming, signatures, and location for the target language (routes to the per-language skill).
+
+These skills are loaded **read-only**: use them solely to understand and discuss the existing project architecture — to read `goga schema` output and existing CODEMANIFEST and usage files. They do not license you to produce contracts, signatures, or cell layouts.
 
 ### Project structure
 
@@ -69,3 +70,10 @@ Challenge terms as you go. Specifically:
 ### Why
 
 The ADR's "why" only makes sense if the vocabulary it uses is sharp.
+
+## Constraints
+
+- To understand the project, read only the architectural diagram, CODEMANIFEST and usage files.
+- Never design cells or CODEMANIFEST contracts — even when the user's constraints sound architectural. That is outside this skill's scope.
+- Do not propose or discuss: type signatures, method/property lists, `location` values, Entities vs Routines, cell boundaries, Imports/Usages wiring, or CODEMANIFEST structure. If a question drifts there, do not answer it — record the open point in the ADR as an unresolved question and move on.
+- Interview outputs are decision records about the problem, its terms, and its constraints — not contracts.

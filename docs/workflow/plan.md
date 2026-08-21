@@ -1,6 +1,6 @@
 # Plan
 
-Compile a design document into a ralphex-compatible execution plan. The plan is a structured markdown file that ralphex autonomously executes through Claude Code to produce the implementation.
+Compile a design document into a ralph-loop-compatible execution plan. The plan is a structured markdown file that the ralph-loop autonomously executes through Claude Code to produce the implementation.
 
 ## Synopsis
 
@@ -17,9 +17,9 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 - `### Task N: <title>` headings define individual tasks
 - `- [ ]` checkboxes mark incomplete items
 - `## Validation Commands` section lists verification commands
-- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the ralphex protocol), **integration tests** (cross-entity scenarios)
+- Three task types: **infrastructure** (cell structure, facade, re-exports), **TDD coding** (entity implementation with the ralphex execution protocol), **integration tests** (cross-entity scenarios)
 
-Only ONE task is executed per ralphex iteration.
+Only ONE task is executed per ralph-loop iteration.
 
 ## Algorithm
 
@@ -39,7 +39,7 @@ Only ONE task is executed per ralphex iteration.
 | Step | Action |
 |---|---|
 | 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions. Transfer traces and diagrams **verbatim**, do not summarize. |
-| 2. Compile into ralphex tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
+| 2. Compile into ralph-loop tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
 | 3. Save the plan | Write to `docs/plans/<function-name>.md`. Create directory if missing. |
 
 ### Phase 3. Plan verification
@@ -52,7 +52,7 @@ Only ONE task is executed per ralphex iteration.
 4. Every planned `.usages/` entry has a creation task or step.
 5. Interaction diagrams and traces transferred verbatim.
 6. All coding tasks follow the TDD workflow.
-7. Ralphex format correct (`### Task N:` headings, `- [ ]` checkboxes).
+7. Plan format correct (`### Task N:` headings, `- [ ]` checkboxes).
 8. Every task atomic and self-contained.
 9. Validation commands defined.
 10. CODEMANIFEST files marked as read-only.
@@ -91,7 +91,7 @@ If any answer is "no" — rework the plan.
 
 Leaf cells first, then parent cells. Entities sharing the same `location` are grouped into one task.
 
-## Ralphex execution protocol (embedded in each coding task)
+## Ralph-loop execution protocol (embedded in each coding task)
 
 Each coding task includes steps 0–8 as checkboxes:
 

@@ -27,14 +27,14 @@ python -m goga --help
 | [`goga init`](init.md) | Interactive project initialization |
 | [`goga install`](install.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
 | [`goga lint`](lint.md) | Validate CODEMANIFEST files |
-| [`goga build`](build.md) | Execute build plan via ralphex |
+| [`goga build`](build.md) | Execute build plan via a ralph-loop |
 | [`goga contract`](contract.md) | Compare CODEMANIFEST with implementation |
 | [`goga config`](config.md) | Display configuration values |
 | [`goga schema`](schema.md) | Generate JSON schema from project cells |
 | [`goga connect`](connect.md) | Install goga skills for AI agents |
 | [`goga upgrade`](upgrade.md) | Upgrade goga and re-sync connected agents |
 | [`goga usages`](usages.md) | Sync cell-level usages from declared git dependencies and check their status against the remote |
-| [`goga pipeline`](pipeline.md) | Run a goga pipeline (or list them) |
+| [`goga pipeline`](pipeline.md) | Run a goga pipeline, or inspect the available ones (`--list`, `--info`) |
 | [`goga tool`](tool.md) | Dynamic tool package invocation |
 
 ## Global Options
