@@ -314,23 +314,27 @@ def build(  # noqa: PLR0913, C901, PLR0915, PLR0912, PLR0917
         raise click.ClickException("build.task_executor.agent is required in .goga/config.yml to run 'goga build'")
 
     # Step 2.3 — two-pass x worktree guard: a review executor whose agent
-    # differs from the task executor makes the in-container build run two
-    # passes (tasks, then `ralphex --review`). ralphex review mode cannot
-    # follow a --worktree branch, so the combination is rejected here —
-    # BEFORE the docker command is assembled (before the env-file write,
-    # before DockerRunner), so no container is ever launched for a run that
-    # is doomed to lose the review pass.
+    # differs from the task executor, or that declares a non-empty review env,
+    # makes the in-container build run two passes (tasks, then `ralphex
+    # --review`). ralphex review mode cannot follow a --worktree branch, so
+    # the combination is rejected here — BEFORE the docker command is
+    # assembled (before the env-file write, before DockerRunner), so no
+    # container is ever launched for a run that is doomed to lose the review
+    # pass. The condition is the config-level projection of the two_pass
+    # formula in resolve_review_options; it is skip-independent — the host
+    # does not resolve the tri-state --skip-review (that belongs to the
+    # in-container build, which also owns the env-without-agent gate).
     review_exec = config.build.review_executor
     worktree_active = worktree or bool(config.build.worktree)
     if (
         review_exec is not None
         and review_exec.agent is not None
-        and review_exec.agent != config.build.task_executor.agent
+        and (review_exec.agent != config.build.task_executor.agent or bool(review_exec.env))
         and worktree_active
     ):
         raise click.ClickException(
-            "build.review_executor.agent differs from task executor; "
-            "the two-pass review cannot follow a --worktree branch"
+            "build.review_executor two-pass review (differing agent or review env) "
+            "cannot follow a --worktree branch"
         )
 
     cli_flags = {

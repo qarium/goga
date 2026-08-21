@@ -1042,6 +1042,81 @@ class TestTwoPassWorktreeGuard:
         assert "worktree" in result.output
         mock_runner.return_value.run.assert_not_called()
 
+    @staticmethod
+    def _write_env_induced_config(tmp_path: Path, *, review_env: dict | None, agent: str | None = "claude") -> None:
+        """Same task/review agents; only a non-empty review env induces two-pass."""
+        review_executor: dict = {}
+        if agent is not None:
+            review_executor["agent"] = agent
+        if review_env is not None:
+            review_executor["env"] = review_env
+        data: dict = {
+            "language": "python",
+            "image": "qarium/goga:latest",
+            "build": {
+                "task_executor": {"agent": "claude"},
+                "review_executor": review_executor,
+            },
+            "pipeline": {"agent": "claude"},
+        }
+        (tmp_path / ".goga").mkdir(exist_ok=True)
+        (tmp_path / ".goga" / "config.yml").write_text(yaml.dump(data))
+
+    def test_host_guard_env_induced_two_pass_worktree_conflict_cli(self, tmp_path, monkeypatch) -> None:
+        """Same agents + non-empty review env → two-pass is induced by env alone;
+        combined with --worktree the guard fires BEFORE any docker call."""
+        self._write_env_induced_config(tmp_path, review_env={"M": "r"})
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    def test_host_guard_env_conflict_skip_independent(self, tmp_path, monkeypatch) -> None:
+        """The env-induced conflict is skip-independent: the guard never reads
+        the skip tri-state (resolution belongs to the in-container build)."""
+        self._write_env_induced_config(tmp_path, review_env={"M": "r"})
+        with (
+            mock.patch.object(_build_mod, "_check_docker", return_value=True),
+            mock.patch.object(_build_mod, "DockerRunner") as mock_runner,
+        ):
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree", "--skip-review"])
+
+        assert result.exit_code == 1
+        assert "review_executor" in result.output
+        assert "worktree" in result.output
+        mock_runner.return_value.run.assert_not_called()
+
+    @mock.patch.object(_build_mod, "_check_docker", return_value=True)
+    @mock.patch.object(_build_mod, "_read_git_config", return_value={})
+    @mock.patch.object(_build_mod, "_write_env_file")
+    @pytest.mark.parametrize(
+        ("review_env", "agent"),
+        [
+            ({"M": "r"}, None),  # env without an agent stays a container-side concern
+            ({}, "claude"),  # empty env → single-pass even under --worktree
+        ],
+    )
+    def test_host_guard_env_empty_and_env_without_agent_no_conflict(  # noqa: PLR0913, PLR0917
+        self, mock_env, mock_git, mock_docker, tmp_path, monkeypatch, review_env, agent
+    ) -> None:
+        """(a) empty review env with a matching agent, (b) env without any agent —
+        neither trips the guard; the run proceeds to docker."""
+        self._write_env_induced_config(tmp_path, review_env=review_env, agent=agent)
+        mock_env.return_value = Path("/tmp/env")
+
+        with mock.patch.object(_build_mod, "DockerRunner") as mock_runner:
+            mock_runner.return_value.run.return_value = 0
+            result = _run_build_in_tmp(tmp_path, monkeypatch, ["plan.md", "--worktree"])
+
+        assert result.exit_code == 0
+        mock_runner.return_value.run.assert_called_once()
+
 
 class TestSkipReviewPairForwarding:
     """The tri-state pair reaches the in-container entrypoint verbatim: True →
