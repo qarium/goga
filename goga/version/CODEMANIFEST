@@ -1,0 +1,137 @@
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the sole owner of the version-form grammar: every mapping from a
+  version form to a PEP 440 pip specifier lives here; consumers compose package
+  identifiers from the returned specifiers themselves.
+
+  All routines are pure transformers — no filesystem access, no network, no
+  logging; the standard library re module is used for segment-shape recognition.
+
+---
+
+"resolve_version(form: str | None) -> spec: str | None":
+  location: version.py
+  annotations: |
+    Sole owner of the four-form version grammar. Maps a version-form string to a
+    pip specifier; raises ValueError on operator-prefixed or malformed input.
+
+    `form`: version-form string in one of the four grammar forms, or None when
+      the caller's version input is absent
+    `spec`: resolved pip specifier to append to the package identifier, or None
+      when no specifier should be appended (latest / null marker)
+
+    Algorithm:
+    1. If `form` is None or equals the literal string "latest" → return None
+       (no specifier — pip selects the newest version under the upgrade request)
+    2. If `form` starts with a PEP 440 operator prefix (==, >=, <=, ~=, !=, <,
+       >, ===) → raise ValueError (operator-prefixed forms are rejected — this
+       routine owns the operator and emits it from the resolved grammar form)
+    3. If `form` matches the major x-range pattern "N.x" (exactly one dot, the
+       last segment is the literal "x", the first segment is a non-empty
+       numeric) → return a compatible-release specifier pinning the lower bound
+       on major version N (the form ~=N.0, PEP 440: >=N.0,<(N+1).0)
+    4. If `form` matches the minor x-range pattern "N.M.x" (exactly two dots,
+       the last segment is the literal "x", the first two segments are
+       non-empty numerics) → return a compatible-release specifier pinning the
+       lower bound on minor version N.M (the form ~=N.M.0, PEP 440:
+       >=N.M.0,<N.(M+1).0). The trailing .0 in ~=N.M.0 is required — ~=N.M
+       alone has only a major bound (<(N+1).0) and would NOT pin the minor
+       upper limit
+    5. If `form` matches the concrete-version pattern "N", "N.M", or "N.M.K"
+       (dot-separated non-empty numeric segments, no trailing "x" literal) →
+       return an exact-pin specifier (the form ==<form>)
+    6. Otherwise → raise ValueError (malformed form)
+
+    Distinguish major x-range ("1.x") from minor x-range ("1.0.x") by counting
+    dots — do NOT use prefix matching. The count of dots determines the lower
+    bound: one dot pins the major version (form ~=N.0, PEP 440 upper bound
+    <(N+1).0), two dots pin the minor version (form ~=N.M.0, PEP 440 upper
+    bound <N.(M+1).0). The trailing .0 in the minor case is what actually
+    drives the tighter upper bound — do NOT emit ~=N.M (major-only bound).
+
+    Apply `convention` for docstring style and the pure-function discipline
+    (no side effects, deterministic output).
+
+    Requirements:
+    - The four accepted forms are: "N.x" (major x-range), "N.M.x" (minor
+      x-range), "N(.M)?(.K)?" (concrete numeric), "latest"
+    - None input is accepted and resolves to None — the marker for an absent
+      version input; "latest" is the only canonical no-specifier marker inside
+      declarative configuration
+    - Every operator-prefixed form (==, >=, <=, ~=, !=, <, >, ===) raises
+      ValueError — `resolve_version` owns the operator and emits it from the
+      resolved grammar form
+    - Pip specifier output is always prefixed with the operator (== or ~=);
+      no operator is injected when None is returned
+
+    Constraints:
+    - Do NOT accept pre-release, post-release, or local-segment versions
+      (1.0.0a1, 1.0.0.post1, 1.0.0+local) — anything richer than the four-form
+      grammar is rejected; pip handles richer forms after resolution
+    - Do NOT validate that the numeric segments form a real PEP 440 version —
+      the routine recognises shape (dot-separated numerics), not existence
+    - Do NOT read metadata, log, or perform I/O — it is a pure function
+
+"resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = False) -> spec: str":
+  location: version.py
+  annotations: |
+    Relative version constraint builder: maps an installed version and a
+    selected version line to the pip specifier that keeps an upgrade inside
+    that line.
+
+    `base_version`: installed version string of the package being upgraded
+    `patch`: when True, constrain the target to the latest patch of the current
+      minor (line X.Y.*)
+    `minor`: when True, constrain the target to the latest release within the
+      current major (line X.*)
+    `spec`: resolved pip specifier (compatible-release form)
+
+    Algorithm:
+    1. Require exactly one of `patch` / `minor`; both set or neither set raises
+       ValueError
+    2. Reduce `base_version` to its leading release segments: the first numeric
+       segment is the major, the optional second numeric segment is the minor;
+       anything after them (pre-release, post-release, local, dev tails) is
+       discarded
+    3. If the base has no leading numeric segments, raise ValueError (the line
+       is undeterminable)
+    4. When `patch` is set: require the minor segment to exist, otherwise raise
+       ValueError; synthesize the minor x-range form "<major>.<minor>.x"
+    5. When `minor` is set: synthesize the major x-range form "<major>.x"
+    6. Resolve the synthesized form via `resolve_version` and return the
+       resulting specifier
+
+    Apply `convention` for docstring style and the pure-function discipline.
+
+    Requirements:
+    - Pure function — deterministic, no I/O, no logging
+    - The synthesized form is always a valid grammar form, so the pip specifier
+      output always carries the compatible-release operator
+    - Rich bases are truncated, never rejected: 1.2.0rc1, 1.2.0.post1,
+      1.2.0+local, 1.2.1.dev0 all reduce to the 1.2 line
+
+    Constraints:
+    - Do not read the installed version here — the caller owns the metadata
+      boundary; this routine receives the base as `base_version`
+    - Do not validate that segments form a real PEP 440 version — shape
+      recognition only, mirroring `resolve_version`
+    - Do not compose package identifiers — specifiers only
+
+---
+
+Author: Goga
+CreatedAt: 21/08/26
+
+Description: |
+  Pure leaf cell that owns the version-form grammar. Maps version forms and
+  relative version-line constraints to PEP 440 pip specifiers; consumers
+  compose package identifiers from the returned specifiers. No I/O lives here.

@@ -142,6 +142,7 @@ agent later with `goga connect <agent>` and the tool will be picked up.
 
 ## Version Form Grammar
 
+Version forms resolve through the shared version-form domain `goga/version`;
 `goga install` emits the operator. The four accepted forms resolve to pip
 specifiers as follows:
 
@@ -159,7 +160,8 @@ YAML-null `tools` values (e.g. `viewer:`) — each exits non-zero with a clear e
 ## Python API
 
 ```python
-from goga.commands.install.install import install, resolve_version
+from goga.commands.install.install import install
+from goga.version import resolve_version
 
 # Click commands are normally invoked via the CLI. For testing or programmatic
 # invocation, use click.testing.CliRunner — see .goga/usages/cooks/click.md.

@@ -1,5 +1,10 @@
 Imports:
   - Types:
+      - resolve_version
+    Usages:
+      - resolve-forms
+    From: goga/version
+  - Types:
       - ProjectConfig
       - load_project_config
     Usages:
@@ -24,6 +29,10 @@ Annotations: |
   Use the `click` practice to build the command, its options, the optional
   positional argument, the --no-connect flag, and exit-code propagation.
 
+  Use the `resolve-forms` practice for version form resolution — `resolve_version`
+  is the sole owner of the four-form grammar and the single point where malformed
+  forms raise ValueError.
+
   Use the `project-configuration` practice when the bulk path needs to read
   .goga/config.yml — load_project_config is the single entrypoint for config consumption,
   and its tools field is a raw mapping validated structurally only.
@@ -33,74 +42,6 @@ Annotations: |
   flag suppresses this activation, and empty mode never activates.
 
 ---
-
-"resolve_version(form: str | None) -> spec: str | None":
-  location: install.py
-  annotations: |
-    Sole owner of the four-form version grammar. Maps a version-form string to a
-    pip specifier; raises ValueError on operator-prefixed or malformed input.
-    Used by both the single path (--version CLI flag) and the bulk path
-    (config.tools expansion).
-
-    `form`: version-form string in one of the four grammar forms, or None when
-      the --version CLI flag is absent (single path only)
-    `spec`: resolved pip specifier to append to the package identifier, or None
-      when no specifier should be appended (latest / null marker)
-
-    Algorithm:
-    1. If `form` is None or equals the literal string "latest" → return None
-       (no specifier — pip selects the newest version under the upgrade request)
-    2. If `form` starts with a PEP 440 operator prefix (==, >=, <=, ~=, !=, <,
-       >, ===) → raise ValueError (operator-prefixed forms are rejected — this
-       routine owns the operator and emits it from the resolved grammar form)
-    3. If `form` matches the major x-range pattern "N.x" (exactly one dot, the
-       last segment is the literal "x", the first segment is a non-empty
-       numeric) → return a compatible-release specifier pinning the lower bound
-       on major version N (the form ~=N.0, PEP 440: >=N.0,<(N+1).0)
-    4. If `form` matches the minor x-range pattern "N.M.x" (exactly two dots,
-       the last segment is the literal "x", the first two segments are
-       non-empty numerics) → return a compatible-release specifier pinning the
-       lower bound on minor version N.M (the form ~=N.M.0, PEP 440:
-       >=N.M.0,<N.(M+1).0). The trailing .0 in ~=N.M.0 is required — ~=N.M
-       alone has only a major bound (<(N+1).0) and would NOT pin the minor
-       upper limit
-    5. If `form` matches the concrete-version pattern "N", "N.M", or "N.M.K"
-       (dot-separated non-empty numeric segments, no trailing "x" literal) →
-       return an exact-pin specifier (the form ==<form>)
-    6. Otherwise → raise ValueError (malformed form)
-
-    Distinguish major x-range ("1.x") from minor x-range ("1.0.x") by counting
-    dots — do NOT use prefix matching. The count of dots determines the lower
-    bound: one dot pins the major version (form ~=N.0, PEP 440 upper bound
-    <(N+1).0), two dots pin the minor version (form ~=N.M.0, PEP 440 upper
-    bound <N.(M+1).0). The trailing .0 in the minor case is what actually
-    drives the tighter upper bound — do NOT emit ~=N.M (major-only bound).
-
-    Apply `convention` for docstring style and the pure-function discipline
-    (no side effects, deterministic output).
-
-    Requirements:
-    - The four accepted forms are: "N.x" (major x-range), "N.M.x" (minor
-      x-range), "N(.M)?(.K)?" (concrete numeric), "latest"
-    - None input is accepted and resolves to None — this exists for the absent
-      --version CLI flag in the single path; it is NOT a valid config.tools
-      value (loader rejects YAML-null structurally)
-    - "latest" and None produce identical output (None) but "latest" is the
-      only canonical no-specifier marker inside config.tools
-    - Every operator-prefixed form (==, >=, <=, ~=, !=, <, >, ===) raises
-      ValueError — resolve_version owns the operator and emits it from the
-      resolved grammar form
-    - Pip specifier output is always prefixed with the operator (== or ~=);
-      no operator is injected when None is returned
-
-    Constraints:
-    - Do NOT accept pre-release, post-release, or local-segment versions
-      (1.0.0a1, 1.0.0.post1, 1.0.0+local) — anything richer than the four-form
-      grammar is rejected; pip handles richer forms after resolution
-    - Do NOT validate that the numeric segments form a real PEP 440 version —
-      the routine recognises shape (dot-separated numerics), not existence
-    - Do NOT read .goga/config.yml — this routine is a pure transformer
-    - Do NOT log or perform I/O — it is a pure function
 
 "install(ctx: click.Context, name: str | None, sudo: bool, version: str | None, local: str | None, no_connect: bool = False) -> exit_code: int":
   location: install.py
@@ -124,7 +65,7 @@ Annotations: |
     `sudo`: when True, run pip under sudo with HOME preserved (Unix-only).
     `version`: optional version-form string in the four-form grammar. Used by
       the single path only (ignored in the bulk path). Resolved by
-      resolve_version; operator-prefixed or malformed forms raise ValueError
+      `resolve_version`; operator-prefixed or malformed forms raise ValueError
       at resolution time. The CLI flag binding the callback's `version`
       parameter MUST expose both forms: the primary long form --version and
       the secondary short alias -v — Click receives them on a single Option
@@ -145,10 +86,10 @@ Annotations: |
             ClickException (--version applies to the SINGLE path only and is
             meaningless for a local source); exit non-zero.
     1. If `name` is not None → SINGLE PATH:
-       1.1. Resolve `version` via resolve_version; on rejection, surface a
+       1.1. Resolve `version` via `resolve_version`; on rejection, surface a
             user-facing CLI exception with a non-zero exit
        1.2. Compose the package identifier from `name` and the resolved specifier
-            (empty when resolve_version returned None)
+            (empty when `resolve_version` returned None)
        1.3. Issue one pip install invocation against the current interpreter with
             the composed identifier and an upgrade request; apply sudo with HOME
             preservation when `sudo` is set
@@ -169,7 +110,7 @@ Annotations: |
        3.3. If the mapping is empty → EMPTY PATH: print "Nothing to install" to
             stdout and exit 0 without invoking pip and without activation
        3.4. Else → BULK PATH: for each (tool_name, form) preserving insertion
-            order, resolve the form via resolve_version (surface rejection as a
+            order, resolve the form via `resolve_version` (surface rejection as a
             user-facing CLI exception), compose the identifier, collect it; issue
             exactly one pip install invocation with every collected identifier
             and an upgrade request; apply sudo with HOME preservation when `sudo`
@@ -233,8 +174,8 @@ Annotations: |
       and the short alias -l on the same Click Option
 
     Constraints:
-    - Do NOT validate, parse, or modify `version` outside resolve_version —
-      resolve_version is the sole owner of the grammar and the single point
+    - Do NOT validate, parse, or modify `version` outside `resolve_version` —
+      `resolve_version` is the sole owner of the grammar and the single point
       where malformed forms raise ValueError
     - Do NOT accept operator-prefixed forms in either --version or cfg.tools —
       they raise ValueError at resolution time
