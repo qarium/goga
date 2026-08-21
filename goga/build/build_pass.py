@@ -5,12 +5,13 @@ from ..ralphex import run_ralphex
 from .ralphex_config import write_ralphex_config
 
 
-def run_build_pass(
+def run_build_pass(  # noqa: PLR0913, PLR0917 — arity is CODEMANIFEST-mandated
     plan: str,
     config: BuildConfig,
-    options: dict,
+    options: dict[str, str | int | bool],
     wrapper_path: str,
     dry_run: bool,
+    env: dict[str, str] | None = None,
 ) -> int:
     """Execute one ralphex pass: write the pass config, delegate the launch.
 
@@ -31,10 +32,15 @@ def run_build_pass(
         dry_run: When True, print instead of launching (the pass config is
             still written — a harmless dry-run side effect matching the
             established behavior).
+        env: Optional environment layer ({str: str}) forwarded verbatim to
+            `run_ralphex` — the review pass receives the review env here; the
+            tasks pass runs without a layer. The pass adds no env logic of
+            its own: the overlay composition lives in the launcher, and the
+            layer never changes the ralphex config written for this pass.
 
     Returns:
         The exit code returned by ralphex, propagated without transformation.
     """
     write_ralphex_config(config, wrapper_path)
 
-    return run_ralphex(plan, options, dry_run)
+    return run_ralphex(plan, options, dry_run, env=env)
