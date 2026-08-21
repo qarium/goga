@@ -38,7 +38,30 @@ key is rejected with ``StructuralError("auto_run key is forbidden in stage body;
 trigger: manual")``; a ``trigger`` value outside ``on_success``/``manual`` is rejected
 with ``StructuralError("trigger must be one of: on_success, manual")`` — the
 authoring key is consumed by the translation, never passed through as an unknown
-key. ``auto`` is a
+key.
+
+Symmetrically, the authoring-side stage-body directive for the script timeout
+is ``timeout``; the compiled afm output field is ``script_timeout``. A step
+body carrying a string ``timeout`` (with ``script`` in the same body) is
+translated into the output ``script_timeout`` slot (canonical position
+immediately after ``script_after``); the value passes verbatim — the Go
+duration grammar is NOT validated here (a malformed string like ``"3 min"``
+reaches the flow-file as-is and fails in afm at runtime). A non-string value
+(including ``timeout: null`` — presence gates, not truthiness, unlike
+``trigger``) is rejected with ``StructuralError("timeout must be a string in
+stage {name}")``; a ``timeout`` without ``script`` is rejected with
+``StructuralError("timeout requires script in stage {name}")``
+(``before_script``/``after_script`` do not open the directive —
+``script_timeout`` scopes to the script action). The output key is present
+only when the directive is authored (omitempty), so pipelines without
+``timeout`` compile byte-identically. Directly authoring ``script_timeout`` is
+not forbidden (the same stance as direct ``script_before``); when both are
+authored, the translated ``timeout`` value wins. The directive applies to
+pipeline-file stage bodies AND embedded extend-stage bodies, and every
+loop-expanded copy (``NAME-i``) inherits the translated value verbatim. The
+translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
+returned to consumers keeps the authored ``timeout`` untouched.
+``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
 but they pass through the canonical slot when the source body carries them. The
@@ -100,6 +123,9 @@ logger = logging.getLogger(__name__)
 # script directives (``before_script``/``script``/``after_script``) are translated
 # to ``script_before``/``script``/``script_after`` and slotted after ``skills``;
 # they appear only when authored, so flow-files without them compile byte-identically.
+# ``script_timeout`` (str) sits immediately after ``script_after`` — the
+# translated form of the authoring ``timeout`` directive — and is likewise
+# present only when authored (or directly authored under its output name).
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
@@ -114,6 +140,7 @@ _CANONICAL_KEY_ORDER = [
     "script_before",
     "script",
     "script_after",
+    "script_timeout",
 ]
 
 # Sentinel key threaded by ``_apply_per_stage_overrides`` into a reconstructed
@@ -313,6 +340,41 @@ def _validate_trigger(body: dict[str, Any]) -> str | None:
     return effective_trigger
 
 
+def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_value: Any) -> None:
+    """Validate the captured ``timeout`` directive and assign ``script_timeout``.
+
+    The directive was captured from the ORIGINAL body by the caller (the
+    authoring key is consumed by the rebuild, so presence/value travel as
+    arguments). Validation runs in the fixed contract order — non-string →
+    requires-script → assign: a present non-string value (``timeout: null``
+    counts as PRESENT, unlike ``trigger`` whose null counts as absent) raises;
+    a ``timeout`` without ``script`` in the same (rebuilt) body raises —
+    ``script_timeout`` scopes to the script action, so ``before_script``/
+    ``after_script`` do not open the directive. Otherwise the value is
+    assigned verbatim to the output ``script_timeout`` key — the Go duration
+    grammar is NOT validated here (afm fails on a malformed string at
+    runtime). The assignment overwrites a directly authored
+    ``script_timeout`` (same output key — the translated value wins).
+
+    Args:
+        body: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        stage_name: The stage id (used in the structural error messages — for
+            loop-expanded copies this is ``NAME-i``).
+        timeout_value: The captured ``timeout`` value from the original body.
+
+    Raises:
+        StructuralError: When the value is not a string, or when the body
+            carries no ``script`` key.
+    """
+    if not isinstance(timeout_value, str):
+        raise StructuralError(f"timeout must be a string in stage {stage_name}")
+    if "script" not in body:
+        raise StructuralError(f"timeout requires script in stage {stage_name}")
+    body["script_timeout"] = timeout_value
+
+
 def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
@@ -349,6 +411,23 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     with ``StructuralError("script is mutually exclusive with prompt/skills in
     stage {stage_name}")``; ``before_script``/``after_script`` are compatible.
 
+    The stage ``timeout`` directive is captured BEFORE the rebuild (from the
+    ORIGINAL body) and validated/translated by the same pass as script
+    exclusivity, in the fixed order: a present non-string value (including
+    ``timeout: null`` — presence gates, not truthiness, unlike ``trigger``)
+    raises ``StructuralError("timeout must be a string in stage
+    {stage_name}")``; a ``timeout`` without ``script`` in the same body raises
+    ``StructuralError("timeout requires script in stage {stage_name}")``
+    (``before_script``/``after_script`` do not open the directive —
+    ``script_timeout`` scopes to the script action); otherwise the value is
+    assigned verbatim to the output ``script_timeout`` key — the Go duration
+    grammar is NOT validated here (afm fails on a malformed string at runtime).
+    The authoring ``timeout`` key is consumed, never passed through as an
+    unknown key; the output key appears only when the directive is authored
+    (omitempty). Directly authoring ``script_timeout`` is legal (unvalidated,
+    the same stance as direct ``script_before``); when both are authored the
+    translated ``timeout`` value wins.
+
     The authoring ``communication`` field is then translated into the output
     ``interactive`` slot — EXCEPT under an approve directive driving the
     communication effect (``auto``/``plan``) + ``communication: true``, where it
@@ -365,7 +444,8 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     ``auto_run: true`` is never emitted. Known keys (``interactive``,
     ``auto_approve``, ``auto_run``, ``command``,
     ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
-    ``skills``, ``script_before``, ``script``, ``script_after``) are emitted in
+    ``skills``, ``script_before``, ``script``, ``script_after``,
+    ``script_timeout``) are emitted in
     that fixed order; any remaining keys are appended alphabetically. The
     input-only ``roles`` key never reaches the output (dropped in
     ``_inject_defaults``); the input-only ``communication`` key never reaches the
@@ -400,7 +480,9 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             closed set ``on_success``/``manual`` (a ``None`` value counts as
             absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
-            — they are mutually exclusive.
+            — they are mutually exclusive. Or if ``body`` carries a present
+            non-string ``timeout`` value, or a ``timeout`` without ``script``
+            in the same body (``script_timeout`` scopes to the script action).
     """
     _reject_authoring_output_keys(body)
 
@@ -420,15 +502,23 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # matches the authored role "planner", not its translated stem "planning".
     raw_roles = body.get("roles")
 
+    # Capture the timeout directive BEFORE the rebuild — the authoring key is
+    # consumed by its translation below, so its presence/value must be read
+    # from the ORIGINAL body. Presence gates (``has_timeout``), not truthiness:
+    # ``timeout: null`` is a PRESENT non-string and raises (unlike ``trigger``,
+    # whose null counts as absent), and ``timeout: ""`` is a valid present string.
+    has_timeout = "timeout" in body
+    timeout_value = body.get("timeout")
+
     # Translate the authoring script directives into their output keys (the
     # authoring keys are consumed, never passed through as unknown keys) and drop
-    # the approve sentinel and the authoring ``trigger`` key — both consumed by
-    # their translations, so neither ever reaches the output. A fresh dict is
-    # built rather than mutating ``body`` in place.
+    # the approve sentinel and the authoring ``trigger``/``timeout`` keys — all
+    # consumed by their translations, so none ever reaches the output. A fresh
+    # dict is built rather than mutating ``body`` in place.
     body = {
         ("script_before" if key == "before_script" else "script_after" if key == "after_script" else key): value
         for key, value in body.items()
-        if key not in (_APPROVE_SENTINEL, "trigger")
+        if key not in (_APPROVE_SENTINEL, "trigger", "timeout")
     }
 
     # ``script`` is mutually exclusive with ``prompt`` and ``skills``;
@@ -437,6 +527,15 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # directly or — it cannot be — derived).
     if "script" in body and ("prompt" in body or "skills" in body):
         raise StructuralError(f"script is mutually exclusive with prompt/skills in stage {stage_name}")
+
+    # The stage timeout directive — validated and translated by the same pass
+    # as script exclusivity (non-string → requires-script → assign; see
+    # ``_apply_timeout_directive``). ``script_timeout`` scopes to the script
+    # action: only ``script`` opens the directive. The value passes verbatim
+    # (the Go duration grammar belongs to afm at runtime) and the assignment
+    # overwrites a directly authored ``script_timeout`` (translated wins).
+    if has_timeout:
+        _apply_timeout_directive(body, stage_name, timeout_value)
 
     if "communication" in body:
         # Translate the authoring ``communication`` key into the output
