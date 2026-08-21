@@ -76,6 +76,33 @@ class TestSerializeFlowContract:
         assert isinstance(text, str)
         assert text.startswith("name: N\n")
 
+    def test_serialize_flow_multiline_script_timeout_round_trips(self) -> None:
+        """A multi-line ``script_timeout`` serializes and parses back verbatim.
+
+        ``script_timeout`` belongs to the script family, so a multi-line value
+        must take the block-literal scalar style (the default parameters render
+        a multi-line string single-quoted).
+        """
+        import yaml
+
+        doc = FlowDocument(
+            name="N",
+            description="D",
+            stages=[
+                FlowStage(
+                    id="a",
+                    name="A",
+                    depends_on=None,
+                    fields={"script": "run", "script_timeout": "a\nb"},
+                ),
+            ],
+        )
+
+        text = serialize_flow(doc)
+
+        assert "script_timeout: |" in text
+        assert yaml.safe_load(text)["stages"][0]["script_timeout"] == "a\nb"
+
 
 class TestSerializeFlowLogic:
     """Behavioral tests against the documented canonical output format."""
@@ -175,3 +202,53 @@ class TestSerializeFlowLogic:
         # Exactly one trailing newline even with an empty stages list.
         assert text.endswith("\n")
         assert not text.endswith("\n\n")
+
+    def test_serialize_multiline_script_timeout_block_literal(self) -> None:
+        """A multi-line ``script_timeout`` takes block-literal scalar style.
+
+        The value has no trailing newline, so the block marker is ``|`` (not
+        ``|-``); the block body is indented 4 spaces (stage key at 2-space
+        indent + best_indent 2).
+        """
+        import yaml
+
+        doc = FlowDocument(
+            name="n",
+            description="d",
+            stages=[
+                FlowStage(
+                    id="a",
+                    name="A",
+                    depends_on=None,
+                    fields={"script": "run", "script_timeout": "a\nb"},
+                ),
+            ],
+        )
+
+        text = serialize_flow(doc)
+
+        assert "script_timeout: |" in text
+        assert "    a" in text
+        assert "    b" in text
+        assert yaml.safe_load(text)["stages"][0]["script_timeout"] == "a\nb"
+
+    def test_serialize_single_line_script_timeout_plain_scalar(self) -> None:
+        """A single-line ``script_timeout`` stays a plain scalar (no block marker)."""
+        doc = FlowDocument(
+            name="n",
+            description="d",
+            stages=[
+                FlowStage(
+                    id="a",
+                    name="A",
+                    depends_on=None,
+                    fields={"script": "run", "script_timeout": "30m"},
+                ),
+            ],
+        )
+
+        text = serialize_flow(doc)
+
+        assert "script_timeout: 30m" in text
+        # Plain scalar — no block-literal marker on the script_timeout line.
+        assert "script_timeout: |" not in text
