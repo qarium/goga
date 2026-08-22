@@ -8,6 +8,8 @@ lives here — all routines are pure transformers.
 
 from __future__ import annotations
 
+import importlib.metadata
+import os
 import re
 
 # Four-form version grammar — segment-count thresholds (see resolve_version).
@@ -35,6 +37,31 @@ def _is_ascii_digits(segment: str) -> bool:
     so the grammar rejects them.
     """
     return segment != "" and segment.isascii() and segment.isdigit()
+
+
+def _release_segments(version: str) -> tuple[str, str | None]:
+    """Reduce a version string to its leading release segments.
+
+    The first numeric segment is the major, the optional second numeric
+    segment is the minor; anything after them (pre-release, post-release,
+    local, dev tails) is discarded — rich versions are truncated, never
+    rejected. Shared reduction step of ``resolve_relative_spec`` and
+    ``compare_versions``.
+
+    Args:
+        version: Version string to reduce.
+
+    Returns:
+        Tuple of the major segment and the optional minor segment (``None``
+        when the version carries no minor segment).
+
+    Raises:
+        ValueError: If ``version`` has no leading numeric major segment.
+    """
+    m = _RELEASE_PREFIX_RE.match(version)
+    if m is None:
+        raise ValueError(f"cannot determine version line from {version!r}")
+    return m.group(1), m.group(2)
 
 
 def resolve_version(form: str | None) -> str | None:
@@ -146,11 +173,7 @@ def resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = 
         raise ValueError("exactly one of patch/minor must be selected")
 
     # 2. Reduce the base to its leading release segments; rich tails are discarded.
-    m = _RELEASE_PREFIX_RE.match(base_version)
-    if m is None:
-        raise ValueError(f"cannot determine version line from {base_version!r}")
-
-    major, minor_seg = m.group(1), m.group(2)
+    major, minor_seg = _release_segments(base_version)
 
     # 3. Synthesize the x-range form for the selected line.
     if patch:
@@ -166,3 +189,71 @@ def resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = 
         raise ValueError("synthesized form resolved without a specifier")
 
     return spec
+
+
+def compare_versions(host_version: str, image_version: str) -> bool:
+    """Compare two version strings at the (major, minor) level.
+
+    Pure comparator for the host-image consistency check: both arguments are
+    reduced to their leading release segments (rich dev/pre/post/local tails
+    are discarded) and compared as integer ``(major, minor)`` pairs. A missing
+    minor segment counts as ``0`` (``"1"`` ≡ ``"1.0"``), so a patch
+    difference never affects the verdict — only a major or minor difference
+    does. Shape recognition only: no PEP 440 existence check, no metadata or
+    environment reads, no logging.
+
+    Args:
+        host_version: First version string (release segments, possibly with
+            dev/pre/post/local tails).
+        image_version: Second version string (same forms).
+
+    Returns:
+        True when both ``(major, minor)`` pairs coincide, False otherwise.
+
+    Raises:
+        ValueError: If either argument has no leading numeric major segment.
+    """
+
+    def pair(version: str) -> tuple[int, int]:
+        major, minor = _release_segments(version)
+        minor_int = int(minor) if minor is not None else 0
+        return int(major), minor_int
+
+    return pair(host_version) == pair(image_version)
+
+
+def host_goga_version() -> str:
+    """Read the version of the goga distribution installed on the host.
+
+    Single reading point for the host goga version — every consumer of the
+    host version goes through this routine. Reads the installed distribution
+    metadata via the standard library ``importlib.metadata`` and returns the
+    version string unchanged.
+
+    Returns:
+        The installed version string of the goga package.
+
+    Raises:
+        importlib.metadata.PackageNotFoundError: When the goga distribution
+            is not installed in the current interpreter; translating the
+            failure into a user-facing error belongs to the caller.
+    """
+    return importlib.metadata.version("goga")
+
+
+def version_check_enabled() -> bool:
+    """Decide whether the host-side version check must run.
+
+    Companion of ``ensure_version_match``: when this predicate returns False,
+    the caller skips both the probe and the comparison — one gate, one place;
+    ``ensure_version_match`` runs only on the True path. The check is
+    disabled only by the exact value ``"1"`` of the ``GOGA_SKIP_VERSION_CHECK``
+    environment variable; an unset, empty, ``"0"``, or any other value leaves
+    the check enabled (exact comparison — no stripping, no case folding).
+    Nothing is printed or logged.
+
+    Returns:
+        True when the check must run (the probe and the comparison), False
+        only when ``GOGA_SKIP_VERSION_CHECK`` equals the exact string ``"1"``.
+    """
+    return os.environ.get("GOGA_SKIP_VERSION_CHECK") != "1"

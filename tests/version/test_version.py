@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from importlib.metadata import PackageNotFoundError
+from unittest import mock
 
 import pytest
-from goga.version import resolve_relative_spec, resolve_version
+from goga.version import (
+    compare_versions,
+    host_goga_version,
+    resolve_relative_spec,
+    resolve_version,
+    version_check_enabled,
+)
 
 # ---------------------------------------------------------------------------
 # Contract tests — facade exposure and signature shape
@@ -18,7 +26,13 @@ class TestVersionFacade:
 
     def test_version_facade_all(self) -> None:
         facade = importlib.import_module("goga.version")
-        assert facade.__all__ == ["resolve_relative_spec", "resolve_version"]
+        assert facade.__all__ == [
+            "compare_versions",
+            "host_goga_version",
+            "resolve_relative_spec",
+            "resolve_version",
+            "version_check_enabled",
+        ]
         for name in facade.__all__:
             assert callable(getattr(facade, name))
 
@@ -53,6 +67,61 @@ class TestResolveRelativeSpecFacade:
         assert params["patch"].default is False
         assert params["minor"].default is False
         assert sig.return_annotation is str or sig.return_annotation == "str"
+
+
+class TestCompareVersionsFacade:
+    """Contract tests — verify compare_versions is exposed and shaped per CODEMANIFEST."""
+
+    def test_compare_versions_importable_from_facade(self) -> None:
+        assert compare_versions is not None
+        assert callable(compare_versions)
+
+    def test_compare_versions_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "compare_versions" in facade.__all__
+        assert callable(facade.compare_versions)
+
+    def test_compare_versions_signature(self) -> None:
+        sig = inspect.signature(compare_versions)
+        params = sig.parameters
+        assert list(params) == ["host_version", "image_version"]
+        assert sig.return_annotation is bool or sig.return_annotation == "bool"
+
+
+class TestHostGogaVersionFacade:
+    """Contract tests — verify host_goga_version is exposed and shaped per CODEMANIFEST."""
+
+    def test_host_goga_version_importable_from_facade(self) -> None:
+        assert host_goga_version is not None
+        assert callable(host_goga_version)
+
+    def test_host_goga_version_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "host_goga_version" in facade.__all__
+        assert callable(facade.host_goga_version)
+
+    def test_host_goga_version_signature(self) -> None:
+        sig = inspect.signature(host_goga_version)
+        assert list(sig.parameters) == []
+        assert sig.return_annotation is str or sig.return_annotation == "str"
+
+
+class TestVersionCheckEnabledFacade:
+    """Contract tests — verify version_check_enabled is exposed and shaped per CODEMANIFEST."""
+
+    def test_version_check_enabled_importable_from_facade(self) -> None:
+        assert version_check_enabled is not None
+        assert callable(version_check_enabled)
+
+    def test_version_check_enabled_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "version_check_enabled" in facade.__all__
+        assert callable(facade.version_check_enabled)
+
+    def test_version_check_enabled_signature(self) -> None:
+        sig = inspect.signature(version_check_enabled)
+        assert list(sig.parameters) == []
+        assert sig.return_annotation is bool or sig.return_annotation == "bool"
 
 
 # ---------------------------------------------------------------------------
@@ -276,3 +345,102 @@ class TestResolveRelativeSpecLogic:
         with pytest.raises(ValueError, match="cannot determine"):
             resolve_relative_spec("abc", patch=True)
         assert opened == []
+
+
+# ---------------------------------------------------------------------------
+# Logic tests — compare_versions ((major, minor) comparator)
+# ---------------------------------------------------------------------------
+
+
+class TestCompareVersionsLogic:
+    """Behavioral scenarios — (major, minor) comparison with tail reduction."""
+
+    def test_compare_versions_agreeing_major_minor(self) -> None:
+        # A patch difference is invisible at the (major, minor) granularity —
+        # the core of the check's tolerance.
+        assert compare_versions("1.2.0", "1.2.1") is True
+
+    @pytest.mark.parametrize(
+        ("host_version", "image_version", "expected"),
+        [
+            # Rich tails reduce silently to the same (major, minor) line.
+            ("1.2.1.dev3", "1.2.0", True),
+            ("1.2.0rc1", "1.2.0.post1", True),
+            ("1.2.0+local", "1.2.0", True),
+            # A missing minor segment counts as 0: "1" ≡ "1.0".
+            ("1", "1.0", True),
+            # Patch-only difference on two-segment forms.
+            ("1.2", "1.2.9", True),
+            # Minor and major differences refuse.
+            ("1.3.0", "1.2.4", False),
+            ("2.0.0", "1.9.1", False),
+        ],
+    )
+    def test_compare_versions_parametrized_reduction(
+        self, host_version: str, image_version: str, expected: bool
+    ) -> None:
+        assert compare_versions(host_version, image_version) is expected
+
+    @pytest.mark.parametrize("bad_version", ["abc", "", "١.٢"])
+    def test_compare_versions_rejects_non_numeric_prefix(self, bad_version: str) -> None:
+        # No leading numeric major segment — re.ASCII also rejects Unicode
+        # decimal digits, which are not PEP 440.
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            compare_versions(bad_version, "1.2")
+
+
+# ---------------------------------------------------------------------------
+# Logic tests — version_check_enabled (gate predicate)
+# ---------------------------------------------------------------------------
+
+
+class TestVersionCheckEnabledLogic:
+    """Behavioral scenarios — exact-"1" escape, every other value enables."""
+
+    @pytest.mark.parametrize("value", ["", "0", " 1", "true", "2"])
+    def test_version_check_enabled_true_matrix(self, monkeypatch: pytest.MonkeyPatch, value: str) -> None:
+        # The test's own monkeypatch runs after the autouse _skip_version_check
+        # fixture and overrides its GOGA_SKIP_VERSION_CHECK=1. Only the exact
+        # string "1" disables — no stripping, no case folding.
+        monkeypatch.setenv("GOGA_SKIP_VERSION_CHECK", value)
+        assert version_check_enabled() is True
+
+    def test_version_check_enabled_exact_one_disables(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("GOGA_SKIP_VERSION_CHECK", "1")
+        assert version_check_enabled() is False
+
+    def test_version_check_enabled_unset_returns_true_despite_autouse(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # unset is the most common mode (no escape at all) — still enabled.
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK")
+        assert version_check_enabled() is True
+
+
+# ---------------------------------------------------------------------------
+# Logic tests — host_goga_version (single reading point)
+# ---------------------------------------------------------------------------
+
+
+class TestHostGogaVersionLogic:
+    """Behavioral scenarios — metadata read, silent success, propagated failure."""
+
+    def test_host_goga_version_returns_installed_version(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Metadata substitution on the stdlib module attribute — the single
+        # reading point must return the distribution version verbatim.
+        monkeypatch.setattr("goga.version.version.importlib.metadata.version", lambda _name: "1.2.3")
+        assert host_goga_version() == "1.2.3"
+        captured = capsys.readouterr()
+        assert captured.out == ""  # never prints — translation belongs to callers
+        assert captured.err == ""
+
+    def test_host_goga_version_propagates_metadata_failure(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        failing = mock.Mock(side_effect=PackageNotFoundError("goga"))
+        monkeypatch.setattr("goga.version.version.importlib.metadata.version", failing)
+        with pytest.raises(PackageNotFoundError):
+            host_goga_version()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
