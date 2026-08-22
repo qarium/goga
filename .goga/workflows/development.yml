@@ -39,3 +39,4 @@ extend:
       - commit-changes
     timeout: "8h"
     script: python3 -m goga.build docs/plans/$(git branch --show-current).md
+    after_script: rm -rf .ralphex

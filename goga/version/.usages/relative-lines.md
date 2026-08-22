@@ -23,14 +23,14 @@ The base is truncated to its leading release segments, so development and pre-re
 The caller owns the metadata boundary — read the installed version first, then hand it to the routine:
 
 ```python
-from importlib.metadata import version
+from goga.version import host_goga_version, resolve_relative_spec
 
-from goga.version import resolve_relative_spec
-
-base = version("goga")  # may raise PackageNotFoundError
+base = host_goga_version()  # may raise PackageNotFoundError
 spec = resolve_relative_spec(base, patch=True)
 identifier = f"goga{spec}"  # e.g. "goga~=1.2.0"
 ```
+
+For the goga package, `host_goga_version` is the single reading point of the installed version — do not call `importlib.metadata.version("goga")` directly.
 
 ## Error cases to surface at the CLI layer
 

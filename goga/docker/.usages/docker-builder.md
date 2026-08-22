@@ -52,8 +52,9 @@ Ordering:
 `DockerBuilder.build` in their **build branch only** — their pull branch
 (`docker_update`) and no-op branches (`docker_build_if_not_exist`) ignore
 `extra_args`, because extra tokens apply to image BUILD, not to a registry pull
-or an absent build. Pure-leaf preserved: `extra_args` is a primitive
-(`list[str]`), so adding it keeps the cell free of `goga/config` Imports.
+or an absent build. Leaf with respect to `goga/config` preserved: `extra_args` is a
+primitive (`list[str]`), so adding it keeps the cell free of `goga/config` Imports
+(the cell's only Import is the version check from `goga/version`).
 
 ## Typical usage
 
@@ -199,5 +200,6 @@ flag, which only decides whether `docker_update` runs at all.
 - Do NOT call `docker_pull` and then raise on a False return — pull failure is
   recoverable by design; the local image may already be present.
 - Do NOT pass a `ProjectConfig` object to `docker_update`. It takes primitives
-  (`image`, `dockerfile`, `extra_args`) so the docker cell stays a leaf with no dependency on
-  goga/config.
+  (`image`, `dockerfile`, `extra_args`) so the docker cell stays free of
+  `goga/config` Imports (the cell's only Import is the version check from
+  `goga/version`).

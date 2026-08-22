@@ -9,12 +9,13 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell is the sole owner of the version-form grammar: every mapping from a
-  version form to a PEP 440 pip specifier lives here; consumers compose package
-  identifiers from the returned specifiers themselves.
-
-  All routines are pure transformers — no filesystem access, no network, no
-  logging; the standard library re module is used for segment-shape recognition.
+  This cell is the sole owner of version semantics: the version-form grammar
+  and the host-side version consistency check. The grammar, comparison, and
+  constraint routines are pure transformers — no I/O, no logging. The check
+  routines read one environment variable and the installed-distribution
+  metadata of the goga package; user-facing messages go to sys.stderr; click
+  is not used. Container or docker invocations never live here — callers hand
+  the check already-obtained version strings.
 
 ---
 
@@ -126,12 +127,134 @@ Annotations: |
       recognition only, mirroring `resolve_version`
     - Do not compose package identifiers — specifiers only
 
+"compare_versions(host_version: str, image_version: str) -> compatible: bool":
+  location: version.py
+  annotations: |
+    Compare two version strings at the (major, minor) level.
+
+    `host_version`: first version string (release segments, possibly with
+      dev/pre/post/local tails)
+    `image_version`: second version string (same forms)
+    `compatible`: True when the (major, minor) pairs coincide
+
+    Algorithm:
+    1. Reduce each argument to its leading release segments: the first
+       numeric segment is the major, the optional second numeric segment is
+       the minor; everything after them is discarded
+    2. Treat a missing minor segment as 0
+    3. When an argument has no leading numeric major segment, raise
+       ValueError
+    4. Return True when both (major, minor) pairs are equal, False
+       otherwise — a patch difference does not affect the verdict
+
+    Requirements:
+    - Pure function — deterministic, no I/O, no logging
+    - Richer tails reduce silently: 1.2.1.dev3, 1.2.0rc1, 1.2.0.post1,
+      1.2.0+local all reduce to the 1.2 line
+
+    Constraints:
+    - Do not validate that segments form a real released version — shape
+      recognition only
+    - Do not read metadata or environment — the caller owns the strings
+
+    Apply the `convention` practice for docstring style and the
+    pure-function discipline.
+
+"host_goga_version() -> version: str":
+  location: version.py
+  annotations: |
+    Read the version of the goga distribution installed on the host.
+
+    `version`: installed version string of the goga package
+
+    Algorithm:
+    1. Read the installed version of the "goga" distribution via the
+       standard library importlib.metadata
+    2. Return it; when the version cannot be determined, propagate the
+       metadata exception unchanged
+
+    Requirements:
+    - Single reading point for the host goga version — every consumer of
+      the host version goes through this routine
+
+    Constraints:
+    - Do not print, log, or terminate — translating the failure into a
+      user-facing error belongs to the caller
+    - Do not read any other distribution or configuration
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+"version_check_enabled() -> enabled: bool":
+  location: version.py
+  annotations: |
+    Decide whether the host-side version check must run.
+
+    `enabled`: True when the check must run — the probe and the comparison
+
+    Algorithm:
+    1. Read the "GOGA_SKIP_VERSION_CHECK" environment variable
+    2. Return False only when the value equals the exact string "1"; an
+       unset, empty, "0", or any other value returns True
+
+    Requirements:
+    - Only the exact value "1" disables the check
+    - Companion of `ensure_version_match`: when this predicate returns
+      False, the caller skips both the probe and the comparison — one
+      gate, one place; `ensure_version_match` runs only on the True path
+
+    Constraints:
+    - Do not read any other environment variable; do not print or log
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+"ensure_version_match(image_version: str | None) -> none: None":
+  location: version.py
+  annotations: |
+    Apply the outcome matrix of the host–image version consistency check.
+
+    `image_version`: version string reported for the goga package inside
+      the project image, or None when the probe could not determine it
+
+    Algorithm:
+    1. Read the host version via `host_goga_version`; when it cannot be
+       determined, refuse — a clear message to sys.stderr (no traceback),
+       process exit code 1
+    2. When `image_version` is None, refuse — a message to sys.stderr
+       naming the escape environment variable GOGA_SKIP_VERSION_CHECK,
+       process exit code 1
+    3. When `image_version` equals "0.0.0", emit a warning to sys.stderr
+       and return — an unknown version is not a confirmed mismatch; the
+       launch continues
+    4. Compare the two versions at the (major, minor) level via
+       `compare_versions`; on a difference, refuse — both versions and a
+       remediation hint to sys.stderr, process exit code 1
+    5. On compatibility, return silently — nothing is printed
+
+    Requirements:
+    - Refusal exits the process with code 1 by unwinding the stack, so the
+      cleanup blocks of the callers execute; no traceback reaches the user
+    - All messages go to sys.stderr only
+    - The caller owns the escape decision — this routine runs only when
+      the check is enabled
+
+    Constraints:
+    - Do not launch containers or invoke docker — version strings arrive
+      as arguments
+    - Do not print anything on the agreeing path
+    - Do not write files
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
 ---
 
 Author: Goga
 CreatedAt: 21/08/26
 
 Description: |
-  Pure leaf cell that owns the version-form grammar. Maps version forms and
-  relative version-line constraints to PEP 440 pip specifiers; consumers
-  compose package identifiers from the returned specifiers. No I/O lives here.
+  Leaf cell that owns version semantics: the version-form grammar with
+  its pip-specifier transformers, and the host-side version consistency
+  check over version strings. No container or docker invocations live
+  here.

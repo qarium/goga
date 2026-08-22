@@ -1,6 +1,7 @@
 Imports:
   - Types:
       - resolve_relative_spec
+      - host_goga_version
     Usages:
       - relative-lines
     From: goga/version
@@ -33,8 +34,10 @@ Annotations: |
   (from $HOME or --user) and passes it through.
 
   The standard library subprocess, sys, importlib.metadata, pwd, and pathlib modules are used for
-  pip invocation, interpreter resolution, installed-version reading, tool-package discovery,
-  user HOME resolution, and path handling.
+  pip invocation, interpreter resolution, tool-package discovery (importlib.metadata
+  packages_distributions, plus the PackageNotFoundError catch), user HOME resolution, and
+  path handling. The installed goga version is read through the imported `host_goga_version`
+  routine — the single reading point for the host goga version.
 
 ---
 
@@ -65,7 +68,9 @@ Annotations: |
             non-zero; pip is not invoked, the re-sync does not run, the installed
             version is not read
        0.2. If either `patch_line` or `minor_line` is True:
-            a. Read the installed goga version via importlib.metadata.version("goga")
+            a. Read the installed goga version via `host_goga_version` (the
+               single reading point for the host goga version; it propagates
+               PackageNotFoundError unchanged)
             b. If the version cannot be determined (PackageNotFoundError and alike)
                -> raise a user-facing ClickException with a clear stderr message;
                exit non-zero; pip is not invoked; no fallback to latest
