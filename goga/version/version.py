@@ -1,9 +1,12 @@
-"""Version-form domain — routines mapping version inputs to pip specifiers.
+"""Version-form domain — version grammar plus the host-side consistency check.
 
-Sole owner of the version grammar: every mapping from a version form (or a
-relative version-line constraint) to a PEP 440 pip specifier lives here;
-consumers compose package identifiers from the returned specifiers. No I/O
-lives here — all routines are pure transformers.
+Sole owner of version semantics: every mapping from a version form (or a
+relative version-line constraint) to a PEP 440 pip specifier lives here, and
+so does the host-side version consistency check. The grammar, comparison,
+and constraint routines are pure transformers — no I/O, no logging. The check
+routines read one environment variable and the installed-distribution
+metadata of the goga package; user-facing messages go to sys.stderr and
+refusals exit the process.
 """
 
 from __future__ import annotations
@@ -11,6 +14,7 @@ from __future__ import annotations
 import importlib.metadata
 import os
 import re
+import sys
 
 # Four-form version grammar — segment-count thresholds (see resolve_version).
 # A version form splits on "." into segments; the segment count fixes the form:
@@ -27,6 +31,31 @@ _CONCRETE_MAX_SEGMENTS = 3
 # re.ASCII keeps \d to 0-9: without it \d also matches Unicode decimal digits
 # (e.g. Arabic-Indic U+0661), which are not PEP 440.
 _RELEASE_PREFIX_RE = re.compile(r"(\d+)(?:\.(\d+))?", re.ASCII)
+
+# User-facing messages of the version check (see ensure_version_match). Every
+# refusal names the escape hatch GOGA_SKIP_VERSION_CHECK=1 so the remedy is
+# discoverable from the error alone; all messages go to sys.stderr only.
+MSG_HOST_FAILED = (
+    "goga version check: cannot determine the goga version installed on the "
+    "host ({exc}). Reinstall goga, or set GOGA_SKIP_VERSION_CHECK=1 to skip "
+    "this check."
+)
+MSG_PROBE_FAILED = (
+    "goga version check: could not determine the goga version inside the "
+    "project image — the image must be able to run python3 and report "
+    "importlib.metadata.version('goga'). Fix the image, or set "
+    "GOGA_SKIP_VERSION_CHECK=1 to skip this check."
+)
+MSG_UNKNOWN_VERSION = (
+    "goga version check: the image reports goga version 0.0.0 (a locally "
+    "built image without a stamped version) — skipping the comparison."
+)
+MSG_MISMATCH = (
+    "goga version check: host goga {host} and image goga {image} differ at "
+    "the (major, minor) level. Align the host CLI and the project image "
+    "(goga upgrade / rebuild or re-pull the image), or set "
+    "GOGA_SKIP_VERSION_CHECK=1 to skip this check."
+)
 
 
 def _is_ascii_digits(segment: str) -> bool:
@@ -257,3 +286,60 @@ def version_check_enabled() -> bool:
         only when ``GOGA_SKIP_VERSION_CHECK`` equals the exact string ``"1"``.
     """
     return os.environ.get("GOGA_SKIP_VERSION_CHECK") != "1"
+
+
+def ensure_version_match(image_version: str | None) -> None:
+    """Apply the outcome matrix of the host-image version consistency check.
+
+    Orchestrator of the check's outcomes: reads the host version through
+    ``host_goga_version`` (the single reading point) and weighs it against
+    the version string the caller probed from the project image. Every
+    refusal writes one message to ``sys.stderr`` and raises
+    :class:`SystemExit` with code ``1`` — the stack unwinds so the cleanup
+    blocks of the callers execute, and no traceback reaches the user. The
+    agreeing path is completely silent; the ``0.0.0`` placeholder path warns
+    and continues. Version strings arrive as arguments — no containers or
+    docker invocations live here.
+
+    Args:
+        image_version: Version string reported for the goga package inside
+            the project image, or ``None`` when the probe could not
+            determine it.
+
+    Returns:
+        ``None`` — agreement and the ``0.0.0`` warning path return normally.
+
+    Raises:
+        SystemExit: with code ``1`` when the host version is undeterminable,
+            the probe failed (``image_version is None``), or the versions
+            differ at the (major, minor) level.
+    """
+    # 1. Host side: the version must be determinable (missing dist or broken
+    #    dist-info are the same refusal).
+    try:
+        host = host_goga_version()
+    except importlib.metadata.PackageNotFoundError as exc:
+        print(MSG_HOST_FAILED.format(exc=exc), file=sys.stderr)
+        sys.exit(1)
+    if not host:
+        print(MSG_HOST_FAILED.format(exc="version metadata is unreadable"), file=sys.stderr)
+        sys.exit(1)
+
+    # 2. Image side: the probe must have answered.
+    if image_version is None:
+        print(MSG_PROBE_FAILED, file=sys.stderr)
+        sys.exit(1)
+
+    # 3. Locally built image without a stamped version — an unknown version
+    #    is not a confirmed mismatch; the launch continues.
+    if image_version == "0.0.0":
+        print(MSG_UNKNOWN_VERSION, file=sys.stderr)
+        return None
+
+    # 4. Refuse on (major, minor) divergence — a patch difference agrees.
+    if not compare_versions(host, image_version):
+        print(MSG_MISMATCH.format(host=host, image=image_version), file=sys.stderr)
+        sys.exit(1)
+
+    # 5. Agreement — silent return.
+    return None

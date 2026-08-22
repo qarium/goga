@@ -10,6 +10,7 @@ from unittest import mock
 import pytest
 from goga.version import (
     compare_versions,
+    ensure_version_match,
     host_goga_version,
     resolve_relative_spec,
     resolve_version,
@@ -28,6 +29,7 @@ class TestVersionFacade:
         facade = importlib.import_module("goga.version")
         assert facade.__all__ == [
             "compare_versions",
+            "ensure_version_match",
             "host_goga_version",
             "resolve_relative_spec",
             "resolve_version",
@@ -122,6 +124,26 @@ class TestVersionCheckEnabledFacade:
         sig = inspect.signature(version_check_enabled)
         assert list(sig.parameters) == []
         assert sig.return_annotation is bool or sig.return_annotation == "bool"
+
+
+class TestEnsureVersionMatchFacade:
+    """Contract tests — verify ensure_version_match is exposed and shaped per CODEMANIFEST."""
+
+    def test_ensure_version_match_importable_from_facade(self) -> None:
+        assert ensure_version_match is not None
+        assert callable(ensure_version_match)
+
+    def test_ensure_version_match_in_facade_all(self) -> None:
+        facade = importlib.import_module("goga.version")
+        assert "ensure_version_match" in facade.__all__
+        assert callable(facade.ensure_version_match)
+
+    def test_ensure_version_match_signature(self) -> None:
+        sig = inspect.signature(ensure_version_match)
+        params = sig.parameters
+        assert list(params) == ["image_version"]
+        assert params["image_version"].annotation is str | None or params["image_version"].annotation == "str | None"
+        assert sig.return_annotation is None or sig.return_annotation == "None"
 
 
 # ---------------------------------------------------------------------------
@@ -444,3 +466,102 @@ class TestHostGogaVersionLogic:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == ""
+
+
+# ---------------------------------------------------------------------------
+# Logic tests — ensure_version_match (outcome matrix)
+# ---------------------------------------------------------------------------
+
+
+class TestEnsureVersionMatchLogic:
+    """Behavioral scenarios — the five outcomes of the consistency check.
+
+    The host-version seam is the intramodule call point
+    ``goga.version.version.host_goga_version`` (step 1 of the algorithm calls
+    it as a module global); stderr is captured with ``capsys``.
+    """
+
+    def test_ensure_version_match_agreeing_path_is_silent(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: "1.2.0")
+        assert ensure_version_match("1.2.1") is None  # patch difference agrees
+        captured = capsys.readouterr()
+        assert captured.out == ""  # nothing is printed on the agreeing path
+        assert captured.err == ""
+
+    def test_ensure_version_match_zero_placeholder_warns_and_continues(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: "1.2.0")
+        ensure_version_match("0.0.0")  # warning, not a refusal — no exception
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "0.0.0" in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" not in captured.err  # continuation, not refusal
+
+    def test_ensure_version_match_refuses_on_mismatch(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: "1.2.4")
+        with pytest.raises(SystemExit) as excinfo:
+            ensure_version_match("1.3.0")
+        assert excinfo.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "1.2.4" in captured.err  # both versions named in the message
+        assert "1.3.0" in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" in captured.err  # remediation names the escape
+        assert "Traceback" not in captured.err  # clean refusal, no traceback
+
+    def test_ensure_version_match_refuses_on_probe_failure(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: "1.2.4")
+        with pytest.raises(SystemExit) as excinfo:
+            ensure_version_match(None)
+        assert excinfo.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "GOGA_SKIP_VERSION_CHECK" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_ensure_version_match_refuses_on_undeterminable_host(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        failing = mock.Mock(side_effect=PackageNotFoundError("goga"))
+        monkeypatch.setattr("goga.version.version.host_goga_version", failing)
+        with pytest.raises(SystemExit) as excinfo:
+            ensure_version_match("1.2.0")
+        assert excinfo.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "cannot determine" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_ensure_version_match_refuses_on_none_host(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Broken dist-info: version() returned nothing — same refusal as a
+        # missing distribution, and the comparison is never reached (without
+        # the guard, _RELEASE_PREFIX_RE.match(None) would raise TypeError).
+        comparator = mock.Mock()
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: None)
+        monkeypatch.setattr("goga.version.version.compare_versions", comparator)
+        with pytest.raises(SystemExit) as excinfo:
+            ensure_version_match("1.2.0")
+        assert excinfo.value.code == 1
+        comparator.assert_not_called()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "cannot determine" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_version_facade_exports_new_routines(self) -> None:
+        # All four check-surface names are importable from the facade.
+        facade = importlib.import_module("goga.version")
+        for name in ("compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"):
+            assert callable(getattr(facade, name))
+        assert {"compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"} <= set(
+            facade.__all__
+        )
