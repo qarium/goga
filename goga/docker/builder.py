@@ -4,18 +4,32 @@ Holds the stateful image builder ``DockerBuilder`` plus the standalone routines
 ``docker_pull`` and ``docker_update``. ``docker_update`` is the single
 ``--update`` decision point shared by the three host-side call sites (build,
 pipeline discovery, pipeline run): BUILD when a project Dockerfile is declared
-(fatal on failure), otherwise PULL (non-fatal — WARNING on failure). All docker
-CLI invocations stream the CLI's own stdout/stderr to the host.
+(fatal on failure), otherwise PULL (non-fatal — WARNING on failure). Docker
+build/pull invocations stream the CLI's own stdout/stderr to the host; the
+silent probes (``_image_exists``, ``docker_image_goga_version``) capture output
+instead.
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import subprocess
 
 from ._flags import translate_params
 
 logger = logging.getLogger(__name__)
+
+# Python snippet the image-version probe runs inside the container (see
+# docker_image_goga_version): print the goga version reported by the image's
+# own importlib.metadata — one line on stdout is the whole probe protocol.
+PROBE_SNIPPET = "from importlib.metadata import version; print(version('goga'))"
+
+# Shape the probe accepts for the first stdout line: an ASCII-digit major
+# segment, optionally ".digits", before any dev/pre/post/local tail — the same
+# leading release-segment shape the version-cell comparator reduces. re.ASCII
+# keeps \d to 0-9 (Unicode decimal digits are not PEP 440).
+_PROBE_VERSION_RE = re.compile(r"\d+(?:\.\d+)?", re.ASCII)
 
 
 class DockerBuildError(RuntimeError):
@@ -194,3 +208,51 @@ def docker_build_if_not_exist(image: str, dockerfile: str | None, extra_args: li
 
     if dockerfile is not None:
         DockerBuilder(image, dockerfile, context=".").build(pull=True, extra_args=extra_args)
+
+
+def docker_image_goga_version(image: str) -> str | None:
+    """Read the goga package version inside ``image`` with a one-shot probe container.
+
+    Runs one short-lived container — ``docker run --rm --entrypoint python3
+    <image> -c PROBE_SNIPPET`` — capturing stdout/stderr instead of streaming
+    them (silent on the host). Returns the first stdout line, stripped, when
+    the docker exit is 0 and the line carries the leading release-segment
+    shape; every failure mode (missing docker binary, non-zero exit, empty
+    stdout, unrecognizable output) reduces to ``None``. Never raises — the
+    verdict on an unanswered probe belongs to the caller
+    (``ensure_version_match``), as does the interpretation of the returned
+    string.
+
+    Args:
+        image: image:tag — non-None (caller-validated); the probe target.
+
+    Returns:
+        The image's goga version string (e.g. ``"1.2.1"``, ``"1.2.1.dev3"``,
+        ``"0.0.0"``), or ``None`` when the image could not answer.
+    """
+    argv = ["docker", "run", "--rm", "--entrypoint", "python3", image, "-c", PROBE_SNIPPET]
+
+    # 1. One minimal probe container; a missing binary is a None answer, not a
+    #    crash (the caller has already verified docker availability).
+    try:
+        result = subprocess.run(argv, capture_output=True, text=True, check=False)
+    except (FileNotFoundError, PermissionError, OSError):
+        return None
+
+    # 2. The image must answer cleanly — docker's own failures stay captured.
+    if result.returncode != 0:
+        return None
+
+    # 3. First stdout line only, stripped; whitespace-only output is no answer.
+    lines = result.stdout.splitlines()
+    if not lines:
+        return None
+    stripped = lines[0].strip()
+    if not stripped:
+        return None
+
+    # 4. Shape recognition — leading release segments, tails pass through.
+    if _PROBE_VERSION_RE.match(stripped) is None:
+        return None
+
+    return stripped

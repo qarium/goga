@@ -2,10 +2,18 @@ from __future__ import annotations
 
 import inspect
 import logging
+from unittest import mock
 
 import goga.docker
+import goga.docker.builder
 import pytest
-from goga.docker import DockerBuilder, docker_build_if_not_exist, docker_pull, docker_update
+from goga.docker import (
+    DockerBuilder,
+    docker_build_if_not_exist,
+    docker_image_goga_version,
+    docker_pull,
+    docker_update,
+)
 from goga.docker.builder import DockerBuildError
 
 
@@ -14,6 +22,14 @@ class _Result:
 
     def __init__(self, returncode: int) -> None:
         self.returncode = returncode
+
+
+class _ProbeResult(_Result):
+    """CompletedProcess stand-in for the capture probes: returncode + stdout."""
+
+    def __init__(self, returncode: int, stdout: str = "") -> None:
+        super().__init__(returncode)
+        self.stdout = stdout
 
 
 class RecordingRun:
@@ -46,6 +62,19 @@ class TestContract:
     def test_docker_build_if_not_exist_is_callable_and_in_facade_all(self) -> None:
         assert callable(docker_build_if_not_exist)
         assert "docker_build_if_not_exist" in goga.docker.__all__
+
+    def test_docker_image_goga_version_is_callable_and_in_facade_all(self) -> None:
+        assert callable(docker_image_goga_version)
+        assert "docker_image_goga_version" in goga.docker.__all__
+
+    def test_docker_image_goga_version_signature_takes_image_primitive(self) -> None:
+        # Takes the image PRIMITIVE (never a Config) — the probe keeps the docker
+        # cell a leaf whose only Import is the version check from goga/version.
+        sig = inspect.signature(docker_image_goga_version)
+        assert list(sig.parameters) == ["image"]
+        param = sig.parameters["image"]
+        assert param.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+        assert param.default is inspect.Parameter.empty
 
     def test_docker_build_if_not_exist_signature_takes_primitives(self) -> None:
         # Takes PRIMITIVES (image, dockerfile, extra_args) — never a Config — so
@@ -535,3 +564,78 @@ class TestImageExistsHelper:
         from goga.docker.builder import _image_exists
 
         assert _image_exists("img:tag") is False
+
+
+class TestDockerImageGogaVersion:
+    """Behavior coverage for docker_image_goga_version — the silent image-version probe."""
+
+    def test_docker_image_goga_version_returns_printed_version(self) -> None:
+        # Whole-call comparison locks the minimal probe form: exactly one
+        # short-lived container (--rm), no mounts / env-file / extra tokens /
+        # runner params, output captured (silent on the host), check=False.
+        with mock.patch.object(
+            goga.docker.builder.subprocess,
+            "run",
+            return_value=_ProbeResult(returncode=0, stdout="1.2.0\n"),
+        ) as run:
+            assert docker_image_goga_version("qarium/goga:1.2") == "1.2.0"
+        run.assert_called_once_with(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--entrypoint",
+                "python3",
+                "qarium/goga:1.2",
+                "-c",
+                "from importlib.metadata import version; print(version('goga'))",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_docker_image_goga_version_accepts_tails_and_strips(self) -> None:
+        # First stdout line only, stripped; dev/pre/post/local tails pass the
+        # shape check — interpreting them belongs to the caller.
+        with mock.patch.object(
+            goga.docker.builder.subprocess,
+            "run",
+            return_value=_ProbeResult(returncode=0, stdout="  1.2.1.dev3  \nextra\n"),
+        ):
+            assert docker_image_goga_version("img:tag") == "1.2.1.dev3"
+
+    @pytest.mark.parametrize(
+        "fake_run",
+        [
+            # (a) returncode filter fires before stdout is even parsed.
+            pytest.param(mock.Mock(return_value=_ProbeResult(returncode=125, stdout="1.2.0\n")), id="nonzero-exit"),
+            # (b) empty stdout is an explicit no-answer.
+            pytest.param(mock.Mock(return_value=_ProbeResult(returncode=0, stdout="")), id="empty-stdout"),
+            # whitespace-only stdout — no first-line answer either.
+            pytest.param(
+                mock.Mock(return_value=_ProbeResult(returncode=0, stdout="   \n")),
+                id="whitespace-only-stdout",
+            ),
+            # (c) unrecognizable output.
+            pytest.param(
+                mock.Mock(return_value=_ProbeResult(returncode=0, stdout="not-a-version\n")),
+                id="unrecognizable-output",
+            ),
+            # (d) a "v" prefix is not the leading release-segment shape.
+            pytest.param(mock.Mock(return_value=_ProbeResult(returncode=0, stdout="v1.2.0\n")), id="prefixed-output"),
+            # (e) missing docker binary — never raises.
+            pytest.param(mock.Mock(side_effect=FileNotFoundError("docker")), id="docker-binary-missing"),
+        ],
+    )
+    def test_docker_image_goga_version_returns_none_on_failures(self, fake_run) -> None:
+        with mock.patch.object(goga.docker.builder.subprocess, "run", fake_run):
+            assert docker_image_goga_version("img:tag") is None
+        # Exactly one probe attempt per call — no retry (anti-pattern).
+        fake_run.assert_called_once()
+
+    def test_docker_facade_exports_probe(self) -> None:
+        from goga.docker import docker_image_goga_version as probe
+
+        assert "docker_image_goga_version" in goga.docker.__all__
+        assert callable(probe)
