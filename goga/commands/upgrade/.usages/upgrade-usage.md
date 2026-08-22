@@ -84,7 +84,7 @@ explicit `--minor` (or flagless) upgrade plus a manual image-tag edit.
 | (no flags) | `<python> -m pip install goga -U` | `Path.home()` |
 | `--sudo` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `Path.home()` (HOME preserved) |
 | `--user alice` | `<python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` |
-| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` (target_user wins) |
+| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` (--user wins) |
 
 `--preserve-env=HOME` is mandatory under `--sudo` — without it, sudo switches `$HOME` to `/root`
 and the subsequent re-sync would read the wrong `connect.yml`.
@@ -94,9 +94,9 @@ When a line flag is active, the `pip install` target in the table carries the re
 
 ## Python API
 
-The semantic handler is `_upgrade` — it carries the contract signature (the Click
-callback `upgrade` wraps it and owns option parsing; call the callback only through
-Click). Direct Python calls (the form the test suite uses) go to the handler:
+The CODEMANIFEST contract signature mirrors the Click callback `upgrade` (call it only
+through Click). Direct Python calls (the form the test suite uses) go to the semantic
+handler `_upgrade`, which the callback wraps and which keeps its own keyword names:
 
 ```python
 from goga.commands.upgrade.upgrade import _upgrade

@@ -233,7 +233,10 @@ Annotations: |
     `target_user`: when set, resolve the goga home of this username via
       pwd.getpwnam for the re-sync instead of the current user's home.
     `exit_code`: pip's outcome when pip was invoked and failed, or 0 when the
-      confirmation was declined; otherwise the re-sync outcome.
+      confirmation was declined; 1 via a user-facing ClickException when the
+      executable cannot be started (OSError: a missing sudo binary or a
+      non-executable interpreter — no returncode exists to propagate);
+      otherwise the re-sync outcome.
 
     Algorithm:
     0. VALIDATIONS (first, before the confirmation prompt and any side
