@@ -26,6 +26,15 @@ def _isolate_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOME", str(home))
 
 
+@pytest.fixture(autouse=True)
+def _skip_version_check(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set GOGA_SKIP_VERSION_CHECK=1 for the whole suite so the DockerRunner
+    version-check gate (once it exists) never launches a real docker probe
+    container. Tests that verify the check itself override this with their own
+    monkeypatch, which runs after this autouse fixture."""
+    monkeypatch.setenv("GOGA_SKIP_VERSION_CHECK", "1")
+
+
 @pytest.fixture
 def project_root() -> Path:
     return Path(__file__).parent / ".project"

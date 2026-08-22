@@ -53,6 +53,7 @@ docs/configuration/agents.md:
 docs/tools.md:
   - goga/connect
   - goga/commands/tool
+  - goga/commands/install
   - goga/pipeline
 
 docs/workflow/index.md:
@@ -132,6 +133,10 @@ docs/cli/tool.md:
 
 docs/cli/install.md:
   - goga/commands/install
+
+docs/cli/uninstall.md:
+  - goga/commands/install
+  - goga/connect
 
 docs/cli/upgrade.md:
   - goga/commands/upgrade

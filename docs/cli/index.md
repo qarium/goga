@@ -26,6 +26,7 @@ python -m goga --help
 |---|---|
 | [`goga init`](init.md) | Interactive project initialization |
 | [`goga install`](install.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
+| [`goga uninstall`](uninstall.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
 | [`goga lint`](lint.md) | Validate CODEMANIFEST files |
 | [`goga build`](build.md) | Execute build plan via a ralph-loop |
 | [`goga contract`](contract.md) | Compare CODEMANIFEST with implementation |
@@ -46,3 +47,26 @@ goga --help
 ```
 
 All subcommands also accept `--help` for inline usage information.
+
+The group also carries a global `--version` / `-v` flag:
+
+| Option | Description |
+|---|---|
+| `--version`, `-v` | Print the goga version installed on the host and exit |
+
+```bash
+goga --version
+goga -v
+```
+
+The flag prints a bare version string (machine-readable, no decorations) to stdout and exits with code `0`:
+
+```
+1.2.3
+```
+
+The option belongs to the root group and is processed eagerly, before any subcommand dispatch — it is available on the root invocation only (`goga --version`), never as a subcommand option. Subcommands with their own same-named option are unaffected: `goga install --version <v>` still addresses the `install` command's value option, which the group flag does not intercept.
+
+When the installed version cannot be determined (goga is not installed for the current interpreter, or its metadata is broken), the command fails cleanly: a one-line `Error: cannot determine the installed goga version (...)` message on stderr, exit code `1`, no traceback.
+
+The flag takes no part in the host–image version check performed before container launches — that check is part of [`goga build`](build.md) and [`goga pipeline`](pipeline.md).

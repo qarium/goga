@@ -4,7 +4,9 @@ import click
 from goga import commands
 from goga.commands import install as install_reexport
 from goga.commands import pipeline as pipeline_reexport
+from goga.commands import uninstall as uninstall_reexport
 from goga.commands.install import install as install_source
+from goga.commands.install import uninstall as uninstall_source
 from goga.commands.pipeline import pipeline as pipeline_source
 
 
@@ -36,3 +38,17 @@ class TestInstallFacade:
         """The re-exported install is a click.Command."""
         assert isinstance(commands.install, click.Command)
         assert install_reexport is install_source
+
+
+class TestUninstallFacade:
+    def test_uninstall_reexported_from_facade(self) -> None:
+        """The facade re-exports the same uninstall object, not a copy."""
+        assert uninstall_reexport is uninstall_source
+
+    def test_uninstall_listed_in_all(self) -> None:
+        """uninstall is a declared member of the goga.commands facade."""
+        assert "uninstall" in commands.__all__
+
+    def test_uninstall_is_a_click_command_via_facade(self) -> None:
+        """The re-exported uninstall is a click.Command."""
+        assert isinstance(commands.uninstall, click.Command)

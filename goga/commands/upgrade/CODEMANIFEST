@@ -1,6 +1,14 @@
 Imports:
   - Types:
+      - resolve_relative_spec
+      - host_goga_version
+    Usages:
+      - relative-lines
+    From: goga/version
+  - Types:
       - resync_registered_agents
+    Usages:
+      - resync-agents
     From: goga/connect
 
 Usages:
@@ -13,53 +21,93 @@ Annotations: |
   - Organizing the REPL development cycle
   - Debugging and testing
   - Organizing the test infrastructure
-  - Understanding general development and testing principles and rules in the project
+  - Understanding the general principles and rules of development and testing in the project
 
-  Use the `click` practice to build the upgrade command, its options (--sudo, --user, --tools),
-  and exit-code propagation.
+  Use the `click` practice to build the upgrade command, its options
+  (--sudo, --user, --tools, --patch, --minor), the mutually exclusive version-line
+  flags, early user-facing errors, and exit-code propagation.
+
+  Use the `relative-lines` practice for relative version-line constraints:
+  `resolve_relative_spec` maps the installed base to the pip specifier that
+  keeps the upgrade inside the selected line.
 
   Use `resync_registered_agents` to re-sync every agent recorded in
   ~/.goga/connect.yml after the pip upgrade; this cell only resolves the goga home
   (from $HOME or --user) and passes it through.
 
+  Use the `resync-agents` practice for the re-sync's calling contract — when
+  to call it, which home to pass, and how its outcome maps to the final exit
+  code.
+
   The standard library subprocess, sys, importlib.metadata, pwd, and pathlib modules are used for
-  pip invocation, interpreter resolution, tool-package discovery, user HOME resolution, and path handling.
+  pip invocation, interpreter resolution, tool-package discovery (importlib.metadata
+  packages_distributions, plus the PackageNotFoundError catch), user HOME resolution, and
+  path handling. The installed goga version is read through the imported `host_goga_version`
+  routine — the single reading point for the host goga version.
 
 ---
 
-"upgrade(use_sudo: bool = False, target_user: str | None = None, include_tools: bool = False) -> exit_code: int":
+"upgrade(ctx: click.Context, sudo: bool, user: str | None, tools: bool, patch: bool, minor: bool) -> exit_code: int":
   location: upgrade.py
   annotations: |
     Upgrade the goga package (and optionally all installed goga_tool_* packages) via pip on the
     current Python interpreter, then re-sync all agents recorded in ~/.goga/connect.yml using their
-    per-agent force_overwrite settings.
+    per-agent force_overwrite settings. The target goga version is optionally constrained to the
+    installed version's line via the mutually exclusive --patch / --minor flags.
 
-    `use_sudo`: when True, prepend the sudo command with --preserve-env=HOME flag to the pip command
+    `sudo`: when True, prepend the sudo command with --preserve-env=HOME flag to the pip command
       (for system-Python installs that require root). Default False.
-    `target_user`: when set, resolve ~/.goga/ for this username via pwd.getpwnam(target_user).pw_dir
+    `user`: when set, resolve ~/.goga/ for this username via pwd.getpwnam(user).pw_dir
       instead of $HOME. Used to re-sync another user's goga installation. Default None.
-    `include_tools`: when True, additionally upgrade all installed goga_tool_* packages discovered
+    `tools`: when True, additionally upgrade all installed goga_tool_* packages discovered
       via importlib.metadata. Default False.
+    `patch`: when True, constrain the goga target to the latest patch of the installed
+      minor line (CLI flag --patch). Mutually exclusive with `minor`. Default False.
+    `minor`: when True, constrain the goga target to the latest release within the installed
+      major line (CLI flag --minor). Mutually exclusive with `patch`. Default False.
     `exit_code`: 0 on success, non-zero on pip failure or re-sync failure
 
     Algorithm:
+    0. VALIDATIONS (first, before any side effect — pip, registry, metadata):
+       0.1. If both `patch` and `minor` are True -> raise a user-facing
+            ClickException (the version-line flags are mutually exclusive); exit
+            non-zero; pip is not invoked, the re-sync does not run, the installed
+            version is not read
+       0.2. If either `patch` or `minor` is True:
+            0.2.1. Read the installed goga version via `host_goga_version` (the
+                   single reading point for the host goga version; it propagates
+                   PackageNotFoundError unchanged)
+            0.2.2. If the version cannot be determined (PackageNotFoundError and alike)
+                   -> raise a user-facing ClickException with a clear stderr message;
+                   exit non-zero; pip is not invoked; no fallback to latest
+            0.2.3. Resolve the relative specifier via `resolve_relative_spec` with
+                   the read base and the active flags; a ValueError rejection is
+                   surfaced as a user-facing ClickException with a non-zero exit
     1. Build the pip install command:
-       a. Base: [sys.executable, "-m", "pip", "install", "goga", "-U"]
-       b. If `include_tools` is True: discover installed goga_tool_* packages via
-          importlib.metadata.packages_distributions() and append each distribution name
-       c. If `use_sudo` is True: prepend ["sudo", "--preserve-env=HOME"] to the command
+       1.1. Base: [sys.executable, "-m", "pip", "install", "goga", "-U"]
+       1.2. If a version line is active: replace the bare "goga" argument with the
+            composed identifier "goga" + resolved specifier (e.g. goga~=1.2.0)
+       1.3. If `tools` is True: discover installed goga_tool_* packages via
+            importlib.metadata.packages_distributions() and append each distribution
+            name without a specifier
+       1.4. If `sudo` is True: prepend ["sudo", "--preserve-env=HOME"] to the command
     2. Run pip via subprocess.run(cmd, check=false)
     3. If pip exits non-zero: emit diagnostics to stderr and return the pip exit code
     4. Resolve the goga home directory for activation:
-       a. If `target_user` is set: pwd.getpwnam(target_user).pw_dir / ".goga"
-       b. Else: Path.home() / ".goga"
+       4.1. If `user` is set: pwd.getpwnam(user).pw_dir / ".goga"
+       4.2. Else: Path.home() / ".goga"
     5. Call `resync_registered_agents` with the resolved goga home; the routine reads the
        registry, re-activates every recorded agent with that agent's force_overwrite, and
        returns 0 on full success (or a missing/empty registry) or the first non-zero per-agent failure
     6. Return the activation outcome
 
-    Apply the `click` practice for command registration, the three options (--sudo/--user/--tools),
-    and exit-code propagation via ctx.exit(code).
+    Apply the `click` practice for command registration, the five options
+    (--sudo/--user/--tools/--patch/--minor; the version-line pair as boolean
+    flags with help text), the early ClickException validations, and exit-code
+    propagation via ctx.exit(code).
+
+    Apply the `relative-lines` practice for the relative-constraint flow: read the
+    installed base first, then hand it to `resolve_relative_spec`.
 
     Apply the `convention` practice for the CLI command docstring rule (--help
     rendered verbatim by Click; omit Args/Returns/Raises), intra-package imports,
@@ -68,18 +116,28 @@ Annotations: |
 
     Requirements:
     - Always invoke pip via the python -m pip form (never the bare pip executable)
-    - When `use_sudo` is True, MUST pass --preserve-env=HOME so the post-pip activation reads
+    - When `sudo` is True, MUST pass --preserve-env=HOME so the post-pip activation reads
       the correct ~/.goga/
-    - When both `use_sudo` and `target_user` are set, `target_user` wins for HOME resolution,
+    - When both `sudo` and `user` are set, `user` wins for HOME resolution,
       but pip still runs under sudo
-    - `target_user` resolution MUST use pwd.getpwnam (Unix); Windows is documented as a constraint
+    - `user` resolution MUST use pwd.getpwnam (Unix); Windows is documented as a constraint
+    - The version-line constraint applies to the goga package identifier ONLY; discovered
+      goga_tool_* packages are appended without a specifier and upgrade to latest in the
+      same single pip invocation
+    - Without a version-line flag the command behaves exactly as an unconstrained upgrade:
+      the installed version is not read and the identifier is the bare "goga"
+    - "Requirement already satisfied" from pip is a success (exit 0 path) followed by the re-sync
     - Activation MUST iterate all agents in connect.yml, applying each agent's own force_overwrite;
       a missing connect.yml is a normal condition handled as a 0 result
 
     Constraints:
     - Do not run pip as a bare subprocess without the python -m prefix
     - Do not read or parse connect.yml directly — delegate activation to `resync_registered_agents`
-    - Do not write connect.yml from this cell (goga/connect is the single writer)
+    - Do not write connect.yml from this cell — the registry is written elsewhere
+    - Do not fall back to latest when the installed version cannot be determined — fail loudly
+      before pip runs
+    - Do not apply the version-line specifier to goga_tool_* identifiers
+    - Do not read .goga/config.yml — the command stays config-blind
     - Windows pwd.getpwnam is unavailable; document as a known constraint
     - This command does NOT auto-detect whether sudo is needed; the user opts in via --sudo
 
@@ -90,4 +148,6 @@ CreatedAt: 28/06/26
 
 Description: |
   CLI wrapper for the goga upgrade command. Combines `pip install goga -U` (optionally with
-  goga_tool_* packages and/or sudo) with a post-upgrade re-sync driven by ~/.goga/connect.yml.
+  goga_tool_* packages and/or sudo, optionally constrained to the installed version's line via
+  the mutually exclusive --patch / --minor flags) with a post-upgrade re-sync driven by
+  ~/.goga/connect.yml.

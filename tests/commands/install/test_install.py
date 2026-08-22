@@ -44,10 +44,12 @@ class TestInstallFacade:
     def test_install_facade_all(self) -> None:
         # Access the package module directly to assert its own ``__all__``
         # (``import ... as`` would resolve to the Click command re-exported into
-        # ``goga.commands``, shadowing the submodule). Both declared routines of
-        # this cell share the facade — pin the exact surface.
+        # ``goga.commands``, shadowing the submodule). The facade now carries
+        # both lifecycle commands of this cell — install and uninstall — pinned
+        # as the exact surface. ``resolve_version`` belongs to the ``goga/version``
+        # domain cell.
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install", "resolve_version"]
+        assert facade.__all__ == ["install", "uninstall"]
 
     def test_install_is_click_command(self) -> None:
         assert isinstance(install, click.Command)

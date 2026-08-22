@@ -142,6 +142,7 @@ agent later with `goga connect <agent>` and the tool will be picked up.
 
 ## Version Form Grammar
 
+Version forms are resolved by the shared version-resolution routine;
 `goga install` emits the operator. The four accepted forms resolve to pip
 specifiers as follows:
 
@@ -159,7 +160,7 @@ YAML-null `tools` values (e.g. `viewer:`) — each exits non-zero with a clear e
 ## Python API
 
 ```python
-from goga.commands.install.install import install, resolve_version
+from goga.commands.install.install import install
 
 # Click commands are normally invoked via the CLI. For testing or programmatic
 # invocation, use click.testing.CliRunner — see .goga/usages/cooks/click.md.
@@ -172,7 +173,7 @@ from goga.commands.install.install import install, resolve_version
 | 0 | pip succeeded and activation succeeded (or registry missing/empty), or empty mode no-op |
 | non-zero (pip) | pip failed — its returncode propagated verbatim; activation is not run |
 | non-zero (activation) | pip succeeded but activation failed for one or more agents — the first non-zero per-agent failure is returned |
-| 1 (`ClickException`) | `resolve_version` rejected a form, or `load_project_config` failed in bulk/empty mode |
+| 1 (`ClickException`) | a version form was rejected, or `load_project_config` failed in bulk/empty mode |
 | 1 (ClickException) | `name` + `--local` combined, or `--version` supplied in local mode |
 
 With `--no-connect`, the exit code is always pip's (install-only semantics).

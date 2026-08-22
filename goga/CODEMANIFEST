@@ -12,18 +12,36 @@ Imports:
       - pipeline
       - upgrade
       - install
+      - uninstall
+    Usages:
+      - cli-commands
     From: goga/commands
   - Types:
       - AST
     From: goga/ast
+  - Types:
+      - host_goga_version
+    Usages:
+      - version-check
+    From: goga/version
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
   click: .goga/usages/cooks/click.md
 
 Annotations: |
-  Use the `conventions` practice during development and testing.
-  Wire the application in __main__.py to enable invocation via python -m.
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice for the root group, the command registration, and
+  the --version flag (an eager flag with a callback that prints and exits).
+  Use the `version-check` practice for the host-version reading contract
+  behind the flag. Wire the application in __main__.py to enable invocation
+  via python -m.
 
 ---
 
@@ -32,7 +50,21 @@ Annotations: |
 app():
   location: cli.py
   annotations: |
+    Root command group of the goga CLI.
+
     Use the `click` practice to create the root command group.
+
+    The group carries the --version / -v flag: an eager option handled
+    before subcommand dispatch, so it never conflicts with subcommands or
+    their options. When the flag is set, print the host goga version
+    obtained via `host_goga_version` to stdout and exit with code 0. When
+    the host version cannot be determined, catch the metadata failure and
+    surface a clean user-facing error (stderr, no traceback, non-zero
+    exit). The flag takes no part in the host–image version check.
+
+    Use the `cli-commands` practice for the command registration reference:
+    the facade import line, the add_command wiring, and the full command
+    table.
 
     Commands:
     - `lint`
@@ -47,10 +79,11 @@ app():
     - `pipeline`
     - `upgrade`
     - `install`
+    - `uninstall`
 
 ---
 
-Author: Mikhail Trifonov
+Author: Goga
 CreatedAt: 13/04/26
 
 Description: |

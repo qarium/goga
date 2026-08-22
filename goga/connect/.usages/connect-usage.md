@@ -39,8 +39,9 @@ exit_code = connect(agents=["claude"], force_overwrite=True)
 
 `resync_registered_agents(goga_home)` re-applies `connect` to every agent listed in
 `<goga_home>/connect.yml`, each with its own recorded `force_overwrite`. It is the
-single, shared entry point for post-change activation used by `goga install` and
-`goga upgrade`. A missing or empty registry is a no-op that returns 0.
+single, shared entry point for post-change activation used by `goga install`,
+`goga upgrade`, and `goga uninstall`. A missing or empty registry is a no-op that
+returns 0.
 
 ```python
 from goga.connect import resync_registered_agents

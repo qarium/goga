@@ -63,7 +63,10 @@ translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
 returned to consumers keeps the authored ``timeout`` untouched.
 ``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
-agent). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
+agent). In a body carrying ``script``, the ``agents`` directive is NOT
+assembled at all — afm rejects ``agents`` combined with ``script`` — so neither
+the ``["auto"]`` default NOR a translated ``roles`` value reaches the output
+(the ``roles`` elements are still validated). ``supervisor``/``supervisor_prompt`` are authored-only — never injected,
 but they pass through the canonical slot when the source body carries them. The
 translation/injection lives in ``FlowStage`` assembly only — the
 ``PipelineDocument.body`` returned to consumers stays a faithful mirror of the
@@ -239,10 +242,16 @@ def _has_usable_roles(body: dict[str, Any]) -> bool:
     return isinstance(roles, list) and len(roles) > 0
 
 
-def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
+def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dict[str, Any]:
     """Return a body dict with ``roles`` translated to ``agents`` (or the default injected).
 
-    The input-only ``roles`` key is ALWAYS dropped from the output. When ``body``
+    The input-only ``roles`` key is ALWAYS dropped from the output. When
+    ``suppress_agents`` is ``True`` (the body carries a ``script`` key — afm
+    rejects ``agents`` combined with ``script``), NO ``agents`` slot is
+    assembled at all: neither the single ``["auto"]`` default NOR the
+    translated ``roles`` value reaches the output. The ``roles`` list is still
+    element-validated (a non-str element raises the same ``StructuralError``)
+    so authoring defects surface identically. When ``body``
     carries a usable ``roles`` value (non-empty list), each role is translated to
     its afm agent name via ``translate_role`` (the single source of truth) and the
     result is placed under the output ``agents`` key. A non-str element raises
@@ -257,10 +266,14 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
+        suppress_agents: When ``True``, assemble no ``agents`` key at all —
+            neither the single ``["auto"]`` default nor the translated
+            ``roles`` value.
 
     Returns:
         A new dict without the ``roles`` key, carrying either the translated
-        ``agents`` list or the injected single ``["auto"]`` default.
+        ``agents`` list or the injected single ``["auto"]`` default — or no
+        ``agents`` key at all when ``suppress_agents`` is ``True``.
     """
     out = {key: value for key, value in body.items() if key != "roles"}
 
@@ -273,13 +286,15 @@ def _inject_defaults(body: dict[str, Any]) -> dict[str, Any]:
         # non-str (e.g. an int) would pollute the ``list[str]`` output unchanged.
         # Reject non-str elements here with a clean ``StructuralError`` instead —
         # mirroring the header ``roles`` validation in ``parse_dsl._extract_roles``.
-        agents: list[str] = []
+        # The validation runs under ``suppress_agents`` too, so authoring defects
+        # surface identically whether or not the value is emitted.
         for role in body["roles"]:
             if not isinstance(role, str):
                 raise StructuralError(f"non-str value in stage roles list: {role!r}")
-            agents.append(translate_role(role))
-        out["agents"] = agents
-    else:
+
+        if not suppress_agents:
+            out["agents"] = [translate_role(role) for role in body["roles"]]
+    elif not suppress_agents:
         out["agents"] = list(_DEFAULT_AGENTS)
 
     return out
@@ -439,7 +454,11 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     (or no communication-effect directive) renames to ``interactive: false`` as
     usual. The ``roles`` field is then translated to ``agents`` (or the single
     default ``agents=["auto"]`` injected) via ``_inject_defaults`` when the source
-    body lacks a usable ``roles`` value. Under an approve directive driving the
+    body lacks a usable ``roles`` value — EXCEPT in a body carrying ``script``,
+    where NO ``agents`` key is assembled at all (afm rejects the combination;
+    both the default injection and the translated ``roles`` value are
+    suppressed, while the ``roles`` elements are still validated). Under an
+    approve directive driving the
     roles effect (``auto``/``dialog``) + ``planner`` in the raw ``roles``,
     ``auto_approve: true`` is emitted (canonical slot right after
     ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
@@ -555,7 +574,11 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
         else:
             body = {("interactive" if key == "communication" else key): value for key, value in body.items()}
 
-    source = _inject_defaults(body)
+    # A body carrying ``script`` assembles NO ``agents`` key — afm rejects the
+    # combination. The suppression covers BOTH the default ``["auto"]``
+    # injection AND the translated ``roles`` value (authored ``roles`` with
+    # ``script`` is legal; the agents slot is simply not emitted).
+    source = _inject_defaults(body, suppress_agents="script" in body)
 
     # An approve directive that drives the roles effect (``auto``/``dialog``) +
     # ``planner`` in the raw roles ⇒ emit ``auto_approve: true`` (canonical slot

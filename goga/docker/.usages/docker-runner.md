@@ -43,7 +43,7 @@ lifecycle, nothing more:
         add_host="127.0.0.1:localhost",
         env_file=env_file_path,
     )
-    # → docker run --rm --name <container_name> --entrypoint python3 \
+    # → docker run --name <container_name> --rm --entrypoint python3 \
     #     -v ./project:/workspace -v <runtime_dir>:/workspace/.ralphex \
     #     --add-host 127.0.0.1:localhost --env-file <env_file_path> \
     #     <image> -m goga.build <plan>
@@ -97,6 +97,31 @@ handler in its `finally`:
   (errors suppressed — the container may already be gone), then the previous
   signal handler is restored.
 
+## Pre-launch version check
+
+Before the work container starts, `run` applies the host–image version
+consistency check:
+
+1. When the check is disabled (the exact environment value
+   `GOGA_SKIP_VERSION_CHECK=1`), skip both the probe and the comparison —
+   behavior is identical to an unchecked launch.
+2. Otherwise `run` reads the goga version inside the constructor image with
+   a short-lived probe container (`docker_image_goga_version`) and hands
+   the version string to the version consistency check, which owns the
+   outcome matrix: silent continue on (major, minor) agreement; stderr
+   warning and continue on the `0.0.0` placeholder; process exit code 1
+   before the work container starts on a mismatch, a failed probe, or an
+   undeterminable host version.
+
+The check has no `run` parameter — the only escape is the environment
+variable. The probe is minimal: no mounts, no env-file, no `extra_args`, no
+`params`; it never receives the runner's flags or credential material. The
+exit code of the work container remains the only return value; a check
+refusal is an exceptional exit that happens before params translation,
+handler installation, and the runner's try/finally — nothing was started
+and no handler was replaced, so there is no runner teardown to perform;
+the caller's cleanup blocks still run during the unwind.
+
 ## Host-side cleanup belongs to the caller
 
 The runner does NOT delete the env-file, does NOT delete tmpfiles, and does NOT
@@ -128,13 +153,21 @@ runs before the caller's `finally` (file / directory cleanup).
 - Installs a process-level SIGTERM/SIGINT handler for the duration of `run`
   (restored in `finally`).
 - Runs `docker kill <name>` in `finally`.
+- Runs one short-lived probe container per launch when the version check is
+  enabled (captured output, nothing streamed).
 
 ## Failure modes
 
+- Missing `name` param → `ValueError` raised before the version gate and the
+  launch (fail-fast: a call without a kill target must not launch even the
+  probe container).
 - Non-zero container exit → returned as `exit_code`; the caller decides how to
   propagate (e.g. through a click context).
 - SIGTERM/SIGINT → process exits with 128 + signum after the container is killed.
 - `docker kill` failure in `finally` → suppressed (container already gone).
+- Version check refusal → process exits with code 1 before the work container
+  starts (message on stderr); the refusal precedes the runner's try/finally,
+  so no runner teardown is due — the caller's cleanup blocks still run.
 
 ## Anti-patterns
 
@@ -146,3 +179,5 @@ runs before the caller's `finally` (file / directory cleanup).
   nameless container cannot be killed by name.
 - Do NOT catch the runner's signal exit to "clean up" the container yourself — the
   runner already kills it in `finally`.
+- Do NOT bypass or wrap the version check around `run` — the gate is part of the
+  launch; its only escape is `GOGA_SKIP_VERSION_CHECK=1`.

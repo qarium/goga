@@ -16,6 +16,7 @@ from goga.connect import resync_registered_agents
 # (``subprocess.run``) and the leaf ``connect`` symbol are mocked per-test.
 _connect_module = importlib.import_module("goga.connect.connect")
 _install_module = importlib.import_module("goga.commands.install.install")
+_uninstall_module = importlib.import_module("goga.commands.install.uninstall")
 _upgrade_module = importlib.import_module("goga.commands.upgrade.upgrade")
 
 
@@ -34,8 +35,9 @@ class TestFacadeWiringIntegration:
     """Cross-cell facade wiring — the routine is re-exported and consumed by all three cells.
 
     Pins the contract that ``resync_registered_agents`` lives in exactly one place
-    (the ``goga.connect`` facade) and that install and upgrade reach it through that
-    facade rather than a private copy, so behaviour cannot drift between callers.
+    (the ``goga.connect`` facade) and that install, uninstall, and upgrade reach it
+    through that facade rather than a private copy, so behaviour cannot drift
+    between callers.
     """
 
     def test_resync_registered_agents_importable_from_connect_facade(self) -> None:
@@ -46,8 +48,10 @@ class TestFacadeWiringIntegration:
         assert "resync_registered_agents" in facade.__all__
 
     def test_install_facade_surface_unchanged(self) -> None:
+        # The install cell facade carries both lifecycle commands — install and
+        # uninstall — since the uninstall contract was materialized.
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install", "resolve_version"]
+        assert facade.__all__ == ["install", "uninstall"]
 
     def test_upgrade_facade_surface_unchanged(self) -> None:
         facade = importlib.import_module("goga.commands.upgrade")
@@ -58,6 +62,10 @@ class TestFacadeWiringIntegration:
         # three cells share one activation entrypoint.
         assert _install_module.resync_registered_agents is resync_registered_agents
         assert _upgrade_module.resync_registered_agents is resync_registered_agents
+
+    def test_uninstall_references_same_routine(self) -> None:
+        # The third caller reaches the same shared routine — not a private copy.
+        assert _uninstall_module.resync_registered_agents is resync_registered_agents
 
 
 class TestInstallToRoutineIntegration:
@@ -85,6 +93,33 @@ class TestInstallToRoutineIntegration:
         # agent's recorded force_overwrite — never a hardcoded value.
         mock_connect.assert_called_once_with(agents=["claude"], force_overwrite=False)
         # Single-writer invariant: install never writes connect.yml (byte-identical).
+        assert (goga_home / "connect.yml").read_text() == before
+
+
+class TestUninstallToRoutineIntegration:
+    """End-to-end uninstall -> routine -> connect across the install/connect cell boundary.
+
+    Same discipline as the install flow: the uninstall-module boundary is NOT mocked,
+    the real ``resync_registered_agents`` runs and invokes the real ``connect`` symbol
+    of ``goga.connect.connect``. Only pip (``subprocess.run``) and the leaf ``connect``
+    are mocked, so the post-removal re-sync wiring is exercised for real.
+    """
+
+    def test_uninstall_runs_real_routine_and_forwards_per_agent_force(self, tmp_path: Path) -> None:
+        goga_home = tmp_path / ".goga"
+        _write_registry(goga_home, {"claude": {"force_overwrite": False}})
+        before = (goga_home / "connect.yml").read_text()
+        with (
+            mock.patch("pathlib.Path.home", return_value=tmp_path),
+            mock.patch.object(_uninstall_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_connect_module, "connect", return_value=0) as mock_connect,
+        ):
+            result = CliRunner().invoke(app, ["uninstall", "foo", "--yes"])
+        assert result.exit_code == 0
+        # The real routine ran after the pip success and forwarded the agent's
+        # recorded force_overwrite — never a hardcoded value.
+        mock_connect.assert_called_once_with(agents=["claude"], force_overwrite=False)
+        # Single-writer invariant: uninstall never writes connect.yml (byte-identical).
         assert (goga_home / "connect.yml").read_text() == before
 
 
@@ -151,9 +186,9 @@ class TestHomeRedirectIntegration:
 class TestSingleWriterInvariant:
     """Single-writer invariant: only ``connect`` (via ``_write_connect_registry``) writes connect.yml.
 
-    install, upgrade, and ``resync_registered_agents`` must never write the registry
-    directly. Verified statically against each module's source — the behavioural
-    ``connect.yml``-not-rewritten assertions live in the flow tests above.
+    install, uninstall, upgrade, and ``resync_registered_agents`` must never write the
+    registry directly. Verified statically against each module's source — the
+    behavioural ``connect.yml``-not-rewritten assertions live in the flow tests above.
     """
 
     def test_resync_routine_does_not_write_registry(self) -> None:
@@ -170,6 +205,11 @@ class TestSingleWriterInvariant:
 
     def test_upgrade_does_not_write_registry_directly(self) -> None:
         source = inspect.getsource(_upgrade_module)
+        assert "_write_connect_registry" not in source
+
+    def test_uninstall_does_not_write_registry_directly(self) -> None:
+        source = inspect.getsource(_uninstall_module)
+        # uninstall reaches the registry only through resync_registered_agents (read-only).
         assert "_write_connect_registry" not in source
 
     def test_connect_is_the_single_writer_of_registry(self) -> None:

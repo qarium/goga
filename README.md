@@ -69,6 +69,8 @@ pipx install goga
 docker info
 ```
 
+Before each launch they also verify that the host goga version and the image's goga version agree at the (major, minor) level — set `GOGA_SKIP_VERSION_CHECK=1` to skip the check, and run `goga --version` to print the installed host version.
+
 Connect goga to your agent
 
 ```bash
@@ -80,6 +82,8 @@ To upgrade goga later and re-sync all connected agents, use:
 ```bash
 goga upgrade
 ```
+
+To stay within your current version line while upgrading, use `goga upgrade --patch` (latest patch of the installed minor line) or `goga upgrade --minor` (latest release of the installed major line). See [`goga upgrade`](https://qarium.github.io/goga/cli/upgrade/) for the full surface.
 
 ## Quick start
 
@@ -297,6 +301,29 @@ goga connect <agent>
 Pass `goga install --no-connect` to opt out of post-install activation (CI/Docker escape-hatch). Pass `goga install --sudo` for system-Python installs requiring root.
 
 See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty/local semantics.
+
+### Removing a tool
+
+`goga uninstall` removes exactly one tool package from the running interpreter's pip. It asks for confirmation first — Enter removes (the default is Y), `n` cancels:
+
+```bash
+# Remove one tool (interactive confirmation, Enter = yes)
+goga uninstall <tool-name>
+
+# Skip the confirmation — the scripted/CI form
+goga uninstall <tool-name> --yes
+goga uninstall <tool-name> -y
+
+# Remove from a system-Python install requiring root
+goga uninstall <tool-name> --sudo
+
+# Remove and re-sync another user's goga installation
+goga uninstall <tool-name> --user alice
+```
+
+After a successful pip uninstall, every connected agent is re-synced: the removed tool's skills and pipelines disappear from `~/.goga/` and from each agent's symlink tree. A tool removed by hand with plain pip leaves those artifacts behind until the next re-sync.
+
+See [`goga uninstall`](https://qarium.github.io/goga/cli/uninstall/) for the full confirmation, sudo/user, and exit-code semantics.
 
 ### Using a tool
 

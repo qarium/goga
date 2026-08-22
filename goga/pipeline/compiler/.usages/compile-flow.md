@@ -18,7 +18,10 @@ Authoring key → output key (the authoring key is consumed, not passed through)
 - script → script
 - after_script → script_after
 - timeout → script_timeout (verbatim str; requires script; omitempty)
-- roles → agents (via translate_role; default ["auto"] when absent/empty)
+- roles → agents (via translate_role; default ["auto"] when absent/empty). In a body
+  carrying `script`, NO agents key is emitted at all (afm rejects the combination) —
+  neither the default nor a translated roles value — while the roles elements are still
+  validated (a non-str element → structural error, same as without script)
 
 An authoring auto_run key is rejected ("auto_run key is forbidden in stage body;
 use trigger: manual") — auto_run is a runtime key, authored as trigger.

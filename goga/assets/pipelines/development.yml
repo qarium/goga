@@ -9,8 +9,18 @@ description: "Development process"
     Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
     Save the architecture plan as `<git branch --show-current>.md`
 
+    **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
+    - Focus on defining "what" the system should achieve (expected behavior, business rules, inputs, and outputs) rather than "how" to code it.
+    - Avoid embedding code snippets, database queries, or specific technology details in the requirement descriptions to leave room for optimal engineering design.
+
+    **Usage files** must be fully self-contained, highly readable, and clear from a consumer's perspective:
+    - API contracts must not reference or depend on other cells internal to the project's upper and peer layers.
+    - To ensure clean layering (such as when designing a Facade), contracts may only depend on strict downward, lower-level cells or shared primitives.
+    - The contract must expose the "what" of the cell without leaking internal architectural context.
+
     Cell convention:
     - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
+    - Keep algorithms, requirements, constraints and usages succinct and to the point. Use clear bullet points and focus strictly on the required outcomes.
     - Highly complex and nested algorithms should be decomposed into smaller, single-responsibility components.
     - Avoid creating single-function files. Functions/Classes should be logically grouped into modules based on high cohesion and shared context.
 

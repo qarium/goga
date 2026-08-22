@@ -94,7 +94,11 @@ Annotations: |
   usable roles value (key absent, explicit null, or an empty list), the
   compiler injects
   a SINGLE default into the assembled `FlowStage` fields —
-  "agents=[\"auto\"]". auto is a sentinel agent mode: goga emits the
+  "agents=[\"auto\"]" — EXCEPT in a body carrying script, where NO
+  agents key is assembled at all (afm rejects agents combined with
+  script): neither the ["auto"] default NOR a translated roles value
+  reaches the output, while the roles elements are still validated.
+  auto is a sentinel agent mode: goga emits the
   literal string auto verbatim and does NOT interpret it — the actual
   agent selection is performed on the afm side. supervisor and
   supervisor_prompt are not default-injected; they are valid
@@ -580,7 +584,10 @@ Annotations: |
               separate fields in the same stage. agents is populated by the
               default-injection rule of `compile_flow` (to the single value
               ["auto"]) when the source step body has no usable agents value
-              (missing key, explicit null, or empty list); supervisor and
+              (missing key, explicit null, or empty list); a body carrying
+              script assembles NO agents key at all (afm rejects the
+              combination — both the ["auto"] default and a translated
+              roles value are suppressed); supervisor and
               supervisor_prompt appear ONLY when the source step body authors
               them.
 
@@ -623,7 +630,8 @@ Annotations: |
       script_after/script_timeout (str) are present only when the corresponding
       stage directive was authored. Insertion order IS the output order — the
       serializer iterates as-is. command/description from WorkflowStage;
-      agents default-injected to ["auto"]; supervisor/supervisor_prompt only
+      agents default-injected to ["auto"], absent entirely in a body
+      carrying script; supervisor/supervisor_prompt only
       when authored.
 
 "FlowDocument(prompt: str | None = None, root_dir: str | None = None, name: str, description: str, stages: list[FlowStage])":
@@ -920,30 +928,30 @@ Annotations: |
                known-names set; a second pass or deferred resolution handles
                extend-stages referencing not-yet-embedded extend-stages):
                - STAGES branch (explicit depends_on via the StageStep field):
-                 a. Construct a `StageStep` whose name is the extend-stage
-                    name, whose title comes from the extend-stage body,
-                    whose depends_on is initialized from the extend-stage
-                    after (None when after is None), and whose body is the
-                    extend-stage body minus title.
-                 b. For each name in the extend-stage before (when present):
-                    append the extend-stage name to the depends_on of the
-                    existing body step whose name/id equals that name
-                    (initialize to an empty list when it had no depends_on).
+                 2.1. Construct a `StageStep` whose name is the extend-stage
+                      name, whose title comes from the extend-stage body,
+                      whose depends_on is initialized from the extend-stage
+                      after (None when after is None), and whose body is the
+                      extend-stage body minus title.
+                 2.2. For each name in the extend-stage before (when present):
+                      append the extend-stage name to the depends_on of the
+                      existing body step whose name/id equals that name
+                      (initialize to an empty list when it had no depends_on).
                - PHASES branch (positional insertion — `PhaseStep` carries
                  NO depends_on field; depends_on is derived by list position
                  in step 5):
-                 a. Construct a `PhaseStep` whose name is the extend-stage
-                    name and whose title and body come from the extend-stage
-                    body.
-                 b. Compute the insertion index from the positioning fields:
-                    immediately AFTER the step whose name/id equals the LAST
-                    resolvable after name, and/or immediately BEFORE the
-                    step whose name/id equals the FIRST resolvable before
-                    name. When both after and before are present, the index
-                    must satisfy both (after-targets precede
-                    before-targets); when inconsistent, fall back to the
-                    after-based index and emit a WARNING.
-                 c. Insert the `PhaseStep` at the computed index; subsequent
+                 2.1. Construct a `PhaseStep` whose name is the extend-stage
+                      name and whose title and body come from the extend-stage
+                      body.
+                 2.2. Compute the insertion index from the positioning fields:
+                      immediately AFTER the step whose name/id equals the LAST
+                      resolvable after name, and/or immediately BEFORE the
+                      step whose name/id equals the FIRST resolvable before
+                      name. When both after and before are present, the index
+                      must satisfy both (after-targets precede
+                      before-targets); when inconsistent, fall back to the
+                      after-based index and emit a WARNING.
+                 2.3. Insert the `PhaseStep` at the computed index; subsequent
                     steps shift down. Step 5's positional derivation then
                     yields the correct depends_on: the extend-stage depends
                     on its positional predecessor (the after-target, or the
@@ -1154,7 +1162,12 @@ Annotations: |
        - In both branches, BEFORE canonical ordering, inject default stage
          fields when the source step body has no usable roles value
          (missing key, explicit null, or empty list): set agents to
-         ["auto"]. The input stage-body field for the afm agents list is
+         ["auto"] — EXCEPT in a body carrying script, where NO agents key
+         is assembled at all (afm rejects agents combined with script):
+         neither the ["auto"] default NOR the translated roles value
+         reaches the output, while the roles elements are still validated
+         (a non-str element raises the same structural error). The input
+         stage-body field for the afm agents list is
          roles; an authored non-empty roles value is translated entry-
          by-entry via `translate_role` (known aliases mapped, all other
          values passed through verbatim) into the output agents value.
@@ -1332,15 +1345,18 @@ Annotations: |
       and depends_on is derived purely by list position in step 5.
       Multi-target before/after reduces to a single positional predecessor
       per step; transitive execution order still respects every target
-    - extend-stages compile into ordinary `FlowStage` instances — no change
-      to `FlowDocument`, `FlowStage`, or `serialize_flow`
+    - extend-stages compile into ordinary `FlowStage` instances —
+      `FlowDocument`, `FlowStage`, and `serialize_flow` are used as-is
     - When `workflow` is None, step 4.1 is skipped entirely (as is the whole
       reconstruction)
     - Consumers must NOT re-invoke `parse_dsl` to obtain the roles — they
       read header roles from `PipelineDocument` returned by this routine
     - Default stage-field injection: a step body with no usable roles
       value (missing key, explicit null, or empty list) yields a
-      `FlowStage` carrying a single injected default — agents=["auto"].
+      `FlowStage` carrying a single injected default — agents=["auto"] —
+      while a body carrying script assembles NO agents key (afm rejects
+      agents combined with script; both the default and a translated
+      roles value are suppressed, roles elements still validated).
       supervisor and supervisor_prompt are NOT default-injected (authored
       values pass through). auto is emitted verbatim; goga does not
       resolve it.
@@ -1359,7 +1375,7 @@ Annotations: |
       to planning/implementation/review, every other value passes through
       verbatim (goga does not validate the open afm agent namespace)
     - The output field name agents, the default ["auto"] injection, the
-      canonical key order, and the flow-style serialization are unchanged
+      canonical key order, and the flow-style serialization are as specified
       (afm contract stable)
     - Override priority (inline extend vs stages block): for a stage that
       originated from an extend-entry, the extend-entry's inline agent /
@@ -1423,7 +1439,7 @@ Annotations: |
     - Loop-expanded copies of a manual stage each assemble auto_run: false
     - auto_run appears in the canonical fields order immediately after
       auto_approve, as a plain bool scalar, ONLY for a manual-effective stage;
-      a pipeline without trigger/manual compiles byte-identically to before
+      a pipeline without trigger/manual compiles byte-identically
       (no auto_run key anywhere)
     - auto_run and the trigger rewrite are output-side only — PipelineDocument
       body stays the faithful mirror of the source pipeline-file

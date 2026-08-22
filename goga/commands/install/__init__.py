@@ -1,5 +1,6 @@
-"""Install command cell — CLI wrapper for the goga install command."""
+"""Install command cell — CLI wrappers for the goga tool package lifecycle."""
 
-from .install import install, resolve_version
+from .install import install
+from .uninstall import uninstall
 
-__all__: list[str] = ["install", "resolve_version"]
+__all__: list[str] = ["install", "uninstall"]

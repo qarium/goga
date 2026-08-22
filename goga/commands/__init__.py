@@ -3,7 +3,7 @@ from .config import config
 from .connect import connect
 from .contract import contract
 from .init import init
-from .install import install
+from .install import install, uninstall
 from .lint import lint
 from .pipeline import pipeline
 from .schema import schema
@@ -22,6 +22,7 @@ __all__ = [
     "pipeline",
     "schema",
     "tool",
+    "uninstall",
     "upgrade",
     "usages",
 ]

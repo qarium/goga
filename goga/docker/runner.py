@@ -20,7 +20,9 @@ from __future__ import annotations
 import signal
 import subprocess
 
+from ..version import ensure_version_match, version_check_enabled
 from ._flags import translate_params
+from .builder import docker_image_goga_version
 
 
 class DockerRunner:
@@ -45,6 +47,17 @@ class DockerRunner:
     ) -> int:
         """Run ``docker run <params-flags> <extra_args> <image> <args>`` and manage lifecycle.
 
+        Step 0 is the host-image version-check gate: decide
+        (``version_check_enabled`` — the ``GOGA_SKIP_VERSION_CHECK=1`` escape
+        lives there and only there), probe the constructor image
+        (``docker_image_goga_version`` — one short-lived capture container), and
+        verify (``ensure_version_match``). A refusal raises ``SystemExit(1)``
+        BEFORE translation, handler installs, and the launch ``try`` — nothing
+        has been started or installed, so no runner teardown is needed (the
+        caller's own ``finally`` blocks still unwind). With the check disabled,
+        neither the probe nor the comparison runs: zero extra subprocesses, the
+        argv is byte-for-byte the no-check form.
+
         ``args`` is the COMMAND + ARGs after the image. ``extra_args`` are raw
         extra docker tokens appended verbatim AFTER the translated params flags
         and BEFORE the image (a separate channel from ``params`` —
@@ -55,12 +68,19 @@ class DockerRunner:
         to the uniform rule). Returns the container exit code.
         """
         # `name` is the kill target — required and special (emitted as `--name`
-        # AND captured as the `docker kill` target). Validate it BEFORE installing
-        # handlers or Popen so a missing name never launches a container we then
-        # cannot identify for teardown.
+        # AND captured as the `docker kill` target). Validate it BEFORE the
+        # version gate, handler installs, and Popen so a missing name never
+        # launches a container we then cannot identify for teardown — nor a
+        # side probe container for a call doomed to fail programmatically.
         name = params.get("name")
         if name is None:
             raise ValueError("DockerRunner.run requires a 'name' param (the docker kill target)")
+
+        # Step 0 — version-check gate: decide → probe → verify. The probe sees
+        # ONLY the constructor image (no params/extra_args); the escape is read
+        # exactly once, here — never re-read past the gate.
+        if version_check_enabled():
+            ensure_version_match(docker_image_goga_version(self.image))
 
         extra_args = list(extra_args or [])
         flags = translate_params(params)

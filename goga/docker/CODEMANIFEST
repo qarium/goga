@@ -1,3 +1,11 @@
+Imports:
+  - Types:
+      - version_check_enabled
+      - ensure_version_match
+    Usages:
+      - version-check
+    From: goga/version
+
 Usages:
   convention: .goga/usages/conventions.md
 
@@ -11,24 +19,27 @@ Annotations: |
 
   This cell is a seed-cell with a declared responsibility zone — everything related
   to Docker in the project: in-container environment assertions, container launching,
-  image building. The body holds the guard routine `ensure_in_docker`; the stateful
-  `DockerBuilder` (image building) and its supporting routines `docker_pull`,
-  `docker_update`, and `docker_build_if_not_exist`; and the stateful `DockerRunner`
-  (container launching).
+  image building, and reading the goga package version inside an image. The body
+  holds the guard routine `ensure_in_docker`; the stateful `DockerBuilder` (image
+  building) and its supporting routines `docker_pull`, `docker_update`, and
+  `docker_build_if_not_exist`; the image-version probe `docker_image_goga_version`;
+  and the stateful `DockerRunner` (container launching).
 
   `docker_update` is the single --update decision point (force refresh — build
   when a Dockerfile is declared, else pull). `docker_build_if_not_exist` is its
   complement: a first-run safety net that builds the local image only when it is
   absent AND a Dockerfile is declared — it never pulls, and it is a no-op when
   the image already exists or when no Dockerfile is set. Both take PRIMITIVES
-  (image, dockerfile) so the cell stays a pure leaf with no Imports.
+  (image, dockerfile, extra_args) so the acquisition surface stays decoupled
+  from configuration loading (the cell's only Imports are the version-check
+  types).
 
   The `DockerBuilder` build and `DockerRunner` run methods translate a uniform
   params dict into docker CLI flags by a shared rule: a 1-character key becomes a
   short flag (p → -p, v → -v); a multi-char snake_case key becomes a long flag
   (add_host → --add-host); a str value becomes "flag value"; a True value becomes a
-  boolean flag; a False value omits the flag; a list value repeats the flag. In
-  the `DockerRunner` run method, the name param is the one exception — it is emitted
+  boolean flag; a False value omits the flag; a list value repeats the flag. In the
+  `DockerRunner` run method, the name param is the one exception — it is emitted
   as the --name flag AND captured as the target for the guaranteed docker kill in
   the runner finally.
 
@@ -38,12 +49,25 @@ Annotations: |
   image (docker run) / before -f (docker build). Structural-only validation
   (list[str]); docker surfaces flag conflicts. docker_update and
   docker_build_if_not_exist forward extra_args to DockerBuilder.build in their
-  build branch only; their pull / no-op branches ignore it. Pure-leaf preserved —
-  the extra_args primitive keeps the cell free of goga/config Imports.
+  build branch only; their pull / no-op branches ignore it. The extra_args
+  primitive keeps the acquisition routines free of configuration Imports.
 
   Route all output (guard error output, goga diagnostic messages) through sys.stderr
   (click is not used). Docker CLI invocations stream the CLI's own stdout/stderr
   directly.
+
+  The zone also covers reading the goga package version inside an image: the
+  probe routine `docker_image_goga_version` runs a short-lived capture
+  container in the minimal form — no mounts, no env-file, no extra tokens.
+
+  Every container launch through `DockerRunner` is gated by the host-side
+  version consistency check: before the work container starts, the runner
+  asks `version_check_enabled` whether the check runs, reads the image
+  version via `docker_image_goga_version`, and hands the version string to
+  `ensure_version_match`, which owns the outcome matrix. A refusal stops the
+  launch before the work container starts. Use the `version-check` practice
+  for the check contract, the outcome matrix, and the escape environment
+  variable.
 
 ---
 
@@ -74,8 +98,8 @@ Annotations: |
       with code 1)
 
     Constraints:
-    - Do NOT perform filesystem or process work — the guard must terminate the
-      process before any such work runs
+    - Do NOT perform filesystem or process work — the guard must terminate
+      the process before any such work runs
     - Do NOT validate other environment variables — the responsibility is solely
       the "GOGA_DOCKER" marker
     - Do NOT return an error value — the routine returns only in the in-container
@@ -158,8 +182,9 @@ Annotations: |
     error-semantics contract (build fatal, pull warning).
 
     Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object, so
-    the goga/docker cell stays a pure leaf (no Imports, no dependency on
-    goga/config). The `image: str` signature makes the non-None precondition
+    the acquisition routines stay decoupled from configuration loading (the cell's
+    only Imports are the version-check types, consumed by `DockerRunner`).
+    The `image: str` signature makes the non-None precondition
     explicit at the call site — callers pass the already-validated config.image.
 
     `image`: image:tag — non-None (the caller validates config.image before
@@ -204,9 +229,11 @@ Annotations: |
     exists, not to refresh it.
 
     Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object,
-    so the goga/docker cell stays a pure leaf with no Imports — same convention
-    as `docker_update`. The `image: str` signature makes the non-None precondition
-    explicit at the call site — callers pass the already-validated config.image.
+    so the acquisition routines stay decoupled from configuration loading — same
+    convention as `docker_update` (the cell's only Imports are the version-check
+    types, consumed by `DockerRunner`). The `image: str` signature makes
+    the non-None precondition explicit at the call site — callers pass the
+    already-validated config.image.
 
     `image`: image:tag — non-None (caller-validated precondition); used as the
              local-image probe target and the build tag
@@ -228,9 +255,9 @@ Annotations: |
     3. When the image is absent and `dockerfile` is not None: construct
        `DockerBuilder` with this `image` and `dockerfile`, context ".", and
        call its build method with pull=True (translated to the --pull flag) and
-       the `extra_args` tokens so base images declared via FROM refresh from the
-       registry instead of being served from the local cache — build failure is
-       fatal (propagates, same error semantics as the build branch of
+       the `extra_args` tokens so base images declared via FROM refresh from
+       the registry instead of being served from the local cache — build failure
+       is fatal (propagates, same error semantics as the build branch of
        `docker_update`)
     4. When the image is absent and `dockerfile` is None: return (no-op — never
        pulls). `extra_args` is ignored.
@@ -256,6 +283,49 @@ Annotations: |
     - The caller runs this UNCONDITIONALLY at launch entry — no --update gate
       (the gate belongs to `docker_update`)
 
+"docker_image_goga_version(image: str) -> version: str | None":
+  location: builder.py
+  annotations: |
+    Read the goga package version inside a Docker image with a short-lived
+    probe container, in capture mode.
+
+    `image`: image to probe (non-None; the caller passes the validated
+             image)
+    `version`: version string printed inside the image, or None when the
+               version could not be determined
+
+    Algorithm:
+    1. Run one short-lived container: docker run --rm --entrypoint python3
+       <image> -c "from importlib.metadata import version; print(version('goga'))",
+       capturing stdout and stderr instead of streaming them
+    2. Keep the probe minimal: no mounts, no env-file, no extra docker
+       tokens, no runner params
+    3. When the docker exit code is 0 and the first stdout line, stripped
+       of whitespace, begins with a non-empty ASCII-digit major segment
+       (the leading release-segment shape — digits, then optionally
+       ".digits", before any dev/pre/post/local tail), return that
+       stripped line
+    4. Return None on every failure: a non-zero docker exit, a missing
+       docker binary, empty output, or output that does not look like a
+       version
+
+    Requirements:
+    - Exactly one short-lived container per call (--rm)
+    - Silent on the host — nothing is printed or streamed
+    - Never raises — every failure is returned as None
+    - Tolerate a missing docker binary (return None; the caller has
+      already verified docker availability)
+
+    Constraints:
+    - Do not cache the result — one probe per call
+    - Do not validate that the version is a real released version — shape
+      recognition only
+    - Do not pass credential material, mounts, env-file, or extra tokens
+      to the probe
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
 "DockerRunner(image: str)":
   location: runner.py
   annotations: |
@@ -263,8 +333,13 @@ Annotations: |
     is concrete, so it is supplied to the constructor. Its run method assembles the
     docker run command from the image + CLI-option params + command args,
     manages the lifecycle (SIGTERM/SIGINT handler, guaranteed docker kill +
-    handler restore in finally), and returns the container exit code. Part of
-    the goga/docker zone ("container launching").
+    handler restore in finally), and returns the container exit code. Part of the
+    goga/docker zone ("container launching").
+
+    The runner is the launch governor as well as the executor: before the
+    work container starts, run applies the version consistency check
+    (decide, probe, verify). The check adds no parameters — its only escape
+    is the host-side environment variable handled by `version_check_enabled`.
 
     `image`: container image (non-None; the caller passes the validated config.image)
   methods:
@@ -279,8 +354,8 @@ Annotations: |
                     params flags and BEFORE the image (structural-only; docker
                     surfaces conflicts). Defaults to [].
       `...params`: docker run CLI options, translated to flags by the SAME rule as
-                the `DockerBuilder` build method. The caller passes the pre-refactor
-                options: name, rm, v (mounts), p (port publish), add_host,
+                the `DockerBuilder` build method. The caller passes the standard
+                launch options: name, rm, v (mounts), p (port publish), add_host,
                 env_file, entrypoint. The name param is REQUIRED and SPECIAL — it is
                 emitted as the --name flag AND captured as the target for the
                 guaranteed docker kill in finally (the one exception to the
@@ -290,23 +365,48 @@ Annotations: |
       `exit_code`: the container exit code
 
       Algorithm:
-      1. Translate `...params` into docker flags per the shared param→flag rule;
-         the name param must be present
-      2. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
-      3. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
-      4. Launch docker run, streaming stdout/stderr; wait for the exit code
-      5. In finally: docker kill <name> (suppress errors — the container may be
+      0. Validate that the name param is present: it is the docker kill
+         target of the finally block, so a call without it is
+         programmatically doomed — fail fast with ValueError BEFORE the
+         version gate, so a doomed call launches not even the probe
+         container
+      1. Version check gate: when `version_check_enabled` is True, read the
+         image version via `docker_image_goga_version` (the constructor
+         image; the probe runs in the minimal form) and hand the string to
+         `ensure_version_match`. On refusal the process exits with code 1
+         before the work container starts. At this point the method has not
+         yet translated params, installed its signal handlers, or entered
+         its try/finally — nothing was started and no handler was replaced,
+         so there is no runner teardown to perform; the caller's cleanup
+         blocks run during the unwind. When the check is disabled, neither
+         the probe nor the comparison runs
+      2. Translate `...params` into docker flags per the shared param→flag rule
+      3. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
+      4. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
+      5. Launch docker run, streaming stdout/stderr; wait for the exit code
+      6. In finally: docker kill <name> (suppress errors — the container may be
          gone) and restore the previous signal handler
-      6. Return the exit code
+      7. Return the exit code
 
       Requirements:
-      - The assembled docker run form preserves the pre-refactor launchers (same
+      - The assembled docker run form preserves the launcher contracts (same
         options and effect): --rm, --name, mounts via -v, --add-host,
         --env-file, --entrypoint, image, args
       - SIGTERM/SIGINT results in exit code 128 + signum (130 SIGINT, 143 SIGTERM)
       - docker kill <name> in finally is mandatory under every exit path; the
         previous signal handler is always restored
       - The container exit code is always returned
+      - Exactly one short-lived probe container per run when the version
+        check is enabled; none when disabled
+      - The probe carries no runner params, mounts, env-file, or extra
+        tokens
+      - The version check inherits whatever setup the caller has already
+        completed: callers that install a signal handler and write secret
+        files do so BEFORE invoking run, so the probe runs inside that
+        window on those paths; the probe itself mounts nothing, writes
+        nothing, and receives no tokens — it adds no leak surface on any
+        path, including paths without a caller-side handler (the read-only
+        info forms)
 
       Constraints:
       - Do NOT resolve proxy / hosts / credential mounts / runtime-dir / env-file
@@ -317,6 +417,11 @@ Annotations: |
         so it cannot be a param). Run order is preserved: the runner finally
         (docker kill + handler restore) runs before the caller finally (file /
         .ralphex cleanup)
+      - Do not add a parameter that disables the version check — the escape
+        is the host-side environment variable only
+      - Do not change the signature or the return contract — the exit code
+        of the work container remains the only return value; a check
+        refusal is an exceptional exit, not a return value
 
 ---
 
@@ -326,11 +431,15 @@ CreatedAt: 09/07/26
 Description: |
   Seed-cell with a declared responsibility zone — everything related to Docker in
   the project: in-container environment assertions, container launching, image
-  building. The body holds the guard routine `ensure_in_docker`; the stateful
-  `DockerBuilder` plus the `docker_pull`, `docker_update`, and
-  `docker_build_if_not_exist` routines (image acquisition — `docker_update`
-  refreshes under `--update`: build when a project Dockerfile is declared, else
-  pull; `docker_build_if_not_exist` is the first-run safety net that builds the
-  local image when it is absent and a Dockerfile is declared); and the stateful
-  `DockerRunner` (container launching + lifecycle). Both image-acquisition
-  routines take primitives so the cell stays a pure leaf with no Imports.
+  building, and reading the goga package version inside an image. The body holds
+  the guard routine `ensure_in_docker`; the stateful `DockerBuilder` plus the
+  `docker_pull`, `docker_update`, and `docker_build_if_not_exist` routines
+  (image acquisition — `docker_update` refreshes under `--update`: build when a
+  project Dockerfile is declared, else pull; `docker_build_if_not_exist` is the
+  first-run safety net that builds the local image when it is absent and a
+  Dockerfile is declared); the `docker_image_goga_version` probe (a short-lived
+  capture container reading the goga version inside an image); and the stateful
+  `DockerRunner` (container launching + lifecycle, gated before every launch by
+  the host-side version consistency check). The image-acquisition routines and
+  the probe take primitives; the runner applies the version check imported from
+  goga/version.

@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import inspect
 import signal
+from unittest import mock
 
 import goga.docker
+import goga.docker.runner
 import pytest
 from goga.docker import DockerRunner
+from goga.docker.builder import docker_image_goga_version
+from goga.version import ensure_version_match, host_goga_version, version_check_enabled
 
 
 class _FakeProc:
@@ -67,6 +71,32 @@ class _RecordingSignal:
         return prev
 
 
+class _OrderingSignal(_RecordingSignal):
+    """A ``_RecordingSignal`` that also logs a label per install event."""
+
+    def __init__(self, events: list[str], label: str = "signal") -> None:
+        super().__init__()
+        self._events = events
+        self._label = label
+
+    def __call__(self, signum, handler):
+        self._events.append(self._label)
+        return super().__call__(signum, handler)
+
+
+class _OrderingPopen(_FakePopen):
+    """A ``_FakePopen`` that also logs a label at each Popen event."""
+
+    def __init__(self, proc: _FakeProc, events: list[str], label: str = "popen") -> None:
+        super().__init__(proc)
+        self._events = events
+        self._label = label
+
+    def __call__(self, argv) -> _FakeProc:
+        self._events.append(self._label)
+        return super().__call__(argv)
+
+
 class TestContract:
     """Contract-surface lock: facade accessibility + callable shapes."""
 
@@ -116,6 +146,24 @@ class TestContract:
 
         assert isinstance(result, int)
         assert result == 7
+
+    def test_docker_runner_run_signature_unchanged(self) -> None:
+        # The version-check gate changes no API: the exact pre-gate parameter
+        # list survives (no check-disabling parameter — the escape is the env
+        # var only) and the return stays an exit-code int (a refusal is an
+        # exceptional exit, not a return value).
+        sig = inspect.signature(DockerRunner.run)
+        assert list(sig.parameters) == ["self", "args", "extra_args", "params"]
+
+    def test_runner_module_binds_version_check_names(self) -> None:
+        # The gate's three collaborators are imported INTO the runner module's
+        # own namespace — the documented substitution point for gate tests
+        # (goga.docker.runner.<name>, mirroring the subprocess/signal patching)
+        # — and they are the facade functions of their origin cells, so the
+        # dependency stays docker → version / docker → docker.builder.
+        assert goga.docker.runner.version_check_enabled is version_check_enabled
+        assert goga.docker.runner.ensure_version_match is ensure_version_match
+        assert goga.docker.runner.docker_image_goga_version is docker_image_goga_version
 
 
 class TestDockerRunnerRun:
@@ -264,3 +312,184 @@ class TestDockerRunnerRun:
         assert argv.index("--gpus") < img_idx
         # image precedes the args (the command after the image) — unchanged.
         assert argv[img_idx + 1 : img_idx + 4] == ["-m", "goga.build", "plan"]
+
+
+class TestDockerRunnerVersionGate:
+    """Step-0 gate coverage: decide → probe → verify → (launch | refusal)."""
+
+    def test_runner_gate_enabled_probes_and_launches(self, monkeypatch) -> None:
+        # Happy path: the gate decides (enabled), probes the constructor image
+        # only, weighs the probe's answer, and the launch proceeds normally.
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        monkeypatch.setattr("goga.docker.runner.version_check_enabled", lambda: True)
+        probe = mock.Mock(return_value="1.2.1")
+        monkeypatch.setattr("goga.docker.runner.docker_image_goga_version", probe)
+        ensure = mock.Mock()
+        monkeypatch.setattr("goga.docker.runner.ensure_version_match", ensure)
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        result = DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        # probe sees exactly the constructor image — no params/extra_args leak
+        # into the probe; ensure weighs exactly the probe's answer.
+        probe.assert_called_once_with("img:tag")
+        ensure.assert_called_once_with("1.2.1")
+        assert len(fake_popen.calls) == 1
+        assert result == 0
+
+    def test_runner_gate_refusal_stops_launch(self, monkeypatch) -> None:
+        # A refusal (SystemExit(1) out of ensure_version_match) unwinds BEFORE
+        # translate/handlers/try: no container launched, no kill teardown is
+        # needed (nothing to tear down), no signal handlers were touched.
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        fake_kill = _RecordingRun()
+        fake_signal = _RecordingSignal()
+        monkeypatch.setattr("goga.docker.runner.version_check_enabled", lambda: True)
+        monkeypatch.setattr(
+            "goga.docker.runner.docker_image_goga_version",
+            mock.Mock(return_value="1.3.0"),
+        )
+        monkeypatch.setattr(
+            "goga.docker.runner.ensure_version_match",
+            mock.Mock(side_effect=SystemExit(1)),
+        )
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", fake_signal)
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", fake_kill)
+
+        with pytest.raises(SystemExit) as exc_info:
+            DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        assert exc_info.value.code == 1
+        assert fake_popen.calls == []
+        assert fake_kill.calls == []
+        assert fake_signal.installs == []
+
+    def test_runner_gate_disabled_skips_probe_entirely(self, monkeypatch) -> None:
+        # The autouse _skip_version_check fixture has already set
+        # GOGA_SKIP_VERSION_CHECK=1 (the suite-wide default), and the REAL
+        # version_check_enabled reads it here: with the check off, neither the
+        # probe nor the comparison runs — zero extra subprocesses — and the
+        # argv is byte-for-byte the pre-gate form (regression anchor).
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        probe = mock.Mock()
+        ensure = mock.Mock()
+        monkeypatch.setattr("goga.docker.runner.docker_image_goga_version", probe)
+        monkeypatch.setattr("goga.docker.runner.ensure_version_match", ensure)
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1", rm=True)
+
+        probe.assert_not_called()
+        ensure.assert_not_called()
+        assert fake_popen.calls == [
+            ["docker", "run", "--name", "goga-build-1", "--rm", "img:tag", "-m", "goga.build"],
+        ]
+
+    def test_runner_gate_runs_before_translate_and_launch(self, monkeypatch) -> None:
+        # Order lock: the verify event fires strictly before translate, the
+        # handler installs, and Popen — the gate is step 0, ahead of everything
+        # the refusal path would otherwise have to undo.
+        events: list[str] = []
+        monkeypatch.setattr("goga.docker.runner.version_check_enabled", lambda: True)
+        probe = mock.Mock(return_value="1.2.0")
+        monkeypatch.setattr("goga.docker.runner.docker_image_goga_version", probe)
+        monkeypatch.setattr(
+            "goga.docker.runner.ensure_version_match",
+            mock.Mock(side_effect=lambda _image_version: events.append("ensure")),
+        )
+        real_translate = goga.docker.runner.translate_params
+
+        def recording_translate(params):
+            events.append("translate")
+            return real_translate(params)
+
+        monkeypatch.setattr("goga.docker.runner.translate_params", recording_translate)
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", _OrderingPopen(_FakeProc(returncode=0), events))
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _OrderingSignal(events))
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        probe.assert_called_once_with("img:tag")
+        assert events.index("ensure") < events.index("translate")
+        assert events.index("ensure") < events.index("popen")
+
+    def test_runner_gate_real_collaborators_refuse_on_mismatch(self, monkeypatch, capsys) -> None:
+        # Real wiring on the refusal path: ONLY the probe is substituted (no
+        # docker in CI). The REAL version_check_enabled reads the environment
+        # (the test's delenv overrides the autouse skip), and the REAL
+        # ensure_version_match weighs the probe's answer against this
+        # interpreter's REAL host version — a 9.9.0 image diverges at the
+        # (major, minor) level from any 1.x/0.x host, so the shipped mismatch
+        # message lands on stderr and nothing is launched.
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK", raising=False)
+        monkeypatch.setattr(
+            "goga.docker.runner.docker_image_goga_version",
+            mock.Mock(return_value="9.9.0"),
+        )
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        fake_kill = _RecordingRun()
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", fake_kill)
+
+        with pytest.raises(SystemExit) as exc_info:
+            DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        assert exc_info.value.code == 1
+        assert fake_popen.calls == []
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "differ at the (major, minor) level" in captured.err
+        assert "9.9.0" in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_runner_gate_real_collaborators_agree_and_launch(self, monkeypatch, capsys) -> None:
+        # The agreeing cell of the matrix with the real predicate, real
+        # comparator, and the real host version: the probe answers exactly the
+        # host's own version string → the gate passes silently and the launch
+        # proceeds.
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK", raising=False)
+        monkeypatch.setattr(
+            "goga.docker.runner.docker_image_goga_version",
+            mock.Mock(return_value=host_goga_version()),
+        )
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        result = DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        assert result == 0
+        assert len(fake_popen.calls) == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        # No refusal markers on stderr (robust even under a 0.0.0 dev host,
+        # where the placeholder warning — not a refusal — is the expected err).
+        assert "differ at the (major, minor) level" not in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" not in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_runner_existing_name_validation_precedes_gate(self, monkeypatch) -> None:
+        # Extends test_docker_runner_run_requires_name: a doomed call (no
+        # name) must not even reach the gate — a programmatic error never
+        # launches a side probe container.
+        fake_popen = _FakePopen(_FakeProc())
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+        decide = mock.Mock(return_value=True)
+        monkeypatch.setattr("goga.docker.runner.version_check_enabled", decide)
+
+        with pytest.raises(ValueError, match="requires a 'name' param"):
+            DockerRunner("img:tag").run(["-m", "goga.build"], rm=True)
+
+        decide.assert_not_called()
+        assert fake_popen.calls == []

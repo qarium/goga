@@ -22,6 +22,7 @@ from goga.pipeline.compiler import (
     StructuralError,
     compile_flow,
 )
+from goga.pipeline.workflow import parse_workflow
 
 _FIXTURES = Path(__file__).resolve().parent / "fixtures" / "compile_flow"
 _FEATURE_PHASES = _FIXTURES / "phases.yml"
@@ -758,6 +759,93 @@ class TestCompileFlowScriptDirectives:
         assert fields["script_before"] == "prep"
         assert fields["script"] == "run"
         assert fields["script_after"] == "cleanup"
+
+    def test_compile_script_suppresses_default_agents(self, tmp_path: Path) -> None:
+        """``script`` without ``roles`` assembles NO ``agents`` key.
+
+        afm rejects ``agents`` combined with ``script`` — the default
+        ``["auto"]`` injection must not fire for script stages.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n")
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        assert "agents" not in flow_doc.stages[0].fields
+        assert "agents" not in flow_path.read_text()
+
+    def test_compile_script_suppresses_authored_roles(self, tmp_path: Path) -> None:
+        """``script`` + authored ``roles`` emits no ``agents`` and raises no error.
+
+        Both the translated ``roles`` value and the default are suppressed; the
+        ``roles`` elements are still validated (a non-str element would raise).
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n  roles:\n    - planner\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["script"] == "run"
+        assert "agents" not in fields
+        assert "roles" not in fields
+
+    def test_compile_script_with_roles_non_str_element_raises(self, tmp_path: Path) -> None:
+        """A non-str ``roles`` element raises even under script suppression."""
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  script: run\n  roles:\n    - 1\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        with pytest.raises(StructuralError, match=r"non-str value in stage roles list"):
+            compile_flow(pipeline_path, flow_path)
+
+    def test_compile_script_family_without_script_keeps_default_agents(self, tmp_path: Path) -> None:
+        """Only ``script`` opens the suppression — ``before_script``/``after_script`` alone do not.
+
+        The predicate keys on the translated ``script`` key itself, so a body
+        bracketing an agent-driven stage with scripts still gets the default
+        ``agents=["auto"]`` injected.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text(
+            "name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: p\n"
+            "  before_script: prep\n  after_script: cleanup\n",
+        )
+        flow_path = tmp_path / "flow.yml"
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path)
+
+        fields = flow_doc.stages[0].fields
+        assert fields["script_before"] == "prep"
+        assert fields["script_after"] == "cleanup"
+        assert fields["agents"] == ["auto"]
+
+    def test_compile_workflow_extend_script_suppresses_agents(self, tmp_path: Path) -> None:
+        """An extend-stage body with ``script`` assembles no ``agents`` key.
+
+        Extend-stages flow through the same ``_canonical_fields`` assembly, so
+        the suppression covers them identically.
+        """
+        pipeline_path = tmp_path / "pipeline.yml"
+        pipeline_path.write_text("name: T\ndescription: T\n---\n\na:\n  title: A\n  prompt: p\n")
+        flow_path = tmp_path / "flow.yml"
+        workflow_path = tmp_path / "workflow.yml"
+        workflow_path.write_text(
+            "extend:\n  b:\n    after:\n      - a\n    title: B\n    script: run\n",
+        )
+        workflow = parse_workflow(workflow_path)
+
+        _, flow_doc = compile_flow(pipeline_path, flow_path, workflow=workflow)
+
+        by_id = {stage.id: stage.fields for stage in flow_doc.stages}
+        assert "agents" not in by_id["b"]
+        assert "agents" in by_id["a"]
 
     def test_compile_no_approve_baseline_byte_identical(self, tmp_path: Path) -> None:
         """A pipeline-file without approve/script directives compiles byte-identically.

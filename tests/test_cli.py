@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import inspect
 import json
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
+from unittest import mock
 
 import click
+import pytest
 from click.testing import CliRunner
 from goga import app
 from goga.cli import app as cli_app
@@ -80,6 +84,10 @@ class TestRegisteredCommands:
         """The 'upgrade' command is registered on the app group."""
         assert "upgrade" in app.commands
 
+    def test_uninstall_command_registered(self) -> None:
+        """The 'uninstall' command is registered on the app group."""
+        assert "uninstall" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -119,6 +127,12 @@ class TestHelpOutput:
         result = runner.invoke(app, ["--help"])
         assert "upgrade" in result.output
 
+    def test_help_contains_uninstall(self) -> None:
+        """The --help output lists the 'uninstall' command."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "uninstall" in result.output
+
 
 class TestBuildHelpOutput:
     def test_build_help_exit_code_zero(self) -> None:
@@ -154,6 +168,96 @@ class TestUpgradeHelpOutput:
         assert "--sudo" in result.output
         assert "--user" in result.output
         assert "--tools" in result.output
+
+
+class TestVersionFlagContract:
+    """Contract tests — the eager --version/-v flag on the root group."""
+
+    def test_version_flag_prints_host_version_and_exits_zero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The --version flag prints the host version and exits with code 0."""
+        monkeypatch.setattr("goga.cli.host_goga_version", lambda: "1.2.3")
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert result.output == "1.2.3\n"
+
+    def test_version_option_listed_in_root_help(self) -> None:
+        """The --version option appears in the root group help."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert result.exit_code == 0
+        assert "--version" in result.output
+
+    def test_app_signature_unchanged_by_flag(self) -> None:
+        """expose_value=False keeps the app() callback parameterless."""
+        assert list(inspect.signature(app.callback).parameters) == []
+
+
+class TestVersionFlagBehavior:
+    """Logic tests — behavior of the eager --version/-v flag."""
+
+    def test_app_version_flag_prints_host_version(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The --version flag echoes the bare host version string."""
+        monkeypatch.setattr("goga.cli.host_goga_version", lambda: "1.2.3")
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 0
+        assert result.output == "1.2.3\n"
+
+    def test_app_version_short_flag(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The -v short spelling behaves exactly like --version."""
+        monkeypatch.setattr("goga.cli.host_goga_version", lambda: "1.2.3")
+        runner = CliRunner()
+        result = runner.invoke(app, ["-v"])
+        assert result.exit_code == 0
+        assert result.output == "1.2.3\n"
+
+    def test_app_version_flag_metadata_failure_is_clean(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An undeterminable host version surfaces as a clean error, no traceback."""
+        monkeypatch.setattr("goga.cli.host_goga_version", mock.Mock(side_effect=PackageNotFoundError("goga")))
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version"])
+        assert result.exit_code == 1
+        assert "cannot determine" in result.output
+        assert "Traceback" not in result.output
+
+    def test_app_subcommands_unaffected_by_version_flag(self) -> None:
+        """The eager group flag never conflicts with subcommands or their options."""
+        runner = CliRunner()
+
+        root_help = runner.invoke(app, ["--help"])
+        assert root_help.exit_code == 0
+        assert "--version" in root_help.output
+
+        build_help = runner.invoke(app, ["build", "--help"])
+        assert build_help.exit_code == 0
+        assert "--version" not in build_help.output
+
+        install_help = runner.invoke(app, ["install", "--help"])
+        assert install_help.exit_code == 0
+        # install keeps its own value option of the same name — the group's
+        # eager flag does not shadow it.
+        assert "--version" in install_help.output
+
+    def test_app_version_flag_before_subcommand_is_eager(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--version ahead of a subcommand is answered before dispatch."""
+        monkeypatch.setattr("goga.cli.host_goga_version", lambda: "1.2.3")
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version", "build", "plan.md"])
+        assert result.exit_code == 0
+        assert result.output == "1.2.3\n"
+
+    def test_app_install_version_value_option_not_intercepted(self) -> None:
+        """install's own --version VALUE option survives the group's eager flag.
+
+        After the subcommand token the option belongs to install: the value is
+        consumed as the option argument (no option conflict, no version print)
+        and --help renders install's own surface."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["install", "--version", "9.9.9", "--help"])
+        assert result.exit_code == 0
+        assert "9.9.9" not in result.output
+        assert "--local" in result.output
 
 
 class TestSchemaLintCoexist:

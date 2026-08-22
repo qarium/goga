@@ -8,6 +8,7 @@ description: "Refactoring or miniman changes process"
   prompt: |
     Cell convention:
     - When changing CODEMANIFEST and usage files, you **MUST** ensure the current state, **NOT** the changelogs.
+    - Keep algorithms, requirements, constraints and usages succinct and to the point. Use clear bullet points and focus strictly on the required outcomes.
   skills:
     - goga-change
 
