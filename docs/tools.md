@@ -29,6 +29,29 @@ If you have already connected an agent, `goga install` automatically re-syncs ev
 
 `goga connect` auto-discovers all installed `goga_tool_*` packages and installs their skills centrally into `~/.goga/skills/`, then symlinks them into each connected agent's skills directory. If the package ships any pipeline `*.yml` files under `pipelines/`, those are installed into `~/.goga/pipelines/` in the same step, **namespaced as `<tool>:<name>.yml`** so they are addressable as `goga pipeline <tool>:<name>` (internal pipelines stay un-prefixed) — see [Pipelines / Shipped Pipelines](pipelines/shipped.md) for the namespacing and residual-conflict rules. The tool becomes available both as an agent skill and as a CLI command.
 
+## Removing a tool
+
+`goga uninstall` removes exactly one tool package from the running interpreter's pip. It asks for confirmation first — Enter removes (the default is Y), `n` cancels:
+
+```bash
+# Remove one tool (interactive confirmation, Enter = yes)
+goga uninstall <tool-name>
+
+# Skip the confirmation — the scripted/CI form
+goga uninstall <tool-name> --yes
+goga uninstall <tool-name> -y
+
+# Remove from a system-Python install requiring root
+goga uninstall <tool-name> --sudo
+
+# Remove and re-sync another user's goga installation
+goga uninstall <tool-name> --user alice
+```
+
+After a successful pip uninstall, every connected agent is re-synced: the removed tool's skills and pipelines disappear from `~/.goga/` and from each agent's symlink tree. A tool removed by hand with plain pip leaves those artifacts behind until the next re-sync.
+
+See [`goga uninstall`](cli/uninstall.md) for the full confirmation, sudo/user, and exit-code semantics.
+
 ## Built-in tools
 
 The following tools ship with goga out of the box — no separate install required. They are registered automatically once goga is installed and `goga connect` has been run.

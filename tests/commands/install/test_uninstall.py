@@ -180,7 +180,7 @@ class TestUninstallLogicNegative:
         ):
             result = CliRunner().invoke(app, ["uninstall", "foo"], input="n\n")
         assert result.exit_code == 0
-        assert "cancelled" in result.output
+        assert 'Removal of goga tool "foo" cancelled' in result.output
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
 
@@ -202,8 +202,24 @@ class TestUninstallLogicNegative:
         ):
             result = CliRunner().invoke(app, ["uninstall", "foo", "--user", "ghost"], input="")
         assert result.exit_code == 1
-        assert "unknown user" in result.output
+        assert "unknown user 'ghost'" in result.output
         # Validation fires before the confirmation — nothing is prompted or removed.
+        assert "[Y/n]" not in result.output
+        mock_run.assert_not_called()
+        mock_resync.assert_not_called()
+
+    def test_uninstall_user_lookup_os_error_fails_fast_like_unknown_user(self) -> None:
+        # OSError from the pwd backend (e.g. an NIS/LDAP lookup failure) hits the
+        # same except-arm as KeyError — a clean unknown-user error, nothing removed.
+        with (
+            mock.patch.object(_uninstall_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_uninstall_module.pwd, "getpwnam", side_effect=OSError("nis lookup failed")),
+            mock.patch.object(_uninstall_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["uninstall", "foo", "--user", "ghost"], input="")
+        assert result.exit_code == 1
+        assert "unknown user 'ghost'" in result.output
+        assert "Traceback" not in result.output
         assert "[Y/n]" not in result.output
         mock_run.assert_not_called()
         mock_resync.assert_not_called()
@@ -229,6 +245,21 @@ class TestUninstallLogicNegative:
             result = CliRunner().invoke(app, ["uninstall", "foo", "--sudo", "--yes"])
         assert result.exit_code == 1
         assert "failed to start" in result.output
+        assert "Traceback" not in result.output
+        mock_resync.assert_not_called()
+
+    def test_uninstall_pip_start_failure_without_filename_names_argv0(self) -> None:
+        # An OSError carrying no filename (e.g. a bare PermissionError from the
+        # spawn) falls back to argv[0] — the interpreter — so the error still
+        # names a real target instead of "None".
+        err = OSError("spawn failed")
+        with (
+            mock.patch.object(_uninstall_module.subprocess, "run", side_effect=err),
+            mock.patch.object(_uninstall_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["uninstall", "foo", "--yes"])
+        assert result.exit_code == 1
+        assert f"failed to start {sys.executable}" in result.output
         assert "Traceback" not in result.output
         mock_resync.assert_not_called()
 

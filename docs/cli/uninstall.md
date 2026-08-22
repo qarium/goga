@@ -103,6 +103,6 @@ goga uninstall foo --sudo --user alice
 
 ## Notes
 
-- `--sudo` and `--user` rely on `sudo` and `pwd.getpwnam` respectively and are unavailable on Windows; Windows users must omit both.
+- `--sudo` and `--user` rely on `sudo` and `pwd.getpwnam` respectively and are Unix-only; goga resolves users through the POSIX `pwd` module, so the CLI itself requires a Unix-like system and does not run on Windows.
 - `goga uninstall` never reads or writes `connect.yml` itself — [`goga connect`](connect.md) is the single writer of the registry, reached only through the shared re-sync routine.
 - Removing a package by hand with plain pip leaves stale skills and pipelines in `~/.goga/` until the next re-sync runs; prefer `goga uninstall`.
