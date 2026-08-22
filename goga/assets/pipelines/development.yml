@@ -9,7 +9,7 @@ description: "Development process"
     Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
     Save the architecture plan as `<git branch --show-current>.md`
 
-    **CODEMANIFEST** files must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
+    **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
     - Focus on defining "what" the system should achieve (expected behavior, business rules, inputs, and outputs) rather than "how" to code it.
     - Avoid embedding code snippets, database queries, or specific technology details in the requirement descriptions to leave room for optimal engineering design.
 
