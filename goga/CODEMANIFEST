@@ -12,6 +12,9 @@ Imports:
       - pipeline
       - upgrade
       - install
+      - uninstall
+    Usages:
+      - cli-commands
     From: goga/commands
   - Types:
       - AST
@@ -59,6 +62,10 @@ app():
     surface a clean user-facing error (stderr, no traceback, non-zero
     exit). The flag takes no part in the host–image version check.
 
+    Use the `cli-commands` practice for the command registration reference:
+    the facade import line, the add_command wiring, and the full command
+    table.
+
     Commands:
     - `lint`
     - `build`
@@ -72,6 +79,7 @@ app():
     - `pipeline`
     - `upgrade`
     - `install`
+    - `uninstall`
 
 ---
 

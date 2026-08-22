@@ -34,18 +34,25 @@ Imports:
     From: goga/commands/upgrade
   - Types:
       - install
+      - uninstall
+    Usages:
+      - uninstall-usage
     From: goga/commands/install
 
 Usages:
-  conventions: .goga/usages/conventions.md
+  convention: .goga/usages/conventions.md
 
 Annotations: |
-  The `conventions` practice is used for:
-  - working with the codebase
-  - organizing the REPL development cycle
-  - debugging and testing
-  - organizing test infrastructure
-  - understanding general development and testing principles/rules in the project
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `uninstall-usage` practice for consumer scenarios of the removal
+  command: confirmation behavior, flags, exit codes, and the post-removal
+  re-sync.
 
 ---
 
@@ -61,6 +68,7 @@ Annotations: |
 ->pipeline: {}
 ->upgrade: {}
 ->install: {}
+->uninstall: {}
 
 ---
 

@@ -7,6 +7,8 @@ Imports:
     From: goga/version
   - Types:
       - resync_registered_agents
+    Usages:
+      - resync-agents
     From: goga/connect
 
 Usages:
@@ -32,6 +34,10 @@ Annotations: |
   Use `resync_registered_agents` to re-sync every agent recorded in
   ~/.goga/connect.yml after the pip upgrade; this cell only resolves the goga home
   (from $HOME or --user) and passes it through.
+
+  Use the `resync-agents` practice for the re-sync's calling contract — when
+  to call it, which home to pass, and how its outcome maps to the final exit
+  code.
 
   The standard library subprocess, sys, importlib.metadata, pwd, and pathlib modules are used for
   pip invocation, interpreter resolution, tool-package discovery (importlib.metadata
