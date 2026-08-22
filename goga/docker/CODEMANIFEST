@@ -365,7 +365,12 @@ Annotations: |
       `exit_code`: the container exit code
 
       Algorithm:
-      0. Version check gate: when `version_check_enabled` is True, read the
+      0. Validate that the name param is present: it is the docker kill
+         target of the finally block, so a call without it is
+         programmatically doomed — fail fast with ValueError BEFORE the
+         version gate, so a doomed call launches not even the probe
+         container
+      1. Version check gate: when `version_check_enabled` is True, read the
          image version via `docker_image_goga_version` (the constructor
          image; the probe runs in the minimal form) and hand the string to
          `ensure_version_match`. On refusal the process exits with code 1
@@ -375,14 +380,13 @@ Annotations: |
          so there is no runner teardown to perform; the caller's cleanup
          blocks run during the unwind. When the check is disabled, neither
          the probe nor the comparison runs
-      1. Translate `...params` into docker flags per the shared param→flag rule;
-         the name param must be present
-      2. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
-      3. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
-      4. Launch docker run, streaming stdout/stderr; wait for the exit code
-      5. In finally: docker kill <name> (suppress errors — the container may be
+      2. Translate `...params` into docker flags per the shared param→flag rule
+      3. Assemble argv: ["docker", "run", *flags, *extra_args, image, *args]
+      4. Install a SIGTERM/SIGINT handler that exits the process with 128 + signum
+      5. Launch docker run, streaming stdout/stderr; wait for the exit code
+      6. In finally: docker kill <name> (suppress errors — the container may be
          gone) and restore the previous signal handler
-      6. Return the exit code
+      7. Return the exit code
 
       Requirements:
       - The assembled docker run form preserves the pre-refactor launchers (same

@@ -53,7 +53,8 @@ goga upgrade --patch --sudo --user alice
 ## Relative Version Lines (--patch / --minor)
 
 The base for both flags is the goga version installed in the current interpreter — read via
-`importlib.metadata`, never the project's docker image tag and never the working directory.
+`host_goga_version` from the `goga/version` facade (the single reading point; it wraps
+`importlib.metadata`), never the project's docker image tag and never the working directory.
 
 | Installed version | Flag | pip identifier | Target line |
 |---|---|---|---|
@@ -93,17 +94,21 @@ When a line flag is active, the `pip install` target in the table carries the re
 
 ## Python API
 
+The semantic handler is `_upgrade` — it carries the contract signature (the Click
+callback `upgrade` wraps it and owns option parsing; call the callback only through
+Click). Direct Python calls (the form the test suite uses) go to the handler:
+
 ```python
-from goga.commands.upgrade.upgrade import upgrade
+from goga.commands.upgrade.upgrade import _upgrade
 
 # Plain upgrade
-exit_code = upgrade()
+exit_code = _upgrade()
 
 # With options
-exit_code = upgrade(use_sudo=True, target_user="alice", include_tools=True)
+exit_code = _upgrade(use_sudo=True, target_user="alice", include_tools=True)
 
 # Stay on the installed minor line (e.g. installed 1.2.3 -> goga~=1.2.0)
-exit_code = upgrade(patch_line=True)
+exit_code = _upgrade(patch_line=True)
 ```
 
 The post-upgrade re-sync is delegated to `goga.connect.resync_registered_agents(goga_home)`, which

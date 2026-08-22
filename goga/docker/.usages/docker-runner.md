@@ -43,7 +43,7 @@ lifecycle, nothing more:
         add_host="127.0.0.1:localhost",
         env_file=env_file_path,
     )
-    # → docker run --rm --name <container_name> --entrypoint python3 \
+    # → docker run --name <container_name> --rm --entrypoint python3 \
     #     -v ./project:/workspace -v <runtime_dir>:/workspace/.ralphex \
     #     --add-host 127.0.0.1:localhost --env-file <env_file_path> \
     #     <image> -m goga.build <plan>
@@ -158,6 +158,9 @@ runs before the caller's `finally` (file / directory cleanup).
 
 ## Failure modes
 
+- Missing `name` param → `ValueError` raised before the version gate and the
+  launch (fail-fast: a call without a kill target must not launch even the
+  probe container).
 - Non-zero container exit → returned as `exit_code`; the caller decides how to
   propagate (e.g. through a click context).
 - SIGTERM/SIGINT → process exits with 128 + signum after the container is killed.
