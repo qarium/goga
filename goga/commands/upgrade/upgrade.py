@@ -10,7 +10,7 @@ from pathlib import Path
 import click
 
 from ...connect import resync_registered_agents
-from ...version import resolve_relative_spec
+from ...version import host_goga_version, resolve_relative_spec
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +121,7 @@ def _upgrade(
         # then resolve the line. An unreadable base is a hard fail — never a
         # silent fallback to latest.
         try:
-            base = importlib.metadata.version("goga")
+            base = host_goga_version()
         except importlib.metadata.PackageNotFoundError as exc:
             raise click.ClickException("cannot determine the installed goga version in this interpreter") from exc
         if not base:
