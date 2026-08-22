@@ -84,6 +84,10 @@ class TestRegisteredCommands:
         """The 'upgrade' command is registered on the app group."""
         assert "upgrade" in app.commands
 
+    def test_uninstall_command_registered(self) -> None:
+        """The 'uninstall' command is registered on the app group."""
+        assert "uninstall" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -122,6 +126,12 @@ class TestHelpOutput:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert "upgrade" in result.output
+
+    def test_help_contains_uninstall(self) -> None:
+        """The --help output lists the 'uninstall' command."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "uninstall" in result.output
 
 
 class TestBuildHelpOutput:

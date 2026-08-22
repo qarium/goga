@@ -10,6 +10,7 @@ from click.testing import CliRunner
 from goga.cli import app
 
 _install_module = importlib.import_module("goga.commands.install.install")
+_uninstall_module = importlib.import_module("goga.commands.install.uninstall")
 
 
 def _pip_result(returncode: int = 0) -> mock.MagicMock:
@@ -76,6 +77,47 @@ class TestInstallCliIntegration:
         with mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(1)):
             result = CliRunner().invoke(app, ["install", "foo"])
         assert result.exit_code == 1
+
+
+class TestUninstallCliIntegration:
+    """End-to-end CLI tests for ``goga uninstall``.
+
+    Drive the root Click group via ``CliRunner`` so they exercise the full
+    wiring: root group (``goga/cli.py``) -> commands facade
+    (``goga/commands/__init__.py``) -> cell facade -> ``uninstall.py``
+    command. The pip and re-sync boundaries are mocked so no real
+    ``subprocess.run`` happens and no agent directory is touched.
+    """
+
+    def test_uninstall_cli_dispatch(self) -> None:
+        """``goga uninstall foo --yes`` composes the canonical argv and exits 0."""
+        with (
+            mock.patch.object(_uninstall_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_uninstall_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["uninstall", "foo", "--yes"])
+        assert result.exit_code == 0
+        argv = mock_run.call_args[0][0]
+        assert argv == [sys.executable, "-m", "pip", "uninstall", "-y", "goga-tool-foo"]
+
+    def test_uninstall_cli_help_lists_options(self) -> None:
+        """``goga uninstall --help`` exits 0 and lists the options and the NAME argument."""
+        result = CliRunner().invoke(app, ["uninstall", "--help"])
+        assert result.exit_code == 0
+        assert "--sudo" in result.output
+        assert "-y" in result.output
+        assert "--user" in result.output
+        assert "NAME" in result.output.upper()
+
+    def test_uninstall_cli_propagates_pip_failure(self) -> None:
+        """A non-zero pip returncode propagates through ``ctx.exit``, skipping the re-sync."""
+        with (
+            mock.patch.object(_uninstall_module.subprocess, "run", return_value=_pip_result(1)),
+            mock.patch.object(_uninstall_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["uninstall", "foo", "--yes"])
+        assert result.exit_code == 1
+        mock_resync.assert_not_called()
 
 
 class TestInstallEndToEndPaths:
