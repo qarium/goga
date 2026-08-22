@@ -19,7 +19,7 @@ This is the supported way to move to a new goga release: because `goga connect` 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `--sudo` | flag | off | Prepend `sudo --preserve-env=HOME` to the pip command (system-Python installs requiring root) |
-| `--user <name>` | string | -- | Resolve `~/.goga/` for this user via `pwd.getpwnam` instead of `$HOME` |
+| `--user <name>` | string | — | Resolve `~/.goga/` for this user via `pwd.getpwnam` instead of `$HOME` |
 | `--tools` | flag | off | Also upgrade discovered `goga_tool_*` packages |
 | `--patch` | flag | off | Constrain goga to the latest patch of the installed minor line (`~=X.Y.0`) |
 | `--minor` | flag | off | Constrain goga to the latest release within the installed major line (`~=X.0`) |
@@ -117,6 +117,7 @@ goga upgrade --patch --tools
 | `0` | Upgrade succeeded; all registered agents re-synced (or no `connect.yml` exists yet) |
 | non-zero | pip failed (returns pip's exit code) |
 | non-zero | One or more agents failed to re-sync (returns the first failure's exit code) |
+| `1` | Unknown `--user <name>` (`pwd.getpwnam` fails) — pip has already run; the re-sync is skipped |
 | `1` | `--patch` and `--minor` combined (ClickException — rejected before pip runs, no side effects) |
 | `1` | Installed goga version unreadable in this interpreter under `--patch`/`--minor` (ClickException — rejected before pip runs, no fallback to latest) |
 | `1` | Installed goga version readable but its line unresolvable — e.g. a major-only installed version under `--patch` (ClickException — rejected before pip runs, no side effects) |

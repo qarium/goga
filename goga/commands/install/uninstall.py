@@ -43,10 +43,10 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
     ``PermissionError``) is translated to a ``click.ClickException`` (exit 1)
     since there is no returncode to propagate.
     """
-    logger.info("uninstall start")
+    logger.info("uninstall start", extra={"package": argv[-1]})
 
     if sudo:
-        logger.warning("running pip under sudo")
+        logger.info("running pip under sudo", extra={"package": argv[-1]})
 
     try:
         result = subprocess.run(argv, check=False)
@@ -61,9 +61,13 @@ def _run_pip(argv: list[str], sudo: bool) -> int:
         raise click.ClickException(f"failed to start {target}: {exc.strerror or exc}") from exc
 
     if result.returncode == 0:
-        logger.info("uninstall complete")
+        logger.info("uninstall complete", extra={"package": argv[-1]})
     else:
-        logger.error("pip failed with exit code %s", result.returncode)
+        logger.error(
+            "pip failed with exit code %s",
+            result.returncode,
+            extra={"package": argv[-1], "returncode": result.returncode},
+        )
 
     return result.returncode
 
@@ -94,7 +98,7 @@ def _resolve_goga_home(target_user: str | None) -> Path:
     except (KeyError, OSError) as exc:
         # KeyError: unknown user. OSError: backend lookup failure (e.g. NIS/LDAP).
         # Either way nothing has been removed yet — fail fast with a clean error.
-        logger.error("unknown user '%s'", target_user)
+        logger.error("unknown user '%s'", target_user, extra={"user": target_user})
         raise click.ClickException(f"unknown user '{target_user}'") from exc
 
 
@@ -138,6 +142,6 @@ def uninstall(
     #      under sudo, and its outcome is the final exit code.
     outcome = resync_registered_agents(goga_home)
     if outcome != 0:
-        logger.error("re-sync failed with exit code %s", outcome)
+        logger.error("re-sync failed with exit code %s", outcome, extra={"returncode": outcome})
 
     ctx.exit(outcome)

@@ -34,6 +34,7 @@ Imports:
     Usages:
       - docker-builder
       - docker-runner
+      - docker-image-version
     From: goga/docker
 
 Usages:
@@ -98,6 +99,9 @@ Annotations: |
   `docker_build_if_not_exist` and the `docker-builder` practice for the
   first-run safety net. Use `DockerRunner` and the `docker-runner` practice
   to assemble the docker run command and manage the container lifecycle.
+  Every launch through `DockerRunner` is gated by the host–image version
+  check; the `docker-image-version` practice covers the image-side version
+  probe.
 
 ---
 

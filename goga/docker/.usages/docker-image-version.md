@@ -20,8 +20,8 @@ string.
   with captured output and return the printed version string; None on any
   failure (non-zero docker exit, missing docker binary, empty or
   non-version-shaped output — accepted shape: the stripped first stdout
-  line begins with a non-empty ASCII-digit major segment, the leading
-  release-segment shape `compare_versions` reduces).
+  line begins with a non-empty ASCII-digit major segment: digits, then
+  optionally ".digits", before any dev/pre/post/local tail).
 
 ## Ready-to-use pattern
 

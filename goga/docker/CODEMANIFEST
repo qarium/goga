@@ -31,8 +31,8 @@ Annotations: |
   absent AND a Dockerfile is declared — it never pulls, and it is a no-op when
   the image already exists or when no Dockerfile is set. Both take PRIMITIVES
   (image, dockerfile, extra_args) so the acquisition surface stays decoupled
-  from goga/config (the cell's only Import is the version check from
-  goga/version).
+  from configuration loading (the cell's only Imports are the version-check
+  types).
 
   The `DockerBuilder` build and `DockerRunner` run methods translate a uniform
   params dict into docker CLI flags by a shared rule: a 1-character key becomes a
@@ -49,8 +49,8 @@ Annotations: |
   image (docker run) / before -f (docker build). Structural-only validation
   (list[str]); docker surfaces flag conflicts. docker_update and
   docker_build_if_not_exist forward extra_args to DockerBuilder.build in their
-  build branch only; their pull / no-op branches ignore it. Pure-leaf preserved —
-  the extra_args primitive keeps the cell free of goga/config Imports.
+  build branch only; their pull / no-op branches ignore it. The extra_args
+  primitive keeps the acquisition routines free of configuration Imports.
 
   Route all output (guard error output, goga diagnostic messages) through sys.stderr
   (click is not used). Docker CLI invocations stream the CLI's own stdout/stderr
@@ -182,8 +182,8 @@ Annotations: |
     error-semantics contract (build fatal, pull warning).
 
     Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object, so
-    the acquisition routines stay decoupled from goga/config (the cell's only
-    Import is the version check from goga/version, consumed by `DockerRunner`).
+    the acquisition routines stay decoupled from configuration loading (the cell's
+    only Imports are the version-check types, consumed by `DockerRunner`).
     The `image: str` signature makes the non-None precondition
     explicit at the call site — callers pass the already-validated config.image.
 
@@ -229,9 +229,9 @@ Annotations: |
     exists, not to refresh it.
 
     Takes PRIMITIVES (`image`, `dockerfile`, `extra_args`), not a Config object,
-    so the acquisition routines stay decoupled from goga/config — same convention
-    as `docker_update` (the cell's only Import is the version check from
-    goga/version, consumed by `DockerRunner`). The `image: str` signature makes
+    so the acquisition routines stay decoupled from configuration loading — same
+    convention as `docker_update` (the cell's only Imports are the version-check
+    types, consumed by `DockerRunner`). The `image: str` signature makes
     the non-None precondition explicit at the call site — callers pass the
     already-validated config.image.
 
@@ -303,8 +303,8 @@ Annotations: |
     3. When the docker exit code is 0 and the first stdout line, stripped
        of whitespace, begins with a non-empty ASCII-digit major segment
        (the leading release-segment shape — digits, then optionally
-       ".digits", before any dev/pre/post/local tail — the same shape the
-       version-cell comparator reduces), return that stripped line
+       ".digits", before any dev/pre/post/local tail), return that
+       stripped line
     4. Return None on every failure: a non-zero docker exit, a missing
        docker binary, empty output, or output that does not look like a
        version
@@ -354,8 +354,8 @@ Annotations: |
                     params flags and BEFORE the image (structural-only; docker
                     surfaces conflicts). Defaults to [].
       `...params`: docker run CLI options, translated to flags by the SAME rule as
-                the `DockerBuilder` build method. The caller passes the pre-refactor
-                options: name, rm, v (mounts), p (port publish), add_host,
+                the `DockerBuilder` build method. The caller passes the standard
+                launch options: name, rm, v (mounts), p (port publish), add_host,
                 env_file, entrypoint. The name param is REQUIRED and SPECIAL — it is
                 emitted as the --name flag AND captured as the target for the
                 guaranteed docker kill in finally (the one exception to the
@@ -389,7 +389,7 @@ Annotations: |
       7. Return the exit code
 
       Requirements:
-      - The assembled docker run form preserves the pre-refactor launchers (same
+      - The assembled docker run form preserves the launcher contracts (same
         options and effect): --rm, --name, mounts via -v, --add-host,
         --env-file, --entrypoint, image, args
       - SIGTERM/SIGINT results in exit code 128 + signum (130 SIGINT, 143 SIGTERM)

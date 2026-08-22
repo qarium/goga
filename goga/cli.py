@@ -39,6 +39,7 @@ def _print_version(ctx: click.Context, _param: click.Parameter, value: bool) -> 
     """
     if not value or ctx.resilient_parsing:
         return
+
     try:
         click.echo(host_goga_version())
         ctx.exit(0)

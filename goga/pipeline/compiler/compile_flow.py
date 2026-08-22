@@ -266,6 +266,9 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
 
     Args:
         body: The step body dict produced by ``parse_dsl``.
+        suppress_agents: When ``True``, assemble no ``agents`` key at all —
+            neither the single ``["auto"]`` default nor the translated
+            ``roles`` value.
 
     Returns:
         A new dict without the ``roles`` key, carrying either the translated
@@ -288,6 +291,7 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
         for role in body["roles"]:
             if not isinstance(role, str):
                 raise StructuralError(f"non-str value in stage roles list: {role!r}")
+
         if not suppress_agents:
             out["agents"] = [translate_role(role) for role in body["roles"]]
     elif not suppress_agents:

@@ -38,7 +38,7 @@ The `--yes`/`-y` flag skips only the goga-level confirmation prompt; pip's own `
 | `name` (positional, required) | string | — | Tool name without the `goga-tool-` prefix; exactly one tool per invocation |
 | `--yes`, `-y` | flag | off | Skip the removal confirmation prompt (both forms are aliases on the same option) |
 | `--sudo` | flag | off | Prepend `sudo --preserve-env=HOME` to the pip command (system-Python installs requiring root) |
-| `--user <name>` | string | -- | Resolve `~/.goga/` for this user via `pwd.getpwnam` — the home the post-removal re-sync targets |
+| `--user <name>` | string | — | Resolve `~/.goga/` for this user via `pwd.getpwnam` — the home the post-removal re-sync targets |
 
 ## Sudo and user semantics
 
@@ -104,6 +104,6 @@ goga uninstall foo --sudo --user alice
 
 ## Notes
 
-- `--sudo` and `--user` rely on `sudo` and `pwd.getpwnam` respectively and are Unix-only; goga resolves users through the POSIX `pwd` module, so the CLI itself requires a Unix-like system and does not run on Windows.
+- `--sudo` and `--user` rely on `sudo` and `pwd.getpwnam` respectively and are unavailable on Windows — omit them there.
 - `goga uninstall` never reads or writes `connect.yml` itself — [`goga connect`](connect.md) is the single writer of the registry, reached only through the shared re-sync routine.
 - Removing a package by hand with plain pip leaves stale skills and pipelines in `~/.goga/` until the next re-sync runs; prefer `goga uninstall`.

@@ -30,6 +30,7 @@ Imports:
     Usages:
       - docker-builder
       - docker-runner
+      - docker-image-version
     From: goga/docker
 
 Usages:
@@ -72,7 +73,9 @@ Annotations: |
   docker kill, signal-handler restore). The runner is a thin executor — this
   command resolves the per-command inputs (mounts, hosts, env-file, runtime-dir)
   and passes them as params; host-side cleanup (env-file, .ralphex) stays in this
-  command's own finally.
+  command's own finally. Every launch through `DockerRunner` is gated by the
+  host–image version check; the `docker-image-version` practice covers the
+  image-side version probe.
 
   The command surfaces the review-phase tri-state flags to the user and rejects
   the two-pass × worktree combination — whether induced by a differing review
@@ -344,8 +347,8 @@ Annotations: |
     - Do not filter credential mounts by the configured task_executor agent —
       detection is agent-agnostic (see `resolve-credential-mounts` practice)
     - Do not mount anything under /workspace other than:
-      (a) the project directory at /workspace, and
-      (b) the resolved host runtime directory at /workspace/.ralphex
+      1. the project directory at /workspace, and
+      2. the resolved host runtime directory at /workspace/.ralphex
     - Wipe the host runtime directory only when `clean` is True — the default
       preserves ralphex state across runs
     - --clean wipes the host runtime directory BEFORE launch; the directory

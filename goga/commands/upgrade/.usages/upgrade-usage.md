@@ -5,7 +5,7 @@
 The `goga upgrade` command performs a transactive upgrade: it runs `pip install goga -U` on the
 current Python interpreter, then re-syncs all agents recorded in `~/.goga/connect.yml` using their
 persisted `force_overwrite` settings. The post-upgrade re-sync is delegated to the shared
-`resync_registered_agents` routine in `goga/connect`, the single owner of the registry and the
+`resync_registered_agents` routine, the single owner of the registry and the
 re-sync logic. The target goga version can optionally be constrained to the installed version's
 line with the mutually exclusive `--patch` / `--minor` flags.
 
@@ -53,8 +53,8 @@ goga upgrade --patch --sudo --user alice
 ## Relative Version Lines (--patch / --minor)
 
 The base for both flags is the goga version installed in the current interpreter — read via
-`host_goga_version` from the `goga/version` facade (the single reading point; it wraps
-`importlib.metadata`), never the project's docker image tag and never the working directory.
+`host_goga_version` (the single reading point for the installed host version), never the
+project's docker image tag and never the working directory.
 
 | Installed version | Flag | pip identifier | Target line |
 |---|---|---|---|
@@ -72,10 +72,10 @@ Errors (both exit non-zero BEFORE pip runs, so no partial upgrade and no re-sync
 - goga is not installed in the current interpreter (e.g. run from a foreign venv) — the base is
   undeterminable; clear stderr error, no silent fallback to latest.
 
-Without either flag the command behaves exactly as before: latest, and the installed version is
-not read at all. Host/image correspondence stays manual by design: nothing warns or auto-fixes a
-docker image tag pinned in `.goga/config.yml` — moving a project to a new minor line is an
-explicit `--minor` (or flagless) upgrade plus a manual image-tag edit.
+Without either flag the command performs an unconstrained upgrade: latest, and the installed
+version is not read at all. Host/image correspondence stays manual by design: nothing warns or
+auto-fixes a docker image tag pinned in `.goga/config.yml` — moving a project to a new minor
+line is an explicit `--minor` (or flagless) upgrade plus a manual image-tag edit.
 
 ## Sudo and User Semantics
 
@@ -111,7 +111,7 @@ exit_code = _upgrade(use_sudo=True, target_user="alice", include_tools=True)
 exit_code = _upgrade(patch_line=True)
 ```
 
-The post-upgrade re-sync is delegated to `goga.connect.resync_registered_agents(goga_home)`, which
+The post-upgrade re-sync is delegated to `resync_registered_agents(goga_home)`, which
 reads the registry and re-applies `connect` per agent. The resolved `goga_home` (`Path.home()` or
 `pwd.getpwnam(target_user).pw_dir / ".goga"`) is the only piece of registry context this command
 supplies.
@@ -150,7 +150,7 @@ supplies.
 - Do not call `pip` as a bare subprocess — always use `<python> -m pip` to target the correct interpreter.
 - Do not read or parse `connect.yml` directly — delegate activation to `resync_registered_agents`.
 - Do not run `--sudo` without `--preserve-env=HOME` — the subsequent re-sync would target `/root/.goga`.
-- Do not write to `connect.yml` from this command — `goga/connect` is the single writer.
+- Do not write to `connect.yml` from this command — the registry is written elsewhere.
 - Do not pass both `--patch` and `--minor` — the pair is mutually exclusive.
 - Do not expect an image-tag warning: host/image correspondence is manual by design.
 - Do not expect `--tools` packages to inherit the version line — only the `goga` identifier is

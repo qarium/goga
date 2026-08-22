@@ -88,9 +88,9 @@ user-facing error belongs to the CLI surface.
 
 - Refusal paths write a message to sys.stderr and terminate the process
   with exit code 1; the stack unwinds so cleanup blocks of the callers
-  (launcher temp-file removal, .ralphex cleanup) execute. In the
-  `DockerRunner` gate the refusal fires before the runner's own
-  try/finally, so no runner teardown is due — nothing was started.
+  (launcher temp-file removal, .ralphex cleanup) execute. When the check
+  gates a launch, the refusal fires before the launcher's own
+  try/finally, so no launcher teardown is due — nothing was started.
 - The "0.0.0" path writes a warning to sys.stderr and returns normally.
 - The agreeing path writes nothing.
 

@@ -33,6 +33,7 @@ def _build_pip_command(goga_identifier: str, include_tools: bool, use_sudo: bool
         The fully assembled pip command argv list.
     """
     cmd: list[str] = [sys.executable, "-m", "pip", "install", goga_identifier, "-U"]
+
     if include_tools:
         pkg_map = importlib.metadata.packages_distributions()
         # Identify tool packages by their importable module name (``goga_tool_*``),
@@ -116,6 +117,7 @@ def _upgrade(
         raise click.ClickException("--patch and --minor are mutually exclusive")
 
     goga_identifier = "goga"
+
     if patch_line or minor_line:
         # Caller owns the metadata boundary: read the installed base first,
         # then resolve the line. An unreadable base is a hard fail — never a
@@ -124,15 +126,18 @@ def _upgrade(
             base = host_goga_version()
         except importlib.metadata.PackageNotFoundError as exc:
             raise click.ClickException("cannot determine the installed goga version in this interpreter") from exc
+
         if not base:
             # A broken dist-info (missing or headerless METADATA) makes
             # importlib.metadata.version return None instead of raising — the
             # same undeterminable-base contract applies, never a TypeError.
             raise click.ClickException("cannot determine the installed goga version in this interpreter")
+
         try:
             spec = resolve_relative_spec(base, patch=patch_line, minor=minor_line)
         except ValueError as exc:
             raise click.ClickException(f"cannot resolve the version line: {exc}") from exc
+
         goga_identifier = f"goga{spec}"
 
     logger.info("upgrade start")

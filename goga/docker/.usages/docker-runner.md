@@ -107,11 +107,11 @@ consistency check:
    behavior is identical to an unchecked launch.
 2. Otherwise `run` reads the goga version inside the constructor image with
    a short-lived probe container (`docker_image_goga_version`) and hands
-   the version string to `ensure_version_match`, which owns the outcome
-   matrix: silent continue on (major, minor) agreement; stderr warning and
-   continue on the `0.0.0` placeholder; process exit code 1 before the work
-   container starts on a mismatch, a failed probe, or an undeterminable
-   host version.
+   the version string to the version consistency check, which owns the
+   outcome matrix: silent continue on (major, minor) agreement; stderr
+   warning and continue on the `0.0.0` placeholder; process exit code 1
+   before the work container starts on a mismatch, a failed probe, or an
+   undeterminable host version.
 
 The check has no `run` parameter — the only escape is the environment
 variable. The probe is minimal: no mounts, no env-file, no `extra_args`, no

@@ -38,6 +38,15 @@ class TestVersionFacade:
         for name in facade.__all__:
             assert callable(getattr(facade, name))
 
+    def test_version_facade_exports_new_routines(self) -> None:
+        # All four check-surface names are importable from the facade.
+        facade = importlib.import_module("goga.version")
+        for name in ("compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"):
+            assert callable(getattr(facade, name))
+        assert {"compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"} <= set(
+            facade.__all__
+        )
+
 
 class TestResolveVersionFacade:
     """Contract tests — verify resolve_version is exposed and shaped per CODEMANIFEST."""
@@ -585,12 +594,3 @@ class TestEnsureVersionMatchLogic:
         captured = capsys.readouterr()
         assert captured.out == ""
         assert captured.err == ""
-
-    def test_version_facade_exports_new_routines(self) -> None:
-        # All four check-surface names are importable from the facade.
-        facade = importlib.import_module("goga.version")
-        for name in ("compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"):
-            assert callable(getattr(facade, name))
-        assert {"compare_versions", "host_goga_version", "version_check_enabled", "ensure_version_match"} <= set(
-            facade.__all__
-        )

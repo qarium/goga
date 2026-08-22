@@ -88,8 +88,10 @@ def _release_segments(version: str) -> tuple[str, str | None]:
         ValueError: If ``version`` has no leading numeric major segment.
     """
     m = _RELEASE_PREFIX_RE.match(version)
+
     if m is None:
         raise ValueError(f"cannot determine version line from {version!r}")
+
     return m.group(1), m.group(2)
 
 
@@ -214,6 +216,7 @@ def resolve_relative_spec(base_version: str, patch: bool = False, minor: bool = 
 
     # 4. Resolve through the grammar owner; the synthesized form always resolves.
     spec = resolve_version(form)
+
     if spec is None:  # unreachable: the synthesized "N(.M)?.x" form always resolves
         raise ValueError("synthesized form resolved without a specifier")
 
@@ -246,6 +249,7 @@ def compare_versions(host_version: str, image_version: str) -> bool:
     def pair(version: str) -> tuple[int, int]:
         major, minor = _release_segments(version)
         minor_int = int(minor) if minor is not None else 0
+
         return int(major), minor_int
 
     return pair(host_version) == pair(image_version)
@@ -321,6 +325,7 @@ def ensure_version_match(image_version: str | None) -> None:
     except importlib.metadata.PackageNotFoundError as exc:
         print(MSG_HOST_FAILED.format(exc=exc), file=sys.stderr)
         sys.exit(1)
+
     if not host:
         print(MSG_HOST_FAILED.format(exc="version metadata is unreadable"), file=sys.stderr)
         sys.exit(1)

@@ -38,7 +38,7 @@ Annotations: |
   forms raise ValueError.
 
   Use the `project-configuration` practice when the bulk path needs to read
-  .goga/config.yml — load_project_config is the single entrypoint for config consumption,
+  .goga/config.yml — `load_project_config` is the single entrypoint for config consumption,
   and its tools field is a raw mapping validated structurally only.
 
   After a successful pip install in single and bulk mode, activate every agent
@@ -145,7 +145,7 @@ Annotations: |
     exit-code propagation. Apply `convention` for the CLI command docstring rule
     (--help rendered verbatim by Click; omit Args/Returns/Raises), import
     discipline, and structured logging. Apply `project-configuration` for
-    load_project_config() semantics and the no-validation contract on cfg.tools;
+    `load_project_config` semantics and the no-validation contract on cfg.tools;
     `project-configuration` is NOT used by the LOCAL path (config is ignored,
     same as SINGLE).
 
@@ -198,8 +198,7 @@ Annotations: |
     - Do NOT run activation under sudo — activation operates on the local user
       home; only pip honors --sudo
     - Do NOT write ~/.goga/connect.yml directly — activation goes through
-      `resync_registered_agents`; connect is the single writer of the registry,
-      and this command never writes it
+      `resync_registered_agents`; this command never writes the registry
     - Do NOT probe whether the package is already installed — the upgrade
       request handles it
     - Do NOT chunk the bulk argv — even a long argv is issued as a single pip
@@ -317,7 +316,7 @@ Annotations: |
       uninstall takes no specifier and the re-sync is part of the removal
       semantics
     - Do NOT read or write the registry directly — the re-sync goes through
-      `resync_registered_agents`; the connect cell is the single writer
+      `resync_registered_agents`
     - Do NOT run pip without the force flag -y — the interaction stays at
       the command-level prompt
     - On Windows, `sudo` and pwd-based user resolution are unavailable

@@ -928,30 +928,30 @@ Annotations: |
                known-names set; a second pass or deferred resolution handles
                extend-stages referencing not-yet-embedded extend-stages):
                - STAGES branch (explicit depends_on via the StageStep field):
-                 a. Construct a `StageStep` whose name is the extend-stage
-                    name, whose title comes from the extend-stage body,
-                    whose depends_on is initialized from the extend-stage
-                    after (None when after is None), and whose body is the
-                    extend-stage body minus title.
-                 b. For each name in the extend-stage before (when present):
-                    append the extend-stage name to the depends_on of the
-                    existing body step whose name/id equals that name
-                    (initialize to an empty list when it had no depends_on).
+                 2.1. Construct a `StageStep` whose name is the extend-stage
+                      name, whose title comes from the extend-stage body,
+                      whose depends_on is initialized from the extend-stage
+                      after (None when after is None), and whose body is the
+                      extend-stage body minus title.
+                 2.2. For each name in the extend-stage before (when present):
+                      append the extend-stage name to the depends_on of the
+                      existing body step whose name/id equals that name
+                      (initialize to an empty list when it had no depends_on).
                - PHASES branch (positional insertion — `PhaseStep` carries
                  NO depends_on field; depends_on is derived by list position
                  in step 5):
-                 a. Construct a `PhaseStep` whose name is the extend-stage
-                    name and whose title and body come from the extend-stage
-                    body.
-                 b. Compute the insertion index from the positioning fields:
-                    immediately AFTER the step whose name/id equals the LAST
-                    resolvable after name, and/or immediately BEFORE the
-                    step whose name/id equals the FIRST resolvable before
-                    name. When both after and before are present, the index
-                    must satisfy both (after-targets precede
-                    before-targets); when inconsistent, fall back to the
-                    after-based index and emit a WARNING.
-                 c. Insert the `PhaseStep` at the computed index; subsequent
+                 2.1. Construct a `PhaseStep` whose name is the extend-stage
+                      name and whose title and body come from the extend-stage
+                      body.
+                 2.2. Compute the insertion index from the positioning fields:
+                      immediately AFTER the step whose name/id equals the LAST
+                      resolvable after name, and/or immediately BEFORE the
+                      step whose name/id equals the FIRST resolvable before
+                      name. When both after and before are present, the index
+                      must satisfy both (after-targets precede
+                      before-targets); when inconsistent, fall back to the
+                      after-based index and emit a WARNING.
+                 2.3. Insert the `PhaseStep` at the computed index; subsequent
                     steps shift down. Step 5's positional derivation then
                     yields the correct depends_on: the extend-stage depends
                     on its positional predecessor (the after-target, or the
@@ -1345,8 +1345,8 @@ Annotations: |
       and depends_on is derived purely by list position in step 5.
       Multi-target before/after reduces to a single positional predecessor
       per step; transitive execution order still respects every target
-    - extend-stages compile into ordinary `FlowStage` instances — no change
-      to `FlowDocument`, `FlowStage`, or `serialize_flow`
+    - extend-stages compile into ordinary `FlowStage` instances —
+      `FlowDocument`, `FlowStage`, and `serialize_flow` are used as-is
     - When `workflow` is None, step 4.1 is skipped entirely (as is the whole
       reconstruction)
     - Consumers must NOT re-invoke `parse_dsl` to obtain the roles — they
@@ -1375,7 +1375,7 @@ Annotations: |
       to planning/implementation/review, every other value passes through
       verbatim (goga does not validate the open afm agent namespace)
     - The output field name agents, the default ["auto"] injection, the
-      canonical key order, and the flow-style serialization are unchanged
+      canonical key order, and the flow-style serialization are as specified
       (afm contract stable)
     - Override priority (inline extend vs stages block): for a stage that
       originated from an extend-entry, the extend-entry's inline agent /
@@ -1439,7 +1439,7 @@ Annotations: |
     - Loop-expanded copies of a manual stage each assemble auto_run: false
     - auto_run appears in the canonical fields order immediately after
       auto_approve, as a plain bool scalar, ONLY for a manual-effective stage;
-      a pipeline without trigger/manual compiles byte-identically to before
+      a pipeline without trigger/manual compiles byte-identically
       (no auto_run key anywhere)
     - auto_run and the trigger rewrite are output-side only — PipelineDocument
       body stays the faithful mirror of the source pipeline-file

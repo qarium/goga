@@ -245,9 +245,12 @@ def docker_image_goga_version(image: str) -> str | None:
 
     # 3. First stdout line only, stripped; whitespace-only output is no answer.
     lines = result.stdout.splitlines()
+
     if not lines:
         return None
+
     stripped = lines[0].strip()
+
     if not stripped:
         return None
 
