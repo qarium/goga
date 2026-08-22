@@ -31,7 +31,7 @@ This is the supported way to move to a new goga release: because `goga connect` 
 | (no flags) | `<python> -m pip install goga -U` | `Path.home()` |
 | `--sudo` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `Path.home()` (HOME preserved) |
 | `--user alice` | `<python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` |
-| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` (target_user wins) |
+| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip install goga -U` | `pwd.getpwnam("alice").pw_dir / ".goga"` (`--user` wins) |
 
 `--preserve-env=HOME` is mandatory under `--sudo`: without it sudo switches `$HOME` to `/root`, so the post-upgrade re-sync would read the wrong `connect.yml`.
 
@@ -54,7 +54,7 @@ By default `goga upgrade` installs the latest released goga (`pip install goga -
 
 ## The connect.yml registry
 
-`~/.goga/connect.yml` is written by `goga connect` and read by `goga install` and `goga upgrade` (via the shared re-sync routine):
+`~/.goga/connect.yml` is written by `goga connect` and read by `goga install`, `goga upgrade`, and [`goga uninstall`](uninstall.md) (via the shared re-sync routine):
 
 ```yaml
 agents:

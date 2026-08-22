@@ -47,7 +47,7 @@ The `--yes`/`-y` flag skips only the goga-level confirmation prompt; pip's own `
 | (no flags) | `<python> -m pip uninstall -y goga-tool-<name>` | `Path.home()` |
 | `--sudo` | `sudo --preserve-env=HOME <python> -m pip uninstall -y goga-tool-<name>` | `Path.home()` (HOME preserved) |
 | `--user alice` | `<python> -m pip uninstall -y goga-tool-<name>` | `pwd.getpwnam("alice").pw_dir / ".goga"` |
-| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip uninstall -y goga-tool-<name>` | `pwd.getpwnam("alice").pw_dir / ".goga"` (target_user wins) |
+| `--sudo --user alice` | `sudo --preserve-env=HOME <python> -m pip uninstall -y goga-tool-<name>` | `pwd.getpwnam("alice").pw_dir / ".goga"` (`--user` wins) |
 
 `--preserve-env=HOME` is mandatory under `--sudo`: without it sudo switches `$HOME` to `/root`, so the post-removal re-sync would read the wrong `connect.yml`.
 
@@ -64,6 +64,7 @@ pip is always invoked via the `<python> -m pip` form (never the bare `pip` execu
 | non-zero | pip failed (returns pip's exit code; the re-sync is not run) |
 | non-zero | pip succeeded but the re-sync failed — a malformed or unreadable registry (`1`) or the first non-zero per-agent failure |
 | `1` | Unknown `--user <name>` (`pwd.getpwnam` fails) — rejected before the confirmation prompt and pip; nothing is removed |
+| `1` | The pip or sudo executable could not be started (`OSError`: a missing binary such as `sudo` on a host without it, or a present-but-non-executable one) — a ClickException, since no returncode exists to propagate |
 | non-zero | stdin ended before the prompt could be answered and `--yes`/`-y` was not given (abort) |
 
 A "not installed" answer from pip (`Skipping ... as it is not installed`) is a WARNING with exit code 0 — a pip success by this contract: the re-sync runs and removes the orphaned artifacts, so the final exit code is the re-sync outcome. A missing `~/.goga/connect.yml` after a successful pip is a normal condition (no agents connected yet) and exits with code `0`.
