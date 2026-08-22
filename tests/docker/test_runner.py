@@ -9,7 +9,7 @@ import goga.docker.runner
 import pytest
 from goga.docker import DockerRunner
 from goga.docker.builder import docker_image_goga_version
-from goga.version import ensure_version_match, version_check_enabled
+from goga.version import ensure_version_match, host_goga_version, version_check_enabled
 
 
 class _FakeProc:
@@ -418,6 +418,64 @@ class TestDockerRunnerVersionGate:
         probe.assert_called_once_with("img:tag")
         assert events.index("ensure") < events.index("translate")
         assert events.index("ensure") < events.index("popen")
+
+    def test_runner_gate_real_collaborators_refuse_on_mismatch(self, monkeypatch, capsys) -> None:
+        # Real wiring on the refusal path: ONLY the probe is substituted (no
+        # docker in CI). The REAL version_check_enabled reads the environment
+        # (the test's delenv overrides the autouse skip), and the REAL
+        # ensure_version_match weighs the probe's answer against this
+        # interpreter's REAL host version — a 9.9.0 image diverges at the
+        # (major, minor) level from any 1.x/0.x host, so the shipped mismatch
+        # message lands on stderr and nothing is launched.
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK", raising=False)
+        monkeypatch.setattr(
+            "goga.docker.runner.docker_image_goga_version",
+            mock.Mock(return_value="9.9.0"),
+        )
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        fake_kill = _RecordingRun()
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", fake_kill)
+
+        with pytest.raises(SystemExit) as exc_info:
+            DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        assert exc_info.value.code == 1
+        assert fake_popen.calls == []
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "differ at the (major, minor) level" in captured.err
+        assert "9.9.0" in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" in captured.err
+        assert "Traceback" not in captured.err
+
+    def test_runner_gate_real_collaborators_agree_and_launch(self, monkeypatch, capsys) -> None:
+        # The agreeing cell of the matrix with the real predicate, real
+        # comparator, and the real host version: the probe answers exactly the
+        # host's own version string → the gate passes silently and the launch
+        # proceeds.
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK", raising=False)
+        monkeypatch.setattr(
+            "goga.docker.runner.docker_image_goga_version",
+            mock.Mock(return_value=host_goga_version()),
+        )
+        fake_popen = _FakePopen(_FakeProc(returncode=0))
+        monkeypatch.setattr("goga.docker.runner.subprocess.Popen", fake_popen)
+        monkeypatch.setattr("goga.docker.runner.signal.signal", _RecordingSignal())
+        monkeypatch.setattr("goga.docker.runner.subprocess.run", _RecordingRun())
+
+        result = DockerRunner("img:tag").run(["-m", "goga.build"], name="goga-build-1")
+
+        assert result == 0
+        assert len(fake_popen.calls) == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        # No refusal markers on stderr (robust even under a 0.0.0 dev host,
+        # where the placeholder warning — not a refusal — is the expected err).
+        assert "differ at the (major, minor) level" not in captured.err
+        assert "GOGA_SKIP_VERSION_CHECK" not in captured.err
+        assert "Traceback" not in captured.err
 
     def test_runner_existing_name_validation_precedes_gate(self, monkeypatch) -> None:
         # Extends test_docker_runner_run_requires_name: a doomed call (no

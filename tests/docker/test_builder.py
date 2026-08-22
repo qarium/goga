@@ -626,6 +626,9 @@ class TestDockerImageGogaVersion:
             pytest.param(mock.Mock(return_value=_ProbeResult(returncode=0, stdout="v1.2.0\n")), id="prefixed-output"),
             # (e) missing docker binary — never raises.
             pytest.param(mock.Mock(side_effect=FileNotFoundError("docker")), id="docker-binary-missing"),
+            # same never-raises contract for the rest of the caught tuple.
+            pytest.param(mock.Mock(side_effect=PermissionError("docker")), id="docker-binary-not-executable"),
+            pytest.param(mock.Mock(side_effect=OSError("spawn failed")), id="docker-binary-oserror"),
         ],
     )
     def test_docker_image_goga_version_returns_none_on_failures(self, fake_run) -> None:

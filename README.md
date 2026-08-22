@@ -69,6 +69,8 @@ pipx install goga
 docker info
 ```
 
+Before each launch they also verify that the host goga version and the image's goga version agree at the (major, minor) level — set `GOGA_SKIP_VERSION_CHECK=1` to skip the check, and run `goga --version` to print the installed host version.
+
 Connect goga to your agent
 
 ```bash

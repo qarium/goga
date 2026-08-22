@@ -557,6 +557,35 @@ class TestEnsureVersionMatchLogic:
         assert "cannot determine" in captured.err
         assert "Traceback" not in captured.err
 
+    def test_ensure_version_match_host_check_precedes_probe_failure(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Both sides fail at once: the host refusal (step 1) wins over the probe
+        # failure (step 2) — the message names the host side, not the image.
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: None)
+        with pytest.raises(SystemExit) as excinfo:
+            ensure_version_match(None)
+        assert excinfo.value.code == 1
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "installed on the host" in captured.err
+        assert "inside the project image" not in captured.err
+
+    def test_ensure_version_match_malformed_image_string_raises_value_error(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # Precondition pin: a NON-None image string without a leading numeric
+        # segment is the comparator's ValueError, not an outcome-matrix refusal.
+        # Unreachable through the shipped caller (the probe shape-filters its
+        # answer), but the declared parameter is str | None — a future probe
+        # change must not silently turn this into a traceback-free refusal.
+        monkeypatch.setattr("goga.version.version.host_goga_version", lambda: "1.2.0")
+        with pytest.raises(ValueError, match="cannot determine version line"):
+            ensure_version_match("v1.2.0")
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert captured.err == ""
+
     def test_version_facade_exports_new_routines(self) -> None:
         # All four check-surface names are importable from the facade.
         facade = importlib.import_module("goga.version")

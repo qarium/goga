@@ -229,6 +229,26 @@ class TestVersionFlagBehavior:
         # eager flag does not shadow it.
         assert "--version" in install_help.output
 
+    def test_app_version_flag_before_subcommand_is_eager(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """--version ahead of a subcommand is answered before dispatch."""
+        monkeypatch.setattr("goga.cli.host_goga_version", lambda: "1.2.3")
+        runner = CliRunner()
+        result = runner.invoke(app, ["--version", "build", "plan.md"])
+        assert result.exit_code == 0
+        assert result.output == "1.2.3\n"
+
+    def test_app_install_version_value_option_not_intercepted(self) -> None:
+        """install's own --version VALUE option survives the group's eager flag.
+
+        After the subcommand token the option belongs to install: the value is
+        consumed as the option argument (no option conflict, no version print)
+        and --help renders install's own surface."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["install", "--version", "9.9.9", "--help"])
+        assert result.exit_code == 0
+        assert "9.9.9" not in result.output
+        assert "--local" in result.output
+
 
 class TestSchemaLintCoexist:
     def test_cli_schema_lint_coexist(self) -> None:

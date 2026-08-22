@@ -29,6 +29,13 @@ def _write_registry(goga_home: Path, agents: dict[str, dict[str, bool]]) -> None
 class TestUpgradeFacade:
     """Contract tests — verify the upgrade facade and Click command shape."""
 
+    def test_upgrade_reads_host_version_via_single_reading_point(self) -> None:
+        """The host version is read through the version cell's single reading
+        point — the upgrade module binds the facade function object itself, so
+        no second metadata-reading call site can reappear unnoticed."""
+        facade = importlib.import_module("goga.version")
+        assert _upgrade_module.host_goga_version is facade.host_goga_version
+
     def test_upgrade_importable_from_facade(self) -> None:
         assert upgrade is not None
 

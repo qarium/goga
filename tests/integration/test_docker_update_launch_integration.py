@@ -58,6 +58,7 @@ from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutor
 # through the package on Python 3.10.
 _build_mod = __import__("goga.commands.build.build", fromlist=["build"])
 _rpc_mod = sys.modules["goga.commands.pipeline.run_pipeline_container"]
+_runner_mod = sys.modules["goga.docker.runner"]
 
 
 def _write_goga_yml(
@@ -659,3 +660,73 @@ class TestPipelineFirstRunAutoBuildIntegration:
         assert created_env
         assert all(not p.exists() for p in created_tmp)
         assert all(not p.exists() for p in created_env)
+
+
+# ===========================================================================
+# build: pre-launch version-check gate (real collaborators, enabled)
+# ===========================================================================
+
+
+class TestVersionGateLaunchIntegration:
+    """``goga build`` with the version-check gate ENABLED end-to-end.
+
+    Only the image-version probe is substituted (no docker in CI): the REAL
+    ``version_check_enabled`` reads the environment (the test's ``delenv``
+    overrides the autouse skip fixture), the REAL ``ensure_version_match``
+    weighs the probe's answer against this interpreter's REAL host version,
+    and the REAL ``DockerRunner.run`` hosts the gate — verifying the
+    caller-level outcome the docs describe: exit 1 with the shipped stderr
+    message, no work container, and the caller ``finally`` cleanup.
+    """
+
+    def test_build_version_gate_refusal_skips_launch_and_cleans_env_file(self, tmp_path: Path, monkeypatch) -> None:
+        """A (major, minor) divergence refuses the launch before any work
+        container starts: the SystemExit(1) unwinds through the caller finally
+        → the secret env-file is unlinked and .ralphex/ removed from the
+        project dir."""
+        _write_goga_yml(tmp_path, dockerfile=None)
+        monkeypatch.setattr(_build_mod, "_check_docker", lambda: True)
+        monkeypatch.setattr(_build_mod, "_read_git_config", lambda: {})
+        # Enable the gate for THIS test (overrides the autouse skip fixture).
+        monkeypatch.delenv("GOGA_SKIP_VERSION_CHECK", raising=False)
+
+        created_env, track_write = _track_env_file_writes()
+        monkeypatch.setattr(_build_mod, "_write_env_file", track_write)
+
+        ralphex_dir = tmp_path / ".ralphex"
+        ralphex_dir.mkdir()
+
+        # Block ONLY docker launches: the launcher legitimately runs git (branch
+        # resolution) via the same subprocess module, so a blanket Popen mock
+        # would break it. A docker run attempt fails the test loudly instead.
+        real_popen = subprocess.Popen
+
+        def popen_guard(argv, *args, **kwargs):
+            assert list(argv[:2]) != ["docker", "run"], "work container launched despite gate refusal"
+            return real_popen(argv, *args, **kwargs)
+
+        with (
+            mock.patch.object(_build_mod, "docker_build_if_not_exist"),
+            mock.patch.object(_build_mod, "docker_update"),
+            # The probe seam in the runner namespace — the ONLY substituted
+            # collaborator; 9.9.0 diverges from any 1.x/0.x host line.
+            mock.patch.object(_runner_mod, "docker_image_goga_version", return_value="9.9.0") as mock_probe,
+        ):
+            monkeypatch.setattr(subprocess, "Popen", popen_guard)
+            result = _run_build(tmp_path, monkeypatch, ["plan.md"])
+
+        # the refusal unwound to the CLI surface with the gate's exit code
+        assert isinstance(result.exception, SystemExit)
+        assert result.exception.code == 1
+        assert result.exit_code == 1
+        # the probe saw exactly the config image; no work container launched
+        mock_probe.assert_called_once_with("qarium/goga:latest")
+        # the shipped mismatch refusal (result.output carries stdout+stderr)
+        assert "differ at the (major, minor) level" in result.output
+        assert "9.9.0" in result.output
+        assert "GOGA_SKIP_VERSION_CHECK" in result.output
+        assert "Traceback" not in result.output
+        # caller finally ran despite the refusal: env-file unlinked, .ralphex/ removed
+        assert created_env
+        assert all(not p.exists() for p in created_env)
+        assert not ralphex_dir.exists()
