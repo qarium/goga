@@ -4,7 +4,21 @@ from importlib.metadata import PackageNotFoundError
 
 import click
 
-from .commands import build, config, connect, contract, init, install, lint, pipeline, schema, tool, upgrade, usages
+from .commands import (
+    build,
+    config,
+    connect,
+    contract,
+    init,
+    install,
+    lint,
+    pipeline,
+    schema,
+    tool,
+    uninstall,
+    upgrade,
+    usages,
+)
 from .version import host_goga_version
 
 # Clean-error message of the --version flag (see _print_version): the metadata
@@ -51,6 +65,7 @@ app.add_command(config)
 app.add_command(connect)
 app.add_command(init)
 app.add_command(install)
+app.add_command(uninstall)
 app.add_command(lint)
 app.add_command(schema)
 app.add_command(contract)

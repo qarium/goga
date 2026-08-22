@@ -46,8 +46,10 @@ class TestFacadeWiringIntegration:
         assert "resync_registered_agents" in facade.__all__
 
     def test_install_facade_surface_unchanged(self) -> None:
+        # The install cell facade carries both lifecycle commands — install and
+        # uninstall — since the uninstall contract was materialized.
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install"]
+        assert facade.__all__ == ["install", "uninstall"]
 
     def test_upgrade_facade_surface_unchanged(self) -> None:
         facade = importlib.import_module("goga.commands.upgrade")
