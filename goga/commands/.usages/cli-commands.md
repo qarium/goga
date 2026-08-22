@@ -7,7 +7,21 @@ The `goga.commands` package is a facade that re-exports 13 CLI commands. Each co
 All commands are available from the facade in a single line:
 
 ```python
-from goga.commands import lint, build, connect, schema, contract, config, usages, tool, init, pipeline, upgrade, install, uninstall
+from goga.commands import (
+    lint,
+    build,
+    connect,
+    schema,
+    contract,
+    config,
+    usages,
+    tool,
+    init,
+    pipeline,
+    upgrade,
+    install,
+    uninstall,
+)
 ```
 
 Each command is available from its subcell (via `__init__.py` re-export):
@@ -33,7 +47,21 @@ from goga.commands.install import uninstall
 ```python
 import click
 
-from goga.commands import lint, build, connect, schema, contract, config, usages, tool, init, pipeline, upgrade, install, uninstall
+from goga.commands import (
+    lint,
+    build,
+    connect,
+    schema,
+    contract,
+    config,
+    usages,
+    tool,
+    init,
+    pipeline,
+    upgrade,
+    install,
+    uninstall,
+)
 
 
 @click.group()

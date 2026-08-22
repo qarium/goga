@@ -69,6 +69,7 @@ nav:
       - cli/index.md
       - Init: cli/init.md
       - Install: cli/install.md
+      - Uninstall: cli/uninstall.md
       - Lint: cli/lint.md
       - Build: cli/build.md
       - Contract: cli/contract.md

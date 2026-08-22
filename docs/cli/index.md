@@ -26,6 +26,7 @@ python -m goga --help
 |---|---|
 | [`goga init`](init.md) | Interactive project initialization |
 | [`goga install`](install.md) | Install goga-tool packages into the current interpreter and re-sync connected agents |
+| [`goga uninstall`](uninstall.md) | Remove a goga-tool package from the current interpreter and re-sync connected agents |
 | [`goga lint`](lint.md) | Validate CODEMANIFEST files |
 | [`goga build`](build.md) | Execute build plan via a ralph-loop |
 | [`goga contract`](contract.md) | Compare CODEMANIFEST with implementation |

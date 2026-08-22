@@ -302,6 +302,29 @@ Pass `goga install --no-connect` to opt out of post-install activation (CI/Docke
 
 See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty/local semantics.
 
+### Removing a tool
+
+`goga uninstall` removes exactly one tool package from the running interpreter's pip. It asks for confirmation first — Enter removes (the default is Y), `n` cancels:
+
+```bash
+# Remove one tool (interactive confirmation, Enter = yes)
+goga uninstall <tool-name>
+
+# Skip the confirmation — the scripted/CI form
+goga uninstall <tool-name> --yes
+goga uninstall <tool-name> -y
+
+# Remove from a system-Python install requiring root
+goga uninstall <tool-name> --sudo
+
+# Remove and re-sync another user's goga installation
+goga uninstall <tool-name> --user alice
+```
+
+After a successful pip uninstall, every connected agent is re-synced: the removed tool's skills and pipelines disappear from `~/.goga/` and from each agent's symlink tree. A tool removed by hand with plain pip leaves those artifacts behind until the next re-sync.
+
+See [`goga uninstall`](https://qarium.github.io/goga/cli/uninstall/) for the full confirmation, sudo/user, and exit-code semantics.
+
 ### Using a tool
 
 **Via CLI:**
