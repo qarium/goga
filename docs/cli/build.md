@@ -80,6 +80,24 @@ The directory survives across runs of the same project on the same branch by def
 
 Note: concurrent builds of the same project on the same branch share one runtime directory; run them on different branches or use `--clean` if isolation is required.
 
+### Pre-launch version check
+
+Before the working container starts, `goga build` checks that the goga version installed on the host and the goga version inside the project image agree at the **(major, minor)** level. The image side is measured by one short-lived probe container (roughly a second): `docker run --rm --entrypoint python3 <image> -c "from importlib.metadata import version; print(version('goga'))"` — captured silently, with no mounts, env-file, or credentials. The host side is read from the installed distribution metadata. A patch-level difference agrees; only a major or minor difference counts as a mismatch.
+
+| Situation | Behavior |
+|---|---|
+| Host and image agree at (major, minor) | Launch proceeds, silently |
+| Host and image differ at (major, minor) | Message on stderr, exit 1 — the working container is not started |
+| Image cannot answer the probe (no python3 or no goga inside the image) | Message on stderr, exit 1 — the working container is not started |
+| Host version undeterminable (goga not installed for this interpreter, or broken metadata) | Message on stderr, exit 1 — the working container is not started |
+| Image reports version `0.0.0` (a locally built image without a stamped version) | Warning on stderr, launch continues |
+
+Every refusal message names the remedy. To skip the check entirely, set `GOGA_SKIP_VERSION_CHECK=1` — both the probe and the comparison are bypassed (zero extra containers, zero overhead), and the launch behaves exactly as before the check existed:
+
+```bash
+GOGA_SKIP_VERSION_CHECK=1 goga build plan.md
+```
+
 ## Examples
 
 Run a build plan:
@@ -156,4 +174,4 @@ Only `language` is required by the loader. `goga build` additionally requires a 
 | Code | Meaning |
 |---|---|
 | `0` | Build completed successfully |
-| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, a ralph-loop error — a missing `ralphex` binary or a rejected launch surfaces as a clean one-line message with exit code 1 — or a fatal `docker build` under `--update`) |
+| `1` | Build failed (Docker not found, config error, precondition failure, invalid review configuration, two-pass review combined with worktree, a ralph-loop error — a missing `ralphex` binary or a rejected launch surfaces as a clean one-line message with exit code 1 — a fatal `docker build` under `--update`, or the pre-launch version check refusing the launch: a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — see [Pre-launch version check](#pre-launch-version-check)) |

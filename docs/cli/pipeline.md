@@ -189,6 +189,24 @@ Note that the `prompts/` subdirectory inside it is regenerated on every run (wip
 
 Credential files for claude (`~/.claude/.credentials.json`), codex (`~/.codex/auth.json`), and opencode (`~/.local/share/opencode/auth.json`) are detected on the host and bind-mounted read-only into the container automatically (no flag) in the **run form only**. Detection is agent-agnostic; only files that exist are mounted. The info forms mount no credentials (they execute nothing).
 
+### Pre-launch version check
+
+Every form — run **and** the list/info forms — launches its container through the same runner, so all of them pass a host–image version check first: the goga version installed on the host and the goga version inside the project image must agree at the **(major, minor)** level. The image side is measured by one short-lived probe container (roughly a second): `docker run --rm --entrypoint python3 <image> -c "from importlib.metadata import version; print(version('goga'))"` — captured silently, with no mounts, env-file, or credentials. The host side is read from the installed distribution metadata. A patch-level difference agrees; only a major or minor difference counts as a mismatch.
+
+| Situation | Behavior |
+|---|---|
+| Host and image agree at (major, minor) | Launch proceeds, silently |
+| Host and image differ at (major, minor) | Message on stderr, exit 1 — the container is not started |
+| Image cannot answer the probe (no python3 or no goga inside the image) | Message on stderr, exit 1 — the container is not started |
+| Host version undeterminable (goga not installed for this interpreter, or broken metadata) | Message on stderr, exit 1 — the container is not started |
+| Image reports version `0.0.0` (a locally built image without a stamped version) | Warning on stderr, launch continues |
+
+Every refusal message names the remedy. To skip the check entirely, set `GOGA_SKIP_VERSION_CHECK=1` — both the probe and the comparison are bypassed (zero extra containers, zero overhead), and the launch behaves exactly as before the check existed:
+
+```bash
+GOGA_SKIP_VERSION_CHECK=1 goga pipeline deploy
+```
+
 ### Examples
 
 Refresh the image, then run (default skips the refresh):
@@ -223,7 +241,7 @@ Host side (all forms):
 | Code | Meaning |
 |------|---------|
 | `0` | The operation completed (container exit 0) |
-| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, or a fatal image build/refresh |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
 | other| The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:
@@ -247,4 +265,5 @@ On SIGTERM/SIGINT during run mode the running container is killed and the proces
 - Do not expect `ls` or `run` host subcommands — `goga pipeline` is a single command (`list`/`run` are the in-container subcommands behind docker, not host ones).
 - A bare `goga pipeline` is an error — use `goga pipeline --list` to list available pipelines.
 - Do not pass a file path or a name ending in `.yml` — pass the bare pipeline name only.
+- The pre-launch version check can be disabled per invocation with `GOGA_SKIP_VERSION_CHECK=1` — it skips both the probe and the comparison for every form (see [Pre-launch version check](#pre-launch-version-check)).
 - The host does not import any code from `goga/pipeline`; the runtime boundary to `goga/pipeline` is Docker.
