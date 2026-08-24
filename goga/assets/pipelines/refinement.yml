@@ -19,8 +19,11 @@ description: "Task refinement process"
   prompt: |
     Save the ADR file as `docs/proposals/<git branch --show-current>.md`
 
-    Use `docs/defines/<git branch --show-current>.md` as the PRD file, if it exists
-    If PRD file does not exist — ask user about task
+    Use `docs/defines/<git branch --show-current>.md` as the PRD file, if it exists.
+    If PRD file does not exist — ask user about task.
+
+    Communication:
+    - You **MUST** follow the `File-Based Dialog Protocol` for every round of questions.
   skills:
     - goga-discover
 
@@ -30,9 +33,9 @@ description: "Task refinement process"
   prompt: |
     Save the task file as `docs/tasks/<git branch --show-current>.md`
 
-    Use `docs/proposals/<git branch --show-current>.md` as the task file, if it exists
-    If propose does not exist — try `docs/defines/<git branch --show-current>.md` as the PRD file
-    If PRD file does not exists — ask user about task
+    Use `docs/proposals/<git branch --show-current>.md` as the task file, if it exists.
+    If propose does not exist — try `docs/defines/<git branch --show-current>.md` as the PRD file.
+    If PRD file does not exists — ask user about task.
   skills:
     - goga-propose
 
