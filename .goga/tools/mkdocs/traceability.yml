@@ -15,6 +15,10 @@ docs/index.md:
   - goga
   - goga/pipeline
   - goga/commands/pipeline
+  - goga/commands/init
+  - goga/commands/usages
+  - goga/commands/install
+  - goga/connect
   - goga/docker
 
 docs/getting-started.md:

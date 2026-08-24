@@ -1,6 +1,4 @@
-**A new semantic layer between specification and implementation** — helping humans and AI agents reason about project structure at a higher level of abstraction.
-
-A full-fledged **Specification-Driven Development (SDD)** framework built on the [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) specification: describe cell contracts, validate them, extract them from source code, and drive an end-to-end agent workflow — propose, brainstorm, design, plan, build, change, and accept — under the hood.
+**An agent-driven SDLC platform** — pipelines run the full development cycle with AI agents, tools extend goga with new capabilities, and specification-driven development based on [**CODEMANIFEST**](https://github.com/qarium/codemanifest/blob/0.0.x/specs/en.md) ships with it out of the box.
 
 <div align="center">
   <p><strong>Languages</strong></p>
@@ -23,11 +21,17 @@ A full-fledged **Specification-Driven Development (SDD)** framework built on the
 
 ## Why goga?
 
-Code and contracts drift apart. Comments rot, types lie, and architecture lives only in someone's head — invisible to the agent that needs to extend it.
+Code and contracts drift apart, and architecture lives only in someone's head, invisible to the agent that needs to extend it. Hard-won project knowledge dies in chat logs instead of traveling between repositories. Every team improvises its own agent workflow, so nothing is standardized or repeatable. And developers hover over the approve button, afraid to give an agent real autonomy.
 
-Goga makes the contract the source of truth. Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used. Validators enforce structure. Parsers extract contracts back from source.
+Goga answers each of these:
 
-Goga is also an **execution engine, not just a format**. A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — propose, review, brainstorm, apply, design, plan, build, change, accept — inside an isolated container, with agent credentials forwarded automatically. No manual orchestration between stages; the pipeline runs the whole cycle for you.
+**Contracts as the source of truth.** Every cell is a directory with a `CODEMANIFEST` file describing exactly what it exposes, what it imports, and how it expects to be used — enforced by validators, recoverable by parsers.
+
+**Knowledge that travels with the repository.** Project know-how lives in usage files instead of dying in chat logs. Imported usages create a tracked dependency graph, and `goga usages sync` detects stale copies and brings them back in line with the source — context moves between repositories with the code.
+
+**Pipelines as a standardized process.** A built-in pipeline runner takes a feature from a one-line idea all the way to acceptance — the same well-defined cycle every time, not an ad-hoc prompt chain. The whole pipeline runs inside an isolated in-container environment with your agent credentials available, and each stage gets its own fresh context window — safe enough to let the agent work without babysitting. By default stages stay interactive and keep you in the loop, and can be configured to run autonomously.
+
+**A tool ecosystem instead of a ceiling.** `goga install` adds tools that bring their own skills and pipelines: documentation generation, translation, review, or an entirely custom development cycle. The built-in SDD workflow is just the one that ships first.
 
 The result: a project that humans and AI agents can navigate, change, and reason about at the same level of abstraction.
 
@@ -57,6 +61,12 @@ Initialize a project — the interactive wizard sets up `.goga/config.yml`, lang
 
 ```bash
 goga init
+```
+
+Or scaffold from a [copier](https://copier.readthedocs.io/) repo template first (optionally with a `#ref` fragment), then answer only the questions the template left open:
+
+```bash
+goga init https://github.com/qarium/my-template.git
 ```
 
 ### Ship a feature in two commands

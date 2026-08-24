@@ -134,3 +134,22 @@ The skill whose directory name matches the tool name becomes the entry point —
 - Name the main skill directory exactly `<tool-name>` to serve as the dispatcher entry point
 - Name sub-skills descriptively using the `<tool-name>-<purpose>` pattern (e.g., `mkdocs-discovery`, `mkdocs-validator`)
 - Keep names concise and indicative of the skill's responsibility
+
+## Pipeline naming
+
+Each pipeline file inside `pipelines/` has a base stem (the filename without `.yml`). When `goga connect` installs the tool, the prefix `<tool>:` is automatically added to every pipeline and the result lives centrally under `~/.goga/pipelines/`.
+
+| In package (`pipelines/`)   | After `goga connect` — pipeline name         |
+|-----------------------------|----------------------------------------------|
+| `deploy.yml`                | `acme:deploy`                                |
+| `release-notes.yml`         | `acme:release-notes`                         |
+| `check.yml` (tool `hello-world`) | `hello-world:check`                     |
+
+The `<tool>` prefix is the canonical hyphenated tool name — the package name with the `goga_tool_` prefix dropped and underscores replaced with hyphens (`goga_tool_hello_world` → `hello-world`). A namespaced pipeline is run as `goga pipeline <tool>:<name>` (e.g., `goga pipeline acme:deploy`); internal goga pipelines stay un-prefixed (e.g., `goga pipeline feature`). Each tool occupies its own `<tool>:` stem, distinct from internal pipelines and from other tools' stems.
+
+### Naming rules
+
+- Name pipeline files with lowercase and hyphens as separators
+- Use flat `*.yml` files directly under `pipelines/` — no subdirectories
+- Rely on the automatic `<tool>:` prefix for namespacing; never bake the tool name into the filename yourself
+- A residual conflict on the namespaced destination (the same `<tool>:<name>.yml` already exists) is resolved with `goga connect --force-overwrite` — see [Pipelines / Shipped Pipelines](pipelines/shipped.md)
