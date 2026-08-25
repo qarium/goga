@@ -4,7 +4,11 @@
 
 # Goga
 
-An open platform for building AI-SDLC. Declare the development process as pipelines, hire any CLI agent per stage, extend capabilities with tools. A full Specification-Driven Development (SDD) cycle ships in the box — and through tools and workflows the cycle can be extended, reshaped, or replaced with any other methodology.
+An open platform for building AI-SDLC.
+AI can already write code. The next problem is engineering the process around it.
+Goga turns engineering processes into reusable software. Define them as pipelines, package capabilities as tools, use any CLI agent at any stage — and share the whole methodology across projects.
+
+A full Specification-Driven Development (SDD) cycle ships in the box — it can run interactively with a human in the loop or autonomously as a harness.
 
 **Three pillars**
 
