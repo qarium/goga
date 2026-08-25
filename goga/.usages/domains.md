@@ -19,6 +19,7 @@ from goga.runtime import resolve_runtime_dir
 from goga.scaffold import Scaffold
 from goga.schema import schema
 from goga.usages import sync
+from goga.version import resolve_version
 ```
 
 Note: `goga.ast` is the only domain re-exported at the facade level (`from goga import AST`). All other domains must be imported via their full subpackage path.
@@ -37,6 +38,7 @@ Note: `goga.ast` is the only domain re-exported at the facade level (`from goga 
 | `scaffold` | `goga/scaffold/`    | Wrap the copier template engine for goga project scaffolding — generation and migration    |
 | `schema`   | `goga/schema/`      | Generate the CODEMANIFEST project JSON schema                                              |
 | `usages`   | `goga/usages/`      | Config-driven synchronization of cell-level usages from declared git dependencies           |
+| `version`  | `goga/version/`     | Version semantics: version-form grammar, pip-specifier resolution, host-side version check  |
 
 ## Per-domain brief
 
@@ -69,3 +71,6 @@ This manifest defines how the `schema` routine generates the CODEMANIFEST projec
 
 ### usages
 Config-driven synchronization of cell-level usages from declared git dependencies into `.goga/usages/<group>/<dep>/`.
+
+### version
+Leaf cell that owns version semantics. Provides the four-form version grammar with its pip-specifier transformers (`resolve_version`, `resolve_relative_spec`), the single reading point for the host goga version (`host_goga_version`), and the host–image version consistency check over version strings (`compare_versions`, `version_check_enabled`, `ensure_version_match`). The cell is pure with respect to containers — callers pass already-obtained version strings; no docker invocations live here.
