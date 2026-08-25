@@ -436,6 +436,10 @@ cell/
 
 The rule of thumb is **one responsibility zone — one cell**. A new cell is born when logic can be decoupled, owns distinct data models, must be reused, or can be stated in a single phrase without "and".
 
+#### Sharing specs across projects
+
+Cell `.usages/` practices can be shared through git: declare a dependency in `.goga/config.yml` and run `goga usages` — usage files from the source repository sync into `.goga/usages/<group>/<dep>/`, ready to be referenced by `Usages` in any CODEMANIFEST.
+
 #### Anatomy of a contract
 
 A `CODEMANIFEST` consists of three sections separated by `---`:
