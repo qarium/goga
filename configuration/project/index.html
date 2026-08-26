@@ -1,0 +1,3675 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow">
+      
+      
+      
+        <link rel="canonical" href="https://qarium.github.io/goga/configuration/project/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../home/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Project - Goga</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+  <style>
+    /* Dark navbar — override palette in both themes */
+    [data-md-color-scheme=default][data-md-color-primary=custom],
+    [data-md-color-scheme=slate][data-md-color-primary=custom] {
+      --md-primary-fg-color: #0a0a13;
+      --md-primary-fg-color--light: #0a0a13cc;
+      --md-primary-bg-color: #ffffff;
+    }
+
+    .md-header__button.md-logo img,
+    .md-header__button.md-logo svg {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+    }
+
+    /* Search form — visible on dark header */
+    .md-search__overlay {
+      background-color: transparent !important;
+    }
+    [data-md-toggle=search]:checked~.md-header .md-search__overlay {
+      background-color: #0000008a !important;
+    }
+    .md-search__inner {
+      background-color: transparent !important;
+    }
+    .md-search__form {
+      background-color: #3a3a3a !important;
+      border-radius: 0.5rem;
+    }
+    .md-search__form:hover {
+      background-color: #4a4a4a !important;
+    }
+    .md-search__input {
+      color: #e0e0e0 !important;
+    }
+    .md-search__input::placeholder {
+      color: #999999 !important;
+    }
+    .md-search__icon {
+      color: #999999 !important;
+    }
+    .md-search__form:hover .md-search__icon,
+    .md-search__input:focus-visible ~ .md-search__icon {
+      color: #e0e0e0 !important;
+    }
+
+    /* Links in dark theme — readable on dark background */
+    [data-md-color-scheme=slate] .md-nav__link,
+    [data-md-color-scheme=slate] .md-toc__link,
+    [data-md-color-scheme=slate] article a {
+      color: #cbd5e0 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link--passed,
+    [data-md-color-scheme=slate] .md-toc__link--passed {
+      color: #718096 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link:hover,
+    [data-md-color-scheme=slate] .md-toc__link:hover,
+    [data-md-color-scheme=slate] article a:hover {
+      color: var(--md-accent-fg-color) !important;
+    }
+
+    /* goga peek assistant — bottom-left corner, rides on top of footer */
+    .goga-peek {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 96px;
+      height: 96px;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0.7;
+      transition: opacity 0.4s ease, transform 0.3s ease, filter 0.3s ease;
+    }
+    .goga-peek img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: auto;
+    }
+    .goga-peek:hover {
+      opacity: 1;
+      transform: translateY(-12px);
+      filter: drop-shadow(0 6px 14px rgba(32, 212, 191, 0.55));
+    }
+
+    /* Speech bubble — appears to the right of the robot on hover */
+    .goga-peek-bubble {
+      position: absolute;
+      left: 108px;
+      bottom: 28px;
+      min-width: 180px;
+      max-width: 260px;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1a2540;
+      border: 2px solid #20D4BF;
+      border-radius: 12px;
+      font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transform: translateX(-8px) scale(0.9);
+      transform-origin: bottom left;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+    /* Tail pointing left toward the robot */
+    .goga-peek-bubble::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #20D4BF;
+    }
+    .goga-peek-bubble::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #ffffff;
+    }
+    .goga-peek:hover .goga-peek-bubble {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+
+    /* On small screens sidenav takes the bottom area — hide peek to avoid clutter */
+    @media (max-width: 767px) {
+      .goga-peek { display: none; }
+    }
+  </style>
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#project-configuration" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goga" class="md-header__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goga
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Project
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+  <div class="goga-peek" aria-hidden="true">
+    <img src="../../assets/goga-head.svg" alt="" />
+    <div class="goga-peek-bubble" id="gogaPeekBubble"></div>
+  </div>
+
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../workflow/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Workflow
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../pipelines/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Pipelines
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../tools/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Tools
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Configuration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cell/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Cell
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CLI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../languages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Languages
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goga" class="md-nav__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    Goga
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../workflow/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflow
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Refinement
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Refinement
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/define/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Define
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/discover/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Discover
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/propose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Propose
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/brainstorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brainstorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/apply/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apply
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/change/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/accept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accept
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../pipelines/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pipelines/pipeline-file/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline File
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pipelines/workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../pipelines/shipped/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shipped Pipelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File location
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fields-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#top-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Top-level
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildtask_executor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build.task_executor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildreview_executor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build.review_executor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#codemanifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        codemanifest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        usages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pre-built-docker-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-built Docker images
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation details
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../home/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cell/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cell
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cell
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/codemanifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CODEMANIFEST
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/init/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/connect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/upgrade/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrade
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-nodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-factory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Factory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-visitor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Visitor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-analyzer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Analyzer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/validation-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/contract-extraction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract Extraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../languages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Languages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Languages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/golang/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/kotlin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kotlin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/swift/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Swift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/javascript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JavaScript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#file-location" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File location
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example configuration
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fields-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fields reference
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Fields reference">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#top-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Top-level
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#build" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildtask_executor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build.task_executor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#buildreview_executor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build.review_executor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#codemanifest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        codemanifest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        usages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#lint" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lint
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#pre-built-docker-images" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pre-built Docker images
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#validation-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Validation errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#implementation-details" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Implementation details
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="project-configuration">Project Configuration</h1>
+<p>goga reads project configuration from <code>.goga/config.yml</code> in the project root. This file is created by <code>goga init</code> and can be edited manually.</p>
+<h2 id="file-location">File location</h2>
+<pre><code>.goga/config.yml
+</code></pre>
+<p>The config loader looks for this file relative to the current working directory.</p>
+<p>For the machine-wide <code>~/.goga/config.yml</code>, see <a href="../home/">Home Configuration</a>.</p>
+<h2 id="example-configuration">Example configuration</h2>
+<pre><code class="language-yaml">language: python
+image: qarium/goga-python-3.14:1.2
+# dockerfile: .goga/Dockerfile     # optional — when set, `--update` builds from this Dockerfile instead of pulling
+
+build:
+  task_executor:
+    agent: claude
+    env:
+      ANTHROPIC_API_KEY: sk-ant-...
+
+  worktree: false
+  skip_finalize: false
+  session_timeout: 30m
+  idle_timeout: 10m
+  max_iterations: 10
+  # review_executor:              # optional review-phase control
+  #   skip: false                 # true → tasks-only run (ralph-loop --tasks-only)
+  #   agent: codex                # differing agent → two-pass run (tasks, then --review)
+  #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
+  #   env:                        # review-pass env layer (requires agent when non-empty)
+  #     ANTHROPIC_MODEL: reviewer
+  # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the build container
+  # hosts:                         # optional docker run --add-host entries
+  #   foo.local: 127.0.0.1
+
+pipeline:
+  agent: claude
+  env:
+    ANTHROPIC_API_KEY: sk-ant-...
+  # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the pipeline container
+  # hosts:                         # optional docker run --add-host entries
+  #   foo.local: 127.0.0.1
+
+codemanifest:
+  usages:
+    conventions: .goga/usages/conventions.md
+
+  annotations: |
+    Follow the project `conventions` for all code generation.
+
+# tools: optional — declared tools are installed together by `goga install`
+# tools:
+#   viewer: latest        # → no specifier (pip selects newest)
+#   afm: 1.0.x            # → ~=1.0.0
+#   ralph-loop: 1.x       # → ~=1.0
+#   go: 1.0.1             # → ==1.0.1
+
+# usages: optional — git dependencies whose cell-level .usages/ are synced by `goga usages sync` and status-checked by `goga usages status`
+# usages:
+#   libs:
+#     click:
+#       git: https://github.com/pallets/click.git
+#       ref: 8.1.7         # optional — branch, tag, or commit; omit for the default branch
+#       root: docs         # optional — subpath inside the repo to walk .usages from; omit for the clone root
+
+# lint: optional — directories ignored by `goga lint` (exact relative paths, no glob)
+# lint:
+#   ignore:
+#     - .venv/
+#     - build/dist
+</code></pre>
+<h2 id="fields-reference">Fields reference</h2>
+<h3 id="top-level">Top-level</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>language</code></td>
+<td><code>string</code></td>
+<td>Yes</td>
+<td>Project language. One of: <code>python</code>, <code>golang</code>, <code>kotlin</code>, <code>swift</code>, <code>javascript</code></td>
+</tr>
+<tr>
+<td><code>image</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Docker image used by <code>goga build</code> and <code>goga pipeline</code> (e.g. <code>qarium/goga-python-3.14:1.2</code>). Consumers raise an error when it is unset.</td>
+</tr>
+<tr>
+<td><code>dockerfile</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Path to a project Dockerfile. When set, <code>goga build --update</code> and <code>goga pipeline --update</code> build the image locally from this Dockerfile (fatal on build failure). When unset (default), <code>--update</code> pulls <code>image</code> from the registry instead (non-fatal warning on pull failure)</td>
+</tr>
+<tr>
+<td><code>build</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Build pipeline settings. Optional at the loader level; <code>goga build</code> raises a <code>ClickException</code> when the section is absent</td>
+</tr>
+<tr>
+<td><code>pipeline</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Pipeline (afm) execution settings. Optional at the loader level; <code>goga pipeline</code> raises a <code>ClickException</code> when the section is absent</td>
+</tr>
+<tr>
+<td><code>commands</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Reserved for future prompt customization. Defaults to <code>{}</code></td>
+</tr>
+<tr>
+<td><code>codemanifest</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Global codemanifest configuration</td>
+</tr>
+<tr>
+<td><code>tools</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>goga-tool version declarations consumed by <code>goga install</code> in bulk mode. Keys are tool names (without the <code>goga-tool-</code> prefix); values are version-form strings. Values are stored verbatim — the four-form grammar (<code>1.0.x</code>, <code>1.x</code>, <code>1.0.1</code>, <code>latest</code>) is validated by <code>goga install</code>, not the loader. Defaults to <code>None</code> (absent); an empty mapping is <code>{}</code>. YAML-null values (<code>viewer:</code>) are rejected</td>
+</tr>
+<tr>
+<td><code>usages</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Git dependencies whose cell-level <code>.usages/</code> files are synced into <code>.goga/usages/&lt;group&gt;/&lt;dep&gt;/</code> by <a href="../../cli/usages/"><code>goga usages sync</code></a> and checked for drift against the remote by <a href="../../cli/usages/"><code>goga usages status</code></a>. Two-level mapping: <code>&lt;group&gt;</code> → <code>&lt;dep&gt;</code> → <code>{ git, ref, root }</code>. Defaults to <code>None</code> (absent), which makes <code>goga usages sync</code> a no-op (exit 0); an empty mapping is <code>{}</code>. <code>&lt;group&gt;</code> and <code>&lt;dep&gt;</code> keys are validated as filesystem path segments — empty, <code>.</code> / <code>..</code>, or any name containing <code>/</code> or <code>\</code> raise <code>ValueError</code></td>
+</tr>
+<tr>
+<td><code>lint</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Optional linter section consumed by <a href="../../cli/lint/"><code>goga lint</code></a>. Currently holds <code>ignore</code>, a list of directory relative paths to prune from lint traversal. Defaults to <code>None</code> (absent); an empty mapping is equivalent to no ignore list. Structural type errors (non-mapping <code>lint</code>, non-list <code>lint.ignore</code>, or a non-string element) raise <code>ValueError</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="build">build</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>task_executor</code></td>
+<td>mapping</td>
+<td>Yes</td>
+<td>AI agent configuration</td>
+</tr>
+<tr>
+<td><code>worktree</code></td>
+<td><code>bool</code></td>
+<td>No</td>
+<td>Use isolated git worktree for builds</td>
+</tr>
+<tr>
+<td><code>skip_finalize</code></td>
+<td><code>bool</code></td>
+<td>No</td>
+<td>Skip the ralph-loop finalization step</td>
+</tr>
+<tr>
+<td><code>session_timeout</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Session timeout in Go duration format (e.g. <code>30m</code>, <code>1h</code>)</td>
+</tr>
+<tr>
+<td><code>idle_timeout</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Idle timeout in Go duration format</td>
+</tr>
+<tr>
+<td><code>wait</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Wait time on rate limit in Go duration format</td>
+</tr>
+<tr>
+<td><code>max_iterations</code></td>
+<td><code>int</code></td>
+<td>No</td>
+<td>Maximum task iterations</td>
+</tr>
+<tr>
+<td><code>review_patience</code></td>
+<td><code>int</code></td>
+<td>No</td>
+<td>Stop review after N unchanged rounds</td>
+</tr>
+<tr>
+<td><code>prompts_dir</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Path to custom ralph-loop prompts</td>
+</tr>
+<tr>
+<td><code>agents_dir</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Path to custom ralph-loop agents</td>
+</tr>
+<tr>
+<td><code>codex_review</code></td>
+<td><code>bool</code></td>
+<td>No</td>
+<td>Enable external codex review</td>
+</tr>
+<tr>
+<td><code>proxy</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>HTTP/HTTPS proxy URL for the build container. When set, <code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>/<code>NO_PROXY=localhost,127.0.0.1</code> are written to the container env-file. Overridden by the <code>--proxy</code> CLI option</td>
+</tr>
+<tr>
+<td><code>hosts</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Host→IP mapping for <code>docker run --add-host</code>. Defaults to <code>{}</code>. Augmented by the repeatable <code>--add-host</code> CLI option (CLI wins on key conflict)</td>
+</tr>
+<tr>
+<td><code>review_executor</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Review-phase configuration. See <a href="#buildreview_executor">build.review_executor</a></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>The deprecated <code>build.image</code> field is rejected with a <code>ValueError</code>. Set the top-level <code>image</code> field instead.</p>
+</blockquote>
+<h3 id="buildtask_executor">build.task_executor</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>AI executor that runs the build inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to <code>None</code>; <code>goga build</code> raises a <code>ClickException</code> when it is <code>None</code> (the build needs an agent to resolve the in-container wrapper). Resolved to <code>/home/goga/bin/&lt;agent&gt;-as-claude.sh</code> — no whitelist; any name whose wrapper file exists in the image works. Baseline wrappers: <code>claude</code>, <code>codex</code>, <code>cursor</code>, <code>opencode</code>, <code>qwen</code>. See <a href="../agents/">Agents</a> for the resolution mechanic, per-agent env variables, and how to add a custom agent.</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Environment variables passed to the agent. Keys and values must be strings. Defaults to <code>{}</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="buildreview_executor">build.review_executor</h3>
+<p>Optional section controlling the review phase of <code>goga build</code>. When absent, the full cycle (tasks + review) runs in a single pass with the task executor's wrapper.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>skip</code></td>
+<td><code>bool</code></td>
+<td>No</td>
+<td>Skip the review phase entirely — the run executes tasks only (ralph-loop <code>--tasks-only</code>). Absent/YAML-null means "not set" (the CLI flag decides); must be a real bool — a YAML <code>1</code> is rejected</td>
+</tr>
+<tr>
+<td><code>agent</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Review executor agent name (same resolution mechanic as <code>build.task_executor.agent</code>; its wrapper must exist in the image). When it differs from <code>task_executor.agent</code>, <strong>or when a non-empty <code>env</code> is declared alongside it</strong>, the build runs two passes: tasks with the task wrapper, then the review pass with the review wrapper. Combining either two-pass form with an active worktree (<code>--worktree</code> or <code>build.worktree: true</code>) is rejected with exit 1 on the host</td>
+</tr>
+<tr>
+<td><code>roles</code></td>
+<td>list of <code>string</code></td>
+<td>No</td>
+<td>Reviewer composition for the review prompts: keeps only the <code>{{agent:X}}</code> lines of the selected roles and adapts the counters of the accompanying text. Whitelist: <code>quality</code>, <code>implementation</code>, <code>testing</code>, <code>simplification</code>, <code>documentation</code>. Absent or <code>[]</code> means the full default set (prompts stay byte-identical to the vendored defaults)</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>mapping of <code>string</code></td>
+<td>No</td>
+<td>Review-pass environment layer (<code>{str: str}</code>). Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/<code>{}</code> all resolve to <code>{}</code> (unlike <code>build.task_executor.env</code>, where YAML-null is an error). A non-empty <code>env</code> induces a two-pass run like a differing agent does, and requires <code>agent</code> — a non-empty <code>env</code> without <code>agent</code> fails in-container validation when the review phase runs; a skipped run ignores the layer entirely</td>
+</tr>
+</tbody>
+</table>
+<p>Precedence: the <code>--skip-review</code>/<code>--no-skip-review</code> CLI pair overrides <code>skip</code>; an explicit <code>--no-skip-review</code> forces the full cycle even when the config sets <code>skip: true</code>. Role names, the env-requires-agent rule, and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).</p>
+<h3 id="pipeline">pipeline</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>AI agent that runs the pipeline stages inside the container. Optional at the loader level — absent/YAML-null/empty/whitespace resolves to <code>None</code>. When <code>None</code>, the agent may be supplied by a per-stage workflow override (see <a href="../../pipelines/workflows/">Workflows</a>) or afm's own default, so <code>goga pipeline</code> does not require it. Same resolution mechanic and baseline set as <code>build.task_executor.agent</code> — see <a href="../agents/">Agents</a>.</td>
+</tr>
+<tr>
+<td><code>env</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Environment variables passed into the pipeline container. Keys and values must be strings. Defaults to <code>{}</code></td>
+</tr>
+<tr>
+<td><code>proxy</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>HTTP/HTTPS proxy URL for the pipeline container. When set, <code>HTTP_PROXY</code>/<code>HTTPS_PROXY</code>/<code>NO_PROXY=localhost,127.0.0.1</code> are written to the container env-file. Overridden by the <code>--proxy</code> CLI option</td>
+</tr>
+<tr>
+<td><code>hosts</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Host→IP mapping for <code>docker run --add-host</code>. Defaults to <code>{}</code>. Augmented by the repeatable <code>--add-host</code> CLI option (CLI wins on key conflict)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="codemanifest">codemanifest</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usages</code></td>
+<td>mapping</td>
+<td>No</td>
+<td>Named practices available in CODEMANIFEST files. Format: <code>{name: path/to/file.md}</code>. Defaults to <code>{}</code></td>
+</tr>
+<tr>
+<td><code>annotations</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Free-text instructions for AI agents. Defaults to <code>None</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="usages">usages</h3>
+<p>Git dependencies whose cell-level <code>.usages/</code> files are synced into <code>.goga/usages/&lt;group&gt;/&lt;dep&gt;/</code> by <a href="../../cli/usages/"><code>goga usages sync</code></a> and checked for drift against the remote by <a href="../../cli/usages/"><code>goga usages status</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>usages.&lt;group&gt;</code></td>
+<td>mapping</td>
+<td>Yes when <code>usages</code> present</td>
+<td>Group bucket. The key becomes a top-level subdirectory of <code>.goga/usages/</code>. Validated as a path segment (no empty / <code>.</code> / <code>..</code> / <code>/</code> / <code>\</code>).</td>
+</tr>
+<tr>
+<td><code>usages.&lt;group&gt;.&lt;dep&gt;</code></td>
+<td>mapping</td>
+<td>Yes when <code>&lt;group&gt;</code> present</td>
+<td>Dependency entry. The key becomes a subdirectory under the group. Same path-segment validation.</td>
+</tr>
+<tr>
+<td><code>usages.&lt;group&gt;.&lt;dep&gt;.git</code></td>
+<td><code>string</code></td>
+<td>Yes</td>
+<td>Git URL of the source repository. Must be non-empty.</td>
+</tr>
+<tr>
+<td><code>usages.&lt;group&gt;.&lt;dep&gt;.ref</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Git ref — branch, tag, or commit. <code>None</code> (omitted) clones the default branch.</td>
+</tr>
+<tr>
+<td><code>usages.&lt;group&gt;.&lt;dep&gt;.root</code></td>
+<td><code>string</code></td>
+<td>No</td>
+<td>Subpath inside the clone to discover <code>.usages</code> folders from. Absent (or an empty string) → clone root. Must be relative; no <code>..</code> or absolute paths (leading <code>/</code> or UNC <code>//host/share</code>).</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>usages</code> is absent, <code>config.usages</code> is <code>None</code> and <code>goga usages sync</code> exits <code>0</code> without invoking git. A present-but-non-mapping value raises <code>ValueError</code>.</p>
+<h3 id="lint">lint</h3>
+<p>Optional section consumed by <a href="../../cli/lint/"><code>goga lint</code></a> to prune directories from validation.</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lint.ignore</code></td>
+<td>list of strings</td>
+<td>No</td>
+<td>Directory relative paths to skip during lint traversal, stored verbatim. A directory matches when its exact normalized relative path equals an entry; glob patterns are not interpreted and a trailing separator is insignificant. Defaults to <code>[]</code> when <code>lint</code> is present but <code>ignore</code> is absent</td>
+</tr>
+</tbody>
+</table>
+<p>When <code>lint</code> is absent, <code>config.lint</code> is <code>None</code> and <code>goga lint</code> lints every directory. A present-but-non-mapping <code>lint</code>, a non-list <code>lint.ignore</code>, or a non-string element raises <code>ValueError</code>. The <code>lint</code> command derives <code>ignore</code> <strong>tolerantly</strong> — any loader error falls back to no filtering rather than failing the lint run.</p>
+<h2 id="pre-built-docker-images">Pre-built Docker images</h2>
+<p>goga provides prebuilt language images for build execution:</p>
+<table>
+<thead>
+<tr>
+<th>Language</th>
+<th>Images</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>qarium/goga-python-3.10:1.2</code> through <code>qarium/goga-python-3.14:1.2</code></td>
+</tr>
+<tr>
+<td>Go</td>
+<td><code>qarium/goga-golang-1.23:1.2</code> through <code>qarium/goga-golang-1.26:1.2</code></td>
+</tr>
+<tr>
+<td>JavaScript</td>
+<td><code>qarium/goga-node-22:1.2</code>, <code>qarium/goga-node-24:1.2</code></td>
+</tr>
+<tr>
+<td>Kotlin</td>
+<td><code>qarium/goga-kotlin-2.0:1.2</code> through <code>qarium/goga-kotlin-2.3:1.2</code></td>
+</tr>
+<tr>
+<td>Swift</td>
+<td><code>qarium/goga-swift-6.0:1.2</code> through <code>qarium/goga-swift-6.2:1.2</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="validation-errors">Validation errors</h2>
+<p>The config loader raises specific exceptions for invalid configuration:</p>
+<table>
+<thead>
+<tr>
+<th>Error</th>
+<th>Cause</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>FileNotFoundError</code></td>
+<td><code>.goga/config.yml</code> does not exist or is empty</td>
+</tr>
+<tr>
+<td><code>KeyError</code></td>
+<td>Missing required field (<code>language</code>, or <code>build.task_executor</code> when <code>build</code> is present)</td>
+</tr>
+<tr>
+<td><code>ValueError</code></td>
+<td>Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated <code>build.image</code> field is present. <code>build.review_executor</code> adds: non-mapping section (<code>build.review_executor must be a mapping</code>), non-bool <code>skip</code> (a YAML <code>1</code> is rejected), non-string <code>agent</code>, <code>roles</code> that is not a list of strings, a non-mapping <code>env</code> (<code>build.review_executor.env must be a mapping in .goga/config.yml</code>), or <code>env</code> with non-string keys/values (<code>build.review_executor.env must have string keys and values</code>)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="implementation-details">Implementation details</h2>
+<p>Configuration is loaded as immutable frozen dataclasses (<code>frozen=True</code>, <code>kw_only=True</code>). Once loaded, the <code>ProjectConfig</code> object cannot be modified. This ensures consistent behavior across the build pipeline.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var peek = document.querySelector('.goga-peek');
+      var bubble = document.getElementById('gogaPeekBubble');
+      var footer = document.querySelector('.md-footer');
+      if (!peek) return;
+
+      var hooks = [
+        "CODEMANIFEST is the source of truth — I keep it that way! 📋",
+        "A cell is a responsibility zone with a contract. Neat, right? 🤖",
+        "Cells make architecture transparent — see the whole project at a glance. 🏛️",
+        "Usages are recipes for working with a cell — for any library or API. 📖",
+        "Want to teach a custom library? Write a .usages/ recipe — I'll surface it. 🍳",
+        "Annotations are little love notes inside your contracts. 📝",
+        "Cells import from other cells, never guess. I watch for that! 👀",
+        "Propose → brainstorm → apply → design → plan → build → change → accept. Let's go! 🚀",
+        "Hidden dependencies? Not on my watch — every cell declares its imports. 🕵️",
+        "One responsibility zone — one cell. I'll remind you. 💡",
+        "Contracts drift from code. Without me, anyway. 🫠",
+        "Hi! I'm goga. Want me to validate your CODEMANIFEST? 👋"
+      ];
+
+      function pickRandomHook() {
+        return hooks[Math.floor(Math.random() * hooks.length)];
+      }
+
+      if (bubble) {
+        bubble.textContent = pickRandomHook();
+        peek.addEventListener('mouseenter', function () {
+          bubble.textContent = pickRandomHook();
+        });
+      }
+
+      if (footer) {
+        function updatePeekBottom() {
+          var footerTop = footer.getBoundingClientRect().top;
+          var viewportH = window.innerHeight;
+          if (footerTop < viewportH) {
+            var visibleFooterH = viewportH - footerTop;
+            peek.style.bottom = (visibleFooterH + 8) + 'px';
+          } else {
+            peek.style.bottom = '16px';
+          }
+        }
+
+        window.addEventListener('scroll', updatePeekBottom, { passive: true });
+        window.addEventListener('resize', updatePeekBottom);
+        updatePeekBottom();
+      }
+    });
+  </script>
+
+  </body>
+</html>

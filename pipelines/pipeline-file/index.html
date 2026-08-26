@@ -1,0 +1,4023 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow">
+      
+      
+      
+        <link rel="canonical" href="https://qarium.github.io/goga/pipelines/pipeline-file/">
+      
+      
+        <link rel="prev" href="../">
+      
+      
+        <link rel="next" href="../workflows/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Pipeline File - Goga</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+  <style>
+    /* Dark navbar — override palette in both themes */
+    [data-md-color-scheme=default][data-md-color-primary=custom],
+    [data-md-color-scheme=slate][data-md-color-primary=custom] {
+      --md-primary-fg-color: #0a0a13;
+      --md-primary-fg-color--light: #0a0a13cc;
+      --md-primary-bg-color: #ffffff;
+    }
+
+    .md-header__button.md-logo img,
+    .md-header__button.md-logo svg {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+    }
+
+    /* Search form — visible on dark header */
+    .md-search__overlay {
+      background-color: transparent !important;
+    }
+    [data-md-toggle=search]:checked~.md-header .md-search__overlay {
+      background-color: #0000008a !important;
+    }
+    .md-search__inner {
+      background-color: transparent !important;
+    }
+    .md-search__form {
+      background-color: #3a3a3a !important;
+      border-radius: 0.5rem;
+    }
+    .md-search__form:hover {
+      background-color: #4a4a4a !important;
+    }
+    .md-search__input {
+      color: #e0e0e0 !important;
+    }
+    .md-search__input::placeholder {
+      color: #999999 !important;
+    }
+    .md-search__icon {
+      color: #999999 !important;
+    }
+    .md-search__form:hover .md-search__icon,
+    .md-search__input:focus-visible ~ .md-search__icon {
+      color: #e0e0e0 !important;
+    }
+
+    /* Links in dark theme — readable on dark background */
+    [data-md-color-scheme=slate] .md-nav__link,
+    [data-md-color-scheme=slate] .md-toc__link,
+    [data-md-color-scheme=slate] article a {
+      color: #cbd5e0 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link--passed,
+    [data-md-color-scheme=slate] .md-toc__link--passed {
+      color: #718096 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link:hover,
+    [data-md-color-scheme=slate] .md-toc__link:hover,
+    [data-md-color-scheme=slate] article a:hover {
+      color: var(--md-accent-fg-color) !important;
+    }
+
+    /* goga peek assistant — bottom-left corner, rides on top of footer */
+    .goga-peek {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 96px;
+      height: 96px;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0.7;
+      transition: opacity 0.4s ease, transform 0.3s ease, filter 0.3s ease;
+    }
+    .goga-peek img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: auto;
+    }
+    .goga-peek:hover {
+      opacity: 1;
+      transform: translateY(-12px);
+      filter: drop-shadow(0 6px 14px rgba(32, 212, 191, 0.55));
+    }
+
+    /* Speech bubble — appears to the right of the robot on hover */
+    .goga-peek-bubble {
+      position: absolute;
+      left: 108px;
+      bottom: 28px;
+      min-width: 180px;
+      max-width: 260px;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1a2540;
+      border: 2px solid #20D4BF;
+      border-radius: 12px;
+      font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transform: translateX(-8px) scale(0.9);
+      transform-origin: bottom left;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+    /* Tail pointing left toward the robot */
+    .goga-peek-bubble::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #20D4BF;
+    }
+    .goga-peek-bubble::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #ffffff;
+    }
+    .goga-peek:hover .goga-peek-bubble {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+
+    /* On small screens sidenav takes the bottom area — hide peek to avoid clutter */
+    @media (max-width: 767px) {
+      .goga-peek { display: none; }
+    }
+  </style>
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#pipeline-file" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goga" class="md-header__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goga
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Pipeline File
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+  <div class="goga-peek" aria-hidden="true">
+    <img src="../../assets/goga-head.svg" alt="" />
+    <div class="goga-peek-bubble" id="gogaPeekBubble"></div>
+  </div>
+
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../workflow/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Workflow
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Pipelines
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../tools/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Tools
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../configuration/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Configuration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cell/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Cell
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CLI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../languages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Languages
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goga" class="md-nav__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    Goga
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../workflow/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflow
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Refinement
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Refinement
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/define/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Define
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/discover/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Discover
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/propose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Propose
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/brainstorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brainstorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/apply/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apply
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/change/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/accept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accept
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline File
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline File
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#document-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Header
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#body-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body formats
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Body formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phases-format-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phases format (list)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stages-format-dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stages format (dict)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#body-step-title-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body step title field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#script-directives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Script directives
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shipped-pipelines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipped pipelines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Roles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-agent-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The agent roles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The agent roles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-each-role-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What each role does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#body-stage-roles-choosing-the-stage-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body stage roles — choosing the stage mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Body stage roles — choosing the stage mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-between-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing between modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#header-roles-overriding-the-default-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Header roles — overriding the default prompts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-header-and-stage-roles-relate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How header and stage roles relate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline-file-roles-vs-workflow-file-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline-file roles vs workflow-file agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../workflows/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shipped/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shipped Pipelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../configuration/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/home/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cell/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cell
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cell
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/codemanifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CODEMANIFEST
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/init/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/connect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/upgrade/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrade
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-nodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-factory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Factory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-visitor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Visitor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-analyzer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Analyzer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/validation-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/contract-extraction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract Extraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../languages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Languages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Languages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/golang/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/kotlin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kotlin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/swift/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Swift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/javascript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JavaScript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#document-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#header" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Header
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#body-formats" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body formats
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Body formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#phases-format-list" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Phases format (list)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#stages-format-dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stages format (dict)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-fields" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage fields
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage fields">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#body-step-title-field" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body step title field
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#script-directives" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Script directives
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#shipped-pipelines" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipped pipelines
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Roles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Roles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-agent-roles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The agent roles
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The agent roles">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-each-role-does" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What each role does
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#body-stage-roles-choosing-the-stage-mode" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Body stage roles — choosing the stage mode
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Body stage roles — choosing the stage mode">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#choosing-between-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Choosing between modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#header-roles-overriding-the-default-prompts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Header roles — overriding the default prompts
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#how-header-and-stage-roles-relate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How header and stage roles relate
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pipeline-file-roles-vs-workflow-file-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pipeline-file roles vs workflow-file agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="pipeline-file">Pipeline File</h1>
+<p>A <strong>pipeline-file</strong> is the base YAML document that defines a pipeline. It
+carries a header (<code>name</code>, <code>description</code>, optional overrides) and a body
+that lists the ordered stages of the pipeline.</p>
+<p>Pipeline-files live at:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Path</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>project</td>
+<td><code>&lt;cwd&gt;/.goga/pipelines/&lt;name&gt;.yml</code></td>
+</tr>
+<tr>
+<td>user</td>
+<td><code>~/.goga/pipelines/&lt;name&gt;.yml</code></td>
+</tr>
+</tbody>
+</table>
+<p>Only top-level <code>*.yml</code> files are scanned. Subdirectories are ignored and
+<code>.yaml</code> files are excluded. On name conflict, the project source wins.</p>
+<h2 id="document-shape">Document shape</h2>
+<p>Every pipeline-file is a two-segment YAML document separated by a <code>---</code> line:</p>
+<pre><code class="language-yaml">&lt;header&gt;
+---
+&lt;body&gt;
+</code></pre>
+<ul>
+<li>The <strong>header</strong> is a YAML mapping with <code>name</code>, <code>description</code>, and an
+  optional <code>roles</code> block (see <a href="#roles">Roles</a>).</li>
+<li>The <strong>body</strong> is either a YAML <strong>list</strong> (phases format) or a YAML <strong>dict</strong>
+  (stages format).</li>
+</ul>
+<p>A file without the <code>---</code> separator is rejected at parse time with a
+structural error.</p>
+<h2 id="header">Header</h2>
+<pre><code class="language-yaml">name: GogaFeature
+description: &quot;Feature development&quot;
+roles:         # optional block — see &quot;Roles&quot;
+  planner: |
+    Inline prompt that replaces the shipped default for the planner role.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Pipeline identifier, must be non-empty</td>
+</tr>
+<tr>
+<td><code>description</code></td>
+<td>string</td>
+<td>yes</td>
+<td>Short human-readable purpose</td>
+</tr>
+<tr>
+<td><code>roles</code></td>
+<td>map</td>
+<td>no</td>
+<td>Inline overrides for the three role prompts. See <a href="#roles">Roles</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>A header missing <code>name</code> or <code>description</code> is rejected with a structural
+error.</p>
+<h2 id="body-formats">Body formats</h2>
+<p>The body can be authored in one of two shapes — both are first-class.</p>
+<h3 id="phases-format-list">Phases format (list)</h3>
+<p>A YAML list of step mappings. Each item is keyed by <code>name</code>; <code>depends_on</code> is
+auto-generated by list position — the first step has no dependency, each
+subsequent step depends on the previous one.</p>
+<pre><code class="language-yaml">- name: propose
+  title: &quot;Create the task from a user propose&quot;
+  communication: true
+  prompt: |
+    Save the task file as `&lt;git branch --show-current&gt;.md`
+  skills:
+    - goga-propose
+
+- name: task-review
+  title: &quot;Review of the created task&quot;
+  communication: true
+  prompt: |
+    Review the task `&lt;git branch --show-current&gt;.md`
+  skills:
+    - goga-review-task
+</code></pre>
+<p>When a workflow applies <code>loop: N</code> to a phases stage, the expanded copies
+chain naturally via list position — the first copy inherits the original
+position, subsequent copies depend on their predecessor, and the next
+<strong>original</strong> step depends on the last expanded copy.</p>
+<h3 id="stages-format-dict">Stages format (dict)</h3>
+<p>A YAML mapping keyed by step id. Each value carries <code>title</code> and an optional
+explicit <code>depends_on</code> plus any extra fields. <code>depends_on</code> is passed through
+as-is, except that workflow loop expansion rewrites external references to
+a base name to the <strong>last</strong> expanded id.</p>
+<pre><code class="language-yaml">propose:
+  title: &quot;Create the task from a user propose&quot;
+  communication: true
+  prompt: |
+    Save the task file as `&lt;git branch --show-current&gt;.md`
+  skills:
+    - goga-propose
+
+task-review:
+  title: &quot;Review of the created task&quot;
+  depends_on: [propose]
+  communication: true
+  prompt: |
+    Review the task `&lt;git branch --show-current&gt;.md`
+  skills:
+    - goga-review-task
+</code></pre>
+<p>Any other body shape (scalar, no separator, or an already-compiled flow-file
+shape) raises <code>unsupported body format</code>.</p>
+<h2 id="stage-fields">Stage fields</h2>
+<p>Both body formats accept the same set of fields per stage. The compiler
+preserves unknown fields verbatim — only the canonical fields below have
+assigned semantics:</p>
+<blockquote>
+<p>The authoring field for user-input stages is <code>communication</code>. The compiler
+translates it to the afm output key <code>interactive</code> (which stays stable in the
+compiled flow-file). Authoring <code>interactive</code> directly is rejected with a
+structural error — use <code>communication</code>.</p>
+<p>Symmetrically, the authoring field for the launch mode is <code>trigger</code>. The
+compiler translates <code>trigger: manual</code> to the afm output key <code>auto_run: false</code>
+(the stage pauses when reached and runs only when launched manually). Authoring
+<code>auto_run</code> directly is rejected with a structural error — use
+<code>trigger: manual</code>.</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>name</code></td>
+<td>string</td>
+<td>— (required, phases only)</td>
+<td>Stage identifier. In phases format the item's <code>name</code>; in stages the map key.</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>string</td>
+<td>— (optional, recommended)</td>
+<td>Display label emitted as the compiled stage's <code>name</code>.</td>
+</tr>
+<tr>
+<td><code>communication</code></td>
+<td>bool</td>
+<td>false</td>
+<td>Whether the stage prompts for user input. Authors as <code>communication</code>; compiles to the afm <code>interactive</code> key. Authoring <code>interactive</code> directly is a structural error.</td>
+</tr>
+<tr>
+<td><code>prompt</code></td>
+<td>string</td>
+<td>—</td>
+<td>Stage-level prompt text; emitted as the compiled <code>prompt</code> field.</td>
+</tr>
+<tr>
+<td><code>skills</code></td>
+<td>list of strings</td>
+<td>—</td>
+<td>Skills the agent must apply at this stage.</td>
+</tr>
+<tr>
+<td><code>before_script</code></td>
+<td>string</td>
+<td>—</td>
+<td>Shell script run before the stage; compiles to the afm <code>script_before</code> field. See <a href="#script-directives">Script directives</a>.</td>
+</tr>
+<tr>
+<td><code>script</code></td>
+<td>string</td>
+<td>—</td>
+<td>Shell script run as the stage body; compiles to the afm <code>script</code> field. Mutually exclusive with <code>prompt</code> and <code>skills</code>. See <a href="#script-directives">Script directives</a>.</td>
+</tr>
+<tr>
+<td><code>after_script</code></td>
+<td>string</td>
+<td>—</td>
+<td>Shell script run after the stage; compiles to the afm <code>script_after</code> field. See <a href="#script-directives">Script directives</a>.</td>
+</tr>
+<tr>
+<td><code>timeout</code></td>
+<td>string</td>
+<td>— (no key emitted)</td>
+<td>Timeout for the stage's script action (Go duration, e.g. <code>30m</code>); compiles to the afm <code>script_timeout</code> field. Requires <code>script</code> in the same body; the value passes verbatim (the duration grammar is validated by afm at runtime). See <a href="#script-directives">Script directives</a>.</td>
+</tr>
+<tr>
+<td><code>roles</code></td>
+<td>list of strings</td>
+<td>autonomous mode when absent</td>
+<td>Agent roles assigned to the stage. See <a href="#roles">Roles</a>.</td>
+</tr>
+<tr>
+<td><code>trigger</code></td>
+<td>string (<code>on_success</code> | <code>manual</code>)</td>
+<td><code>on_success</code> (no key emitted)</td>
+<td>Launch mode of the stage. <code>trigger: manual</code> compiles to the afm <code>auto_run: false</code> key (canonical slot right after <code>auto_approve</code>) — the stage pauses when reached and runs only when launched manually; <code>trigger: on_success</code> (or an absent key) emits no <code>auto_run</code> key. Authoring <code>auto_run</code> directly is a structural error. Valid in both body formats and in workflow <code>extend</code> bodies; a workflow <code>stages</code> block can force or cancel it per-stage via <code>manual</code> (see <a href="../workflows/">Workflows</a>).</td>
+</tr>
+<tr>
+<td><code>depends_on</code></td>
+<td>list of strings</td>
+<td>auto (phases) / none (stages)</td>
+<td>Stage dependencies.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="body-step-title-field">Body step <code>title</code> field</h3>
+<p>The body step carries a <code>title</code> field that becomes the compiled stage's
+display name. Use a short human-readable phrase — it is what end users see
+in stage listings.</p>
+<h3 id="script-directives">Script directives</h3>
+<p>A stage may carry shell scripts to run at fixed points relative to the
+agent's work. The three authoring fields are translated into the matching afm
+output keys at compile time:</p>
+<table>
+<thead>
+<tr>
+<th>Author as</th>
+<th>Compiles to</th>
+<th>When it runs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>before_script</code></td>
+<td><code>script_before</code></td>
+<td>Before the stage's agent work.</td>
+</tr>
+<tr>
+<td><code>script</code></td>
+<td><code>script</code></td>
+<td>As the stage body itself.</td>
+</tr>
+<tr>
+<td><code>after_script</code></td>
+<td><code>script_after</code></td>
+<td>After the stage's agent work.</td>
+</tr>
+<tr>
+<td><code>timeout</code></td>
+<td><code>script_timeout</code></td>
+<td>Bounds the stage's script action.</td>
+</tr>
+</tbody>
+</table>
+<p>The authoring keys are consumed and never appear in the compiled flow-file —
+only the translated <code>script_*</code> keys do. A multi-line <code>script_before</code>,
+<code>script</code>, <code>script_after</code>, or <code>script_timeout</code> serializes as a YAML
+block-literal (e.g. <code>script: |</code>); a single-line value stays a plain scalar.
+The rule is uniform across all four slots.</p>
+<p><code>script</code> is <strong>mutually exclusive</strong> with <code>prompt</code> and <code>skills</code>: a stage runs
+either an agent-driven prompt (<code>prompt</code>/<code>skills</code>) or a literal shell script
+(<code>script</code>), not both. Authoring <code>script</code> together with <code>prompt</code> and/or
+<code>skills</code> is a structural error. <code>before_script</code> and <code>after_script</code> are
+compatible with both <code>script</code> and <code>prompt</code>/<code>skills</code> — they bracket the stage
+regardless of how its body is defined.</p>
+<p>A stage whose body carries <code>script</code> compiles with <strong>no <code>agents</code> key at all</strong>:
+afm rejects <code>agents</code> combined with <code>script</code>, so the default <code>auto</code> agent is
+not injected and an authored body <code>roles</code> value (see
+<a href="#roles">Roles</a>) is element-validated but not emitted — body <code>roles</code> has no
+effect on a script stage's compiled output. Only <code>script</code> opens this
+suppression: <code>before_script</code>/<code>after_script</code> alone keep the default
+<code>agents: [auto]</code> injection. The rule is uniform across both body formats and
+in workflow <code>extend</code> bodies.</p>
+<p><code>timeout</code> scopes to the script action: it requires <code>script</code> in the same body
+(<code>before_script</code>/<code>after_script</code> do not open the directive — a <code>timeout</code>
+without <code>script</code> is a structural error, as is a non-string value, including
+YAML-null). The value passes verbatim with no duration-grammar validation on
+the goga side — a malformed string fails in afm at runtime. The key is
+emitted only when authored; authoring <code>script_timeout</code> directly is not
+forbidden, but when both are authored the translated <code>timeout</code> value wins.
+Valid in both body formats and in workflow <code>extend</code> bodies; loop-expanded
+copies inherit it.</p>
+<pre><code class="language-yaml">deploy:
+  title: Deploy
+  before_script: |
+    set -e
+    echo &quot;building...&quot;
+  script: |
+    make build
+    make deploy
+  after_script: echo &quot;done&quot;
+  timeout: 30m
+</code></pre>
+<h2 id="shipped-pipelines">Shipped pipelines</h2>
+<p>Goga ships six ready-to-use pipelines — <code>bugfix</code>, <code>development</code>, <code>patch</code>,
+<code>refinement</code>, <code>review</code>, and <code>sync</code> — that cover the most common authoring
+lifecycles. See
+<a href="../shipped/">Shipped Pipelines</a> for the per-pipeline walkthrough and how
+project pipelines override the global ones.</p>
+<h2 id="roles">Roles</h2>
+<p>The pipeline-file carries <code>roles</code> in <strong>two distinct places</strong>, and they
+serve different purposes. A third <code>agent</code> concept exists in
+<a href="../workflows/#workflow-agent-choosing-the-cli-agent">workflow-files</a> and
+is intentionally different — see the comparison at the end of this
+section.</p>
+<table>
+<thead>
+<tr>
+<th>Where</th>
+<th>Field</th>
+<th>Type</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Header</td>
+<td><code>roles</code></td>
+<td>map</td>
+<td>Replace shipped default <strong>prompts</strong> for the three authorable roles.</td>
+</tr>
+<tr>
+<td>Body stage</td>
+<td><code>roles</code></td>
+<td>list of strings</td>
+<td>Choose which <strong>roles</strong> run the stage (its mode).</td>
+</tr>
+<tr>
+<td>Workflow-file stage</td>
+<td><code>agent</code></td>
+<td>string</td>
+<td>Choose which <strong>CLI agent</strong> runs the stage (e.g. codex, claude).</td>
+</tr>
+</tbody>
+</table>
+<p>The rest of this section covers the first two — both live in the
+pipeline-file. The third is documented in <a href="../workflows/">Workflows</a>.</p>
+<h3 id="the-agent-roles">The agent roles</h3>
+<p>When a stage runs in <strong>coordinated mode</strong> (see below), the roles in its
+<code>roles</code> list execute in sequence — each role's output becomes the next
+role's input. You author the three overridable roles by alias; the
+compiler maps each alias to the afm agent name (and the matching shipped
+prompt file):</p>
+<table>
+<thead>
+<tr>
+<th>Author as (alias)</th>
+<th>afm agent / prompt stem</th>
+<th>Responsibility</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>planner</code></td>
+<td><code>planning</code></td>
+<td>Read the task, decompose it into a verifiable plan, hand off. Does not execute the work.</td>
+</tr>
+<tr>
+<td><code>executor</code></td>
+<td><code>implementation</code></td>
+<td>Execute the plan task-by-task, including any required research, code, or analysis. Produces the deliverable.</td>
+</tr>
+<tr>
+<td><code>reviewer</code></td>
+<td><code>review</code></td>
+<td>Verify the deliverable against the plan and acceptance criteria. Approves or requests changes.</td>
+</tr>
+</tbody>
+</table>
+<p>A fourth afm role, <strong><code>summary</code></strong>, produces the final report for the run,
+covering every stage. It is <strong>not</strong> an authorable role: it never appears
+as a key in the header <code>roles</code> block, and its prompt file (<code>summary.md</code>)
+is always materialized from the shipped default. (<code>summary</code> may still be
+listed in a stage's <code>roles</code> field — like any non-alias value it passes
+through to the afm <code>agents</code> list verbatim — but it is never an override
+target.)</p>
+<h4 id="what-each-role-does">What each role does</h4>
+<p><strong><code>planner</code></strong> (<code>planning</code>) decomposes the incoming task into an actionable
+plan with three sections: a numbered task list, the assumptions made along
+the way, and explicit acceptance criteria the work must meet. It does not
+perform the work itself — it hands the plan to the next role. It makes
+decisions autonomously rather than asking questions, and documents every
+non-obvious choice under assumptions.</p>
+<p><strong><code>executor</code></strong> (<code>implementation</code>) executes the plan top to bottom. For
+each task it decides the nature of the work — research, analysis, code,
+discussion — and acts accordingly. It runs the acceptance criteria checks
+before declaring the stage complete, and produces an honest report (not a
+false "done") when a criterion cannot be met.</p>
+<p><strong><code>reviewer</code></strong> (<code>review</code>) audits the deliverable against the plan: every
+task actually done, every acceptance criterion met, the result matching
+the intent of the prompt, edge cases handled. It returns a single verdict
+— <code>approved</code> or <code>needs_changes</code> — with a list of critical blockers and a
+list of non-blocking suggestions.</p>
+<p><strong><code>summary</code></strong> reads the logs of every stage in the run and produces a
+final report: a one-paragraph overview, a per-stage breakdown of what
+happened, and any open issues carried over from review. Because it is not
+an authorable role, its prompt is always the shipped default.</p>
+<h3 id="body-stage-roles-choosing-the-stage-mode">Body stage <code>roles</code> — choosing the stage mode</h3>
+<p>The per-stage <code>roles</code> field is a list of role aliases. A stage runs in one
+of two modes depending on whether the list is non-empty:</p>
+<ul>
+<li><strong>Autonomous mode</strong> — <code>roles</code> is absent, <code>null</code>, or an empty list <code>[]</code>.
+  The stage receives its task and decides for itself how to organize the
+  work: which steps to take, in which order, and when the result is
+  complete. Use this for stages that should not be decomposed ahead of
+  time — research, free-form authoring, exploratory analysis.</li>
+<li><strong>Coordinated mode</strong> — <code>roles</code> is a non-empty list (e.g.
+  <code>[planner, executor]</code>). The listed roles run in sequence and organize
+  the work for the incoming task: the <code>planner</code> decomposes the task into a
+  verifiable plan, the <code>executor</code> executes that plan, the <code>reviewer</code>
+  validates the result, and the <code>summary</code> role produces the final report.
+  Use this for stages where you want predictable, reviewable execution —
+  feature builds, bug fixes, anything with acceptance criteria.</li>
+</ul>
+<p>The two modes are mutually exclusive per stage — there is no hybrid.
+Authoring even a single-element list (<code>roles: [planner]</code>) is enough to
+switch the stage into coordinated mode; an authored non-empty value
+always wins.</p>
+<h4 id="choosing-between-modes">Choosing between modes</h4>
+<ul>
+<li>Leave <code>roles</code> out for stages whose work cannot be planned ahead of
+  time — exploratory research, free-form authoring, asking a question.</li>
+<li>Author <code>roles</code> for stages whose work is structurally predictable —
+  building a feature, fixing a bug, anything where you want a plan,
+  execution, review, and a final report.</li>
+</ul>
+<h4 id="examples">Examples</h4>
+<p><strong>Autonomous mode</strong> — no <code>roles</code> field. The stage receives the prompt and
+organizes the work itself:</p>
+<pre><code class="language-yaml">- name: research
+  title: &quot;Explore the codebase for prior art&quot;
+  prompt: |
+    Find any existing implementations of feature flagging
+    in this codebase and summarize what you find.
+</code></pre>
+<p><strong>Coordinated mode</strong> — <code>planner</code> and <code>executor</code> roles assigned. The stage
+decomposes the task into a plan, then executes it:</p>
+<pre><code class="language-yaml">- name: ship
+  title: &quot;Build and ship artifacts&quot;
+  roles:
+    - planner
+    - executor
+  prompt: |
+    Build the artifacts for the current branch and ship them.
+</code></pre>
+<p><strong>Full lifecycle</strong> — all three authorable roles. Useful for stages where
+you want end-to-end verification (the automatic <code>summary</code> report covers
+the stage on top):</p>
+<pre><code class="language-yaml">- name: deliver
+  title: &quot;Deliver the feature end-to-end&quot;
+  roles:
+    - planner
+    - executor
+    - reviewer
+  prompt: |
+    Implement the feature described in the task file, verify
+    it meets the acceptance criteria, and produce a report.
+</code></pre>
+<h3 id="header-roles-overriding-the-default-prompts">Header <code>roles</code> — overriding the default prompts</h3>
+<p>The header-level <code>roles</code> block lets you replace the shipped default prompt
+for any of the three authorable roles with an inline prompt of your own.
+An override fully <strong>replaces</strong> the default — it does not merge with it.
+When the block is absent or empty, the three shipped defaults are used
+unchanged. (<code>summary</code> has no override slot — its prompt is always the
+default.)</p>
+<p>The block accepts exactly three keys — one per authorable role:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Replaces shipped default prompt for afm agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>planner</code></td>
+<td><code>planning</code></td>
+</tr>
+<tr>
+<td><code>executor</code></td>
+<td><code>implementation</code></td>
+</tr>
+<tr>
+<td><code>reviewer</code></td>
+<td><code>review</code></td>
+</tr>
+</tbody>
+</table>
+<p>Example:</p>
+<pre><code class="language-yaml">name: GogaFeature
+description: &quot;Feature development&quot;
+roles:
+  planner: |
+    You are the planner for this feature pipeline.
+    Break the work into reviewable steps.
+  reviewer: |
+    Review each change against the feature's acceptance criteria.
+---
+</code></pre>
+<p>Rules:</p>
+<ul>
+<li>Only those three keys are valid. An unknown key (including <code>summary</code>) is
+  rejected at compile time with <code>unknown role in header.roles: &lt;key&gt;;
+  valid keys: planner, executor, reviewer</code>.</li>
+<li>Each value must be a string. A non-string value raises
+  <code>non-str value in header.roles.&lt;key&gt;</code>.</li>
+<li>The legacy <code>agents</code> key is rejected outright with <code>agents key is
+  forbidden in header; use roles</code>.</li>
+<li>An absent <code>roles</code> block and an empty <code>roles:</code> mapping are both treated
+  identically — no overrides, the three shipped defaults are used
+  unchanged.</li>
+<li>Overrides are a pipeline-file-side artifact. They are <strong>not</strong> carried
+  into the compiled flow-file — they are materialized into a separate
+  prompts directory at run time.</li>
+</ul>
+<h3 id="how-header-and-stage-roles-relate">How header and stage <code>roles</code> relate</h3>
+<p>The two pipeline-file <code>roles</code> declarations compose without collision:</p>
+<ul>
+<li>The <strong>per-stage</strong> <code>roles</code> list decides <strong>which roles</strong> execute and in
+  which order — i.e. the stage's mode.</li>
+<li>The <strong>header-level</strong> <code>roles</code> map decides <strong>what each role's prompt
+  says</strong> when it runs.</li>
+</ul>
+<p>A stage running in coordinated mode picks up the header-level overrides
+for whatever roles appear in its list. If no override is supplied for a
+role, that role uses its shipped default. The header overrides do <strong>not</strong>
+add roles to a stage — they only change the prompt of roles already listed
+in the stage's <code>roles</code> field. A stage in autonomous mode (no <code>roles</code>
+field) is unaffected by header overrides.</p>
+<h3 id="pipeline-file-roles-vs-workflow-file-agent">Pipeline-file <code>roles</code> vs workflow-file <code>agent</code></h3>
+<table>
+<thead>
+<tr>
+<th>Aspect</th>
+<th>Pipeline-file header <code>roles</code></th>
+<th>Pipeline-file stage <code>roles</code></th>
+<th>Workflow-file stage <code>agent</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scope</td>
+<td>Pipeline-wide default</td>
+<td>Single stage</td>
+<td>Single stage (overrides at run time)</td>
+</tr>
+<tr>
+<td>Value</td>
+<td>Map of role → prompt</td>
+<td>List of role aliases</td>
+<td>Single CLI agent name</td>
+</tr>
+<tr>
+<td>Controls</td>
+<td>The prompt text of each role</td>
+<td>Which roles run, in which order (mode)</td>
+<td>Which CLI binary runs the stage</td>
+</tr>
+<tr>
+<td>Examples</td>
+<td><code>{planner: "...", reviewer: "..."}</code></td>
+<td><code>[planner, executor]</code></td>
+<td><code>codex</code>, <code>claude</code>, <code>opencode</code></td>
+</tr>
+</tbody>
+</table>
+<p>Use pipeline-file declarations for the <strong>stable structure</strong> of a pipeline
+(its roles and their prompts). Use workflow-file <code>agent</code> for <strong>per-project
+variation</strong> — running the same pipeline on different CLI agents without
+forking the pipeline-file. See <a href="../workflows/">Workflows</a> for the full
+workflow-agent semantics.</p>
+<h2 id="errors">Errors</h2>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Exception</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>---</code> separator missing</td>
+<td><code>missing body separator</code></td>
+</tr>
+<tr>
+<td>Header missing <code>name</code> or <code>description</code></td>
+<td><code>header missing name/description</code></td>
+</tr>
+<tr>
+<td>Legacy <code>agents</code> key in header</td>
+<td><code>agents key is forbidden in header; use roles</code></td>
+</tr>
+<tr>
+<td>Unknown key in header <code>roles</code> block (incl. <code>summary</code>)</td>
+<td><code>unknown role in header.roles: &lt;key&gt;; valid keys: planner, executor, reviewer</code></td>
+</tr>
+<tr>
+<td>Non-mapping <code>roles</code> block in header</td>
+<td><code>non-mapping roles block in header</code></td>
+</tr>
+<tr>
+<td>Non-string value in header <code>roles.&lt;key&gt;</code></td>
+<td><code>non-str value in header.roles.&lt;key&gt;</code></td>
+</tr>
+<tr>
+<td>Legacy <code>agents</code> key in a stage body</td>
+<td><code>agents key is forbidden in stage body; use roles</code></td>
+</tr>
+<tr>
+<td>Authoring <code>interactive</code> in a stage body</td>
+<td><code>interactive key is forbidden in stage body; use communication</code></td>
+</tr>
+<tr>
+<td>Authoring <code>auto_run</code> in a stage body</td>
+<td><code>auto_run key is forbidden in stage body; use trigger: manual</code></td>
+</tr>
+<tr>
+<td><code>trigger</code> value outside <code>on_success</code>/<code>manual</code></td>
+<td><code>trigger must be one of: on_success, manual</code></td>
+</tr>
+<tr>
+<td><code>timeout</code> value is not a string (including YAML-null)</td>
+<td><code>timeout must be a string in stage &lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>timeout</code> without <code>script</code> in the same body</td>
+<td><code>timeout requires script in stage &lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>script</code> authored together with <code>prompt</code> and/or <code>skills</code></td>
+<td><code>script is mutually exclusive with prompt/skills in stage &lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Body shape is neither list nor dict</td>
+<td><code>unsupported body format</code></td>
+</tr>
+<tr>
+<td>Body has zero steps</td>
+<td><code>empty body</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../workflows/">Workflows</a> — layer project-specific overrides on top of a
+  compiled pipeline.</li>
+<li><a href="../../cli/pipeline/"><code>goga pipeline</code> CLI reference</a> — invocation flags,
+  exit codes, and Docker mechanics.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var peek = document.querySelector('.goga-peek');
+      var bubble = document.getElementById('gogaPeekBubble');
+      var footer = document.querySelector('.md-footer');
+      if (!peek) return;
+
+      var hooks = [
+        "CODEMANIFEST is the source of truth — I keep it that way! 📋",
+        "A cell is a responsibility zone with a contract. Neat, right? 🤖",
+        "Cells make architecture transparent — see the whole project at a glance. 🏛️",
+        "Usages are recipes for working with a cell — for any library or API. 📖",
+        "Want to teach a custom library? Write a .usages/ recipe — I'll surface it. 🍳",
+        "Annotations are little love notes inside your contracts. 📝",
+        "Cells import from other cells, never guess. I watch for that! 👀",
+        "Propose → brainstorm → apply → design → plan → build → change → accept. Let's go! 🚀",
+        "Hidden dependencies? Not on my watch — every cell declares its imports. 🕵️",
+        "One responsibility zone — one cell. I'll remind you. 💡",
+        "Contracts drift from code. Without me, anyway. 🫠",
+        "Hi! I'm goga. Want me to validate your CODEMANIFEST? 👋"
+      ];
+
+      function pickRandomHook() {
+        return hooks[Math.floor(Math.random() * hooks.length)];
+      }
+
+      if (bubble) {
+        bubble.textContent = pickRandomHook();
+        peek.addEventListener('mouseenter', function () {
+          bubble.textContent = pickRandomHook();
+        });
+      }
+
+      if (footer) {
+        function updatePeekBottom() {
+          var footerTop = footer.getBoundingClientRect().top;
+          var viewportH = window.innerHeight;
+          if (footerTop < viewportH) {
+            var visibleFooterH = viewportH - footerTop;
+            peek.style.bottom = (visibleFooterH + 8) + 'px';
+          } else {
+            peek.style.bottom = '16px';
+          }
+        }
+
+        window.addEventListener('scroll', updatePeekBottom, { passive: true });
+        window.addEventListener('resize', updatePeekBottom);
+        updatePeekBottom();
+      }
+    });
+  </script>
+
+  </body>
+</html>

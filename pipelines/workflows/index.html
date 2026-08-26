@@ -1,0 +1,4452 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A tool for working with the codemanifest specification — assembly, extension, and plan-building workflow">
+      
+      
+      
+        <link rel="canonical" href="https://qarium.github.io/goga/pipelines/workflows/">
+      
+      
+        <link rel="prev" href="../pipeline-file/">
+      
+      
+        <link rel="next" href="../shipped/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Workflows - Goga</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  
+  <style>
+    /* Dark navbar — override palette in both themes */
+    [data-md-color-scheme=default][data-md-color-primary=custom],
+    [data-md-color-scheme=slate][data-md-color-primary=custom] {
+      --md-primary-fg-color: #0a0a13;
+      --md-primary-fg-color--light: #0a0a13cc;
+      --md-primary-bg-color: #ffffff;
+    }
+
+    .md-header__button.md-logo img,
+    .md-header__button.md-logo svg {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+    }
+
+    /* Search form — visible on dark header */
+    .md-search__overlay {
+      background-color: transparent !important;
+    }
+    [data-md-toggle=search]:checked~.md-header .md-search__overlay {
+      background-color: #0000008a !important;
+    }
+    .md-search__inner {
+      background-color: transparent !important;
+    }
+    .md-search__form {
+      background-color: #3a3a3a !important;
+      border-radius: 0.5rem;
+    }
+    .md-search__form:hover {
+      background-color: #4a4a4a !important;
+    }
+    .md-search__input {
+      color: #e0e0e0 !important;
+    }
+    .md-search__input::placeholder {
+      color: #999999 !important;
+    }
+    .md-search__icon {
+      color: #999999 !important;
+    }
+    .md-search__form:hover .md-search__icon,
+    .md-search__input:focus-visible ~ .md-search__icon {
+      color: #e0e0e0 !important;
+    }
+
+    /* Links in dark theme — readable on dark background */
+    [data-md-color-scheme=slate] .md-nav__link,
+    [data-md-color-scheme=slate] .md-toc__link,
+    [data-md-color-scheme=slate] article a {
+      color: #cbd5e0 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link--passed,
+    [data-md-color-scheme=slate] .md-toc__link--passed {
+      color: #718096 !important;
+    }
+    [data-md-color-scheme=slate] .md-nav__link:hover,
+    [data-md-color-scheme=slate] .md-toc__link:hover,
+    [data-md-color-scheme=slate] article a:hover {
+      color: var(--md-accent-fg-color) !important;
+    }
+
+    /* goga peek assistant — bottom-left corner, rides on top of footer */
+    .goga-peek {
+      position: fixed;
+      bottom: 16px;
+      left: 16px;
+      width: 96px;
+      height: 96px;
+      z-index: 5;
+      pointer-events: none;
+      opacity: 0.7;
+      transition: opacity 0.4s ease, transform 0.3s ease, filter 0.3s ease;
+    }
+    .goga-peek img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: auto;
+    }
+    .goga-peek:hover {
+      opacity: 1;
+      transform: translateY(-12px);
+      filter: drop-shadow(0 6px 14px rgba(32, 212, 191, 0.55));
+    }
+
+    /* Speech bubble — appears to the right of the robot on hover */
+    .goga-peek-bubble {
+      position: absolute;
+      left: 108px;
+      bottom: 28px;
+      min-width: 180px;
+      max-width: 260px;
+      padding: 10px 14px;
+      background: #ffffff;
+      color: #1a2540;
+      border: 2px solid #20D4BF;
+      border-radius: 12px;
+      font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+      opacity: 0;
+      transform: translateX(-8px) scale(0.9);
+      transform-origin: bottom left;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      pointer-events: none;
+    }
+    /* Tail pointing left toward the robot */
+    .goga-peek-bubble::before {
+      content: "";
+      position: absolute;
+      left: -10px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #20D4BF;
+    }
+    .goga-peek-bubble::after {
+      content: "";
+      position: absolute;
+      left: -7px;
+      bottom: 14px;
+      width: 0;
+      height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 10px solid #ffffff;
+    }
+    .goga-peek:hover .goga-peek-bubble {
+      opacity: 1;
+      transform: translateX(0) scale(1);
+    }
+
+    /* On small screens sidenav takes the bottom area — hide peek to avoid clutter */
+    @media (max-width: 767px) {
+      .goga-peek { display: none; }
+    }
+  </style>
+
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#workflows" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Goga" class="md-header__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Goga
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Workflows
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="custom" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+  <div class="goga-peek" aria-hidden="true">
+    <img src="../../assets/goga-head.svg" alt="" />
+    <div class="goga-peek-bubble" id="gogaPeekBubble"></div>
+  </div>
+
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../getting-started/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Getting Started
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../workflow/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Workflow
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Pipelines
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../tools/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Tools
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../configuration/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Configuration
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cell/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Cell
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../cli/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  CLI
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Architecture
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../../languages/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Languages
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Goga" class="md-nav__button md-logo" aria-label="Goga" data-md-component="logo">
+      
+  <img src="https://avatars.githubusercontent.com/u/262344922?s=200&v=4" alt="logo">
+
+    </a>
+    Goga
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/qarium/goga" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    GitHub
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../workflow/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_3" id="__nav_3_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflow
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_2" id="__nav_3_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Refinement
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Refinement
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/define/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Define
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/discover/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Discover
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/propose/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Propose
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/review/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Task Review
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_3" id="__nav_3_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Development
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Development
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/brainstorm/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Brainstorm
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/apply/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Apply
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/design/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Design
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/plan/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Plan
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/change/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Change
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../workflow/accept/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Accept
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipelines
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipelines
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline-file/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline File
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflows
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#document-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage entries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-agent-choosing-the-cli-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow agent — choosing the CLI agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-prompt-context-not-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow prompt — context, not command
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skipping-a-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skipping a stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-approval-approve-auto-plan-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto-approval (approve: auto, plan, dialog)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-launch-manual-and-trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual launch (manual and trigger)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-the-pipeline-with-new-stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extending the pipeline with new stages
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending the pipeline with new stages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#positioning-semantics-by-body-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Positioning semantics by body format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inline-agent-loop-and-approve-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inline agent, loop, and approve overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rules-and-anti-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules and anti-patterns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-compiler-applies-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the compiler applies a workflow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How the compiler applies a workflow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pass-0-embed-extend-stages-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0 — Embed extend-stages (in-place)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-05-strict-validation-of-stage-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0.5 — Strict validation of stage names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-0a0-pre-strict-validation-of-extend-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0a0-pre — Strict validation of extend refs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-06-skip-removal-transparent-reconnection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0.6 — Skip removal + transparent reconnection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-1-per-stage-overrides-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 1 — Per-stage overrides (in-place)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skills-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skills merge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-2-loop-expansion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 2 — Loop expansion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-3-external-depends_on-rewrite-stages-format-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 3 — External depends_on rewrite (stages format only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-4-agent-mode-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 4 — Agent-mode resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invocation-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invocation modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Invocation modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#log-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log line
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../shipped/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Shipped Pipelines
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tools
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../configuration/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Configuration
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/home/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../configuration/agents/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Agents
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cell/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Cell
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Cell
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/codemanifest/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CODEMANIFEST
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cell/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../cli/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_8" id="__nav_8_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    CLI
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/init/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Init
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/install/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Install
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/uninstall/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Uninstall
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/lint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/build/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Config
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/schema/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/connect/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/upgrade/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Upgrade
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/usages/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Usages
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../cli/tool/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../architecture/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Architecture
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-nodes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Nodes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-factory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Factory
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-visitor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Visitor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-analyzer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Analyzer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/ast-errors/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AST Errors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/validation-rules/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Validation Rules
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../architecture/contract-extraction/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contract Extraction
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../../languages/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Languages
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Languages
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/python/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Python
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/golang/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Go
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/kotlin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Kotlin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/swift/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Swift
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../languages/javascript/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    JavaScript
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#document-shape" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Document shape
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#stage-entries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stage entries
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Stage entries">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#workflow-agent-choosing-the-cli-agent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow agent — choosing the CLI agent
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#workflow-prompt-context-not-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Workflow prompt — context, not command
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skipping-a-stage" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skipping a stage
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#auto-approval-approve-auto-plan-dialog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Auto-approval (approve: auto, plan, dialog)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#manual-launch-manual-and-trigger" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Manual launch (manual and trigger)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#extending-the-pipeline-with-new-stages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Extending the pipeline with new stages
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Extending the pipeline with new stages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#positioning-semantics-by-body-format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Positioning semantics by body format
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#inline-agent-loop-and-approve-overrides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Inline agent, loop, and approve overrides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#examples" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Examples
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rules-and-anti-patterns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rules and anti-patterns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-the-compiler-applies-a-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the compiler applies a workflow
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="How the compiler applies a workflow">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pass-0-embed-extend-stages-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0 — Embed extend-stages (in-place)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-05-strict-validation-of-stage-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0.5 — Strict validation of stage names
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-0a0-pre-strict-validation-of-extend-refs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0a0-pre — Strict validation of extend refs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-06-skip-removal-transparent-reconnection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 0.6 — Skip removal + transparent reconnection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-1-per-stage-overrides-in-place" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 1 — Per-stage overrides (in-place)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#skills-merge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Skills merge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-2-loop-expansion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 2 — Loop expansion
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-3-external-depends_on-rewrite-stages-format-only" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 3 — External depends_on rewrite (stages format only)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pass-4-agent-mode-resolution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pass 4 — Agent-mode resolution
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#invocation-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Invocation modes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Invocation modes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#log-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Log line
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Example
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="workflows">Workflows</h1>
+<p>A <strong>workflow-file</strong> is an optional YAML document that layers project-specific
+behavior on top of a compiled pipeline at run time. A workflow can inject a
+top-level prompt, override the agent or prompt of specific stages, expand
+a stage into N chained copies via <code>loop</code>, <strong>skip (delete) a stage</strong>,
+declare per-stage <strong>auto-approval</strong> via <code>approve</code>, force or cancel a stage's
+<strong>manual launch mode</strong> via <code>manual</code>, and <strong>declaratively add
+new stages</strong> to the pipeline via <code>extend</code>.</p>
+<p>Stage names in <code>workflow.stages</code> are matched strictly: a name that does not
+match any pipeline step or extend-stage is a compile error. Workflows that
+reference names absent from the target pipeline must be split or pruned.</p>
+<p>Workflow-files live at:</p>
+<pre><code>&lt;cwd&gt;/.goga/workflows/&lt;name&gt;.yml
+</code></pre>
+<p>They are <strong>project-only</strong> — there is no user-level workflow directory. The
+name must be a bare filename resolved inside <code>.goga/workflows/</code>; path
+traversal via <code>..</code> or an absolute prefix is rejected.</p>
+<h2 id="document-shape">Document shape</h2>
+<p>A workflow-file is a YAML mapping with up to three top-level keys:</p>
+<pre><code class="language-yaml">prompt: |
+  Top-level prompt injected as the first directive of the compiled pipeline.
+
+stages:
+  &lt;stage-name&gt;:
+    agent: codex              # optional per-stage agent override
+    prompt: |                 # optional per-stage prompt override
+      Additional per-stage instruction.
+    loop: 2                   # optional iteration count (&gt;= 1)
+    skills: [web-search]      # optional skills merged with the pipeline stage's skills
+    approve: auto             # optional auto-approval directive: auto | plan | dialog
+
+extend:
+  &lt;new-stage-name&gt;:
+    after: [propose]          # position the new stage relative to existing ones
+    title: Warmup             # optional display label; defaults to the entry key
+    prompt: |                 # any other stage field passes through verbatim
+      Bootstrap instruction for the new stage.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Type</th>
+<th>Required</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prompt</code></td>
+<td>string</td>
+<td>no*</td>
+<td>Top-level prompt emitted as the first key of the output.</td>
+</tr>
+<tr>
+<td><code>stages</code></td>
+<td>map</td>
+<td>no*</td>
+<td>Per-stage override instructions keyed by stage name.</td>
+</tr>
+<tr>
+<td><code>extend</code></td>
+<td>map</td>
+<td>no*</td>
+<td>New stages to add to the pipeline, keyed by new stage name.</td>
+</tr>
+</tbody>
+</table>
+<p>* At least one of <code>prompt</code>, a non-empty <code>stages</code> block, or a non-empty
+<code>extend</code> block must be present; an empty workflow is rejected with a
+structural error.</p>
+<p>Unknown top-level keys are rejected with
+<code>unknown key in workflow: &lt;KEY&gt;; valid keys: prompt, stages, extend</code>.</p>
+<h2 id="stage-entries">Stage entries</h2>
+<p>Each entry under <code>stages</code> is keyed by stage name and accepts up to seven
+fields:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agent</code></td>
+<td>string</td>
+<td>—</td>
+<td>CLI agent name (e.g. <code>codex</code>, <code>claude</code>, <code>cursor</code>, <code>opencode</code>, <code>qwen</code>). Selects which agent runs this stage. See <a href="#workflow-agent-choosing-the-cli-agent">Workflow <code>agent</code> — choosing the CLI agent</a>.</td>
+</tr>
+<tr>
+<td><code>prompt</code></td>
+<td>string</td>
+<td>—</td>
+<td>Per-stage context prompt. Lower precedence than the stage's own <code>prompt</code> — closer to a section description than to a direct instruction. See <a href="#workflow-prompt-context-not-command">Workflow <code>prompt</code> — context, not command</a>.</td>
+</tr>
+<tr>
+<td><code>loop</code></td>
+<td>int</td>
+<td>—</td>
+<td>Positive iteration count (<code>&gt;= 1</code>). When <code>&gt;= 2</code>, the stage is expanded into N chained copies.</td>
+</tr>
+<tr>
+<td><code>skills</code></td>
+<td>string list</td>
+<td>—</td>
+<td>Skill names merged with the pipeline stage's own <code>skills</code> (pipeline-first, deduplicated by value). See <a href="#skills-merge">Skills merge</a>.</td>
+</tr>
+<tr>
+<td><code>skip</code></td>
+<td>bool</td>
+<td>—</td>
+<td>When <code>true</code>, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). <code>false</code> (or an absent key) leaves the stage in place. <code>skip</code> is allowed ONLY in the <code>stages</code> block — it is a structural error under <code>extend</code>. <code>skip</code> wins over <code>agent</code>/<code>prompt</code>/<code>loop</code>/<code>skills</code> overrides on the same entry.</td>
+</tr>
+<tr>
+<td><code>approve</code></td>
+<td>string</td>
+<td>—</td>
+<td>Auto-approval directive. Accepted values are <code>auto</code>, <code>plan</code>, and <code>dialog</code>; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see <a href="#auto-approval-approve-auto-plan-dialog">Auto-approval (<code>approve: auto/plan/dialog</code>)</a>): (1) <strong>communication effect</strong> — if the body has <code>communication: true</code>, the stage's <code>interactive</code> output is SUPPRESSED (omitted, not <code>false</code>); (2) <strong>roles effect</strong> — if the body's raw <code>roles</code> contain <code>planner</code>, the stage emits <code>auto_approve: true</code>. <code>auto</code> drives BOTH effects; <code>plan</code> drives only the communication effect; <code>dialog</code> drives only the roles effect. Allowed in both <code>stages</code> and <code>extend</code> (inline default override; a <code>stages</code> entry wins per-field).</td>
+</tr>
+<tr>
+<td><code>manual</code></td>
+<td>bool</td>
+<td>—</td>
+<td>Manual-launch instruction, <code>stages</code> block only. <code>true</code> forces the manual launch mode: the compiler emits <code>auto_run: false</code> for the stage, overriding any authored <code>trigger</code> in its body. <code>false</code> cancels a manual state coming from either body source (a pipeline-file <code>trigger: manual</code> or an extend body <code>trigger: manual</code>) and is a structural error (<code>manual: false on non-manual stage &lt;NAME&gt;</code>) when the stage is not manual. An absent key means no instruction — the stage's own <code>trigger</code> decides. The three states (<code>true</code>/<code>false</code>/absent) are distinct; a non-bool value (including <code>null</code>) is a structural error. Allowed ONLY in <code>stages</code> — it is a structural error under <code>extend</code> (a new stage's launch mode is authored in its body via <code>trigger</code>). <code>skip</code> wins over <code>manual</code>: a skipped stage is removed before the manual instruction is applied. See <a href="#manual-launch-manual-and-trigger">Manual launch (<code>manual</code> and <code>trigger</code>)</a>.</td>
+</tr>
+</tbody>
+</table>
+<p>Rules:</p>
+<ul>
+<li>Only <code>agent</code>, <code>prompt</code>, <code>loop</code>, <code>skills</code>, <code>skip</code>, <code>approve</code>, <code>manual</code> are valid. An unknown key
+  is rejected with <code>unknown key in workflow.stages.&lt;NAME&gt;: &lt;KEY&gt;; valid keys:
+  agent, prompt, loop, skills, skip, approve, manual</code>.</li>
+<li><code>loop</code> must be an int <code>&gt;= 1</code>. Zero, negative values, and non-int types
+  raise a structural error.</li>
+<li><code>skills</code> must be a <code>list[str]</code>. A non-list (or a list with non-string
+  elements) raises <code>non-list-of-str skills in workflow.stages.&lt;NAME&gt;</code>.</li>
+<li><code>skip</code> (when present) must be a <code>bool</code>. A non-bool value raises
+  <code>non-bool value in workflow.stages.&lt;NAME&gt;.skip</code>. <code>skip</code> is allowed only in
+  the <code>stages</code> block — it is a structural error under <code>extend</code> (see
+  <a href="#skipping-a-stage">Skipping a stage</a>).</li>
+<li><code>approve</code> (when present) must be one of the strings <code>auto</code>, <code>plan</code>, or
+  <code>dialog</code>. A non-string value raises <code>non-str value in
+  workflow.stages.&lt;NAME&gt;.approve</code>; any other string raises <code>approve must be
+  one of: auto, plan, dialog in workflow.stages.&lt;NAME&gt;</code> (see
+  <a href="#auto-approval-approve-auto-plan-dialog">Auto-approval (<code>approve: auto/plan/dialog</code>)</a>).</li>
+<li><code>manual</code> (when present) must be a <code>bool</code>. A non-bool value (including an
+  explicit <code>null</code>) raises <code>non-bool value in workflow.stages.&lt;NAME&gt;.manual</code>.
+  <code>manual</code> is allowed only in the <code>stages</code> block — it is a structural error
+  under <code>extend</code>.</li>
+<li>The stage value must be a mapping. Non-mapping values raise
+  <code>non-mapping stage &lt;NAME&gt; in workflow.stages</code>.</li>
+<li>Stage names are validated against the target pipeline: a name that does not
+  match any step in the pipeline or any <code>extend</code>-stage is a structural error.</li>
+<li><code>agent</code> is not validated against a known agent set. Absence of the
+  corresponding wrapper file is surfaced at run time.</li>
+</ul>
+<h3 id="workflow-agent-choosing-the-cli-agent">Workflow <code>agent</code> — choosing the CLI agent</h3>
+<blockquote>
+<p><strong>Two different <code>agent</code> concepts.</strong> The pipeline-file stage field
+<code>roles</code> names the <strong>roles</strong> that organize the work inside a stage —
+<code>planner</code>, <code>executor</code>, <code>reviewer</code> (plus the always-on <code>summary</code>
+report). See <a href="../pipeline-file/#roles">stage modes</a>. The workflow-file
+stage field <code>agent</code> (singular) is a different concept: it names the
+<strong>CLI agent</strong> that runs the stage — <code>claude</code>, <code>codex</code>, <code>cursor</code>,
+<code>opencode</code>, or any other installed wrapper. The two are orthogonal.</p>
+</blockquote>
+<p>A workflow's per-stage <code>agent</code> field lets the <strong>same pipeline run different
+stages on different CLI agents</strong>. This is what makes a pipeline portable
+across CLI tools: you keep one pipeline-file (the work to be done) and
+express "stage X should run on codex, stage Y on claude" in a
+project-level workflow-file, without forking the pipeline.</p>
+<p>Each <code>agent</code> value resolves to a wrapper script installed in the goga image
+at <code>/home/goga/bin/&lt;agent&gt;-as-claude.sh</code>. The wrapper presents the named
+CLI agent to the pipeline runner in a uniform invocation shape, so the
+pipeline itself does not care which concrete CLI is underneath.</p>
+<p>The canonical baseline wrappers shipped with the image — <code>claude</code>, <code>codex</code>,
+<code>cursor</code>, <code>opencode</code>, <code>qwen</code> — and their per-agent environment variables are
+documented in <a href="../../configuration/agents/">Agents</a> under
+the Configuration reference. This page keeps the workflow-scoped agent
+semantics (per-stage override, inline-extend agent); the wrapper set
+itself is shared with build and pipeline.</p>
+<p>Any other value is permitted as long as the corresponding wrapper file
+exists in the image — absence is surfaced at run time, not at validation
+time.</p>
+<p>When a stage does <strong>not</strong> specify an <code>agent</code> in the workflow, the pipeline
+uses its global default agent — typically <code>claude</code>. Setting <code>agent</code>
+per-stage overrides that default for the named stage only; other stages
+keep the global default.</p>
+<h3 id="workflow-prompt-context-not-command">Workflow <code>prompt</code> — context, not command</h3>
+<p>The per-stage <code>prompt</code> in a workflow-file is <strong>not</strong> a direct instruction
+to the agent. Its weight is lower than the stage's own <code>prompt</code> field
+declared in the <a href="../pipeline-file/#stage-fields">pipeline-file</a>, and it is
+closer in role to a section description: it sets context, frames the
+stage's intent, and gives the agent additional background to interpret the
+stage's main prompt against.</p>
+<p>Two consequences follow from this lower precedence:</p>
+<ul>
+<li>The workflow <code>prompt</code> does <strong>not</strong> override or replace the stage's own
+  <code>prompt</code>. The stage's declared prompt remains the authoritative
+  instruction; the workflow <code>prompt</code> sits beside it as additional context.</li>
+<li>The workflow <code>prompt</code> does <strong>not</strong> by itself command the agent to take
+  specific actions. Free-form prose is interpreted as background, not as
+  a directive.</li>
+</ul>
+<p>To make a workflow <code>prompt</code> carry actual requirements, follow the
+explicit labeled format the goga prompts already use — sections like
+<code>Requirements:</code>, <code>Constraints:</code>, <code>Algorithm:</code>. Labeled blocks are
+recognized as instructions and are honored as such; unstructured prose is
+not.</p>
+<p>Example — descriptive context only (no enforceable requirements):</p>
+<pre><code class="language-yaml">stages:
+  propose:
+    prompt: |
+      This stage formalizes the user's request into a task document.
+      It runs early in the lifecycle and shapes the rest of the pipeline.
+</code></pre>
+<p>Example — context with enforceable requirements (the labeled block is
+honored as an instruction):</p>
+<pre><code class="language-yaml">stages:
+  propose:
+    prompt: |
+      Task formalization process.
+
+      Requirements:
+      - Examine all link connections between cells carefully.
+      - Do not write code examples in the task.
+
+      Constraints:
+      - Do not build architecture in the task.
+</code></pre>
+<p>In the second form, the <code>Requirements:</code> and <code>Constraints:</code> blocks are the
+load-bearing parts — the leading paragraph is still just context.</p>
+<h3 id="skipping-a-stage">Skipping a stage</h3>
+<p>A <code>stages</code> entry may set <code>skip: true</code> to remove the named stage from the
+compiled pipeline. The stage disappears from the flow-file entirely, and its
+dependents are <strong>transparently reconnected</strong>: any stage that depended on the
+skipped stage instead depends on the skipped stage's own predecessors. Chains
+are resolved transitively — in <code>A → B → C</code>, skipping <code>B</code> makes <code>C</code> depend on
+<code>A</code>; skipping both <code>A</code> and <code>B</code> makes <code>C</code> depend on whatever <code>A</code> depended on
+(nothing, in the limit). For a <strong>phases</strong> pipeline, removal is positional (the
+next stage simply chains to the new predecessor). <code>skip</code> wins over
+<code>agent</code>/<code>prompt</code>/<code>loop</code>/<code>skills</code> overrides on the same entry, and removing
+every stage is a structural error (<code>empty body</code>).</p>
+<pre><code class="language-yaml">stages:
+  task-review:
+    skip: true
+</code></pre>
+<h3 id="auto-approval-approve-auto-plan-dialog">Auto-approval (<code>approve: auto</code>, <code>plan</code>, <code>dialog</code>)</h3>
+<p>A <code>stages</code> (or <code>extend</code>) entry may set an <code>approve</code> directive to drive the afm
+auto-approval behavior for that stage at compile time. The directive is one of
+three values — <code>auto</code>, <code>plan</code>, or <code>dialog</code> — chosen from a closed set, not a
+free-form flag, so any other string (or a non-string) is a structural error.</p>
+<p>The compiler applies two <strong>independent</strong> effects to the stage body, and each
+directive drives a subset of them:</p>
+<ol>
+<li><strong><code>interactive</code> suppression</strong> (the <strong>communication effect</strong>) — if the stage
+   body has <code>communication: true</code>, the stage's <code>interactive</code> afm output is
+   SUPPRESSED (the key is omitted entirely, NOT emitted as <code>interactive:
+   false</code>). This makes an otherwise user-prompting stage run non-interactively.
+   <code>communication: false</code> (or no <code>communication</code> key) is unaffected —
+   suppression fires only when <code>communication is True</code>.</li>
+<li><strong><code>auto_approve</code> emission</strong> (the <strong>roles effect</strong>) — if the stage body's raw
+   <code>roles</code> list contains <code>planner</code>, the stage emits <code>auto_approve: true</code> (the
+   afm per-stage auto-approval key, in the canonical slot right after
+   <code>interactive</code>). The match is against the authored role alias <code>planner</code>,
+   captured before the compiler translates it to the afm stem <code>planning</code>.</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th><code>approve</code></th>
+<th style="text-align: center;">communication effect (suppress <code>interactive</code>)</th>
+<th style="text-align: center;">roles effect (emit <code>auto_approve</code>)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(absent)</em></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><code>auto</code></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">✓</td>
+</tr>
+<tr>
+<td><code>plan</code></td>
+<td style="text-align: center;">✓</td>
+<td style="text-align: center;">—</td>
+</tr>
+<tr>
+<td><code>dialog</code></td>
+<td style="text-align: center;">—</td>
+<td style="text-align: center;">✓</td>
+</tr>
+</tbody>
+</table>
+<p>So <code>auto</code> is the full directive (both effects, as before); <code>plan</code> keeps the
+communication effect but turns the roles effect OFF (a <code>planner</code> stage does NOT
+emit <code>auto_approve</code>); <code>dialog</code> keeps the roles effect but turns the
+communication effect OFF (<code>communication: true</code> still becomes <code>interactive:
+true</code>). The two effects are independent: each fires on its own trigger AND its
+own directive subset. With neither trigger present, the directive is a no-op on
+the body (it still threads through; it just has nothing to act on).</p>
+<pre><code class="language-yaml">stages:
+  deploy:
+    approve: auto      # or plan, or dialog
+</code></pre>
+<p>Under <code>extend</code>, <code>approve</code> is an inline default override exactly like inline
+<code>agent</code>/<code>loop</code> (see <a href="#inline-agent-loop-and-approve-overrides">Inline agent, loop, and approve overrides</a>):
+it is extracted from the entry (never reaches the body), and a <code>stages</code> entry
+naming the same stage wins per-field.</p>
+<h3 id="manual-launch-manual-and-trigger">Manual launch (<code>manual</code> and <code>trigger</code>)</h3>
+<p>A stage's launch mode has two authoring surfaces that meet in the compiler:</p>
+<ul>
+<li>The <strong>stage body</strong> (a pipeline-file stage or an <code>extend</code> body) carries a
+  <code>trigger</code> field — <code>on_success</code> (the default) or <code>manual</code>. <code>trigger: manual</code>
+  compiles to the afm <code>auto_run: false</code> key (see
+  <a href="../pipeline-file/">Pipeline files</a>): the stage pauses when reached and runs
+  only when launched manually. An authoring <code>auto_run</code> key in a body is a
+  structural error — the output key is assembled by the compiler, never
+  authored.</li>
+<li>The <strong>workflow <code>stages</code> block</strong> carries <code>manual</code> — a force/cancel instruction
+  applied ON TOP of the body, without editing the pipeline-file:</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th><code>manual</code></th>
+<th>Effect on the stage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(absent)</em></td>
+<td>No instruction — the body's own <code>trigger</code> decides.</td>
+</tr>
+<tr>
+<td><code>true</code></td>
+<td>Forces manual: the stage compiles with <code>auto_run: false</code>, overriding any authored <code>trigger</code>. Idempotent on a stage that is already manual.</td>
+</tr>
+<tr>
+<td><code>false</code></td>
+<td>Cancels manual: an effective <code>trigger: manual</code> (from the pipeline-file body or an <code>extend</code> body) is rewritten to <code>on_success</code>, so no <code>auto_run</code> key is emitted. A structural error when the stage is NOT manual (<code>manual: false on non-manual stage &lt;NAME&gt;</code>) — cancelling a state that does not exist is an authoring mistake, not a no-op.</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-yaml">stages:
+  deploy:
+    manual: true   # hold the deploy stage for manual launch
+</code></pre>
+<p><code>manual</code> is allowed ONLY in the <code>stages</code> block — under <code>extend</code> it is a
+structural error (<code>manual is forbidden in workflow.extend.&lt;NAME&gt;</code>): a new
+stage's launch mode is authored in its own body via <code>trigger</code>, never via a
+workflow instruction. <code>skip</code> wins over <code>manual</code>: a skipped stage is removed
+before the manual instruction is applied, so <code>skip: true</code> + <code>manual: true</code>
+on one entry simply deletes the stage. On a <code>loop</code>-expanded stage every copy
+carries the launch mode of the original.</p>
+<h2 id="extending-the-pipeline-with-new-stages">Extending the pipeline with new stages</h2>
+<p>The <code>stages</code> block only overrides stages that already exist in the target
+pipeline. The <code>extend</code> block does the complementary thing: it <strong>adds brand-new
+stages</strong> that are not in the pipeline-file at all. Each <code>extend</code> entry is one
+new stage, positioned relative to existing stages via <code>before</code> / <code>after</code>:</p>
+<pre><code class="language-yaml">extend:
+  &lt;new-stage-name&gt;:
+    before: [plan]            # place this new stage BEFORE the named stage(s)
+    after: [propose]          # place this new stage AFTER the named stage(s)
+    agent: codex              # optional: default agent override for the new stage
+    loop: 2                   # optional: default loop override (&gt;= 2 expands)
+    title: Warmup             # optional; any other stage field passes through
+    prompt: |                 # verbatim stage body — same fields as a pipeline stage
+      Bootstrap the environment before the pipeline runs.
+</code></pre>
+<p>Positioning (<code>before</code> / <code>after</code>), default overrides (<code>agent</code> / <code>loop</code> /
+<code>approve</code>), and the stage body are separate concerns:</p>
+<ul>
+<li><code>before</code> and <code>after</code> are <strong>lists of existing stage names</strong>. The new stage is
+  declared to run before the <code>before</code> names and after the <code>after</code> names. At
+  least one of the two must be present — an entry with neither is rejected.</li>
+<li><code>agent</code>, <code>loop</code>, and <code>approve</code> are optional <strong>default overrides</strong> extracted
+  from the entry (see <a href="#inline-agent-loop-and-approve-overrides">Inline agent, loop, and approve overrides</a>).</li>
+<li>Everything else in the entry (<code>title</code>, <code>prompt</code>, <code>skills</code>, <code>roles</code>,
+  <code>communication</code>, <code>trigger</code>, or any other stage field) is the <strong>verbatim body</strong> of the new
+  stage. It is carried through unchanged and embedded as an ordinary stage in
+  the compiled output. <code>before</code>, <code>after</code>, <code>agent</code>, <code>loop</code>, <code>approve</code>, and
+  <code>depends_on</code> are never part of the body — <code>agent</code>/<code>loop</code>/<code>approve</code> are
+  extracted as override fields, and <code>depends_on</code> is forbidden here (positioning
+  is declared structurally, not as a dependency edge). <code>trigger</code> IS part of the
+  body: a new stage's launch mode is authored right there (<code>trigger: manual</code>
+  compiles to <code>auto_run: false</code>), which is why the workflow <code>manual</code> key is
+  forbidden in an <code>extend</code> entry (see
+  <a href="#manual-launch-manual-and-trigger">Manual launch (<code>manual</code> and <code>trigger</code>)</a>);
+  <code>skip</code> is likewise forbidden (a new stage has nothing to skip).</li>
+<li>The <code>title</code> field, when omitted, falls back to the entry key — so a stage
+  declared under <code>extend: warmup:</code> without a <code>title</code> is still labeled
+  <code>warmup</code> in the output.</li>
+</ul>
+<p>Extend-stage names are <strong>first-class members</strong> of the workflow's name set:
+they are valid targets for <code>stages</code> entries and for other extend-entries'
+<code>before</code>/<code>after</code> refs (cross-references between extend-stages resolve). The
+new stage is always inserted; if a name collides with an existing stage, the
+duplicate is surfaced downstream by afm. Dangling <code>before</code>/<code>after</code> refs —
+names in neither the original pipeline body nor any extend-stage — are
+<strong>structural errors</strong> raised before the embed (see
+<a href="#pass-0a0-pre-strict-validation-of-extend-refs">How the compiler applies a workflow — Pass 0a0-pre</a>).</p>
+<h3 id="positioning-semantics-by-body-format">Positioning semantics by body format</h3>
+<p>How <code>before</code> / <code>after</code> translate into run order depends on the compiled
+body format of the target pipeline:</p>
+<ul>
+<li><strong>Stages format</strong> — the compiler derives <code>depends_on</code> edges from the names.
+  Each <code>after</code> name is added to the new stage's <code>depends_on</code> (so the new stage
+  runs after it), and the new stage's name is added to the <code>depends_on</code> of each
+  <code>before</code> target (so they run after it). Existing <code>depends_on</code> on the targets
+  is preserved — the new edge is appended, not overwritten. Execution order is
+  then governed entirely by <code>depends_on</code>, exactly as for any other stage.</li>
+<li><strong>Phases format</strong> — the compiler inserts the new stage <strong>positionally</strong>:
+  immediately after the last <code>after</code> target and/or immediately before the
+  first <code>before</code> target. Run order comes from list position, not <code>depends_on</code>.
+  When <code>after</code> and <code>before</code> targets place the stage inconsistently, the
+  <code>after</code> position wins. Every <code>before</code>/<code>after</code> target is guaranteed to exist
+  by Pass 0a0-pre (see <a href="#how-the-compiler-applies-a-workflow">How the compiler applies a workflow</a>).</li>
+</ul>
+<h3 id="inline-agent-loop-and-approve-overrides">Inline agent, loop, and approve overrides</h3>
+<p>Alongside positioning, an extend entry may carry inline <code>agent</code>, <code>loop</code>, and
+<code>approve</code> fields. They are extracted from the body exactly like
+<code>before</code>/<code>after</code> — they never reach the compiled stage as separate fields — and
+act as <strong>default overrides</strong> for the new stage, mirroring what a <code>stages</code> entry
+provides for an existing stage:</p>
+<ul>
+<li><code>agent</code> (a string) is composed into the stage's <code>command</code> wrapper path by
+  the same template as a <code>stages</code>-block <code>agent</code>
+  (<code>/home/goga/bin/&lt;agent&gt;-as-claude.sh</code>).</li>
+<li><code>loop</code> (an int <code>&gt;= 1</code>; <code>&gt;= 2</code> expands) expands the new stage into
+  <code>&lt;name&gt;-1..N</code> chained copies by the same rules as a <code>stages</code>-block <code>loop</code>,
+  including the external <code>before</code>/<code>after</code> reference rewrite to the last
+  expanded id.</li>
+<li><code>approve</code> (one of <code>auto</code>/<code>plan</code>/<code>dialog</code>) drives the stage's auto-approval
+  effects, same as a <code>stages</code>-block <code>approve</code> (see
+  <a href="#auto-approval-approve-auto-plan-dialog">Auto-approval (<code>approve: auto/plan/dialog</code>)</a>).</li>
+</ul>
+<p>An inline <code>agent</code>/<code>loop</code>/<code>approve</code> is a <strong>default</strong>: if a <code>stages</code> entry also
+names the same stage, the <code>stages</code> value wins <strong>per field</strong> — an unset <code>stages</code>
+field falls back to the inline one. This lets <code>extend</code> declare a sensible
+default that a <code>stages</code> override can selectively tighten. An inline
+<code>agent: null</code>, <code>loop: null</code>, or <code>approve: null</code> is a structural type error, not
+an absence — omit the key to express absence (symmetric with the per-stage
+<code>agent</code>/<code>loop</code>/<code>approve</code>).</p>
+<h3 id="examples">Examples</h3>
+<p>A STAGES pipeline <code>propose → review</code> with a new <code>warmup</code> stage that runs after
+<code>propose</code>, and a new <code>extra</code> stage that runs before <code>review</code>:</p>
+<pre><code class="language-yaml">extend:
+  warmup:
+    after: [propose]
+    title: Warmup
+    prompt: |
+      Bootstrap instruction.
+  extra:
+    before: [review]
+    title: Extra
+    prompt: |
+      Additional pass before review.
+</code></pre>
+<p>Compiled effect (stages format): <code>warmup</code> depends on <code>propose</code>, and <code>review</code>
+gains <code>extra</code> as an additional dependency —
+<code>propose → warmup</code>, <code>extra → review</code>.</p>
+<p>The same idea for a PHASES pipeline <code>[a, b, c]</code> — insert <code>x</code> after <code>b</code>:</p>
+<pre><code class="language-yaml">extend:
+  x:
+    after: [b]
+    title: X
+    prompt: |
+      Stage inserted between b and c.
+</code></pre>
+<p>Compiled effect (phases format): the run order becomes <code>[a, b, x, c]</code>.</p>
+<p>A workflow can consist of <code>extend</code> alone — this is a valid, non-empty workflow:</p>
+<pre><code class="language-yaml">extend:
+  teardown:
+    after: [summary]
+    title: Teardown
+    prompt: |
+      Final cleanup after the summary stage.
+</code></pre>
+<h3 id="rules-and-anti-patterns">Rules and anti-patterns</h3>
+<ul>
+<li><code>depends_on</code> is <strong>forbidden</strong> inside an extend entry. Positioning is declared
+  via <code>before</code> / <code>after</code>; the compiler derives the dependency edges.</li>
+<li>At least one of <code>before</code> / <code>after</code> must be present. An entry with neither is
+  rejected with
+  <code>extend entry &lt;NAME&gt; requires at least one of before/after</code>.</li>
+<li><code>before</code> and <code>after</code> must each be a <code>list[str]</code> when present. A scalar or a
+  list with non-string elements is rejected with <code>non-list-of-str before in
+  workflow.extend.&lt;NAME&gt;</code> / <code>non-list-of-str after in workflow.extend.&lt;NAME&gt;</code>.</li>
+<li>An inline <code>agent</code> (when present) must be a string; an inline <code>loop</code> (when
+  present) must be an int <code>&gt;= 1</code>; an inline <code>approve</code> (when present) must be one of
+  <code>auto</code>/<code>plan</code>/<code>dialog</code> — the same type rules as the <code>stages</code> block. A non-string
+  <code>agent</code> raises <code>non-str value in workflow.extend.&lt;NAME&gt;.agent</code>; a non-int or
+  <code>&lt; 1</code> <code>loop</code> raises <code>non-int value in workflow.extend.&lt;NAME&gt;.loop</code> /
+  <code>loop must be &gt;= 1 in workflow.extend.&lt;NAME&gt;</code>; a non-string <code>approve</code> raises
+  <code>non-str value in workflow.extend.&lt;NAME&gt;.approve</code>, and any other string
+  raises <code>approve must be one of: auto, plan, dialog in workflow.extend.&lt;NAME&gt;</code>. Inline
+  <code>agent</code>/<code>loop</code>/<code>approve</code> are default overrides — a <code>stages</code> entry for the
+  same name wins per field.</li>
+<li>An extend entry that names a <code>before</code>/<code>after</code> target that does not exist in
+  the pipeline (and is not another extend-stage) is a <strong>dangling reference</strong> —
+  a structural error raised by Pass 0a0-pre (<code>unknown stage name in
+  workflow.extend.&lt;NAME&gt;.before: &lt;REF&gt;</code> or the <code>.after</code> variant).</li>
+<li>Extend-stages are embedded into the compiled <code>FlowDocument.stages</code> only. The
+  original <code>PipelineDocument.body</code> is never modified — <code>extend</code> is a run-time
+  layering, like the rest of a workflow-file.</li>
+</ul>
+<h2 id="how-the-compiler-applies-a-workflow">How the compiler applies a workflow</h2>
+<p>When <code>compile_flow</code> is invoked with a non-None <code>WorkflowDocument</code>, the
+compiler reconstructs the parsed body in a fixed sequence of passes <strong>before</strong>
+building the output stages. The ordering is mandatory: extend-stages are
+embedded first, stage names are strictly validated and skipped stages removed,
+then per-stage overrides are applied, then loops are expanded, then external
+<code>depends_on</code> references are rewritten. Embedding first means a per-stage
+override (Pass 1) or loop expansion (Pass 2) can also target a stage introduced
+by <code>extend</code>, by name.</p>
+<h3 id="pass-0-embed-extend-stages-in-place">Pass 0 — Embed extend-stages (in-place)</h3>
+<p>For each entry in <code>workflow.extend</code>, the compiler appends a new stage to the
+working step sequence — the verbatim entry body minus <code>title</code>, labeled with the
+entry's <code>title</code> (or, falling back, the entry key). Positioning is then applied
+by body format:</p>
+<ul>
+<li><strong>Stages format</strong> — each <code>after</code> name becomes a <code>depends_on</code> entry on the new
+  stage, and the new stage's name is appended to the <code>depends_on</code> of each
+  <code>before</code> target (existing entries preserved; idempotent). Dangling
+  <code>before</code>/<code>after</code> targets are rejected up front by Pass 0a0-pre (see below),
+  so this pass only ever sees resolvable names.</li>
+<li><strong>Phases format</strong> — the new stage is inserted positionally after the last
+  <code>after</code> target and/or before the first <code>before</code> target, with no explicit
+  <code>depends_on</code>. Inconsistent <code>after</code>/<code>before</code> positions fall back to the
+  <code>after</code> position. Targets that cannot be resolved are caught by Pass 0a0-pre
+  before this pass runs.</li>
+</ul>
+<p>After this pass the extend-stages live in the working sequence alongside the
+originals, so Passes 1–3 below apply to them by the same generic rules.</p>
+<p>Before Pass 1, the compiler resolves one <strong>effective override map</strong> keyed by
+stage name, computed once and shared by Passes 1 and 2: each <code>extend</code> entry
+seeds a default override from its inline <code>agent</code>/<code>loop</code>/<code>approve</code>, and each
+<code>stages</code> entry then overlays per-field, winning whenever its field is not
+<code>None</code> (the inline value is the fallback). A name that appears only in <code>stages</code>
+is used verbatim; a name that appears only in <code>extend</code> carries just its inline
+<code>agent</code>/<code>loop</code>/<code>approve</code>.</p>
+<h3 id="pass-05-strict-validation-of-stage-names">Pass 0.5 — Strict validation of stage names</h3>
+<p>Before applying any override, the compiler validates every name in <code>workflow.stages</code>
+against the full name set = original pipeline step names ∪ extend-stage names. A name
+absent from both is a <strong>structural error</strong> (<code>unknown stage name in workflow.stages:
+&lt;name&gt;</code>). A stage that exists — even if also marked
+<code>skip: true</code> — is NOT flagged (the check runs on the full set before removal). Strictness
+is symmetric: dangling <code>extend.&lt;name&gt;.before/.after</code> refs are likewise rejected by
+Pass 0a0-pre (below).</p>
+<h3 id="pass-0a0-pre-strict-validation-of-extend-refs">Pass 0a0-pre — Strict validation of extend refs</h3>
+<p>Before the embed pass, the compiler validates every <code>before</code>/<code>after</code> ref in
+<code>workflow.extend</code> against the union of original pipeline step names and
+extend-stage names. Any ref absent from that set raises a <strong>structural error</strong>
+(<code>unknown stage name in workflow.extend.&lt;NAME&gt;.before: &lt;ref&gt;</code> or the <code>.after</code>
+variant) — a dangling <code>before</code>/<code>after</code> ref does not pass through verbatim.
+The check runs before embed and before skip removal, so a ref to a stage that
+also carries <code>skip: true</code> is NOT flagged here (it still exists in the original
+body at this point and is removed later at Pass 0.6). Existence only — cycles,
+self-references, and duplicate refs remain afm's responsibility.</p>
+<h3 id="pass-06-skip-removal-transparent-reconnection">Pass 0.6 — Skip removal + transparent reconnection</h3>
+<p>Stages with <code>skip: true</code> are removed from the working body. Dependents' <code>depends_on</code> are
+reconnected to the skipped stage's predecessors (transitively for chains; positional
+collapse for phases). <code>skip</code> wins over other overrides (removal precedes Pass 1). If the
+reconstructed body is empty, the compiler raises <code>empty body</code>.</p>
+<h3 id="pass-1-per-stage-overrides-in-place">Pass 1 — Per-stage overrides (in-place)</h3>
+<p>For each <code>(stage_name, effective_stage)</code> pair in the effective override map:</p>
+<ol>
+<li>Find the step in the body whose <code>name</code> or id equals <code>stage_name</code>.</li>
+<li>If not found — silent (only an intentionally skipped stage removed at Pass 0.6
+   reaches here; unknown names already errored at Pass 0.5).</li>
+<li>If found:</li>
+<li>When <code>effective_stage.agent</code> is not None — set the stage's <code>command</code>
+     field to the composed wrapper path
+     <code>/home/goga/bin/&lt;agent&gt;-as-claude.sh</code>. This applies the inline-extend
+     <code>agent</code> too, via the effective map.</li>
+<li>When <code>effective_stage.prompt</code> is not None — attach the prompt as
+     per-stage context for the agent running the stage. The prompt has
+     lower precedence than the stage's own <code>prompt</code> field and is treated
+     as ambient guidance, not as a direct command. See
+     <a href="#workflow-prompt-context-not-command">Workflow <code>prompt</code> — context, not command</a>.</li>
+<li>When <code>effective_stage.skills</code> is not None — merge the workflow skills
+     with the stage's existing <code>skills</code> (pipeline-first, deduplicated). See
+     <a href="#skills-merge">Skills merge</a>.</li>
+<li>The effective <code>approve</code> directive is threaded into the step body under
+     an internal sentinel key (one of <code>auto</code>/<code>plan</code>/<code>dialog</code>, or <code>None</code>); it is
+     read and consumed during canonical field assembly (Pass 4) to drive the two
+     approve effects (each on its own directive subset) and never reaches the
+     output. See
+     <a href="#auto-approval-approve-auto-plan-dialog">Auto-approval (<code>approve: auto/plan/dialog</code>)</a>.</li>
+<li>The effective <code>manual</code> instruction is applied to the WORKING copy of the
+     body (the parsed <code>PipelineDocument</code> is never mutated): <code>true</code> sets the
+     working body's trigger to <code>manual</code> over any authored value (idempotent on
+     an already-manual stage); <code>false</code> rewrites an effective <code>trigger: manual</code>
+     back to <code>on_success</code> or raises <code>manual: false on non-manual stage &lt;NAME&gt;</code>
+     when the stage is not manual; absent is a no-op. The resulting trigger is
+     translated during canonical field assembly (Pass 4) into the afm
+     <code>auto_run: false</code> key. See
+     <a href="#manual-launch-manual-and-trigger">Manual launch (<code>manual</code> and <code>trigger</code>)</a>.</li>
+</ol>
+<h3 id="skills-merge">Skills merge</h3>
+<p>A <code>stages</code>-block <code>skills</code> override is <strong>merged</strong> with the pipeline-file
+<code>skills</code> of the matched stage, not replaced:</p>
+<ul>
+<li>Pipeline-file skills come first (their relative order is preserved), then
+  the workflow skills, with any value already seen dropped (deduplication is
+  by value, first-occurrence order).</li>
+<li>A stage with no pipeline <code>skills</code> gets the workflow list as-is; a workflow
+  override of <code>[]</code> (or a stage with neither side carrying skills) leaves the
+  <code>skills</code> key absent rather than emitting an empty list.</li>
+<li>An <code>extend</code> entry's own body <code>skills</code> are the new stage's pipeline-side
+  skills — when a <code>stages</code> entry also names that stage, the merge combines the
+  extend-body skills with the <code>stages</code> override. With no matching <code>stages</code>
+  entry the extend-body skills pass through verbatim.</li>
+</ul>
+<h3 id="pass-2-loop-expansion">Pass 2 — Loop expansion</h3>
+<p>For each step, determine <code>loop_count</code> from the effective override's <code>loop</code>
+for that stage name when set, else <code>1</code>. The effective <code>loop</code> folds an
+inline-extend <code>loop</code> together with a <code>stages</code>-block <code>loop</code> (the <code>stages</code>
+value wins per-field when both are present).</p>
+<p>When <code>loop_count &gt;= 2</code>, the compiler appends N copies with ids
+<code>&lt;name&gt;-1</code>, ..., <code>&lt;name&gt;-N</code>, each subsequent copy depending on the previous
+one. The compiler records an <code>expanded_ids</code> map from base-name to the list
+of ids produced.</p>
+<p>Expansion interacts with body format:</p>
+<ul>
+<li><strong>Phases format</strong> — the expanded copies chain naturally via list position.
+  The first copy inherits the original position; subsequent copies depend
+  on their predecessor; the next <strong>original</strong> step depends on the last
+  expanded copy.</li>
+<li><strong>Stages format</strong> — <code>depends_on</code> is otherwise passed through as-is. See
+  Pass 3 for the external-reference rewrite.</li>
+</ul>
+<h3 id="pass-3-external-depends_on-rewrite-stages-format-only">Pass 3 — External depends_on rewrite (stages format only)</h3>
+<p>For each stage in <strong>stages</strong> format with a non-empty <code>depends_on</code>, the
+compiler replaces any reference to a base name whose <code>loop_count &gt;= 2</code>
+with <code>expanded_ids[ref][-1]</code> — i.e. the <strong>last</strong> expanded id.</p>
+<p>For example, if stage <code>review</code> has <code>loop: 2</code> and another stage declares
+<code>depends_on: [review]</code>, the compiled output carries
+<code>depends_on: [review-2]</code>.</p>
+<h3 id="pass-4-agent-mode-resolution">Pass 4 — Agent-mode resolution</h3>
+<p>After overrides and expansion, the compiler resolves the agent mode for
+every stage the same way the no-workflow path does: a stage without an
+authored non-empty <code>roles</code> value runs in autonomous mode, and a stage
+with an authored non-empty <code>roles</code> value runs in coordinated mode. See
+<a href="../pipeline-file/#roles">stage modes</a> for the functional description
+of each mode.</p>
+<p>A workflow-applied <code>command</code> override (from a per-stage <code>agent</code> field) and
+the stage's own agent-mode resolution are independent — the override
+selects which agent binary runs the stage, while the <code>roles</code> field
+selects how the work is organized inside it.</p>
+<h2 id="invocation-modes">Invocation modes</h2>
+<p>A pipeline run picks up a workflow in one of three mutually exclusive modes.
+The launcher communicates the chosen mode to the container through env-file
+entries.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Invocation</th>
+<th>Env-file entry</th>
+<th>Behavior</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Auto-match</td>
+<td><code>goga pipeline deploy</code></td>
+<td><em>(neither)</em></td>
+<td>If <code>&lt;cwd&gt;/.goga/workflows/deploy.yml</code> exists, it is applied silently.</td>
+</tr>
+<tr>
+<td>Explicit override</td>
+<td><code>goga pipeline deploy --workflow custom</code></td>
+<td><code>GOGA_WORKFLOW_NAME=custom</code></td>
+<td>Apply <code>&lt;cwd&gt;/.goga/workflows/custom.yml</code>. Host validates existence first.</td>
+</tr>
+<tr>
+<td>Disable</td>
+<td><code>goga pipeline deploy --no-workflow</code></td>
+<td><code>GOGA_WORKFLOW_DISABLED=1</code></td>
+<td>Disable workflow application entirely.</td>
+</tr>
+</tbody>
+</table>
+<p>In auto-match mode no host-side validation runs — the workflow-file is
+opened and parsed inside the container, and a missing file is silently
+treated as "no workflow". In explicit-override mode the host validates the
+file exists before launch (exit 1 if missing).</p>
+<p><code>--workflow</code> and <code>--no-workflow</code> are mutually exclusive — passing both
+exits with code 1 before launch.</p>
+<p>The card form honors the same three modes: <code>goga pipeline deploy --info
+[-w &lt;wf&gt; | --no-workflow]</code> resolves the workflow through the identical
+rule set, with the same host-side validation. The decision travels as
+<code>docker run</code> argv (not the env-file), and the stage list the card prints
+is exactly the composition a run with the same flags executes. See
+<a href="../../cli/pipeline/">pipeline</a>.</p>
+<h3 id="log-line">Log line</h3>
+<p>When a workflow will actually be applied (explicit <code>--workflow</code>, or an
+auto-match file that exists), the launcher prints a single line to stdout:</p>
+<pre><code>Pipeline running with workflow &quot;&lt;name&gt;&quot;
+</code></pre>
+<p>When no workflow applies, the launcher prints no workflow line.</p>
+<h2 id="example">Example</h2>
+<p>A workflow that layers a Russian-language answer directive and two
+per-stage prompts on top of a pipeline:</p>
+<pre><code class="language-yaml">prompt: |
+  Answer in Russian language
+
+stages:
+  propose:
+    prompt: |
+      Task formalization process.
+
+      Requirements:
+      - When setting the task, it is necessary to develop stack technologies more carefully.
+      - Carefully examine all the link connections between cells
+
+      Constraints:
+      - Don't write code examples in the task
+      - Don't build architecture in the task
+  brainstorm:
+    prompt: |
+      Architectural design process.
+
+      Requirements:
+      - Annotations describe the high-level order of actions
+      - Every usage file is connected through Imports and referenced in annotations
+      - Usage files are self-contained
+      - Footer Description describes the responsibility zone
+
+      Constraints:
+      - Annotations must not reference previous functionality
+      - Annotations do not contain implementation details
+      - Annotations must not use &quot;X from Imports&quot; phrasing
+      - Footer Description does not contain details
+</code></pre>
+<p>A workflow that expands a <code>propose-review</code> stage into two passes and pins
+its agent to <code>claude</code>:</p>
+<pre><code class="language-yaml">stages:
+  propose-review:
+    loop: 2
+    agent: claude
+</code></pre>
+<p>Compiled effect: the original <code>propose-review</code> stage is replaced by
+<code>propose-review-1</code> and <code>propose-review-2</code>, each depending on the previous
+one, both running with the <code>claude</code> wrapper.</p>
+<p>A workflow that runs different stages on different CLI agents — authoring
+on <code>codex</code>, review on <code>claude</code> — without touching the pipeline-file:</p>
+<pre><code class="language-yaml">stages:
+  propose:
+    agent: codex
+  brainstorm:
+    agent: codex
+  architecture-review:
+    agent: claude
+  plan-review:
+    agent: claude
+</code></pre>
+<p>Here <code>codex</code> does the heavy authoring (propose, brainstorm) and <code>claude</code>
+runs the reviews. The underlying pipeline-file stays unchanged — every
+project can pin its own agent-per-stage matrix in its workflow-file.</p>
+<p>A workflow that adds stages which are not in the pipeline-file at all — a
+<code>warmup</code> that runs after <code>propose</code>, and an <code>extra</code> review that runs before
+<code>plan-review</code>:</p>
+<pre><code class="language-yaml">extend:
+  warmup:
+    after: [propose]
+    title: Warmup
+    prompt: |
+      Boot up tooling context before the pipeline runs.
+
+  extra:
+    before: [plan-review]
+    title: Extra review
+    prompt: |
+      An additional review pass before the plan is finalized.
+</code></pre>
+<p>Compiled effect: two stages absent from the pipeline-file now appear in the
+run. In stages format <code>warmup</code> depends on <code>propose</code>, and <code>plan-review</code> gains
+<code>extra</code> as an additional dependency; in phases format <code>warmup</code> is inserted
+after <code>propose</code> and <code>extra</code> before <code>plan-review</code>. The pipeline-file itself is
+untouched — <code>extend</code> layers new stages on top at run time.</p>
+<h2 id="errors">Errors</h2>
+<table>
+<thead>
+<tr>
+<th>Condition</th>
+<th>Exception</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>File is not valid YAML</td>
+<td><code>invalid YAML in workflow-file</code></td>
+</tr>
+<tr>
+<td>Root is not a mapping</td>
+<td><code>workflow must be a mapping</code></td>
+</tr>
+<tr>
+<td><code>prompt</code> present but not a string</td>
+<td><code>non-str value in workflow.prompt</code></td>
+</tr>
+<tr>
+<td><code>stages</code> present but not a mapping</td>
+<td><code>non-mapping stages block in workflow</code></td>
+</tr>
+<tr>
+<td>Unknown top-level key</td>
+<td><code>unknown key in workflow: &lt;KEY&gt;; valid keys: prompt, stages, extend</code></td>
+</tr>
+<tr>
+<td>Stage value is not a mapping</td>
+<td><code>non-mapping stage &lt;NAME&gt; in workflow.stages</code></td>
+</tr>
+<tr>
+<td><code>extend</code> present but not a mapping</td>
+<td><code>non-mapping extend block in workflow</code></td>
+</tr>
+<tr>
+<td>Extend entry value is not a mapping</td>
+<td><code>non-mapping extend entry &lt;NAME&gt; in workflow.extend</code></td>
+</tr>
+<tr>
+<td><code>depends_on</code> present in an extend entry</td>
+<td><code>depends_on is forbidden in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>before</code> in an extend entry not a <code>list[str]</code></td>
+<td><code>non-list-of-str before in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>after</code> in an extend entry not a <code>list[str]</code></td>
+<td><code>non-list-of-str after in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Inline <code>agent</code> in an extend entry not a string</td>
+<td><code>non-str value in workflow.extend.&lt;NAME&gt;.agent</code></td>
+</tr>
+<tr>
+<td>Inline <code>loop</code> in an extend entry not an int</td>
+<td><code>non-int value in workflow.extend.&lt;NAME&gt;.loop</code></td>
+</tr>
+<tr>
+<td>Inline <code>loop</code> in an extend entry is an int but <code>&lt; 1</code></td>
+<td><code>loop must be &gt;= 1 in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Inline <code>approve</code> in an extend entry not a string</td>
+<td><code>non-str value in workflow.extend.&lt;NAME&gt;.approve</code></td>
+</tr>
+<tr>
+<td>Inline <code>approve</code> in an extend entry not one of <code>auto</code>/<code>plan</code>/<code>dialog</code></td>
+<td><code>approve must be one of: auto, plan, dialog in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Extend entry has neither <code>before</code> nor <code>after</code></td>
+<td><code>extend entry &lt;NAME&gt; requires at least one of before/after</code></td>
+</tr>
+<tr>
+<td>Unknown per-stage key</td>
+<td><code>unknown key in workflow.stages.&lt;NAME&gt;: &lt;KEY&gt;; valid keys: agent, prompt, loop, skills, skip, approve, manual</code></td>
+</tr>
+<tr>
+<td><code>agent</code> present but not a string</td>
+<td><code>non-str value in workflow.stages.&lt;NAME&gt;.agent</code></td>
+</tr>
+<tr>
+<td><code>prompt</code> present but not a string</td>
+<td><code>non-str value in workflow.stages.&lt;NAME&gt;.prompt</code></td>
+</tr>
+<tr>
+<td><code>loop</code> present but not an int</td>
+<td><code>non-int value in workflow.stages.&lt;NAME&gt;.loop</code></td>
+</tr>
+<tr>
+<td><code>loop</code> is an int but <code>&lt; 1</code></td>
+<td><code>loop must be &gt;= 1 in workflow.stages.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>skills</code> present but not a <code>list[str]</code></td>
+<td><code>non-list-of-str skills in workflow.stages.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>skip</code> is not a bool</td>
+<td><code>non-bool value in workflow.stages.&lt;NAME&gt;.skip</code></td>
+</tr>
+<tr>
+<td><code>manual</code> is not a bool</td>
+<td><code>non-bool value in workflow.stages.&lt;NAME&gt;.manual</code></td>
+</tr>
+<tr>
+<td><code>approve</code> present but not a string</td>
+<td><code>non-str value in workflow.stages.&lt;NAME&gt;.approve</code></td>
+</tr>
+<tr>
+<td><code>approve</code> present but not one of <code>auto</code>/<code>plan</code>/<code>dialog</code></td>
+<td><code>approve must be one of: auto, plan, dialog in workflow.stages.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>skip</code> present under <code>extend</code></td>
+<td><code>skip is forbidden in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>manual</code> present under <code>extend</code></td>
+<td><code>manual is forbidden in workflow.extend.&lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td><code>manual: false</code> on a stage that is not manual</td>
+<td><code>manual: false on non-manual stage &lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Unknown stage name in <code>workflow.stages</code> (absent from pipeline and extend)</td>
+<td><code>unknown stage name in workflow.stages: &lt;NAME&gt;</code></td>
+</tr>
+<tr>
+<td>Unknown ref in <code>workflow.extend.&lt;NAME&gt;.before</code></td>
+<td><code>unknown stage name in workflow.extend.&lt;NAME&gt;.before: &lt;REF&gt;</code></td>
+</tr>
+<tr>
+<td>Unknown ref in <code>workflow.extend.&lt;NAME&gt;.after</code></td>
+<td><code>unknown stage name in workflow.extend.&lt;NAME&gt;.after: &lt;REF&gt;</code></td>
+</tr>
+<tr>
+<td>All stages skipped (empty reconstructed body)</td>
+<td><code>empty body</code></td>
+</tr>
+<tr>
+<td>None of <code>prompt</code>, <code>stages</code>, <code>extend</code> entries are present</td>
+<td><code>empty workflow — provide at least prompt, one stage, or one extend entry</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="see-also">See also</h2>
+<ul>
+<li><a href="../pipeline-file/">Pipeline File</a> — the base document a workflow layers
+  on top of.</li>
+<li><a href="../../cli/pipeline/"><code>goga pipeline</code> CLI reference</a> — invocation flags
+  for <code>--workflow</code> / <code>--no-workflow</code> and exit codes.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.indexes", "search.suggest", "search.highlight", "content.code.copy"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+  
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var peek = document.querySelector('.goga-peek');
+      var bubble = document.getElementById('gogaPeekBubble');
+      var footer = document.querySelector('.md-footer');
+      if (!peek) return;
+
+      var hooks = [
+        "CODEMANIFEST is the source of truth — I keep it that way! 📋",
+        "A cell is a responsibility zone with a contract. Neat, right? 🤖",
+        "Cells make architecture transparent — see the whole project at a glance. 🏛️",
+        "Usages are recipes for working with a cell — for any library or API. 📖",
+        "Want to teach a custom library? Write a .usages/ recipe — I'll surface it. 🍳",
+        "Annotations are little love notes inside your contracts. 📝",
+        "Cells import from other cells, never guess. I watch for that! 👀",
+        "Propose → brainstorm → apply → design → plan → build → change → accept. Let's go! 🚀",
+        "Hidden dependencies? Not on my watch — every cell declares its imports. 🕵️",
+        "One responsibility zone — one cell. I'll remind you. 💡",
+        "Contracts drift from code. Without me, anyway. 🫠",
+        "Hi! I'm goga. Want me to validate your CODEMANIFEST? 👋"
+      ];
+
+      function pickRandomHook() {
+        return hooks[Math.floor(Math.random() * hooks.length)];
+      }
+
+      if (bubble) {
+        bubble.textContent = pickRandomHook();
+        peek.addEventListener('mouseenter', function () {
+          bubble.textContent = pickRandomHook();
+        });
+      }
+
+      if (footer) {
+        function updatePeekBottom() {
+          var footerTop = footer.getBoundingClientRect().top;
+          var viewportH = window.innerHeight;
+          if (footerTop < viewportH) {
+            var visibleFooterH = viewportH - footerTop;
+            peek.style.bottom = (visibleFooterH + 8) + 'px';
+          } else {
+            peek.style.bottom = '16px';
+          }
+        }
+
+        window.addEventListener('scroll', updatePeekBottom, { passive: true });
+        window.addEventListener('resize', updatePeekBottom);
+        updatePeekBottom();
+      }
+    });
+  </script>
+
+  </body>
+</html>
