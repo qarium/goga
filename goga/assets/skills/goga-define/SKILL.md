@@ -357,7 +357,9 @@ Once the product definition is validated:
 4. save it as:
 
 ```text
-docs/defines/<topic>.md
+.goga/history/<year>/<topic>/prd.md
+
+<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
 ```
 
 `<topic>` should be derived from the product change using a concise, filesystem-safe topic name.
@@ -406,7 +408,9 @@ The orchestrator must not formulate or resolve the decision itself.
 The primary output of `goga-define` is one Markdown file:
 
 ```text
-docs/defines/<topic>.md
+.goga/history/<year>/<topic>/prd.md
+
+<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
 ```
 
 The orchestrator should provide a concise completion message containing:

@@ -344,7 +344,9 @@ The PRD must contain only validated product decisions.
 The final artifact will be saved by the orchestrator to:
 
 ```text
-docs/defines/<topic>.md
+.goga/history/<year>/<topic>/prd.md
+
+<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
 ```
 
 Do not create additional PRD files.
