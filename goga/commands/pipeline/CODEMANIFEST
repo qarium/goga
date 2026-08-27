@@ -43,6 +43,12 @@ Usages:
   afm: .goga/usages/cooks/afm.md
   agent-wrappers: .goga/usages/cooks/agent-as-claude-wrappers.md
   docker-auth-mounts: .goga/usages/cooks/docker-auth-mounts.md
+  git: |
+    External git binary invoked via subprocess.run (check=True,
+    capture_output=True). Set GIT_TERMINAL_PROMPT=0 in the env to suppress
+    interactive prompts. Read-only inspection (current branch name, branch ref
+    existence) plus one host-side mutation (create-and-switch to a new branch).
+    Mock the subprocess call in tests per `convention`.
 
 Annotations: |
   The `convention` practice is used for:
@@ -103,14 +109,30 @@ Annotations: |
   check; the `docker-image-version` practice covers the image-side version
   probe.
 
+  The optional -b/--branch flag prepares a fresh branch and a fresh history
+  topic before the run form launches: the entered name is normalized into the
+  topic slug, occupancy is checked against three oracles (a local branch, a
+  remote-tracking branch, the history topic folder), and a free name creates
+  the branch on the host and switches to it. The procedure runs after the
+  argument-form validation and before any docker activity. The listing and
+  info forms silently skip the whole branch procedure.
+
+  Use the `git` practice for every git invocation of the branch procedure —
+  read-only inspection and the single create-and-switch mutation.
+  Use the `click` practice for the -b/--branch option: a long form and a short
+  alias sharing a single Option, click.prompt for the re-ask cycle, and
+  exit-code propagation.
+
 ---
 
-"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
+"pipeline(ctx: click.Context, name: str | None, list_requested: bool, info: bool, branch: str | None, extra_env: tuple[str, ...], proxy: str | None, add_host: tuple[str, ...], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None)":
   location: pipeline.py
   annotations: |
     Single CLI command "goga pipeline" with five explicit forms. Every form
     launches the goga Docker container and invokes the in-container
-    entrypoint inside it; the host never reads pipeline files directly.
+    entrypoint inside it; the host never reads pipeline files directly. The
+    optional -b/--branch flag prepares a fresh git branch and a fresh
+    history topic before the run form starts.
 
     `ctx`: Click execution context, used to propagate exit codes (per the
            `click` practice)
@@ -121,6 +143,12 @@ Annotations: |
     `info`: flag from the --info/-i click option — a modifier meaning "show
             instead of act": with `list_requested` → the overview, with
             `name` → the card; on its own it selects no form.
+    `branch`: optional branch name from the -b/--branch option (a long form
+            and a short alias on a single click option). Run form only:
+            prepares a fresh branch and a fresh history topic via
+            `ensure_pipeline_branch` before any docker activity. Silently
+            ignored in the flat list, overview, and card forms — not an
+            error.
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env option,
             forwarded into the container env-file in the run form only.
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy option; when
@@ -164,8 +192,8 @@ Annotations: |
        2.2. `name` absent AND `list_requested` absent → the error
             'Missing pipeline name. Use "goga pipeline --list" to list
             available pipelines, or provide a pipeline name.' to stderr,
-            exit 1, nothing to stdout, no image refresh and no first-run
-            build
+            exit 1, nothing to stdout, no branch procedure, no image
+            refresh and no first-run build
        2.3. `workflow` provided AND `no_workflow` set → mutually-exclusive
             error (exit 1)
        2.4. `workflow` provided → reject a name whose resolved path escapes
@@ -174,7 +202,20 @@ Annotations: |
             resolve into the wider filesystem; then verify
             <cwd>/.goga/workflows/<workflow>.yml exists; a missing file is
             a clean error (exit 1)
-    3. Dispatch by form:
+    3. Branch procedure (run form only — `name` given, `list_requested`
+       False, `branch` given): bring the project onto a fresh branch via
+       `ensure_pipeline_branch`. When the procedure completed (a
+       created-and-switched branch or the already-on-branch case), print
+       'Pipeline running on branch <final branch name>' to stdout once,
+       immediately after the branch procedure and before the step-4
+       dispatch; the forms that skip the procedure print no branch line.
+       Every git action happens on the host before any
+       docker activity. An input error (an empty slug) or an unresolved
+       conflict aborts the command with a non-zero exit before any image
+       refresh, build, or launch. The flat list, overview, and card forms
+       skip the procedure silently — passing -b there is not an error and
+       has no effect.
+    4. Dispatch by form:
        - flat list — `run_pipeline_info_container` with name=None,
          info=False; `update` applies (image refresh before the listing)
        - overview — `run_pipeline_info_container` with name=None, info=True;
@@ -186,14 +227,25 @@ Annotations: |
          per the flag matrix)
        - run — resolve the proxy (CLI over config) and the hosts (CLI over
          config), then `run_pipeline_container` with the full argument set
-    4. Propagate the returned exit code via the click context (per the
+    5. Propagate the returned exit code via the click context (per the
        `click` practice)
 
     Requirements:
     - Expose -l/--list and -i/--info as click flags alongside the run
       options; long and short forms behave identically
-    - Every step-2 check runs before any docker activity — an argument-form
-      error never refreshes, builds, or launches an image
+    - Register -b/--branch with both forms on a single click Option — both
+      bind the `branch` parameter identically
+    - When the branch procedure ran, print exactly one stdout line
+      'Pipeline running on branch <name>' before the launch — in the
+      created-and-switched and the already-on-branch case alike; no branch
+      line in the flat list, overview, and card forms
+    - Every step-2 check runs before any git or docker activity — an
+      argument-form error never creates a branch, refreshes, builds, or
+      launches an image
+    - The branch procedure (step 3) runs before any docker activity; a
+      branch error never launches an image
+    - The listing and info forms silently ignore -b/--branch — no message,
+      no side effects
     - The listing and info forms silently ignore -e/--env, --proxy,
       -c/--clean, -s/--skip, -p/--parallel, and --add-host — no side
       effects; --clean deletes nothing
@@ -217,6 +269,149 @@ Annotations: |
     - Do not validate the KEY=VALUE format, the "HOST:IP" format beyond the
       single-colon split, or the --skip stage names — forwarded as-is
     - Do not default or validate `parallel`
+    - Do not validate the branch name at the CLI layer — the branch
+      procedure and git own that
+    - Do not switch back to the previous branch after the launch — the run
+      finishes on the new branch
+    - Do not pass the branch name into the container — the container sees
+      the branch through the mounted project
+
+"normalize_topic_slug(name: str) -> slug: str":
+  location: branch.py
+  annotations: |
+    Normalize a branch name into the history topic slug.
+
+    `name`: branch name as entered by the user
+    `slug`: history topic slug
+
+    Algorithm:
+    1. Lowercase the name
+    2. Drop every non-ASCII character (no transliteration)
+    3. Replace each remaining character outside [a-z0-9] with a hyphen
+    4. Collapse repeat hyphens into one
+    5. Trim leading and trailing hyphens
+
+    Requirements:
+    - The grammar matches the skill-side topic grammar:
+      "Feature/Foo_Bar" -> "feature-foo-bar"; "release/1.3.0" ->
+      "release-1-3-0"; "aБb" -> "ab" (non-ASCII dropped before hyphen
+      replacement); a fully non-ASCII name -> empty slug
+    - Deterministic — same input always produces the same output
+    - Pure string transformation — no git, no filesystem, no side effects
+
+    Constraints:
+    - Do not transliterate Cyrillic or any other script
+    - Do not return a fallback for an empty result — an empty slug is a
+      valid output; the caller owns the empty-slug decision
+
+"resolve_current_branch_name() -> branch: str | None":
+  location: branch.py
+  annotations: |
+    Read the current git branch name exactly as git reports it.
+
+    `branch`: raw current branch name, or None when it cannot be determined
+
+    Apply the `git` practice for the invocation pattern.
+
+    Algorithm:
+    1. Ask git for the current branch name
+    2. A non-empty answer -> return it stripped, unmodified
+    3. Detached HEAD, missing git binary, or a non-repository -> None
+
+    Requirements:
+    - Read-only — no branch switch, no writes, no caching
+    - No slugification and no fallback value — both belong to the caller
+
+    Constraints:
+    - Do not tolerate unexpected OS-level failures silently — the None
+      result covers only the documented failure modes
+
+"check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> conflict: str | None":
+  location: branch.py
+  annotations: |
+    Decide whether the entered branch name and the topic slug are free.
+
+    `branch_name`: branch name as entered (checked against git refs)
+    `slug`: normalized topic slug (checked against the history folder)
+    `history_year`: current year as YYYY (the caller owns the clock)
+    `conflict`: human-readable reason of the first occupied oracle, or None
+                when everything is free
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. A local branch ref for `branch_name` exists -> return the reason
+    2. A remote-tracking ref for `branch_name` exists -> return the reason
+       (local remote-tracking refs only — no network call)
+    3. The history topic folder .goga/history/<history_year>/<slug> exists
+       -> return the reason
+    4. All three oracles are free -> None
+
+    Requirements:
+    - The git oracles check the name as entered; the history oracle checks
+      the slug — the two may deliberately differ
+    - The first occupied oracle wins; remaining oracles are not probed
+    - Read-only — no ref or folder is created
+
+    Constraints:
+    - Do not resolve remote state over the network — remote-tracking refs
+      only
+    - Do not create the history folder or any ref here
+
+"ensure_pipeline_branch(branch_name: str) -> branch: str":
+  location: branch.py
+  annotations: |
+    Bring the project onto a fresh branch with a fresh history topic before
+    a pipeline run.
+
+    `branch_name`: branch name as entered by the user
+    `branch`: the final branch name — the entered one or the re-asked one;
+              the current branch name for the already-on-branch case
+
+    Apply the `click` practice for click.prompt and exit-code propagation.
+    Apply the `git` practice for every git invocation.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Normalize `branch_name` via `normalize_topic_slug` and read the
+       current branch via `resolve_current_branch_name`
+    2. Empty slug -> input error:
+       - interactive terminal: print the reason, prompt for a new name via
+         click.prompt, restart from step 1 with it
+       - no terminal: print the reason and the hint to pass another name
+         via -b to stderr, fail with a non-zero exit
+    3. The current branch is known and its slug equals the entered slug ->
+       return the current branch name; no git action, no occupancy check
+       (a branch does not conflict with itself)
+    4. `check_branch_occupancy` with the entered name, the slug, and the
+       current year returns a reason -> conflict:
+       - interactive terminal: print the reason, prompt for a new name,
+         restart from step 1 with it
+       - no terminal: print the reason and the hint to stderr, fail with a
+         non-zero exit
+    5. Free name -> create the branch named exactly as entered on the host
+       and switch to it (git owns the name-validity error)
+    6. Return the final branch name
+
+    Requirements:
+    - The branch is created with the name exactly as entered; the history
+      topic name is the slug — the two may deliberately differ
+    - The whole procedure runs on the host, before any docker activity
+    - A re-ask cycle abort (Ctrl-C or closed input) leaves the repository
+      untouched — no branch is created, no switch happens
+    - After a successful create-and-switch the caller stays on the new
+      branch — no switch back
+
+    Constraints:
+    - Do not validate branch-name characters — git rejects invalid names
+      itself
+    - Do not auto-pick suffixed names on a conflict — the user re-asks or
+      aborts
+    - Do not touch the runtime-segment branch grammar — the runtime paths
+      keep their own normalization and are not unified with the slug
 
 "run_pipeline_container(name: str, config: ProjectConfig, extra_env: tuple[str, ...], proxy: str | None, hosts: dict[str, str], clean: bool, update: bool, workflow: str | None, no_workflow: bool, skip: tuple[str, ...], parallel: int | None) -> exit_code: int":
   location: run_pipeline_container.py
@@ -697,5 +892,6 @@ Description: |
   Host-side CLI wrapper cell for the single pipeline command. Every form —
   the flat list, the overview, the card, and the run — launches the goga
   Docker container and invokes the in-container pipeline entrypoint inside
-  it. The runtime boundary to the in-container pipeline is docker — this
-  cell has no Python Type Imports from it.
+  it; the run form can first prepare a fresh branch and history topic on
+  the host. The runtime boundary to the in-container pipeline is docker —
+  this cell has no Python Type Imports from it.

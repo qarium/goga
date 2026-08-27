@@ -28,6 +28,8 @@ Imports:
     From: goga/commands/init
   - Types:
       - pipeline
+    Usages:
+      - pipeline-command
     From: goga/commands/pipeline
   - Types:
       - upgrade
@@ -37,6 +39,7 @@ Imports:
       - uninstall
     Usages:
       - uninstall-usage
+      - install AS install-usage
     From: goga/commands/install
 
 Usages:
@@ -53,6 +56,12 @@ Annotations: |
   Use the `uninstall-usage` practice for consumer scenarios of the removal
   command: confirmation behavior, flags, exit codes, and the post-removal
   re-sync.
+
+  Use the `pipeline-command` practice for consumer scenarios of the
+  pipeline command: the five forms, the branch preparation flow of
+  -b/--branch, and the flag behavior per form.
+  Use the `install-usage` practice for consumer scenarios of the install
+  command: the four modes, the post-install hooks, and the exit codes.
 
 ---
 
