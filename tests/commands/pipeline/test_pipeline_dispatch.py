@@ -5,6 +5,10 @@ These tests pin the click-command contract declared in
 ``pipeline(ctx, name, extra_env, proxy, add_host, clean, update)``:
 
 - new ``--proxy``, ``--add-host`` (multiple), ``--clean``, ``--update/-u`` options
+- new ``-b/--branch`` option (run form only): one Option with both forms
+  binding the ``branch`` parameter; the guarded branch procedure runs after
+  the step-2 validation and before any docker activity, prints exactly one
+  stdout line, and never forwards the branch name into a launcher
 - proxy resolution: ``--proxy`` wins over ``config.pipeline.proxy``
 - hosts resolution: ``--add-host`` entries merge on top of
   ``config.pipeline.hosts`` (CLI overrides config on key conflict)
@@ -19,9 +23,12 @@ dependency.
 
 from __future__ import annotations
 
+import inspect
 import sys
+import typing
 from unittest import mock
 
+import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import pipeline
@@ -101,6 +108,41 @@ class TestPipelineDispatchContract:
         assert "--clean" in output
         assert "--update" in output
         assert "-u" in output
+
+
+class TestPipelineBranchOptionContract:
+    def test_pipeline_branch_option_contract_both_forms_one_option(self) -> None:
+        """-b/--branch is a single Option binding ``branch``; both forms reach the procedure.
+
+        The Option carries both forms (``set(param.opts)`` is exactly the pair),
+        defaults to None, and is a plain string option (click renders the
+        declared ``type=str`` as its canonical STRING param type). The callback
+        declares ``branch: str | None`` directly after ``info`` (contract
+        order), and ``--branch x NAME`` / ``-b x NAME`` reach
+        ``ensure_pipeline_branch`` with the same value.
+        """
+        branch_param = next(p for p in pipeline.params if p.name == "branch")
+        assert set(branch_param.opts) == {"-b", "--branch"}
+        assert branch_param.default is None
+        assert branch_param.type is click.STRING
+
+        parameters = list(inspect.signature(pipeline_cmd.callback).parameters)
+        assert parameters.index("branch") == parameters.index("info") + 1
+        hints = typing.get_type_hints(pipeline_cmd.callback)
+        assert hints["branch"] == str | None
+
+        config = _make_config()
+        runner = CliRunner()
+        for argv in (["--branch", "x", "my-pipeline"], ["-b", "x", "my-pipeline"]):
+            with (
+                mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+                mock.patch.object(_pipeline_module, "ensure_pipeline_branch", return_value="x") as mock_ensure,
+                mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0),
+            ):
+                result = runner.invoke(pipeline, argv)
+
+            assert result.exit_code == 0
+            mock_ensure.assert_called_once_with("x")
 
 
 # --- Logic tests (positive) ---
@@ -250,6 +292,69 @@ class TestPipelineDispatchEdge:
             result = runner.invoke(pipeline, ["deploy"])
 
         assert result.exit_code == exit_code
+
+
+class TestPipelineBranchRunForm:
+    def test_pipeline_run_form_with_branch_prints_line_and_launches(self) -> None:
+        """The run form runs the procedure, prints the branch line, launches without the name."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "ensure_pipeline_branch", return_value="feat/x") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
+
+        assert result.exit_code == 0
+        assert "Pipeline running on branch feat/x" in result.stdout
+        mock_ensure.assert_called_once_with("feat/x")
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.kwargs["name"] == "my-pipeline"
+        # The branch name never crosses the docker boundary — no branch kwarg,
+        # no value equal to it anywhere in the launcher call.
+        assert "branch" not in mock_run.call_args.kwargs
+        assert "feat/x" not in mock_run.call_args.kwargs.values()
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["-b", "x", "--list"],
+            ["-b", "x", "--list", "--info"],
+            ["-b", "x", "my-pipeline", "--info"],
+        ],
+        ids=["flat-list", "overview", "card"],
+    )
+    def test_pipeline_list_and_info_forms_silently_skip_branch(self, argv: list[str]) -> None:
+        """The flat list, overview, and card forms ignore -b — no procedure, no line."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "ensure_pipeline_branch") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0),
+        ):
+            result = runner.invoke(pipeline, argv)
+
+        assert result.exit_code == 0
+        mock_ensure.assert_not_called()
+        assert "Pipeline running on branch" not in result.stdout
+
+    def test_pipeline_missing_name_error_precedes_branch_procedure(self) -> None:
+        """A step-2 form error exits 1 before any git action of the branch procedure."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(_pipeline_module, "ensure_pipeline_branch") as mock_ensure,
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "feat/x"])
+
+        assert result.exit_code == 1
+        assert "Missing pipeline name" in result.output
+        mock_ensure.assert_not_called()
+        mock_run.assert_not_called()
 
 
 class TestPipelineCallbackSignature:
