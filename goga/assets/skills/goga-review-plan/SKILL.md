@@ -31,7 +31,7 @@ You **verify** the plan, **report** findings, and **fix** the plan upon discover
    Examples in other skills may use naming conventions of one language (e.g., snake_case), while the target language
    requires different conventions (e.g., PascalCase) — the language skill is the authoritative source for the target language.
 2. Read the plan from `.goga/history/<year>/<topic>/plan.md`
-3. Read the design document from `.goga/history/<year>/<topic>/design.md` — same topic directory; the year may differ, so search `.goga/history/*/<topic>/design.md` with a 4-digit year
+3. Read the design document from `.goga/history/*/<topic>/design.md` (4-digit year)
 4. Read all relevant `CODEMANIFEST` files referenced by the design document
 5. Load the DSL specification and DSL application principles:
    - Invoke `goga-cell` via the **Skill tool** — obtain the DSL reference

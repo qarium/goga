@@ -359,10 +359,10 @@ Once the product definition is validated:
 ```text
 .goga/history/<year>/<topic>/prd.md
 
-<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
+`<year>` = current year, `YYYY`; create the directory lazily
 ```
 
-`<topic>` should be derived from the product change using a concise, filesystem-safe topic name.
+`<topic>` — lowercase kebab-case slug derived from the product change.
 
 Do not overwrite an unrelated existing PRD.
 
@@ -410,7 +410,7 @@ The primary output of `goga-define` is one Markdown file:
 ```text
 .goga/history/<year>/<topic>/prd.md
 
-<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
+`<year>` = current year, `YYYY`; create the directory lazily
 ```
 
 The orchestrator should provide a concise completion message containing:

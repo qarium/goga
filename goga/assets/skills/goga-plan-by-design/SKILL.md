@@ -58,7 +58,7 @@ Use for:
 
 #### Step 6: Load Design Document
 
-Read the file from `.goga/history/<year>/<topic>/design.md`. `<topic>` is taken from skill arguments; search across `.goga/history/*/<topic>/design.md` for a 4-digit year.
+Read the file from `.goga/history/*/<topic>/design.md` (4-digit year). `<topic>` is taken from skill arguments.
 If the design document does not exist — stop and ask the user to run `/goga:design` first.
 
 ---
@@ -103,7 +103,7 @@ Use the `goga-cell` skill for correct interpretation of DSL elements during comp
 
 Write the plan to `.goga/history/<year>/<topic>/plan.md` using the template from `output-template.md`.
 
-`<topic>` — a short descriptive feature name (e.g., `http-client`, `auth-module`).
+`<topic>` — lowercase kebab-case slug (e.g., `http-client`, `auth-module`).
 The name should reflect the plan's scope, not the Cell name.
 Create the `.goga/history/<year>/<topic>/` directory lazily if it does not exist.
 

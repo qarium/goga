@@ -12,7 +12,7 @@ Arguments: $ARGUMENTS
 
 1. **Arguments contain a path under `.goga/history/`** — the path must match
    `.goga/history/<year>/<topic>/<kind>.md`:
-   - `<year>` must be exactly 4 digits (`\d{4}`). A path like `.goga/history/26/<topic>/...` is NOT a valid artifact path → treat as **cell**.
+   - `<year>` must be 4 digits (`\d{4}`); otherwise the path is not a valid artifact path → treat as **cell**.
    - Derive the review type by `<kind>` (the filename without `.md`):
      - `prd.md` → **prd**
      - `adr.md` → **adr**
@@ -40,18 +40,24 @@ Arguments: $ARGUMENTS
 
 ### Type-Based Routing
 
+**prd** and **adr** have no dedicated review skills — there is nothing to route them to yet.
+
+#### prd / adr
+There is no review skill for this artifact kind yet.
+1. Stop execution and report to the user that PRD/ADR review is not supported.
+
 #### architecture
-Verify that `.goga/history/<year>/<target>/arch.md` exists (search `.goga/history/*/<target>/arch.md` for a `<year>` that is exactly 4 digits).
+Verify that `.goga/history/<year>/<target>/arch.md` exists — search `.goga/history/*/<target>/arch.md` (4-digit year).
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-arch` via the **Skill tool**, passing `<target>` as the argument.
 
 #### design
-Verify that `.goga/history/<year>/<target>/design.md` exists (search `.goga/history/*/<target>/design.md` for a `<year>` that is exactly 4 digits).
+Verify that `.goga/history/<year>/<target>/design.md` exists — search `.goga/history/*/<target>/design.md` (4-digit year).
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-design` via the **Skill tool**, passing `<target>` as the argument.
 
 #### plan
-Verify that `.goga/history/<year>/<target>/plan.md` exists (search `.goga/history/*/<target>/plan.md` for a `<year>` that is exactly 4 digits).
+Verify that `.goga/history/<year>/<target>/plan.md` exists — search `.goga/history/*/<target>/plan.md` (4-digit year).
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-plan` via the **Skill tool**, passing `<target>` as the argument.
 
@@ -61,6 +67,6 @@ Verify that directory `<target>` and file `<target>/CODEMANIFEST` both exist.
 2. **Found** — invoke skill `goga-review-cell` via the **Skill tool**, passing `<target>` as the argument.
 
 #### task
-Verify that `.goga/history/<year>/<target>/task.md` exists (search `.goga/history/*/<target>/task.md` for a `<year>` that is exactly 4 digits).
+Verify that `.goga/history/<year>/<target>/task.md` exists — search `.goga/history/*/<target>/task.md` (4-digit year).
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-task` via the **Skill tool**, passing `<target>` as the argument.

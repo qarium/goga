@@ -23,7 +23,7 @@ Finding _facts_ is your job, never the user's. When a frontier question needs a 
 
 The interview is done when the frontier is empty: every branch of the design tree visited, nothing left silently assumed. Do not write the ADR until the user confirms you have reached a shared understanding.
 
-Once confirmed, write the ADR to `.goga/history/<year>/<topic>/adr.md` (`<topic>` is a slug name, lowercase kebab-case; `<year>` is the current year in `YYYY` format, 4 digits, zero-padded; create the directory lazily if needed), following `adr-template.md` from the current skill directory.
+Once confirmed, write the ADR to `.goga/history/<year>/<topic>/adr.md` (`<topic>` — lowercase kebab-case slug; `<year>` = current year, `YYYY`; create the directory lazily), following `adr-template.md` from the current skill directory.
 
 ## Research
 

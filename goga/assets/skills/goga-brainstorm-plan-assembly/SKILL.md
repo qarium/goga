@@ -24,7 +24,7 @@ Use these reports for its specific purpose:
 
 ### Phase 1. Determine the topic
 
-Determine `<topic>` — a short name from the **Topic** section of the `[PRIMARY_ANALYSIS_REPORT]`.
+Determine `<topic>` — a lowercase kebab-case slug from the **Topic** section of the `[PRIMARY_ANALYSIS_REPORT]`.
 
 ### Phase 2. Assemble the plan structure
 

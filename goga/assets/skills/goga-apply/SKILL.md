@@ -19,7 +19,7 @@ Retain the original arguments for the duration of the session.
 Resolve `<topic>`:
 
 1. **Arguments supplied** — use the arguments as `<topic>`.
-2. **No arguments** — scan `.goga/history/*/` topic directories for `arch.md` (year segment must be 4 digits) and present the list via **AskUserQuestion**:
+2. **No arguments** — scan `.goga/history/*/` topic directories for `arch.md` (4-digit year) and present the list via **AskUserQuestion**:
     - **Directory missing or empty** — halt and report the error.
     - **Single file** — use its topic directory name as `<topic>`.
     - **Multiple files** — present the list via AskUserQuestion and prompt for selection.

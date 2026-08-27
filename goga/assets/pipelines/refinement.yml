@@ -7,7 +7,7 @@ description: "Task refinement process"
   communication: true
   prompt: |
     Save the PRD file as `.goga/history/<year>/<git branch --show-current>/prd.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
+    (`<year>` = current year, `YYYY`; create the directory lazily)
 
     Constrains:
     - Don't research a project until you receive the task
@@ -18,11 +18,11 @@ description: "Task refinement process"
   title: "Technical discovery & create ADR"
   communication: true
   prompt: |
-    Save the ADR file as `.goga/history/<year>/<git branch --show-current>/adr.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
-
-    Use `.goga/history/<year>/<git branch --show-current>/prd.md` as the PRD file, if it exists (any 4-digit year under `.goga/history/`).
+    Use `.goga/history/<year>/<git branch --show-current>/prd.md` as the PRD file, if it exists (4-digit year).
     If PRD file does not exist — ask user about task.
+
+    Save the ADR file as `.goga/history/<year>/<git branch --show-current>/adr.md`
+    (`<year>` = current year, `YYYY`; create the directory lazily)
 
     Communication:
     - You **MUST** follow the `File-Based Dialog Protocol` for every round of questions.
@@ -33,12 +33,12 @@ description: "Task refinement process"
   title: "Task decomposition & create Task(s)"
   communication: true
   prompt: |
-    Save the task file as `.goga/history/<year>/<git branch --show-current>/task.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
-
-    Use `.goga/history/<year>/<git branch --show-current>/adr.md` as the task file, if it exists (any 4-digit year under `.goga/history/`).
-    If ADR does not exist — try `.goga/history/<year>/<git branch --show-current>/prd.md` (any 4-digit year) as the PRD file.
+    Use the ADR `.goga/history/<year>/<git branch --show-current>/adr.md` as the input for task formulation, if it exists (4-digit year).
+    If ADR does not exist — try `.goga/history/<year>/<git branch --show-current>/prd.md` (4-digit year) as the PRD file.
     If PRD file does not exists — ask user about task.
+
+    Save the task file as `.goga/history/<year>/<git branch --show-current>/task.md`
+    (`<year>` = current year, `YYYY`; create the directory lazily)
   skills:
     - goga-propose
 
@@ -46,6 +46,7 @@ description: "Task refinement process"
   title: "Review of the created task"
   communication: true
   prompt: |
-    Review the task `.goga/history/<year>/<git branch --show-current>/task.md` (any 4-digit year under `.goga/history/`)
+    Review the task `.goga/history/<year>/<git branch --show-current>/task.md`
+    (`<year>` = current year, `YYYY`)
   skills:
     - goga-review-task

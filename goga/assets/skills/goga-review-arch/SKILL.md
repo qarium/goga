@@ -23,7 +23,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
 ## Input
 
 - **Required**: architecture plan at `.goga/history/<year>/<topic>/arch.md`
-- **Optional**: task file at `.goga/history/<year>/<topic>/task.md` — when present, used to verify requirements coverage. The year may differ from the architecture plan's year; locate the task file as `.goga/history/*/<topic>/task.md` with a 4-digit year segment.
+- **Optional**: task file at `.goga/history/*/<topic>/task.md` (4-digit year) — when present, used to verify requirements coverage
 
 ---
 
@@ -49,7 +49,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
     - Classify plan cells: newly created vs. modified
 6. Read the existing CODEMANIFESTs of cells the plan marks for modification
 7. Read the existing `.usages/` files of cells marked for modification
-8. If the task file `.goga/history/*/<topic>/task.md` exists (4-digit year; the year may differ from the architecture plan's year) — read it for subsequent requirements coverage verification
+8. If the task file `.goga/history/*/<topic>/task.md` exists (4-digit year) — read it for subsequent requirements coverage verification
 
 ---
 
@@ -233,7 +233,7 @@ Missing edge cases — log as **Medium**.
 
 #### Step 4. Task Requirements Coverage
 
-If the task file `.goga/history/<year>/<topic>/task.md` exists:
+If the task file `.goga/history/*/<topic>/task.md` exists (4-digit year):
 
 - Each requirement from the "Description" section must map to type(s) in the plan that fulfill it
 - Each acceptance criterion must have a contractual basis in the plan — the plan must enable fulfilling the criterion

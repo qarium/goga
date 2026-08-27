@@ -6,9 +6,9 @@ description: "Development process"
   title: "Task-based architecture development"
   communication: true
   prompt: |
-    Use the task `.goga/history/<year>/<git branch --show-current>/task.md`, if it exists (any 4-digit year under `.goga/history/`)
+    Use the task `.goga/history/<year>/<git branch --show-current>/task.md`, if it exists
     Save the architecture plan as `.goga/history/<year>/<git branch --show-current>/arch.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
+    (`<year>` = current year, `YYYY`; create the directory lazily)
 
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
     - Focus on defining "what" the system should achieve (expected behavior, business rules, inputs, and outputs) rather than "how" to code it.
@@ -35,14 +35,16 @@ description: "Development process"
   title: "Review of the created architectural plan"
   communication: true
   prompt: |
-    Review the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md` (any 4-digit year under `.goga/history/`)
+    Review the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md`
+    (`<year>` = current year, `YYYY`)
   skills:
     - goga-review-arch
 
 - name: apply-architecture
   title: "Apply the created architectural plan"
   prompt: |
-    Apply the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md` (any 4-digit year under `.goga/history/`)
+    Apply the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md`
+    (`<year>` = current year, `YYYY`)
   skills:
     - goga-apply
 
@@ -51,7 +53,7 @@ description: "Development process"
   communication: true
   prompt: |
     Save the design document as `.goga/history/<year>/<git branch --show-current>/design.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
+    (`<year>` = current year, `YYYY`; create the directory lazily)
   skills:
     - goga-design
 
@@ -59,7 +61,8 @@ description: "Development process"
   title: "Review of the created design plan"
   communication: true
   prompt: |
-    Review the design document `.goga/history/<year>/<git branch --show-current>/design.md` (any 4-digit year under `.goga/history/`)
+    Review the design document `.goga/history/<year>/<git branch --show-current>/design.md`
+    (`<year>` = current year, `YYYY`)
   skills:
     - goga-review-design
 
@@ -67,9 +70,9 @@ description: "Development process"
   title: "Create the coding plan"
   communication: true
   prompt: |
-    Use the design document `.goga/history/<year>/<git branch --show-current>/design.md` (any 4-digit year under `.goga/history/`)
+    Use the design document `.goga/history/<year>/<git branch --show-current>/design.md`
     Save the plan as `.goga/history/<year>/<git branch --show-current>/plan.md`
-    where `<year>` is the current year in `YYYY` format (4 digits, zero-padded).
+    (`<year>` = current year, `YYYY`; create the directory lazily)
   skills:
     - goga-plan
 
@@ -77,7 +80,8 @@ description: "Development process"
   title: "Review of the created coding plan"
   communication: true
   prompt: |
-    Review the plan `.goga/history/<year>/<git branch --show-current>/plan.md` (any 4-digit year under `.goga/history/`)
+    Review the plan `.goga/history/<year>/<git branch --show-current>/plan.md`
+    (`<year>` = current year, `YYYY`)
   skills:
     - goga-review-plan
 

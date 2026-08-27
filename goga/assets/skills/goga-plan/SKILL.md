@@ -20,6 +20,6 @@ Determine `<topic>`:
    - **Single file** — use its topic directory name as `<topic>`.
    - **Multiple files** — display the list via AskUserQuestion and prompt the user to select one.
 
-Check if `.goga/history/<year>/<topic>/design.md` exists (search `.goga/history/*/<topic>/design.md` for a 4-digit year).
+Check if `.goga/history/*/<topic>/design.md` exists (4-digit year).
 **Does not exist** — stop and ask the user to run `/goga:design` first.
 **Exists** — call `goga-plan-by-design` via the **Skill tool** with `<topic>` as the argument.

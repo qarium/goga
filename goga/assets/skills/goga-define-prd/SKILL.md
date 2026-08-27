@@ -346,7 +346,7 @@ The final artifact will be saved by the orchestrator to:
 ```text
 .goga/history/<year>/<topic>/prd.md
 
-<year> is the current year in `YYYY` format (4 digits, zero-padded). Create the directory lazily if it does not exist.
+`<year>` = current year, `YYYY`; create the directory lazily
 ```
 
 Do not create additional PRD files.
