@@ -6,7 +6,7 @@ description: "Development process"
   title: "Task-based architecture development"
   communication: true
   prompt: |
-    Use the task `docs/tasks/<git branch --show-current>.md`, if it exists
+    Use the task `.goga/history/<year>/<git branch --show-current>/task.md`, if it exists (any 4-digit year under `.goga/history/`)
     Save the architecture plan as `<git branch --show-current>.md`
 
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
@@ -85,7 +85,7 @@ description: "Development process"
     Commit all added and modified files.
 
     Constraints:
-    - Except changes in `docs/<defines|proposals|tasks|arch|design|plans>`.
+    - Except changes in `.goga/history/`.
 
 - name: accept-result
   title: "Contracts & coverage audit"
