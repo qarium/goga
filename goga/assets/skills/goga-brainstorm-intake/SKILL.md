@@ -21,7 +21,7 @@ Classify the description into one of:
 
 - **Brief** — one sentence or a feature name
 - **Detailed** — a complete specification with requirements, constraints, examples
-- **Task file** — path to `docs/tasks/<topic>.md`
+- **Task file** — path to `.goga/history/<year>/<topic>/task.md`
 
 ### Phase 3. Read the task file if provided
 
