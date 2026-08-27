@@ -11,7 +11,7 @@ strict order, never performing design work yourself — each stage is delegated 
 
 ## Mission
 
-Produce an architecture plan (`docs/arch/<topic>.md`) describing which cells, CODEMANIFEST files, and `.usages/` files
+Produce an architecture plan (`.goga/history/<year>/<topic>/arch.md`) describing which cells, CODEMANIFEST files, and `.usages/` files
 need to be created and in what order — designed collaboratively with the user through exploration, discussion, and
 refinement.
 
@@ -152,13 +152,13 @@ Execute each phase strictly sequentially — one phase at a time. After each pha
 ### Phase 9. Plan Assembly
 - Invoke: **goga-brainstorm-plan-assembly**
 - Reads: [CELL_ASSEMBLY_REPORT] + [PRIMARY_ANALYSIS_REPORT]
-- Output: [ARCHITECTURE_PLAN] written to `docs/arch/<topic>.md`
+- Output: [ARCHITECTURE_PLAN] written to `.goga/history/<year>/<topic>/arch.md`
 - WAIT: present plan to user, obtain confirmation
 - STOP if: plan incomplete
 
 ### Phase 10. Plan Verification
 - Invoke: **goga-brainstorm-plan-verification**
-- Reads: [ARCHITECTURE_PLAN] (`docs/arch/<topic>.md`)
+- Reads: [ARCHITECTURE_PLAN] (`.goga/history/<year>/<topic>/arch.md`)
 - Output: [VERIFICATION_REPORT]
 - WAIT: present the final (fixed) plan and [VERIFICATION_REPORT] to the user, obtain final confirmation
 - STOP if: unresolved DSL errors; any verification gate failed

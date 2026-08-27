@@ -62,7 +62,7 @@ What to check after implementing each artifact.
 
 ### Phase 4. Save the plan
 
-Save the plan to `docs/arch/<topic>.md`.
+Save the plan to `.goga/history/<year>/<topic>/arch.md`.
 
 ## WAIT
 
@@ -76,7 +76,7 @@ Fill every section. No empty sections.
 # [ARCHITECTURE_PLAN]
 
 ## Topic
-[Short name and the docs/arch/<topic>.md path]
+[Short name and the .goga/history/<year>/<topic>/arch.md path]
 
 ## Implementation Order
 [Ordered list of cells, leaves to root, with rationale per cell]

@@ -6,7 +6,7 @@ description: Creation and modification of cells by architecture plan
 
 ## Purpose
 
-Creates new cells and modifies existing cells based on the architecture plan defined in `docs/arch/<topic>.md`. Materializes the plan into the cell file structure:
+Creates new cells and modifies existing cells based on the architecture plan defined in `.goga/history/<year>/<topic>/arch.md`. Materializes the plan into the cell file structure:
 CODEMANIFEST, `.usages/`.
 
 ---
@@ -51,8 +51,8 @@ Apply the loaded DSL specifications, DSL application principles, and language ru
 #### Step 1. Locate the plan file
 
 - If the argument contains a file path — use it directly
-- If the argument contains only `<topic>` — search for the file `docs/arch/<topic>.md`
-- If no argument is provided — discover all files in `docs/arch/` and present the list via **AskUserQuestion**
+- If the argument contains only `<topic>` — search for the file `.goga/history/<year>/<topic>/arch.md`
+- If no argument is provided — discover all `arch.md` files under `.goga/history/*/` topic directories and present the list via **AskUserQuestion**
 - If the file is not found — halt and report the error to the user
 
 #### Step 2. Parse the plan structure
