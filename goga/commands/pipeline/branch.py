@@ -1,12 +1,13 @@
-"""Host-side branch primitives for the ``-b/--branch`` procedure of ``goga pipeline``.
+"""Host-side branch routines for the ``-b/--branch`` procedure of ``goga pipeline``.
 
-Three of the four branch routines declared in the cell CODEMANIFEST with
-``location: branch.py``: the pure slug transformer, the git current-branch
-reader, and the three-oracle occupancy check. Every git invocation follows the
-``git`` practice — ``subprocess.run`` with ``check=True``, captured output, and
-``GIT_TERMINAL_PROMPT=0`` in the environment. All oracles are read-only; the
-single host-side mutation (create-and-switch) belongs to
-``ensure_pipeline_branch`` and is not part of this module's read-only surface.
+The four branch routines declared in the cell CODEMANIFEST with ``location:
+branch.py``: the pure slug transformer, the git current-branch reader, the
+three-oracle occupancy check, and the orchestrator of the whole branch
+procedure. Every git invocation follows the ``git`` practice —
+``subprocess.run`` with ``check=True``, captured output, and
+``GIT_TERMINAL_PROMPT=0`` in the environment. The oracles are read-only; the
+single host-side mutation (create-and-switch) is owned by
+``ensure_pipeline_branch``.
 """
 
 from __future__ import annotations
@@ -14,7 +15,34 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
+from datetime import datetime
 from pathlib import Path
+
+import click
+
+_GIT_REQUIRED_MESSAGE = "git is required for -b/--branch: git binary not found"
+_REASK_HINT = "Pass another branch name via -b."
+
+
+def _reask_branch_name(reason: str) -> str:
+    """Handle an unusable branch name: re-ask on a terminal, abort otherwise.
+
+    Args:
+        reason: Human-readable reason the current name cannot be used.
+
+    Returns:
+        The re-asked branch name (the caller restarts the procedure with it).
+
+    Raises:
+        click.ClickException: without a terminal — the reason plus the ``-b``
+            hint go to the user as a non-terminal abort.
+        click.Abort: Ctrl-C or EOF at the prompt.
+    """
+    if not sys.stdin.isatty():
+        raise click.ClickException(f"{reason} {_REASK_HINT}")
+    click.echo(reason, err=True)
+    return click.prompt("New branch name")
 
 
 def normalize_topic_slug(name: str) -> str:
@@ -154,3 +182,73 @@ def check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> st
     if topic_dir.is_dir():
         return f"history topic '.goga/history/{history_year}/{slug}' already exists"
     return None
+
+
+def ensure_pipeline_branch(branch_name: str) -> str:
+    """Bring the project onto a fresh branch with a fresh history topic.
+
+    Composes the three primitives above: normalize the entered name into the
+    topic slug, read the current branch, and check occupancy against the three
+    oracles. A free name is created and switched to on the host exactly as
+    entered (``git switch -c`` — the single mutation; git owns name validity).
+    An unusable name (an empty slug or an occupancy conflict) re-asks on a
+    terminal — the cycle restarts from the top and validates the NEW name
+    fully — and aborts cleanly without one. The already-on-branch case (the
+    current branch's slug equals the entered slug) touches nothing and returns
+    the CURRENT branch name.
+
+    Args:
+        branch_name: Branch name as entered by the user via ``-b/--branch``.
+
+    Returns:
+        The final branch name — the entered one or the re-asked one after a
+        create-and-switch; the current branch name for the already-on-branch
+        case.
+
+    Raises:
+        click.ClickException: an empty topic slug or an unresolved occupancy
+            conflict without a terminal, a failed create-and-switch (carrying
+            git's stderr), or a missing git binary.
+        click.Abort: Ctrl-C or EOF at the re-ask prompt — the repository is
+            left untouched.
+    """
+    while True:
+        slug = normalize_topic_slug(branch_name)
+        current = resolve_current_branch_name()
+
+        if slug == "":
+            reason = f"branch name '{branch_name}' normalizes to an empty topic slug"
+            branch_name = _reask_branch_name(reason)
+            continue
+
+        if current is not None and normalize_topic_slug(current) == slug:
+            return current
+
+        try:
+            # Local-timezone year — the history tree is organized by the host's
+            # calendar year; the bare now() shape is the mandated test mock target.
+            conflict = check_branch_occupancy(
+                branch_name,
+                slug,
+                f"{datetime.now().year:04d}",  # noqa: DTZ005
+            )
+        except FileNotFoundError as exc:
+            raise click.ClickException(_GIT_REQUIRED_MESSAGE) from exc
+        if conflict is not None:
+            branch_name = _reask_branch_name(conflict)
+            continue
+
+        try:
+            subprocess.run(
+                ["git", "switch", "-c", branch_name],
+                check=True,
+                capture_output=True,
+                text=True,
+                env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+            )
+        except FileNotFoundError as exc:
+            raise click.ClickException(_GIT_REQUIRED_MESSAGE) from exc
+        except subprocess.CalledProcessError as exc:
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            raise click.ClickException(f"git failed to create branch {branch_name!r}: {stderr.strip()}") from exc
+        return branch_name
