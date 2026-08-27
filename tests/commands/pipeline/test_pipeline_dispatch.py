@@ -19,18 +19,25 @@ These tests pin the click-command contract declared in
 The dispatch target ``run_pipeline_container`` is mocked so these tests stay
 focused on the click surface and the host-side resolution logic, with no docker
 dependency.
+
+The integration block at the bottom drives the REAL ``ensure_pipeline_branch``
+through the real command surface, mocking only the process boundary (git
+subprocess and docker launcher) to verify the wiring the unit tests mock away.
 """
 
 from __future__ import annotations
 
 import inspect
+import subprocess
 import sys
 import typing
+from pathlib import Path
 from unittest import mock
 
 import click
 import pytest
 from click.testing import CliRunner
+from goga.commands.pipeline import branch as branch_module
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
@@ -354,6 +361,141 @@ class TestPipelineBranchRunForm:
         assert result.exit_code == 1
         assert "Missing pipeline name" in result.output
         mock_ensure.assert_not_called()
+        mock_run.assert_not_called()
+
+
+# --- Integration tests (the real branch procedure through the real command) ---
+
+
+class _GitResult:
+    """Minimal stand-in for a ``subprocess.CompletedProcess``."""
+
+    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+def _git_answers(
+    show_current: object = _GitResult(stdout="main\n"),
+    show_ref: object = subprocess.CalledProcessError(1, "git"),
+    for_each_ref: object = _GitResult(stdout=""),
+    switch: object = _GitResult(),
+) -> mock.Mock:
+    """Build a ``subprocess.run`` mock answering per git subcommand.
+
+    Each answer is either a result object (returned) or an exception instance
+    (raised); an unexpected argv fails the test loudly. Same process-boundary
+    doubling as ``test_branch.py`` — git itself is never mocked.
+    """
+    answers = {
+        ("branch", "--show-current"): show_current,
+        ("show-ref",): show_ref,
+        ("for-each-ref",): for_each_ref,
+        ("switch",): switch,
+    }
+
+    def _run(argv: list[str], **_kwargs: object) -> _GitResult:
+        for key, answer in answers.items():
+            if tuple(argv[1 : 1 + len(key)]) == key:
+                if isinstance(answer, BaseException):
+                    raise answer
+                return answer
+        raise AssertionError(f"unexpected git argv in test: {argv!r}")
+
+    return mock.Mock(side_effect=_run)
+
+
+def _switch_calls(run_mock: mock.Mock) -> list[list[str]]:
+    """The recorded ``git switch`` argvs (usually asserted to be empty)."""
+    return [call.args[0] for call in run_mock.call_args_list if call.args[0][1] == "switch"]
+
+
+class TestPipelineBranchIntegration:
+    """Cross-entity: the real ``ensure_pipeline_branch`` through the real command.
+
+    Only the process boundary is mocked (git subprocess calls, docker
+    launcher), so these tests verify the wiring the unit tests mock away: the
+    ``from .branch import`` path, the run-form guard, the argument handed to
+    the procedure, and the ordering guarantee — step-2 validation, branch
+    procedure, branch line, docker activity.
+    """
+
+    def test_pipeline_branch_flow_a_creates_and_launches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Flow A happy path: created as entered, line printed, launcher unbranch'd."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+        run_mock = _git_answers()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "Feature/X", "my-pipeline"])
+
+        assert result.exit_code == 0
+        assert "Pipeline running on branch Feature/X" in result.stdout
+        assert run_mock.call_args_list[-1].args[0] == ["git", "switch", "-c", "Feature/X"]
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.kwargs["name"] == "my-pipeline"
+        # The branch name never crosses the docker boundary.
+        assert "branch" not in mock_run.call_args.kwargs
+        assert "Feature/X" not in mock_run.call_args.kwargs.values()
+
+    def test_pipeline_branch_line_uses_final_branch_name(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Already on the branch: the line carries the CURRENT name and git is untouched."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+        run_mock = _git_answers(show_current=_GitResult(stdout="release/1.3.0\n"))
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "release-1.3.0", "my-pipeline"])
+
+        assert result.exit_code == 0
+        assert "Pipeline running on branch release/1.3.0" in result.stdout
+        assert _switch_calls(run_mock) == []
+        assert mock_run.call_count == 1
+
+    def test_pipeline_branch_no_git_host_fails_cleanly_through_cli(self) -> None:
+        """A host without git: the clean failure on stderr, exit 1, nothing launches."""
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(branch_module.subprocess, "run", side_effect=FileNotFoundError("git")),
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
+
+        assert result.exit_code == 1
+        assert "git is required for -b/--branch: git binary not found" in result.stderr
+        mock_run.assert_not_called()
+
+    def test_pipeline_branch_conflict_without_tty_fails_through_cli(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A conflict without a terminal: reason and -b hint on stderr, no launch."""
+        monkeypatch.chdir(tmp_path)
+        config = _make_config()
+        run_mock = _git_answers(show_ref=_GitResult(returncode=0))
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
+            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
+
+        assert result.exit_code == 1
+        assert "branch 'feat/x' already exists" in result.stderr
+        assert "Pass another branch name via -b." in result.stderr
+        assert _switch_calls(run_mock) == []
         mock_run.assert_not_called()
 
 
