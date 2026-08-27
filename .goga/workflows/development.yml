@@ -38,5 +38,8 @@ extend:
     after:
       - commit-changes
     timeout: "8h"
-    script: python3 -m goga.build .goga/history/$(date +%Y)/$(git branch --show-current)/plan.md
+    script: |
+      branch=$(git branch --show-current)
+      topic=$(python3 -c "import re,sys; print(re.sub(r'[^a-z0-9]+','-',sys.argv[1].lower()).strip('-'))" "$branch")
+      python3 -m goga.build ".goga/history/$(date +%Y)/$topic/plan.md"
     after_script: rm -rf .ralphex
