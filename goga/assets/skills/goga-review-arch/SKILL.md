@@ -6,7 +6,7 @@ description: Review an architecture plan for semantic correctness
 
 ## Objective
 
-Validate the architecture plan (`docs/arch/<topic>.md`) for **semantic correctness** — assess model cohesion, domain boundary
+Validate the architecture plan (`.goga/history/<year>/<topic>/arch.md`) for **semantic correctness** — assess model cohesion, domain boundary
 soundness, and requirement sufficiency for implementation.
 The agent **analyzes** the architecture plan, **reports** findings, and **applies fixes** when issues are detected
 (subject to user approval).
@@ -22,8 +22,8 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
 
 ## Input
 
-- **Required**: architecture plan at `docs/arch/<topic>.md`
-- **Optional**: task file at `docs/tasks/<topic>.md` — when present, used to verify requirements coverage
+- **Required**: architecture plan at `.goga/history/<year>/<topic>/arch.md`
+- **Optional**: task file at `.goga/history/<year>/<topic>/task.md` — when present, used to verify requirements coverage. The year may differ from the architecture plan's year; locate the task file as `.goga/history/*/<topic>/task.md` with a 4-digit year segment.
 
 ---
 
@@ -31,7 +31,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
 
 ### Phase 1: Context Loading
 
-1. Read the architecture plan from `docs/arch/<topic>.md`
+1. Read the architecture plan from `.goga/history/<year>/<topic>/arch.md`
 2. Load the DSL specification and DSL application principles:
     - Invoke `goga-cell` via **Skill tool** — to understand DSL rules
       (signature syntax, Import/Usage/Annotation rules, types, mutations, embeddings, constraints)
@@ -49,7 +49,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
     - Classify plan cells: newly created vs. modified
 6. Read the existing CODEMANIFESTs of cells the plan marks for modification
 7. Read the existing `.usages/` files of cells marked for modification
-8. If the task file `docs/tasks/<topic>.md` exists — read it for subsequent requirements coverage verification
+8. If the task file `.goga/history/*/<topic>/task.md` exists (4-digit year; the year may differ from the architecture plan's year) — read it for subsequent requirements coverage verification
 
 ---
 
@@ -233,7 +233,7 @@ Missing edge cases — log as **Medium**.
 
 #### Step 4. Task Requirements Coverage
 
-If the task file `docs/tasks/<topic>.md` exists:
+If the task file `.goga/history/<year>/<topic>/task.md` exists:
 
 - Each requirement from the "Description" section must map to type(s) in the plan that fulfill it
 - Each acceptance criterion must have a contractual basis in the plan — the plan must enable fulfilling the criterion
