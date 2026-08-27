@@ -43,7 +43,7 @@ All CODEMANIFEST edits must be **proposed to the user** before applying.
      (document structure, signature syntax, Imports rules, Usages rules, Annotations rules, types, mutations, embeddings, constraints)
    - Use the **Skill tool** to invoke `goga-cookbook` — for understanding cell design principles and CODEMANIFEST
      (when to use Entity vs Routine, when to apply mutations and embeddings, usage file authoring principles, cell granularity)
-2. Read the design document from `docs/design/<feature-name>.md`
+2. Read the design document from `.goga/history/<year>/<topic>/design.md`
 3. Read all relevant CODEMANIFEST files referenced by the design
 4. Read existing source files referenced by the design (if any)
 5. Execute `goga schema --help` to understand the command, then execute `goga schema` to obtain the full project dependency graph. Use `--depends-on <cell_path>` to discover cells that depend on cells modified by the design. This ensures the review covers all affected cells.
