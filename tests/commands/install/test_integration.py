@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import importlib
 import sys
+import types
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
+from goga.commands.install import hook as hook_module
 
 _install_module = importlib.import_module("goga.commands.install.install")
 _uninstall_module = importlib.import_module("goga.commands.install.uninstall")
@@ -226,3 +228,141 @@ class TestInstallEndToEndPaths:
         assert result.exit_code == 0
         assert result.output.strip() == "Nothing to install"
         mock_run.assert_not_called()
+
+
+class TestInstallHookFlowIntegration:
+    """Cross-entity: the real hook routines through the real ``install`` command.
+
+    Only the process boundary is mocked (pip subprocess, the dynamic
+    ``goga_tool_<tool>`` facade import, the agent re-sync), so these tests
+    verify the wiring the unit tests mock away: the ``from .hook import`` path
+    inside ``install.py``, the per-path hook-target lists, the
+    pip -> hooks -> re-sync order, and the failure containment of the design's
+    Flows B (single mode, sudo) and C (bulk hook failure).
+
+    The hook-fake construction rule applies: every fake facade is a
+    ``types.SimpleNamespace`` carrying a REAL recorder function declaring its
+    parameters — a bare MagicMock has no declared ``user`` parameter and the
+    signature projection would bare-call it.
+    """
+
+    def test_install_hook_flow_b_sudo_user_reaches_hook_in_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Flow B: pip -> hook -> re-sync, the hook seeing the REAL person.
+
+        sudo ran and recorded the caller in ``SUDO_USER`` — the hook must
+        receive ``alice``, the actual person, not the root account the
+        installer may run under.
+        """
+        monkeypatch.setenv("SUDO_USER", "alice")
+        order: list[str] = []
+        recorder: list[dict[str, str | None]] = []
+
+        def _viewer_install(user: str | None = None) -> None:
+            order.append("hook")
+            recorder.append({"user": user})
+
+        def _pip(_argv: list[str], **_kwargs: object) -> mock.MagicMock:
+            order.append("pip")
+            return _pip_result()
+
+        def _resync(_home: Path) -> int:
+            order.append("resync")
+            return 0
+
+        def _import(name: str) -> types.SimpleNamespace:
+            if name == "goga_tool_viewer":
+                return types.SimpleNamespace(install=_viewer_install)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+        with (
+            mock.patch.object(_install_module.subprocess, "run", side_effect=_pip) as mock_run,
+            mock.patch.object(hook_module.importlib, "import_module", side_effect=_import),
+            mock.patch.object(_install_module, "resync_registered_agents", side_effect=_resync) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        mock_resync.assert_called_once()
+        # The initiating user is the real person behind the sudo-ed install.
+        assert recorder == [{"user": "alice"}]
+        assert order == ["pip", "hook", "resync"]
+
+    def test_install_hook_flow_c_bulk_failure_stops_at_first_hook(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Flow C: bulk stops at the first failing hook — no re-sync, no rollback.
+
+        The viewer hook raises; the wrapped RuntimeError carries the tool name
+        and hook message out as a user-facing error (exit 1). afm's hook never
+        runs, the pip package stays, and the agent re-sync is never reached.
+        """
+        _write_config(tmp_path, "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("SUDO_USER", raising=False)
+        calls: list[str] = []
+
+        def _viewer_install(user: str | None = None) -> None:
+            calls.append("viewer")
+            raise ValueError("boom")
+
+        def _afm_install(user: str | None = None) -> None:
+            calls.append("afm")
+
+        def _import(name: str) -> types.SimpleNamespace:
+            if name == "goga_tool_viewer":
+                return types.SimpleNamespace(install=_viewer_install)
+            if name == "goga_tool_afm":
+                return types.SimpleNamespace(install=_afm_install)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(hook_module.getpass, "getuser", return_value="bob"),
+            mock.patch.object(hook_module.importlib, "import_module", side_effect=_import),
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+
+        assert result.exit_code == 1
+        assert "install hook for tool 'viewer' failed: boom" in result.output
+        # No rollback — exactly one pip install, no uninstall anywhere — and
+        # bulk stops at the FIRST failing hook: afm's hook never runs.
+        assert mock_run.call_count == 1
+        assert calls == ["viewer"]
+        mock_resync.assert_not_called()
+
+    def test_install_local_suffix_hook_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Edge: ``--local <path>:<tool>`` — suffix stripped from pip, names the hook.
+
+        The pip argv carries the bare path, the hook target is the suffixed
+        tool name, the hook receives the OS user (no ``SUDO_USER``), and the
+        activation still runs — the suffix governs only the hook, never the
+        re-sync.
+        """
+        monkeypatch.delenv("SUDO_USER", raising=False)
+        recorder: list[dict[str, str | None]] = []
+
+        def _mytool_install(user: str | None = None) -> None:
+            recorder.append({"user": user})
+
+        def _import(name: str) -> types.SimpleNamespace:
+            if name == "goga_tool_mytool":
+                return types.SimpleNamespace(install=_mytool_install)
+            raise ModuleNotFoundError(f"No module named {name!r}", name=name)
+
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(hook_module.getpass, "getuser", return_value="bob"),
+            mock.patch.object(hook_module.importlib, "import_module", side_effect=_import),
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool:mytool"])
+
+        assert result.exit_code == 0
+        # The suffix is stripped from the pip target...
+        assert mock_run.call_count == 1
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["./my-tool"]
+        # ...and names the hook target, which receives the OS user.
+        assert recorder == [{"user": "bob"}]
+        mock_resync.assert_called_once()
