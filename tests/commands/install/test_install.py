@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import sys
 from pathlib import Path
 from unittest import mock
@@ -483,6 +484,213 @@ class TestInstallLocalMode:
         assert argv[-1] == "-U"
         # Activation runs once and never under sudo.
         mock_resync.assert_called_once()
+
+
+class TestInstallHookWiringContract:
+    """Contract tests — the release adds NO new CLI option, and every pip path
+    hands ``_after_pip`` a hook-targets list (Algorithm step 4 — HOOKS).
+
+    The hook wiring lives inside the existing surface: single targets
+    ``[name]``, local the ``:<tool-name>`` suffix value (or an empty list),
+    bulk the config keys in YAML order. The empty path never reaches hooks.
+    """
+
+    def test_install_facade_still_binds_only_the_four_cli_options(self) -> None:
+        names = {p.name for p in install.params if isinstance(p, click.Option)}
+        assert names == {"sudo", "version", "local", "no_connect"}
+
+    def test_install_single_path_passes_name_as_hook_targets(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+        assert result.exit_code == 0
+        mock_hooks.assert_called_once_with(["viewer"])
+
+    def test_install_local_path_passes_suffix_tool_as_hook_targets(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool:mytool"])
+        assert result.exit_code == 0
+        mock_hooks.assert_called_once_with(["mytool"])
+
+    def test_install_bulk_path_passes_config_keys_as_hook_targets(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _write_config(tmp_path, "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        mock_hooks.assert_called_once_with(["viewer", "afm"])
+
+
+class TestInstallHookFlow:
+    """HOOKS step — pip → hooks → activation, per-path targets, containment.
+
+    After a successful pip in single, local, and bulk mode ``run_install_hooks``
+    receives the path's hook-target list. ``--no-connect`` suppresses only the
+    re-sync; nothing runs after a failed pip; a hook failure is a user-facing
+    non-zero exit with no rollback and no re-sync; a malformed ``--local``
+    suffix and the empty path never reach hooks at all.
+    """
+
+    def test_install_single_mode_runs_hook_after_pip(self) -> None:
+        order: list[str] = []
+
+        def _pip(_argv: list[str], **_kwargs: object) -> mock.MagicMock:
+            order.append("pip")
+            return _pip_result()
+
+        def _hooks(tools: list[str]) -> None:
+            order.append(f"hooks:{','.join(tools)}")
+
+        def _resync(_home: Path) -> int:
+            order.append("resync")
+            return 0
+
+        with (
+            mock.patch.object(_install_module.subprocess, "run", side_effect=_pip) as mock_run,
+            mock.patch.object(_install_module, "run_install_hooks", side_effect=_hooks) as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", side_effect=_resync),
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+        assert result.exit_code == 0
+        mock_run.assert_called_once()
+        mock_hooks.assert_called_once_with(["viewer"])
+        # The hook step sits between pip and the agent re-sync.
+        assert order == ["pip", "hooks:viewer", "resync"]
+
+    def test_install_local_with_suffix_targets_tool_hook(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool:mytool"])
+        assert result.exit_code == 0
+        # The suffix is stripped from the pip target and names the hook tool.
+        assert mock_run.call_count == 1
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["./my-tool"]
+        mock_hooks.assert_called_once_with(["mytool"])
+
+    def test_install_bulk_hooks_follow_yaml_order(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(tmp_path, "language: python\ntools:\n  viewer: latest\n  afm: 1.0.x\n")
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0),
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert mock_run.call_count == 1
+        assert _pkgs_from_argv(mock_run.call_args[0][0]) == ["goga-tool-viewer", "goga-tool-afm~=1.0.0"]
+        mock_hooks.assert_called_once_with(["viewer", "afm"])
+
+    def test_install_hook_failure_fails_command_without_rollback_or_resync(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(
+                _install_module,
+                "run_install_hooks",
+                side_effect=RuntimeError("install hook for tool 'viewer' failed: boom"),
+            ),
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+        assert result.exit_code == 1
+        assert "install hook for tool 'viewer' failed: boom" in result.output
+        # No rollback — exactly one pip install, no uninstall anywhere.
+        assert mock_run.call_count == 1
+        mock_resync.assert_not_called()
+
+    def test_install_no_connect_still_runs_hooks(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer", "--no-connect"])
+        assert result.exit_code == 0
+        mock_hooks.assert_called_once_with(["viewer"])
+        # The flag suppresses ONLY the re-sync — the hooks still ran.
+        mock_resync.assert_not_called()
+
+    def test_install_pip_failure_skips_hooks_and_resync(self) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result(2)),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+        assert result.exit_code == 2
+        mock_hooks.assert_not_called()
+        mock_resync.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--local", "./x:"],
+            ["--local", "./x:a/b"],
+            ["--local", "./x:a\\b"],
+            ["--local", "./x:a:b"],
+        ],
+    )
+    def test_install_malformed_local_suffix_rejected_before_pip(self, argv: list[str]) -> None:
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+        ):
+            result = CliRunner().invoke(app, ["install", *argv])
+        assert result.exit_code == 1
+        assert "Error: malformed --local value" in result.output
+        assert "Traceback" not in result.output
+        mock_run.assert_not_called()
+        mock_hooks.assert_not_called()
+
+    def test_install_local_without_suffix_warns_and_runs_no_hook(self, caplog: pytest.LogCaptureFixture) -> None:
+        with (
+            caplog.at_level(logging.WARNING, logger=_install_module.logger.name),
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()),
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents", return_value=0) as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "--local", "./my-tool"])
+        assert result.exit_code == 0
+        mock_hooks.assert_called_once_with([])
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1
+        assert warnings[0].message == "install hook skipped for local source"
+        assert warnings[0].path == "./my-tool"
+        assert warnings[0].hint == "pass :<tool-name> to enable the post-install hook"
+        # A missing suffix suppresses the hook, NOT the activation.
+        mock_resync.assert_called_once()
+
+    def test_install_empty_mode_touches_nothing(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        _write_config(tmp_path, "language: python\ntools: {}\n")
+        monkeypatch.chdir(tmp_path)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(_install_module, "run_install_hooks") as mock_hooks,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install"])
+        assert result.exit_code == 0
+        assert "Nothing to install" in result.output
+        # The empty path's never-clauses: no pip, no hooks, no activation.
+        mock_run.assert_not_called()
+        mock_hooks.assert_not_called()
+        mock_resync.assert_not_called()
 
 
 class TestInstallActivation:
