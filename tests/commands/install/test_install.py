@@ -36,6 +36,17 @@ def _pkgs_from_argv(argv: list[str]) -> list[str]:
     return argv[argv.index("install") + 1 : -1]
 
 
+# The five names declared in the cell CODEMANIFEST — the two lifecycle commands
+# and the three ``hook.py`` routines (exported since release 1.3.0).
+_INSTALL_FACADE_ALL = [
+    "call_install_hook",
+    "install",
+    "resolve_initiating_user",
+    "run_install_hooks",
+    "uninstall",
+]
+
+
 class TestInstallFacade:
     """Contract tests — verify the install facade and Click command shape."""
 
@@ -45,12 +56,36 @@ class TestInstallFacade:
     def test_install_facade_all(self) -> None:
         # Access the package module directly to assert its own ``__all__``
         # (``import ... as`` would resolve to the Click command re-exported into
-        # ``goga.commands``, shadowing the submodule). The facade now carries
-        # both lifecycle commands of this cell — install and uninstall — pinned
-        # as the exact surface. ``resolve_version`` belongs to the ``goga/version``
-        # domain cell.
+        # ``goga.commands``, shadowing the submodule). The facade carries the
+        # five declared names — both lifecycle commands of this cell plus the
+        # three ``hook.py`` routines — pinned as the exact surface.
+        # ``resolve_version`` belongs to the ``goga/version`` domain cell.
         facade = importlib.import_module("goga.commands.install")
-        assert facade.__all__ == ["install", "uninstall"]
+        assert facade.__all__ == _INSTALL_FACADE_ALL
+
+    def test_cell_facades_export_full_contract_api(self) -> None:
+        """Every declared contract name is importable from the cell facade root.
+
+        The Python facade rule obliges ``goga.commands.install`` to expose the
+        full contract API: both lifecycle commands and the three ``hook.py``
+        routines.
+        """
+        from goga.commands.install import (
+            call_install_hook,
+            resolve_initiating_user,
+            run_install_hooks,
+            uninstall,
+        )
+        from goga.commands.install import (
+            install as install_from_facade,
+        )
+
+        assert install_from_facade is install
+        assert isinstance(uninstall, click.Command)
+        assert resolve_initiating_user is not None
+        assert run_install_hooks is not None
+        assert call_install_hook is not None
+        assert sys.modules["goga.commands.install"].__all__ == _INSTALL_FACADE_ALL
 
     def test_install_is_click_command(self) -> None:
         assert isinstance(install, click.Command)
