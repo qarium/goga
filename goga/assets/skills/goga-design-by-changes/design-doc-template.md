@@ -1,12 +1,12 @@
 # Design Document Template
 
-The agent persists this document at `docs/design/<feature-name>.md`.
+The agent persists this document at `.goga/history/<year>/<topic>/design.md`.
 
 This is a **complete architectural specification** — every detail fully elaborated.
 
 ---
 
-# Design Document: `<feature-name>`
+# Design Document: `<topic>`
 
 ## Contract Changes
 

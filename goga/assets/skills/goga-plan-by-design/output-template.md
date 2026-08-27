@@ -1,12 +1,12 @@
 # Plan Output Template
 
 Result of Phase 1 (structure) + Phase 2 (Usages calibration).
-Saved to `docs/plans/<feature-name>.md`.
+Saved to `.goga/history/<year>/<topic>/plan.md`.
 This format is compatible with ralphex execution.
 
 ---
 
-# Plan: `<feature-name>`
+# Plan: `<topic>`
 
 ## Purpose
 

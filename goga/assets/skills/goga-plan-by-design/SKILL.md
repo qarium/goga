@@ -58,7 +58,7 @@ Use for:
 
 #### Step 6: Load Design Document
 
-Read the file from `docs/design/<feature-name>.md`. `<feature-name>` is taken from skill arguments.
+Read the file from `.goga/history/<year>/<topic>/design.md`. `<topic>` is taken from skill arguments; search across `.goga/history/*/<topic>/design.md` for a 4-digit year.
 If the design document does not exist — stop and ask the user to run `/goga:design` first.
 
 ---
@@ -101,11 +101,11 @@ Use the `goga-cell` skill for correct interpretation of DSL elements during comp
 
 #### Step 3: Save the Plan
 
-Write the plan to `docs/plans/<feature-name>.md` using the template from `output-template.md`.
+Write the plan to `.goga/history/<year>/<topic>/plan.md` using the template from `output-template.md`.
 
-`<feature-name>` — a short descriptive feature name (e.g., `http-client`, `auth-module`).
+`<topic>` — a short descriptive feature name (e.g., `http-client`, `auth-module`).
 The name should reflect the plan's scope, not the Cell name.
-Create the `docs/plans/` directory if it does not exist.
+Create the `.goga/history/<year>/<topic>/` directory lazily if it does not exist.
 
 ---
 
