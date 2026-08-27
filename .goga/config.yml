@@ -20,6 +20,11 @@ pipeline:
     <<: *claude-env
     ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"
 
+lint:
+  ignore:
+    - build/
+    - .venv/
+
 codemanifest:
   usages:
     convention: .goga/usages/conventions.md
@@ -30,7 +35,3 @@ codemanifest:
     - Debugging and testing
     - Organizing the test infrastructure
     - Understanding the general principles and rules of development and testing in the project
-
-lint:
-  ignore:
-    - build/
