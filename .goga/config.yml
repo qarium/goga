@@ -18,7 +18,7 @@ build:
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
   review_executor:
     agent: claude
-    base_ref: origin/1.2.x
+    base_ref: release/1.3.0
     patience: 3
     env:
       <<: *claude-env

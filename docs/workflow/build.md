@@ -62,6 +62,7 @@ Inside the container, the ralph-loop executes the plan: one task per iteration, 
 | `--wait` | string | config | Wait time before starting |
 | `--max-iterations` | int | config | Maximum number of build iterations |
 | `--review-patience` | int | config | Review patience count |
+| `--base-ref` | string | config | Review diff base (branch name or commit hash); overrides `build.review_executor.base_ref` |
 | `-e`, `--env` | string | -- | Additional environment variable (`KEY=VALUE`, repeatable). Forwarded into the container env-file. |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry. Merges on top of `build.hosts` from config; CLI wins on host-key conflict. |
@@ -69,6 +70,8 @@ Inside the container, the ralph-loop executes the plan: one task per iteration, 
 | `-c`, `--clean` | flag | off | Wipe the persistent ralph-loop runtime host directory under `~/.goga/runtime/builds/<normalized_project>/<branch>/` before launching the container. Default preserves state across runs of the same project on the same branch. |
 
 Timeout and iteration options fall back to `.goga/config.yml` when not provided on the command line.
+
+`--review-patience` and `--base-ref` are review-scoped: they resolve with precedence CLI > `build.review_executor.*` in `.goga/config.yml` > omit, and they apply to review-carrying passes only — the single full-cycle pass, or the review pass of a two-pass run; a tasks-only run carries neither. The legacy `build.review_patience` key is not parsed (the setting moved to `build.review_executor.patience`).
 
 ## Examples
 

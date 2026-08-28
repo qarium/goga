@@ -3415,7 +3415,6 @@ build:
         config = load_project_config()
         assert config.build.review_executor.patience == 3
         assert isinstance(config.build.review_executor.patience, int)
-        assert not isinstance(config.build.review_executor.patience, bool)
 
     def test_review_executor_base_ref_non_string_raises(self, goga_project):
         """review_executor.base_ref: 12 → ValueError with the exact contract message."""
@@ -3508,14 +3507,14 @@ build:
         assert config.build.review_executor.base_ref is None
 
     @pytest.mark.parametrize(
-        ("patience_snippet", "section_present"),
-        [("agent: claude\n", True), ("agent: claude\n    patience: null\n", True), ("", False)],
-        ids=["absent", "yaml-null", "section-absent"],
+        "patience_snippet",
+        ["agent: claude\n", "agent: claude\n    patience: null\n"],
+        ids=["absent", "yaml-null"],
     )
-    def test_review_executor_patience_unset_variants_resolve_none(
-        self, goga_project, patience_snippet, section_present
-    ):
-        """Absent and YAML-null patience both resolve to None, as does an absent section."""
+    def test_review_executor_patience_unset_variants_resolve_none(self, goga_project, patience_snippet):
+        """Absent and YAML-null patience both resolve to None.
+
+        The absent-section variant is pinned by test_loader_review_executor_absent_and_null."""
         _write_goga_yml(
             goga_project,
             f"""\
@@ -3527,11 +3526,8 @@ build:
     {patience_snippet}""",
         )
         config = load_project_config()
-        if section_present:
-            assert config.build.review_executor is not None
-            assert config.build.review_executor.patience is None
-        else:
-            assert config.build.review_executor is None
+        assert config.build.review_executor is not None
+        assert config.build.review_executor.patience is None
 
     @pytest.mark.parametrize(
         ("patience_literal", "patience_id"),

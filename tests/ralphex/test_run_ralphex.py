@@ -59,8 +59,12 @@ class TestBuildCommand:
         assert "10" in cmd
 
     def test_scalar_option_zero_and_empty_omitted(self) -> None:
-        """Scalar values of None/""/0 are omitted (guards against 0==False regression)."""
-        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": ""}) == [
+        """Scalar values of None/""/0 are omitted (guards against 0==False regression).
+
+        review_patience 0 is the documented patience-unset case: the resolver
+        forwards a CLI/config 0 verbatim and the launcher drops it, so ralphex
+        runs its own default (0 = disabled)."""
+        assert _build_command("plan.md", {"max_iterations": 0, "session_timeout": "", "review_patience": 0}) == [
             "ralphex",
             "plan.md",
             "--config-dir",

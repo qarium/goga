@@ -224,15 +224,29 @@ class TestConfigBaseReachesRalphexFlag:
 
         # The review-carrying pass alone carries the review-scoped flags: the
         # options keys base_ref / review_patience map onto the ralphex value
-        # flags --base-ref / --review-patience.
+        # flags --base-ref / --review-patience. The full argv is pinned (not
+        # just flag membership) so a flag/value transposition or a stray token
+        # fails the test.
         second_cmd = _build_command("plan.md", mock_run.call_args_list[1].args[1])
-        assert "--base-ref" in second_cmd
-        assert "origin/1.2.x" in second_cmd
-        assert "--review-patience" in second_cmd
-        assert "3" in second_cmd
+        assert second_cmd == [
+            "ralphex",
+            "plan.md",
+            "--config-dir",
+            ".ralphex/",
+            "--review",
+            "--review-patience",
+            "3",
+            "--base-ref",
+            "origin/1.2.x",
+        ]
 
         # The tasks pass carries the universal options only — a diff base on the
         # task pass would scope the wrong phase of the run.
         first_cmd = _build_command("plan.md", mock_run.call_args_list[0].args[1])
-        assert "--base-ref" not in first_cmd
-        assert "--review-patience" not in first_cmd
+        assert first_cmd == [
+            "ralphex",
+            "plan.md",
+            "--config-dir",
+            ".ralphex/",
+            "--tasks-only",
+        ]

@@ -1233,6 +1233,43 @@ class TestReviewScopedPassComposition:
         assert second["review_patience"] == 3
         assert second["review"] is True
 
+    def test_cli_scoped_options_override_config_on_review_pass(self, tmp_path, monkeypatch) -> None:
+        # The CLI source flows through the same composition: cli_options carry
+        # base_ref/review_patience, the config declares different values, and
+        # the CLI wins on the review-carrying (here: single full) pass.
+        config = _make_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main", patience=3)
+        )
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=config,
+                cli_options={"skip_manifest_check": True, "base_ref": "origin/1.2.x", "review_patience": 7},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["base_ref"] == "origin/1.2.x"
+        assert mock_run.call_args.args[1]["review_patience"] == 7
+
+    def test_cli_scoped_options_without_review_executor_section(self, tmp_path, monkeypatch) -> None:
+        # A minimal config with no review_executor section still honors
+        # CLI-sourced review bounds on the single full pass — the resolver
+        # must read the CLI source without gating it on the section.
+        with mock.patch("goga.build.build_pass.run_ralphex", return_value=0) as mock_run:
+            result = _run_build_in_tmp(
+                tmp_path,
+                monkeypatch,
+                config=_make_config(),
+                cli_options={"skip_manifest_check": True, "base_ref": "origin/1.2.x", "review_patience": 4},
+            )
+
+        assert result == 0
+        assert mock_run.call_count == 1
+        assert mock_run.call_args.args[1]["base_ref"] == "origin/1.2.x"
+        assert mock_run.call_args.args[1]["review_patience"] == 4
+
     def test_skip_run_omits_review_scoped_options(self, tmp_path, monkeypatch) -> None:
         # A skip run has no review phase of any kind: even with review bounds
         # declared, the single tasks-only pass carries universal options only.
