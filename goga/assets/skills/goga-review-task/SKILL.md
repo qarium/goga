@@ -6,7 +6,7 @@ description: Review a task for completeness, correctness, and consistency
 
 ## Objective
 
-Validates a task (`.goga/history/<year>/<topic>/task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-brainstorm`).
+Validates a task (the file at the path printed by `goga history path -f task.md`) for **completeness, correctness, and consistency** — ensuring the task is formulated clearly enough to proceed to architecture (`goga-brainstorm`).
 
 You **verify** the task, **report** findings, and **fix** the task when issues are discovered (with user approval).
 
@@ -24,7 +24,7 @@ You **verify** the task, **report** findings, and **fix** the task when issues a
 
 ## Verifiable Artifact
 
-- Task file at `.goga/history/<year>/<topic>/task.md` — a formulated task being verified for completeness and correctness
+- Task file at the path printed by `goga history path -f task.md` — a formulated task being verified for completeness and correctness
 
 ---
 
@@ -32,7 +32,7 @@ You **verify** the task, **report** findings, and **fix** the task when issues a
 
 ### Phase 1: Load Context
 
-1. Read the task from `.goga/history/<year>/<topic>/task.md`
+1. Read the task from the path printed by `goga history path -f task.md`
 2. Load the DSL specification and DSL application principles:
    - Use the **Skill tool** to invoke `goga-cell` — for understanding cell terminology and CODEMANIFEST when verifying the "Existing Architecture" section
    - Use the **Skill tool** to invoke `goga-cookbook` — for understanding cell interaction principles when verifying the correctness of affected cells description

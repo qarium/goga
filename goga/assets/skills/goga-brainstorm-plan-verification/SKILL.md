@@ -19,7 +19,7 @@ Use these skills for verification:
 
 Use this artifact for its specific purpose:
 
-- **`[ARCHITECTURE_PLAN]`** (at `.goga/history/<year>/<topic>/arch.md`) — use it as the **object of verification**: its implementation
+- **`[ARCHITECTURE_PLAN]`** (at the path printed by `goga history path -f arch.md`) — use it as the **object of verification**: its implementation
   order, per-cell CODEMANIFESTs and `.usages/` files, dependency map, and verification checklist, against which the DSL
   checks are run, failures are fixed in place, and the report is produced.
 

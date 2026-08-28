@@ -341,13 +341,9 @@ The document must be self-contained and understandable without access to the int
 
 The PRD must contain only validated product decisions.
 
-The final artifact will be saved by the orchestrator to:
-
-```text
-.goga/history/<year>/<topic>/prd.md
-
-`<year>` = current year, `YYYY`; create the directory lazily
-```
+The final artifact will be saved by the orchestrator at the path printed by
+`goga history path -f prd.md` (the orchestrator runs `goga history ensure`
+first if the topic directory does not exist).
 
 Do not create additional PRD files.
 

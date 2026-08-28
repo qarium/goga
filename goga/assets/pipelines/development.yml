@@ -6,10 +6,9 @@ description: "Development process"
   title: "Task-based architecture development"
   communication: true
   prompt: |
-    Use the task `.goga/history/<year>/<topic>/task.md`, if it exists
-    Save the architecture plan as `.goga/history/<year>/<topic>/arch.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name (`release/1.3.0` → `release-1-3-0`); create the directory lazily)
+    Use the task file at the path printed by `goga history path -f task.md`, if it exists
+    Save the architecture plan at the path printed by `goga history path -f arch.md`
+    (run `goga history ensure` first if the topic directory does not exist)
 
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
     - Focus on defining "what" the system should achieve (expected behavior, business rules, inputs, and outputs) rather than "how" to code it.
@@ -36,18 +35,14 @@ description: "Development process"
   title: "Review of the created architectural plan"
   communication: true
   prompt: |
-    Review the architecture plan `.goga/history/<year>/<topic>/arch.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name)
+    Review the architecture plan at the path printed by `goga history path -f arch.md`
   skills:
     - goga-review-arch
 
 - name: apply-architecture
   title: "Apply the created architectural plan"
   prompt: |
-    Apply the architecture plan `.goga/history/<year>/<topic>/arch.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name)
+    Apply the architecture plan at the path printed by `goga history path -f arch.md`
   skills:
     - goga-apply
 
@@ -55,9 +50,8 @@ description: "Development process"
   title: "Designing architecture into code"
   communication: true
   prompt: |
-    Save the design document as `.goga/history/<year>/<topic>/design.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name; create the directory lazily)
+    Save the design document at the path printed by `goga history path -f design.md`
+    (run `goga history ensure` first if the topic directory does not exist)
   skills:
     - goga-design
 
@@ -65,9 +59,7 @@ description: "Development process"
   title: "Review of the created design plan"
   communication: true
   prompt: |
-    Review the design document `.goga/history/<year>/<topic>/design.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name)
+    Review the design document at the path printed by `goga history path -f design.md`
   skills:
     - goga-review-design
 
@@ -75,10 +67,9 @@ description: "Development process"
   title: "Create the coding plan"
   communication: true
   prompt: |
-    Use the design document `.goga/history/<year>/<topic>/design.md`
-    Save the plan as `.goga/history/<year>/<topic>/plan.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name; create the directory lazily)
+    Use the design document at the path printed by `goga history path -f design.md`
+    Save the plan at the path printed by `goga history path -f plan.md`
+    (run `goga history ensure` first if the topic directory does not exist)
   skills:
     - goga-plan
 
@@ -86,9 +77,7 @@ description: "Development process"
   title: "Review of the created coding plan"
   communication: true
   prompt: |
-    Review the plan `.goga/history/<year>/<topic>/plan.md`
-    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
-    current git branch name)
+    Review the plan at the path printed by `goga history path -f plan.md`
   skills:
     - goga-review-plan
 
@@ -99,7 +88,7 @@ description: "Development process"
     Commit all added and modified files.
 
     Constraints:
-    - Except changes in `.goga/history/`.
+    - Except changes in the `.goga/history/` tree owned by `goga history`.
 
 - name: accept-result
   title: "Contracts & coverage audit"

@@ -1,7 +1,7 @@
 # Plan Output Template
 
 Result of Phase 1 (structure) + Phase 2 (Usages calibration).
-Saved to `.goga/history/<year>/<topic>/plan.md`.
+Saved to the path printed by `goga history path -f plan.md`.
 This format is compatible with ralphex execution.
 
 ---

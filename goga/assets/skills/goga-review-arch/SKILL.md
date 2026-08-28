@@ -6,7 +6,7 @@ description: Review an architecture plan for semantic correctness
 
 ## Objective
 
-Validate the architecture plan (`.goga/history/<year>/<topic>/arch.md`) for **semantic correctness** — assess model cohesion, domain boundary
+Validate the architecture plan (the file at the path printed by `goga history path -f arch.md`) for **semantic correctness** — assess model cohesion, domain boundary
 soundness, and requirement sufficiency for implementation.
 The agent **analyzes** the architecture plan, **reports** findings, and **applies fixes** when issues are detected
 (subject to user approval).
@@ -22,7 +22,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
 
 ## Input
 
-- **Required**: architecture plan at `.goga/history/<year>/<topic>/arch.md`
+- **Required**: architecture plan at the path printed by `goga history path -f arch.md`
 - **Optional**: task file at `.goga/history/*/<topic>/task.md` (4-digit year) — when present, used to verify requirements coverage
 
 ---
@@ -31,7 +31,7 @@ all types, domains, and requirements as a unified whole — not each CODEMANIFES
 
 ### Phase 1: Context Loading
 
-1. Read the architecture plan from `.goga/history/<year>/<topic>/arch.md`
+1. Read the architecture plan from the path printed by `goga history path -f arch.md`
 2. Load the DSL specification and DSL application principles:
     - Invoke `goga-cell` via **Skill tool** — to understand DSL rules
       (signature syntax, Import/Usage/Annotation rules, types, mutations, embeddings, constraints)

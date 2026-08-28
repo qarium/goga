@@ -101,11 +101,10 @@ Use the `goga-cell` skill for correct interpretation of DSL elements during comp
 
 #### Step 3: Save the Plan
 
-Write the plan to `.goga/history/<year>/<topic>/plan.md` using the template from `output-template.md`.
+Write the plan to the path printed by `goga history path -f plan.md`, using the template from `output-template.md`.
 
-`<topic>` — lowercase kebab-case slug (e.g., `http-client`, `auth-module`).
-The name should reflect the plan's scope, not the Cell name.
-Create the `.goga/history/<year>/<topic>/` directory lazily if it does not exist.
+The topic (branch) name should reflect the plan's scope, not the Cell name.
+Run `goga history ensure` first if the topic directory does not exist.
 
 ---
 

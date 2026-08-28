@@ -34,7 +34,7 @@ Task file) sets the expected depth — Brief input yields more dark zones; Detai
 constraints and acceptance criteria.
 
 - **Topic** — a short topic name derived from the `[INTAKE_REPORT]` task summary (used by plan-assembly for
-  `.goga/history/<year>/<topic>/arch.md`)
+  the `arch.md` path printed by `goga history path -f arch.md`)
 - **Acceptance criteria** — if task-file input, folded verbatim/condensed from the `[INTAKE_REPORT]` "Acceptance
   Criteria" section; otherwise N/A
 - **Stack & external dependencies** — if task-file input, folded from the `[INTAKE_REPORT]` "Stack and Dependencies"

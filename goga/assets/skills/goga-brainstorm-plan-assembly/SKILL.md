@@ -24,7 +24,8 @@ Use these reports for its specific purpose:
 
 ### Phase 1. Determine the topic
 
-Determine `<topic>` — a lowercase kebab-case slug from the **Topic** section of the `[PRIMARY_ANALYSIS_REPORT]`.
+Resolve the topic directory — the path printed by `goga history path` (the topic comes from the current git branch).
+Keep the **Topic** section of the `[PRIMARY_ANALYSIS_REPORT]` as the plan's short name.
 
 ### Phase 2. Assemble the plan structure
 
@@ -62,7 +63,8 @@ What to check after implementing each artifact.
 
 ### Phase 4. Save the plan
 
-Save the plan to `.goga/history/<year>/<topic>/arch.md`.
+Save the plan to the path printed by `goga history path -f arch.md`
+(run `goga history ensure` first if the topic directory does not exist).
 
 ## WAIT
 
@@ -76,7 +78,7 @@ Fill every section. No empty sections.
 # [ARCHITECTURE_PLAN]
 
 ## Topic
-[Short name and the .goga/history/<year>/<topic>/arch.md path]
+[Short name and the path printed by `goga history path -f arch.md`]
 
 ## Implementation Order
 [Ordered list of cells, leaves to root, with rationale per cell]

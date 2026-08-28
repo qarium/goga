@@ -354,15 +354,8 @@ Once the product definition is validated:
 1. invoke `goga-define-prd`;
 2. provide the complete validated context;
 3. receive the final Markdown document;
-4. save it as:
-
-```text
-.goga/history/<year>/<topic>/prd.md
-
-`<year>` = current year, `YYYY`; create the directory lazily
-```
-
-`<topic>` — lowercase kebab-case slug derived from the product change.
+4. save it at the path printed by `goga history path -f prd.md`
+   (run `goga history ensure` first if the topic directory does not exist).
 
 Do not overwrite an unrelated existing PRD.
 
@@ -405,13 +398,8 @@ The orchestrator must not formulate or resolve the decision itself.
 
 ## Output
 
-The primary output of `goga-define` is one Markdown file:
-
-```text
-.goga/history/<year>/<topic>/prd.md
-
-`<year>` = current year, `YYYY`; create the directory lazily
-```
+The primary output of `goga-define` is one Markdown file saved at the path
+printed by `goga history path -f prd.md`.
 
 The orchestrator should provide a concise completion message containing:
 
