@@ -11,6 +11,7 @@ from goga.config import (
     LintConfig,
     PipelineConfig,
     ProjectConfig,
+    ReviewExecutorConfig,
     TaskExecutorConfig,
 )
 from goga.config.project.config import DepConfig
@@ -134,9 +135,17 @@ class TestBuildConfigAPIShape:
         from goga.config import ReviewExecutorConfig
 
         names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env"]
+        assert names == ["skip", "agent", "roles", "env", "base_ref", "patience"]
         assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
         assert ReviewExecutorConfig(skip=None, agent=None, roles=None).env == {}
+
+    def test_review_executor_config_declares_base_ref_and_patience_fields(self):
+        """ReviewExecutorConfig carries the review-scoped base_ref/patience fields and
+        BuildConfig no longer declares the relocated review_patience."""
+        from goga.config import ReviewExecutorConfig
+
+        assert {"base_ref", "patience"} <= set(ReviewExecutorConfig.__dataclass_fields__)
+        assert "review_patience" not in BuildConfig.__dataclass_fields__
 
     def test_has_worktree_field(self):
         assert "worktree" in BuildConfig.__dataclass_fields__
@@ -156,8 +165,9 @@ class TestBuildConfigAPIShape:
     def test_has_max_iterations_field(self):
         assert "max_iterations" in BuildConfig.__dataclass_fields__
 
-    def test_has_review_patience_field(self):
-        assert "review_patience" in BuildConfig.__dataclass_fields__
+    def test_review_patience_field_removed(self):
+        """The relocated review_patience is gone from BuildConfig."""
+        assert "review_patience" not in BuildConfig.__dataclass_fields__
 
     def test_has_prompts_dir_field(self):
         assert "prompts_dir" in BuildConfig.__dataclass_fields__
@@ -417,7 +427,7 @@ class TestBuildConfigCreation:
         assert bc.idle_timeout is None
         assert bc.wait is None
         assert bc.max_iterations is None
-        assert bc.review_patience is None
+        assert not hasattr(bc, "review_patience")
         assert bc.prompts_dir is None
         assert bc.agents_dir is None
         assert bc.codex_review is None
@@ -427,6 +437,7 @@ class TestBuildConfigCreation:
 
     def test_all_fields_populated(self):
         te = TaskExecutorConfig(agent="gemini", env={"X": "1"})
+        review = ReviewExecutorConfig(agent="codex", base_ref="origin/1.2.x", patience=3)
         bc = BuildConfig(
             task_executor=te,
             worktree=True,
@@ -435,10 +446,10 @@ class TestBuildConfigCreation:
             idle_timeout="1h",
             wait="5m",
             max_iterations=10,
-            review_patience=3,
             prompts_dir="/custom/prompts",
             agents_dir="/custom/agents",
             codex_review=True,
+            review_executor=review,
         )
         assert bc.task_executor.agent == "gemini"
         assert bc.task_executor.env == {"X": "1"}
@@ -448,7 +459,8 @@ class TestBuildConfigCreation:
         assert bc.idle_timeout == "1h"
         assert bc.wait == "5m"
         assert bc.max_iterations == 10
-        assert bc.review_patience == 3
+        assert bc.review_executor.patience == 3
+        assert bc.review_executor.base_ref == "origin/1.2.x"
         assert bc.prompts_dir == "/custom/prompts"
         assert bc.agents_dir == "/custom/agents"
         assert bc.codex_review is True

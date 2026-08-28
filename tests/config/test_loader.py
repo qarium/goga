@@ -75,10 +75,12 @@ build:
   idle_timeout: "1h"
   wait: "5m"
   max_iterations: 10
-  review_patience: 3
   prompts_dir: "/custom/prompts"
   agents_dir: "/custom/agents"
   codex_review: true
+  review_executor:
+    base_ref: origin/1.2.x
+    patience: 3
 """
 
 HAPPY_YAML = """\
@@ -161,7 +163,8 @@ class TestLoadConfigPositive:
         assert config.build.idle_timeout == "1h"
         assert config.build.wait == "5m"
         assert config.build.max_iterations == 10
-        assert config.build.review_patience == 3
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+        assert config.build.review_executor.patience == 3
         assert config.build.prompts_dir == "/custom/prompts"
         assert config.build.agents_dir == "/custom/agents"
         assert config.build.codex_review is True
@@ -3102,17 +3105,19 @@ class TestReviewExecutorConfigContract:
         assert project_mod.ReviewExecutorConfig is ReviewExecutorConfig
 
     def test_review_executor_config_is_frozen_kw_only_dataclass(self):
-        """ReviewExecutorConfig is a frozen kw_only dataclass with four fields."""
+        """ReviewExecutorConfig is a frozen kw_only dataclass with six fields."""
         from goga.config.project.config import ReviewExecutorConfig
 
         assert dataclasses.is_dataclass(ReviewExecutorConfig)
         params = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}
-        assert set(params) == {"skip", "agent", "roles", "env"}
+        assert set(params) == {"skip", "agent", "roles", "env", "base_ref", "patience"}
         assert params["skip"].default is None
         assert params["agent"].default is None
         assert params["roles"].default is None
         assert params["env"].default is dataclasses.MISSING
         assert params["env"].default_factory is dict
+        assert params["base_ref"].default is None
+        assert params["patience"].default is None
 
     def test_review_executor_config_reexport_from_facade_alive(self):
         """goga.config re-exports the same class object as the project cell."""
@@ -3298,11 +3303,12 @@ build:
         )
 
     def test_review_executor_config_declared_fields_include_env(self):
-        """Declared fields are skip, agent, roles, env; env is a factory-defaulted dict[str, str]."""
+        """Declared fields are skip, agent, roles, env, base_ref, patience; env is
+        a factory-defaulted dict[str, str]."""
         from goga.config.project.config import ReviewExecutorConfig
 
         names = [f.name for f in dataclasses.fields(ReviewExecutorConfig)]
-        assert names == ["skip", "agent", "roles", "env"]
+        assert names == ["skip", "agent", "roles", "env", "base_ref", "patience"]
         assert ReviewExecutorConfig.__dataclass_fields__["env"].type == dict[str, str]
         env_field = {f.name: f for f in dataclasses.fields(ReviewExecutorConfig)}["env"]
         assert env_field.default is dataclasses.MISSING
@@ -3374,3 +3380,175 @@ build:
         config = load_project_config()
         assert config.build.review_executor is not None, env_id
         assert config.build.review_executor.env == {}, env_id
+
+    def test_review_executor_base_ref_parsed_verbatim(self, goga_project):
+        """review_executor.base_ref string is stored verbatim as a str."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    agent: claude
+    base_ref: origin/1.2.x
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+        assert isinstance(config.build.review_executor.base_ref, str)
+
+    def test_review_executor_patience_int_parsed(self, goga_project):
+        """review_executor.patience YAML int is stored verbatim as an int."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: 3
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.patience == 3
+        assert isinstance(config.build.review_executor.patience, int)
+        assert not isinstance(config.build.review_executor.patience, bool)
+
+    def test_review_executor_base_ref_non_string_raises(self, goga_project):
+        """review_executor.base_ref: 12 → ValueError with the exact contract message."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    base_ref: 12
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor\.base_ref must be a string"):
+            load_project_config()
+
+    @pytest.mark.parametrize(
+        "patience_snippet",
+        ['patience: "3"', "patience: 3.5"],
+        ids=["quoted-string", "float"],
+    )
+    def test_review_executor_patience_non_int_raises(self, goga_project, patience_snippet):
+        """A non-int patience (str, float) raises ValueError with the exact message."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {patience_snippet}
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
+            load_project_config()
+
+    def test_review_executor_patience_yaml_bool_rejected(self, goga_project):
+        """patience: true → ValueError — guards the bool-before-int check order."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: true
+""",
+        )
+        with pytest.raises(ValueError, match=r"review_executor\.patience must be an int"):
+            load_project_config()
+
+    def test_legacy_build_review_patience_key_not_parsed(self, goga_project):
+        """A legacy build.review_patience key is silently ignored — no field, no error."""
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_patience: 5
+""",
+        )
+        config = load_project_config()
+        assert not hasattr(config.build, "review_patience")
+
+    @pytest.mark.parametrize(
+        "base_ref_snippet",
+        ["", "base_ref: null\n", 'base_ref: ""\n', 'base_ref: "   "\n'],
+        ids=["absent", "yaml-null", "empty-string", "whitespace-only"],
+    )
+    def test_review_executor_base_ref_unset_variants_resolve_none(self, goga_project, base_ref_snippet):
+        """Absent, YAML-null, empty and whitespace-only base_ref all resolve to None."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    agent: claude
+    {base_ref_snippet}""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor is not None
+        assert config.build.review_executor.base_ref is None
+
+    @pytest.mark.parametrize(
+        ("patience_snippet", "section_present"),
+        [("agent: claude\n", True), ("agent: claude\n    patience: null\n", True), ("", False)],
+        ids=["absent", "yaml-null", "section-absent"],
+    )
+    def test_review_executor_patience_unset_variants_resolve_none(
+        self, goga_project, patience_snippet, section_present
+    ):
+        """Absent and YAML-null patience both resolve to None, as does an absent section."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    {patience_snippet}""",
+        )
+        config = load_project_config()
+        if section_present:
+            assert config.build.review_executor is not None
+            assert config.build.review_executor.patience is None
+        else:
+            assert config.build.review_executor is None
+
+    @pytest.mark.parametrize(
+        ("patience_literal", "patience_id"),
+        [("0", "zero"), ("-1", "negative")],
+    )
+    def test_review_executor_patience_zero_and_negative_verbatim(self, goga_project, patience_literal, patience_id):
+        """patience 0 and -1 are stored verbatim — structural typing, no range check."""
+        _write_goga_yml(
+            goga_project,
+            f"""\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    patience: {patience_literal}
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.patience == int(patience_literal), patience_id
