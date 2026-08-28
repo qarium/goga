@@ -1,23 +1,31 @@
 """Contract and logic tests for the branch routines declared in
 ``goga/commands/pipeline/CODEMANIFEST`` with ``location: branch.py``:
 
-- ``normalize_topic_slug(name: str) -> str`` — pure slug transformer
-- ``resolve_current_branch_name() -> str | None`` — git reader with the three
-  documented None modes (detached HEAD, missing git binary, non-repository)
-- ``check_branch_occupancy(branch_name, slug, history_year) -> str | None`` —
-  three-oracle occupancy check (local ref, remote-tracking ref, history topic)
+- ``check_branch_occupancy(branch_name, slug) -> str | None`` — three-oracle
+  occupancy check (local ref, remote-tracking ref, history topic via the
+  domain oracle ``topic_exists``)
 - ``ensure_pipeline_branch(branch_name: str) -> str`` — the branch-procedure
   orchestrator (re-ask cycle, non-terminal abort, no-git-host conversion, the
   single create-and-switch mutation)
 
-Git is mocked at the subprocess boundary per the ``git`` practice —
-``mock.patch.object(branch_module.subprocess, "run")`` — never as a git double.
+The slug transformer and the git current-branch reader are NOT local anymore:
+they are Imported from the history domain (``goga.history``) and only their
+identity with the domain facade is asserted here — their behavior suites live
+in ``tests/history/``.
+
+Git is mocked at the subprocess boundary per the ``git`` practice — one
+``run`` dispatcher laid over BOTH invocation points at once
+(``goga.history.git.branch`` and this cell's ``branch`` module) via
+``contextlib.ExitStack``; mocking only one of them would release real git into
+the test.
 """
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import typing
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from unittest import mock
@@ -26,6 +34,8 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga.commands.pipeline import branch as branch_module
+from goga.history import naming as history_naming
+from goga.history.git import branch as history_git_branch_module
 
 # --- Git subprocess mocking helpers (the process boundary only) ---
 
@@ -79,62 +89,53 @@ def _git_run_dispatch(
     return mock.Mock(side_effect=_run)
 
 
+@contextlib.contextmanager
+def _git_on_both_points(run_mock: mock.Mock) -> Iterator[mock.Mock]:
+    """Lay one ``run`` dispatcher over BOTH git invocation points at once.
+
+    ``ensure_pipeline_branch`` spans two modules after the domain migration:
+    ``--show-current`` runs in ``goga.history.git.branch`` while ``show-ref``,
+    ``for-each-ref``, and ``switch`` run in this cell's ``branch`` module. A
+    mock on only one of the two points would let the other run real git.
+    """
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(history_git_branch_module.subprocess, "run", run_mock))
+        stack.enter_context(mock.patch.object(branch_module.subprocess, "run", run_mock))
+        yield run_mock
+
+
+class _FixedClock:
+    """Stand-in for ``datetime`` answering a fixed naive date."""
+
+    @staticmethod
+    def now() -> datetime:
+        return datetime(2031, 6, 15)  # noqa: DTZ001 — a fixed naive date is the point of the clock
+
+
+def _switch_argv_calls(run_mock: mock.Mock) -> list[list[str]]:
+    """The recorded ``git switch`` argvs (usually asserted to be empty)."""
+    return [call.args[0] for call in run_mock.call_args_list if call.args[0][1] == "switch"]
+
+
 # --- Contract tests ---
 
 
 class TestBranchContract:
-    def test_three_primitives_exist_and_are_callable(self) -> None:
-        """The three routines are defined on the branch module and callable."""
-        assert callable(branch_module.normalize_topic_slug)
-        assert callable(branch_module.resolve_current_branch_name)
+    def test_branch_routines_exist_and_are_callable(self) -> None:
+        """The two routines are defined on the branch module and callable."""
         assert callable(branch_module.check_branch_occupancy)
-
-    def test_normalize_topic_slug_signature(self) -> None:
-        """``normalize_topic_slug(name: str) -> str``."""
-        hints = typing.get_type_hints(branch_module.normalize_topic_slug)
-        assert hints == {"name": str, "return": str}
-
-    def test_resolve_current_branch_name_signature(self) -> None:
-        """``resolve_current_branch_name() -> str | None``."""
-        hints = typing.get_type_hints(branch_module.resolve_current_branch_name)
-        assert hints["return"] == str | None
+        assert callable(branch_module.ensure_pipeline_branch)
 
     def test_check_branch_occupancy_signature(self) -> None:
-        """``check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> str | None``."""
+        """``check_branch_occupancy(branch_name: str, slug: str) -> str | None``."""
         import inspect
 
         signature = inspect.signature(branch_module.check_branch_occupancy)
-        assert list(signature.parameters) == ["branch_name", "slug", "history_year"]
+        assert list(signature.parameters) == ["branch_name", "slug"]
         for parameter in signature.parameters.values():
             assert parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
         hints = typing.get_type_hints(branch_module.check_branch_occupancy)
-        assert hints == {
-            "branch_name": str,
-            "slug": str,
-            "history_year": str,
-            "return": str | None,
-        }
-
-    def test_resolve_current_branch_name_signature_parameters(self) -> None:
-        """``resolve_current_branch_name`` takes no parameters."""
-        import inspect
-
-        signature = inspect.signature(branch_module.resolve_current_branch_name)
-        assert list(signature.parameters) == []
-        hints = typing.get_type_hints(branch_module.resolve_current_branch_name)
-        assert hints == {"return": str | None}
-
-    def test_normalize_topic_slug_parameters(self) -> None:
-        """``normalize_topic_slug`` takes one positional-or-keyword ``name``."""
-        import inspect
-
-        signature = inspect.signature(branch_module.normalize_topic_slug)
-        assert list(signature.parameters) == ["name"]
-        assert signature.parameters["name"].kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-
-    def test_ensure_pipeline_branch_exists_and_is_callable(self) -> None:
-        """The orchestrator is defined on the branch module and callable."""
-        assert callable(branch_module.ensure_pipeline_branch)
+        assert hints == {"branch_name": str, "slug": str, "return": str | None}
 
     def test_ensure_pipeline_branch_signature(self) -> None:
         """``ensure_pipeline_branch(branch_name: str) -> str``."""
@@ -146,85 +147,26 @@ class TestBranchContract:
         hints = typing.get_type_hints(branch_module.ensure_pipeline_branch)
         assert hints == {"branch_name": str, "return": str}
 
-    def test_ensure_pipeline_branch_free_name_returns_entered_name(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A free name creates-and-switches and returns the entered name (str → str)."""
-        monkeypatch.chdir(tmp_path)
-        run_mock = _git_run_dispatch(
-            show_current=_GitResult(stdout="main\n"),
-            show_ref=subprocess.CalledProcessError(1, "git"),
-            for_each_ref=_GitResult(stdout=""),
-            switch=_GitResult(returncode=0),
-        )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            assert branch_module.ensure_pipeline_branch("feat/x") == "feat/x"
+    def test_moved_routines_are_bound_to_the_domain_not_local_copies(self) -> None:
+        """The moved names resolve to the DOMAIN objects — a local ``def`` copy would differ."""
+        import goga.history
 
+        assert branch_module.normalize_topic_slug is goga.history.normalize_topic_slug
+        assert branch_module.resolve_current_branch_name is goga.history.resolve_current_branch_name
 
-# --- Logic tests: normalize_topic_slug (pure transformer) ---
+    def test_pipeline_facade_all_without_moved_names(self) -> None:
+        """The package facade exports exactly the seven names — the moved routines are gone."""
+        from goga.commands.pipeline import __all__ as facade_all
 
-
-class TestNormalizeTopicSlug:
-    @pytest.mark.parametrize(
-        ("name", "expected"),
-        [
-            ("Feature/Foo_Bar", "feature-foo-bar"),
-            ("release/1.3.0", "release-1-3-0"),
-            ("Релиз/Один", ""),
-            ("aБb", "ab"),
-            ("-a--b-", "a-b"),
-            ("My Tool", "my-tool"),
-            ("feat///x", "feat-x"),
-            ("UPPER", "upper"),
-            ("123", "123"),
-        ],
-    )
-    def test_normalize_topic_slug_parametrized(self, name: str, expected: str) -> None:
-        """The grammar rows from the contract — deterministic pure transform."""
-        assert branch_module.normalize_topic_slug(name) == expected
-
-    def test_normalize_topic_slug_empty_result_is_valid_output(self) -> None:
-        """A fully non-ASCII name yields "" — no fallback, no raise."""
-        assert branch_module.normalize_topic_slug("Релиз/Один") == ""
-
-
-# --- Logic tests: resolve_current_branch_name (git reader) ---
-
-
-class TestResolveCurrentBranchName:
-    def test_resolve_current_branch_name_returns_stripped_raw_name(self) -> None:
-        """The raw branch name is returned stripped and unmodified (no slugification)."""
-        result = _GitResult(returncode=0, stdout="  release/1.3.0\n")
-        with mock.patch.object(branch_module.subprocess, "run", return_value=result) as run_mock:
-            branch = branch_module.resolve_current_branch_name()
-        assert branch == "release/1.3.0"
-        assert run_mock.call_args.args[0] == ["git", "branch", "--show-current"]
-        assert run_mock.call_args.kwargs["env"]["GIT_TERMINAL_PROMPT"] == "0"
-
-    def test_resolve_current_branch_name_detached_head_returns_none(self) -> None:
-        """Detached HEAD — an empty git answer — yields None."""
-        result = _GitResult(returncode=0, stdout="")
-        with mock.patch.object(branch_module.subprocess, "run", return_value=result):
-            assert branch_module.resolve_current_branch_name() is None
-
-    def test_resolve_current_branch_name_not_a_repository_returns_none(self) -> None:
-        """A non-repository (non-zero git exit) yields None."""
-        error = subprocess.CalledProcessError(128, "git")
-        with mock.patch.object(branch_module.subprocess, "run", side_effect=error):
-            assert branch_module.resolve_current_branch_name() is None
-
-    def test_resolve_current_branch_name_missing_git_binary_returns_none(self) -> None:
-        """A missing git binary yields None."""
-        with mock.patch.object(branch_module.subprocess, "run", side_effect=FileNotFoundError("git")):
-            assert branch_module.resolve_current_branch_name() is None
-
-    def test_resolve_current_branch_name_unexpected_os_error_propagates(self) -> None:
-        """Unexpected OS-level failures are NOT swallowed — PermissionError propagates."""
-        with (
-            mock.patch.object(branch_module.subprocess, "run", side_effect=PermissionError("denied")),
-            pytest.raises(PermissionError),
-        ):
-            branch_module.resolve_current_branch_name()
+        assert facade_all == [
+            "check_branch_occupancy",
+            "clean_pipeline_runtime_dir",
+            "ensure_pipeline_branch",
+            "pipeline",
+            "resolve_pipeline_runtime_dir",
+            "run_pipeline_container",
+            "run_pipeline_info_container",
+        ]
 
 
 # --- Logic tests: check_branch_occupancy (three oracles) ---
@@ -238,8 +180,8 @@ class TestCheckBranchOccupancy:
             show_ref=_GitResult(returncode=0),
             for_each_ref=_GitResult(stdout="refs/remotes/origin/feat/x\n"),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
+        with _git_on_both_points(run_mock):
+            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x")
         assert conflict == "branch 'feat/x' already exists"
         probed = [call.args[0] for call in run_mock.call_args_list]
         assert all(argv[1] != "for-each-ref" for argv in probed)
@@ -251,8 +193,8 @@ class TestCheckBranchOccupancy:
             show_ref=subprocess.CalledProcessError(1, "git"),
             for_each_ref=_GitResult(stdout="refs/remotes/origin/feat/x\nrefs/remotes/origin/main\n"),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
+        with _git_on_both_points(run_mock):
+            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x")
         assert conflict == "remote-tracking branch 'feat/x' already exists"
 
     def test_check_branch_occupancy_remote_ref_no_prefix_match(
@@ -265,41 +207,54 @@ class TestCheckBranchOccupancy:
             show_ref=subprocess.CalledProcessError(1, "git"),
             for_each_ref=_GitResult(stdout="refs/remotes/origin/feat/xy\nrefs/remotes/origin/main\n"),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
+        with _git_on_both_points(run_mock):
+            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x")
         assert conflict is None
 
-    def test_check_branch_occupancy_history_topic_folder_reports_reason(
+    def test_check_branch_occupancy_two_param_topic_oracle(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Oracle 3: an existing history topic DIRECTORY (checked by slug) reports the reason."""
-        (tmp_path / ".goga" / "history" / "2026" / "feat-x").mkdir(parents=True)
+        """Oracle 3: the DOMAIN resolves the year — two parameters, no clock here.
+
+        The year 2031 comes from the fixed clock patched at the domain's
+        ``naming.datetime`` (the mandated bare-``now()`` point); this cell
+        computes no year of its own. The reason names the slug for the current
+        year — no hand-built path in the message.
+        """
+        (tmp_path / ".goga" / "history" / "2031" / "feat-x").mkdir(parents=True)
         monkeypatch.chdir(tmp_path)
         run_mock = _git_run_dispatch(
             show_current=_GitResult(stdout="main\n"),
             show_ref=subprocess.CalledProcessError(1, "git"),
             for_each_ref=_GitResult(stdout=""),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
-        assert conflict == "history topic '.goga/history/2026/feat-x' already exists"
+        with (
+            mock.patch.object(history_naming, "datetime", _FixedClock),
+            _git_on_both_points(run_mock),
+        ):
+            conflict = branch_module.check_branch_occupancy("feat/x", "feat-x")
+        assert conflict == "history topic 'feat-x' already exists for the current year"
+        assert _switch_argv_calls(run_mock) == []
 
-    def test_check_branch_occupancy_stray_file_is_not_a_topic(
+    def test_check_branch_occupancy_stray_file_is_not_topic(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A stray FILE named <slug> does not occupy a topic — only a directory does."""
-        (tmp_path / ".goga" / "history" / "2026" / "feat-x").parent.mkdir(parents=True)
-        (tmp_path / ".goga" / "history" / "2026" / "feat-x").write_text("stray")
+        (tmp_path / ".goga" / "history" / "2031" / "feat-x").parent.mkdir(parents=True)
+        (tmp_path / ".goga" / "history" / "2031" / "feat-x").write_text("stray")
         monkeypatch.chdir(tmp_path)
         run_mock = _git_run_dispatch(
             show_current=_GitResult(stdout="main\n"),
             show_ref=subprocess.CalledProcessError(1, "git"),
             for_each_ref=_GitResult(stdout=""),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
-            assert branch_module.check_branch_occupancy("feat/x", "feat-x", "2026") is None
+        with (
+            mock.patch.object(history_naming, "datetime", _FixedClock),
+            _git_on_both_points(run_mock),
+        ):
+            assert branch_module.check_branch_occupancy("feat/x", "feat-x") is None
 
-    def test_check_branch_occupancy_ref_listing_failure_propagates(self) -> None:
+    def test_check_branch_occupancy_oracle_listing_failure_propagates(self) -> None:
         """A git infrastructure failure of oracle 2 itself propagates (not an occupancy answer)."""
         run_mock = _git_run_dispatch(
             show_current=_GitResult(stdout="main\n"),
@@ -307,21 +262,31 @@ class TestCheckBranchOccupancy:
             for_each_ref=subprocess.CalledProcessError(128, "git", stderr="fatal: not a git repository"),
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             pytest.raises(subprocess.CalledProcessError),
         ):
-            branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
+            branch_module.check_branch_occupancy("feat/x", "feat-x")
 
 
 # --- Logic tests: ensure_pipeline_branch (the branch-procedure orchestrator) ---
 
 
-def _switch_argv_calls(run_mock: mock.Mock) -> list[list[str]]:
-    """The recorded ``git switch`` argvs (usually asserted to be empty)."""
-    return [call.args[0] for call in run_mock.call_args_list if call.args[0][1] == "switch"]
-
-
 class TestEnsurePipelineBranch:
+    def test_ensure_pipeline_branch_end_to_end_free_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One dispatcher over both points: a free name returns the entered name and switches."""
+        monkeypatch.chdir(tmp_path)
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=_GitResult(stdout=""),
+            switch=_GitResult(returncode=0),
+        )
+        with _git_on_both_points(run_mock):
+            assert branch_module.ensure_pipeline_branch("feat/x") == "feat/x"
+        assert run_mock.call_args.args[0] == ["git", "switch", "-c", "feat/x"]
+
     def test_ensure_pipeline_branch_creates_and_switches_as_entered(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -333,14 +298,14 @@ class TestEnsurePipelineBranch:
             for_each_ref=_GitResult(stdout=""),
             switch=_GitResult(returncode=0),
         )
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
+        with _git_on_both_points(run_mock):
             assert branch_module.ensure_pipeline_branch("Feature/X") == "Feature/X"
         assert run_mock.call_args.args[0] == ["git", "switch", "-c", "Feature/X"]
 
     def test_ensure_pipeline_branch_already_on_branch_returns_current_name(self) -> None:
         """Slug equality with the current branch → the CURRENT name, one probe, no mutation."""
         run_mock = _git_run_dispatch(show_current=_GitResult(stdout="release/1.3.0\n"))
-        with mock.patch.object(branch_module.subprocess, "run", run_mock):
+        with _git_on_both_points(run_mock):
             assert branch_module.ensure_pipeline_branch("release-1.3.0") == "release/1.3.0"
         assert run_mock.call_count == 1
         assert run_mock.call_args.args[0] == ["git", "branch", "--show-current"]
@@ -349,7 +314,7 @@ class TestEnsurePipelineBranch:
         """Empty slug without a terminal → ClickException with the reason and the -b hint."""
         run_mock = _git_run_dispatch()
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
             pytest.raises(click.ClickException) as excinfo,
         ):
@@ -366,7 +331,7 @@ class TestEnsurePipelineBranch:
         def _probe() -> None:
             branch_module.ensure_pipeline_branch("Релиз")
 
-        with mock.patch.object(branch_module.subprocess, "run", _git_run_dispatch()):
+        with _git_on_both_points(_git_run_dispatch()):
             result = CliRunner().invoke(_probe, [])
         assert result.exit_code == 1
         assert "normalizes to an empty topic slug" in result.stderr
@@ -376,13 +341,41 @@ class TestEnsurePipelineBranch:
         """A conflict without a terminal → ClickException with the oracle reason and hint."""
         run_mock = _git_run_dispatch(show_ref=_GitResult(returncode=0))
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
             pytest.raises(click.ClickException) as excinfo,
         ):
             branch_module.ensure_pipeline_branch("feat/x")
         message = str(excinfo.value)
         assert "branch 'feat/x' already exists" in message
+        assert "Pass another branch name via -b." in message
+        assert _switch_argv_calls(run_mock) == []
+
+    def test_ensure_pipeline_branch_history_topic_conflict_no_tty_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Oracle 3 through the orchestrator: the domain topic oracle wins for the current year.
+
+        The year is pinned at the domain's ``naming.datetime`` — the only
+        clock left in the procedure. The reason names the slug and the current
+        year, not a hand-composed path.
+        """
+        (tmp_path / ".goga" / "history" / "2031" / "feat-x").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=_GitResult(stdout=""),
+        )
+        with (
+            mock.patch.object(history_naming, "datetime", _FixedClock),
+            _git_on_both_points(run_mock),
+            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
+            pytest.raises(click.ClickException) as excinfo,
+        ):
+            branch_module.ensure_pipeline_branch("feat/x")
+        message = str(excinfo.value)
+        assert "history topic 'feat-x' already exists for the current year" in message
         assert "Pass another branch name via -b." in message
         assert _switch_argv_calls(run_mock) == []
 
@@ -396,7 +389,7 @@ class TestEnsurePipelineBranch:
             switch=_GitResult(returncode=0),
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=True),
             mock.patch.object(branch_module.click, "prompt", return_value="feat/two") as prompt_mock,
         ):
@@ -408,7 +401,7 @@ class TestEnsurePipelineBranch:
         """Ctrl-C at the re-ask prompt propagates as click.Abort — no switch ever ran."""
         run_mock = _git_run_dispatch(show_ref=_GitResult(returncode=0))
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=True),
             mock.patch.object(branch_module.click, "prompt", side_effect=click.Abort()),
             pytest.raises(click.Abort),
@@ -428,7 +421,7 @@ class TestEnsurePipelineBranch:
             switch=subprocess.CalledProcessError(128, "git", stderr="fatal: 'a b' is not a valid branch name"),
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             pytest.raises(click.ClickException) as excinfo,
         ):
             branch_module.ensure_pipeline_branch("a b")
@@ -437,48 +430,14 @@ class TestEnsurePipelineBranch:
         assert "fatal: 'a b' is not a valid branch name" in message
 
     def test_ensure_pipeline_branch_missing_git_binary_fails_cleanly(self) -> None:
-        """A no-git host is a clean ClickException — never a traceback."""
+        """A no-git host is a clean ClickException — never a traceback (both points)."""
         run_mock = mock.Mock(side_effect=FileNotFoundError("git"))
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             pytest.raises(click.ClickException) as excinfo,
         ):
             branch_module.ensure_pipeline_branch("feat/x")
         assert str(excinfo.value) == "git is required for -b/--branch: git binary not found"
-        assert _switch_argv_calls(run_mock) == []
-
-    def test_ensure_pipeline_branch_history_topic_conflict_no_tty_fails(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Oracle 3 through the orchestrator: the topic dir is checked by SLUG for the current year.
-
-        The year is pinned via the mandated ``branch_module.datetime`` mock
-        target, so the composed ``f"{datetime.now().year:04d}"`` argument is
-        asserted against a directory created for that exact year.
-        """
-
-        class _FixedClock:
-            @staticmethod
-            def now() -> datetime:
-                return datetime(2031, 6, 15)  # noqa: DTZ001 — a fixed naive date is the point of the clock
-
-        (tmp_path / ".goga" / "history" / "2031" / "feat-x").mkdir(parents=True)
-        monkeypatch.chdir(tmp_path)
-        run_mock = _git_run_dispatch(
-            show_current=_GitResult(stdout="main\n"),
-            show_ref=subprocess.CalledProcessError(1, "git"),
-            for_each_ref=_GitResult(stdout=""),
-        )
-        with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
-            mock.patch.object(branch_module, "datetime", _FixedClock),
-            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
-            pytest.raises(click.ClickException) as excinfo,
-        ):
-            branch_module.ensure_pipeline_branch("feat/x")
-        message = str(excinfo.value)
-        assert "history topic '.goga/history/2031/feat-x' already exists" in message
-        assert "Pass another branch name via -b." in message
         assert _switch_argv_calls(run_mock) == []
 
     def test_ensure_pipeline_branch_ref_listing_failure_fails_cleanly(
@@ -497,7 +456,7 @@ class TestEnsurePipelineBranch:
             for_each_ref=subprocess.CalledProcessError(128, "git", stderr="fatal: not a git repository"),
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             pytest.raises(click.ClickException) as excinfo,
         ):
             branch_module.ensure_pipeline_branch("feat/x")
@@ -513,7 +472,7 @@ class TestEnsurePipelineBranch:
             show_ref=[_GitResult(returncode=0)],
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=True),
             mock.patch.object(branch_module.click, "prompt", return_value="main"),
         ):
@@ -539,7 +498,7 @@ class TestEnsurePipelineBranch:
             switch=_GitResult(returncode=0),
         )
         with (
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            _git_on_both_points(run_mock),
             mock.patch.object(branch_module.sys.stdin, "isatty", return_value=True),
             mock.patch.object(branch_module.click, "prompt", return_value="feat/two") as prompt_mock,
         ):

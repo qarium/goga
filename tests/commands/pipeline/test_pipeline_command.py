@@ -593,16 +593,16 @@ class TestPipelineDispatchForms:
 
 # --- Facade contract: goga/commands/pipeline exports the full contract API ---
 
-# The nine names declared in the cell CODEMANIFEST — the pipeline command, the
-# two container launchers, the four branch routines, and the two runtime-dir
-# helpers (declared since the cell existed, exported since release 1.3.0).
+# The seven names declared in the cell CODEMANIFEST — the pipeline command, the
+# two container launchers, the two branch routines, and the two runtime-dir
+# helpers (declared since the cell existed, exported since release 1.3.0; the
+# slug transformer and the current-branch reader moved to goga.history with no
+# re-export from their old location).
 _PIPELINE_FACADE_ALL = [
     "check_branch_occupancy",
     "clean_pipeline_runtime_dir",
     "ensure_pipeline_branch",
-    "normalize_topic_slug",
     "pipeline",
-    "resolve_current_branch_name",
     "resolve_pipeline_runtime_dir",
     "run_pipeline_container",
     "run_pipeline_info_container",
@@ -611,7 +611,7 @@ _PIPELINE_FACADE_ALL = [
 
 class TestCommandsFacadeExportsInfoLauncher:
     def test_commands_facade_exports_info_launcher(self) -> None:
-        """The package facade defines all nine public names and lists them in ``__all__``.
+        """The package facade defines all seven public names and lists them in ``__all__``.
 
         ``goga.commands.pipeline`` is shadowed on the ``goga.commands`` package
         by the pipeline Click command (see the module-level note above), so the
@@ -625,7 +625,7 @@ class TestCommandsFacadeExportsInfoLauncher:
             assert name in commands_facade.__all__, f"{name} is missing from goga.commands.pipeline.__all__"
 
     def test_commands_facade_all_is_alphabetical_and_complete(self) -> None:
-        """``__all__`` holds exactly the nine names in alphabetical order."""
+        """``__all__`` holds exactly the seven names in alphabetical order."""
         commands_facade = sys.modules["goga.commands.pipeline"]
         assert commands_facade.__all__ == _PIPELINE_FACADE_ALL
 
@@ -633,15 +633,13 @@ class TestCommandsFacadeExportsInfoLauncher:
         """Every declared contract name is importable from the cell facade root.
 
         The Python facade rule obliges ``goga.commands.pipeline`` to expose the
-        full contract API: the command, both launchers, the four ``branch.py``
+        full contract API: the command, both launchers, the two ``branch.py``
         routines, and the two runtime-dir helpers.
         """
         from goga.commands.pipeline import (
             check_branch_occupancy,
             clean_pipeline_runtime_dir,
             ensure_pipeline_branch,
-            normalize_topic_slug,
-            resolve_current_branch_name,
             resolve_pipeline_runtime_dir,
             run_pipeline_container,
             run_pipeline_info_container,
@@ -655,8 +653,6 @@ class TestCommandsFacadeExportsInfoLauncher:
         assert run_pipeline_info_container is not None
         assert resolve_pipeline_runtime_dir is not None
         assert clean_pipeline_runtime_dir is not None
-        assert normalize_topic_slug is not None
-        assert resolve_current_branch_name is not None
         assert check_branch_occupancy is not None
         assert ensure_pipeline_branch is not None
         assert sys.modules["goga.commands.pipeline"].__all__ == _PIPELINE_FACADE_ALL

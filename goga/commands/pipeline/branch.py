@@ -1,10 +1,11 @@
 """Host-side branch routines for the ``-b/--branch`` procedure of ``goga pipeline``.
 
-The four branch routines declared in the cell CODEMANIFEST with ``location:
-branch.py``: the pure slug transformer, the git current-branch reader, the
-three-oracle occupancy check, and the orchestrator of the whole branch
-procedure. Every git invocation follows the ``git`` practice —
-``subprocess.run`` with ``check=True``, captured output, and
+The two branch routines declared in the cell CODEMANIFEST with ``location:
+branch.py``: the three-oracle occupancy check and the orchestrator of the
+whole branch procedure. The slug transformer and the git current-branch
+reader come from the history domain (``goga.history``) via the cell Imports —
+this module holds no local copies. Every git invocation follows the ``git``
+practice — ``subprocess.run`` with ``check=True``, captured output, and
 ``GIT_TERMINAL_PROMPT=0`` in the environment. The oracles are read-only; the
 single host-side mutation (create-and-switch) is owned by
 ``ensure_pipeline_branch``.
@@ -13,13 +14,12 @@ single host-side mutation (create-and-switch) is owned by
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
-from datetime import datetime
-from pathlib import Path
 
 import click
+
+from ...history import normalize_topic_slug, resolve_current_branch_name, topic_exists
 
 _GIT_REQUIRED_MESSAGE = "git is required for -b/--branch: git binary not found"
 _REASK_HINT = "Pass another branch name via -b."
@@ -45,71 +45,7 @@ def _reask_branch_name(reason: str) -> str:
     return click.prompt("New branch name")
 
 
-def normalize_topic_slug(name: str) -> str:
-    """Normalize a branch name into the history topic slug.
-
-    Deterministic pure string transformation: lowercase the name, drop every
-    non-ASCII character (no transliteration), replace each remaining character
-    outside ``[a-z0-9]`` with a hyphen, collapse repeat hyphens into one, and
-    trim leading and trailing hyphens. Lowercasing happens BEFORE the ASCII
-    filter, so a name like ``"aБb"`` yields ``"ab"`` and the Turkish dotted
-    capital ``"İ"`` lowercases to ``"i"`` plus a combining dot that the filter
-    drops.
-
-    A fully non-ASCII or all-separator name yields the empty string — a valid
-    output. No fallback is returned for an empty result; the caller owns the
-    empty-slug decision.
-
-    Args:
-        name: Branch name as entered by the user.
-
-    Returns:
-        The history topic slug (possibly empty). No git, no filesystem, no
-        side effects.
-    """
-    lowered = name.lower()
-    ascii_only = "".join(character for character in lowered if character.isascii())
-    hyphened = re.sub(r"[^a-z0-9]", "-", ascii_only)
-    collapsed = re.sub(r"-{2,}", "-", hyphened)
-    return collapsed.strip("-")
-
-
-def resolve_current_branch_name() -> str | None:
-    """Read the current git branch name exactly as git reports it.
-
-    Asks git via ``git branch --show-current`` (per the ``git`` practice) and
-    returns the stripped answer unmodified — no slugification, no fallback
-    value; both belong to the caller. ``None`` covers only the three documented
-    failure modes: detached HEAD (an empty git answer), a missing git binary
-    (``FileNotFoundError``), and a non-repository (a non-zero git exit).
-    Read-only; the result is not cached — each call asks git anew.
-
-    Returns:
-        The raw current branch name (stripped, unmodified), or ``None`` when it
-        cannot be determined.
-
-    Raises:
-        OSError: unexpected OS-level failures of the git invocation (e.g. a
-            ``PermissionError``); the ``None`` result covers only the
-            documented failure modes.
-    """
-    try:
-        result = subprocess.run(
-            ["git", "branch", "--show-current"],
-            check=True,
-            capture_output=True,
-            text=True,
-            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
-        )
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        return None
-    value = result.stdout.strip()
-    if value == "":
-        return None
-    return value
-
-
-def check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> str | None:
+def check_branch_occupancy(branch_name: str, slug: str) -> str | None:
     """Decide whether the entered branch name and the topic slug are free.
 
     Probes three oracles in order and returns the human-readable reason of the
@@ -120,8 +56,10 @@ def check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> st
        ``/``);
     2. a remote-tracking ref for ``branch_name`` (local
        ``git for-each-ref refs/remotes`` output only — no network call);
-    3. the history topic folder ``.goga/history/<history_year>/<slug>`` — only
-       a DIRECTORY occupies a topic (a stray file named ``<slug>`` does not).
+    3. the history topic for ``slug`` via the domain oracle ``topic_exists``
+       (the current year is resolved inside the domain — this routine owns no
+       clock; only a DIRECTORY occupies a topic, a stray file named
+       ``<slug>`` does not).
 
     The git oracles check the name as entered; the history oracle checks the
     slug — the two may deliberately differ (``release/1.3.0`` vs
@@ -132,7 +70,6 @@ def check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> st
     Args:
         branch_name: Branch name as entered (checked against git refs).
         slug: Normalized topic slug (checked against the history folder).
-        history_year: Current year as ``YYYY`` (the caller owns the clock).
 
     Returns:
         The human-readable reason of the first occupied oracle, or ``None``
@@ -177,19 +114,19 @@ def check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> st
         if separator and branch == branch_name:
             return f"remote-tracking branch '{branch_name}' already exists"
 
-    # Oracle 3 — history topic folder. Only a directory occupies a topic.
-    topic_dir = Path.cwd() / ".goga" / "history" / history_year / slug
-    if topic_dir.is_dir():
-        return f"history topic '.goga/history/{history_year}/{slug}' already exists"
+    # Oracle 3 — history topic, via the domain oracle (the year is resolved
+    # inside the domain). Only a directory occupies a topic.
+    if topic_exists(slug):
+        return f"history topic '{slug}' already exists for the current year"
     return None
 
 
 def ensure_pipeline_branch(branch_name: str) -> str:
     """Bring the project onto a fresh branch with a fresh history topic.
 
-    Composes the three primitives above: normalize the entered name into the
-    topic slug, read the current branch, and check occupancy against the three
-    oracles. A free name is created and switched to on the host exactly as
+    Composes the domain primitives (the slug transformer and the git
+    current-branch reader from ``goga.history``) with the occupancy check
+    above. A free name is created and switched to on the host exactly as
     entered (``git switch -c`` — the single mutation; git owns name validity).
     An unusable name (an empty slug or an occupancy conflict) re-asks on a
     terminal — the cycle restarts from the top and validates the NEW name
@@ -226,13 +163,7 @@ def ensure_pipeline_branch(branch_name: str) -> str:
             return current
 
         try:
-            # Local-timezone year — the history tree is organized by the host's
-            # calendar year; the bare now() shape is the mandated test mock target.
-            conflict = check_branch_occupancy(
-                branch_name,
-                slug,
-                f"{datetime.now().year:04d}",  # noqa: DTZ005
-            )
+            conflict = check_branch_occupancy(branch_name, slug)
         except FileNotFoundError as exc:
             raise click.ClickException(_GIT_REQUIRED_MESSAGE) from exc
         except subprocess.CalledProcessError as exc:
