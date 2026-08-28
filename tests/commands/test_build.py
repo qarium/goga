@@ -77,9 +77,9 @@ class TestApiShape:
         assert result.exit_code == 2
         assert "Missing argument" in result.output
 
-    def test_build_has_fifteen_options(self) -> None:
+    def test_build_has_sixteen_options(self) -> None:
         options = [p for p in build_cmd.params if isinstance(p, click.Option)]
-        assert len(options) == 15
+        assert len(options) == 16
 
     def test_build_has_dry_run_option(self) -> None:
         param_names = [p.name for p in build_cmd.params]
@@ -121,6 +121,10 @@ class TestApiShape:
         param_names = [p.name for p in build_cmd.params]
         assert "review_patience" in param_names
 
+    def test_build_has_base_ref_option(self) -> None:
+        param_names = [p.name for p in build_cmd.params]
+        assert "base_ref" in param_names
+
     def test_build_has_skip_review_option(self) -> None:
         param_names = [p.name for p in build_cmd.params]
         assert "skip_review" in param_names
@@ -146,6 +150,7 @@ class TestHelpOutput:
             "--wait",
             "--max-iterations",
             "--review-patience",
+            "--base-ref",
             "--skip-review",
             "--no-skip-review",
             "-e",
@@ -606,6 +611,36 @@ class TestCLIFlagForwarding:
 
         args = mock_runner.return_value.run.call_args.args[0]
         assert "--skip-finalize" in args
+
+
+# --- _cli_flags_to_args base_ref forwarding tests ---
+
+
+class TestCliFlagsToArgsBaseRef:
+    """--base-ref renders as a value-option pair; unset adds no token.
+
+    The host performs no precedence resolution for the review diff base —
+    forwarding only. A set value yields the exact ``["--base-ref", REF]``
+    tokens docker run hands to the container argv; unset (None) adds no
+    flag, leaving the decision to the container config.
+    """
+
+    def test_cli_flags_to_args_base_ref_set(self) -> None:
+        from goga.commands.build.build import _cli_flags_to_args
+
+        args = _cli_flags_to_args({"base_ref": "origin/1.2.x", "dry_run": False})
+
+        assert "--base-ref" in args
+        assert "origin/1.2.x" in args
+
+    def test_cli_flags_to_args_base_ref_unset_adds_no_flag(self) -> None:
+        from goga.commands.build.build import _cli_flags_to_args
+
+        args = _cli_flags_to_args({"base_ref": None})
+
+        assert "--base-ref" not in args
+        # No bare token leaks: every rendered token belongs to another flag.
+        assert args == []
 
 
 # --- Git config tests ---
