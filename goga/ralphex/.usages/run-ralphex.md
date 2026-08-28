@@ -16,11 +16,10 @@ the CLI/config precedence applied, generates the `.ralphex/config`, and only the
 from goga.ralphex import run_ralphex
 
 plan = "docs/plans/my-plan.md"  # resolved by the caller (goga/build)
-options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
+options = {  # universal ralphex options (CLI > ProjectConfig > omit applied)
     "worktree": True,
     "max_iterations": 50,
     "session_timeout": "30m",
-    "base_ref": "origin/1.2.x",  # → --base-ref (review diff base)
     "tasks_only": False,  # True → --tasks-only (skip all review phases)
     "review": False,  # True → --review (review-only pass)
 }
@@ -29,13 +28,16 @@ dry_run = False
 exit_code = run_ralphex(plan, options, dry_run)
 ```
 
-Two-pass composition when the task executor and the review executor differ:
+Two-pass composition when the task executor and the review executor differ. The
+shared `options` dict holds the universal options only — the review-scoped keys
+(`base_ref`, `review_patience`) join the review pass alone, never the tasks pass:
 
 ```python
-# Pass 1 — tasks only (task wrapper in .ralphex/config claude_command)
+# Pass 1 — tasks only (task wrapper in .ralphex/config claude_command).
+# Universal options only: a review diff base here would scope the wrong phase.
 exit_code = run_ralphex(plan, {**options, "tasks_only": True}, dry_run)
 # Pass 2 (only on pass-1 success) — review only (review wrapper rewritten
-# into claude_command)
+# into claude_command), carrying the review-scoped options
 if exit_code == 0:
     exit_code = run_ralphex(plan, {**options, "review": True}, dry_run)
 ```

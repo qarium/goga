@@ -219,7 +219,10 @@ Annotations: |
        two_pass true)
     6. Resolve base_ref: take the cli_options base_ref when not None, otherwise
        the base_ref field of `ReviewExecutorConfig`, otherwise None; an empty
-       or whitespace-only value from either source resolves as unset (None)
+       or whitespace-only value from either source resolves as unset (None);
+       a padded value (non-empty with surrounding whitespace) resolves to its
+       stripped form — the CLI path and directly-constructed configs are not
+       loader-normalized
     7. Resolve patience: take the cli_options review_patience when not None,
        otherwise the patience field of `ReviewExecutorConfig`, otherwise None
 

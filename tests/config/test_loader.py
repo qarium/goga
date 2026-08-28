@@ -3399,6 +3399,26 @@ build:
         assert config.build.review_executor.base_ref == "origin/1.2.x"
         assert isinstance(config.build.review_executor.base_ref, str)
 
+    def test_review_executor_base_ref_padded_stripped(self, goga_project):
+        """review_executor.base_ref with surrounding whitespace is stored stripped.
+
+        Exact equality — an implementation that only nulls the whitespace-only
+        case without assigning the stripped value fails.
+        """
+        _write_goga_yml(
+            goga_project,
+            """\
+language: python
+build:
+  task_executor:
+    agent: claude
+  review_executor:
+    base_ref: "  origin/1.2.x  "
+""",
+        )
+        config = load_project_config()
+        assert config.build.review_executor.base_ref == "origin/1.2.x"
+
     def test_review_executor_patience_int_parsed(self, goga_project):
         """review_executor.patience YAML int is stored verbatim as an int."""
         _write_goga_yml(
