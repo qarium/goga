@@ -163,7 +163,7 @@ class TestHistoryNegativePaths:
 
     def test_history_path_extensionless_file_fails(self) -> None:
         """An extensionless -f value surfaces the domain error as a clean error."""
-        result = CliRunner().invoke(history, ["path", "-f", "noext"])
+        result = CliRunner().invoke(history, ["path", "feat-x", "-f", "noext"])
         assert result.exit_code == 1
         assert "must carry an extension" in result.stderr
 

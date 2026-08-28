@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import inspect
 import json
+import runpy
+import sys
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from unittest import mock
@@ -10,6 +12,7 @@ import click
 import pytest
 from click.testing import CliRunner
 from goga import app, commands
+from goga import cli as cli_module
 from goga.cli import app as cli_app
 
 from tests.conftest import cwd as _cwd
@@ -43,6 +46,18 @@ class TestFacadeAvailability:
     def test_both_imports_reference_same_object(self) -> None:
         """goga.app and goga.cli.app reference the same object."""
         assert app is cli_app
+
+
+class TestModuleEntrypoint:
+    def test_python_dash_m_goga_runs_the_root_app(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """``python -m goga`` dispatches to the root app — the workflow's entrypoint."""
+        monkeypatch.setattr(sys, "argv", ["goga", "history", "path", "-f", "plan.md"])
+        sys.modules.pop("goga.__main__", None)
+
+        with mock.patch.object(cli_module, "app", return_value=0) as app_mock:
+            runpy.run_module("goga", run_name="__main__")
+
+        assert app_mock.call_args == mock.call()
 
 
 class TestApiShape:

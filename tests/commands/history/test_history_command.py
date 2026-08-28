@@ -88,6 +88,45 @@ class TestHistoryStatus:
         assert "other" not in result.output
         assert "2026" not in result.output
 
+    def test_history_status_defaults_to_current_year_unfiltered(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Plain status: the current year, no filters — every topic alphabetically."""
+        history_root = tmp_path / ".goga" / "history"
+        (history_root / "2025" / "old-topic").mkdir(parents=True)
+        year_dir = history_root / "2031"
+        for topic in ("alpha", "mid", "zeta"):
+            (year_dir / topic).mkdir(parents=True)
+        (year_dir / "alpha" / "plan.md").write_text("plan\n", encoding="utf-8")
+        (year_dir / "mid" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        with mock.patch.object(naming, "datetime", _FixedClock):
+            result = CliRunner().invoke(history, ["status"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["alpha [planned]", "mid [defined]", "zeta [empty]"]
+        assert "old-topic" not in result.output
+
+    def test_history_status_repeatable_status_filter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """-s repeats: one -s per name keeps several statuses, drops the rest."""
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        for topic in ("done-topic", "planned-topic", "defined-topic"):
+            (year_dir / topic).mkdir(parents=True)
+        (year_dir / "done-topic" / "completed").mkdir()
+        (year_dir / "done-topic" / "completed" / "plan.md").write_text("done\n", encoding="utf-8")
+        (year_dir / "planned-topic" / "plan.md").write_text("plan\n", encoding="utf-8")
+        (year_dir / "defined-topic" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "planned", "-s", "done"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["done-topic [done]", "planned-topic [planned]"]
+        assert "defined-topic" not in result.output
+
 
 class TestHistoryPath:
     def test_history_path_prints_file_path_only(
@@ -106,6 +145,37 @@ class TestHistoryPath:
         assert result.exit_code == 0
         assert result.output.splitlines() == [expected]
         assert result.output.endswith("\n")
+        assert not (tmp_path / ".goga").exists()
+
+    def test_history_path_without_file_prints_topic_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """path without -f answers the branch-defaulted topic directory."""
+        monkeypatch.chdir(tmp_path)
+        runner = CliRunner()
+        with (
+            mock.patch.object(naming, "datetime", _FixedClock),
+            mock.patch.object(_history_module, "resolve_current_branch_name", return_value="Feature/Foo_Bar"),
+        ):
+            result = runner.invoke(history, ["path"])
+
+        expected = str(Path(".goga/history") / "2031" / "feature-foo-bar")
+        assert result.exit_code == 0
+        assert result.output.splitlines() == [expected]
+        assert result.output.endswith("\n")
+        assert not (tmp_path / ".goga").exists()
+
+    def test_history_path_explicit_topic_and_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """path takes an explicit branch-name topic; -y overrides the year."""
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["path", "release/1.3.0", "-f", "plan.md", "-y", "2025"])
+
+        expected = str(Path(".goga/history") / "2025" / "release-1-3-0" / "plan.md")
+        assert result.exit_code == 0
+        assert result.output.splitlines() == [expected]
         assert not (tmp_path / ".goga").exists()
 
 
@@ -127,6 +197,19 @@ class TestHistoryEnsure:
         assert second.exit_code == 0
         assert first.output == ""
         assert second.output == ""
+        assert (tmp_path / ".goga" / "history" / "2031" / "feature-foo-bar").is_dir()
+
+    def test_history_ensure_explicit_name_creates_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ensure with an explicit NAME normalizes it — no git involved."""
+        monkeypatch.chdir(tmp_path)
+
+        with mock.patch.object(naming, "datetime", _FixedClock):
+            result = CliRunner().invoke(history, ["ensure", "Feature/Foo_Bar"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
         assert (tmp_path / ".goga" / "history" / "2031" / "feature-foo-bar").is_dir()
 
 
