@@ -241,8 +241,9 @@ clear error.
 - Do not declare `tools:` values with YAML-null (`viewer:`) — write
   `viewer: latest`.
 - Do not bypass the command and call `pip` with `sudo` directly without
-  `--preserve-env=HOME`: the hook's initiating-user resolution and the
-  post-install activation depend on the caller's `$HOME`.
+  `--preserve-env=HOME`: the post-install activation depends on the caller's
+  `$HOME` (the hook's initiating-user resolution reads `SUDO_USER` / the OS
+  user, never `$HOME`).
 - Do not expect `--version` to apply in bulk mode — it is ignored when
   `name` is absent.
 - Do not expect a hook for a local install without the suffix — goga does

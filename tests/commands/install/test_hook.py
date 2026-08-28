@@ -153,6 +153,39 @@ class TestCallInstallHook:
         assert invoked is True
         assert calls == [{"user": "alice"}]
 
+    def test_call_install_hook_normalizes_case_variant_tool_to_module_name(self) -> None:
+        """A case-variant tool name imports the lowercase facade module.
+
+        pip resolves distribution names case-insensitively (``goga install
+        Hello-World`` installs ``goga-tool-hello-world``), so the install
+        succeeds — the module lookup must reach the same lowercase module or
+        the hook would degrade to the quiet-skip path.
+        """
+        calls: list[dict[str, str | None]] = []
+
+        def _fake_install(user: str | None = None) -> None:
+            calls.append({"user": user})
+
+        fake_module = types.SimpleNamespace(install=_fake_install)
+        with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module) as mock_import:
+            invoked = hook_module.call_install_hook("Hello-World", "alice")
+        assert invoked is True
+        assert calls == [{"user": "alice"}]
+        mock_import.assert_called_once_with("goga_tool_hello_world")
+
+    def test_call_install_hook_case_variant_tool_runs_real_module_hook(self) -> None:
+        """End-to-end against a real importable facade: the case-variant spelling runs the hook."""
+        calls: list[dict[str, str | None]] = []
+
+        def _fake_install(user: str | None = None) -> None:
+            calls.append({"user": user})
+
+        fake_facade = types.SimpleNamespace(install=_fake_install)
+        with mock.patch.dict(sys.modules, {"goga_tool_hello_world": fake_facade}):
+            invoked = hook_module.call_install_hook("Hello-World", "alice")
+        assert invoked is True
+        assert calls == [{"user": "alice"}]
+
     def test_call_install_hook_keyword_only_user_injected(self) -> None:
         """``def install(*, user)`` — keyword-only IS keyword-capable (the value is injected)."""
         calls: list[dict[str, str | None]] = []
