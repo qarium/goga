@@ -41,6 +41,11 @@ Imports:
       - uninstall-usage
       - install AS install-usage
     From: goga/commands/install
+  - Types:
+      - history
+    Usages:
+      - history-command
+    From: goga/commands/history
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -63,6 +68,10 @@ Annotations: |
   Use the `install-usage` practice for consumer scenarios of the install
   command: the four modes, the post-install hooks, and the exit codes.
 
+  Use the `history-command` practice for consumer scenarios of the history
+  command group: the four subcommands, their options and filters, the path
+  and ensure behaviors, and the exit codes.
+
 ---
 
 ->lint: {}
@@ -78,6 +87,7 @@ Annotations: |
 ->upgrade: {}
 ->install: {}
 ->uninstall: {}
+->history: {}
 
 ---
 

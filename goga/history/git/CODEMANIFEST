@@ -1,0 +1,53 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  git: |
+    External git binary invoked via subprocess.run (check=True, capture_output=True).
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
+    subprocess call in tests per `convention`.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell owns git-environment introspection for the history domain: reading the
+  current branch name. It is environment-probing, NOT history-path or topic logic —
+  that lives in goga/history. All git access flows through the `git` practice; mock
+  the subprocess call in tests per `convention`. Use relative imports. Re-exported
+  on the goga/history facade via embedding.
+
+---
+
+"resolve_current_branch_name() -> branch: str | None":
+  location: branch.py
+  annotations: |
+    Read the current git branch name exactly as git reports it.
+
+    `branch`: raw current branch name, or None when it cannot be determined
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Ask git for the current branch name
+    2. A non-empty answer -> return it stripped, unmodified
+    3. Detached HEAD, missing git binary, or a non-repository -> None
+
+    Requirements:
+    - Read-only — no branch switch, no writes, no caching
+    - No slugification and no fallback value — both belong to the caller
+
+    Constraints:
+    - Do not tolerate unexpected OS-level failures silently — the None result
+      covers only the documented failure modes
+
+---
+
+Author: Goga
+CreatedAt: 28/08/26
+Description: |
+  Git-environment introspection for the history domain — reads the current branch
+  name. Re-exported on the goga/history facade.

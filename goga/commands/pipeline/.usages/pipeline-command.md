@@ -52,7 +52,8 @@ The entered name plays two roles:
   `.goga/history/<YYYY>/<slug>/`: lowercase, non-ASCII dropped, anything
   outside `[a-z0-9]` becomes `-`, repeat hyphens collapse, edge hyphens
   trim (`Feature/Foo_Bar` → `feature-foo-bar`, `release/1.3.0` →
-  `release-1-3-0`).
+  `release-1-3-0`). The same topic addressing is available directly via the
+  `goga history path` / `goga history ensure` commands.
 
 Occupancy = a local branch with the entered name, OR a remote-tracking
 branch with the entered name, OR an existing `.goga/history/<YYYY>/<slug>/`

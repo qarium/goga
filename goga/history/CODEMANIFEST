@@ -1,0 +1,335 @@
+Imports:
+  - Types:
+      - resolve_current_branch_name
+    From: goga/history/git
+
+Usages:
+  convention: .goga/usages/conventions.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  This cell is the single owner of the .goga/history/ tree: topic identity (the
+  slug grammar and the current year), topic addressing (directory and artifact
+  file paths, existence, creation), the topic status model, and tree traversal.
+  Artifact files are written by their producers — this cell computes paths and
+  creates topic directories only; it never writes artifact content. Pure
+  filesystem and grammar logic: no git access (the branch reader lives in
+  goga/history/git and is re-exported on this facade), no CLI, no output
+  rendering. Every topic value received on the input is normalized — a branch
+  name and an already-normalized slug are both accepted, identically and
+  idempotently. Use relative imports.
+
+---
+
+->resolve_current_branch_name: {}
+
+"normalize_topic_slug(name: str) -> slug: str":
+  location: naming.py
+  annotations: |
+    Normalize a topic input into the history topic slug.
+
+    `name`: topic input as entered — a branch name or an already-normalized slug
+    `slug`: the history topic slug
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Lowercase the name
+    2. Drop every non-ASCII character (no transliteration)
+    3. Replace each remaining character outside [a-z0-9] with a hyphen
+    4. Collapse repeat hyphens into one
+    5. Trim leading and trailing hyphens
+
+    Requirements:
+    - "Feature/Foo_Bar" -> "feature-foo-bar"; "release/1.3.0" ->
+      "release-1-3-0"; "aБb" -> "ab" (non-ASCII dropped before hyphen
+      replacement); a fully non-ASCII name -> empty slug
+    - Idempotent — an already-normalized slug stays itself
+    - Deterministic — same input always produces the same output
+    - Pure string transformation — no git, no filesystem, no side effects
+
+    Constraints:
+    - Do not transliterate Cyrillic or any other script
+    - Do not return a fallback for an empty result — an empty slug is a valid
+      output; the caller owns the empty-slug decision
+
+"current_year() -> year: str":
+  location: naming.py
+  annotations: |
+    Compute the current calendar year for history addressing.
+
+    `year`: the current year as four digits
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Read the naive local calendar year and return it as four digits
+
+    Requirements:
+    - Naive local time, exactly four digits — the single time source for every
+      history consumer
+    - Pure — no filesystem access, no caching
+
+    Constraints:
+    - Do not accept a timezone or an override value — callers needing a
+      different year pass it explicitly to the path routines
+
+"resolve_topic_dir(topic: str, year: str | None = None) -> topic_dir: Path":
+  location: paths.py
+  annotations: |
+    Compute the directory path of a history topic.
+
+    `topic`: topic input — a branch name or an already-normalized slug
+    `year`: optional year as four digits; None means the current year
+    `topic_dir`: the topic directory path .goga/history/<year>/<slug>/
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Normalize `topic` via `normalize_topic_slug`
+    2. An empty slug -> raise a clean error (no topic name remains)
+    3. Resolve the year — `year` when given, otherwise `current_year`
+    4. Compose .goga/history/<year>/<slug> and return it
+
+    Requirements:
+    - The path is rooted at the caller's working directory
+    - Pure with respect to the filesystem — the directory is not created
+    - Idempotent — the same input yields the same path
+
+    Constraints:
+    - Do not create the directory — creation belongs to `ensure_topic_dir`
+    - Do not fall back to another name or year when the slug is empty — the
+      error is the result
+
+"resolve_topic_file(topic: str, filename: str, year: str | None = None) -> file_path: Path":
+  location: paths.py
+  annotations: |
+    Compute the path of an artifact file inside a history topic.
+
+    `topic`: topic input — a branch name or an already-normalized slug
+    `filename`: artifact filename — arbitrary, must carry an extension
+    `year`: optional year as four digits; None means the current year
+    `file_path`: the artifact file path .goga/history/<year>/<slug>/<filename>
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Reject a `filename` without an extension with a clean error
+    2. Compose the topic directory via `resolve_topic_dir` with `topic` and `year`
+    3. Append `filename` and return the path
+
+    Requirements:
+    - A filename carries an extension when a dot separates a non-empty stem
+      from a non-empty suffix — a leading dot alone (a dotfile name such as
+      ".md") is a hidden-file marker, not an extension separator
+    - Pure with respect to the filesystem — the file is neither created nor
+      checked for existence
+    - The filename is taken verbatim — no normalization, no case change
+
+    Constraints:
+    - Do not resolve the path against the filesystem — no existence checks
+
+"topic_exists(topic: str, year: str | None = None) -> exists: bool":
+  location: paths.py
+  annotations: |
+    Decide whether a history topic already exists for the year.
+
+    `topic`: topic input — a branch name or an already-normalized slug
+    `year`: optional year as four digits; None means the current year
+    `exists`: True when the topic directory exists
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Compose the topic directory via `resolve_topic_dir` with `topic` and `year`
+    2. Return True when the path exists and is a directory, otherwise False
+
+    Requirements:
+    - A stray file named like the slug does not occupy a topic — only a
+      directory counts
+    - Read-only — nothing is created
+
+    Constraints:
+    - Do not raise on an absent history root — a missing tree is simply "no"
+
+"ensure_topic_dir(name: str) -> topic_dir: Path":
+  location: paths.py
+  annotations: |
+    Create the directory of a history topic for the current year.
+
+    `name`: topic input — a branch name or an already-normalized slug
+    `topic_dir`: the topic directory path that now exists
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Compose the topic directory via `resolve_topic_dir` with `name` and the
+       current year
+    2. Create the directory including missing parents
+    3. Return the path
+
+    Requirements:
+    - Idempotent — an existing topic directory is a success, not a conflict
+    - Creates directories only — no artifact files
+
+    Constraints:
+    - Do not report occupancy — deciding whether a topic may be created
+      belongs to the caller
+    - Do not create or touch artifact files inside the directory
+
+"TopicStatus()":
+  location: status.py
+  annotations: |
+    Fixed value set of a history topic status. Each member names the process
+    stage reached by the topic's deepest present artifact.
+
+    Apply the `convention` practice for the value-set implementation and
+    intra-package imports.
+
+    Requirements:
+    - Members carry their display names verbatim — consumers filter and
+      render by them
+
+    Constraints:
+    - Fixed value set (implement as enum.Enum); no derived or combined members
+  properties:
+    "empty -> str": |
+      "empty" — no artifact is present in the topic directory.
+    "defined -> str": |
+      "defined" — prd.md is the deepest present artifact.
+    "discovered -> str": |
+      "discovered" — adr.md is the deepest present artifact.
+    "backlog -> str": |
+      "backlog" — task.md is the deepest present artifact.
+    "designed -> str": |
+      "designed" — arch.md is the deepest present artifact.
+    "specified -> str": |
+      "specified" — design.md is the deepest present artifact.
+    "planned -> str": |
+      "planned" — plan.md is the deepest present artifact.
+    "done -> str": |
+      "done" — completed/plan.md is the deepest present artifact.
+
+"TopicRecord(topic: str, status: TopicStatus)":
+  location: status.py
+  annotations: |
+    One topic of a year paired with its resolved status — a single record of
+    the status listing.
+
+    `topic`: the topic slug
+    `status`: the topic status
+
+    Apply the `convention` practice for the data-model rules and intra-package
+    imports.
+  properties:
+    "topic -> str": |
+      The topic slug — the directory name of the topic.
+    "status -> TopicStatus": |
+      The status resolved for the topic.
+
+"resolve_topic_status(topic_dir: Path) -> status: TopicStatus":
+  location: status.py
+  annotations: |
+    Resolve the status of one topic from its directory content.
+
+    `topic_dir`: the topic directory path
+    `status`: the status of the topic
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Probe the artifacts of the progression in deepening order: prd.md,
+       adr.md, task.md, arch.md, design.md, plan.md, completed/plan.md
+    2. Return the member mapped to the deepest artifact present as a file
+    3. No artifact present -> empty
+
+    Requirements:
+    - completed/plan.md is the deepest artifact — its presence wins over every
+      flat artifact
+    - Read-only — the directory content is probed, never changed
+
+    Constraints:
+    - Do not invent intermediate statuses — the member set is fixed
+    - Do not consider files outside the progression
+
+"collect_topic_statuses(year: str | None = None) -> records: list[TopicRecord]":
+  location: status.py
+  annotations: |
+    Collect every topic of one year with its resolved status.
+
+    `year`: optional year as four digits; None means the current year
+    `records`: one `TopicRecord` per topic, sorted alphabetically by topic
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise `current_year`
+    2. List the topic directories of that year; an absent year yields no records
+    3. Resolve the status of each topic via `resolve_topic_status`
+    4. Assemble the records sorted alphabetically by topic and return them
+
+    Requirements:
+    - Only directories count as topics — stray files in the year directory are
+      ignored
+    - An absent year yields an empty list — not an error
+
+    Constraints:
+    - Do not filter — filtering belongs to the consumer
+    - Do not render — output shaping belongs to the consumer
+
+"HistoryYear(year: str, topics: list[str])":
+  location: tree.py
+  annotations: |
+    One year of the history tree paired with its topic names — a single record
+    of the tree listing.
+
+    `year`: the year as four digits
+    `topics`: the topic slugs of that year
+
+    Apply the `convention` practice for the data-model rules and intra-package
+    imports.
+  properties:
+    "year -> str": |
+      The year as four digits — the directory name of the year.
+    "topics -> list[str]": |
+      The topic slugs found under the year, sorted alphabetically.
+
+"collect_history_tree() -> tree: list[HistoryYear]":
+  location: tree.py
+  annotations: |
+    Collect the full history tree — every year with its topics.
+
+    `tree`: one `HistoryYear` per year, sorted by year ascending
+
+    Apply the `convention` practice for docstring style and intra-package imports.
+
+    Algorithm:
+    1. List the year directories of the history root
+    2. For each year, list its topic directories
+    3. Assemble one `HistoryYear` per year — topics sorted alphabetically,
+       years sorted ascending
+    4. Return the assembled tree
+
+    Requirements:
+    - A year directory is a directory named with exactly four digits —
+      anything else is ignored
+    - Only directories count as topics — stray files are ignored
+    - An absent history root yields an empty list — not an error
+
+    Constraints:
+    - Do not compute statuses — the tree carries topic names only
+    - Do not render — output shaping belongs to the consumer
+
+---
+
+Author: Goga
+CreatedAt: 28/08/26
+Description: |
+  Owner of the .goga/history/ tree — topic identity, addressing, statuses, and
+  traversal. Re-exports the git branch reader on its facade.

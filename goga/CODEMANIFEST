@@ -13,6 +13,7 @@ Imports:
       - upgrade
       - install
       - uninstall
+      - history
     Usages:
       - cli-commands
     From: goga/commands
@@ -80,6 +81,7 @@ app():
     - `upgrade`
     - `install`
     - `uninstall`
+    - `history`
 
 ---
 

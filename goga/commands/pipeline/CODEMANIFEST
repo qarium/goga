@@ -1,5 +1,12 @@
 Imports:
   - Types:
+      - normalize_topic_slug
+      - resolve_current_branch_name
+      - topic_exists
+    Usages:
+      - topic-paths
+    From: goga/history
+  - Types:
       - ProjectConfig
       - load_project_config
       - HomeConfig
@@ -111,12 +118,16 @@ Annotations: |
 
   The optional -b/--branch flag prepares a fresh branch and a fresh history
   topic before the run form launches: the entered name is normalized into the
-  topic slug, occupancy is checked against three oracles (a local branch, a
-  remote-tracking branch, the history topic folder), and a free name creates
-  the branch on the host and switches to it. The procedure runs after the
-  argument-form validation and before any docker activity. The listing and
-  info forms silently skip the whole branch procedure.
+  topic slug via `normalize_topic_slug`, occupancy is checked against three
+  oracles (a local branch, a remote-tracking branch, the history topic folder
+  via `topic_exists`), and a free name creates the branch on the host and
+  switches to it. The procedure runs after the argument-form validation and
+  before any docker activity. The listing and info forms silently skip the
+  whole branch procedure.
 
+  Use the `topic-paths` practice for the consumer patterns of the history
+  facade used by the branch procedure — the topic slug, the current branch,
+  and the topic-existence oracle.
   Use the `git` practice for every git invocation of the branch procedure —
   read-only inspection and the single create-and-switch mutation.
   Use the `click` practice for the -b/--branch option: a long form and a short
@@ -276,68 +287,18 @@ Annotations: |
     - Do not pass the branch name into the container — the container sees
       the branch through the mounted project
 
-"normalize_topic_slug(name: str) -> slug: str":
-  location: branch.py
-  annotations: |
-    Normalize a branch name into the history topic slug.
-
-    `name`: branch name as entered by the user
-    `slug`: history topic slug
-
-    Algorithm:
-    1. Lowercase the name
-    2. Drop every non-ASCII character (no transliteration)
-    3. Replace each remaining character outside [a-z0-9] with a hyphen
-    4. Collapse repeat hyphens into one
-    5. Trim leading and trailing hyphens
-
-    Requirements:
-    - The grammar matches the skill-side topic grammar:
-      "Feature/Foo_Bar" -> "feature-foo-bar"; "release/1.3.0" ->
-      "release-1-3-0"; "aБb" -> "ab" (non-ASCII dropped before hyphen
-      replacement); a fully non-ASCII name -> empty slug
-    - Deterministic — same input always produces the same output
-    - Pure string transformation — no git, no filesystem, no side effects
-
-    Constraints:
-    - Do not transliterate Cyrillic or any other script
-    - Do not return a fallback for an empty result — an empty slug is a
-      valid output; the caller owns the empty-slug decision
-
-"resolve_current_branch_name() -> branch: str | None":
-  location: branch.py
-  annotations: |
-    Read the current git branch name exactly as git reports it.
-
-    `branch`: raw current branch name, or None when it cannot be determined
-
-    Apply the `git` practice for the invocation pattern.
-
-    Algorithm:
-    1. Ask git for the current branch name
-    2. A non-empty answer -> return it stripped, unmodified
-    3. Detached HEAD, missing git binary, or a non-repository -> None
-
-    Requirements:
-    - Read-only — no branch switch, no writes, no caching
-    - No slugification and no fallback value — both belong to the caller
-
-    Constraints:
-    - Do not tolerate unexpected OS-level failures silently — the None
-      result covers only the documented failure modes
-
-"check_branch_occupancy(branch_name: str, slug: str, history_year: str) -> conflict: str | None":
+"check_branch_occupancy(branch_name: str, slug: str) -> conflict: str | None":
   location: branch.py
   annotations: |
     Decide whether the entered branch name and the topic slug are free.
 
     `branch_name`: branch name as entered (checked against git refs)
     `slug`: normalized topic slug (checked against the history folder)
-    `history_year`: current year as YYYY (the caller owns the clock)
     `conflict`: human-readable reason of the first occupied oracle, or None
                 when everything is free
 
     Apply the `git` practice for the invocation pattern.
+    Apply the `topic-paths` practice for the topic-existence oracle contract.
     Apply the `convention` practice for docstring style and intra-package
     imports.
 
@@ -345,8 +306,8 @@ Annotations: |
     1. A local branch ref for `branch_name` exists -> return the reason
     2. A remote-tracking ref for `branch_name` exists -> return the reason
        (local remote-tracking refs only — no network call)
-    3. The history topic directory .goga/history/<history_year>/<slug>
-       exists as a directory -> return the reason (a stray file named
+    3. `topic_exists` with `slug` returns True -> return the reason (the
+       topic directory of the current year is taken; a stray file named
        <slug> does not occupy a topic)
     4. All three oracles are free -> None
 
@@ -355,10 +316,10 @@ Annotations: |
       the slug — the two may deliberately differ
     - The first occupied oracle wins; remaining oracles are not probed
     - Read-only — no ref or folder is created
+    - No clock — the topic year is resolved inside the history oracle
 
     Constraints:
-    - Do not resolve remote state over the network — remote-tracking refs
-      only
+    - Do not resolve remote state over the network — remote-tracking refs only
     - Do not create the history folder or any ref here
 
 "ensure_pipeline_branch(branch_name: str) -> branch: str":
@@ -373,6 +334,9 @@ Annotations: |
 
     Apply the `click` practice for click.prompt and exit-code propagation.
     Apply the `git` practice for every git invocation.
+    Apply the `topic-paths` practice for the consumer patterns of the history
+    facade — the topic slug, the current branch, and the topic-existence
+    oracle.
     Apply the `convention` practice for docstring style and intra-package
     imports.
 
@@ -387,8 +351,8 @@ Annotations: |
     3. The current branch is known and its slug equals the entered slug ->
        return the current branch name; no git action, no occupancy check
        (a branch does not conflict with itself)
-    4. `check_branch_occupancy` with the entered name, the slug, and the
-       current year returns a reason -> conflict:
+    4. `check_branch_occupancy` with the entered name and the slug returns
+       a reason -> conflict:
        - interactive terminal: print the reason, prompt for a new name,
          restart from step 1 with it
        - no terminal: print the reason and the hint to stderr, fail with a
