@@ -9,7 +9,7 @@ from unittest import mock
 import click
 import pytest
 from click.testing import CliRunner
-from goga import app
+from goga import app, commands
 from goga.cli import app as cli_app
 
 from tests.conftest import cwd as _cwd
@@ -279,3 +279,28 @@ class TestSchemaLintCoexist:
                 lint_result = runner.invoke(app, ["lint", "."])
 
             assert lint_result.exit_code in (0, 1)
+
+
+def test_cli_registers_history_group() -> None:
+    """The history group is registered on app and re-exported by the facade.
+
+    Regression guard for the full registration chain: the group must be added
+    to the root ``app`` (help surface), expose all four subcommands, and be
+    re-exported through ``goga.commands.__all__`` — otherwise
+    ``from goga.commands import history`` breaks on some consumer paths even
+    though ``cli.py`` registered it.
+    """
+    runner = CliRunner()
+
+    root_help = runner.invoke(app, ["--help"])
+    assert root_help.exit_code == 0
+    assert "history" in root_help.output
+
+    history_help = runner.invoke(app, ["history", "--help"])
+    assert history_help.exit_code == 0
+    for subcommand in ("list", "status", "path", "ensure"):
+        assert subcommand in history_help.output
+
+    assert "history" in commands.__all__
+    assert len(commands.__all__) == 14
+    assert hasattr(commands, "history")

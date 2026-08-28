@@ -9,6 +9,7 @@ from .commands import (
     config,
     connect,
     contract,
+    history,
     init,
     install,
     lint,
@@ -74,3 +75,4 @@ app.add_command(pipeline)
 app.add_command(usages)
 app.add_command(tool)
 app.add_command(upgrade)
+app.add_command(history)
