@@ -39,8 +39,6 @@ extend:
       - commit-changes
     timeout: "8h"
     script: |
-      branch=$(git branch --show-current)
-      topic=$(python3 -c "from goga.commands.pipeline.branch import normalize_topic_slug; import sys; print(normalize_topic_slug(sys.argv[1]))" "$branch")
-      test -n "$topic" || { echo "branch name '$branch' normalizes to an empty topic slug" >&2; exit 1; }
-      python3 -m goga.build ".goga/history/$(date +%Y)/$topic/plan.md"
+      plan=$(python3 -m goga history path -f plan.md) || exit 1
+      python3 -m goga.build "$plan"
     after_script: rm -rf .ralphex
