@@ -596,8 +596,8 @@ class TestPipelineDispatchForms:
 # The seven names declared in the cell CODEMANIFEST — the pipeline command, the
 # two container launchers, the two branch routines, and the two runtime-dir
 # helpers (declared since the cell existed, exported since release 1.3.0; the
-# slug transformer and the current-branch reader moved to goga.history with no
-# re-export from their old location).
+# slug transformer and the current-branch reader belong to goga.history and
+# are not re-exported from this facade).
 _PIPELINE_FACADE_ALL = [
     "check_branch_occupancy",
     "clean_pipeline_runtime_dir",

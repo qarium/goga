@@ -93,10 +93,10 @@ def _git_run_dispatch(
 def _git_on_both_points(run_mock: mock.Mock) -> Iterator[mock.Mock]:
     """Lay one ``run`` dispatcher over BOTH git invocation points at once.
 
-    ``ensure_pipeline_branch`` spans two modules after the domain migration:
-    ``--show-current`` runs in ``goga.history.git.branch`` while ``show-ref``,
-    ``for-each-ref``, and ``switch`` run in this cell's ``branch`` module. A
-    mock on only one of the two points would let the other run real git.
+    ``ensure_pipeline_branch`` spans two modules: ``--show-current`` runs in
+    ``goga.history.git.branch`` while ``show-ref``, ``for-each-ref``, and
+    ``switch`` run in this cell's ``branch`` module. A mock on only one of the
+    two points would let the other run real git.
     """
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch.object(history_git_branch_module.subprocess, "run", run_mock))
@@ -147,15 +147,15 @@ class TestBranchContract:
         hints = typing.get_type_hints(branch_module.ensure_pipeline_branch)
         assert hints == {"branch_name": str, "return": str}
 
-    def test_moved_routines_are_bound_to_the_domain_not_local_copies(self) -> None:
-        """The moved names resolve to the DOMAIN objects — a local ``def`` copy would differ."""
+    def test_domain_routines_are_bound_to_the_domain_not_local_copies(self) -> None:
+        """The domain names resolve to the DOMAIN objects — a local ``def`` copy would differ."""
         import goga.history
 
         assert branch_module.normalize_topic_slug is goga.history.normalize_topic_slug
         assert branch_module.resolve_current_branch_name is goga.history.resolve_current_branch_name
 
-    def test_pipeline_facade_all_without_moved_names(self) -> None:
-        """The package facade exports exactly the seven names — the moved routines are gone."""
+    def test_pipeline_facade_all_excludes_the_domain_routines(self) -> None:
+        """The package facade exports exactly the seven names — the domain routines live on the history facade."""
         from goga.commands.pipeline import __all__ as facade_all
 
         assert facade_all == [

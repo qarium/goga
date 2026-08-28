@@ -1,10 +1,9 @@
 """Naming and time primitives for the history domain.
 
 The two routines declared in the cell CODEMANIFEST with ``location:
-naming.py``: the pure slug transformer (moved verbatim from the pipeline
-cell, whose own copy stays in place until the dedicated migration task) and
-the single current-year point shared by every history consumer. Both are
-pure — no git, no filesystem, no caching.
+naming.py``: the pure slug transformer — the single owner of the topic slug
+grammar — and the single current-year point shared by every history
+consumer. Both are pure — no git, no filesystem, no caching.
 """
 
 from __future__ import annotations
