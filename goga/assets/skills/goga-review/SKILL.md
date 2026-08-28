@@ -10,9 +10,7 @@ Arguments: $ARGUMENTS
 
 ### Review Type Detection
 
-1. **Arguments contain a path under `.goga/history/`** — the path must match
-   `.goga/history/<year>/<topic>/<kind>.md`:
-   - `<year>` must be 4 digits (`\d{4}`); otherwise the path is not a valid artifact path → treat as **cell**.
+1. **Arguments contain a path under the path printed by `goga history path -f <kind>.md`** :
    - Derive the review type by `<kind>` (the filename without `.md`):
      - `prd.md` → **prd**
      - `adr.md` → **adr**
@@ -23,11 +21,11 @@ Arguments: $ARGUMENTS
    - Any other filename, or a path outside `.goga/history/` → **cell**.
 
    Extract `<target>` (the topic):
-   - For `.goga/history/2026/javascript-contract/arch.md` → `<target>` = `javascript-contract`
+   - For `.goga/history/<year>/<topic>/<kind>.md` → `<target>` = `<topic>`
    - For `src/cell/my-cell` → `<target>` = `src/cell/my-cell`
    - For `my-cell` → `<target>` = `my-cell`
 
-2. **Arguments are empty** — prompt the user via AskUserQuestion:
+2. **Arguments are empty** — ask the user:
    - **question**: "What do you want to review?"
    - **header**: "Review type"
    - **multiSelect**: false
@@ -47,17 +45,17 @@ There is no review skill for this artifact kind yet.
 1. Stop execution and report to the user that PRD/ADR review is not supported.
 
 #### architecture
-Verify that `.goga/history/<year>/<target>/arch.md` exists — search `.goga/history/*/<target>/arch.md` (4-digit year).
+Verify the path printed by `goga history path -f arch.md` exists.
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-arch` via the **Skill tool**, passing `<target>` as the argument.
 
 #### design
-Verify that `.goga/history/<year>/<target>/design.md` exists — search `.goga/history/*/<target>/design.md` (4-digit year).
+Verify the path printed by `goga history path -f design.md` exists.
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-design` via the **Skill tool**, passing `<target>` as the argument.
 
 #### plan
-Verify that `.goga/history/<year>/<target>/plan.md` exists — search `.goga/history/*/<target>/plan.md` (4-digit year).
+Verify the path printed by `goga history path -f plan.md` exists.
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-plan` via the **Skill tool**, passing `<target>` as the argument.
 
@@ -67,6 +65,6 @@ Verify that directory `<target>` and file `<target>/CODEMANIFEST` both exist.
 2. **Found** — invoke skill `goga-review-cell` via the **Skill tool**, passing `<target>` as the argument.
 
 #### task
-Verify that `.goga/history/<year>/<target>/task.md` exists — search `.goga/history/*/<target>/task.md` (4-digit year).
+Verify the path printed by `goga history path -f task.md` exists.
 1. **Not found** — stop execution and report to the user.
 2. **Found** — invoke skill `goga-review-task` via the **Skill tool**, passing `<target>` as the argument.

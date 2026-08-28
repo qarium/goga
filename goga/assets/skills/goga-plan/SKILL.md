@@ -12,14 +12,6 @@ Retain the original arguments for the entire session.
 
 ### Design document identification
 
-Determine `<topic>`:
-
-1. **Arguments provided** — use them as the function name.
-2. **Arguments empty** — scan `.goga/history/*/` topic directories for `design.md` (4-digit year) and present the list via **AskUserQuestion**:
-   - **Directory does not exist or is empty** — stop and ask the user to run `/goga:design` first.
-   - **Single file** — use its topic directory name as `<topic>`.
-   - **Multiple files** — display the list via AskUserQuestion and prompt the user to select one.
-
-Check if `.goga/history/*/<topic>/design.md` exists (4-digit year).
-**Does not exist** — stop and ask the user to run `/goga:design` first.
-**Exists** — call `goga-plan-by-design` via the **Skill tool** with `<topic>` as the argument.
+Check if the path printed by `goga history path -f design.md`:
+- **Does not exist** — stop and ask the user to run `/goga:design` first.
+- **Exists** — call skill `goga-plan-by-design` via the **Skill tool** with the printed path as the argument.

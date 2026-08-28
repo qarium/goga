@@ -58,7 +58,7 @@ Use for:
 
 #### Step 6: Load Design Document
 
-Read the file from `.goga/history/*/<topic>/design.md` (4-digit year). `<topic>` is taken from skill arguments.
+Read the file from the path printed by `goga history path -f design.md`.
 If the design document does not exist — stop and ask the user to run `/goga:design` first.
 
 ---

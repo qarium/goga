@@ -51,8 +51,7 @@ Apply the loaded DSL specifications, DSL application principles, and language ru
 #### Step 1. Locate the plan file
 
 - If the argument contains a file path — use it directly
-- If the argument contains only `<topic>` — search for the file `.goga/history/<year>/<topic>/arch.md`
-- If no argument is provided — discover all `arch.md` files under `.goga/history/*/` topic directories and present the list via **AskUserQuestion**
+- If no argument is provided — use the path printed by `goga history path -f arch.md`
 - If the file is not found — halt and report the error to the user
 
 #### Step 2. Parse the plan structure
