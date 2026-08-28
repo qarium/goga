@@ -56,7 +56,8 @@ The entered name plays two roles:
 
 Occupancy = a local branch with the entered name, OR a remote-tracking
 branch with the entered name, OR an existing `.goga/history/<YYYY>/<slug>/`
-folder for the current year.
+topic directory for the current year (a stray file named `<slug>` does not
+occupy a topic).
 
 - Interactive terminal: the reason is printed and a new name is prompted
   until the name is free (Ctrl-C aborts, nothing is created); a fully

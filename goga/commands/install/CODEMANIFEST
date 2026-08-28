@@ -297,11 +297,17 @@ Annotations: |
     imports, and structured logging.
 
     Algorithm:
-    1. Resolve the initiating user once via `resolve_initiating_user`
-    2. For each name in `tools` in order: run `call_install_hook` with the
+    1. An empty `tools` list -> return at once (no user resolution, no log
+       lines)
+    2. Resolve the initiating user once via `resolve_initiating_user`
+    3. For each name in `tools` in order: run `call_install_hook` with the
        name and the user; log the outcome — hook invoked or skipped
-    3. A hook exception propagates: the loop stops and the hooks of the
-       remaining tools are not run
+    4. A hook exception is wrapped in a RuntimeError carrying the tool name
+       ("install hook for tool '<name>' failed: <message>") with the original
+       exception as its cause; the loop stops and the hooks of the remaining
+       tools are not run. A failure of the user-resolution step itself
+       propagates as-is — it is not a hook failure and carries no tool
+       context
 
     Requirements:
     - One initiating user for the whole call — every hook of the run sees
@@ -327,8 +333,15 @@ Annotations: |
     imports.
 
     Algorithm:
-    1. Import the facade module goga_tool_<tool>; a missing module -> False
-       (a quiet skip — a package without the facade convention is normal)
+    1. Normalize `tool` into the facade module identifier goga_tool_<name>:
+       every hyphen and dot becomes an underscore and the result is
+       lowercased (the pip identifier is hyphenated while the on-disk
+       top-level module is underscored, and the import lookup is
+       case-sensitive). Import the module; when the facade itself is missing
+       (ModuleNotFoundError naming exactly that module) -> False (a quiet
+       skip — a package without the facade convention is normal). A
+       ModuleNotFoundError naming a DIFFERENT module means the facade exists
+       but its own imports are broken -> propagate (a failure, not a skip)
     2. A callable install on the facade is absent -> False (a quiet skip —
        the hook is optional for every tool)
     3. The hook signature declares a keyword-capable parameter named user

@@ -519,3 +519,33 @@ class TestEnsurePipelineBranch:
         ):
             assert branch_module.ensure_pipeline_branch("feat/one") == "main"
         assert _switch_argv_calls(run_mock) == []
+
+    def test_ensure_pipeline_branch_empty_slug_tty_reasks_new_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """An empty slug on a terminal re-asks; the loop restarts with the new name.
+
+        The empty-slug branch shares the re-ask machinery with the conflict
+        branch, but it fires BEFORE the already-on-branch and occupancy steps —
+        so the first iteration must not reach a single oracle. The re-asked
+        name then runs the full procedure: occupancy is free, the branch is
+        created exactly as entered.
+        """
+        monkeypatch.chdir(tmp_path)
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=_GitResult(stdout=""),
+            switch=_GitResult(returncode=0),
+        )
+        with (
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=True),
+            mock.patch.object(branch_module.click, "prompt", return_value="feat/two") as prompt_mock,
+        ):
+            assert branch_module.ensure_pipeline_branch("Релиз/Один") == "feat/two"
+        assert prompt_mock.call_count == 1
+        reason = capsys.readouterr().err
+        assert "normalizes to an empty topic slug" in reason
+        assert "Релиз/Один" in reason
+        assert run_mock.call_args.args[0] == ["git", "switch", "-c", "feat/two"]

@@ -138,7 +138,11 @@ Neither pip, nor hooks, nor activation is invoked.
 
 After a successful pip install (single, local with a `:<tool-name>`
 suffix, and bulk), the command imports each installed tool's facade module
-`goga_tool_<tool>` and calls its `install` callable when one exists:
+`goga_tool_<name>` and calls its `install` callable when one exists. The
+tool identifier is normalized into the module name first — every hyphen and
+dot becomes an underscore and the result is lowercased (`mytool` →
+`goga_tool_mytool`, `my-tool` → `goga_tool_my_tool`), matching the
+underscored top-level package pip lays out on disk:
 
 - No facade module or no callable `install` → quiet skip (the hook is
   optional; existing tools without a hook install exactly as before).
@@ -197,7 +201,7 @@ clear error.
 
 ## Python API
 
-    from goga.commands.install.install import install
+    from goga.commands.install import install
 
     # Click commands are normally invoked via the CLI. For testing or
     # programmatic invocation, use click.testing.CliRunner to drive the

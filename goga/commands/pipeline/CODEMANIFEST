@@ -345,8 +345,9 @@ Annotations: |
     1. A local branch ref for `branch_name` exists -> return the reason
     2. A remote-tracking ref for `branch_name` exists -> return the reason
        (local remote-tracking refs only — no network call)
-    3. The history topic folder .goga/history/<history_year>/<slug> exists
-       -> return the reason
+    3. The history topic directory .goga/history/<history_year>/<slug>
+       exists as a directory -> return the reason (a stray file named
+       <slug> does not occupy a topic)
     4. All three oracles are free -> None
 
     Requirements:
