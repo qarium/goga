@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/design/<function-name>.md` — a design document with these sections:
+`.goga/history/<year>/<topic>/design.md` — a design document with these sections:
 
 - Contract changes (added/removed/modified entities)
 - Applied CODEMANIFEST fixes
@@ -72,13 +72,13 @@ The document does **not** contain implementation code and does **not** produce a
 | Step | Action |
 |---|---|
 | 1. Write from template | Use the design-doc template. |
-| 2. Save | Path: `docs/design/<function-name>.md`. Create directory if missing; overwrite if exists. |
+| 2. Save | Path: `.goga/history/<year>/<topic>/design.md`. Create directory if missing; overwrite if exists. |
 
 ## Resolving the function name
 
 If `<function-name>` is omitted:
 
-1. Scan `docs/design/`.
+1. Scan `.goga/history/*/` topic directories for `design.md` (4-digit year).
 2. **Single file** — use automatically.
 3. **Multiple files** — ask the user.
 4. **Empty or missing** — halt and ask the user to run `design` first.
@@ -88,7 +88,7 @@ If `<function-name>` is omitted:
 | | |
 |---|---|
 | **Input** | Modified CODEMANIFEST files (from `apply`) |
-| **Output** | `docs/design/<function-name>.md` |
+| **Output** | `.goga/history/<year>/<topic>/design.md` |
 
 ## What happens next
 

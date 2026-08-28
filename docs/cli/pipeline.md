@@ -11,6 +11,7 @@ goga pipeline --list              # flat list: available pipeline names (in-cont
 goga pipeline --list --info       # overview: one bullet block per pipeline with its description
 goga pipeline <name> --info       # card: name, description, stages in execution order
 goga pipeline <name>              # run: execute the pipeline (in-container)
+goga pipeline <name> -b <branch>  # run: first create+switch to a fresh branch (host-side)
 ```
 
 ## Forms
@@ -58,7 +59,7 @@ The card and the run share the same workflow rule set and the same compiler, so 
 
 ## Run Mode (`goga pipeline <name>`)
 
-Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; otherwise the launcher prints no status line.
+Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; when `-b/--branch` prepared a branch, a single `Pipeline running on branch <name>` line is printed before the launch; otherwise the launcher prints no status line.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -86,6 +87,28 @@ Pipeline running with workflow "feature-phases"
 ```
 
 If the name exists in both sources, the project source wins. The container exit code is propagated as the command's exit code.
+
+### Branch preparation
+
+The run form can first prepare a fresh git branch and a fresh history topic on the host, before any docker activity:
+
+```bash
+goga pipeline development -b feat/x
+```
+
+The entered name plays two roles:
+
+- **branch name** — used exactly as entered when creating and switching (`git switch -c`; git rejects invalid names itself);
+- **history topic slug** — the normalized form that names the topic folder `.goga/history/<YYYY>/<slug>/`: lowercase, non-ASCII dropped, anything outside `[a-z0-9]` becomes `-`, repeat hyphens collapse, edge hyphens trim (`Feature/Foo_Bar` → `feature-foo-bar`, `release/1.3.0` → `release-1-3-0`).
+
+Occupancy is checked against three oracles in order: a local branch with the entered name, a remote-tracking branch with the entered name (local refs only — no network), and an existing `.goga/history/<YYYY>/<slug>/` folder for the current year. On a conflict — or a name that normalizes to an empty slug (a fully non-ASCII name):
+
+- **interactive terminal**: the reason is printed and a new name is prompted until the name is free (Ctrl-C aborts, nothing is created);
+- **no terminal** (CI/scripts): the reason plus the hint `Pass another branch name via -b.` goes to stderr and the command exits 1 — no image refresh, build, or launch happens.
+
+When the procedure completes (a created-and-switched branch, or the already-on-branch case where the current branch's slug equals the entered slug — nothing is touched), goga prints `Pipeline running on branch <name>` to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
+
+The flat list, overview, and card forms silently ignore `-b` — passing it there is not an error and has no effect.
 
 ## Prerequisites
 
@@ -159,6 +182,7 @@ stages:
 | `name` (positional) | string | — | Pipeline name without extension. Selects the card (`--info`) or run form; omit it and pass `--list` for the listing forms. `--list` and a name together are rejected (exit 1) |
 | `-l`, `--list` | flag | off | List available pipelines (flat list). Add `--info` for a one-line description per pipeline |
 | `-i`, `--info` | flag | off | With `--list`: print the overview. With `NAME`: print the pipeline card instead of running it |
+| `-b`, `--branch` | string | — | Create and switch to a fresh branch (and a fresh `.goga/history/<YYYY>/<slug>/` history topic) before the run; see [Branch preparation](#branch-preparation). Run form only — the list/info forms silently ignore it |
 | `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`) forwarded into the container env-file. Run form only |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run form only |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Run form only — the info forms receive the configured `pipeline.hosts` only |
@@ -234,6 +258,12 @@ Wipe persistent afm state for this pipeline/branch before launch:
 goga pipeline deploy --clean
 ```
 
+Start the run on a fresh branch and history topic:
+
+```bash
+goga pipeline development -b feat/x
+```
+
 ## Exit Codes
 
 Host side (all forms):
@@ -241,7 +271,7 @@ Host side (all forms):
 | Code | Meaning |
 |------|---------|
 | `0` | The operation completed (container exit 0) |
-| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a branch-procedure failure (an empty topic slug or an unresolved occupancy conflict without a terminal, a failed `git switch -c` or ref listing, or a missing git binary — see [Branch preparation](#branch-preparation)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
 | other| The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import subprocess
 import typing
+from datetime import datetime
 from pathlib import Path
 from unittest import mock
 
@@ -62,7 +63,7 @@ def _git_run_dispatch(
 
     def _run(argv: list[str], **_kwargs: object) -> _GitResult:
         for key, default_outcome in outcomes.items():
-            if tuple(argv[1 : 1 + len(key)]) == key or tuple(argv[1:]) == key:
+            if tuple(argv[1 : 1 + len(key)]) == key:
                 outcome = default_outcome
                 if queues[key] is not None:
                     if not queues[key]:
@@ -145,8 +146,11 @@ class TestBranchContract:
         hints = typing.get_type_hints(branch_module.ensure_pipeline_branch)
         assert hints == {"branch_name": str, "return": str}
 
-    def test_ensure_pipeline_branch_free_name_returns_entered_name(self) -> None:
+    def test_ensure_pipeline_branch_free_name_returns_entered_name(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """A free name creates-and-switches and returns the entered name (str → str)."""
+        monkeypatch.chdir(tmp_path)
         run_mock = _git_run_dispatch(
             show_current=_GitResult(stdout="main\n"),
             show_ref=subprocess.CalledProcessError(1, "git"),
@@ -295,6 +299,19 @@ class TestCheckBranchOccupancy:
         with mock.patch.object(branch_module.subprocess, "run", run_mock):
             assert branch_module.check_branch_occupancy("feat/x", "feat-x", "2026") is None
 
+    def test_check_branch_occupancy_ref_listing_failure_propagates(self) -> None:
+        """A git infrastructure failure of oracle 2 itself propagates (not an occupancy answer)."""
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=subprocess.CalledProcessError(128, "git", stderr="fatal: not a git repository"),
+        )
+        with (
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            branch_module.check_branch_occupancy("feat/x", "feat-x", "2026")
+
 
 # --- Logic tests: ensure_pipeline_branch (the branch-procedure orchestrator) ---
 
@@ -399,8 +416,11 @@ class TestEnsurePipelineBranch:
             branch_module.ensure_pipeline_branch("feat/x")
         assert _switch_argv_calls(run_mock) == []
 
-    def test_ensure_pipeline_branch_git_rejects_invalid_name_surfaces_stderr(self) -> None:
+    def test_ensure_pipeline_branch_git_rejects_invalid_name_surfaces_stderr(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """git owns name validity — its stderr is surfaced in the ClickException."""
+        monkeypatch.chdir(tmp_path)
         run_mock = _git_run_dispatch(
             show_current=_GitResult(stdout="main\n"),
             show_ref=subprocess.CalledProcessError(1, "git"),
@@ -425,6 +445,65 @@ class TestEnsurePipelineBranch:
         ):
             branch_module.ensure_pipeline_branch("feat/x")
         assert str(excinfo.value) == "git is required for -b/--branch: git binary not found"
+        assert _switch_argv_calls(run_mock) == []
+
+    def test_ensure_pipeline_branch_history_topic_conflict_no_tty_fails(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Oracle 3 through the orchestrator: the topic dir is checked by SLUG for the current year.
+
+        The year is pinned via the mandated ``branch_module.datetime`` mock
+        target, so the composed ``f"{datetime.now().year:04d}"`` argument is
+        asserted against a directory created for that exact year.
+        """
+
+        class _FixedClock:
+            @staticmethod
+            def now() -> datetime:
+                return datetime(2031, 6, 15)  # noqa: DTZ001 — a fixed naive date is the point of the clock
+
+        (tmp_path / ".goga" / "history" / "2031" / "feat-x").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=_GitResult(stdout=""),
+        )
+        with (
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(branch_module, "datetime", _FixedClock),
+            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
+            pytest.raises(click.ClickException) as excinfo,
+        ):
+            branch_module.ensure_pipeline_branch("feat/x")
+        message = str(excinfo.value)
+        assert "history topic '.goga/history/2031/feat-x' already exists" in message
+        assert "Pass another branch name via -b." in message
+        assert _switch_argv_calls(run_mock) == []
+
+    def test_ensure_pipeline_branch_ref_listing_failure_fails_cleanly(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A git infra failure of the oracles (e.g. outside a repository) is a clean error.
+
+        ``git for-each-ref`` exiting non-zero (128 outside a repository) must
+        surface as a ClickException carrying git's stderr — never a raw
+        ``CalledProcessError`` traceback out of the CLI.
+        """
+        monkeypatch.chdir(tmp_path)
+        run_mock = _git_run_dispatch(
+            show_current=_GitResult(stdout="main\n"),
+            show_ref=subprocess.CalledProcessError(1, "git"),
+            for_each_ref=subprocess.CalledProcessError(128, "git", stderr="fatal: not a git repository"),
+        )
+        with (
+            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            pytest.raises(click.ClickException) as excinfo,
+        ):
+            branch_module.ensure_pipeline_branch("feat/x")
+        message = str(excinfo.value)
+        assert "git failed to check branch occupancy" in message
+        assert "fatal: not a git repository" in message
         assert _switch_argv_calls(run_mock) == []
 
     def test_ensure_pipeline_branch_reask_validates_new_name_fully(self) -> None:

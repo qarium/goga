@@ -139,7 +139,7 @@ If you want explicit control over each step instead of running the whole cycle a
 
 > The slash-command form `/goga:<command>` works in agents that consume the goga command bundle — currently `claude`, `opencode`, and `qwen` (see [`goga connect`](cli/connect.md)). Codex and cursor do not register commands; in those agents invoke the skill directly: `goga-propose` (Codex uses the `$` prefix — `$goga-propose`).
 
-The agent walks you through an interactive dialogue, then produces `docs/tasks/<topic>.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
+The agent walks you through an interactive dialogue, then produces `.goga/history/<year>/<topic>/task.md`. From there, each subsequent command takes the previous artifact as input and produces the next one. See the [Workflow](workflow/index.md) section for the full algorithm of each step in both workrounds — refinement and development — including shortcut paths for smaller changes.
 
 ## View
 

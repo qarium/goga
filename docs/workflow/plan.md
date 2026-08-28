@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/plans/<function-name>.md` — an execution plan with this structure:
+`.goga/history/<year>/<topic>/plan.md` — an execution plan with this structure:
 
 - `### Task N: <title>` headings define individual tasks
 - `- [ ]` checkboxes mark incomplete items
@@ -32,7 +32,7 @@ Only ONE task is executed per ralph-loop iteration.
 | 3 | Load language implementation rules via `goga-lang-disp`. |
 | 4 | Load the plan template from `output-template.md`. |
 | 5 | Load project conventions from `conventions.md`. |
-| 6 | Read the design document from `docs/design/<function-name>.md`. Halt if missing. |
+| 6 | Read the design document from `.goga/history/<year>/<topic>/design.md`. Halt if missing. |
 
 ### Phase 2. Compile design document into plan
 
@@ -40,7 +40,7 @@ Only ONE task is executed per ralph-loop iteration.
 |---|---|
 | 1. Extract data from design | Contract changes → task scope; applied fixes → context; entity interactions → diagrams; code stack traces → verified chains; algorithm design → checkboxes; cross-cutting concerns → distributed across tasks; usages analysis → task context; `.usages/` updates → tasks; test stack traces → test instructions. Transfer traces and diagrams **verbatim**, do not summarize. |
 | 2. Compile into ralph-loop tasks | For each entity: create tasks following DSL compilation rules, cell boundaries, ralphex plan-format requirements, task ordering, TDD workflow, task formation rules, templates, and project conventions. |
-| 3. Save the plan | Write to `docs/plans/<function-name>.md`. Create directory if missing. |
+| 3. Save the plan | Write to `.goga/history/<year>/<topic>/plan.md`. Create directory if missing. |
 
 ### Phase 3. Plan verification
 
@@ -119,7 +119,7 @@ After completion: `→ REVIEW → APPROVAL → NEXT_TASK`.
 
 If `<function-name>` is omitted:
 
-1. Scan `docs/design/`.
+1. Scan `.goga/history/*/` topic directories for `design.md` (4-digit year).
 2. **Single file** — use automatically.
 3. **Multiple files** — ask the user.
 4. **Empty or missing** — halt and ask the user to run `design` first.
@@ -128,8 +128,8 @@ If `<function-name>` is omitted:
 
 | | |
 |---|---|
-| **Input** | `docs/design/<function-name>.md` |
-| **Output** | `docs/plans/<function-name>.md` |
+| **Input** | `.goga/history/<year>/<topic>/design.md` |
+| **Output** | `.goga/history/<year>/<topic>/plan.md` |
 
 ## What happens next
 

@@ -95,6 +95,14 @@ A valid tool must:
 - Each skill directory must include a `SKILL.md` file
 - Expose a `main(argv: list[str])` function for CLI execution
 
+A tool **may** additionally expose an `install(user: str | None = None)`
+callable in its facade package — the post-install hook. `goga install` calls
+it after a successful pip, passing the initiating user (`SUDO_USER` when goga
+itself runs under sudo, else the current OS user) only when the parameter is
+declared keyword-capable; otherwise the hook is called with no arguments. A
+missing or non-callable `install` is skipped quietly. See
+[`goga install` — Post-install hooks](cli/install.md#post-install-hooks).
+
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
 `<tool>:<name>.yml`** (where `<tool>` is the package name with the

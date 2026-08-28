@@ -13,13 +13,18 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Dispatch logic
 
-| Argument shape | Type | Specialized skill |
+When the argument is a path under `.goga/history/`, it must match `.goga/history/<year>/<topic>/<kind>.md` (a 4-digit `<year>`); the review type comes from the `<kind>` filename:
+
+| Artifact kind | Type | Specialized skill |
 |---|---|---|
-| Path under `docs/tasks/` | `task` | `goga-review-task` |
-| Path under `docs/arch/` | `architecture` | `goga-review-arch` |
-| Path under `docs/design/` | `design` | `goga-review-design` |
-| Path under `docs/plans/` | `plan` | `goga-review-plan` |
-| Cell directory or other | `cell` | `goga-review-cell` |
+| `prd.md` | `prd` | *review not supported* (no dedicated skill yet) |
+| `adr.md` | `adr` | *review not supported* (no dedicated skill yet) |
+| `task.md` | `task` | `goga-review-task` |
+| `arch.md` | `architecture` | `goga-review-arch` |
+| `design.md` | `design` | `goga-review-design` |
+| `plan.md` | `plan` | `goga-review-plan` |
+
+Any other filename, a path outside `.goga/history/`, or a cell directory → **cell** (`goga-review-cell`). For `prd` and `adr` the dispatcher stops with "review not supported" — no dedicated review skill exists for those kinds yet.
 
 If the argument is empty, the dispatcher asks which type to review via `AskUserQuestion`.
 
@@ -43,7 +48,7 @@ The task review `review(task)` is the checkpoint that closes refinement: it veri
 
 ## Algorithm — Task review (`goga-review-task`)
 
-Validates `docs/tasks/<topic>.md` for completeness, correctness, and consistency.
+Validates `.goga/history/<year>/<topic>/task.md` for completeness, correctness, and consistency.
 
 | Phase | Action |
 |---|---|
@@ -61,7 +66,7 @@ Validates `docs/tasks/<topic>.md` for completeness, correctness, and consistency
 
 ## Algorithm — Architecture review (`goga-review-arch`)
 
-Validates `docs/arch/<topic>.md` for semantic correctness across the whole plan — model cohesion, cell boundaries, requirement sufficiency.
+Validates `.goga/history/<year>/<topic>/arch.md` for semantic correctness across the whole plan — model cohesion, cell boundaries, requirement sufficiency.
 
 | Phase | Action |
 |---|---|
@@ -79,7 +84,7 @@ Validates `docs/arch/<topic>.md` for semantic correctness across the whole plan 
 
 ## Algorithm — Design review (`goga-review-design`)
 
-Verifies `docs/design/<feature-name>.md` for logical correctness by tracing the full code stack for each entry point and test scenario.
+Verifies `.goga/history/<year>/<topic>/design.md` for logical correctness by tracing the full code stack for each entry point and test scenario.
 
 | Phase | Action |
 |---|---|
@@ -92,7 +97,7 @@ Verifies `docs/design/<feature-name>.md` for logical correctness by tracing the 
 
 ## Algorithm — Plan review (`goga-review-plan`)
 
-Verifies `docs/plans/<feature-name>.md` for completeness and correctness before passing to the ralph-loop.
+Verifies `.goga/history/<year>/<topic>/plan.md` for completeness and correctness before passing to the ralph-loop.
 
 | Phase | Action |
 |---|---|

@@ -6,6 +6,7 @@ import types
 from pathlib import Path
 from unittest import mock
 
+import click
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
@@ -52,10 +53,11 @@ class TestInstallCliIntegration:
         assert result.exit_code == 0
         assert "--sudo" in result.output
         assert "--version" in result.output
-        # Click uppercases the argument metavar (NAME) in the usage line and
-        # emits an ``Arguments:`` section; either marker confirms the required
-        # positional argument is declared.
-        assert "NAME" in result.output.upper() or "Arguments" in result.output
+        # Structural check — the --help prose contains the word "name", so a
+        # substring assert on the rendered text cannot fail; assert the
+        # positional argument is declared on the command instead.
+        arguments = [param for param in _install_module.install.params if isinstance(param, click.Argument)]
+        assert [param.name for param in arguments] == ["name"]
 
     def test_install_cli_plain_dispatch(self) -> None:
         """``goga install foo`` composes the canonical argv and exits with pip's returncode."""
@@ -330,6 +332,31 @@ class TestInstallHookFlowIntegration:
         # bulk stops at the FIRST failing hook: afm's hook never runs.
         assert mock_run.call_count == 1
         assert calls == ["viewer"]
+        mock_resync.assert_not_called()
+
+    def test_install_identity_resolution_failure_is_clean_cli_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """An unwrapped hook-step failure (identity resolution) → clean exit 1, no traceback.
+
+        The user-resolution step runs before any hook; its raw failure message
+        surfaces as a user-facing error (the exit-code matrix's "unwrapped
+        hook-step failure" row): pip's package stays, no hook runs, and the
+        activation re-sync is never reached.
+        """
+        monkeypatch.delenv("SUDO_USER", raising=False)
+        with (
+            mock.patch.object(_install_module.subprocess, "run", return_value=_pip_result()) as mock_run,
+            mock.patch.object(hook_module.getpass, "getuser", side_effect=KeyError("uid not found")),
+            mock.patch.object(hook_module.importlib, "import_module") as mock_import,
+            mock.patch.object(_install_module, "resync_registered_agents") as mock_resync,
+        ):
+            result = CliRunner().invoke(app, ["install", "viewer"])
+
+        assert result.exit_code == 1
+        # click's exception formatter produced the message — not a raw traceback.
+        assert "Error:" in result.output
+        assert "'uid not found'" in result.output
+        mock_run.assert_called_once()
+        mock_import.assert_not_called()
         mock_resync.assert_not_called()
 
     def test_install_local_suffix_hook_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:

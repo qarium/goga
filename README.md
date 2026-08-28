@@ -151,7 +151,9 @@ description: End-to-end feature development
   title: "Create the task from a user propose"
   communication: true
   prompt: |
-    Save the task file as `<git branch --show-current>.md`
+    Save the task file as `.goga/history/<year>/<topic>/task.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug
+    of the current git branch name; create the directory lazily)
   skills:
     - goga-propose
 
@@ -183,6 +185,7 @@ Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipe
 
 ```bash
 goga pipeline development             # run the development cycle (opens with brainstorm)
+goga pipeline development -b feat/x   # first create+switch to a fresh branch and history topic
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
@@ -296,15 +299,18 @@ goga install
 
 # Install a tool from a local source directory (no PyPI lookup)
 goga install --local <path>
+
+# Same, naming the tool whose post-install hook runs
+goga install --local <path>:<tool-name>
 ```
 
-After installing, connect the tool to your agent (only required the first time, or to connect a new agent — `goga install` re-syncs already-connected agents automatically):
+After a successful pip, `goga install` runs each freshly installed tool's optional post-install hook (a callable `install` in its facade — skipped quietly when absent), then re-syncs every already-connected agent:
 
 ```bash
 goga connect <agent>
 ```
 
-Pass `goga install --no-connect` to opt out of post-install activation (CI/Docker escape-hatch). Pass `goga install --sudo` for system-Python installs requiring root.
+Pass `goga install --no-connect` to opt out of the post-install agent re-sync (CI/Docker escape-hatch; the post-install hooks still run). Pass `goga install --sudo` for system-Python installs requiring root.
 
 See [`goga install`](https://qarium.github.io/goga/cli/install/) for the full version-grammar rules and single/bulk/empty/local semantics.
 
@@ -379,6 +385,8 @@ A valid tool **must**:
 - Contain a `skills/` directory with at least one skill (each skill directory has a `SKILL.md`)
 - Expose a `main(argv: list[str])` function for CLI execution (optionally declaring a keyword-capable `ast` parameter to receive the project AST)
 - A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time, namespaced as `<tool>:<name>.yml`
+
+A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
 
 After publication, install into any project:
 
@@ -569,7 +577,7 @@ These are not special "SDD extension points" — they are exactly the same workf
 `goga build` is a separate service that materializes a plan into code. Pipelines produce plans; Build executes them — and neither side is a special case of the other. A plan is handed to a ralph-loop running inside an isolated Docker container, which reads the plan, executes each task in sequence (declaration → contract tests → implementation → interface verification → logic tests → lint → review → approval), and writes the implementation into the project tree. `CODEMANIFEST` files stay **read-only** throughout — the contract is the source of truth, the build produces code that satisfies it.
 
 ```bash
-goga build docs/plans/<topic>.md
+goga build .goga/history/<year>/<topic>/plan.md
 ```
 
 The host side assembles the environment and launches the container; the in-container process then guards its environment, prepares the loop's working directory, and runs the loop with the plan as input. Credential files for `claude`, `codex`, and `opencode` are detected on the host and bind-mounted read-only into the container automatically (no flag), so the agent executing the plan runs with your live credentials.
@@ -583,7 +591,7 @@ goga build plan.md -e ENV_VAR=value       # forward an extra env var into the co
 goga build plan.md --skip-review          # run tasks only, skip the review phase
 ```
 
-The review phase is configurable beyond the on/off flag: a `build.review_executor` section in `.goga/config.yml` can hand review to a different agent (`agent: codex` runs a second, review-only pass on the codex wrapper), skip it by default (`skip: true` — `--no-skip-review` forces the full cycle), select the reviewer composition (`roles: [quality, testing]`), and layer environment variables onto the review pass alone (`env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the values never reach logs or dry-run output, and like a differing agent a non-empty `env` forces a two-pass run, so it cannot be combined with a worktree). After a successful run the plan file itself moves to `docs/plans/completed/`.
+The review phase is configurable beyond the on/off flag: a `build.review_executor` section in `.goga/config.yml` can hand review to a different agent (`agent: codex` runs a second, review-only pass on the codex wrapper), skip it by default (`skip: true` — `--no-skip-review` forces the full cycle), select the reviewer composition (`roles: [quality, testing]`), and layer environment variables onto the review pass alone (`env: {ANTHROPIC_MODEL: reviewer}` — the variables overlay the container environment for the review subprocess only; the tasks pass never sees them, the values never reach logs or dry-run output, and like a differing agent a non-empty `env` forces a two-pass run, so it cannot be combined with a worktree). After a successful run the plan file itself moves to `completed/` inside its own topic directory (`.goga/history/<year>/<topic>/completed/`).
 
 A running build executes inside a Docker container, where its run-state and logs are written to a persistent host directory and survive across runs of the same project on the same branch — so an interrupted build can be resumed. Pass `--clean` (or `-c`) to wipe that state before launch for a fresh run. After the build, test the implementation manually.
 

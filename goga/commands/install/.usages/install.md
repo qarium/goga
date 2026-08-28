@@ -43,7 +43,8 @@ activation only — the hooks still run.
     goga install foo --version 1.0.x
 
     # Install with sudo (system-Python installs requiring root); hooks and
-    # activation run without sudo, the hook receives SUDO_USER
+    # activation run without sudo, the hook receives the current OS user
+    # (SUDO_USER only when goga itself runs under sudo)
     goga install foo --sudo
 
     # Install only — skip activation; the post-install hook still runs
@@ -94,7 +95,8 @@ Install a goga-tool from a local source directory instead of PyPI:
     goga install --local ./my-tool:mytool --no-connect
 
     # Local install under sudo (system-Python); hooks and activation run
-    # without sudo, the hook receives SUDO_USER
+    # without sudo, the hook receives the current OS user (SUDO_USER only
+    # when goga itself runs under sudo)
     goga install --local ./my-tool:mytool --sudo
 
 Local mode issues exactly one `pip install <path> -U` against the current
@@ -143,8 +145,10 @@ suffix, and bulk), the command imports each installed tool's facade module
 - The hook's signature declares a keyword-capable parameter `user` → it is
   called as `install(user=<initiating user>)`; otherwise it is called with
   no arguments.
-- The initiating user is `SUDO_USER` when the install runs under sudo,
-  otherwise the current OS user — the actual initiator, not root. What the
+- The initiating user is `SUDO_USER` when goga itself runs under sudo
+  (`sudo goga install ...`), otherwise the current OS user — the actual
+  initiator, not root. The `--sudo` flag runs only pip under sudo and does
+  not set `SUDO_USER`. What the
   tool does with the string (chown, per-user config, git identity) is the
   tool's business; goga does not re-execute the hook as that user.
 - Hook failure (an exception from the hook body): non-zero exit with the

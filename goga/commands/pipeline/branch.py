@@ -208,7 +208,8 @@ def ensure_pipeline_branch(branch_name: str) -> str:
     Raises:
         click.ClickException: an empty topic slug or an unresolved occupancy
             conflict without a terminal, a failed create-and-switch (carrying
-            git's stderr), or a missing git binary.
+            git's stderr), a git infrastructure failure of the occupancy
+            oracles (carrying git's stderr), or a missing git binary.
         click.Abort: Ctrl-C or EOF at the re-ask prompt — the repository is
             left untouched.
     """
@@ -234,6 +235,14 @@ def ensure_pipeline_branch(branch_name: str) -> str:
             )
         except FileNotFoundError as exc:
             raise click.ClickException(_GIT_REQUIRED_MESSAGE) from exc
+        except subprocess.CalledProcessError as exc:
+            # A git infrastructure failure of the oracles themselves (e.g. the
+            # ref listing exiting 128 outside a repository) — not an occupancy
+            # answer; surfaced as a clean failure, never a traceback.
+            stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+            raise click.ClickException(
+                f"git failed to check branch occupancy for {branch_name!r}: {stderr.strip()}"
+            ) from exc
         if conflict is not None:
             branch_name = _reask_branch_name(conflict)
             continue

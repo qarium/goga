@@ -119,6 +119,21 @@ class TestCallInstallHook:
         assert calls == [{"user": "alice"}]
         mock_import.assert_called_once_with("goga_tool_fake")
 
+    def test_call_install_hook_keyword_only_user_injected(self) -> None:
+        """``def install(*, user)`` — keyword-only IS keyword-capable (the value is injected)."""
+        calls: list[dict[str, str | None]] = []
+
+        def _fake_install(*, user: str | None = None) -> None:
+            calls.append({"user": user})
+
+        fake_module = types.SimpleNamespace(install=_fake_install)
+        with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module):
+            invoked = hook_module.call_install_hook("fake", "alice")
+        assert invoked is True
+        # A bare call would raise TypeError (missing keyword-only argument);
+        # the recorded value proves the keyword injection happened.
+        assert calls == [{"user": "alice"}]
+
     def test_call_install_hook_bare_call_when_no_user_parameter(self) -> None:
         """A hook without a ``user`` parameter is called with NO arguments."""
         calls: list[tuple[()]] = []

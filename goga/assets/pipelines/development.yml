@@ -6,9 +6,10 @@ description: "Development process"
   title: "Task-based architecture development"
   communication: true
   prompt: |
-    Use the task `.goga/history/<year>/<git branch --show-current>/task.md`, if it exists
-    Save the architecture plan as `.goga/history/<year>/<git branch --show-current>/arch.md`
-    (`<year>` = current year, `YYYY`; create the directory lazily)
+    Use the task `.goga/history/<year>/<topic>/task.md`, if it exists
+    Save the architecture plan as `.goga/history/<year>/<topic>/arch.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name (`release/1.3.0` → `release-1-3-0`); create the directory lazily)
 
     **CODEMANIFEST files** must be described at a functional and business-logic level, remaining strictly implementation-agnostic:
     - Focus on defining "what" the system should achieve (expected behavior, business rules, inputs, and outputs) rather than "how" to code it.
@@ -35,16 +36,18 @@ description: "Development process"
   title: "Review of the created architectural plan"
   communication: true
   prompt: |
-    Review the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md`
-    (`<year>` = current year, `YYYY`)
+    Review the architecture plan `.goga/history/<year>/<topic>/arch.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name)
   skills:
     - goga-review-arch
 
 - name: apply-architecture
   title: "Apply the created architectural plan"
   prompt: |
-    Apply the architecture plan `.goga/history/<year>/<git branch --show-current>/arch.md`
-    (`<year>` = current year, `YYYY`)
+    Apply the architecture plan `.goga/history/<year>/<topic>/arch.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name)
   skills:
     - goga-apply
 
@@ -52,8 +55,9 @@ description: "Development process"
   title: "Designing architecture into code"
   communication: true
   prompt: |
-    Save the design document as `.goga/history/<year>/<git branch --show-current>/design.md`
-    (`<year>` = current year, `YYYY`; create the directory lazily)
+    Save the design document as `.goga/history/<year>/<topic>/design.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name; create the directory lazily)
   skills:
     - goga-design
 
@@ -61,8 +65,9 @@ description: "Development process"
   title: "Review of the created design plan"
   communication: true
   prompt: |
-    Review the design document `.goga/history/<year>/<git branch --show-current>/design.md`
-    (`<year>` = current year, `YYYY`)
+    Review the design document `.goga/history/<year>/<topic>/design.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name)
   skills:
     - goga-review-design
 
@@ -70,9 +75,10 @@ description: "Development process"
   title: "Create the coding plan"
   communication: true
   prompt: |
-    Use the design document `.goga/history/<year>/<git branch --show-current>/design.md`
-    Save the plan as `.goga/history/<year>/<git branch --show-current>/plan.md`
-    (`<year>` = current year, `YYYY`; create the directory lazily)
+    Use the design document `.goga/history/<year>/<topic>/design.md`
+    Save the plan as `.goga/history/<year>/<topic>/plan.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name; create the directory lazily)
   skills:
     - goga-plan
 
@@ -80,8 +86,9 @@ description: "Development process"
   title: "Review of the created coding plan"
   communication: true
   prompt: |
-    Review the plan `.goga/history/<year>/<git branch --show-current>/plan.md`
-    (`<year>` = current year, `YYYY`)
+    Review the plan `.goga/history/<year>/<topic>/plan.md`
+    (`<year>` = current year, `YYYY`; `<topic>` = lowercase kebab-case slug of the
+    current git branch name)
   skills:
     - goga-review-plan
 

@@ -39,14 +39,14 @@ Inside the container, the ralph-loop executes the plan: one task per iteration, 
 ## When to use
 
 - After `plan` and `review(plan)`, when the plan is approved.
-- Whenever an execution plan exists in `docs/plans/` and is ready to be executed.
+- Whenever an execution plan exists under `.goga/history/` and is ready to be executed.
 
 ## Inputs and outputs
 
 | | |
 |---|---|
-| **Input** | `docs/plans/<topic>.md` — the execution plan |
-| **Output** | Implemented code in the project tree; after a successful run the plan itself moves to `docs/plans/completed/<topic>.md` |
+| **Input** | `.goga/history/<year>/<topic>/plan.md` — the execution plan |
+| **Output** | Implemented code in the project tree; after a successful run the plan itself moves to `.goga/history/<year>/<topic>/completed/plan.md` |
 
 ## Options
 
@@ -73,23 +73,23 @@ Timeout and iteration options fall back to `.goga/config.yml` when not provided 
 ## Examples
 
 ```bash
-goga build docs/plans/json-export.md
-goga build docs/plans/json-export.md --dry-run
-goga build docs/plans/json-export.md --skip-manifest-check
-goga build docs/plans/json-export.md -e ANTHROPIC_API_KEY=sk-xxx
+goga build .goga/history/<year>/json-export/plan.md
+goga build .goga/history/<year>/json-export/plan.md --dry-run
+goga build .goga/history/<year>/json-export/plan.md --skip-manifest-check
+goga build .goga/history/<year>/json-export/plan.md -e ANTHROPIC_API_KEY=sk-xxx
 
 # Force-refresh the image before launch (build when dockerfile is declared, else pull)
-goga build docs/plans/json-export.md --update
+goga build .goga/history/<year>/json-export/plan.md --update
 
 # Route container traffic through a corporate proxy and add a local host entry
-goga build docs/plans/json-export.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
+goga build .goga/history/<year>/json-export/plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
 
 # Wipe persistent ralph-loop state before launch (start fresh)
-goga build docs/plans/json-export.md --clean
+goga build .goga/history/<year>/json-export/plan.md --clean
 
 # Without --clean, ralph-loop state persists across runs of the same project+branch
-goga build docs/plans/json-export.md
-goga build docs/plans/json-export.md  # second run reuses .ralphex/ from the first
+goga build .goga/history/<year>/json-export/plan.md
+goga build .goga/history/<year>/json-export/plan.md  # second run reuses .ralphex/ from the first
 ```
 
 ## Exit codes
@@ -101,7 +101,7 @@ goga build docs/plans/json-export.md  # second run reuses .ralphex/ from the fir
 
 ## What happens next
 
-- The completed plan now lives in `docs/plans/completed/` — nothing further reads it, but it stays for reference.
+- The completed plan now lives in `.goga/history/<year>/<topic>/completed/` — nothing further reads it, but it stays for reference.
 - Test the produced implementation manually.
 - If bugs or defects are found — fix them with [`change`](change.md).
 - Once the implementation is stable — run [`accept`](accept.md) for final sign-off.

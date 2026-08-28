@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/proposals/<topic>.md` — a short ADR (slug name, lowercase kebab-case; the directory is created lazily if needed). An ADR is 1–3 sentences: the context, the decision, and why. Optional sections (`Status`, `Considered Options`, `Consequences`) are included only when they add genuine value.
+`.goga/history/<year>/<topic>/adr.md` — a short ADR (slug name, lowercase kebab-case; the directory is created lazily if needed). An ADR is 1–3 sentences: the context, the decision, and why. Optional sections (`Status`, `Considered Options`, `Consequences`) are included only when they add genuine value.
 
 ## Algorithm
 
@@ -68,7 +68,7 @@ If a decision is easy to reverse, skip it. If it is not surprising, nobody will 
 | | |
 |---|---|
 | **Input** | A decision worth recording, in natural language |
-| **Output** | `docs/proposals/<topic>.md` — a short ADR |
+| **Output** | `.goga/history/<year>/<topic>/adr.md` — a short ADR |
 
 ## What happens next
 

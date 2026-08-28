@@ -1,6 +1,6 @@
 # Apply
 
-Materialize an architecture plan into the cells file structure. Reads `docs/arch/<topic>.md` and produces actual `CODEMANIFEST` files and `.usages/` directories on disk.
+Materialize an architecture plan into the cells file structure. Reads `.goga/history/<year>/<topic>/arch.md` and produces actual `CODEMANIFEST` files and `.usages/` directories on disk.
 
 ## Synopsis
 
@@ -33,7 +33,7 @@ The skill does **not** write implementation code — only the contract skeleton.
 
 | Step | Action |
 |---|---|
-| 1. Locate the plan file | Use argument as path or `docs/arch/<topic>.md`; if no argument, list `docs/arch/` via `AskUserQuestion`; halt if file missing. |
+| 1. Locate the plan file | Use argument as path or `.goga/history/<year>/<topic>/arch.md`; if no argument, scan `.goga/history/*/` topic directories for `arch.md` (4-digit year) and list them via `AskUserQuestion`; halt if file missing. |
 | 2. Parse the plan structure | Extract implementation order, artifacts per cell, dependency map, verification checklist. |
 | 3. Classify cells | Mark each as **new** (directory does not exist) or **modification** (directory exists; read current CODEMANIFEST to compute diff). |
 
@@ -78,7 +78,7 @@ Process cells **strictly in plan order** (leaves → root). For each cell:
 
 If `<topic>` is omitted:
 
-1. Scan `docs/arch/`.
+1. Scan `.goga/history/*/` topic directories for `arch.md` (4-digit year).
 2. **Single file** — use automatically.
 3. **Multiple files** — ask the user via `AskUserQuestion`.
 4. **Empty or missing** — halt and report.
@@ -95,7 +95,7 @@ If `goga` is unavailable, the skill halts.
 
 | | |
 |---|---|
-| **Input** | `docs/arch/<topic>.md` |
+| **Input** | `.goga/history/<year>/<topic>/arch.md` |
 | **Output** | Cells on disk: `CODEMANIFEST` files and `.usages/` directories |
 
 ## What happens next

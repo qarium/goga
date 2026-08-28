@@ -12,7 +12,7 @@ Examples use the slash-command form `/goga:<command>`, which works in agents tha
 
 ## Output artifact
 
-`docs/defines/<topic>.md` — a PRD with sections for the problem, users, goals, user experience, requirements, constraints, scope, and success criteria. If a PRD with the same topic already exists, the collision is handled explicitly rather than silently overwriting unrelated work.
+`.goga/history/<year>/<topic>/prd.md` — a PRD with sections for the problem, users, goals, user experience, requirements, constraints, scope, and success criteria. If a PRD with the same topic already exists, the collision is handled explicitly rather than silently overwriting unrelated work.
 
 ## Pipeline
 

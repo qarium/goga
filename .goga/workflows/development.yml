@@ -40,6 +40,6 @@ extend:
     timeout: "8h"
     script: |
       branch=$(git branch --show-current)
-      topic=$(python3 -c "import re,sys; print(re.sub(r'[^a-z0-9]+','-',sys.argv[1].lower()).strip('-'))" "$branch")
+      topic=$(python3 -c "from goga.commands.pipeline.branch import normalize_topic_slug; import sys; print(normalize_topic_slug(sys.argv[1]))" "$branch")
       python3 -m goga.build ".goga/history/$(date +%Y)/$topic/plan.md"
     after_script: rm -rf .ralphex

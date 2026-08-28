@@ -94,9 +94,10 @@ define → discover → propose → task-review
 records the settled technical decisions as a short ADR; `propose`
 formulates the structured task; `task-review` verifies it. The `define`,
 `discover`, `propose`, and `task-review` stages emit and consume
-documents named after the current git branch (`docs/defines/`,
-`docs/proposals/`, `docs/tasks/`), and each later stage falls back to
-the earlier artifacts when they exist.
+documents under the current branch's history topic
+(`.goga/history/<year>/<topic>/` — `prd.md`, `adr.md`, `task.md`, with
+`<topic>` the kebab-case slug of the current git branch), and each later
+stage falls back to the earlier artifacts when they exist.
 
 ## `development`
 
