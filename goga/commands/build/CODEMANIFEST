@@ -138,6 +138,10 @@ Annotations: |
     - --dry-run, --worktree, --skip-finalize, --skip-manifest-check
     - --session-timeout, --idle-timeout, --wait
     - --max-iterations, --review-patience
+    - --base-ref REF (str) — review diff base (branch name or commit hash);
+      overrides build.review_executor.base_ref; forwarded to the container
+      and applied to the review-carrying pass only (per the `build-usage`
+      practice)
     - --skip-review / --no-skip-review (bool pair) — skip the review phase;
       tri-state, overrides build.review_executor.skip
     - -e / --env KEY=VALUE (multiple) — pass environment variables to the container
@@ -191,7 +195,10 @@ Annotations: |
         in-container orchestrator).
     3. Collect cli_flags from click parameters; forward the review pair by the
        --worktree pattern: skip_review True → --skip-review; False →
-       --no-skip-review; None → neither flag (the tri-state survives to the container)
+       --no-skip-review; None → neither flag (the tri-state survives to the
+       container); forward --base-ref by the existing value-option pattern —
+       the flag with its value joins cli_flags only when the option is set;
+       unset (None) adds no flag, leaving the decision to the container config
     4. Resolve the proxy: take `proxy` when not None, otherwise fall back to
        config.build.proxy
     5. Resolve hosts: merge config.build.hosts with parsed `add_host` entries;
@@ -326,6 +333,9 @@ Annotations: |
     - The env-induced two-pass × worktree conflict is the same host-side guard
       as the differing-agent one — it fires before docker run, before any
       filesystem or container work, regardless of --skip-review
+    - The host does NOT resolve --base-ref precedence against config —
+      forwarding only; the unset case resolves in-container (CLI >
+      build.review_executor.base_ref > omit)
 
     Constraints:
     - Do not refresh an EXISTING image by default — refresh only when `update`

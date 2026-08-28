@@ -20,6 +20,7 @@ options = {  # resolved ralphex options (CLI > ProjectConfig > omit applied)
     "worktree": True,
     "max_iterations": 50,
     "session_timeout": "30m",
+    "base_ref": "origin/1.2.x",  # → --base-ref (review diff base)
     "tasks_only": False,  # True → --tasks-only (skip all review phases)
     "review": False,  # True → --review (review-only pass)
 }
@@ -40,6 +41,12 @@ if exit_code == 0:
 ```
 
 ```python
+# Review pass scoped to a diff base: base_ref maps to --base-ref and is
+# omitted when None or empty — run_ralphex never validates the ref
+exit_code = run_ralphex(plan, {**options, "review": True, "base_ref": "origin/1.2.x"}, dry_run)
+```
+
+```python
 # Review pass with an env layer: keys of env override the inherited
 # environment for this subprocess only; the tasks pass runs without a layer.
 exit_code = run_ralphex(plan, {**options, "review": True}, dry_run, env={"ANTHROPIC_MODEL": "reviewer-model"})
@@ -55,6 +62,10 @@ exit_code = run_ralphex(plan, {**options, "review": True}, dry_run, env={"ANTHRO
   precedence resolution. Bool keys include `tasks_only` (True → bare `--tasks-only`,
   tasks without any review) and `review` (True → bare `--review`, review-only pass);
   False or absent omits the flag.
+  Review-scoped keys — `review_patience` and `base_ref` — map like any other
+  key but belong on review-carrying passes only (the caller decides the pass
+  composition). `base_ref` is forwarded verbatim and omitted from the command
+  when None or an empty string.
 - `dry_run: bool` — when True, print the assembled ralphex command to sys.stderr and
   return 0 without launching.
 - `env: dict[str, str] | None` — optional environment layer for the ralphex
@@ -95,3 +106,5 @@ the docker env-file by the host launcher).
   in the caller.
 - Do not pass a build config object (`BuildConfig`/`TaskExecutorConfig`) — `run_ralphex`
   takes resolved primitives only and imports nothing from `goga/config`.
+- Do not pass `base_ref` expecting `run_ralphex` to validate or resolve the
+  ref — the value is forwarded verbatim; ralphex resolves it.

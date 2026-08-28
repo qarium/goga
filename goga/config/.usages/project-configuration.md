@@ -46,10 +46,11 @@ config = load_project_config()
 - A present-but-non-mapping `pipeline` or `build` value (e.g. `pipeline: 5`, `pipeline:` null, `build: true`) raises `ValueError`, not `AttributeError`
 - Raises `yaml.YAMLError` on invalid YAML syntax
 - Optional `build.review_executor` follows structural-only validation: field
-  types, a list-of-strings check for `roles`, and a strings-mapping check for
-  `env`; an empty `roles` list and an empty `env` mapping pass through verbatim
-  — the empty-to-full-set (roles) and env-requires-agent (env) semantics belong
-  to the consuming command
+  types, a list-of-strings check for `roles`, a strings-mapping check for
+  `env`, and scalar type checks for `base_ref` (string) and `patience`
+  (integer); an empty `roles` list and an empty `env` mapping pass through
+  verbatim — the empty-to-full-set (roles) and env-requires-agent (env)
+  semantics belong to the consuming command
 
 **Error handling**:
 
@@ -131,7 +132,6 @@ build:
   idle_timeout: "1h"
   wait: "5m"
   max_iterations: 10
-  review_patience: 3
   prompts_dir: /custom/prompts
   agents_dir: /custom/agents
   codex_review: true
@@ -143,6 +143,8 @@ build:
       - testing
     env:                  # mapping | absent — review-pass env layer
       ANTHROPIC_MODEL: reviewer-model
+    base_ref: origin/1.2.x  # str | absent — review diff base (branch or hash)
+    patience: 3             # int | absent — stop external review after N unchanged rounds
 codemanifest:
   usages:
     usage_name: path/to/file.md
@@ -214,7 +216,6 @@ afm) that consume these fields.
 | `build.idle_timeout`        | str     | None                   | Idle timeout (Go duration format)                       |
 | `build.wait`                | str     | None                   | Rate-limit retry wait (Go duration format)              |
 | `build.max_iterations`      | int     | None                   | Maximum task iteration count                            |
-| `build.review_patience`     | int     | None                   | Review convergence threshold                            |
 | `build.prompts_dir`         | str     | None                   | Custom prompt directory path                            |
 | `build.agents_dir`          | str     | None                   | Custom agent directory path                             |
 | `build.codex_review`        | bool    | None                   | Enable external codex review (mapped to ralphex `codex_enabled`) |
@@ -223,6 +224,8 @@ afm) that consume these fields.
 | `build.review_executor.agent`    | str     | None  | Review executor name (resolved by the consumer) |
 | `build.review_executor.roles`    | list    | None  | Reviewer composition; empty list passes verbatim (full default set is consumer semantics) |
 | `build.review_executor.env`     | mapping | `{}`  | Review-pass env layer ({str: str}); empty when absent/YAML-null/`{}`; requires `agent` when non-empty (enforced by the consumer) |
+| `build.review_executor.base_ref` | str | None | Review diff base — branch name or commit hash; overrides ralphex's default-branch detection for review diffs. Verbatim, no validation at the config layer |
+| `build.review_executor.patience` | int | None | Stop the external review after N consecutive unchanged rounds (moved from `build.review_patience`, which is no longer parsed) |
 | `codemanifest`              | mapping | None                   | CODEMANIFEST usage and annotation config                |
 | `codemanifest.usages`       | mapping | `{}`                   | Usage name-to-path mapping (`{str: str}`)               |
 | `codemanifest.annotations`  | str     | None                   | Freeform annotations for the AI agent                   |
@@ -283,13 +286,18 @@ config.build.review_executor  # ReviewExecutorConfig | None
 config.build.review_executor.skip  # bool | None — tri-state skip source
 config.build.review_executor.agent  # str | None — review executor name
 config.build.review_executor.roles  # list[str] | None — verbatim; [] means the full default set to the consumer
-config.build.review_executor.env  # dict — {str: str}, empty when absent
+config.build.review_executor.env       # dict — {str: str}, empty when absent
+config.build.review_executor.base_ref  # str | None — review diff base, verbatim
+config.build.review_executor.patience  # int | None — external-review stop threshold
 
 # CodemanifestConfig fields — None when the `codemanifest` section is absent
 config.codemanifest  # CodemanifestConfig | None
 config.codemanifest.usages  # dict — {str: str}
 config.codemanifest.annotations  # str | None
 ```
+
+The legacy `build.review_patience` key is no longer parsed — declare review
+patience as `build.review_executor.patience`.
 
 ### `tools` accessor — no-validation contract
 

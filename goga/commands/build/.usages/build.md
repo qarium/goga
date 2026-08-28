@@ -9,7 +9,7 @@ CLI wrapper for the build command. Parses click options, loads configuration, an
 ```
 goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-check]
                  [--session-timeout T] [--idle-timeout T] [--wait T]
-                 [--max-iterations N] [--review-patience N]
+                 [--max-iterations N] [--review-patience N] [--base-ref REF]
                  [--skip-review | --no-skip-review]
                  [-e KEY=VALUE ...]
                  [--proxy URL] [--add-host HOST:IP ...] [--clean] [--update | -u]
@@ -34,6 +34,7 @@ goga build <plan> [--dry-run] [--worktree] [--skip-finalize] [--skip-manifest-ch
 | `--wait` | str | from config | Wait on rate limit |
 | `--max-iterations` | int | from config | Maximum iterations |
 | `--review-patience` | int | from config | Review stop threshold |
+| `--base-ref` | str | from config | Review diff base (branch name or commit hash). Overrides `build.review_executor.base_ref` in `.goga/config.yml`; forwarded to the container only when set. Reaches ralphex as `--base-ref` on the review-carrying pass only |
 | `--skip-review` / `--no-skip-review` | bool pair | tri-state | Skip the review phase (`--skip-review`) or force the full cycle (`--no-skip-review`). Overrides `build.review_executor.skip` in `.goga/config.yml`; when neither flag is given, the config decides |
 | `-e` / `--env` | str (multiple) | — | Pass environment variables to the container (KEY=VALUE) |
 | `--proxy` | str | from config | HTTP/HTTPS proxy URL; overrides `build.proxy` in `.goga/config.yml`. When set, adds HTTP_PROXY/HTTPS_PROXY/NO_PROXY to the container env-file |
@@ -63,6 +64,9 @@ goga build docs/plans/my-plan.md
 
 # Route container traffic through a corporate proxy and add a local host entry
 goga build docs/plans/my-plan.md --proxy http://corp:3128 --add-host foo.local:127.0.0.1
+
+# Scope the review diff to a release branch base
+goga build docs/plans/my-plan.md --base-ref origin/1.2.x
 
 # Wipe ralphex state before launch (start fresh)
 goga build docs/plans/my-plan.md --clean
@@ -98,6 +102,10 @@ A differing build.review_executor.agent OR a non-empty build.review_executor.env
 (with agent set) combined with --worktree is rejected before the container starts
 (the review pass cannot follow the worktree branch). The guard is config-level and
 skip-independent — the host does not resolve the tri-state --skip-review.
+
+`--base-ref` follows the same forwarding discipline: the host does not
+resolve it against config — an unset flag leaves the decision to
+`build.review_executor.base_ref` in-container.
 
 ## Proxy and hosts
 

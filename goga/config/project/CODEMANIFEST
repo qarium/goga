@@ -32,10 +32,11 @@ Annotations: |
   to the owning consumer.
 
   The optional build.review_executor sub-section follows the same structural-only
-  stance: field types, a list-of-strings check for roles, and a strings-mapping
-  check for env; an empty roles list and an empty env mapping pass through
-  verbatim (the empty-to-full-set and the env-requires-agent meanings belong to
-  the consuming cell).
+  stance: field types, a list-of-strings check for roles, a strings-mapping
+  check for env, and scalar type checks for base_ref (string) and patience
+  (integer); an empty roles list and an empty env mapping pass through
+  verbatim (the empty-to-full-set and the env-requires-agent meanings belong
+  to the consuming cell).
 
 ---
 
@@ -81,8 +82,12 @@ Annotations: |
        mapping → ValueError; a non-string key or value → ValueError (messages
        follow the build.task_executor.env pattern; YAML-null is a valid empty
        mapping — null-tolerance mirrors agent and roles of this step).
-       Construct a `ReviewExecutorConfig` from the resolved fields and pass it
-       into `BuildConfig`.
+       base_ref: absent/YAML-null/empty/whitespace → None; a non-string value →
+       ValueError (the agent pattern).
+       patience: absent/YAML-null → None; a non-int value (including a YAML
+       boolean) → ValueError — a structural type check.
+       Construct a `ReviewExecutorConfig` from the resolved fields (including
+       base_ref and patience) and pass it into `BuildConfig`.
     8. Extract the optional codemanifest block; when present, construct a
        `CodemanifestConfig` from its usages and annotations fields, otherwise None
     9. Extract the optional lint block. When the lint key is absent or
@@ -141,6 +146,9 @@ Annotations: |
     - build.hosts is optional, defaults to an empty mapping
     - review_executor.env is stored verbatim — semantic validation
       (env requires agent) belongs to the consumer
+    - review_executor.base_ref and review_executor.patience are parsed
+      structural-only and stored verbatim — branch resolvability and value
+      semantics belong to the consumer
     - codemanifest is optional
     - tools is optional; values are stored verbatim with NO semantic validation
       — invalid forms (operator-prefixed, malformed numerics) pass through
@@ -190,6 +198,9 @@ Annotations: |
       at the loader level — semantics belong to the consumer
     - Do NOT validate review_executor.env semantics at the loader level —
       semantics belong to the consumer
+    - Do NOT parse the legacy build.review_patience key — the field moved to
+      build.review_executor.patience; a config declaring the old key is silently
+      ignored (accepted breaking change: the field was never released)
     - The final `ProjectConfig` assembly MUST include lint
 
 "ProjectConfig(lang: str, image: str | None, dockerfile: str | None, build: BuildConfig | None, pipeline: PipelineConfig | None, commands: dict, codemanifest: CodemanifestConfig | None, tools: dict[str, str] | None, usages: dict[str, dict[str, DepConfig]] | None = None, lint: LintConfig | None = None)":
@@ -271,7 +282,7 @@ Annotations: |
       `LintConfig`, or None when the lint section is absent. Defaults to None
       (kw_only) so ProjectConfig(...) callers may omit lint=.
 
-"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, review_patience: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
+"BuildConfig(task_executor: TaskExecutorConfig, worktree: bool | None, skip_finalize: bool | None, session_timeout: str | None, idle_timeout: str | None, wait: str | None, max_iterations: int | None, prompts_dir: str | None, agents_dir: str | None, codex_review: bool | None, review_executor: ReviewExecutorConfig | None, proxy: str | None, hosts: dict[str, str])":
   location: config.py
   annotations: |
     Build execution configuration. Constructed by load_project_config from the build section of .goga/config.yml.
@@ -303,8 +314,6 @@ Annotations: |
       Rate-limit retry wait duration. Go duration format.
     "max_iterations -> int | None": |
       Maximum number of task iterations.
-    "review_patience -> int | None": |
-      Stop review after N consecutive rounds with no changes.
     "prompts_dir -> str | None": |
       Custom ralphex prompt directory path.
     "agents_dir -> str | None": |
@@ -351,12 +360,13 @@ Annotations: |
       Passed to the AI executor at launch to configure models and endpoints.
       Optional — defaults to an empty dict.
 
-"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None, env: dict[str, str])":
+"ReviewExecutorConfig(skip: bool | None, agent: str | None, roles: list[str] | None, env: dict[str, str], base_ref: str | None, patience: int | None)":
   location: config.py
   annotations: |
     Review-executor configuration of the build — whether the review phase is
-    skipped, which agent runs it, which reviewer roles participate, and which
-    environment variables the review pass carries.
+    skipped, which agent runs it, which reviewer roles participate, which
+    environment variables the review pass carries, the base of the review
+    diff, and the external-review stop threshold.
 
     `skip`: tri-state source for skipping the review phase — None when the
             field is absent
@@ -366,6 +376,8 @@ Annotations: |
              stored verbatim and means the full default set to the consumer
     `env`: environment variable dictionary for the review pass — an empty dict
            when the field is absent, YAML-null, or an empty mapping
+    `base_ref`: review diff base — None when unset
+    `patience`: external-review stop threshold — None when unset
 
     Requirements:
     - Immutable frozen dataclass (frozen=True, kw_only=True), per `convention`
@@ -376,6 +388,8 @@ Annotations: |
     Constraints:
     - Do not validate role names, agent names, or env applicability at this
       level — structural typing only
+    - Do not validate base_ref or patience values at this level — branch
+      resolvability and threshold semantics belong to the consumer
   properties:
     "skip -> bool | None": |
       Tri-state source for skipping the review phase. None when the field is
@@ -392,6 +406,18 @@ Annotations: |
       from .goga/config.yml. Empty dict when the field is absent, YAML-null, or
       an empty mapping. Structural typing is enforced by `load_project_config`;
       the env-requires-agent rule belongs to the consumer.
+    "base_ref -> str | None": |
+      Review diff base for the review pass — a branch name or a commit
+      hash, verbatim from .goga/config.yml. None when the field is absent,
+      YAML-null, or empty/whitespace-only (normalized by
+      `load_project_config`). No resolution or validation here — the value
+      flows to the consumer as the source of the review-scoped diff base.
+    "patience -> int | None": |
+      External-review stop threshold — stop the external review after N
+      consecutive unchanged rounds. None when the field is absent or
+      YAML-null. Structural typing (int) is enforced by
+      `load_project_config`; range and semantic checks belong to the
+      consumer.
 
 "PipelineConfig(agent: str | None, env: dict, proxy: str | None, hosts: dict[str, str])":
   location: config.py

@@ -27,6 +27,7 @@ exit_code = build(
         "worktree": True,
         "skip_finalize": False,
         "skip_manifest_check": False,
+        "base_ref": "origin/1.2.x",  # review diff base (review-scoped)
     },
 )
 ```
@@ -36,7 +37,8 @@ exit_code = build(
 - `plan` — path to the plan file (markdown)
 - `config` — ProjectConfig object loaded via `load_project_config`
 - `cli_options` — options dictionary (dry_run, worktree, skip_finalize, skip_manifest_check,
-  skip_review, session_timeout, idle_timeout, wait, max_iterations, review_patience)
+  skip_review, session_timeout, idle_timeout, wait, max_iterations, review_patience,
+  base_ref)
 
 ## Review-phase control
 
@@ -58,6 +60,25 @@ runs. With skip: true the review env is ignored entirely.
 
 build.review_executor.roles filters {{agent:X}} lines in both review prompts; empty list
 or absent = full default set; files of all 5 agents are always present in .ralphex/agents/.
+
+### Review-scoped options
+
+`base_ref` (review diff base — branch name or commit hash) and `patience`
+(external-review stop threshold) are review-scoped: they resolve with
+precedence CLI > `build.review_executor.*` > omit and join the ralphex
+options of review-carrying passes only — the full-mode single pass and the
+two-pass review pass. A skipped run and the tasks-only pass never carry
+them.
+
+cli_options={'base_ref': 'origin/1.2.x'} or .goga/config.yml
+build.review_executor.base_ref: origin/1.2.x → ralphex receives
+--base-ref origin/1.2.x on the review-carrying pass. The same precedence
+holds for the review_patience cli_options key /
+build.review_executor.patience → --review-patience.
+
+When neither source sets them, the keys stay absent and the assembled
+ralphex command is unchanged. The legacy build.review_patience config key
+is not parsed — declare build.review_executor.patience instead.
 
 ## Review-pass environment
 
@@ -103,4 +124,4 @@ prepares the mount before launch and wipes it only on `goga build --clean`. The 
 
 ## Docker entry point
 
-`main()` calls `ensure_in_docker()` first, then argparse handles parsing and calls `build()`.
+`main()` calls `ensure_in_docker()` first, then argparse handles parsing (including `--base-ref`) and calls `build()`.

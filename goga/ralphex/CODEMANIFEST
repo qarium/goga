@@ -49,6 +49,7 @@ Annotations: |
               - wait (str)             → --wait             (value flag)
               - max_iterations (int)   → --max-iterations   (value flag)
               - review_patience (int)  → --review-patience  (value flag)
+              - base_ref (str)         → --base-ref          (value flag)
     `dry_run`: when True, print the assembled ralphex command to sys.stderr and return 0
               without launching.
     `env`: optional environment layer ({str: str}) applied on top of the inherited
