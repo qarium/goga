@@ -8,6 +8,9 @@ dockerfile: Dockerfile
   ANTHROPIC_BASE_URL: "https://api.z.ai/api/anthropic"
 
 build:
+  session_timeout: 1h
+  idle_timeout: 15m
+  max_iterations: 10
   task_executor:
     agent: claude
     env:
@@ -15,6 +18,8 @@ build:
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.1"
   review_executor:
     agent: claude
+    base_ref: origin/1.2.x
+    patience: 3
     env:
       <<: *claude-env
       ANTHROPIC_DEFAULT_OPUS_MODEL: "glm-5.3[1m]"

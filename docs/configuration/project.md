@@ -36,6 +36,8 @@ build:
   #   roles: [quality, testing]   # reviewer composition; absent/[] → full default set
   #   env:                        # review-pass env layer (requires agent when non-empty)
   #     ANTHROPIC_MODEL: reviewer
+  #   base_ref: origin/1.2.x      # review diff base — branch name or commit hash
+  #   patience: 3                 # stop the external review after N unchanged rounds
   # proxy: http://corp:3123        # optional HTTP/HTTPS proxy URL for the build container
   # hosts:                         # optional docker run --add-host entries
   #   foo.local: 127.0.0.1
@@ -105,7 +107,6 @@ codemanifest:
 | `idle_timeout` | `string` | No | Idle timeout in Go duration format |
 | `wait` | `string` | No | Wait time on rate limit in Go duration format |
 | `max_iterations` | `int` | No | Maximum task iterations |
-| `review_patience` | `int` | No | Stop review after N unchanged rounds |
 | `prompts_dir` | `string` | No | Path to custom ralph-loop prompts |
 | `agents_dir` | `string` | No | Path to custom ralph-loop agents |
 | `codex_review` | `bool` | No | Enable external codex review |
@@ -132,6 +133,8 @@ Optional section controlling the review phase of `goga build`. When absent, the 
 | `agent` | `string` | No | Review executor agent name (same resolution mechanic as `build.task_executor.agent`; its wrapper must exist in the image). When it differs from `task_executor.agent`, **or when a non-empty `env` is declared alongside it**, the build runs two passes: tasks with the task wrapper, then the review pass with the review wrapper. Combining either two-pass form with an active worktree (`--worktree` or `build.worktree: true`) is rejected with exit 1 on the host |
 | `roles` | list of `string` | No | Reviewer composition for the review prompts: keeps only the `{{agent:X}}` lines of the selected roles and adapts the counters of the accompanying text. Whitelist: `quality`, `implementation`, `testing`, `simplification`, `documentation`. Absent or `[]` means the full default set (prompts stay byte-identical to the vendored defaults) |
 | `env` | mapping of `string` | No | Review-pass environment layer (`{str: str}`). Keys overlay same-named container variables for the review-pass subprocess only — the tasks pass and the container env-file are unaffected, and the values never reach logs or dry-run output. Absent/YAML-null/`{}` all resolve to `{}` (unlike `build.task_executor.env`, where YAML-null is an error). A non-empty `env` induces a two-pass run like a differing agent does, and requires `agent` — a non-empty `env` without `agent` fails in-container validation when the review phase runs; a skipped run ignores the layer entirely |
+| `base_ref` | `string` | No | Review diff base — a branch name or commit hash, stored verbatim (no resolvability or format check; ralphex owns the diagnostics). Overrides ralphex's default-branch detection on review-carrying passes. Absent/YAML-null/empty/whitespace resolves to `None`. Overridden by the `--base-ref` CLI option |
+| `patience` | `int` | No | Stop the external review after N consecutive unchanged rounds. Absent/YAML-null resolves to `None`; a YAML boolean is rejected. Moved from `build.review_patience`, which is no longer parsed. Overridden by the `--review-patience` CLI option |
 
 Precedence: the `--skip-review`/`--no-skip-review` CLI pair overrides `skip`; an explicit `--no-skip-review` forces the full cycle even when the config sets `skip: true`. Role names, the env-requires-agent rule, and the review wrapper are validated in-container before any pass runs — but only when the review phase will actually run (a skipped run never validates them).
 
@@ -195,7 +198,7 @@ The config loader raises specific exceptions for invalid configuration:
 |-------|-------|
 | `FileNotFoundError` | `.goga/config.yml` does not exist or is empty |
 | `KeyError` | Missing required field (`language`, or `build.task_executor` when `build` is present) |
-| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), or `env` with non-string keys/values (`build.review_executor.env must have string keys and values`) |
+| `ValueError` | Invalid field value (wrong type, empty string, non-mapping where mapping expected), or the deprecated `build.image` field is present. `build.review_executor` adds: non-mapping section (`build.review_executor must be a mapping`), non-bool `skip` (a YAML `1` is rejected), non-string `agent`, `roles` that is not a list of strings, a non-mapping `env` (`build.review_executor.env must be a mapping in .goga/config.yml`), `env` with non-string keys/values (`build.review_executor.env must have string keys and values`), a non-string `base_ref` (`build.review_executor.base_ref must be a string in .goga/config.yml`), or a non-int `patience`, including a YAML boolean (`build.review_executor.patience must be an int in .goga/config.yml`) |
 
 ## Implementation details
 

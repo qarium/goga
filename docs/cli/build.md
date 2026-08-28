@@ -42,6 +42,7 @@ The build pipeline performs these steps:
 | `--wait` | string | config | Wait time before starting |
 | `--max-iterations` | int | config | Maximum number of build iterations |
 | `--review-patience` | int | config | Review patience count |
+| `--base-ref` | string | config | Review diff base (branch name or commit hash); overrides `build.review_executor.base_ref` |
 | `-e`, `--env` | string | -- | Additional environment variable (`KEY=VALUE`, repeatable) |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `build.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `build.hosts` (CLI wins on key conflict) |
@@ -49,6 +50,8 @@ The build pipeline performs these steps:
 | `-c`, `--clean` | flag | off | Wipe the persistent ralph-loop runtime host directory before launch (default preserves state across runs) |
 
 Timeout and iteration options fall back to values in `.goga/config.yml` when not provided on the command line.
+
+`--review-patience` and `--base-ref` are review-scoped: they resolve with precedence CLI > `build.review_executor.*` in `.goga/config.yml` > omit, and they apply to review-carrying passes only — the single full-cycle pass, or the review pass of a two-pass run; a tasks-only run carries neither. The legacy `build.review_patience` key is not parsed (the setting moved to `build.review_executor.patience`).
 
 ### Proxy and hosts
 
@@ -128,6 +131,12 @@ Skip the review phase (run tasks only):
 
 ```bash
 goga build plan.md --skip-review
+```
+
+Review against a specific branch or commit instead of the detected default:
+
+```bash
+goga build plan.md --base-ref origin/1.2.x
 ```
 
 Pull the latest image, then build (default skips the pull):
