@@ -119,6 +119,40 @@ class TestCallInstallHook:
         assert calls == [{"user": "alice"}]
         mock_import.assert_called_once_with("goga_tool_fake")
 
+    def test_call_install_hook_normalizes_hyphenated_tool_to_module_name(self) -> None:
+        """The canonical hyphenated tool name imports the underscored facade module.
+
+        pip lays the ``goga-tool-hello-world`` distribution out as the top-level
+        module ``goga_tool_hello_world``; a literal ``goga_tool_hello-world``
+        import can never resolve and the hook would degrade to the quiet skip.
+        """
+        calls: list[dict[str, str | None]] = []
+
+        def _fake_install(user: str | None = None) -> None:
+            calls.append({"user": user})
+
+        fake_module = types.SimpleNamespace(install=_fake_install)
+        with mock.patch.object(hook_module.importlib, "import_module", return_value=fake_module) as mock_import:
+            invoked = hook_module.call_install_hook("hello-world", "alice")
+        assert invoked is True
+        assert calls == [{"user": "alice"}]
+        mock_import.assert_called_once_with("goga_tool_hello_world")
+
+    def test_call_install_hook_hyphenated_tool_runs_real_module_hook(self) -> None:
+        """End-to-end against a real importable facade: the hyphenated spelling runs the hook."""
+        calls: list[dict[str, str | None]] = []
+
+        def _fake_install(user: str | None = None) -> None:
+            calls.append({"user": user})
+
+        # importlib.import_module consults sys.modules first, so a registered
+        # throwaway facade is found without a file on sys.path.
+        fake_facade = types.SimpleNamespace(install=_fake_install)
+        with mock.patch.dict(sys.modules, {"goga_tool_hello_world": fake_facade}):
+            invoked = hook_module.call_install_hook("hello-world", "alice")
+        assert invoked is True
+        assert calls == [{"user": "alice"}]
+
     def test_call_install_hook_keyword_only_user_injected(self) -> None:
         """``def install(*, user)`` — keyword-only IS keyword-capable (the value is injected)."""
         calls: list[dict[str, str | None]] = []

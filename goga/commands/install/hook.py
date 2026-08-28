@@ -54,7 +54,10 @@ def call_install_hook(tool: str, user: str) -> bool:
     """Run the post-install hook of one installed tool when it provides one.
 
     Imports the tool facade ``goga_tool_<tool>`` and calls its optional
-    ``install`` callable. The injection follows the signature projection:
+    ``install`` callable. The identifier is normalized to a module name first —
+    hyphens and dots become underscores, so the canonical hyphenated tool name
+    (``hello-world``) imports ``goga_tool_hello_world``, the spelling pip lays
+    out on disk. The injection follows the signature projection:
     only a declared keyword-capable ``user`` parameter receives the value — a
     positional-only ``user`` or a bare ``**kwargs`` is not an opt-in and the
     hook is called without arguments. No argument other than ``user`` is
@@ -75,7 +78,12 @@ def call_install_hook(tool: str, user: str) -> bool:
             differs), a failure rather than a skip.
         Exception: whatever the hook itself raises, propagated unchanged.
     """
-    module_name = f"goga_tool_{tool}"
+    # The pip-style tool identifier is hyphenated (``hello-world``) while the
+    # installed top-level module is underscored (``goga_tool_hello_world``) —
+    # the same duality `goga connect` normalizes for pipeline namespacing.
+    # Without this the import of every multi-word tool's facade misses and the
+    # hook degrades to the quiet-skip path.
+    module_name = f"goga_tool_{tool.replace('-', '_').replace('.', '_')}"
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as exc:
