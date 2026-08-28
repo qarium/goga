@@ -38,7 +38,7 @@ class TestReviewOptionsContract:
 
     def test_review_options_declared_fields(self) -> None:
         fields = {f.name for f in dataclasses.fields(ReviewOptions)}
-        assert fields == {"skip", "review_agent", "roles", "two_pass", "review_env"}
+        assert fields == {"skip", "review_agent", "roles", "two_pass", "review_env", "base_ref", "patience"}
 
     def test_review_options_field_types(self) -> None:
         hints = typing.get_type_hints(ReviewOptions)
@@ -47,11 +47,13 @@ class TestReviewOptionsContract:
         assert hints["roles"] == list[str] | None
         assert hints["two_pass"] is bool
         assert hints["review_env"] == dict[str, str]
+        assert hints["base_ref"] == str | None
+        assert hints["patience"] == int | None
 
     def test_review_options_declared_fields_include_review_env(self) -> None:
         """`review_env` is the fifth field, required — no default factory."""
         names = [f.name for f in dataclasses.fields(ReviewOptions)]
-        assert names == ["skip", "review_agent", "roles", "two_pass", "review_env"]
+        assert names == ["skip", "review_agent", "roles", "two_pass", "review_env", "base_ref", "patience"]
         env_field = next(f for f in dataclasses.fields(ReviewOptions) if f.name == "review_env")
         assert env_field.default is dataclasses.MISSING
         assert env_field.default_factory is dataclasses.MISSING
@@ -61,6 +63,16 @@ class TestReviewOptionsContract:
         assert ReviewOptions.__dataclass_params__.frozen is True
         with pytest.raises(TypeError):
             ReviewOptions(False, None, None, False, {})  # type: ignore[misc]
+
+    def test_review_options_declares_base_ref_and_patience_fields(self) -> None:
+        assert {"base_ref", "patience"} <= set(ReviewOptions.__dataclass_fields__)
+
+    def test_resolve_review_options_docstring_lists_three_keys(self) -> None:
+        """The docstring names the three cli_options keys; the old one-key wording is gone."""
+        doc = resolve_review_options.__doc__ or ""
+        for key in ("skip_review", "base_ref", "review_patience"):
+            assert key in doc
+        assert "only `skip_review` is read" not in doc
 
 
 class TestResolveReviewOptionsLogic:
@@ -185,3 +197,78 @@ class TestResolveReviewOptionsLogic:
         assert result.two_pass is False
         assert result.review_agent is None
         assert result.review_env == {"X": "y"}
+
+    def test_resolve_review_options_base_ref_cli_overrides_config(self) -> None:
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main"),
+        )
+
+        result = resolve_review_options(config, {"base_ref": "origin/1.2.x"})
+
+        assert result.base_ref == "origin/1.2.x"
+
+    def test_resolve_review_options_base_ref_from_config_when_cli_absent(self) -> None:
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/1.2.x"),
+        )
+
+        result = resolve_review_options(config, {})
+
+        assert result.base_ref == "origin/1.2.x"
+
+    def test_resolve_review_options_patience_cli_overrides_config(self) -> None:
+        """Pins the naming split: the cli_options KEY is review_patience,
+        the ReviewOptions FIELD is patience."""
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", patience=3),
+        )
+
+        result = resolve_review_options(config, {"review_patience": 7})
+
+        assert result.patience == 7
+
+    def test_resolve_review_options_base_ref_empty_whitespace_resolves_unset(self) -> None:
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref="   "),
+        )
+
+        result = resolve_review_options(config, {})
+
+        assert result.base_ref is None
+
+    @pytest.mark.parametrize(
+        ("config_base_ref", "cli_options"),
+        [
+            ("  origin/1.2.x  ", {}),
+            (None, {"base_ref": " origin/1.2.x "}),
+        ],
+        ids=["config-source", "cli-source"],
+    )
+    def test_resolve_review_options_base_ref_padded_value_stripped(self, config_base_ref, cli_options) -> None:
+        """Exact equality — an implementation that only checks emptiness
+        without assigning the stripped value fails."""
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref=config_base_ref),
+        )
+
+        result = resolve_review_options(config, cli_options)
+
+        assert result.base_ref == "origin/1.2.x"
+
+    def test_resolve_review_options_base_ref_empty_cli_means_unset_not_fallback(self) -> None:
+        """An explicitly empty CLI value does NOT fall through to the config."""
+        config = _make_build_config(
+            review_executor=ReviewExecutorConfig(agent="claude", base_ref="origin/main"),
+        )
+
+        result = resolve_review_options(config, {"base_ref": ""})
+
+        assert result.base_ref is None
+
+    def test_resolve_review_options_no_review_executor_leaves_scoped_none(self) -> None:
+        config = _make_build_config(review_executor=None)
+
+        result = resolve_review_options(config, {})
+
+        assert result.base_ref is None
+        assert result.patience is None
