@@ -339,6 +339,23 @@ class TestCreateTopic:
         stderr = capsys.readouterr().err
         assert "branch 'feat/x' already exists" in stderr
 
+    def test_create_topic_reask_abort_leaves_repository_untouched(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Ctrl-C at the re-ask prompt propagates as ``click.Abort`` — nothing is created."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+        monkeypatch.setattr(click, "prompt", mock.Mock(side_effect=click.Abort()))
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        with pytest.raises(click.Abort):
+            create_topic("!!!")
+
+        create_and_switch.assert_not_called()
+        assert not (tmp_path / ".goga").exists()
+
 
 # --- Infrastructure boundary ---
 
@@ -394,3 +411,42 @@ class TestCreationInfrastructureBoundary:
 
         assert "fatal: invalid branch name" in raised.value.message
         assert not (tmp_path / ".goga" / "history" / "2026" / "feat-x").exists()
+
+    def test_missing_git_binary_at_creation_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing git binary during the create mutation is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        _wire_inventory(monkeypatch, [], current="main")
+        monkeypatch.setattr(
+            creation, "create_and_switch_branch", mock.Mock(side_effect=FileNotFoundError("git"))
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("feat/x", year="2026")
+
+        assert "git" in raised.value.message
+
+    def test_stray_file_at_topic_path_surfaces_as_clean_error(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stray file named like the slug occupies no topic — the mkdir failure is a clean error.
+
+        The history oracle counts directories only, so the name is free and
+        the branch is created first; ``ensure_topic_dir`` then fails on the
+        file, and the boundary turns the ``OSError`` into a clean error
+        instead of a traceback.
+        """
+        monkeypatch.chdir(tmp_path)
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        year_dir.mkdir(parents=True)
+        (year_dir / "feat-x").write_text("not a topic", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="main")
+
+        with pytest.raises(click.ClickException) as raised:
+            create_topic("feat-x", year="2026")
+
+        assert "cannot create topic directory" in raised.value.message
+        assert "feat-x" in raised.value.message
+        # The traced order — the branch mutation runs before the directory.
+        create_and_switch.assert_called_once_with("feat-x")

@@ -287,3 +287,15 @@ class TestEnsureTopicDir:
         with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
             ensure_topic_dir("Релиз/Один")
         assert not (tmp_path / ".goga").exists()
+
+    def test_ensure_topic_dir_stray_file_propagates_oserror(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stray file at the topic path is an ``OSError`` from mkdir, propagated."""
+        monkeypatch.chdir(tmp_path)
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        year_dir.mkdir(parents=True)
+        (year_dir / "feat-x").write_text("not a topic", encoding="utf-8")
+
+        with pytest.raises(OSError, match="feat-x"):
+            ensure_topic_dir("feat-x", year="2026")

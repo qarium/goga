@@ -136,6 +136,22 @@ The slash-command form `/goga:<command>` works in agents that consume the goga c
 goga schema | goga tool viewer
 ```
 
+## Topics
+
+Work is organized as **topics** — one directory per piece of work under `.goga/history/<year>/<topic>/`, each usually living on its own git branch. The `goga topics` command group manages them:
+
+```bash
+goga topics status              # the board: every topic of the year across branches
+goga topics status --remote     # same board over remote-tracking refs
+goga topics create feat/x       # fresh work: the branch verbatim + its topic directory
+goga topics switch feat-x       # onto the branch hosting that work (branch, slug, or prefix)
+goga topics --year 2025 status  # the board of an explicit year
+```
+
+The board is a three-column table — topic, branch, statuses — with `*` marking the current branch and a local branch absorbing its remote twin. Each topic carries its **maximal statuses** in scale order: `empty → defined → discovered → backlog → designed → specified → planned → done`, deepening as `prd.md`, `adr.md`, `task.md`, `arch.md`, `design.md`, `plan.md`, and `completed/plan.md` land. A topic can carry several statuses at once (`goga history status` prints them; `-s` filters by any of them).
+
+To resume work inside a pipeline, pass the identifier to the run — `goga pipeline development -t feat/x` switches to the hosting branch first (creating a local branch from its remote-tracking ref when needed) and is an idempotent no-op when you are already on it. Fresh work is started with `goga topics create`, not `-t`.
+
 ## Pipelines
 
 A **pipeline** is a declarative scenario of stages an agent walks through to deliver a piece of work — propose, review, brainstorm, apply, design, plan, build, change, accept. A pipeline-file does not depend on any concrete agent: claude, codex, qwen, opencode, or any other installed wrapper can execute it. Stages with `communication: true` pause the run and ask for human input; without it they run autonomously.
@@ -185,7 +201,7 @@ Pipelines are resolved from `<cwd>/.goga/pipelines/` (project) and `~/.goga/pipe
 
 ```bash
 goga pipeline development             # run the development cycle (opens with brainstorm)
-goga pipeline development -b feat/x   # first create+switch to a fresh branch and history topic
+goga pipeline development -t feat/x   # first switch to the branch hosting this work, then run
 goga pipeline refinement -s discover  # shorter run: skip technical discovery
 goga pipeline development -p 4        # cap parallelism (subject to the pipeline's dependency rules)
 goga pipeline development --clean     # wipe persistent state for a fresh run
@@ -396,6 +412,15 @@ A valid tool **must**:
 - A `pipelines/` directory is **optional**; when present, its flat `*.yml` files are copied into `~/.goga/pipelines/` at `goga connect` time, namespaced as `<tool>:<name>.yml`
 
 A tool **may** additionally expose an `install(user: str | None = None)` callable in its facade package: `goga install` calls it after a successful pip, passing the initiating user (`SUDO_USER` when goga itself runs under sudo, else the current OS user) only when the parameter is declared keyword-capable. A missing or non-callable `install` is skipped quietly.
+
+A tool **may** also expose a `register_topic_statuses(statuses)` callable to extend the topic status scale with its own artifacts. goga imports every installed `goga_tool_*` package at each command start that computes statuses and calls the callable with a registry scoped to the package:
+
+```python
+def register_topic_statuses(statuses):
+    statuses.register("published", "mkdocs/published.md", after="planned")
+```
+
+The name is shown qualified as `<tool>.<name>` (here `mkdocs.published`), the filepath is relative to the topic directory (nested paths allowed), and `before=`/`after=` anchor the entry to an existing scale entry (at least one anchor is required; both define a range). Built-in entries are immutable. A bad registration — an unknown anchor, an invalid range, or a crashed callback — is skipped with a warning on stderr and never aborts the command; only a package that fails to import is fatal.
 
 After publication, install into any project:
 

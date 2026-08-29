@@ -132,6 +132,11 @@ def create_topic(branch_name: str, year: str | None = None) -> str:
         raise click.ClickException(f"git failed: {detail}") from exc
     except FileNotFoundError as exc:
         raise click.ClickException(f"git is not available: {exc}") from exc
+    except OSError as exc:
+        # ``ensure_topic_dir`` propagates the mkdir failures — a stray file
+        # named like the slug occupies no topic for the oracle, so the
+        # failure can only surface here, after the branch was created.
+        raise click.ClickException(f"cannot create topic directory: {exc}") from exc
 
 
 def _occupancy_conflict(

@@ -103,6 +103,25 @@ declared keyword-capable; otherwise the hook is called with no arguments. A
 missing or non-callable `install` is skipped quietly. See
 [`goga install` — Post-install hooks](cli/install.md#post-install-hooks).
 
+A tool **may** also expose a `register_topic_statuses(statuses)` callable —
+the topic-status hook. At every command start that computes topic statuses,
+goga imports each installed `goga_tool_*` package and calls the callable
+with a registry scoped to the package:
+
+```python
+def register_topic_statuses(statuses):
+    statuses.register("published", "mkdocs/published.md", after="planned")
+```
+
+The entry's name is shown qualified as `<tool>.<name>` (here
+`mkdocs.published`), its `filepath` is the artifact path relative to the
+topic directory (nested paths allowed), and `before=`/`after=` anchor it to
+an existing scale entry — at least one anchor is required, both define a
+range. Built-in entries are immutable. A bad registration — an unknown
+anchor, an invalid range, or a crashed callback — is skipped with a warning
+on stderr and never aborts the command; only a package that fails to import
+is fatal. See [Topics](cli/topics.md) for the status scale itself.
+
 A `pipelines/` directory is **optional**. When present, `goga connect`
 copies its flat `*.yml` files into `~/.goga/pipelines/` **namespaced as
 `<tool>:<name>.yml`** (where `<tool>` is the package name with the

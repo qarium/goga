@@ -28,7 +28,7 @@ for ref in refs:
 from goga.history import resolve_history_root
 from goga.topics.git import read_ref_tree_paths
 
-prefix = f"{resolve_history_root()}/"
+prefix = f"{resolve_history_root().as_posix()}/"
 paths = read_ref_tree_paths("feature-foo", prefix)
 ```
 

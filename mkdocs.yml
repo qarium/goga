@@ -79,6 +79,8 @@ nav:
       - Upgrade: cli/upgrade.md
       - Usages: cli/usages.md
       - Pipeline: cli/pipeline.md
+      - History: cli/history.md
+      - Topics: cli/topics.md
       - Tool: cli/tool.md
   - Architecture:
       - architecture/index.md

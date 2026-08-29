@@ -217,11 +217,33 @@ class TestAssemblePlacement:
         assert "goga_tool_a" in stderr
         assert _names(scale) == _BUILTIN_NAMES
 
+    def test_assemble_unresolvable_before_anchor_skips(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A ``before`` anchor naming no entry of the scale skips the registration."""
+        _install_package(
+            monkeypatch,
+            "goga_tool_a",
+            _registering({"name": "x", "filepath": "a/x.md", "before": "nonexistent.status"}),
+        )
+        _packages(monkeypatch, "goga_tool_a")
+
+        scale = assemble_status_scale()
+
+        assert "a.x" not in _names(scale)
+        stderr = capsys.readouterr().err
+        assert "Warning" in stderr
+        assert "goga_tool_a" in stderr
+        assert _names(scale) == _BUILTIN_NAMES
+
     def test_assemble_same_anchor_block_keeps_registration_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Two packages anchoring after the same entry form a block in package order.
 
         The design-review q1 regression: a bare ``insert(pos(A) + 1)`` would
-        reverse the block — the alphabetical package order must win.
+        reverse the block — the alphabetical package order must win. The
+        enumeration map is handed to the packages in reverse order so the
+        assertion depends on the alphabetical sort, not on dict insertion
+        order.
         """
         _install_package(
             monkeypatch, "goga_tool_a", _registering({"name": "x", "filepath": "a/x.md", "after": "planned"})
@@ -229,7 +251,7 @@ class TestAssemblePlacement:
         _install_package(
             monkeypatch, "goga_tool_b", _registering({"name": "y", "filepath": "b/y.md", "after": "planned"})
         )
-        _packages(monkeypatch, "goga_tool_a", "goga_tool_b")
+        _packages(monkeypatch, "goga_tool_b", "goga_tool_a")
 
         scale = assemble_status_scale()
 

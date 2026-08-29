@@ -19,7 +19,9 @@ mocked, only the boundaries the environment cannot provide:
                   -> goga.commands.history.render_topic_statuses
 
     goga pipeline -t/--topic — the removed -b/--branch regression, and the
-    idempotent switch chain of ``switch_topic`` through the real git cell.
+    mutating chains of ``switch_topic``/``create_topic`` through the real git
+    cell: checkout, remote-tracking branch creation, and branch-plus-directory
+    creation.
 
 Git is real: the git-dependent scenarios run in a throwaway repository
 under ``tmp_path`` (``git init`` plus commits, with ``git update-ref``
@@ -41,6 +43,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest import mock
 
+import click
 import pytest
 from click.testing import CliRunner
 from goga.cli import app
@@ -48,7 +51,7 @@ from goga.commands.history import history
 from goga.commands.topics import topics
 from goga.history import assemble_status_scale
 from goga.history.statuses import assembly as statuses_assembly
-from goga.topics import switch_topic
+from goga.topics import create_topic, switch_topic
 from goga.topics import switching as topics_switching
 
 # The scenarios drive real git — skip them where no git binary exists.
@@ -82,6 +85,38 @@ def _write(root: Path, relative: str) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("integration\n", encoding="utf-8")
+
+
+def _current_branch(root: Path) -> str:
+    """Read the checked-out branch of the throwaway repository.
+
+    Args:
+        root: The repository root.
+
+    Returns:
+        The current branch name as git reports it.
+    """
+    result = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=root, check=True, capture_output=True, text=True
+    )
+    return result.stdout.strip()
+
+
+def _add_solo_branch(root: Path) -> None:
+    """Add a branch hosting exactly one topic of its own.
+
+    An orphan branch — its tree carries no other topic of the year, so it
+    resolves unambiguously by branch name and by slug alike, unlike the
+    chained ``feat-b`` which also carries the shared ``feat-a`` history.
+
+    Args:
+        root: The repository root of an already initialized topic repo.
+    """
+    _git(root, "switch", "-q", "--orphan", "solo")
+    _write(root, ".goga/history/2025/solo/prd.md")
+    _git(root, "add", ".goga")
+    _git(root, *_GIT_IDENTITY, "commit", "-qm", "topic solo")
+    _git(root, "switch", "-q", "feat-a")
 
 
 def _init_topic_repo(root: Path) -> None:
@@ -262,3 +297,92 @@ class TestSwitchTopicIdempotentChain:
         assert clean_probe.called is False
         assert checkout.called is False
         assert create_branch.called is False
+
+    def test_switch_by_slug_checks_out_local_host(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A slug identifier resolves to its single local host and checks it out for real."""
+        _init_topic_repo(tmp_path)
+        _add_solo_branch(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        line = switch_topic("solo", "2025")
+
+        assert line == "Switched to branch solo"
+        assert _current_branch(tmp_path) == "solo"
+
+    def test_switch_ambiguous_slug_lists_candidates_without_terminal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A branch hosting several topics of the year is ambiguous — the numbered
+        list is the non-interactive error, and nothing is mutated."""
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+
+        with pytest.raises(click.ClickException, match=r"1\) feat-b"):
+            switch_topic("feat-b", "2025")
+
+        assert _current_branch(tmp_path) == "feat-a"
+
+    def test_switch_by_slug_creates_branch_from_remote_tracking(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A slug hosted only by a remote-tracking ref creates the local branch from it."""
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "feat-b")
+        _git(tmp_path, "branch", "-D", "feat-a")
+        monkeypatch.chdir(tmp_path)
+
+        line = switch_topic("feat-a", "2025")
+
+        assert line == "Created branch feat-a from origin/feat-a"
+        assert _current_branch(tmp_path) == "feat-a"
+
+    def test_switch_refuses_dirty_working_tree(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A dirty working tree is a clean error — the repository stays put."""
+        _init_topic_repo(tmp_path)
+        _add_solo_branch(tmp_path)
+        (tmp_path / "uncommitted.txt").write_text("dirty\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(click.ClickException, match="dirty"):
+            switch_topic("solo", "2025")
+
+        assert _current_branch(tmp_path) == "feat-a"
+
+
+@requires_git
+class TestCreateTopicRealGit:
+    """``goga topics create`` over the real git cell and path routines."""
+
+    def test_create_topic_creates_branch_and_topic_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A free name creates the branch verbatim and the topic directory of the year."""
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+
+        line = create_topic("Feature/Foo_Bar", year="2025")
+
+        assert line == "Created branch Feature/Foo_Bar and topic 2025/feature-foo-bar"
+        assert _current_branch(tmp_path) == "Feature/Foo_Bar"
+        assert (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").is_dir()
+
+    def test_create_topic_occupied_local_branch_reasks_non_interactively(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An existing branch name is a clean occupancy error — nothing is created."""
+        _init_topic_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(
+            sys, "stdin", mock.Mock(**{"isatty.return_value": False})
+        )
+
+        with pytest.raises(click.ClickException, match="already exists"):
+            create_topic("feat-b", year="2025")
+
+        assert _current_branch(tmp_path) == "feat-a"
+        assert not (tmp_path / ".goga" / "history" / "2025" / "feat-b").exists()

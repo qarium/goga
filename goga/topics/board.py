@@ -183,7 +183,10 @@ def _year_topics_by_ref(refs: list[BranchRef], year: str) -> dict[str, dict[str,
         ...]}`` with the artifact paths relative to the topic directory,
         ready for ``StatusScale.maximal_present``.
     """
-    prefix = f"{resolve_history_root()}/"
+    # ``as_posix`` — git pathspecs and ``ls-tree`` output are always
+    # forward-slashed, on Windows too; a native-separator path would match
+    # nothing and silently empty the board.
+    prefix = f"{resolve_history_root().as_posix()}/"
     return {ref.name: _year_topics(read_ref_tree_paths(ref.name, prefix), year) for ref in refs}
 
 

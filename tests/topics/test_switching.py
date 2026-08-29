@@ -556,3 +556,56 @@ class TestSwitchingInfrastructureBoundary:
             switch_topic("feat/a", "2026")
 
         assert "error: cannot switch" in raised.value.message
+
+    def test_missing_git_binary_at_mutation_surfaces_as_clean_error(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A missing git binary during the mutation phase is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {"feat/a": [".goga/history/2026/feat-a/plan.md"], "main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        monkeypatch.setattr(
+            switching, "is_working_tree_clean", mock.Mock(side_effect=FileNotFoundError("git"))
+        )
+
+        with pytest.raises(click.ClickException) as raised:
+            switch_topic("feat/a", "2026")
+
+        assert "git" in raised.value.message
+
+    def test_selection_prompt_abort_leaves_repository_untouched(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Ctrl-C at the selection prompt propagates as ``click.Abort`` — no mutation."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="feat/b", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-a/plan.md"],
+            "feat/b": [".goga/history/2026/feat-b/plan.md"],
+            "main": ["README.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": True}))
+        monkeypatch.setattr(click, "prompt", mock.Mock(side_effect=click.Abort()))
+        cleanliness, checkout, creation = _wire_mutations(monkeypatch)
+
+        with pytest.raises(click.Abort):
+            switch_topic("feat", "2026")
+
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()

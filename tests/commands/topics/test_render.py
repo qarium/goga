@@ -120,9 +120,9 @@ class TestRenderTopicBoard:
         assert "feat/x" in lines[2]
         assert "[done]" in lines[2]
 
-    @pytest.mark.parametrize(("width", "degenerate"), [(33, False), (32, True)])
+    @pytest.mark.parametrize("width", [33, 32])
     def test_render_topic_board_boundary_width_33_32(
-        self, capsys: pytest.CaptureFixture[str], width: int, degenerate: bool
+        self, capsys: pytest.CaptureFixture[str], width: int
     ) -> None:
         """Width 33 splits evenly into the minimum thirds; 32 stays at them anyway."""
         records = [
@@ -139,7 +139,22 @@ class TestRenderTopicBoard:
         assert "feat-a" in lines[2]
         assert "[done]" in lines[2]
         assert "…" in lines[3]
-        if degenerate:
-            assert width < 33
-        else:
-            assert width == 33
+
+    def test_render_topic_board_two_segments_fit_one_line(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """Width 80 — two short status segments join on one statuses line."""
+        records = [
+            BoardRecord(
+                topic="feat-a",
+                branch="feat/a",
+                statuses=["defined", "planned"],
+                current=False,
+                remote=False,
+            )
+        ]
+        render_topic_board(records, 80)
+        lines = capsys.readouterr().out.splitlines()
+        # usable = 71, so topic_cap = branch_cap = 23 and statuses_w = 25;
+        # "[defined] [planned]" is 19 columns and fits — one data row only.
+        assert len(lines) == 3
+        assert "[defined] [planned]" in lines[2]
+        assert all(len(line) <= 80 for line in lines)

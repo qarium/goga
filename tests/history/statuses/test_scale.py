@@ -125,6 +125,51 @@ class TestMaximalPresent:
 
         assert scale.maximal_present(paths) == ["mkdocs.published", "scriba.translated"]
 
+    def test_maximal_present_before_anchored_entry_stays_below_anchor(self, builtin_scale: StatusScale) -> None:
+        """A ``before``-anchored tool entry is strictly below its anchor."""
+        scale = StatusScale(
+            stages=[
+                *builtin_scale.stages[:7],  # empty .. planned
+                Stage(name="tool.review", filepath="review.md", before="done"),
+                builtin_scale.stages[7],  # done
+            ],
+        )
+
+        # Both artifacts present — the anchor outranks the tool entry.
+        assert scale.maximal_present(["review.md", "completed/plan.md"]) == ["done"]
+        # The tool artifact alone — the tool entry is maximal, and so is the
+        # axis entry it does not relate to.
+        assert scale.maximal_present(["plan.md", "review.md"]) == ["planned", "tool.review"]
+
+    def test_maximal_present_range_entry_between_its_anchors(self, builtin_scale: StatusScale) -> None:
+        """A both-anchored range entry outranks its ``after`` and yields to its ``before``."""
+        scale = StatusScale(
+            stages=[
+                *builtin_scale.stages[:7],  # empty .. planned
+                Stage(name="tool.range", filepath="range.md", after="defined", before="done"),
+                builtin_scale.stages[7],  # done
+            ],
+        )
+
+        assert scale.maximal_present(["prd.md", "range.md"]) == ["tool.range"]
+        assert scale.maximal_present(["range.md", "completed/plan.md"]) == ["done"]
+        # The range entry and an unrelated axis entry are both maximal.
+        assert scale.maximal_present(["plan.md", "range.md"]) == ["planned", "tool.range"]
+
+    def test_maximal_present_after_chain_is_transitive(self, builtin_scale: StatusScale) -> None:
+        """A chain of ``after`` anchors outranks transitively — the deepest wins."""
+        scale = StatusScale(
+            stages=[
+                *builtin_scale.stages[:7],  # empty .. planned
+                Stage(name="tool.first", filepath="first.md", after="planned"),
+                Stage(name="tool.second", filepath="second.md", after="tool.first"),
+                builtin_scale.stages[7],  # done
+            ],
+        )
+
+        assert scale.maximal_present(["plan.md", "first.md"]) == ["tool.first"]
+        assert scale.maximal_present(["first.md", "second.md"]) == ["tool.second"]
+
     def test_maximal_present_dedupes_repeated_paths(self, builtin_scale: StatusScale) -> None:
         """A repeated path marks its entry once."""
         assert builtin_scale.maximal_present(["plan.md", "plan.md"]) == ["planned"]
