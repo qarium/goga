@@ -7,4 +7,6 @@ new branch, and the working-tree cleanliness probe. It is environment
 access, not topic logic — every decision belongs to the caller.
 """
 
-__all__: list[str] = []
+from .refs import BranchRef, list_branch_refs
+
+__all__: list[str] = ["BranchRef", "list_branch_refs"]
