@@ -335,8 +335,10 @@ stages:
   extend-stage receives its buttons through the `stages` block by its name,
   like any other stage.
 - An empty map (`notes: {}`) equals absence — no `buttons` key is emitted.
-  A pipeline compiled without notes is byte-identical to one compiled
-  without a workflow.
+  `notes` changes nothing else: a workflow whose entries are all empty
+  compiles byte-identically to compiling without a workflow, while any
+  other instruction (`prompt`, `agent`, `loop`, `skip`, ...) changes the
+  output as usual — notes or not.
 - Every `loop`-expanded copy carries the same buttons, and `skip` wins over
   `notes`: a skipped stage is removed before the buttons are resolved, so
   its notes never leak into a survivor.
