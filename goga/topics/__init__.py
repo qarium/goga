@@ -11,9 +11,9 @@ local-only and happen strictly after every decision is made.
 
 from .board import BoardRecord, collect_topic_board
 from .creation import check_branch_occupancy, create_topic
+from .ensuring import ensure_topic
 from .switching import (
     SwitchCandidate,
-    ensure_topic,
     resolve_switch_candidates,
     switch_topic,
 )

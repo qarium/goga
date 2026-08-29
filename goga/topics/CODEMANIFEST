@@ -251,7 +251,7 @@ Annotations: |
     - Do not return to the previous branch — the switch is the outcome
 
 "ensure_topic(identifier: str, year: str | None = None) -> result: str":
-  location: switching.py
+  location: ensuring.py
   annotations: |
     Bring the repository onto the requested work, creating it when nothing
     hosts the identifier.

@@ -1,7 +1,7 @@
 # topics — creating fresh work
 
 How to create a new branch with its topic directory using the `goga.topics`
-facade. For consumers that start new work: the topics create command.
+facade. For consumers that start new work.
 
 `create_topic` takes the branch name as entered. The branch keeps the name
 verbatim; the topic directory takes the normalized slug of the year — the

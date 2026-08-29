@@ -3,7 +3,7 @@
 How to bring the repository onto requested work in one call — switching
 when it exists, creating it when nothing hosts it — with the `goga.topics`
 facade. For consumers that resume *or* start work through a single
-identifier: the pipeline run form (`goga pipeline NAME -t <identifier>`).
+identifier.
 
 `ensure_topic` resolves the identifier exactly like `switch_topic` —
 exact branch name, then exact topic slug (a local branch beats its remote
@@ -38,5 +38,5 @@ print(result)  # one line — the outcome
   otherwise.
 - A switch that would mutate probes the working tree first — a dirty tree
   is a clean error. The creation fallback carries uncommitted changes
-  onto the fresh branch instead, exactly like `goga topics create`.
+  onto the fresh branch instead.
 - Mutations are local-only — no network, no fetch, no push.

@@ -3,7 +3,7 @@
 `goga pipeline` is a single Click command with five explicit forms. Every
 form launches the goga Docker container and invokes python -m goga.pipeline
 inside it. The host never reads pipeline files directly — the runtime
-boundary to goga/pipeline is docker.
+boundary to the in-container pipeline is docker.
 
 ## Forms
 
@@ -73,22 +73,21 @@ name without a terminal is a clean error before any launch.
 ## -p vs docker -p
 
 The user-facing -p/--parallel is a Click option. The Docker port-publish
--p <port>:<port> is an internal translated docker token assembled by
-run_pipeline_container/DockerRunner from the allocated port (run form
+-p <port>:<port> is an internal translated docker token assembled by the
+run launcher from the allocated port (run form
 only). Different namespaces (Click CLI vs docker run argv) — no collision.
 The user never authors the docker -p.
 
 ## Threading chains
 
     goga pipeline NAME            → run (full shape)
-    goga pipeline NAME -t feat/x  → ensure_topic(feat/x) → run (full shape)
+    goga pipeline NAME -t feat/x  → switch-or-create → run (full shape)
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
     goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow]
 
     goga pipeline NAME -p N
       → docker run … -m goga.pipeline run NAME --port PORT --parallel N
-        → pipeline_cli → run_pipeline(parallel=N) → run_flow(max_parallel=N)
-          → afm run --port PORT --max-parallel N <flow>
+        → the in-container run launches afm bounded to N concurrent stages
 
 Absent ⇒ parallel=None ⇒ no in-container --parallel ⇒ afm unbounded.
