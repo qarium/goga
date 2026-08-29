@@ -14,4 +14,4 @@ Retain the original arguments for the entire session.
 
 Check if the path printed by `goga history path -f design.md`:
 - **Does not exist** — stop and ask the user to run `/goga:design` first.
-- **Exists** — call skill `goga-plan-by-design` via the **Skill tool** with the printed path as the argument.
+- **Exists** — use the **Skill tool** to invoke `goga-plan-by-design` with the printed path as the argument.
