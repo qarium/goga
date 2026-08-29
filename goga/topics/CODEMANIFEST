@@ -1,0 +1,328 @@
+Imports:
+  - Types:
+      - normalize_topic_slug
+      - resolve_current_branch_name
+      - topic_exists
+      - ensure_topic_dir
+      - resolve_history_root
+      - resolve_topic_status
+      - StatusScale
+      - assemble_status_scale
+    Usages:
+      - topic-paths
+      - topic-statuses
+    From: goga/history
+  - Types:
+      - BranchRef
+      - list_branch_refs
+      - read_ref_tree_paths
+      - checkout_local_branch
+      - create_branch_from_remote_tracking
+      - create_and_switch_branch
+      - is_working_tree_clean
+    Usages:
+      - refs-and-switching
+    From: goga/topics/git
+
+Usages:
+  convention: .goga/usages/conventions.md
+  click: .goga/usages/cooks/click.md
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `click` practice for the interactive moments of switching and
+  creation: click.prompt for the numbered candidate selection and the re-ask
+  cycle, and the non-interactive detection with its clean error.
+
+  Use the `topic-paths` practice for the consumer patterns of the history
+  facade — the topic slug, the topic directory of a year, the existence
+  oracle, and the current branch.
+  Use the `topic-statuses` practice for the status scale patterns of the
+  history facade — scale assembly and maximal-status computation.
+  Use the `refs-and-switching` practice for the git patterns of the topics
+  git cell — the branch inventory, ref tree reading, and the bounded switch
+  mutations.
+
+  This cell owns the topics domain — the work-tracker view of the history
+  tree: the cross-branch topic inventory of one year with per-topic
+  statuses, the switch-identifier resolution and switching orchestration,
+  and the fresh-work creation procedure. Topic identity, addressing, and
+  statuses belong to the history facade; git access belongs to the topics
+  git cell. Mutations are local-only and happen strictly after every
+  decision is made. Use relative imports.
+
+---
+
+"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool)":
+  location: board.py
+  annotations: |
+    One row of the topic board — a topic hosted by one branch.
+
+    `topic`: the topic slug
+    `branch`: the display name of the hosting branch
+    `statuses`: the qualified names of the maximal present statuses, in
+                scale order
+    `current`: True when the row hosts the current working branch
+    `remote`: True when the hosting ref is remote-tracking
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "topic -> str": |
+      The topic slug — the directory name of the topic.
+    "branch -> str": |
+      The display name of the hosting branch.
+    "statuses -> list[str]": |
+      The maximal present status names of the topic, in scale order.
+    "current -> bool": |
+      True when the row hosts the current working branch.
+    "remote -> bool": |
+      True when the hosting ref is remote-tracking.
+
+"collect_topic_board(year: str | None = None, remote: bool = False) -> records: list[BoardRecord]":
+  location: board.py
+  annotations: |
+    Collect the cross-branch topic inventory of one year — every topic with
+    its hosting branch and statuses.
+
+    `year`: optional year as four digits; None means the current year
+    `remote`: True reads remote-tracking refs instead of local branches
+    `records`: one `BoardRecord` per hosted topic, sorted by scale order of
+               the first maximal status, then alphabetically by topic
+
+    Apply the `topic-paths` practice for the year and tree-root patterns.
+    Apply the `topic-statuses` practice for the scale assembly and
+    maximal-status computation.
+    Apply the `refs-and-switching` practice for the inventory and
+    tree-reading patterns.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current year
+    2. Assemble the status scale via `assemble_status_scale` once
+    3. Local mode enumerates local branches via `list_branch_refs` and reads
+       the current branch from the working copy via
+       `resolve_current_branch_name`; remote mode enumerates the
+       remote-tracking `BranchRef` entries of the same inventory only.
+       Local mode takes the full inventory of `list_branch_refs` — a topic
+       hosted only by a remote-tracking ref keeps its row with the remote
+       marker
+    4. Read the topic tree of every ref under the root resolved via
+       `resolve_history_root` with `read_ref_tree_paths`, without checkout
+    5. For every ref, take the topics of the resolved year with their
+       artifact paths and compute the maximal statuses — the working copy
+       via `resolve_topic_status`, every other ref via the `StatusScale`
+    6. Collapse a local branch and its remote twin into one row — the local
+       branch wins; different branches hosting one slug stay separate rows
+    7. Mark the row hosting the current branch
+    8. Sort by scale order of the first maximal status, then alphabetically
+       by topic, and return the records
+
+    Requirements:
+    - The current branch is read from the working copy — uncommitted
+      progress is visible; remote mode shows it through its remote twin
+    - Read-only — no checkout, no worktree, no mutation of any kind
+    - A year without topics yields an empty list — not an error
+
+    Constraints:
+    - Do not render — output shaping belongs to the consumer
+    - Do not cross the year boundary — other years are invisible here
+
+"SwitchCandidate(branch: str, topic: str | None, statuses: list[str], current: bool, remote: bool)":
+  location: switching.py
+  annotations: |
+    One candidate of a switch-identifier resolution — a branch that may
+    host the requested work.
+
+    `branch`: the display name of the candidate branch
+    `topic`: the topic slug the branch hosts, or None for a branch without
+             a topic
+    `statuses`: the qualified names of the maximal present statuses, in
+                scale order
+    `current`: True for the current branch
+    `remote`: True when the candidate ref is remote-tracking
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+  properties:
+    "branch -> str": |
+      The display name of the candidate branch.
+    "topic -> str | None": |
+      The topic slug the branch hosts, or None for a branch without a
+      topic.
+    "statuses -> list[str]": |
+      The maximal present status names of the candidate's topic, in scale
+      order — empty for a branch without a topic.
+    "current -> bool": |
+      True for the current branch.
+    "remote -> bool": |
+      True when the candidate ref is remote-tracking.
+
+"resolve_switch_candidates(identifier: str, year: str | None = None) -> candidates: list[SwitchCandidate]":
+  location: switching.py
+  annotations: |
+    Resolve a switch identifier into its candidate branches.
+
+    `identifier`: the user input — a branch name, a topic slug, or their
+                 prefix
+    `year`: optional year as four digits; None means the current year
+    `candidates`: the matching candidates, exact matches first, then prefix
+                  matches
+
+    Apply the `topic-paths` practice for the slug normalization and current
+    branch patterns.
+    Apply the `refs-and-switching` practice for the inventory and
+    tree-reading patterns.
+
+    Algorithm:
+    1. Normalize `identifier` into a slug via `normalize_topic_slug`
+    2. Collect the branch inventory and the topics of the resolved year
+    3. Exact branch name match -> the candidates hosting that name
+    4. Exact slug match otherwise -> the branches hosting the slug, local
+       branches first
+    5. Prefix matches otherwise -> the branches whose name or hosted slug
+       starts with the input
+    6. Return the candidates with their statuses
+
+    Requirements:
+    - Exact matches always precede prefix matches
+    - A branch without a topic is a valid candidate
+    - Read-only — no mutation before a choice
+
+    Constraints:
+    - Do not choose among multiple candidates — selection belongs to the
+      caller
+
+"switch_topic(identifier: str, year: str | None = None) -> result: str":
+  location: switching.py
+  annotations: |
+    Bring the repository onto the branch hosting the requested work.
+
+    `identifier`: the user input — a branch name, a topic slug, or their
+                 prefix
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the numbered selection prompt and the
+    non-interactive detection.
+    Apply the `refs-and-switching` practice for the checkout and
+    remote-tracking branch patterns.
+
+    Algorithm:
+    1. Resolve the candidates via `resolve_switch_candidates`
+    2. No candidate -> clean error with a hint to the board
+    3. One candidate -> take it; several -> print the numbered list with
+       statuses and prompt for a number, or fail with the list when no
+       interactive input is available
+    4. Already on the hosting branch -> idempotent success, no mutation, no
+       cleanliness probe
+    5. A mutation is needed -> probe the working tree cleanliness first via
+       `is_working_tree_clean`; a dirty tree is a clean error naming the
+       reason and the next step — commit or stash the working copy before
+       switching
+    6. Local host -> check out the branch via `checkout_local_branch`;
+       remote-only host -> create the local branch from the remote-tracking
+       ref via `create_branch_from_remote_tracking`
+    7. Return the single result line
+
+    Requirements:
+    - Every mutation is local — no network, no fetch, no push
+    - Nothing is mutated before the candidate choice is complete
+    - The result is exactly one line
+
+    Constraints:
+    - Do not manage the stages of the hosting pipeline — continuation
+      belongs to the pipeline itself
+    - Do not return to the previous branch — the switch is the outcome
+
+"create_topic(branch_name: str, year: str | None = None) -> result: str":
+  location: creation.py
+  annotations: |
+    Create fresh work — a branch with the name as entered and its topic
+    directory of the year.
+
+    `branch_name`: the branch name as entered by the user
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the re-ask prompt and the non-interactive
+    detection.
+    Apply the `topic-paths` practice for the slug, existence, and directory
+    creation patterns.
+    Apply the `refs-and-switching` practice for the create-and-switch
+    pattern.
+
+    Algorithm:
+    1. Normalize `branch_name` into a slug via `normalize_topic_slug`
+    2. Empty slug -> input error: print the reason, prompt for a new name
+       on an interactive terminal and restart, or fail with the hint
+       otherwise
+    3. The current branch — read via `resolve_current_branch_name` — hosts
+       the same slug -> idempotent success, no mutation, no occupancy
+       check
+    4. `check_branch_occupancy` reports a conflict -> print the reason with
+       a hint to the board, prompt for a new name on an interactive terminal
+       and restart, or fail otherwise
+    5. Free name -> create the branch named exactly as entered and switch
+       to it via `create_and_switch_branch`, and create the topic directory
+       via `ensure_topic_dir` of the year
+    6. Return the single result line
+
+    Requirements:
+    - The branch keeps the name as entered; the topic directory takes the
+      slug — the two may deliberately differ
+    - An aborted re-ask leaves the repository untouched
+    - The caller stays on the new branch
+
+    Constraints:
+    - Do not validate branch-name characters — git owns name validity
+    - Do not auto-pick suffixed names on a conflict — the user re-asks or
+      aborts
+    - Do not write artifact files inside the topic directory
+
+"check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> conflict: str | None":
+  location: creation.py
+  annotations: |
+    Decide whether the entered branch name and the topic slug are free.
+
+    `branch_name`: branch name as entered — checked against the branch
+                   inventory
+    `slug`: normalized topic slug — checked against the topic directory of
+            the year
+    `year`: optional year as four digits; None means the current year
+    `conflict`: human-readable reason of the first occupied oracle, or None
+                when everything is free
+
+    Apply the `topic-paths` practice for the topic-existence oracle
+    contract.
+    Apply the `refs-and-switching` practice for the inventory pattern.
+
+    Algorithm:
+    1. A local `BranchRef` named `branch_name` exists in the inventory of
+       `list_branch_refs` -> return the reason
+    2. A remote-tracking `BranchRef` whose short name (the part after the
+       first "/") equals `branch_name` exists -> return the reason
+    3. The topic directory of `slug` in the year exists via `topic_exists`
+       -> return the reason
+    4. All three oracles are free -> None
+
+    Requirements:
+    - The first occupied oracle wins; remaining oracles are not probed
+    - Read-only — no ref or directory is created
+
+    Constraints:
+    - Do not resolve remote state over the network — the local inventory
+      only
+
+---
+
+Author: Goga
+CreatedAt: 29/08/26
+Description: |
+  The topics domain — the cross-branch topic inventory, switch resolution
+  and orchestration, and fresh-work creation.

@@ -2,7 +2,6 @@ Imports:
   - Types:
       - HistoryYear
       - TopicRecord
-      - TopicStatus
       - collect_history_tree
       - collect_topic_statuses
       - ensure_topic_dir
@@ -10,6 +9,7 @@ Imports:
       - resolve_current_branch_name
       - resolve_topic_dir
       - resolve_topic_file
+      - assemble_status_scale
     Usages:
       - topic-paths
       - topic-statuses
@@ -86,14 +86,14 @@ Annotations: |
 
     "status(year: str | None = None, topic: str | None = None, statuses: tuple[str, ...]) -> exit_code: int": |
       Subcommand goga history status: print the flat list of topics of one
-      year, each line "topic [status]".
+      year, each line "topic [status] [status] ...".
 
       `year`: optional YEAR positional — four digits; None means the current
               year; the year is never printed
       `topic`: --topic/-t value — a substring filter; the value is normalized
                via `normalize_topic_slug` before matching
-      `statuses`: -s/--status values (repeatable, multiple=True) — status
-                  names to keep; combined with `topic` by AND
+      `statuses`: -s/--status values (repeatable, multiple=True) — qualified
+                  status names to keep; combined with `topic` by AND
       `exit_code`: 0 on success (an empty result included), 1 on error
 
       Apply the `topic-statuses` practice for the record and status
@@ -102,18 +102,20 @@ Annotations: |
       the color rules.
 
       Algorithm:
-      1. Validate every name in `statuses` against `TopicStatus` — an
-         unknown name is a clean error (stderr, non-zero exit)
-      1.1. A `topic` value that normalizes to an empty slug is a clean error
-           (stderr, non-zero exit) — an empty filter would silently match
-           every topic and is rejected instead
-      2. Collect the records via `collect_topic_statuses` with `year`
-      3. Filter: when `topic` is given, keep the records whose topic contains
-         the normalized filter as a substring; when `statuses` is non-empty,
-         keep the records whose status is one of the resolved names; both
-         filters combine by AND
-      4. Render the surviving records via `render_topic_statuses`
-      5. An empty result renders nothing and exits 0
+      1. Assemble the status scale via `assemble_status_scale` once and
+         validate every name in `statuses` against it — an unknown name is
+         a clean error (stderr, non-zero exit)
+      2. A `topic` value that normalizes to an empty slug is a clean error
+         (stderr, non-zero exit) — an empty filter would silently match
+         every topic and is rejected instead
+      3. Collect the records via `collect_topic_statuses` with `year` and
+         the assembled scale — the single scale of this command run
+      4. Filter: when `topic` is given, keep the records whose topic
+         contains the normalized filter as a substring; when `statuses` is
+         non-empty, keep the records carrying at least one of the resolved
+         names; both filters combine by AND
+      5. Render the surviving records via `render_topic_statuses`
+      6. An empty result renders nothing and exits 0
 
       Requirements:
       - Topics come out alphabetically — the domain sorts, the command does
@@ -121,8 +123,8 @@ Annotations: |
       - The year is never printed
       - Color follows the `click` practice: ANSI only on a TTY, NO_COLOR
         disables it always
-      - An empty normalized `topic` filter is an error, not a match-all —
-        consistent with the empty-slug policy of `resolve_topic_dir`
+      - A record matches a status filter when any of its maximal statuses
+        is one of the requested names
 
       Constraints:
       - Do not print the year, a header, or a summary line — one record per
@@ -213,7 +215,8 @@ Annotations: |
 "render_topic_statuses(records: list[TopicRecord])":
   location: render.py
   annotations: |
-    Render the status view: one flat "topic [status]" line per record.
+    Render the status view: one flat "topic [status] [status] ..." line per
+    record — every maximal status of the record, in scale order.
 
     `records`: the (already filtered) records to print
 
@@ -221,14 +224,14 @@ Annotations: |
     only on a TTY, NO_COLOR disables it always.
 
     Algorithm:
-    1. For each `TopicRecord` in `records`, print the topic followed by the
-       bracketed status display name
-    2. Colorize the status segment per the `click` practice; leave the topic
-       plain
+    1. For each `TopicRecord` in `records`, print the topic followed by one
+       bracketed status segment per maximal status, in scale order
+    2. Colorize the status segments per the `click` practice; leave the
+       topic plain
     3. An empty `records` prints nothing
 
     Requirements:
-    - The status segment uses the display name of the record's status
+    - Every maximal status of the record is printed — none is hidden
     - Empty input renders empty output — not an error
 
     Constraints:

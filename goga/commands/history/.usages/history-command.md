@@ -17,30 +17,19 @@ artifacts.
 
 - Read-only. An empty history prints nothing, exit 0.
 
-## goga history status [YEAR] [-t TOPIC] [-s STATUS]…
+## Reading the statuses of a year
 
-Prints one `topic [status]` line per topic of the year — flat, no year, no
-tree.
+    goga history status
+    goga history status 2025
+    goga history status --topic release
+    goga history status -s done -s mkdocs.published
 
-    release-1-3-0 [done]
-    history-commands [planned]
-
-- `YEAR` — optional positional, four digits; defaults to the current year.
-- `-t/--topic` — substring filter; the value is normalized (a branch name
-  works as a filter too). A `--topic` value that normalizes to an empty slug
-  (fully non-ASCII) is an error, not a match-all.
-- `-s/--status` — repeatable (`-s defined -s discovered`); combined with
-  `--topic` by AND. Valid names: `empty`, `defined`, `discovered`,
-  `backlog`, `designed`, `specified`, `planned`, `done`. An unknown name is
-  an error (non-zero exit).
-- Topics come out alphabetically. An empty result prints nothing, exit 0.
-- Statuses are colorized on a terminal; piped output is plain; `NO_COLOR`
-  disables color always.
-
-A topic's status is the deepest artifact present: `prd.md` → defined,
-`adr.md` → discovered, `task.md` → backlog, `arch.md` → designed,
-`design.md` → specified, `plan.md` → planned, `completed/plan.md` → done;
-no artifacts → empty.
+Prints one line per topic: the slug and every maximal status in brackets,
+in scale order — for example "release-1-3-0 [done] [mkdocs.published]".
+Status filters take qualified status names: built-in names bare, tool
+statuses as <tool>.<name>; a record matches when any of its maximal
+statuses is one of the requested names. An unknown name is a clean error.
+The year is never printed; an empty result prints nothing and exits 0.
 
 ## goga history path [TOPIC] [-f FILENAME] [-y YEAR]
 

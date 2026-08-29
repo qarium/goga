@@ -1,56 +1,61 @@
 # history — topic statuses
 
-How to read the status of history topics with the `goga.history` facade. For
-consumers that report progress: CLI status output, reviews, dashboards.
+How to read the statuses of history topics with the `goga.history` facade.
+For consumers that report progress: CLI status output, boards, reviews,
+dashboards.
 
-A topic's status is the process stage reached by its deepest present
-artifact:
-
-| Status | Deepest artifact present |
-|---|---|
-| empty | none |
-| defined | prd.md |
-| discovered | adr.md |
-| backlog | task.md |
-| designed | arch.md |
-| specified | design.md |
-| planned | plan.md |
-| done | completed/plan.md |
+A topic's status is the set of its maximal present statuses on the topic
+status scale. The built-in axis is fixed — empty, defined, discovered,
+backlog, designed, specified, planned, done, marked by the artifacts prd.md,
+adr.md, task.md, arch.md, design.md, plan.md, completed/plan.md inside the
+topic directory. Tool packages extend the scale with qualified statuses
+`<tool>.<name>`, so one topic can carry several statuses at once — all of
+them are shown.
 
 ## Listing a year with statuses
 
 ```python
-from goga.history import collect_topic_statuses
+from goga.history import assemble_status_scale, collect_topic_statuses
 
-records = collect_topic_statuses()             # current year
-records = collect_topic_statuses(year="2025")  # explicit year
+records = collect_topic_statuses()             # current year, scale assembled here
+scale = assemble_status_scale()
+records = collect_topic_statuses(year="2025", scale=scale)  # reuse one scale
 for record in records:
-    print(record.topic, record.status.value)
+    print(record.topic, " ".join(f"[{s}]" for s in record.statuses))
 ```
 
-- One `TopicRecord` per topic, sorted alphabetically by topic.
-- An absent year or a year without topics yields an empty list — not an error.
-- Filtering (by status name or topic substring) belongs to the consumer: the
-  facade returns the full year.
+- One `TopicRecord` per topic, sorted alphabetically by topic; the record
+  carries every maximal status name in scale order.
+- Pass an assembled `scale` to reuse one assembly across calls; None
+  assembles it once inside.
+- An absent year or a year without topics yields an empty list — not an
+  error.
 
-## Resolving one topic's status
+## Resolving one topic's statuses
 
 ```python
-from goga.history import resolve_topic_dir, resolve_topic_status
+from goga.history import (
+    assemble_status_scale,
+    resolve_topic_dir,
+    resolve_topic_status,
+)
 
-status = resolve_topic_status(resolve_topic_dir("history-commands"))
+scale = assemble_status_scale()
+statuses = resolve_topic_status(resolve_topic_dir("history-commands"), scale)
 ```
 
-- `completed/plan.md` wins over every flat artifact when present.
+- Nested artifact paths are honored (completed/plan.md counts).
 - Read-only.
 
 ## Validating status names
 
 ```python
-from goga.history import TopicStatus
+from goga.history import assemble_status_scale
 
-TopicStatus("planned")  # -> TopicStatus.planned; ValueError for unknown names
+scale = assemble_status_scale()
+stage = scale.resolve_status("mkdocs.published")  # unknown name -> clean error
 ```
 
 - Use this to validate user-supplied status filters before matching records:
-  the member set is fixed, and `record.status.value` carries the display name.
+  the member set is the assembled scale, and `stage.name` carries the
+  display name.

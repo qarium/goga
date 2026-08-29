@@ -58,9 +58,12 @@ from goga.history import ensure_topic_dir
 
 topic_dir = ensure_topic_dir("Feature/Foo_Bar")
 # -> .goga/history/2026/feature-foo-bar (now existing)
+
+topic_dir = ensure_topic_dir("Feature/Foo_Bar", year="2025")
+# -> .goga/history/2025/feature-foo-bar (now existing)
 ```
 
-- Always for the current year.
+- The year defaults to the current year (four digits, local time).
 - Idempotent: an existing topic directory is a success, not a conflict.
   Decide occupancy *before* creating (via `topic_exists`) when the
   distinction matters.
@@ -94,3 +97,16 @@ topic_dir = resolve_topic_dir(branch)
 
 - Returns the raw branch name, or None when it cannot be determined; the
   error policy belongs to the caller.
+
+## Reading the history root
+
+```python
+from goga.history import resolve_history_root
+
+root = resolve_history_root()  # .goga/history/
+```
+
+- The single source of the tree location — the prefix for reading topic
+  trees out of git refs.
+- Pure: nothing is created.
+

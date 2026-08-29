@@ -1,0 +1,226 @@
+Usages:
+  convention: .goga/usages/conventions.md
+  registration: |
+    The tool-package registration contract. An installed goga_tool_* package
+    may expose a module-level register_topic_statuses(statuses) callable;
+    when present, goga calls it at every scale assembly with a
+    StatusRegistry scoped to the package. The callable registers tool
+    statuses via statuses.register(name, filepath, before=..., after=...);
+    names are stored qualified <tool>.<name>. A package without the
+    callable is a normal condition, not an error.
+
+Annotations: |
+  The `convention` practice is used for:
+  - Working with the codebase
+  - Organizing the REPL development cycle
+  - Debugging and testing
+  - Organizing the test infrastructure
+  - Understanding the general principles and rules of development and testing in the project
+
+  Use the `registration` practice for the tool-package registration
+  contract behind the scale assembly.
+
+  This cell owns the topic status scale: the built-in artifact axis, the
+  registration of tool statuses over installed goga_tool_* packages, and the
+  computation of a topic's maximal present statuses. Pure scale logic — no
+  filesystem probing of topic directories, no git access, no CLI, no output
+  rendering. The built-in axis is immutable; tool extensions are add-only.
+  Package traversal is deterministic — installed goga_tool_* packages in
+  alphabetical order of top-level module name. Use relative imports.
+
+---
+
+"StatusScale(stages: list[Stage])":
+  location: scale.py
+  annotations: |
+    The assembled partially ordered scale of topic statuses — the single
+    source of scale order and maximal-status computation.
+
+    `stages`: the scale content in scale order
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The built-in axis is ordered empty, defined, discovered, backlog,
+      designed, specified, planned, done by the artifacts prd.md, adr.md,
+      task.md, arch.md, design.md, plan.md, completed/plan.md
+    - A tool status never reorders or replaces a built-in one
+  properties:
+    "stages -> list[Stage]": |
+      The scale content in scale order.
+  methods:
+    "maximal_present(paths: list[str]) -> statuses: list[str]": |
+      Compute the maximal present statuses of one topic.
+
+      `paths`: the artifact paths present in a topic directory, relative to
+               it
+      `statuses`: the qualified names of the maximal present statuses, in
+                  scale order
+
+      Apply the `convention` practice for docstring style and intra-package
+      imports.
+
+      Algorithm:
+      1. Mark every scale entry whose artifact path is present
+      2. Drop every marked entry strictly below another marked entry
+      3. Return the names of the surviving entries in scale order
+
+      Requirements:
+      - Every maximal entry is returned — a present entry outranked by no
+        other present entry stays visible
+      - A topic with no artifact present yields the single built-in name
+        empty
+
+      Constraints:
+      - Do not probe the filesystem — presence is decided by the caller's
+        `paths` input alone
+    "resolve_status(name: str) -> stage: Stage": |
+      Resolve a qualified status name for filter validation.
+
+      `name`: a status name as entered by a consumer — a built-in name or a
+              qualified tool name
+      `stage`: the scale entry carrying the name
+
+      Apply the `convention` practice for docstring style and intra-package
+      imports.
+
+      Algorithm:
+      1. Find the scale entry whose qualified name equals `name` exactly
+      2. An unknown name raises a clean error
+
+      Constraints:
+      - Do not fuzzy-match or fall back — the exact qualified name is the
+        contract
+
+"Stage(name: str, filepath: str, before: str | None = None, after: str | None = None)":
+  location: scale.py
+  annotations: |
+    One entry of the scale — a named position anchored to the artifact that
+    marks it.
+
+    `name`: the qualified name — bare for built-in entries, <tool>.<name>
+            for tool entries
+    `filepath`: the artifact path relative to the topic directory; nested
+                paths allowed
+    `before`: the qualified name of the entry this one precedes; None for
+              built-in entries
+    `after`: the qualified name of the entry this one follows; None for
+             built-in entries
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - A tool entry carries at least one anchor; a built-in entry carries
+      none — its position is the axis order
+  properties:
+    "name -> str": |
+      The qualified status name.
+    "filepath -> str": |
+      The artifact path relative to the topic directory.
+    "before -> str | None": |
+      The qualified name of the entry this one precedes, or None.
+    "after -> str | None": |
+      The qualified name of the entry this one follows, or None.
+
+"StatusRegistry(builtin_stages: list[Stage], tool_prefix: str)":
+  location: registry.py
+  annotations: |
+    The controlled registration surface handed to a tool package — the only
+    way a tool status enters the scale.
+
+    `builtin_stages`: the immutable built-in axis the registry extends
+    `tool_prefix`: the qualifier applied to every name registered through
+                   this registry — derived from the package name
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - Registration is add-only — a built-in entry is never modified,
+      removed, or re-anchored
+  properties:
+    "stages -> list[Stage]": |
+      The built-in axis plus every accepted tool entry.
+  methods:
+    "register(name: str, filepath: str, before: str | None = None, after: str | None = None)": |
+      Register one tool status.
+
+      `name`: the status name as the tool defines it — stored qualified as
+              <tool_prefix>.<name>
+      `filepath`: the artifact path relative to the topic directory
+      `before`: optional anchor — the qualified name of an entry this one
+                precedes
+      `after`: optional anchor — the qualified name of an entry this one
+               follows
+
+      Apply the `convention` practice for docstring style and intra-package
+      imports.
+
+      Algorithm:
+      1. Qualify `name` with the registry's tool prefix
+      2. Validate the content: a non-empty name, a non-empty `filepath`,
+         and at least one anchor present
+      3. Append the entry to the registry content
+
+      Requirements:
+      - A structural violation raises a clean registration error naming the
+        entry
+      - Both anchors given define a placement range; anchor resolution and
+        range validity are decided at scale assembly
+
+      Constraints:
+      - Do not resolve anchors here — a tool may anchor to an entry
+        registered by another tool
+      - Do not modify built-in entries
+
+"assemble_status_scale() -> scale: StatusScale":
+  location: assembly.py
+  annotations: |
+    Assemble the full status scale — the built-in axis extended by every
+    installed tool package.
+
+    `scale`: the assembled scale
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Build the built-in axis of eight entries
+    2. Enumerate the installed goga_tool_* packages in alphabetical order
+       of package name
+    3. Import each package — a broken import is a clean error naming the
+       package
+    4. A package without the callback of the `registration` practice is
+       skipped silently
+    5. Call the callback of the `registration` practice with a registry
+       scoped to the package
+    6. Any exception from the callback — a registration content error or a
+       crashed callback — skips that registration with a warning to stderr;
+       the package import failure of step 3 remains the only fatal case
+    7. Resolve anchors and validate placement ranges; an unresolvable
+       anchor or an invalid range skips the registration with a warning to
+       stderr
+    8. Assemble and return the scale
+
+    Requirements:
+    - The assembly runs at every command start that needs the scale —
+      before any output and before any mutation
+    - The scale assembles from the surviving registrations alone — one
+      broken registration never cancels the rest
+    - Package enumeration mirrors goga/connect: importlib.metadata
+      .packages_distributions() filtered to top-level module names starting
+      with goga_tool_, sorted alphabetically by top-level module name
+
+    Constraints:
+    - Do not cache the scale across command runs
+    - Do not let a registration problem abort the command
+
+---
+
+Author: Goga
+CreatedAt: 29/08/26
+Description: |
+  Owner of the topic status scale — the built-in artifact axis, tool-status
+  registration, and maximal-status computation.

@@ -14,6 +14,7 @@ Imports:
       - install
       - uninstall
       - history
+      - topics
     Usages:
       - cli-commands
     From: goga/commands
@@ -82,6 +83,7 @@ app():
     - `install`
     - `uninstall`
     - `history`
+    - `topics`
 
 ---
 
