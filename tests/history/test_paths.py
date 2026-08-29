@@ -1,10 +1,11 @@
 """Contract and logic tests for the routines declared in
 ``goga/history/CODEMANIFEST`` with ``location: paths.py``:
 
+- ``resolve_history_root() -> Path``
 - ``resolve_topic_dir(topic: str, year: str | None = None) -> Path``
 - ``resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Path``
 - ``topic_exists(topic: str, year: str | None = None) -> bool``
-- ``ensure_topic_dir(name: str) -> Path``
+- ``ensure_topic_dir(name: str, year: str | None = None) -> Path``
 
 The path composers are pure with respect to the filesystem; ``ensure_topic_dir``
 is the only mutating routine. The single mock target is ``naming.datetime``
@@ -24,6 +25,7 @@ import pytest
 from goga.history import naming, paths
 from goga.history.paths import (
     ensure_topic_dir,
+    resolve_history_root,
     resolve_topic_dir,
     resolve_topic_file,
     topic_exists,
@@ -43,11 +45,13 @@ class _FixedClock:
 
 class TestPathsContract:
     def test_routines_are_importable_from_module_and_callable(self) -> None:
-        """All four routines are importable from ``goga.history.paths`` and callable."""
+        """All five routines are importable from ``goga.history.paths`` and callable."""
+        assert callable(resolve_history_root)
         assert callable(resolve_topic_dir)
         assert callable(resolve_topic_file)
         assert callable(topic_exists)
         assert callable(ensure_topic_dir)
+        assert paths.resolve_history_root is resolve_history_root
         assert paths.resolve_topic_dir is resolve_topic_dir
         assert paths.resolve_topic_file is resolve_topic_file
         assert paths.topic_exists is topic_exists
@@ -57,11 +61,18 @@ class TestPathsContract:
         """The paths routines are importable from the domain facade."""
         import goga.history
 
+        assert goga.history.resolve_history_root is resolve_history_root
         assert goga.history.resolve_topic_dir is resolve_topic_dir
         assert goga.history.resolve_topic_file is resolve_topic_file
         assert goga.history.topic_exists is topic_exists
         assert goga.history.ensure_topic_dir is ensure_topic_dir
-        for name in ("resolve_topic_dir", "resolve_topic_file", "topic_exists", "ensure_topic_dir"):
+        for name in (
+            "resolve_history_root",
+            "resolve_topic_dir",
+            "resolve_topic_file",
+            "topic_exists",
+            "ensure_topic_dir",
+        ):
             assert name in goga.history.__all__
 
     def test_resolve_topic_dir_signature(self) -> None:
@@ -100,23 +111,46 @@ class TestPathsContract:
         hints = typing.get_type_hints(topic_exists)
         assert hints == {"topic": str, "year": str | None, "return": bool}
 
+    def test_resolve_history_root_signature(self) -> None:
+        """``resolve_history_root() -> Path`` — no parameters at all."""
+        signature = inspect.signature(resolve_history_root)
+        assert list(signature.parameters) == []
+        hints = typing.get_type_hints(resolve_history_root)
+        assert hints == {"return": Path}
+
     def test_ensure_topic_dir_signature(self) -> None:
-        """``ensure_topic_dir(name: str) -> Path`` — one positional-or-keyword parameter."""
+        """``ensure_topic_dir(name: str, year: str | None = None) -> Path`` — year is a kwarg."""
         signature = inspect.signature(ensure_topic_dir)
-        assert list(signature.parameters) == ["name"]
+        assert list(signature.parameters) == ["name", "year"]
         assert all(
             parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
             for parameter in signature.parameters.values()
         )
+        assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(ensure_topic_dir)
-        assert hints == {"name": str, "return": Path}
+        assert hints == {"name": str, "year": str | None, "return": Path}
+        bound = inspect.signature(ensure_topic_dir).bind(name="X", year="2025")
+        assert bound.arguments == {"name": "X", "year": "2025"}
 
     def test_history_root_helper_points_at_the_tree(self) -> None:
-        """The private helper answers the relative history root."""
+        """The private helper delegates to the public composer — one source of the root."""
         assert paths._history_root() == Path(".goga") / "history"
+        assert paths._history_root() == resolve_history_root()
 
 
 # --- Logic tests ---
+
+
+class TestResolveHistoryRoot:
+    def test_resolve_history_root_composes_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The composer answers the relative root — pure, nothing is created."""
+        monkeypatch.chdir(tmp_path)
+        result = resolve_history_root()
+        assert result == Path(".goga") / "history"
+        assert not result.exists()
+        assert not (tmp_path / ".goga").exists()
 
 
 class TestResolveTopicDir:
@@ -197,6 +231,30 @@ class TestTopicExists:
 
 
 class TestEnsureTopicDir:
+    def test_ensure_topic_dir_creates_explicit_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicit year scopes creation to that year — the D1 current-year-only fix."""
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(naming, "datetime", _FixedClock):
+            created = ensure_topic_dir("Feature/Foo_Bar", year="2025")
+            repeated = ensure_topic_dir("Feature/Foo_Bar", year="2025")
+        expected = Path(".goga/history/2025/feature-foo-bar")
+        assert created == expected
+        assert repeated == expected
+        assert (tmp_path / ".goga" / "history" / "2025" / "feature-foo-bar").is_dir()
+        assert not (tmp_path / ".goga" / "history" / "2031").exists()
+
+    def test_ensure_topic_dir_defaults_to_current_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without a year the current year applies — the pre-existing behavior stands."""
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.object(naming, "datetime", _FixedClock):
+            created = ensure_topic_dir("X")
+        assert created == Path(".goga/history/2031/x")
+        assert (tmp_path / ".goga" / "history" / "2031" / "x").is_dir()
+
     def test_ensure_topic_dir_creates_idempotently(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

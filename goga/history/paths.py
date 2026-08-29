@@ -1,10 +1,10 @@
 """Topic addressing for the history domain.
 
 The routines declared in the cell CODEMANIFEST with ``location: paths.py``:
-the private history-root helper shared by the cell's modules, the two pure
-path composers (topic directory and artifact file), the read-only occupancy
-oracle, and the idempotent directory creator. Composers never touch the
-filesystem — creation belongs to ``ensure_topic_dir`` alone.
+the public history-root composer (the private helper delegates to it), the
+two pure path composers (topic directory and artifact file), the read-only
+occupancy oracle, and the idempotent directory creator. Composers never touch
+the filesystem — creation belongs to ``ensure_topic_dir`` alone.
 """
 
 from __future__ import annotations
@@ -14,9 +14,23 @@ from pathlib import Path, PurePath
 from .naming import current_year, normalize_topic_slug
 
 
-def _history_root() -> Path:
-    """Return the history tree root relative to the caller's working directory."""
+def resolve_history_root() -> Path:
+    """Return the root path of the history tree.
+
+    The single source of the tree location for every consumer reading the
+    topic tree of a git ref — the path is composed at the caller's working
+    directory and nothing is created or checked.
+
+    Returns:
+        The history tree path ``.goga/history/`` — relative to the caller's
+        working directory, not created.
+    """
     return Path(".goga") / "history"
+
+
+def _history_root() -> Path:
+    """Return the history tree root — delegated to the public composer."""
+    return resolve_history_root()
 
 
 def resolve_topic_dir(topic: str, year: str | None = None) -> Path:
@@ -91,8 +105,8 @@ def topic_exists(topic: str, year: str | None = None) -> bool:
     return resolve_topic_dir(topic, year).is_dir()
 
 
-def ensure_topic_dir(name: str) -> Path:
-    """Create the directory of a history topic for the current year.
+def ensure_topic_dir(name: str, year: str | None = None) -> Path:
+    """Create the directory of a history topic of a year.
 
     Idempotent: an existing topic directory is a success, not a conflict —
     deciding whether a topic may be created belongs to the caller.
@@ -100,6 +114,7 @@ def ensure_topic_dir(name: str) -> Path:
 
     Args:
         name: Topic input — a branch name or an already-normalized slug.
+        year: Optional year as four digits; ``None`` means the current year.
 
     Returns:
         The topic directory path that now exists.
@@ -109,6 +124,6 @@ def ensure_topic_dir(name: str) -> Path:
         OSError: Propagated from ``mkdir`` — unexpected OS failures are not
             swallowed.
     """
-    topic_dir = resolve_topic_dir(name)
+    topic_dir = resolve_topic_dir(name, year)
     topic_dir.mkdir(parents=True, exist_ok=True)
     return topic_dir

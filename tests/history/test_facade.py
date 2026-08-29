@@ -1,6 +1,6 @@
 """Facade contract test for the ``goga/history`` domain cell.
 
-The cell CODEMANIFEST declares thirteen facade names: the twelve domain types
+The cell CODEMANIFEST declares fourteen facade names: the thirteen domain types
 and routines of the ``naming``/``paths``/``status``/``tree`` modules plus the
 git branch reader embedded from the nested ``goga.history.git`` leaf cell (the
 ``->resolve_current_branch_name: {}`` re-export).
@@ -20,6 +20,7 @@ _HISTORY_FACADE_ALL = [
     "ensure_topic_dir",
     "normalize_topic_slug",
     "resolve_current_branch_name",
+    "resolve_history_root",
     "resolve_topic_dir",
     "resolve_topic_file",
     "resolve_topic_status",
@@ -28,8 +29,8 @@ _HISTORY_FACADE_ALL = [
 
 
 class TestHistoryFacade:
-    def test_history_facade_exports_thirteen_names(self) -> None:
-        """The facade ``__all__`` is exactly the thirteen contract names, alphabetical."""
+    def test_history_facade_exports_fourteen_names(self) -> None:
+        """The facade ``__all__`` is exactly the fourteen contract names, alphabetical."""
         assert goga.history.__all__ == _HISTORY_FACADE_ALL
         for name in _HISTORY_FACADE_ALL:
             assert hasattr(goga.history, name), f"{name} is not defined on goga.history"

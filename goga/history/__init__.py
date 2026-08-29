@@ -9,7 +9,13 @@ declared in ``goga/history/CODEMANIFEST``.
 
 from .git import resolve_current_branch_name
 from .naming import current_year, normalize_topic_slug
-from .paths import ensure_topic_dir, resolve_topic_dir, resolve_topic_file, topic_exists
+from .paths import (
+    ensure_topic_dir,
+    resolve_history_root,
+    resolve_topic_dir,
+    resolve_topic_file,
+    topic_exists,
+)
 from .status import TopicRecord, TopicStatus, collect_topic_statuses, resolve_topic_status
 from .tree import HistoryYear, collect_history_tree
 
@@ -23,6 +29,7 @@ __all__: list[str] = [
     "ensure_topic_dir",
     "normalize_topic_slug",
     "resolve_current_branch_name",
+    "resolve_history_root",
     "resolve_topic_dir",
     "resolve_topic_file",
     "resolve_topic_status",
