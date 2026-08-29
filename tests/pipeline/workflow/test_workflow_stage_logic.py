@@ -114,10 +114,10 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).skip is True
 
     def test_field_order_fixed_canonical(self) -> None:
-        """Field order is fixed: agent, prompt, loop, skills, skip, approve, manual."""
+        """Field order is fixed: agent, prompt, loop, skills, skip, approve, manual, notes."""
         names = [field.name for field in fields(WorkflowStage)]
 
-        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve", "manual"]
+        assert names == ["agent", "prompt", "loop", "skills", "skip", "approve", "manual", "notes"]
 
     def test_workflow_stage_approve_defaults_none(self) -> None:
         """Omitting ``approve`` yields None — no auto-approval directive."""
@@ -157,6 +157,19 @@ class TestWorkflowStageLogic:
         assert WorkflowStage(skip=True).manual is None
         assert WorkflowStage(manual=True).manual is True
         assert WorkflowStage(manual=False).manual is False
+
+    def test_workflow_stage_notes_defaults_none(self) -> None:
+        """Omitting ``notes`` yields None — no note-buttons instruction."""
+        assert WorkflowStage().notes is None
+        assert WorkflowStage(agent="codex").notes is None
+
+    def test_workflow_stage_notes_stored_verbatim(self) -> None:
+        """notes stores the keyword-passed map verbatim (same object, mirroring skills)."""
+        notes = {"fix": "F"}
+        stage = WorkflowStage(notes=notes)
+
+        assert stage.notes == {"fix": "F"}
+        assert stage.notes is notes
 
     def test_skip_accepts_true_and_false(self) -> None:
         """skip=True and skip=False round-trip verbatim."""

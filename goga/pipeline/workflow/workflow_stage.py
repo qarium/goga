@@ -20,15 +20,18 @@ optional auto-approval directive — one of ``"auto"``/``"plan"``/``"dialog"``
 ``manual`` is an optional manual-launch instruction — strictly a bool, with
 ``None`` (the default, key absent), ``True`` (force), and ``False``
 (explicit cancel) as three DIFFERENT states: an absent key and an explicit
-``manual: false`` are distinct instructions (the compiler resolves them).
-No validation lives here either: ``parse_workflow`` enforces every invariant
-(key set, field types, ``loop >= 1``, ``skip`` is a bool, ``approve`` is one
-of ``"auto"``/``"plan"``/``"dialog"``, ``manual`` is a bool) and raises a
-structural error before this dataclass is built.
+``manual: false`` are distinct instructions (the compiler resolves them);
+``notes`` is an optional map of note name → prompt text (a declarative
+note-buttons instruction — the compiler emits the stage's ``buttons`` field
+from it). No validation lives here either: ``parse_workflow`` enforces every
+invariant (key set, field types, ``loop >= 1``, ``skip`` is a bool,
+``approve`` is one of ``"auto"``/``"plan"``/``"dialog"``, ``manual`` is a
+bool, ``notes`` is a str→str map) and raises a structural error before this
+dataclass is built.
 
 Field order is fixed — ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
-``approve``, ``manual`` — to match the canonical order of the per-stage keys
-in the workflow-file.
+``approve``, ``manual``, ``notes`` — to match the canonical order of the
+per-stage keys in the workflow-file.
 """
 
 from __future__ import annotations
@@ -40,12 +43,13 @@ from dataclasses import dataclass
 class WorkflowStage:
     """A single per-stage override instruction from a workflow-file.
 
-    The six fields ``agent``, ``prompt``, ``loop``, ``skills``, ``approve``,
-    and ``manual`` default to ``None`` — a workflow-file may omit any of them,
-    and ``parse_workflow`` produces ``None`` for missing fields; ``skip``
-    defaults to ``False``. Field order is fixed (``agent``, ``prompt``,
-    ``loop``, ``skills``, ``skip``, ``approve``, ``manual``) to match the
-    canonical order of the per-stage keys in the workflow-file.
+    The seven fields ``agent``, ``prompt``, ``loop``, ``skills``,
+    ``approve``, ``manual``, and ``notes`` default to ``None`` — a
+    workflow-file may omit any of them, and ``parse_workflow`` produces
+    ``None`` for missing fields; ``skip`` defaults to ``False``. Field order
+    is fixed (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``,
+    ``approve``, ``manual``, ``notes``) to match the canonical order of the
+    per-stage keys in the workflow-file.
 
     Args:
         agent: Agent name consumed by the compiler to compose the per-stage
@@ -92,6 +96,13 @@ class WorkflowStage:
             distinguishable to the compiler. This cell does not act on
             ``manual`` — it is declarative; the compiler applies the
             force / cancel logic.
+        notes: Optional note-buttons instruction (a map of note name →
+            prompt text), or ``None`` when not specified. Declarative —
+            extracted here, consumed by the compiler to emit the stage's
+            ``buttons`` field. An empty map equals absence (``parse_workflow``
+            normalizes it to ``None``), so this field carries either ``None``
+            or a non-empty map. This cell does not act on ``notes`` — it is
+            declarative.
     """
 
     agent: str | None = None
@@ -101,3 +112,4 @@ class WorkflowStage:
     skip: bool = False
     approve: str | None = None
     manual: bool | None = None
+    notes: dict[str, str] | None = None

@@ -68,6 +68,18 @@ class TestWorkflowStageContract:
         assert WorkflowStage(manual=True).manual is True
         assert WorkflowStage(manual=False).manual is False
 
+    def test_workflow_stage_has_notes_property(self) -> None:
+        """WorkflowStage exposes a ``notes`` property defaulting to None (NOT {}).
+
+        The ``None`` default pins the "None | non-empty map" model invariant —
+        ``parse_workflow`` normalizes an empty map to ``None`` upstream, and a
+        mutable ``{}`` default would silently diverge from the ``is not None``
+        check the compiler relies on.
+        """
+        assert hasattr(WorkflowStage(), "notes")
+        assert WorkflowStage().notes is None
+        assert WorkflowStage(notes={"fix": "F"}).notes == {"fix": "F"}
+
     def test_workflow_stage_defaults_all_none(self) -> None:
         """Every field defaults to None when constructed with no arguments."""
         stage = WorkflowStage()
@@ -79,7 +91,7 @@ class TestWorkflowStageContract:
         assert stage.approve is None
 
     def test_workflow_stage_constructible_kw_only(self) -> None:
-        """WorkflowStage accepts all seven fields as keyword-only arguments."""
+        """WorkflowStage accepts all eight fields as keyword-only arguments."""
         stage = WorkflowStage(
             agent="codex",
             prompt="text",
@@ -88,6 +100,7 @@ class TestWorkflowStageContract:
             skip=True,
             approve="auto",
             manual=True,
+            notes={"fix": "Fix and continue"},
         )
 
         assert stage.agent == "codex"
@@ -97,3 +110,4 @@ class TestWorkflowStageContract:
         assert stage.skip is True
         assert stage.approve == "auto"
         assert stage.manual is True
+        assert stage.notes == {"fix": "Fix and continue"}
