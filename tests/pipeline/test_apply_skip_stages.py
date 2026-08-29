@@ -150,3 +150,36 @@ class TestApplySkipStagesLogic:
 
         assert set(result.stages.keys()) == {"build"}
         assert result.stages["build"].skip is True
+
+    def test_skip_replaces_notes_entry(self) -> None:
+        """A skipped name's replacement stage carries notes=None (model default)."""
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(notes={"x": "1"}),
+                "b": WorkflowStage(notes={"y": "2"}),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["a"])
+
+        # The wholesale replacement carries skip=True and the notes model
+        # default (None) — dropped notes are unreachable by design (the
+        # compiler removes the stage before any notes application).
+        assert result.stages["a"].notes is None
+        assert result.stages["a"].skip is True
+        # The input document is unchanged.
+        assert workflow.stages["a"].notes == {"x": "1"}
+        assert workflow.stages["a"].skip is False
+
+    def test_apply_skip_stages_preserves_notes_of_other_stages(self) -> None:
+        """Surviving stages keep their notes through the shallow stages copy."""
+        workflow = WorkflowDocument(
+            stages={
+                "a": WorkflowStage(notes={"x": "1"}),
+                "b": WorkflowStage(notes={"y": "2"}),
+            },
+        )
+
+        result = apply_skip_stages(workflow, ["a"])
+
+        assert result.stages["b"].notes == {"y": "2"}

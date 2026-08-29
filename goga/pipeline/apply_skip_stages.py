@@ -40,7 +40,8 @@ def apply_skip_stages(workflow: WorkflowDocument | None, skip_stages: list[str])
           (``None`` stays ``None``; no skip applied).
         - Skip always wins — a name present in both the workflow stages and
           ``skip_stages`` is replaced with a ``WorkflowStage(skip=True)`` (all
-          other fields at defaults).
+          other fields at defaults — ``notes`` stays ``None``, the model-field
+          default).
         - Do not mutate the input ``workflow`` or its stages/extend maps.
         - When ``workflow`` is ``None`` and ``skip_stages`` is non-empty,
           construct a document whose stages map carries only the skip entries
