@@ -79,15 +79,21 @@ def status(
     topic: str | None = None,
     statuses: tuple[str, ...] = (),
 ) -> None:
-    """Print the topics of one year, one 'topic [status]' line each.
+    """Print the topics of one year, one 'topic [status] [status] …' line each.
 
-    YEAR defaults to the current year and is never printed. -t/--topic keeps
-    the topics whose slug contains the normalized filter as a substring;
-    -s/--status keeps the given statuses; both filters combine by AND. An
-    empty result prints nothing and exits 0 — it is not an error. The topics
-    come out alphabetically; the domain sorts, this command does not re-sort.
+    A topic carries its maximal statuses in scale order — one bracketed
+    segment per status, tool statuses included. YEAR defaults to the current
+    year and is never printed. -t/--topic keeps the topics whose slug
+    contains the normalized filter as a substring; -s/--status keeps the
+    topics carrying at least one of the requested statuses; both filters
+    combine by AND. An empty result prints nothing and exits 0 — it is not
+    an error. The topics come out alphabetically; the domain sorts, this
+    command does not re-sort.
     """
-    scale = assemble_status_scale()
+    try:
+        scale = assemble_status_scale()
+    except (ValueError, ImportError) as exc:
+        raise click.ClickException(str(exc)) from exc
     for name in statuses:
         try:
             scale.resolve_status(name)

@@ -144,6 +144,19 @@ class TestHistoryNegativePaths:
         assert "unknown status name" in result.stderr
         assert "Traceback" not in result.stderr
 
+    def test_history_status_broken_scale_assembly_fails_cleanly(self) -> None:
+        """A fatal scale assembly error (broken goga_tool_* import) surfaces clean."""
+        runner = CliRunner()
+        with mock.patch.object(
+            _history_module,
+            "assemble_status_scale",
+            side_effect=ImportError("package goga_tool_bad failed to import: boom"),
+        ):
+            result = runner.invoke(history, ["status"])
+        assert result.exit_code == 1
+        assert "goga_tool_bad" in result.stderr
+        assert "Traceback" not in result.stderr
+
     def test_history_status_empty_topic_filter_is_error(self) -> None:
         """A -t value normalizing to an empty slug is an error, not match-all."""
         result = CliRunner().invoke(history, ["status", "-t", "Релиз"])

@@ -15,15 +15,19 @@ in the command module.
 
 from __future__ import annotations
 
+import inspect
 import sys
 from datetime import datetime
 from pathlib import Path
+from types import ModuleType
+from typing import Any
 from unittest import mock
 
 import pytest
 from click.testing import CliRunner
 from goga.commands.history import history
 from goga.history import naming
+from goga.history.statuses import assembly as assembly_module
 
 # goga.commands.history.history is shadowed in the package __init__ by the
 # history click group, so attribute access through the package gives the
@@ -37,6 +41,28 @@ class _FixedClock:
     @staticmethod
     def now() -> datetime:
         return datetime(2031, 6, 15)  # noqa: DTZ001 — a fixed naive date is the point of the clock
+
+
+def _fake_tool_packages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate the scale assembly to one fake tool package.
+
+    ``goga_tool_mkdocs`` registers ``published`` anchored after ``planned``,
+    so a topic carrying both ``plan.md`` and ``mkdocs/published.md`` has the
+    single maximal status ``mkdocs.published``. The enumeration patch keeps
+    the real tool packages of the environment out of the assembled scale.
+    """
+
+    def register_topic_statuses(statuses: Any) -> None:
+        statuses.register(name="published", filepath="mkdocs/published.md", after="planned")
+
+    module = ModuleType("goga_tool_mkdocs")
+    module.register_topic_statuses = register_topic_statuses
+    monkeypatch.setitem(sys.modules, "goga_tool_mkdocs", module)
+    monkeypatch.setattr(
+        assembly_module,
+        "packages_distributions",
+        lambda: {"goga_tool_mkdocs": ["goga-tool-mkdocs"]},
+    )
 
 
 # --- Cross-entity interactions ---
@@ -69,6 +95,52 @@ class TestHistoryList:
 
 
 class TestHistoryStatus:
+    def test_status_signature_defaults(self) -> None:
+        """``status(year=None, topic=None, statuses=())`` — the declared shape."""
+        callback = history.commands["status"].callback
+        signature = inspect.signature(callback)
+        assert list(signature.parameters) == ["ctx", "year", "topic", "statuses"]
+        assert signature.parameters["year"].default is None
+        assert signature.parameters["topic"].default is None
+        assert signature.parameters["statuses"].default == ()
+
+    def test_history_status_multi_status_line_and_filter(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A registered tool status is maximal and filterable — one segment per status."""
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        (year_dir / "release-1-3-0" / "mkdocs").mkdir(parents=True)
+        (year_dir / "release-1-3-0" / "plan.md").write_text("plan\n", encoding="utf-8")
+        (year_dir / "release-1-3-0" / "mkdocs" / "published.md").write_text("pub\n", encoding="utf-8")
+        (year_dir / "alpha").mkdir()
+        (year_dir / "alpha" / "prd.md").write_text("prd\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+        _fake_tool_packages(monkeypatch)
+
+        result = CliRunner().invoke(history, ["status", "2026", "-s", "mkdocs.published"])
+
+        assert result.exit_code == 0
+        assert result.output.splitlines() == ["release-1-3-0 [mkdocs.published]"]
+        assert "alpha" not in result.output
+
+    def test_history_status_unknown_filter_name_clean_error(self) -> None:
+        """An unknown -s name fails before any collection — clean, exit 1."""
+        with mock.patch.object(_history_module, "collect_topic_statuses") as collect_mock:
+            result = CliRunner().invoke(history, ["status", "-s", "bogus"])
+
+        assert result.exit_code == 1
+        assert "unknown status name: 'bogus'" in result.stderr
+        assert "Traceback" not in result.stderr
+        collect_mock.assert_not_called()
+
+    def test_history_status_empty_topic_filter_rejected(self) -> None:
+        """A -t value normalizing to an empty slug is rejected, not match-all."""
+        result = CliRunner().invoke(history, ["status", "-t", "???"])
+
+        assert result.exit_code == 1
+        assert "empty topic slug" in result.stderr
+        assert result.stdout == ""
+
     def test_history_status_filters_and(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """-t and -s combine by AND; the year is resolved, never printed."""
         year_dir = tmp_path / ".goga" / "history" / "2026"
@@ -217,7 +289,18 @@ class TestHistoryEnsure:
 
 
 class TestHistoryEmptyResults:
-    def test_history_status_empty_result_exit_zero(
+    def test_history_status_empty_result_prints_nothing_exit_zero(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A year without topics prints nothing and exits 0 — not an error."""
+        monkeypatch.chdir(tmp_path)
+
+        result = CliRunner().invoke(history, ["status", "1999"])
+
+        assert result.exit_code == 0
+        assert result.output == ""
+
+    def test_history_status_filter_matching_nothing_exit_zero(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """A filter matching nothing prints nothing and exits 0 — not an error."""

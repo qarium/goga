@@ -19,7 +19,7 @@ from unittest import mock
 import pytest
 from goga.commands.history import render
 from goga.commands.history.render import render_history_tree, render_topic_statuses
-from goga.history import HistoryYear, TopicRecord, TopicStatus
+from goga.history import HistoryYear, TopicRecord
 
 # --- Contract tests ---
 
@@ -81,19 +81,41 @@ class TestRenderTopicStatuses:
     ) -> None:
         """A non-empty NO_COLOR keeps every segment plain — no ANSI escapes."""
         monkeypatch.setenv("NO_COLOR", "1")
-        render_topic_statuses([TopicRecord(topic="t", status=TopicStatus.planned)])
+        render_topic_statuses([TopicRecord(topic="t", statuses=["planned"])])
         captured = capsys.readouterr()
         assert captured.out.strip() == "t [planned]"
+        assert "\x1b" not in captured.out
+
+    def test_render_topic_statuses_one_segment_per_status(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every status of a record prints as its own space-separated segment."""
+        monkeypatch.setenv("NO_COLOR", "1")
+        render_topic_statuses(
+            [TopicRecord(topic="release-1-3-0", statuses=["done", "mkdocs.published"])]
+        )
+        captured = capsys.readouterr()
+        assert captured.out == "release-1-3-0 [done] [mkdocs.published]\n"
         assert "\x1b" not in captured.out
 
     def test_render_topic_statuses_colors_status_segment(
         self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """One color on the status segment; the topic stays plain with no newline."""
+        """One color on the status segments; the topic stays plain with no newline."""
         monkeypatch.delenv("NO_COLOR", raising=False)
         with mock.patch.object(render.click, "secho") as secho_mock:
-            render_topic_statuses([TopicRecord(topic="t", status=TopicStatus.planned)])
+            render_topic_statuses([TopicRecord(topic="t", statuses=["planned"])])
         assert secho_mock.call_args == mock.call("[planned]", fg="cyan")
+        assert capsys.readouterr().out == "t "
+
+    def test_render_topic_statuses_colors_every_segment(
+        self, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The colored call carries the whole segment sequence of the record."""
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        with mock.patch.object(render.click, "secho") as secho_mock:
+            render_topic_statuses([TopicRecord(topic="t", statuses=["done", "mkdocs.published"])])
+        assert secho_mock.call_args == mock.call("[done] [mkdocs.published]", fg="cyan")
         assert capsys.readouterr().out == "t "
 
     def test_render_topic_statuses_empty_input_prints_nothing(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -107,8 +129,8 @@ class TestRenderTopicStatuses:
         """Records print in the given order — the renderer neither sorts nor filters."""
         monkeypatch.setenv("NO_COLOR", "1")
         records = [
-            TopicRecord(topic="zeta", status=TopicStatus.empty),
-            TopicRecord(topic="alpha", status=TopicStatus.done),
+            TopicRecord(topic="zeta", statuses=["empty"]),
+            TopicRecord(topic="alpha", statuses=["done"]),
         ]
         render_topic_statuses(records)
         assert capsys.readouterr().out == "zeta [empty]\nalpha [done]\n"
