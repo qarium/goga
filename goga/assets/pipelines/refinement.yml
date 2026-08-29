@@ -6,9 +6,6 @@ description: "Task refinement process"
   title: "Product definition & create PRD"
   communication: true
   prompt: |
-    Save the PRD file at the path printed by `goga history path -f prd.md`
-    (run `goga history ensure` first if the topic directory does not exist)
-
     Constrains:
     - Don't research a project until you receive the task
   skills:
@@ -21,8 +18,8 @@ description: "Task refinement process"
     Use the PRD file at the path printed by `goga history path -f prd.md`, if it exists.
     If PRD file does not exist — ask user about task.
 
-    Save the ADR file at the path printed by `goga history path -f adr.md`
-    (run `goga history ensure` first if the topic directory does not exist)
+    Constrains:
+    - Don't research a project until you receive the task
 
     Communication:
     - You **MUST** follow the `File-Based Dialog Protocol` for every round of questions.
@@ -36,16 +33,11 @@ description: "Task refinement process"
     Use the ADR at the path printed by `goga history path -f adr.md` as the input for task formulation, if it exists.
     If ADR does not exist — try the PRD file at the path printed by `goga history path -f prd.md`.
     If PRD file does not exists — ask user about task.
-
-    Save the task file at the path printed by `goga history path -f task.md`
-    (run `goga history ensure` first if the topic directory does not exist)
   skills:
     - goga-propose
 
 - name: task-review
   title: "Review of the created task"
   communication: true
-  prompt: |
-    Review the task file at the path printed by `goga history path -f task.md`
   skills:
     - goga-review-task

@@ -6,7 +6,7 @@ description: Design document verification via code stack tracing
 
 ## Purpose
 
-Verifies the design document for **logical correctness** by tracing the full code stack for each entry point and test scenario. This is a **verification pass** — the goal is to find logical errors before plan creation.
+Verifies the design document (the file at the path printed by `goga history path -f design.md`) for **logical correctness** by tracing the full code stack for each entry point and test scenario. This is a **verification pass** — the goal is to find logical errors before plan creation.
 
 You do **not** write implementation code.
 You **trace** each logical chain and **find** where the logic breaks.
