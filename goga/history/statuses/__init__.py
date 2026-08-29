@@ -6,4 +6,6 @@ statuses. Pure scale logic — no filesystem probing of topic directories, no
 git access, no CLI, no output rendering.
 """
 
-__all__: list[str] = []
+from .scale import Stage, StatusScale
+
+__all__: list[str] = ["Stage", "StatusScale"]
