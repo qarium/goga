@@ -6,6 +6,8 @@ stages:
     prompt: |
       Architectural design process.
 
+      Use the file `.goga/memory/development.md` as project rules if exists. The file is read only.
+
       Requirements:
       - Annotations describe the high-level order of actions
       - Every usage file is connected through Imports and referenced in annotations
