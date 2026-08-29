@@ -59,7 +59,7 @@ The card and the run share the same workflow rule set and the same compiler, so 
 
 ## Run Mode (`goga pipeline <name>`)
 
-Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; when `-t/--topic` switched the repository onto the hosting branch, the single result line of the switch (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, or `Already on branch <name>`) is echoed once before the launch; otherwise the launcher prints no status line.
+Run a pipeline by name. Pass the bare name only (no `.yml` extension); the container resolves the absolute path internally, compiles the goga DSL pipeline-file into an afm flow-file at `<AFM_DIR>/flow.yml`, materializes the four agent prompt files into `<AFM_DIR>/prompts/` (applying any `roles` overrides from the pipeline-file header — see [Custom agent prompts](#custom-agent-prompts)), and runs that via `afm run`. Passing `-p/--parallel N` caps the number of stages afm executes concurrently (it threads through to `afm run --max-parallel <N>`); without it afm runs unbounded. A free port is allocated automatically and published on both sides (`-p <port>:<port>`); `afm` listens on that port inside the container. When a workflow is applied, a single log line naming it is printed to stdout; when `-t/--topic` brought the repository onto the requested work, the single result line of the topic procedure (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed once before the launch; otherwise the launcher prints no status line.
 
 Pipelines are flat `*.yml` files (one per pipeline) resolved from two directories, with the project source winning on name conflicts:
 
@@ -90,10 +90,11 @@ If the name exists in both sources, the project source wins. The container exit 
 
 ### Topic switch
 
-The run form can first bring the repository onto the branch hosting the requested work — continuing existing work instead of creating fresh work (fresh work belongs to [`goga topics create`](topics.md)):
+The run form can first bring the repository onto the requested work — continuing existing work, or creating fresh work in one command when nothing hosts the identifier:
 
 ```bash
 goga pipeline development -t feat/x
+goga pipeline refinement -t prune-history-and-new-status
 ```
 
 The identifier resolves through three tiers, and the first tier with a match wins (so a non-interactive `-t` never reaches a prompt):
@@ -102,15 +103,16 @@ The identifier resolves through three tiers, and the first tier with a match win
 2. **exact topic slug** — a branch hosting the topic `.goga/history/<YYYY>/<slug>/` whose slug equals the normalized input (lowercase, non-ASCII dropped, anything outside `[a-z0-9]` as `-`, repeat hyphens collapsed, edges trimmed: `Feature/Foo_Bar` → `feature-foo-bar`); local branches come before remote-tracking refs;
 3. **prefix** — a branch whose name, or whose hosted slug, starts with the input.
 
-Within a tier, several candidates may match (a branch chain carries several topics). On an interactive terminal goga prints the numbered list with each candidate's statuses and prompts for a number; with no terminal (CI/scripts) the numbered list itself becomes a clean error and the command exits 1 — no image refresh, build, or launch happens. No candidate at all exits 1 with a hint to `goga topics status`.
+Within a tier, several candidates may match (a branch chain carries several topics). On an interactive terminal goga prints the numbered list with each candidate's statuses and prompts for a number; with no terminal (CI/scripts) the numbered list itself becomes a clean error and the command exits 1 — no image refresh, build, or launch happens. No candidate at all creates fresh work instead of failing: the branch is created with the name as entered, the repository switches to it, and the topic directory of the year is created from its slug (`Created branch <name> and topic <year>/<slug>`). An unusable name — one that normalizes to an empty slug, or one already occupied by an existing branch, a remote-tracking twin, or the topic directory of the year — re-asks on an interactive terminal and exits 1 with the reason otherwise.
 
 The outcome:
 
 - already on the hosting branch → idempotent success, nothing is touched and the working tree is not even probed;
 - a local host → `git switch <branch>`;
-- a remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`).
+- a remote-only host → the local branch is created from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`);
+- nothing hosts the identifier → the branch is created as entered and the topic directory of the year appears (uncommitted changes carry onto the fresh branch, exactly like `goga topics create`).
 
-A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, or `Already on branch <name>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
+A switch that would mutate checks the working tree first: a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched. Every git action happens on the host, after every form check and before any docker activity. The single result line (`Switched to branch <name>`, `Created branch <name> from <remote>/<name>`, `Already on branch <name>`, or `Created branch <name> and topic <year>/<slug>`) is echoed to stdout once, before the launch. The branch name is never forwarded into the container — the container sees the branch through the mounted project, and goga does not switch back after the launch.
 
 The flat list, overview, and card forms silently ignore `-t` — passing it there is not an error and has no effect.
 
@@ -186,7 +188,7 @@ stages:
 | `name` (positional) | string | — | Pipeline name without extension. Selects the card (`--info`) or run form; omit it and pass `--list` for the listing forms. `--list` and a name together are rejected (exit 1) |
 | `-l`, `--list` | flag | off | List available pipelines (flat list). Add `--info` for a one-line description per pipeline |
 | `-i`, `--info` | flag | off | With `--list`: print the overview. With `NAME`: print the pipeline card instead of running it |
-| `-t`, `--topic` | string | — | Bring the repository onto the branch hosting the requested work before the run — a branch name, a topic slug, or their prefix; see [Topic switch](#topic-switch). Run form only — the list/info forms silently ignore it |
+| `-t`, `--topic` | string | — | Bring the repository onto the requested work before the run — a branch name, a topic slug, or their prefix, created fresh when nothing hosts it; see [Topic switch](#topic-switch). Run form only — the list/info forms silently ignore it |
 | `-e`, `--env` | string (repeatable) | — | Additional environment variable (`KEY=VALUE`) forwarded into the container env-file. Run form only |
 | `--proxy` | string | config | HTTP/HTTPS proxy URL; overrides `pipeline.proxy`. Adds `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY=localhost,127.0.0.1` to the container env-file. Run form only |
 | `--add-host` | string (repeatable) | -- | Add a `docker run --add-host HOST:IP` entry; merges on top of `pipeline.hosts` (CLI wins on key conflict). Run form only — the info forms receive the configured `pipeline.hosts` only |
@@ -275,7 +277,7 @@ Host side (all forms):
 | Code | Meaning |
 |------|---------|
 | `0` | The operation completed (container exit 0) |
-| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-switch failure (no branch hosting the identifier, several candidates without a terminal, a dirty working tree, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
+| `1` | A `ClickException`: a form error (bare invocation, `--list` + name, `--workflow` + `--no-workflow`), the `pipeline` section missing in `.goga/config.yml`, an explicit `--workflow <name>` naming a file that does not exist or escaping the workflows dir, a topic-procedure failure (several candidates without a terminal, a dirty working tree on a switch, an unusable — empty-slug or occupied — name without a terminal, a failed `git switch` or ref listing, or a missing git binary — see [Topic switch](#topic-switch)), or a fatal image build/refresh. Or the pre-launch version check refusing the launch (a host–image (major, minor) mismatch, an image that cannot answer the version probe, or an undeterminable host version — a stderr message plus `SystemExit`, see [Pre-launch version check](#pre-launch-version-check)) |
 | other| The container's exit code, propagated unchanged (including the run-mode codes below) |
 
 Container side, run form:

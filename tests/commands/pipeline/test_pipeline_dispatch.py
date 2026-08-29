@@ -8,8 +8,9 @@ These tests pin the click-command contract declared in
 - the ``-t/--topic`` option (run form only): one Option with both forms
   binding the ``topic`` parameter; the guarded topic procedure runs after
   the step-2 validation and before any docker activity, echoes exactly one
-  stdout line — the result line of ``switch_topic`` — and never forwards
-  the topic into a launcher
+  stdout line — the result line of ``ensure_topic`` (a switch, or the
+  creation of fresh work when nothing hosts the identifier) — and never
+  forwards the topic into a launcher
 - proxy resolution: ``--proxy`` wins over ``config.pipeline.proxy``
 - hosts resolution: ``--add-host`` entries merge on top of
   ``config.pipeline.hosts`` (CLI overrides config on key conflict)
@@ -22,7 +23,7 @@ The dispatch target ``run_pipeline_container`` is mocked so these tests stay
 focused on the click surface and the host-side resolution logic, with no docker
 dependency.
 
-The integration block at the bottom drives the REAL ``switch_topic`` from the
+The integration block at the bottom drives the REAL ``ensure_topic`` from the
 topics domain through the real command surface, mocking the domain's git
 boundary at its import points (the same wiring the topics cell tests use), to
 verify the wiring the unit tests mock away.
@@ -44,6 +45,7 @@ from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
 from goga.history import current_year
 from goga.topics import board as topics_board
+from goga.topics import creation as topics_creation
 from goga.topics import switching as topics_switching
 from goga.topics.git import BranchRef
 
@@ -130,7 +132,7 @@ class TestPipelineTopicOptionContract:
         defaults to None, and is a plain string option (click renders the
         declared ``type=str`` as its canonical STRING param type). The callback
         declares ``topic: str | None`` directly after ``info`` (contract
-        order), and ``--topic x NAME`` / ``-t x NAME`` reach ``switch_topic``
+        order), and ``--topic x NAME`` / ``-t x NAME`` reach ``ensure_topic``
         with the same value.
         """
         topic_param = next(p for p in pipeline.params if p.name == "topic")
@@ -149,13 +151,13 @@ class TestPipelineTopicOptionContract:
         for argv in (["--topic", "x", "my-pipeline"], ["-t", "x", "my-pipeline"]):
             with (
                 mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-                mock.patch.object(_pipeline_module, "switch_topic", return_value="Switched to branch x") as mock_switch,
+                mock.patch.object(_pipeline_module, "ensure_topic", return_value="Switched to branch x") as mock_ensure,
                 mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0),
             ):
                 result = runner.invoke(pipeline, argv)
 
             assert result.exit_code == 0
-            mock_switch.assert_called_once_with("x")
+            mock_ensure.assert_called_once_with("x")
 
 
 # --- Logic tests (positive) ---
@@ -312,28 +314,28 @@ class TestPipelineTopicRunForm:
         """The topic procedure runs, echoes its one result line, then the container launches."""
         config = _make_config()
         switch_line = "Switched to branch feat/x"
-        mock_switch = mock.Mock(return_value=switch_line)
+        mock_ensure = mock.Mock(return_value=switch_line)
         mock_run = mock.Mock(return_value=0)
         order = mock.Mock()
-        order.attach_mock(mock_switch, "switch_topic")
+        order.attach_mock(mock_ensure, "ensure_topic")
         order.attach_mock(mock_run, "run_container")
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "switch_topic", mock_switch),
+            mock.patch.object(_pipeline_module, "ensure_topic", mock_ensure),
             mock.patch.object(_pipeline_module, "run_pipeline_container", mock_run),
         ):
             result = runner.invoke(pipeline, ["-t", "feat/x", "development"])
 
         assert result.exit_code == 0
-        # Exactly one topic line on stdout, verbatim from switch_topic.
+        # Exactly one topic line on stdout, verbatim from ensure_topic.
         assert result.stdout.count(switch_line) == 1
-        mock_switch.assert_called_once_with("feat/x")
+        mock_ensure.assert_called_once_with("feat/x")
         mock_run.assert_called_once()
         assert mock_run.call_args.kwargs["name"] == "development"
-        # The switch precedes the docker activity, and the topic identifier
-        # never crosses the docker boundary.
-        assert order.method_calls[0] == mock.call.switch_topic("feat/x")
+        # The topic procedure precedes the docker activity, and the topic
+        # identifier never crosses the docker boundary.
+        assert order.method_calls[0] == mock.call.ensure_topic("feat/x")
         assert order.method_calls[1][0] == "run_container"
         assert "topic" not in mock_run.call_args.kwargs
         assert "feat/x" not in mock_run.call_args.kwargs.values()
@@ -353,13 +355,13 @@ class TestPipelineTopicRunForm:
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
             mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
         ):
             result = runner.invoke(pipeline, argv)
 
         assert result.exit_code == 0
-        mock_switch.assert_not_called()
+        mock_ensure.assert_not_called()
         mock_info.assert_called_once()
         assert "Switched to branch" not in result.stdout
 
@@ -369,14 +371,14 @@ class TestPipelineTopicRunForm:
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
             mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
         ):
             result = runner.invoke(pipeline, ["-t", "x"])
 
         assert result.exit_code == 1
         assert "Missing pipeline name" in result.output
-        mock_switch.assert_not_called()
+        mock_ensure.assert_not_called()
         mock_run.assert_not_called()
 
     def test_pipeline_has_no_branch_option(self) -> None:
@@ -385,12 +387,12 @@ class TestPipelineTopicRunForm:
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
+            mock.patch.object(_pipeline_module, "ensure_topic") as mock_ensure,
         ):
             result = runner.invoke(pipeline, ["-b", "x", "dev"])
 
         assert result.exit_code != 0
-        mock_switch.assert_not_called()
+        mock_ensure.assert_not_called()
 
         help_result = runner.invoke(pipeline, ["--help"])
         assert help_result.exit_code == 0
@@ -415,18 +417,21 @@ def _wire_topic_domain(
     inventory: list[BranchRef],
     trees: dict[str, list[str]],
     current: str | None,
-) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
-    """Wire the REAL ``switch_topic`` to a canned git boundary.
+) -> tuple[mock.Mock, mock.Mock, mock.Mock, mock.Mock]:
+    """Wire the REAL ``ensure_topic`` to a canned git boundary.
 
     The resolution reads the scale, the ref inventory, the ref trees, and the
     current branch at their import points inside the topics domain (the same
     points the domain's own tests patch); the mutations are recording mocks.
-    Only the topics facade stays real — exactly the wiring ``pipeline`` relies
-    on through ``from ...topics import switch_topic``.
+    The creation fallback of ``ensure_topic`` runs the REAL ``create_topic``,
+    so the creation module's git boundary is wired the same way. Only the
+    topics facade stays real — exactly the wiring ``pipeline`` relies on
+    through ``from ...topics import ensure_topic``.
 
     Returns:
-        The cleanliness probe, the local checkout, and the remote-tracking
-        branch creation — all as recording mocks.
+        The cleanliness probe, the local checkout, the remote-tracking branch
+        creation, and the create-and-switch mutation of the creation fallback
+        — all as recording mocks.
     """
     monkeypatch.setattr(topics_switching, "assemble_status_scale", _builtin_scale)
     monkeypatch.setattr(topics_switching, "list_branch_refs", lambda: inventory)
@@ -435,11 +440,16 @@ def _wire_topic_domain(
 
     cleanliness = mock.Mock(return_value=True)
     checkout = mock.Mock()
-    creation = mock.Mock()
+    remote_creation = mock.Mock()
     monkeypatch.setattr(topics_switching, "is_working_tree_clean", cleanliness)
     monkeypatch.setattr(topics_switching, "checkout_local_branch", checkout)
-    monkeypatch.setattr(topics_switching, "create_branch_from_remote_tracking", creation)
-    return cleanliness, checkout, creation
+    monkeypatch.setattr(topics_switching, "create_branch_from_remote_tracking", remote_creation)
+
+    monkeypatch.setattr(topics_creation, "list_branch_refs", lambda: inventory)
+    monkeypatch.setattr(topics_creation, "resolve_current_branch_name", lambda: current)
+    create_and_switch = mock.Mock()
+    monkeypatch.setattr(topics_creation, "create_and_switch_branch", create_and_switch)
+    return cleanliness, checkout, remote_creation, create_and_switch
 
 
 def _builtin_scale():
@@ -461,7 +471,7 @@ def _builtin_scale():
 
 
 class TestPipelineTopicIntegration:
-    """Cross-entity: the real ``switch_topic`` from the topics domain through the real command.
+    """Cross-entity: the real ``ensure_topic`` from the topics domain through the real command.
 
     Only the domain's git boundary is canned, so these tests verify the wiring
     the unit tests mock away: the ``from ...topics import`` path, the run-form
@@ -478,7 +488,7 @@ class TestPipelineTopicIntegration:
             BranchRef(name="feat/a", remote=False),
         ]
         trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
-        _cleanliness, checkout, _creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
+        _cleanliness, checkout, _remote, _fresh = _wire_topic_domain(monkeypatch, inventory, trees, "main")
 
         config = _make_config()
         runner = CliRunner()
@@ -505,7 +515,9 @@ class TestPipelineTopicIntegration:
         year = current_year()
         inventory = [BranchRef(name="feat/a", remote=False)]
         trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
-        cleanliness, checkout, creation = _wire_topic_domain(monkeypatch, inventory, trees, "feat/a")
+        cleanliness, checkout, remote_creation, fresh_creation = _wire_topic_domain(
+            monkeypatch, inventory, trees, "feat/a"
+        )
 
         config = _make_config()
         runner = CliRunner()
@@ -519,33 +531,39 @@ class TestPipelineTopicIntegration:
         assert "Already on branch feat/a" in result.stdout
         cleanliness.assert_not_called()
         checkout.assert_not_called()
-        creation.assert_not_called()
+        remote_creation.assert_not_called()
+        fresh_creation.assert_not_called()
         assert mock_run.call_count == 1
 
-    def test_pipeline_topic_unresolved_identifier_aborts_before_docker(
+    def test_pipeline_topic_unresolved_identifier_creates_and_launches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """An unresolved identifier: clean failure on stderr, exit 1, nothing launches."""
+        """An identifier nothing hosts: fresh work is created — the branch as
+        entered, the topic directory of the year — the creation line prints,
+        and the launcher runs topic-free."""
         monkeypatch.chdir(tmp_path)
         year = current_year()
         inventory = [BranchRef(name="main", remote=False)]
         trees = {"main": [f".goga/history/{year}/other/prd.md"]}
-        cleanliness, checkout, _creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
+        _cleanliness, checkout, _remote, fresh_creation = _wire_topic_domain(
+            monkeypatch, inventory, trees, "main"
+        )
 
         config = _make_config()
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
             result = runner.invoke(pipeline, ["-t", "nope", "my-pipeline"])
 
-        assert result.exit_code == 1
-        assert "no branch hosts 'nope'" in result.stderr
-        assert "goga topics status" in result.stderr
-        cleanliness.assert_not_called()
+        assert result.exit_code == 0
+        assert f"Created branch nope and topic {year}/nope" in result.stdout
+        fresh_creation.assert_called_once_with("nope")
         checkout.assert_not_called()
-        mock_run.assert_not_called()
+        assert (tmp_path / ".goga" / "history" / year / "nope").is_dir()
+        assert mock_run.call_count == 1
+        assert "topic" not in mock_run.call_args.kwargs
 
 
 class TestPipelineCallbackSignature:

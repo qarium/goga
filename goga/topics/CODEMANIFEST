@@ -54,10 +54,12 @@ Annotations: |
   This cell owns the topics domain — the work-tracker view of the history
   tree: the cross-branch topic inventory of one year with per-topic
   statuses, the switch-identifier resolution and switching orchestration,
-  and the fresh-work creation procedure. Topic identity, addressing, and
-  statuses belong to the history facade; git access belongs to the topics
-  git cell. Mutations are local-only and happen strictly after every
-  decision is made. Use relative imports.
+  the fresh-work creation procedure, and the combined ensure orchestration
+  that switches onto hosted work and creates it when nothing hosts the
+  identifier. Topic identity, addressing, and statuses belong to the
+  history facade; git access belongs to the topics git cell. Mutations are
+  local-only and happen strictly after every decision is made. Use
+  relative imports.
 
 ---
 
@@ -248,6 +250,46 @@ Annotations: |
       belongs to the pipeline itself
     - Do not return to the previous branch — the switch is the outcome
 
+"ensure_topic(identifier: str, year: str | None = None) -> result: str":
+  location: switching.py
+  annotations: |
+    Bring the repository onto the requested work, creating it when nothing
+    hosts the identifier.
+
+    `identifier`: the user input — a branch name, a topic slug, or their
+                 prefix
+    `year`: optional year as four digits; None means the current year
+    `result`: one line describing the outcome
+
+    Apply the `click` practice for the interactive moments inherited from
+    the two orchestrations: the numbered candidate selection and the
+    creation re-ask cycle with the non-interactive detection.
+    Apply the `topic-paths` practice for the slug and topic-directory
+    patterns of the creation fallback.
+    Apply the `refs-and-switching` practice for the checkout and
+    create-and-switch patterns.
+
+    Algorithm:
+    1. Resolve the candidates via `resolve_switch_candidates`
+    2. No candidate -> create fresh work via `create_topic` with
+       `identifier` as the branch name — the occupancy oracles, the re-ask
+       cycle, and the idempotent current-branch success belong to it
+    3. Otherwise -> the switch procedure: the candidate choice, the
+       idempotent already-on-host confirmation, the cleanliness probe, and
+       the local checkout or the remote-tracking branch creation
+
+    Requirements:
+    - Creation happens only at zero candidates — a resolvable identifier
+      never creates anything
+    - The result is exactly one line
+    - Every mutation is local — no network, no fetch, no push
+
+    Constraints:
+    - Do not alter the switch-only contract of `switch_topic` — the topics
+      switch command keeps its stricter behavior
+    - Do not manage the stages of the hosting pipeline — continuation
+      belongs to the pipeline itself
+
 "create_topic(branch_name: str, year: str | None = None) -> result: str":
   location: creation.py
   annotations: |
@@ -333,4 +375,5 @@ Author: Goga
 CreatedAt: 29/08/26
 Description: |
   The topics domain — the cross-branch topic inventory, switch resolution
-  and orchestration, and fresh-work creation.
+  and orchestration, fresh-work creation, and the combined ensure
+  orchestration that switches onto hosted work or creates it.

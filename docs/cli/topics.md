@@ -72,7 +72,7 @@ IDENTIFIER resolves through three tiers — the first tier with a match wins, so
 - A local host is checked out (`git switch <branch>`); a remote-only host creates the local branch from the remote-tracking ref (`git switch -c <branch> <remote>/<branch>`, reported as `Created branch <branch> from <remote>/<branch>`).
 - A switch that would mutate first probes the working tree; a dirty tree exits 1 with `working tree is dirty — commit or stash before switching` before anything is touched.
 
-The same resolution backs `goga pipeline <name> -t <identifier>` (see [pipeline](pipeline.md#topic-switch)).
+The same resolution backs the switch half of `goga pipeline <name> -t <identifier>` — there, an identifier nothing hosts creates fresh work instead of failing (see [pipeline](pipeline.md#topic-switch)).
 
 ## Exit Codes
 

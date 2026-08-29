@@ -1,8 +1,7 @@
 # topics — switching and continuation
 
 How to move the repository onto existing work with the `goga.topics`
-facade. For consumers that resume work: the topics switch command, the
-pipeline run form.
+facade. For consumers that resume work: the topics switch command.
 
 `switch_topic` resolves the identifier, chooses among candidates, and
 performs the switch. Resolution tries three tiers in order — exact branch

@@ -1,8 +1,8 @@
 Imports:
   - Types:
-      - switch_topic
+      - ensure_topic
     Usages:
-      - switching
+      - ensuring
     From: goga/topics
   - Types:
       - ProjectConfig
@@ -114,15 +114,17 @@ Annotations: |
   probe.
 
   The optional -t/--topic flag moves the repository onto the requested work
-  before the run form launches: the identifier resolves through `switch_topic`
-  — an exact branch name, an exact topic slug, or their prefix — and the
-  switch completes before any docker activity. The procedure runs after the
-  argument-form validation. The listing and info forms silently skip the
-  whole topic procedure.
+  before the run form launches: the identifier resolves through `ensure_topic`
+  — an exact branch name, an exact topic slug, or their prefix — and, when
+  nothing hosts it, fresh work is created: the branch named as entered and
+  the topic directory of the year. The switch or creation completes before
+  any docker activity. The procedure runs after the argument-form
+  validation. The listing and info forms silently skip the whole topic
+  procedure.
 
-  Use the `switching` practice for the consumer patterns of the topics
+  Use the `ensuring` practice for the consumer patterns of the topics
   facade used by the topic procedure — the identifier resolution and the
-  switch orchestration.
+  switch-or-create orchestration.
   Use the `git` practice for the git identity read into the container
   env-file.
   Use the `click` practice for the -t/--topic option: a long form and a
@@ -137,7 +139,8 @@ Annotations: |
     launches the goga Docker container and invokes the in-container
     entrypoint inside it; the host never reads pipeline files directly. The
     optional -t/--topic flag moves the repository onto the requested work
-    before the run form starts.
+    before the run form starts — creating it when nothing hosts the
+    identifier.
 
     `ctx`: Click execution context, used to propagate exit codes (per the
            `click` practice)
@@ -152,9 +155,11 @@ Annotations: |
              and a short alias on a single click option) — a branch name, a
              topic slug, or their prefix; the year scope is always the
              current year. Run form only: brings the repository onto the
-             hosting branch via `switch_topic` before any docker activity.
-             Silently ignored in the flat list, overview, and card forms —
-             not an error.
+             requested work via `ensure_topic` before any docker activity —
+             switching onto the hosting branch, or creating fresh work (the
+             branch named as entered and the topic directory of the year)
+             when nothing hosts the identifier. Silently ignored in the
+             flat list, overview, and card forms — not an error.
     `extra_env`: raw KEY=VALUE strings from the repeatable -e/--env option,
             forwarded into the container env-file in the run form only.
     `proxy`: optional HTTP/HTTPS proxy URL from the --proxy option; when
@@ -210,15 +215,19 @@ Annotations: |
             a clean error (exit 1)
     3. Topic procedure (run form only — `name` given, `list_requested`
        False, `topic` given): bring the repository onto the requested work
-       via `switch_topic`. When the procedure switched — or confirmed the
-       repository already on the host — echo the single result line to
-       stdout once, immediately after the topic procedure and before the
-       step-4 dispatch; the forms that skip the procedure print no topic
-       line. Every git action happens on the host before any docker
-       activity. An unresolved identifier or a dirty working tree aborts
-       the command with a non-zero exit before any image refresh, build, or
-       launch. The flat list, overview, and card forms skip the procedure
-       silently — passing -t there is not an error and has no effect.
+       via `ensure_topic` — a switch onto the hosting branch when one
+       hosts the identifier, or the creation of fresh work (the branch
+       named as entered and the topic directory of the year) when nothing
+       does. Echo the single result line to stdout once, immediately after
+       the topic procedure and before the step-4 dispatch; the forms that
+       skip the procedure print no topic line. Every git action happens on
+       the host before any docker activity. Several candidates without an
+       interactive terminal, a dirty working tree on a switch mutation, or
+       an unusable (empty-slug) or occupied name without a terminal aborts
+       the command with a non-zero exit before any image refresh, build,
+       or launch. The flat list, overview, and card forms skip the
+       procedure silently — passing -t there is not an error and has no
+       effect.
     4. Dispatch by form:
        - flat list — `run_pipeline_info_container` with name=None,
          info=False; `update` applies (image refresh before the listing)
@@ -240,8 +249,10 @@ Annotations: |
     - Register -t/--topic with both forms on a single click Option — both
       bind the `topic` parameter identically
     - When the topic procedure ran, echo exactly one stdout line — the
-      result line of `switch_topic` — before the launch; no topic line in
-      the flat list, overview, and card forms
+      result line of the topic procedure (a switch, a branch created from
+      a remote-tracking ref, the already-on-host confirmation, or the
+      fresh-work creation) — before the launch; no topic line in the
+      flat list, overview, and card forms
     - Every step-2 check runs before any git or docker activity — an
       argument-form error never switches a branch, refreshes, builds, or
       launches an image
@@ -762,6 +773,6 @@ Description: |
   the flat list, the overview, the card, and the run — launches the goga
   Docker container and invokes the in-container pipeline entrypoint inside
   it; the run form can first bring the repository onto the requested work
-  (the -t/--topic switch) on the host. The runtime boundary to the
-  in-container pipeline is docker — this cell has no Python Type Imports
-  from it.
+  (the -t/--topic switch-or-create) on the host. The runtime boundary to
+  the in-container pipeline is docker — this cell has no Python Type
+  Imports from it.

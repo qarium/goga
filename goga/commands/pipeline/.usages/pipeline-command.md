@@ -25,7 +25,7 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 |---|---|---|
 | -l / --list | flag | select the listing forms |
 | -i / --info | flag | show instead of act (overview with --list, card with NAME) |
-| -t / --topic ID | str | bring the repository onto the requested work (branch name, topic slug, or prefix) before the run; run form only |
+| -t / --topic ID | str | bring the repository onto the requested work (branch name, topic slug, or prefix) before the run, creating it when nothing hosts it; run form only |
 | -w / --workflow NAME | str | apply an explicit workflow (run and card); the file must exist (early host validation) |
 | --no-workflow | flag | disable workflow resolution (run and card) |
 | -p / --parallel N | int | max concurrently executing stages; run only |
@@ -33,17 +33,22 @@ exit 1). `--info` is a modifier, not a mode: without a name and without
 | -c / --clean | flag | wipe persistent afm state before launch; run only |
 | -u / --update | flag | refresh the image before the flat list and the run; no-op in the info forms |
 
-## Continuing existing work
+## Continuing or starting work
 
     goga pipeline development --topic history-com
     goga pipeline development -t release-1-3-0
+    goga pipeline refinement -t prune-history-and-new-status
 
-Brings the repository onto the branch hosting the requested work — an exact
-branch name, an exact topic slug, or their prefix — and then launches the
-usual run. The switch completes on the host before any docker activity; a
-repeated invocation already on the host continues without switching. The
-flat list, overview, and card forms silently ignore -t. An unresolved
-identifier or a dirty working tree is a clean error before any launch.
+Brings the repository onto the requested work — an exact branch name, an
+exact topic slug, or their prefix — and then launches the usual run. When
+nothing hosts the identifier, fresh work is created instead: the branch
+named as entered and the topic directory of the year
+(`Created branch <name> and topic <year>/<slug>`). The switch or creation
+completes on the host before any docker activity; a repeated invocation
+already on the host continues without switching. The flat list, overview,
+and card forms silently ignore -t. Several candidates without a terminal, a
+dirty working tree on a switch, or an unusable (empty-slug) or occupied
+name without a terminal is a clean error before any launch.
 
 ## Flag behavior in the list/info forms
 
@@ -76,7 +81,7 @@ The user never authors the docker -p.
 ## Threading chains
 
     goga pipeline NAME            → run (full shape)
-    goga pipeline NAME -t feat/x  → switch_topic(feat/x) → run (full shape)
+    goga pipeline NAME -t feat/x  → ensure_topic(feat/x) → run (full shape)
     goga pipeline --list          → minimal shape: list
     goga pipeline --list --info   → minimal shape: list --info
     goga pipeline NAME --info     → minimal shape: run NAME --info [-w WF | --no-workflow]

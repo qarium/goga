@@ -597,7 +597,7 @@ class TestPipelineDispatchForms:
 # two container launchers, and the two runtime-dir helpers (declared since the
 # cell existed, exported since release 1.3.0; the slug transformer and the
 # current-branch reader belong to goga.history, and the topic procedure
-# delegates to goga.topics.switch_topic — neither is re-exported from this
+# delegates to goga.topics.ensure_topic — neither is re-exported from this
 # facade; the former branch routines moved to the topics domain in release
 # 1.4.0 and are gone from this cell entirely).
 _PIPELINE_FACADE_ALL = [
@@ -657,7 +657,7 @@ class TestCommandsFacadeExportsInfoLauncher:
         """The retired branch routines are gone from the facade and the package.
 
         The branch procedure was replaced by the topic procedure
-        (-t/--topic via ``switch_topic`` from the topics domain): neither
+        (-t/--topic via ``ensure_topic`` from the topics domain): neither
         ``ensure_pipeline_branch`` nor ``check_branch_occupancy`` is defined
         on the facade, listed in ``__all__``, or importable as a module of
         this cell.
@@ -671,15 +671,15 @@ class TestCommandsFacadeExportsInfoLauncher:
         assert "goga.commands.pipeline.branch" not in sys.modules
 
     def test_cell_facade_topic_procedure_imports_from_topics_domain(self) -> None:
-        """The command module binds ``switch_topic`` from the topics facade.
+        """The command module binds ``ensure_topic`` from the topics facade.
 
         The single identity the topic procedure runs through — the ``from
-        ...topics import switch_topic`` import-point the command's own
+        ...topics import ensure_topic`` import-point the command's own
         dispatch relies on.
         """
-        from goga.topics import switch_topic as from_domain
+        from goga.topics import ensure_topic as from_domain
 
-        assert _pipeline_module.switch_topic is from_domain
+        assert _pipeline_module.ensure_topic is from_domain
 
     def test_commands_facade_info_launcher_is_importable_by_name(self) -> None:
         """The consumer form ``from goga.commands.pipeline import run_pipeline_info_container`` works."""

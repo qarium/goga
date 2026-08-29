@@ -85,6 +85,7 @@ class TestCreationContract:
             "check_branch_occupancy",
             "collect_topic_board",
             "create_topic",
+            "ensure_topic",
             "resolve_switch_candidates",
             "switch_topic",
         }

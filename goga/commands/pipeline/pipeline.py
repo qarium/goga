@@ -6,7 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
-from ...topics import switch_topic
+from ...topics import ensure_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
 
@@ -35,8 +35,9 @@ from .run_pipeline_info_container import run_pipeline_info_container
     "topic",
     type=str,
     default=None,
-    help="Bring the repository onto the requested work before the run "
-    "(branch name, topic slug, or prefix; run form only)",
+    help="Bring the repository onto the requested work before the run, "
+    "creating it when nothing hosts it (branch name, topic slug, or prefix; "
+    "run form only)",
 )
 @click.option(
     "-e",
@@ -131,7 +132,8 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     stages in execution order) without running anything.
 
     With -t/--topic: bring the repository onto the requested work (a branch
-    name, a topic slug, or their prefix) before the run.
+    name, a topic slug, or their prefix) before the run — creating it when
+    nothing hosts the identifier.
 
     All forms launch the goga Docker container and delegate there — the host
     never reads pipeline files directly.
@@ -205,16 +207,17 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     # Step 3 — topic procedure (run form only: `name` given, no --list, no
     # --info, and -t/--topic given). Every git action happens here on the
     # host, AFTER every step-2 form check and BEFORE any docker activity — a
-    # form error or a switching error never refreshes, builds, or launches an
+    # form error or a topic error never refreshes, builds, or launches an
     # image. The flat list, overview, and card forms skip the procedure
     # silently: passing -t there is not an error and has no effect. The single
-    # result line of `switch_topic` (a switch, a fresh branch created from a
-    # remote-tracking ref, or the already-on-host confirmation) is echoed to
-    # stdout exactly once, immediately after the procedure and before the
-    # dispatch — and never forwarded into a launcher: the container sees the
-    # branch through the mounted project.
+    # result line of `ensure_topic` (a switch, a fresh branch created from a
+    # remote-tracking ref, the already-on-host confirmation, or the creation
+    # of fresh work — branch plus topic directory — when nothing hosts the
+    # identifier) is echoed to stdout exactly once, immediately after the
+    # procedure and before the dispatch — and never forwarded into a launcher:
+    # the container sees the branch through the mounted project.
     if topic is not None and name is not None and not list_requested and not info:
-        line = switch_topic(topic)
+        line = ensure_topic(topic)
         click.echo(line)
 
     # Step 4 — dispatch. The info forms receive hosts from the config ONLY:
