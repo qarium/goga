@@ -624,7 +624,7 @@ Annotations: |
       `WorkflowDocument` whose stages map carries only the skip entries (prompt
       None, extend empty); skip applies to a workflow-less pipeline
     - Construct `WorkflowStage` with skip=True and all other fields at their
-      defaults
+      defaults — notes stays None (the model field default)
     - Stage-name validation is NOT performed here — the compiler's strict check
       raises a structural error on a name absent from the pipeline body; this
       routine stays declarative

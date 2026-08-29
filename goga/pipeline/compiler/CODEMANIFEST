@@ -76,9 +76,9 @@ Annotations: |
   responsibility, not this cell's.
 
   Canonical `FlowStage` fields key order: interactive, auto_approve, auto_run,
-  command, prompt, description, agents, supervisor, supervisor_prompt, skills,
-  script_before, script, script_after, script_timeout, then alphabetically-
-  sorted unknown keys. command is populated from the agent
+  command, prompt, description, buttons, agents, supervisor, supervisor_prompt,
+  skills, script_before, script, script_after, script_timeout, then
+  alphabetically-sorted unknown keys. command is populated from the agent
   field of `WorkflowStage` (composed as /home/goga/bin/AGENT-as-claude.sh);
   description is populated from the prompt field of `WorkflowStage`. Both
   are independent channels — pipeline-file prompt and workflow-file prompt
@@ -258,6 +258,21 @@ Annotations: |
   runs before this pass — a skipped stage never reaches the manual application.
   Loop-expanded copies carry the stage's effective trigger, so every copy of a
   manual stage assembles auto_run: false.
+
+  Workflow notes instruction: when the workflow stages block carries notes
+  for a stage (a map of note name → prompt text on `WorkflowStage`), the
+  compiler assembles the per-stage buttons field of the flow-file in the
+  canonical slot immediately after description; the map passes through
+  verbatim — keys and values unchanged. An authoring buttons key in a stage
+  body (pipeline-file stage OR embedded extend-stage) is a structural error
+  "buttons key is forbidden in stage body; use notes in workflow.stages" —
+  buttons are authored ONLY through the workflow notes instruction (a single
+  authoring source; no collisions). The instruction applies per stage name to
+  embedded extend-stages as well; loop-expanded copies carry the same buttons;
+  a skipped stage never reaches the application (skip removal runs first).
+  Interpretation of the buttons belongs to afm — the compiler only assembles
+  and serializes the field. Output-side only — `PipelineDocument` stays the
+  faithful mirror of the source pipeline-file.
 
   Stage script directives: before_script, script, after_script are string
   stage-body directives translated to script_before, script, script_after (the
@@ -564,10 +579,13 @@ Annotations: |
     `depends_on`: predecessor step ids, or None. None produces no depends_on
                   key in output; an empty list produces depends_on [].
     `fields`: extra step fields in canonical key order (interactive,
-              auto_approve, auto_run, command, prompt, description, agents,
-              supervisor, supervisor_prompt, skills, script_before, script,
-              script_after, script_timeout, then alphabetically-sorted
+              auto_approve, auto_run, command, prompt, description, buttons,
+              agents, supervisor, supervisor_prompt, skills, script_before,
+              script, script_after, script_timeout, then alphabetically-sorted
               unknown keys).
+              buttons (map of str→str) is present only when the workflow
+              supplied a non-empty notes instruction for the stage — the map
+              passes through verbatim.
               auto_run (bool) is present only when the stage's effective
               trigger is manual — the value is always False; auto_run: true
               is never assembled. script_before/script/script_after (str)
@@ -620,9 +638,11 @@ Annotations: |
       Predecessor step ids, or None when absent.
     "fields -> dict[str, Any]": |
       Extra fields in canonical key order: interactive, auto_approve,
-      auto_run, command, prompt, description, agents, supervisor,
+      auto_run, command, prompt, description, buttons, agents, supervisor,
       supervisor_prompt, skills, script_before, script, script_after,
-      script_timeout, then alphabetically-sorted unknown keys. auto_approve
+      script_timeout, then alphabetically-sorted unknown keys. buttons
+      (map of str→str) is present only when the workflow supplied a
+      non-empty notes instruction for the stage. auto_approve
       (bool) is present only when the effective approve directive drives the
       roles effect ("auto"/"dialog") + planner-in-roles fired; auto_run (bool)
       is present only when the stage's effective trigger is manual — the value
@@ -805,8 +825,8 @@ Annotations: |
     2. For each `FlowStage` in `doc`, build a representation in canonical
        key order: id, name, then the stage fields as-is (already in
        canonical order — interactive, auto_approve, auto_run, command,
-       prompt, description, agents, supervisor, supervisor_prompt, skills,
-       script_before, script, script_after, script_timeout, then
+       prompt, description, buttons, agents, supervisor, supervisor_prompt,
+       skills, script_before, script, script_after, script_timeout, then
        alphabetically-sorted unknown keys), then depends_on when it is not
        None. The serializer does NOT reorder — canonical order is fixed at
        `FlowStage` assembly
@@ -816,7 +836,10 @@ Annotations: |
        plain bool scalars; script_before / script / script_after as plain
        scalars when single-line and block-literal scalars when multi-line;
        script_timeout as a plain scalar when single-line and a block-literal
-       scalar when multi-line (the script-family pattern)
+       scalar when multi-line (the script-family pattern); buttons values:
+       single-line text — a plain scalar (quoted as needed), multi-line text
+       — a block-literal scalar; the buttons map itself is emitted as a
+       regular block-style mapping
     4. Ensure the result ends with a single trailing newline
     5. Return the string
 
@@ -828,7 +851,7 @@ Annotations: |
       when present), optional root_dir (second, when supplied), then
       fixed top-level key order (name, description, stages), canonical
       per-stage key order (including auto_approve, auto_run, command,
-      description, and script_before/script/script_after/script_timeout),
+      description, buttons, and script_before/script/script_after/script_timeout),
       flow-style for agents, block-style for skills and depends_on,
       auto_approve and auto_run as plain bool scalars, single trailing newline
     - When `doc` prompt is None — the output omits the prompt key
@@ -847,6 +870,9 @@ Annotations: |
       auto_run serializes only as auto_run: false
     - a stage without an authored timeout serializes without the
       script_timeout key
+    - buttons values: single-line text as a plain scalar (quoted as needed),
+      multi-line text as a block-literal scalar; a stage without a buttons key
+      serializes without it (byte-identical output for notes-free pipelines)
 
     Constraints:
     - Do not reorder keys — the fields order is the caller's responsibility
@@ -1091,6 +1117,13 @@ Annotations: |
                   error "manual: false on non-manual stage <NAME>"
                 The rewrite targets the working body copy only — the original
                 parsed body and PipelineDocument stay untouched
+              - effective notes = the stages-block notes for this name (None
+                when the entry provides no notes key or the name has no
+                entry). The extend-seeded branch carries notes=None — notes
+                has no inline extend equivalent (notes in an extend-entry is
+                rejected by the workflow parser). An overlay merge passes the
+                notes field explicitly — an overlay that omitted it would
+                silently drop the instruction
        4.6. Build a new ordered list of steps with loop-expansion applied —
            expands an extend-stage when the effective
            loop for that name is >= 2 (producing NAME-1..N):
@@ -1159,6 +1192,12 @@ Annotations: |
          prompt/skills in stage <name>" (every stage, incl. loop-expanded
          copies; same pass as the agents/interactive-forbidden checks).
          before_script/after_script do NOT trigger the error
+       - In both branches, BEFORE assembling fields, check the
+         authoring-buttons prohibition: an authoring buttons key in a stage
+         body (pipeline-file stage OR embedded extend-stage) raises a
+         structural error "buttons key is forbidden in stage body; use notes
+         in workflow.stages" (same pass as the agents/interactive-forbidden
+         checks)
        - In both branches, BEFORE canonical ordering, inject default stage
          fields when the source step body has no usable roles value
          (missing key, explicit null, or empty list): set agents to
@@ -1231,12 +1270,18 @@ Annotations: |
          emitted. The authoring trigger key is consumed by the translation —
          it never reaches the output as an unknown key. Uniform across every
          loop-expanded copy
+       - Workflow notes translation: when the effective notes for the stage is
+         not None — assemble buttons (the map verbatim, keys and values
+         unchanged) into the fields canonical slot immediately after
+         description; uniform across every loop-expanded copy. A stage without
+         an effective notes assembles NO buttons key. Output-side only — the
+         source bodies and PipelineDocument stay untouched
        - In both branches, assemble the fields of each `FlowStage` in the
          EXTENDED canonical key order (interactive, auto_approve, auto_run,
-         command, prompt, description, agents, supervisor, supervisor_prompt,
-         skills, script_before, script, script_after, script_timeout, then
-         alphabetically-sorted unknown keys), copying from the
-         (defaults-injected) step body.
+         command, prompt, description, buttons, agents, supervisor,
+         supervisor_prompt, skills, script_before, script, script_after,
+         script_timeout, then alphabetically-sorted unknown keys), copying
+         from the (defaults-injected) step body.
          auto_approve (bool) is present only when the effective approve
          directive drives the roles effect ("auto"/"dialog") + planner-in-roles
          fired; script_before / script / script_after / script_timeout (str)
@@ -1293,7 +1338,9 @@ Annotations: |
       injected INTO the body at step 4.5 before this assembly, so a single
       body dict is the sole source for fields. Pipeline-file fields
       and workflow-injected fields coexist in the same dict without
-      merging or collision
+      merging or collision. The ONE exception is buttons: assembled from
+      the effective notes only, never threaded into the body (the
+      authoring-buttons prohibition closes that channel)
     - Unknown stage names in workflow.stages (names absent from both the
       original body and the extend-stages) raise a structural error
       "unknown stage name in workflow.stages: <name>";
@@ -1421,9 +1468,9 @@ Annotations: |
     - script together with prompt and/or skills is a structural error
       "script is mutually exclusive with prompt/skills in stage <name>";
       before_script/after_script are compatible (no error)
-    - auto_approve, script_before, script, and script_after appear only when
-      their source directive is present; flow-files without those directives
-      carry none of these keys
+    - auto_approve, buttons, script_before, script, and script_after appear
+      only when their source directive is present; flow-files without those
+      directives carry none of these keys
     - trigger (when present in a stage body or extend body) must be exactly
       on_success or manual; any other value (including on_failure) is a
       structural error "trigger must be one of: on_success, manual"
@@ -1451,6 +1498,19 @@ Annotations: |
     - script_timeout occupies the canonical fields slot immediately after
       script_after — a pipeline without timeout compiles byte-identically
       (no script_timeout key anywhere)
+    - buttons is authored ONLY via the workflow stages-block notes instruction;
+      an authoring buttons key in a stage body (pipeline-file stage or
+      extend-stage body) is a structural error raised by `compile_flow`
+    - a non-None effective notes assembles the stage's buttons field (the map
+      verbatim) in the canonical slot immediately after description; every
+      loop-expanded copy carries the same buttons
+    - a stage without an effective notes assembles no buttons key — a pipeline
+      without notes compiles byte-identically (no buttons key anywhere)
+    - notes on an extend-stage name applies (embedded before validation); a
+      name absent from both the original body and the extend-stages raises the
+      existing structural error "unknown stage name in workflow.stages: <name>"
+    - buttons is output-side only — `PipelineDocument` and the source bodies
+      are never affected
 
     Constraints:
     - Do not read AFM_DIR or any environment variable — `flow_path` is
@@ -1534,7 +1594,7 @@ Annotations: |
       `FlowStage` field only
     - Canonical key order is fixed at `FlowStage` assembly — the full
       order (interactive, auto_approve, auto_run, command, prompt,
-      description, agents, supervisor, supervisor_prompt, skills,
+      description, buttons, agents, supervisor, supervisor_prompt, skills,
       script_before, script, script_after, script_timeout, then
       alphabetically-sorted unknown keys)
     - Do not leak auto_approve or script_* into `PipelineDocument` — they
@@ -1548,6 +1608,17 @@ Annotations: |
     - Do not mutate the original parsed body when applying manual — the
       rewrite lives on the working copy; PipelineDocument carries the source
       bodies
+    - Do not interpret the buttons — the runtime meaning belongs to afm; the
+      compiler only assembles and serializes the field
+    - Do not let an authoring buttons key pass through to output as an unknown
+      key — it is rejected as a structural error
+    - Do not apply notes to a skipped stage — skip removal runs before the
+      override pass
+    - Do not thread the effective notes into the (working) stage body — unlike
+      the command/description overrides, buttons are assembled into `FlowStage`
+      fields directly from the effective-notes value; the body channel is closed
+      by the authoring-buttons prohibition (an injected key would trip the
+      step-5 check)
 
 "translate_role(role: str) -> name: str":
   location: compile_flow.py

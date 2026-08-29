@@ -8,7 +8,7 @@ and detects the body format, applies per-stage workflow overrides + loop-expansi
 ## Stage-body field translation (canonical order)
 
 Output FlowStage fields, canonical order:
-interactive, auto_approve, auto_run, command, prompt, description, agents, supervisor,
+interactive, auto_approve, auto_run, command, prompt, description, buttons, agents, supervisor,
 supervisor_prompt, skills, script_before, script, script_after, script_timeout, <unknown A-Z>.
 
 Authoring key → output key (the authoring key is consumed, not passed through):
@@ -18,6 +18,8 @@ Authoring key → output key (the authoring key is consumed, not passed through)
 - script → script
 - after_script → script_after
 - timeout → script_timeout (verbatim str; requires script; omitempty)
+- notes (workflow.stages.<name>) → buttons (map verbatim; slot right after
+  description; omitempty)
 - roles → agents (via translate_role; default ["auto"] when absent/empty). In a body
   carrying `script`, NO agents key is emitted at all (afm rejects the combination) —
   neither the default nor a translated roles value — while the roles elements are still
@@ -57,6 +59,30 @@ Interactions:
 - `skip: true` wins — the stage is removed entirely; trigger/manual never apply
 - loop-expansion: every copy of a manual stage carries `auto_run: false`
 - `PipelineDocument` is unaffected (output-side only; source bodies never mutated)
+
+## notes (workflow directive: map str→str) → buttons (flow-file)
+
+`notes` is a per-stage workflow instruction carrying note buttons — a map of
+"note name → prompt text". The compiler translates it into the afm per-stage
+key `buttons`.
+
+- authoring source is SINGLE: `workflow.stages.<name>.notes`. An authoring
+  `buttons` key in a stage body (pipeline-file stage or extend-stage body) is a
+  structural error — "buttons key is forbidden in stage body; use notes in
+  workflow.stages"
+- a non-empty notes map assembles `buttons` (the map verbatim — keys and values
+  unchanged) into the canonical slot immediately after `description`
+- `notes: {}` (empty map) equals absence — no `buttons` key in the output
+- `notes` applies per stage name to extend-stages as well (note buttons of a new
+  stage are authored as `stages.<new-stage-name>.notes`; `notes` in an
+  extend-entry is rejected by the workflow parser)
+- loop-expanded copies carry the same `buttons`
+- `skip: true` wins — the stage is removed before the notes application
+- a name absent from both the pipeline body and the extend-stages raises the
+  existing structural error "unknown stage name in workflow.stages: <name>"
+- `PipelineDocument` is unaffected (output-side only; source bodies never mutated)
+- interpretation of the buttons belongs to afm — the compiler only assembles and
+  serializes the field
 
 ## approve (workflow directive: auto | plan | dialog)
 
@@ -126,7 +152,7 @@ body) translated to the afm per-stage key `script_timeout`.
 
 ## Key presence
 
-Stages without approve, without script directives, without communication/roles
-changes, and without a manual-effective trigger produce no auto_approve /
-auto_run / script_* / script_timeout keys — those keys appear only when their
-source directive is present.
+Stages without approve, without notes, without script directives, without
+communication/roles changes, and without a manual-effective trigger produce
+no auto_approve / buttons / auto_run / script_* / script_timeout keys — those
+keys appear only when their source directive is present.
