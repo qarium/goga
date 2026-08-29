@@ -6,13 +6,14 @@ stages:
     prompt: |
       Architectural design process.
 
-      Use the file `.goga/memory/development.md` as project rules if exists. The file is read only.
+      Use the memory file `.goga/memory/development.md` as project rules if exists. The file is read only.
 
       Requirements:
       - Annotations describe the high-level order of actions
       - Every usage file is connected through Imports and referenced in annotations
       - Usage files are self-contained
       - Footer Description describes the responsibility zone
+      - Before deciding how to do something, reflect on the memory file.
 
       Constraints:
       - Annotations must not reference previous functionality
