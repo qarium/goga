@@ -282,6 +282,49 @@ class TestParseWorkflowPositive:
         assert deploy.approve == "auto"
         assert deploy.loop == 2
 
+    def test_parse_workflow_notes_map_builds_stage_notes(self, tmp_path: Path) -> None:
+        """A ``notes`` map on a stage builds WorkflowStage.notes verbatim (authoring order).
+
+        Pins the model invariant: ``notes`` is either ``None`` or a NON-EMPTY
+        map stored verbatim with insertion order preserved — the compiler
+        assembles the flow-file buttons from exactly this map.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n"
+            "  deploy:\n"
+            "    notes:\n"
+            "      fix: Fix the failure and continue\n"
+            "      investigate: Gather diagnostics\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        deploy = document.stages["deploy"]
+        assert deploy.notes == {
+            "fix": "Fix the failure and continue",
+            "investigate": "Gather diagnostics",
+        }
+        # Authoring order is preserved (the serializer emits the map as authored).
+        assert list(deploy.notes) == ["fix", "investigate"]
+        # notes is independent of the other fields; they stay at their defaults.
+        assert deploy.agent is None
+        assert deploy.skip is False
+
+    def test_parse_workflow_empty_notes_map_normalizes_to_none(self, tmp_path: Path) -> None:
+        """An empty ``notes`` map normalizes to None (``{}`` equals absence).
+
+        The compiler's ``is not None`` check must never see an empty-map
+        instruction — an empty map would assemble a pointless ``buttons: {}``
+        key into the flow-file.
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    notes: {}\n")
+
+        document = parse_workflow(workflow_path)
+
+        assert document.stages["deploy"].notes is None
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -559,10 +602,10 @@ class TestParseWorkflowNegative:
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
         # The full valid-keys list now includes ``skip`` (5th), ``approve``
-        # (6th), and ``manual`` (7th); the substring ``agent, prompt, loop,
-        # skills`` alone would pass even without them, so assert the full
-        # trailing fragment.
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message
+        # (6th), ``manual`` (7th), and ``notes`` (8th); the substring
+        # ``agent, prompt, loop, skills`` alone would pass even without them,
+        # so assert the full trailing fragment.
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_rejects_non_str_agent(self, tmp_path: Path) -> None:
         """A non-str agent raises WorkflowSyntaxError naming the stage and field."""
@@ -707,6 +750,71 @@ class TestParseWorkflowNegative:
         with pytest.raises(WorkflowSyntaxError, match=r"manual is forbidden in workflow\.extend\.extra"):
             parse_workflow(workflow_path)
 
+    @pytest.mark.parametrize(
+        "notes_yaml",
+        ["[1, 2]", "~", "text"],
+        ids=["list", "explicit-null", "str"],
+    )
+    def test_parse_workflow_non_mapping_notes_raises(self, tmp_path: Path, notes_yaml: str) -> None:
+        """A non-mapping ``notes`` raises WorkflowSyntaxError('non-mapping notes ...').
+
+        Presence of the key gates the check (like ``skip``/``manual``), so an
+        explicit ``notes: null`` is ALSO a non-mapping error — unlike
+        ``trigger`` whose null would be an unknown-key error. The message is
+        asserted in full: the shape matches ``non-list-of-str skills in ...``
+        (a stage-level location with no trailing field name).
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            f"stages:\n  deploy:\n    notes: {notes_yaml}\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        assert str(exc_info.value) == "non-mapping notes in workflow.stages.deploy"
+
+    def test_parse_workflow_non_str_note_value_raises(self, tmp_path: Path) -> None:
+        """A non-str note value raises WorkflowSyntaxError naming the note key.
+
+        The KEY-interpolated message shape is unique to notes: no other stage
+        field validates a map's values, so the location fragment ends in the
+        offending note name (``...stages.deploy.notes.fix``).
+        """
+        workflow_path = _write(tmp_path, "workflow.yml", "stages:\n  deploy:\n    notes:\n      fix: 5\n")
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        assert str(exc_info.value) == "non-str value in workflow.stages.deploy.notes.fix"
+
+    def test_parse_workflow_notes_forbidden_in_extend_entry(self, tmp_path: Path) -> None:
+        """A ``notes`` key inside an extend entry raises WorkflowSyntaxError naming the entry.
+
+        notes is stages-block only (it mirrors ``manual``): the compiler
+        consumes it per stage name, so an extend-stage receives its notes
+        through the ``stages`` block — never inline. The check sits at contract
+        position 6.2.5, right after the ``manual`` check (6.2.4).
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n"
+            "  deploy:\n"
+            "    agent: codex\n"
+            "extend:\n"
+            "  extra:\n"
+            "    after: [deploy]\n"
+            "    notes:\n"
+            "      fix: x\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        assert str(exc_info.value) == "notes is forbidden in workflow.extend.extra"
+
     def test_parse_workflow_trigger_in_stages_is_unknown_key(self, tmp_path: Path) -> None:
         """A ``trigger`` key in the stages block is an unknown-key structural error.
 
@@ -731,7 +839,7 @@ class TestParseWorkflowNegative:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.deploy: trigger" in message
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes" in message
 
     def test_parse_workflow_approve_non_auto_rejected(self, tmp_path: Path) -> None:
         """An ``approve`` value outside the accepted set is rejected (stages entry).

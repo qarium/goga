@@ -14,10 +14,10 @@ it returns instructions, never their resolution.
 A workflow-file is structurally malformed when its YAML is invalid, its root is
 not a mapping, it carries an unknown top-level or per-stage key, a field has the
 wrong type (including a non-bool ``manual``), an extend-entry forbids
-``depends_on`` / ``skip`` / ``manual`` / mistypes ``before`` / ``after`` / omits
-both / mistypes an inline ``agent`` / ``loop`` / ``approve``, a ``loop`` is
-below one, or it provides neither a top-level prompt, any stage entry, nor any
-extend entry. Each of those raises ``WorkflowSyntaxError`` (a
+``depends_on`` / ``skip`` / ``manual`` / ``notes`` / mistypes ``before`` /
+``after`` / omits both / mistypes an inline ``agent`` / ``loop`` / ``approve``,
+a ``loop`` is below one, or it provides neither a top-level prompt, any stage
+entry, nor any extend entry. Each of those raises ``WorkflowSyntaxError`` (a
 ``ValueError`` subclass, mirroring the compiler cell's ``StructuralError``)
 with an authored-time message. A missing or unreadable file lets the underlying
 ``OSError`` propagate unchanged — consistent with the compiler behavior.
@@ -30,6 +30,12 @@ stage-body field that passes through the extend body verbatim here — the
 compiler validates its value), never via a workflow instruction. This cell
 does not act on ``manual`` — it is declarative; the compiler applies the
 force / cancel logic.
+
+``notes`` is accepted ONLY in the ``stages`` block too (a map of note name →
+prompt text, str→str; an empty map equals absence and builds ``None``), and is
+likewise forbidden in an extend-entry — the compiler consumes it per stage name
+to emit the flow-file buttons. This cell does not act on ``notes`` — it is
+declarative; the runtime meaning of the buttons belongs to afm.
 """
 
 from __future__ import annotations
@@ -48,13 +54,13 @@ _TOP_LEVEL_KEYS = ("prompt", "stages", "extend")
 
 # Fixed keys of a per-stage entry, in canonical order. Used both for unknown-key
 # rejection and for documenting the accepted per-stage field set.
-_STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve", "manual")
+_STAGE_KEYS = ("agent", "prompt", "loop", "skills", "skip", "approve", "manual", "notes")
 
 # Keys extracted out of an extend-entry's body before construction: the
 # positioning keys (``before``/``after``) and the inline default overrides
 # (``agent``/``loop``/``approve``). Every other key passes through verbatim as
-# the stage body (``depends_on``, ``skip`` and ``manual`` never reach the body —
-# they are rejected outright).
+# the stage body (``depends_on``, ``skip``, ``manual`` and ``notes`` never
+# reach the body — they are rejected outright).
 _EXTEND_BODY_EXCLUDED = ("before", "after", "agent", "loop", "approve")
 
 # Accepted values for the ``approve`` directive (per-stage AND inline extend),
@@ -74,8 +80,10 @@ class WorkflowSyntaxError(ValueError):
 
     A structural error is an authored-time defect in the workflow-file: invalid
     YAML, a non-mapping root, an unknown top-level or per-stage key, a
-    wrong-typed field (including a non-bool ``manual``), an extend-entry that
-    forbids ``depends_on`` / ``skip`` / ``manual`` / mistypes ``before`` /
+    wrong-typed field (including a non-bool ``manual`` or a malformed
+    ``notes``), an extend-entry that
+    forbids ``depends_on`` / ``skip`` / ``manual`` / ``notes`` / mistypes
+    ``before`` /
     ``after`` / an inline ``agent`` / an inline ``loop`` / an inline
     ``approve`` / omits both ``before`` and ``after``, a ``loop`` below
     one, or a workflow that provides neither a top-level prompt, any stage
@@ -91,11 +99,13 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     Read the file at ``workflow_path``, parse it as YAML, validate the expected
     top-level keys (``prompt``, ``stages``, ``extend``) and the per-stage key
     set (``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve``,
-    ``manual``),
+    ``manual``, ``notes``),
     type-check each present field (``manual`` strictly a bool; an absent key
-    builds ``None``, NOT ``False``), validate each extend-entry's positioning
+    builds ``None``, NOT ``False``; ``notes`` a map of note name → prompt text
+    whose empty form builds ``None``), validate each extend-entry's positioning
     (``before``/``after`` as ``list[str]``, ``depends_on`` forbidden, ``skip``
-    forbidden, ``manual`` forbidden, at least one of ``before``/``after``
+    forbidden, ``manual`` forbidden, ``notes`` forbidden, at least one of
+    ``before``/``after``
     required) and any inline
     ``agent`` (str) / ``loop`` (int >= 1) / ``approve`` (one of ``auto``/
     ``plan``/``dialog``), enforce
@@ -106,7 +116,8 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
     ``depends_on`` rewriting, no stage removal. A ``trigger`` key in the
     ``stages`` block is an unknown-key structural error; a ``trigger`` key in
     an extend-entry body passes through verbatim (the compiler validates its
-    value). This cell does not act on ``manual`` — it is declarative.
+    value). This cell does not act on ``manual`` or ``notes`` — they are
+    declarative.
 
     Args:
         workflow_path: Absolute path to the workflow-file.
@@ -120,10 +131,12 @@ def parse_workflow(workflow_path: Path) -> WorkflowDocument:
             (propagated unchanged).
         WorkflowSyntaxError: If the file is invalid YAML, the root is not a
             mapping, an unknown top-level or per-stage key is present, a field
-            has the wrong type (including a non-bool ``skip`` or a non-bool
-            ``manual``), an extend-entry
+            has the wrong type (including a non-bool ``skip``, a non-bool
+            ``manual``, or a ``notes`` that is non-mapping or carries a
+            non-str value), an extend-entry
             is malformed (non-mapping value, ``depends_on`` present, ``skip``
-            present, ``manual`` present, ``before``/``after`` not a
+            present, ``manual`` present, ``notes`` present, ``before``/``after``
+            not a
             ``list[str]``, an inline
             ``agent`` not a str or ``loop`` not an ``int >= 1`` or ``approve``
             not one of ``auto``/``plan``/``dialog``, neither ``before`` nor
@@ -230,7 +243,7 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
 
     The entry value must be a mapping. Its key set is validated against
     ``agent``, ``prompt``, ``loop``, ``skills``, ``skip``, ``approve``,
-    ``manual`` (unknown
+    ``manual``, ``notes`` (unknown
     key → structural error); each present field is then type-checked, ``loop``
     must be an ``int >= 1``, ``skills`` must be a ``list[str]``, ``skip`` must be
     a ``bool``, ``approve`` must be one of ``auto``/``plan``/``dialog``, and
@@ -239,6 +252,8 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
     default — since absence is equivalent to ``False``; ``manual`` stays
     ``None`` — NOT ``False`` — since an absent key and an explicit
     ``manual: false`` are DIFFERENT instructions the compiler must tell apart).
+    ``notes`` must be a ``dict`` of ``str``→``str``; an EMPTY map is normalized
+    to ``None`` — the model carries either ``None`` or a non-empty map.
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -252,45 +267,30 @@ def _build_stage(name: Any, value: Any) -> WorkflowStage:
             per-stage key is present, ``agent``/``prompt`` is not a str,
             ``loop`` is not an ``int >= 1``, ``skills`` is not a
             ``list[str]``, ``skip`` is not a ``bool``, ``approve`` is not
-            one of ``auto``/``plan``/``dialog``, or ``manual`` is not a
-            ``bool``.
+            one of ``auto``/``plan``/``dialog``, ``manual`` is not a
+            ``bool``, or ``notes`` is not a ``dict`` of ``str``→``str``.
     """
     if not isinstance(value, dict):
         raise WorkflowSyntaxError(f"non-mapping stage {name} in workflow.stages")
 
-    agent: str | None = None
-    prompt: str | None = None
-    loop: int | None = None
-    skills: list[str] | None = None
-    skip: bool = False
-    approve: str | None = None
-    manual: bool | None = None
+    # ``_validate_stage_field`` dispatches per key and rejects unknown keys, so
+    # only the valid stage keys land here — the map is then unpacked onto the
+    # constructor with per-field defaults for the absent ones (``skip`` stays
+    # ``False``, everything else ``None``).
+    fields: dict[str, Any] = {}
 
     for key, field_value in value.items():
-        validated = _validate_stage_field(name, key, field_value)
-        if key == "agent":
-            agent = validated
-        elif key == "prompt":
-            prompt = validated
-        elif key == "loop":
-            loop = validated
-        elif key == "skills":
-            skills = validated
-        elif key == "skip":
-            skip = validated
-        elif key == "approve":
-            approve = validated
-        elif key == "manual":
-            manual = validated
+        fields[key] = _validate_stage_field(name, key, field_value)
 
     return WorkflowStage(
-        agent=agent,
-        prompt=prompt,
-        loop=loop,
-        skills=skills,
-        skip=skip,
-        approve=approve,
-        manual=manual,
+        agent=fields.get("agent"),
+        prompt=fields.get("prompt"),
+        loop=fields.get("loop"),
+        skills=fields.get("skills"),
+        skip=fields.get("skip", False),
+        approve=fields.get("approve"),
+        manual=fields.get("manual"),
+        notes=fields.get("notes"),
     )
 
 
@@ -300,13 +300,15 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
     Dispatches by ``key`` over the ``_STAGE_KEYS`` set, enforcing each field's
     type (``agent``/``prompt`` str, ``loop`` int >= 1, ``skills`` list[str],
     ``skip`` bool, ``approve`` one of ``auto``/``plan``/``dialog``, ``manual``
-    bool). An unknown key raises
+    bool, ``notes`` a str→str map). An unknown key raises
     the unknown-key structural error with the full valid-set fragment
     (``_STAGE_KEYS`` is the single source of that fragment — ``trigger`` is a
     full stage-body field, NOT a workflow key, so it lands here as an unknown
     key). Returns the
     validated value unchanged (only ``loop`` is normalized via
-    ``_validate_loop``, which already returns an ``int``).
+    ``_validate_loop``, which already returns an ``int``; ``notes`` is
+    normalized via ``_validate_notes``, which returns ``None`` for an empty
+    map).
 
     Args:
         name: The stage-name map key (used in error messages).
@@ -316,14 +318,16 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
     Returns:
         The validated field value (``agent``/``prompt`` str, ``loop`` int,
         ``skills`` list[str], ``skip`` bool, ``approve`` str equal to one of
-        ``auto``/``plan``/``dialog``, or ``manual`` bool).
+        ``auto``/``plan``/``dialog``, ``manual`` bool, or ``notes`` a non-empty
+        ``dict[str, str]`` — ``None`` when the map is empty).
 
     Raises:
         WorkflowSyntaxError: If ``key`` is an unknown per-stage key, or the
             field value has the wrong type (non-str agent/prompt, non-int/<1
             loop, non-list[str] skills, non-bool skip, an ``approve`` that
-            is not a str equal to ``auto``/``plan``/``dialog``, or a non-bool
-            ``manual``).
+            is not a str equal to ``auto``/``plan``/``dialog``, a non-bool
+            ``manual``, or ``notes`` that is non-mapping or carries a non-str
+            value).
     """
     if key in ("agent", "prompt"):
         return _validate_str_field(f"workflow.stages.{name}", key, field_value)
@@ -343,6 +347,8 @@ def _validate_stage_field(name: Any, key: Any, field_value: Any) -> Any:
         return field_value
     elif key == "approve":
         return _validate_approve(f"workflow.stages.{name}", field_value)
+    elif key == "notes":
+        return _validate_notes(f"workflow.stages.{name}", field_value)
     else:
         raise WorkflowSyntaxError(f"unknown key in workflow.stages.{name}: {key}; valid keys: {', '.join(_STAGE_KEYS)}")
 
@@ -377,7 +383,9 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     ``manual`` is forbidden too (the launch mode of a NEW stage is authored in
     its body via ``trigger`` — a full stage-body field that passes through
     verbatim and is validated by the compiler — never via a workflow
-    instruction);
+    instruction); ``notes`` is forbidden likewise (a declarative note-buttons
+    instruction is stages-block only — the compiler consumes it per stage
+    name);
     ``before`` and ``after`` (when present) must each be a ``list[str]``; an
     inline ``agent`` (when present) must be a ``str``; an inline ``loop`` (when
     present) must be an ``int >= 1`` (``bool`` rejected first, symmetric with
@@ -387,11 +395,12 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     at least one of ``before``/``after`` must be present. Every other key passes
     through verbatim as the stage body. ``before``, ``after``, ``agent``,
     ``loop`` and ``approve`` are removed from the body before construction
-    (``depends_on``, ``skip`` and ``manual`` never reach it: they are rejected
-    outright).
+    (``depends_on``, ``skip``, ``manual`` and ``notes`` never reach it: they are
+    rejected outright).
 
     The structural checks run in the CODEMANIFEST order (step 6.2):
-    non-mapping → ``depends_on`` → ``skip`` → ``manual`` → ``before`` →
+    non-mapping → ``depends_on`` → ``skip`` → ``manual`` → ``notes`` →
+    ``before`` →
     ``after`` →
     ``agent`` → ``loop`` → ``approve`` → at-least-one-of-before/after. The
     at-least-one check runs LAST so an entry carrying BOTH a positioning defect
@@ -409,7 +418,7 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
     Raises:
         WorkflowSyntaxError: If the entry value is not a mapping, it contains a
             ``depends_on`` key, it contains a ``skip`` key, it contains a
-            ``manual`` key, ``before`` is not a
+            ``manual`` key, it contains a ``notes`` key, ``before`` is not a
             ``list[str]``, ``after`` is not a ``list[str]``, an inline
             ``agent`` is not a ``str``, an inline ``loop`` is not an
             ``int >= 1``, an inline ``approve`` is not a str equal to one of
@@ -460,25 +469,28 @@ def _build_extend_stage(name: Any, value: Any) -> WorkflowExtendStage:
 
 
 def _reject_forbidden_extend_keys(name: Any, value: dict[str, Any]) -> None:
-    """Reject the keys an extend-entry must never carry (contract 6.2.2 - 6.2.4).
+    """Reject the keys an extend-entry must never carry (contract 6.2.2 - 6.2.5).
 
-    Three keys are forbidden outright, each with its own message, checked in the
+    Four keys are forbidden outright, each with its own message, checked in the
     CODEMANIFEST order before any positioning/type validation: ``depends_on``
     (positioning is declared via ``before``/``after`` instead), ``skip`` (a new
     stage has no existing stage to delete — skip is defined only for existing
-    pipeline stages via the ``stages`` block), and ``manual`` (the launch mode
+    pipeline stages via the ``stages`` block), ``manual`` (the launch mode
     of a new stage is authored in its body via ``trigger``, never via a
-    workflow instruction). All three never reach the extend body.
+    workflow instruction), and ``notes`` (a declarative note-buttons
+    instruction is stages-block only — it mirrors ``manual``: the compiler
+    consumes it per stage name, and an extend-stage receives it through the
+    ``stages`` block). All four never reach the extend body.
 
     Args:
         name: The stage-name map key (used in error messages).
         value: The raw entry value for this extend stage.
 
     Raises:
-        WorkflowSyntaxError: If the entry carries ``depends_on``, ``skip``, or
-            ``manual`` (checked in that order).
+        WorkflowSyntaxError: If the entry carries ``depends_on``, ``skip``,
+            ``manual``, or ``notes`` (checked in that order).
     """
-    for forbidden_key in ("depends_on", "skip", "manual"):
+    for forbidden_key in ("depends_on", "skip", "manual", "notes"):
         if forbidden_key in value:
             raise WorkflowSyntaxError(f"{forbidden_key} is forbidden in workflow.extend.{name}")
 
@@ -586,5 +598,46 @@ def _validate_approve(scope: str, field_value: Any) -> str:
 
     if field_value not in _APPROVE_DIRECTIVES:
         raise WorkflowSyntaxError(f"approve must be one of: {', '.join(_APPROVE_DIRECTIVES)} in {scope}")
+
+    return field_value
+
+
+def _validate_notes(scope: str, field_value: Any) -> dict[str, str] | None:
+    """Validate a ``notes`` field value and return it (or ``None`` when empty).
+
+    ``notes`` is a declarative note-buttons instruction: a map of note name →
+    prompt text. A non-``dict`` value is rejected first — an explicit
+    ``notes: null`` included, since presence of the key forces the type check
+    (the presence gating mirrors ``skip``/``manual``) — then every non-``str``
+    value is rejected with the note key interpolated verbatim into the location.
+    Map KEYS are deliberately not validated (the open stance mirrors the afm
+    agent namespace — afm owns the runtime note grammar), so a non-str key
+    flows through and lands verbatim in the error-message fragment when a
+    value fails. An EMPTY map equals absence and returns ``None`` — the
+    compiler's ``is not None`` check must never see an empty instruction.
+    ``scope`` is the dotted location up to but excluding ``notes`` (e.g.
+    ``"workflow.stages.deploy"``), used verbatim in both messages.
+
+    Args:
+        scope: The dotted location (without the trailing ``.notes``).
+        field_value: The raw ``notes`` value to validate.
+
+    Returns:
+        The validated notes map, or ``None`` when the map is empty (absence).
+
+    Raises:
+        WorkflowSyntaxError: If ``field_value`` is not a ``dict``, or any of
+            its values is not a ``str``.
+    """
+    if not isinstance(field_value, dict):
+        raise WorkflowSyntaxError(f"non-mapping notes in {scope}")
+
+    for key, text in field_value.items():
+        if not isinstance(text, str):
+            raise WorkflowSyntaxError(f"non-str value in {scope}.notes.{key}")
+
+    if not field_value:
+        # An empty map equals absence.
+        return None
 
     return field_value

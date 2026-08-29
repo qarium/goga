@@ -144,14 +144,24 @@ class TestParseWorkflowContract:
 
         Pins the contract: ``_STAGE_KEYS`` is the single source of the accepted
         per-stage key set and of the unknown-key ``valid keys`` message fragment,
-        so it must carry ``approve`` (after ``skip``) and ``manual`` (after
-        ``approve``).
+        so it must carry ``approve`` (after ``skip``), ``manual`` (after
+        ``approve``), and ``notes`` (after ``manual``).
         """
         from goga.pipeline.workflow.parse_workflow import _STAGE_KEYS
 
         assert "approve" in _STAGE_KEYS
-        # Fixed canonical order: agent, prompt, loop, skills, skip, approve, manual.
-        assert _STAGE_KEYS == ("agent", "prompt", "loop", "skills", "skip", "approve", "manual")
+        # Fixed canonical order: agent, prompt, loop, skills, skip, approve,
+        # manual, notes.
+        assert _STAGE_KEYS == (
+            "agent",
+            "prompt",
+            "loop",
+            "skills",
+            "skip",
+            "approve",
+            "manual",
+            "notes",
+        )
 
     def test_parse_workflow_manual_is_accepted_stage_key(self, tmp_path: Path) -> None:
         """``manual`` is part of the accepted per-stage key set (contract surface).
@@ -175,7 +185,7 @@ class TestParseWorkflowContract:
 
         Pins the contract: the ``valid keys`` fragment of the unknown-key message
         is generated from ``_STAGE_KEYS`` and therefore includes ``approve`` and
-        the trailing ``manual``.
+        the trailing ``manual, notes``.
         """
         workflow_path = tmp_path / "workflow.yml"
         workflow_path.write_text("stages:\n  propose:\n    bad: value\n")
@@ -185,4 +195,4 @@ class TestParseWorkflowContract:
 
         message = str(exc_info.value)
         assert "unknown key in workflow.stages.propose: bad" in message
-        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual" in message
+        assert "valid keys: agent, prompt, loop, skills, skip, approve, manual, notes" in message
