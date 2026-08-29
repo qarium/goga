@@ -4,10 +4,12 @@ import click
 from goga import commands
 from goga.commands import install as install_reexport
 from goga.commands import pipeline as pipeline_reexport
+from goga.commands import topics as topics_reexport
 from goga.commands import uninstall as uninstall_reexport
 from goga.commands.install import install as install_source
 from goga.commands.install import uninstall as uninstall_source
 from goga.commands.pipeline import pipeline as pipeline_source
+from goga.commands.topics import topics as topics_source
 
 
 class TestCommandsFacade:
@@ -52,3 +54,17 @@ class TestUninstallFacade:
     def test_uninstall_is_a_click_command_via_facade(self) -> None:
         """The re-exported uninstall is a click.Command."""
         assert isinstance(commands.uninstall, click.Command)
+
+
+class TestTopicsFacade:
+    def test_topics_reexported_from_facade(self) -> None:
+        """topics is importable from the goga.commands facade."""
+        assert topics_reexport is topics_source
+
+    def test_topics_listed_in_all(self) -> None:
+        """topics is a declared member of the goga.commands facade."""
+        assert "topics" in commands.__all__
+
+    def test_topics_is_a_click_group_via_facade(self) -> None:
+        """The re-exported topics is a click Group (a command group)."""
+        assert isinstance(topics_reexport, click.Group)

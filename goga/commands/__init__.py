@@ -9,6 +9,7 @@ from .lint import lint
 from .pipeline import pipeline
 from .schema import schema
 from .tool import tool
+from .topics import topics
 from .upgrade import upgrade
 from .usages import usages
 
@@ -24,6 +25,7 @@ __all__ = [
     "pipeline",
     "schema",
     "tool",
+    "topics",
     "uninstall",
     "upgrade",
     "usages",

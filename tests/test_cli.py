@@ -103,6 +103,11 @@ class TestRegisteredCommands:
         """The 'uninstall' command is registered on the app group."""
         assert "uninstall" in app.commands
 
+    def test_topics_command_registered(self) -> None:
+        """The 'topics' command is registered on the app group (command.name)."""
+        assert any(command.name == "topics" for command in app.commands.values())
+        assert "topics" in app.commands
+
 
 class TestHelpOutput:
     def test_help_exit_code_zero(self) -> None:
@@ -147,6 +152,12 @@ class TestHelpOutput:
         runner = CliRunner()
         result = runner.invoke(app, ["--help"])
         assert "uninstall" in result.output
+
+    def test_help_contains_topics(self) -> None:
+        """The --help output lists the 'topics' command."""
+        runner = CliRunner()
+        result = runner.invoke(app, ["--help"])
+        assert "topics" in result.output
 
 
 class TestBuildHelpOutput:
@@ -317,5 +328,37 @@ def test_cli_registers_history_group() -> None:
         assert subcommand in history_help.output
 
     assert "history" in commands.__all__
-    assert len(commands.__all__) == 14
+    assert len(commands.__all__) == 15
     assert hasattr(commands, "history")
+
+
+def test_facades_export_topics() -> None:
+    """Every facade of the feature exports its contract names.
+
+    Design-doc scenario: ``topics`` resolves through ``goga.commands``; the
+    domain entries resolve through ``goga.topics``; the history embeddings
+    resolve through ``goga.history``; ``app`` registers the ``topics``
+    command; the deleted single-status enum stays gone.
+    """
+    import goga.commands
+    import goga.history
+    from goga import app as root_app
+    from goga.commands import topics as topics_group
+    from goga.history import (
+        StatusScale,
+        assemble_status_scale,
+        resolve_history_root,
+    )
+    from goga.topics import collect_topic_board, create_topic, switch_topic
+
+    assert topics_group is not None
+    assert collect_topic_board is not None
+    assert switch_topic is not None
+    assert create_topic is not None
+    assert StatusScale is not None
+    assert assemble_status_scale is not None
+    assert resolve_history_root is not None
+
+    assert "topics" in goga.commands.__all__
+    assert any(command.name == "topics" for command in root_app.commands.values())
+    assert "TopicStatus" not in goga.history.__all__

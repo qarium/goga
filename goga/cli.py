@@ -16,6 +16,7 @@ from .commands import (
     pipeline,
     schema,
     tool,
+    topics,
     uninstall,
     upgrade,
     usages,
@@ -76,3 +77,4 @@ app.add_command(usages)
 app.add_command(tool)
 app.add_command(upgrade)
 app.add_command(history)
+app.add_command(topics)
