@@ -26,7 +26,7 @@ from ..history import (
     normalize_topic_slug,
     resolve_current_branch_name,
 )
-from .board import _current_branch_topic, _year_topics_by_ref
+from .board import _current_branch_topic, _short_name, _year_topics_by_ref
 from .git import (
     BranchRef,
     checkout_local_branch,
@@ -71,8 +71,11 @@ def resolve_switch_candidates(
     Returns:
         The matching candidates, exact matches first, then prefix matches —
         locals before remote-tracking refs, then by branch, then by topic.
-        A branch without a topic is a valid candidate with ``topic=None``
-        and empty ``statuses``.
+        Every branch appears once: a remote-tracking candidate whose local
+        twin hosts the same topic is collapsed — the local branch wins —
+        and a branch hosting several topics of the year contributes its
+        first entry only. A branch without a topic is a valid candidate
+        with ``topic=None`` and empty ``statuses``.
 
     Algorithm:
         1. Normalize ``identifier`` into a slug via ``normalize_topic_slug``
@@ -84,11 +87,14 @@ def resolve_switch_candidates(
            local branches first
         5. Prefix matches otherwise -> the branches whose name or hosted
            slug starts with the input
-        6. Return the candidates with their statuses
+        6. Collapse the tier to one entry per branch and return the
+           candidates with their statuses
 
     Requirements:
         Exact matches always precede prefix matches — the first non-empty
         tier wins and excludes every other tier.
+        A branch appears in the result once — a local branch beats its
+        remote twin, so an unambiguous identifier never reaches a prompt.
         A branch without a topic is a valid candidate.
         Read-only — no mutation before a choice.
 
@@ -183,7 +189,7 @@ def _resolve_switch_candidates(
 
     Returns:
         The candidates of the first non-empty resolution tier — exact
-        branch, exact slug, prefix.
+        branch, exact slug, prefix — collapsed to one entry per branch.
     """
     resolved_year = year or current_year()
     scale = assemble_status_scale()
@@ -204,7 +210,7 @@ def _resolve_switch_candidates(
     )
     for tier in tiers:
         if tier:
-            return tier
+            return _unique_candidates(tier)
     return []
 
 
@@ -257,6 +263,40 @@ def _hosted_candidates(
         )
         for ref, slug, statuses in hosted
     ]
+
+
+def _unique_candidates(candidates: list[SwitchCandidate]) -> list[SwitchCandidate]:
+    """Collapse the redundant candidates of one resolution tier.
+
+    A remote-tracking candidate whose local twin hosts the same topic is
+    dropped — the local branch wins, mirroring the board's twin collapse —
+    and every branch is kept once: the first entry of the tier order
+    (locals first, then branch, then topic) carries it, so a branch
+    hosting several topics of the year never repeats in the list and an
+    unambiguous identifier stays unambiguous.
+
+    Args:
+        candidates: The candidates of one resolution tier, in tier order.
+
+    Returns:
+        The candidates without remote twins and branch repetitions.
+    """
+    local_topics = {
+        (candidate.topic, candidate.branch)
+        for candidate in candidates
+        if not candidate.remote
+    }
+    unique: list[SwitchCandidate] = []
+    branches: set[str] = set()
+    for candidate in candidates:
+        hosted_twin = (candidate.topic, _short_name(candidate.branch)) in local_topics
+        if candidate.remote and hosted_twin:
+            continue
+        if candidate.branch in branches:
+            continue
+        branches.add(candidate.branch)
+        unique.append(candidate)
+    return unique
 
 
 def _switch_topic(identifier: str, year: str | None) -> str:

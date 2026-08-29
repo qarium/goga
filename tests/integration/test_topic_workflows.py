@@ -311,19 +311,60 @@ class TestSwitchTopicIdempotentChain:
         assert line == "Switched to branch solo"
         assert _current_branch(tmp_path) == "solo"
 
-    def test_switch_ambiguous_slug_lists_candidates_without_terminal(
+    def test_switch_by_branch_name_hosting_several_topics_switches(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A branch hosting several topics of the year is ambiguous — the numbered
-        list is the non-interactive error, and nothing is mutated."""
+        """An exact branch name is one candidate even when the branch hosts
+        several topics of the year — the switch needs no terminal."""
         _init_topic_repo(tmp_path)
         monkeypatch.chdir(tmp_path)
         monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
 
-        with pytest.raises(click.ClickException, match=r"1\) feat-b"):
-            switch_topic("feat-b", "2025")
+        line = switch_topic("feat-b", "2025")
+
+        assert line == "Switched to branch feat-b"
+        assert _current_branch(tmp_path) == "feat-b"
+
+    def test_switch_ambiguous_slug_lists_candidates_without_terminal(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A slug hosted by several distinct branches is genuinely ambiguous —
+        the numbered list is the non-interactive error, and nothing is mutated."""
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "-c", "one")
+        _write(tmp_path, ".goga/history/2025/shared/prd.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic shared")
+        _git(tmp_path, "switch", "-q", "-c", "two")
+        _git(tmp_path, "switch", "-q", "feat-a")
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(sys, "stdin", mock.Mock(**{"isatty.return_value": False}))
+
+        with pytest.raises(click.ClickException, match=r"(?s)1\) one.*2\) two"):
+            switch_topic("shared", "2025")
 
         assert _current_branch(tmp_path) == "feat-a"
+
+    def test_switch_by_slug_with_pushed_twin_switches_and_is_idempotent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A slug hosted by a branch and its pushed remote twin resolves to the
+        local branch — from another branch and again on the host."""
+        _init_topic_repo(tmp_path)
+        _git(tmp_path, "switch", "-q", "--orphan", "work/x")
+        _write(tmp_path, ".goga/history/2025/work-x/plan.md")
+        _git(tmp_path, "add", ".goga")
+        _git(tmp_path, *_GIT_IDENTITY, "commit", "-qm", "topic work-x")
+        _git(tmp_path, "update-ref", "refs/remotes/origin/work/x", "HEAD")
+        _git(tmp_path, "switch", "-q", "feat-a")
+        monkeypatch.chdir(tmp_path)
+
+        line = switch_topic("work-x", "2025")
+        idempotent = switch_topic("work-x", "2025")
+
+        assert line == "Switched to branch work/x"
+        assert idempotent == "Already on branch work/x"
+        assert _current_branch(tmp_path) == "work/x"
 
     def test_switch_by_slug_creates_branch_from_remote_tracking(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

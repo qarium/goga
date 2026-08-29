@@ -258,13 +258,69 @@ class TestResolveSwitchCandidates:
     ) -> None:
         """Within a tier: locals first, then by branch, then by topic."""
         monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="origin/zz", remote=True),
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="origin/aa", remote=True),
+        ]
+        trees = {
+            "feat/a": [".goga/history/2026/feat-x/plan.md"],
+            "origin/aa": [".goga/history/2026/feat-x/prd.md"],
+            "origin/zz": [".goga/history/2026/feat-x/adr.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, None)
+
+        candidates = resolve_switch_candidates("feat-x", "2026")
+
+        assert [(c.branch, c.remote, c.statuses) for c in candidates] == [
+            ("feat/a", False, ["planned"]),
+            ("origin/aa", True, ["defined"]),
+            ("origin/zz", True, ["discovered"]),
+        ]
+
+    def test_resolve_switch_candidates_local_beats_remote_twin(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A branch and its remote twin hosting one slug resolve to the local
+        branch — an unambiguous slug never reaches a prompt."""
+        monkeypatch.chdir(tmp_path)
         _wire_resolution(monkeypatch, builtin_scale, _twin_inventory(), _twin_trees(), None)
 
         candidates = resolve_switch_candidates("feat-a", "2026")
 
-        assert [(c.branch, c.remote, c.statuses) for c in candidates] == [
-            ("feat/a", False, ["planned"]),
-            ("origin/feat/a", True, ["planned"]),
+        assert [(c.branch, c.remote) for c in candidates] == [("feat/a", False)]
+
+    def test_resolve_switch_candidates_branch_appears_once(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A branch hosting several topics of the year is one candidate — the
+        branch never repeats in the tier list."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="other", remote=False),
+        ]
+        trees = {
+            "main": [
+                ".goga/history/2026/feat-b/plan.md",
+                ".goga/history/2026/feat-a/prd.md",
+            ],
+            "other": ["README.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "other")
+
+        candidates = resolve_switch_candidates("main", "2026")
+
+        # The first entry of the tier order (branch, then topic) carries the
+        # branch — the alphabetically first hosted topic.
+        assert [(c.branch, c.topic, c.statuses) for c in candidates] == [
+            ("main", "feat-a", ["defined"])
         ]
 
     def test_resolve_switch_candidates_working_copy_of_current_branch(
@@ -276,19 +332,23 @@ class TestResolveSwitchCandidates:
         """The current branch's statuses come from the working copy."""
         monkeypatch.chdir(tmp_path)
         _working_copy_topic(tmp_path, "2026", "feat-a", ["plan.md"])
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="origin/other", remote=True),
+        ]
         trees = {
             "feat/a": [".goga/history/2026/feat-a/notes.txt"],
-            "origin/feat/a": [".goga/history/2026/feat-a/notes.txt"],
+            "origin/other": [".goga/history/2026/feat-a/notes.txt"],
         }
-        _wire_resolution(monkeypatch, builtin_scale, _twin_inventory(), trees, "feat/a")
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "feat/a")
 
         candidates = resolve_switch_candidates("feat-a", "2026")
 
         # The uncommitted plan.md is visible on the current branch; the same
-        # work through its remote twin reads the ref tree only.
+        # topic on another ref reads the ref tree only.
         assert [(c.branch, c.statuses, c.current) for c in candidates] == [
             ("feat/a", ["planned"], True),
-            ("origin/feat/a", ["empty"], False),
+            ("origin/other", ["empty"], False),
         ]
 
 
@@ -316,6 +376,58 @@ class TestSwitchTopic:
 
         assert result == "Switched to branch feat/a"
         checkout.assert_called_once_with("feat/a")
+
+    def test_switch_topic_slug_with_pushed_twin_switches_local(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A slug hosted by a branch and its remote twin checks out the local
+        branch — the twin never turns an unambiguous switch into a prompt."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="origin/feat/a", remote=True),
+        ]
+        trees = {**_twin_trees(), "main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        _cleanliness, checkout, creation = _wire_mutations(monkeypatch, clean=True)
+
+        result = switch_topic("feat-a", "2026")
+
+        assert result == "Switched to branch feat/a"
+        checkout.assert_called_once_with("feat/a")
+        creation.assert_not_called()
+
+    def test_switch_topic_branch_hosting_several_topics_switches(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """An exact branch name hosting several topics of the year is one
+        candidate — the switch proceeds without a selection prompt."""
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="other", remote=False),
+        ]
+        trees = {
+            "main": [
+                ".goga/history/2026/feat-b/plan.md",
+                ".goga/history/2026/feat-a/prd.md",
+            ],
+            "other": ["README.md"],
+        }
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "other")
+        _cleanliness, checkout, _creation = _wire_mutations(monkeypatch, clean=True)
+
+        result = switch_topic("main", "2026")
+
+        assert result == "Switched to branch main"
+        checkout.assert_called_once_with("main")
 
     def test_switch_topic_idempotent_when_already_on_host(
         self,
