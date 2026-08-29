@@ -8,5 +8,6 @@ domain errors surface as clean CLI errors.
 """
 
 from .render import render_topic_board
+from .topics import topics
 
-__all__: list[str] = ["render_topic_board"]
+__all__: list[str] = ["render_topic_board", "topics"]
