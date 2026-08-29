@@ -86,3 +86,17 @@ class TestSerializeFlowButtonsSlot:
         assert all(
             isinstance(value, str) for value in loaded["stages"][0]["buttons"].values()
         )
+
+    def test_serialize_buttons_preserves_insertion_order(self) -> None:
+        """The buttons mapping serializes in authored order — never sorted.
+
+        The branch rebuilds the dict (wrapping multi-line values), so the
+        rebuild itself could reorder it; the authored order is what afm
+        renders as the button order. Non-alphabetical keys make a ``sorted``
+        regression observable.
+        """
+        doc = _doc_with_fields({"buttons": {"zebra": "Z", "alpha": "A", "mid": "M"}})
+
+        text = serialize_flow(doc)
+
+        assert list(yaml.safe_load(text)["stages"][0]["buttons"]) == ["zebra", "alpha", "mid"]

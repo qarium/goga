@@ -325,6 +325,24 @@ class TestParseWorkflowPositive:
 
         assert document.stages["deploy"].notes is None
 
+    def test_parse_workflow_non_str_note_key_flows_through_verbatim(self, tmp_path: Path) -> None:
+        """A non-str note KEY is not rejected — the open-key stance.
+
+        Map keys are deliberately unvalidated (afm owns the runtime note
+        grammar — the same open stance as the agent namespace): a non-str
+        key flows through verbatim into ``WorkflowStage.notes``. Only the
+        VALUES are validated at parse time.
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    notes:\n      1: Fix it\n",
+        )
+
+        document = parse_workflow(workflow_path)
+
+        assert document.stages["deploy"].notes == {1: "Fix it"}
+
     def test_parse_workflow_extend_populates_document(self, tmp_path: Path) -> None:
         """A workflow-file with an extend block parses each entry into WorkflowExtendStage."""
         workflow_path = _write(
@@ -788,6 +806,24 @@ class TestParseWorkflowNegative:
             parse_workflow(workflow_path)
 
         assert str(exc_info.value) == "non-str value in workflow.stages.deploy.notes.fix"
+
+    def test_parse_workflow_non_str_note_key_interpolated_in_error(self, tmp_path: Path) -> None:
+        """A failing value under a non-str key names the key verbatim in the location.
+
+        The open-key stance means the error fragment carries whatever key was
+        authored — the integer key ``1`` lands in the message unchanged
+        (``...stages.deploy.notes.1``).
+        """
+        workflow_path = _write(
+            tmp_path,
+            "workflow.yml",
+            "stages:\n  deploy:\n    notes:\n      1: 5\n",
+        )
+
+        with pytest.raises(WorkflowSyntaxError) as exc_info:
+            parse_workflow(workflow_path)
+
+        assert str(exc_info.value) == "non-str value in workflow.stages.deploy.notes.1"
 
     def test_parse_workflow_notes_forbidden_in_extend_entry(self, tmp_path: Path) -> None:
         """A ``notes`` key inside an extend entry raises WorkflowSyntaxError naming the entry.

@@ -5,8 +5,8 @@ behavior on top of a compiled pipeline at run time. A workflow can inject a
 top-level prompt, override the agent or prompt of specific stages, expand
 a stage into N chained copies via `loop`, **skip (delete) a stage**,
 declare per-stage **auto-approval** via `approve`, force or cancel a stage's
-**manual launch mode** via `manual`, and **declaratively add
-new stages** to the pipeline via `extend`.
+**manual launch mode** via `manual`, attach **note buttons** to a stage via
+`notes`, and **declaratively add new stages** to the pipeline via `extend`.
 
 Stage names in `workflow.stages` are matched strictly: a name that does not
 match any pipeline step or extend-stage is a compile error. Workflows that
@@ -38,6 +38,8 @@ stages:
     loop: 2                   # optional iteration count (>= 1)
     skills: [web-search]      # optional skills merged with the pipeline stage's skills
     approve: auto             # optional auto-approval directive: auto | plan | dialog
+    notes:                    # optional note buttons compiled to the afm `buttons` field
+      fix: Fix the failure and continue
 
 extend:
   <new-stage-name>:
@@ -62,7 +64,7 @@ Unknown top-level keys are rejected with
 
 ## Stage entries
 
-Each entry under `stages` is keyed by stage name and accepts up to seven
+Each entry under `stages` is keyed by stage name and accepts up to eight
 fields:
 
 | Field   | Type     | Default | Description                                                                                              |
@@ -74,12 +76,13 @@ fields:
 | `skip`  | bool     | —       | When `true`, the compiler DELETES this stage from the compiled pipeline (the stage is absent from the flow-file entirely). Dependents of the skipped stage are transparently reconnected to its predecessors (no dangling references). `false` (or an absent key) leaves the stage in place. `skip` is allowed ONLY in the `stages` block — it is a structural error under `extend`. `skip` wins over `agent`/`prompt`/`loop`/`skills` overrides on the same entry. |
 | `approve` | string | —     | Auto-approval directive. Accepted values are `auto`, `plan`, and `dialog`; any other value (or a non-string) is a structural error. Each value drives a subset of two INDEPENDENT effects the compiler applies to the stage body (see [Auto-approval (`approve: auto/plan/dialog`)](#auto-approval-approve-auto-plan-dialog)): (1) **communication effect** — if the body has `communication: true`, the stage's `interactive` output is SUPPRESSED (omitted, not `false`); (2) **roles effect** — if the body's raw `roles` contain `planner`, the stage emits `auto_approve: true`. `auto` drives BOTH effects; `plan` drives only the communication effect; `dialog` drives only the roles effect. Allowed in both `stages` and `extend` (inline default override; a `stages` entry wins per-field). |
 | `manual` | bool | —     | Manual-launch instruction, `stages` block only. `true` forces the manual launch mode: the compiler emits `auto_run: false` for the stage, overriding any authored `trigger` in its body. `false` cancels a manual state coming from either body source (a pipeline-file `trigger: manual` or an extend body `trigger: manual`) and is a structural error (`manual: false on non-manual stage <NAME>`) when the stage is not manual. An absent key means no instruction — the stage's own `trigger` decides. The three states (`true`/`false`/absent) are distinct; a non-bool value (including `null`) is a structural error. Allowed ONLY in `stages` — it is a structural error under `extend` (a new stage's launch mode is authored in its body via `trigger`). `skip` wins over `manual`: a skipped stage is removed before the manual instruction is applied. See [Manual launch (`manual` and `trigger`)](#manual-launch-manual-and-trigger). |
+| `notes` | map of str→str | — | Note buttons — a map of "note name → prompt text" compiled verbatim into the stage's afm `buttons` field (canonical slot after `description`). Single-line texts serialize as plain scalars, multi-line texts as block literals. An empty map equals absence (no `buttons` key emitted). Allowed ONLY in `stages` — it is a structural error under `extend` (an extend-stage receives its buttons through the `stages` block by name). Every `loop`-expanded copy carries the same buttons; `skip` wins over `notes`. Interpretation of the buttons belongs to afm — the compiler only assembles and serializes the field. See [Note buttons (`notes`)](#note-buttons-notes). |
 
 Rules:
 
-- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual` are valid. An unknown key
-  is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
-  agent, prompt, loop, skills, skip, approve, manual`.
+- Only `agent`, `prompt`, `loop`, `skills`, `skip`, `approve`, `manual`, `notes` are valid. An
+  unknown key is rejected with `unknown key in workflow.stages.<NAME>: <KEY>; valid keys:
+  agent, prompt, loop, skills, skip, approve, manual, notes`.
 - `loop` must be an int `>= 1`. Zero, negative values, and non-int types
   raise a structural error.
 - `skills` must be a `list[str]`. A non-list (or a list with non-string
@@ -97,6 +100,12 @@ Rules:
   explicit `null`) raises `non-bool value in workflow.stages.<NAME>.manual`.
   `manual` is allowed only in the `stages` block — it is a structural error
   under `extend`.
+- `notes` (when present) must be a mapping with string values. A non-mapping
+  value (including an explicit `null`) raises `non-mapping notes in
+  workflow.stages.<NAME>`; a non-string value raises `non-str value in
+  workflow.stages.<NAME>.notes.<KEY>`. An empty map is treated as absence.
+  `notes` is allowed only in the `stages` block — it is a structural error
+  under `extend` (see [Note buttons (`notes`)](#note-buttons-notes)).
 - The stage value must be a mapping. Non-mapping values raise
   `non-mapping stage <NAME> in workflow.stages`.
 - Stage names are validated against the target pipeline: a name that does not
@@ -295,6 +304,44 @@ workflow instruction. `skip` wins over `manual`: a skipped stage is removed
 before the manual instruction is applied, so `skip: true` + `manual: true`
 on one entry simply deletes the stage. On a `loop`-expanded stage every copy
 carries the launch mode of the original.
+
+### Note buttons (`notes`)
+
+A workflow's per-stage `notes` field attaches **note buttons** to a stage: a
+map of "note name → prompt text" that the compiler emits verbatim as the
+stage's afm `buttons` field (in the canonical slot right after
+`description`).
+
+```yaml
+stages:
+  deploy:
+    notes:
+      fix: Fix the failure and continue
+      investigate: |
+        Gather diagnostics for the failure.
+        Include the last 50 log lines.
+```
+
+- The map passes through verbatim — keys and values unchanged, authoring
+  order preserved. Single-line texts serialize as plain scalars (quoted as
+  needed); multi-line texts serialize as block literals.
+- Buttons are authored ONLY through this instruction. An authoring
+  `buttons` key in a stage body (a pipeline-file stage or an `extend` body)
+  is a structural error (`buttons key is forbidden in stage body; use notes
+  in workflow.stages`) — there is exactly one authoring source, so the
+  compiler-assembled field can never collide with an authored one.
+- `notes` is allowed ONLY in the `stages` block — under `extend` it is a
+  structural error (`notes is forbidden in workflow.extend.<NAME>`). An
+  extend-stage receives its buttons through the `stages` block by its name,
+  like any other stage.
+- An empty map (`notes: {}`) equals absence — no `buttons` key is emitted.
+  A pipeline compiled without notes is byte-identical to one compiled
+  without a workflow.
+- Every `loop`-expanded copy carries the same buttons, and `skip` wins over
+  `notes`: a skipped stage is removed before the buttons are resolved, so
+  its notes never leak into a survivor.
+- Interpretation of the buttons belongs to afm — the compiler only assembles
+  and serializes the field.
 
 ## Extending the pipeline with new stages
 
@@ -789,7 +836,7 @@ untouched — `extend` layers new stages on top at run time.
 | Inline `approve` in an extend entry not a string                | `non-str value in workflow.extend.<NAME>.approve`                           |
 | Inline `approve` in an extend entry not one of `auto`/`plan`/`dialog` | `approve must be one of: auto, plan, dialog in workflow.extend.<NAME>` |
 | Extend entry has neither `before` nor `after`                   | `extend entry <NAME> requires at least one of before/after`                 |
-| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual` |
+| Unknown per-stage key                                           | `unknown key in workflow.stages.<NAME>: <KEY>; valid keys: agent, prompt, loop, skills, skip, approve, manual, notes` |
 | `agent` present but not a string                                | `non-str value in workflow.stages.<NAME>.agent`                             |
 | `prompt` present but not a string                               | `non-str value in workflow.stages.<NAME>.prompt`                            |
 | `loop` present but not an int                                   | `non-int value in workflow.stages.<NAME>.loop`                              |
@@ -801,6 +848,9 @@ untouched — `extend` layers new stages on top at run time.
 | `approve` present but not one of `auto`/`plan`/`dialog`         | `approve must be one of: auto, plan, dialog in workflow.stages.<NAME>`      |
 | `skip` present under `extend`                                   | `skip is forbidden in workflow.extend.<NAME>`                               |
 | `manual` present under `extend`                                 | `manual is forbidden in workflow.extend.<NAME>`                             |
+| `notes` present under `extend`                                  | `notes is forbidden in workflow.extend.<NAME>`                              |
+| `notes` present but not a mapping (including `null`)            | `non-mapping notes in workflow.stages.<NAME>`                               |
+| `notes` value not a string                                      | `non-str value in workflow.stages.<NAME>.notes.<KEY>`                       |
 | `manual: false` on a stage that is not manual                   | `manual: false on non-manual stage <NAME>`                                  |
 | Unknown stage name in `workflow.stages` (absent from pipeline and extend) | `unknown stage name in workflow.stages: <NAME>`                  |
 | Unknown ref in `workflow.extend.<NAME>.before`                 | `unknown stage name in workflow.extend.<NAME>.before: <REF>`               |

@@ -154,6 +154,33 @@ class TestNotesButtonsAssembly:
         assert buttons[1] is not buttons[2]
         assert buttons[0] is not buttons[2]
 
+    def test_multiline_note_value_compiles_block_literal(self, tmp_path: Path) -> None:
+        """A multi-line note text compiles to a block-literal value through the full path.
+
+        Exercising the whole chain (parse → effective-notes resolution → the
+        deep-copy hops → the serializer's block-literal wrapping) rather than
+        only a directly constructed ``FlowDocument``: the authored multi-line
+        prompt text must survive the compile unchanged and round-trip through
+        ``yaml.safe_load``.
+        """
+        flow_text = _compile(
+            tmp_path,
+            _HEADER + "s:\n  title: S\n  prompt: do work\n",
+            "stages:\n"
+            "  s:\n"
+            "    notes:\n"
+            "      fix: |-\n"
+            "        Line1\n"
+            "        Line2\n",
+        )
+
+        stage = yaml.safe_load(flow_text)["stages"][0]
+
+        assert stage["buttons"] == {"fix": "Line1\nLine2"}
+        assert "    fix: |" in flow_text
+        assert "      Line1" in flow_text
+        assert "      Line2" in flow_text
+
     def test_notes_apply_to_extend_stage_by_name(self, tmp_path: Path) -> None:
         """An extend-stage receives its buttons through the stages block by name.
 
@@ -262,6 +289,21 @@ class TestNotesProhibitions:
             )
 
         assert str(excinfo.value) == "unknown stage name in workflow.stages: ghost"
+
+    def test_body_notes_key_is_not_the_instruction(self, tmp_path: Path) -> None:
+        """A ``notes`` key in a stage body passes through as an ordinary unknown key.
+
+        Only the authoring ``buttons`` key is prohibited; ``notes`` in a body
+        is NOT the workflow instruction (that lives in ``workflow.stages``
+        alone), so it is neither consumed nor rejected — it lands in the
+        output verbatim like any unknown key and never becomes buttons.
+        """
+        flow_text = _compile(tmp_path, _HEADER + "s:\n  title: S\n  notes:\n    fix: x\n")
+
+        stage = yaml.safe_load(flow_text)["stages"][0]
+
+        assert stage["notes"] == {"fix": "x"}
+        assert "buttons" not in stage
 
 
 class TestNotesEdges:

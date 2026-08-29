@@ -37,7 +37,8 @@ The pipelines layer is split into two authoring surfaces:
 - **[Workflows](workflows.md)** — an optional layering document that extends
   a compiled pipeline at run time with a top-level prompt, per-stage agent /
   prompt overrides, loop expansion, stage skipping via `skip`, manual launch
-  via `manual`, and new stages declared via `extend`.
+  via `manual`, note buttons via `notes` (compiled to the afm `buttons`
+  field), and new stages declared via `extend`.
   Authored per project; lives in `.goga/workflows/<name>.yml` (project-only).
 
 A pipeline-file answers **what** the pipeline does. A workflow answers
@@ -83,7 +84,8 @@ the afm auto-approval effects (interactive suppression and/or
 `auto_approve` emission), and per-stage `manual: true|false` forces or
 cancels the stage's manual launch mode (a stage-body `trigger: manual`
 compiles to the afm `auto_run: false` key — the stage pauses until
-launched). The pipeline-file itself can also carry
+launched). A per-stage `notes` map compiles verbatim to the afm `buttons`
+field (note buttons). The pipeline-file itself can also carry
 `before_script` / `script` / `after_script` shell directives on any stage
 — compiled to the afm `script_*` keys — and a `timeout` directive (Go
 duration string) that compiles to the afm `script_timeout` key and bounds

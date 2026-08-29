@@ -129,6 +129,11 @@ assigned semantics:
 > (the stage pauses when reached and runs only when launched manually). Authoring
 > `auto_run` directly is rejected with a structural error — use
 > `trigger: manual`.
+>
+> The per-stage `buttons` field (note buttons) has no pipeline-file authoring
+> key at all: it is assembled by the compiler from a workflow `notes`
+> instruction (see [Workflows — Note buttons](workflows.md#note-buttons-notes)).
+> Authoring `buttons` in a stage body is rejected with a structural error.
 
 | Field         | Type             | Default                     | Description                                                                  |
 |---------------|------------------|-----------------------------|------------------------------------------------------------------------------|
@@ -446,6 +451,7 @@ workflow-agent semantics.
 | Legacy `agents` key in a stage body                      | `agents key is forbidden in stage body; use roles`              |
 | Authoring `interactive` in a stage body                  | `interactive key is forbidden in stage body; use communication` |
 | Authoring `auto_run` in a stage body                     | `auto_run key is forbidden in stage body; use trigger: manual`  |
+| Authoring `buttons` in a stage body                      | `buttons key is forbidden in stage body; use notes in workflow.stages` |
 | `trigger` value outside `on_success`/`manual`            | `trigger must be one of: on_success, manual`                    |
 | `timeout` value is not a string (including YAML-null)   | `timeout must be a string in stage <NAME>`                      |
 | `timeout` without `script` in the same body             | `timeout requires script in stage <NAME>`                       |
