@@ -9,12 +9,15 @@ every decision is made.
 """
 
 from .board import BoardRecord, collect_topic_board
+from .creation import check_branch_occupancy, create_topic
 from .switching import SwitchCandidate, resolve_switch_candidates, switch_topic
 
 __all__: list[str] = [
     "BoardRecord",
     "SwitchCandidate",
+    "check_branch_occupancy",
     "collect_topic_board",
+    "create_topic",
     "resolve_switch_candidates",
     "switch_topic",
 ]

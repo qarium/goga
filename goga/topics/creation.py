@@ -1,0 +1,215 @@
+"""The fresh-work creation of the topics domain.
+
+The entities declared in the cell CODEMANIFEST with
+``location: creation.py``: the three-oracle occupancy check of a fresh-work
+name and the orchestrator that creates the branch — named exactly as entered
+— together with its topic directory of the year. Topic identity and
+addressing belong to the history facade; the bounded git mutation belongs to
+the nested git cell. Git infrastructure failures surface as
+``click.ClickException`` — the clean-error boundary of the domain; the
+interactive moments follow the ``click`` practice. The status scale is never
+assembled here — creation is not a status consumer.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import click
+
+from ..history import (
+    current_year,
+    ensure_topic_dir,
+    normalize_topic_slug,
+    resolve_current_branch_name,
+    topic_exists,
+)
+from .git import create_and_switch_branch, list_branch_refs
+
+# The board hint of an occupancy conflict — where the occupied names are
+# visible to the user.
+_BOARD_HINT = "run 'goga topics status' to see the board"
+
+
+def check_branch_occupancy(
+    branch_name: str, slug: str, year: str | None = None
+) -> str | None:
+    """Decide whether the entered branch name and the topic slug are free.
+
+    Probes three oracles in order and returns the human-readable reason of
+    the first occupied one; the remaining oracles are not probed:
+
+    1. a local ``BranchRef`` of the inventory named exactly ``branch_name``;
+    2. a remote-tracking ``BranchRef`` whose short name — the part after the
+       first slash of its display name — equals ``branch_name`` (the local
+       inventory only, no network);
+    3. the topic directory of ``slug`` in the year via ``topic_exists`` —
+       only a directory occupies a topic.
+
+    The git oracles check the name as entered; the history oracle checks the
+    slug — the two may deliberately differ (``Feature/Foo_Bar`` vs
+    ``feature-foo-bar``).
+
+    Args:
+        branch_name: Branch name as entered (checked against the inventory).
+        slug: Normalized topic slug (checked against the topic directory).
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The human-readable reason of the first occupied oracle, or ``None``
+        when everything is free.
+
+    Constraints:
+        Read-only — no ref or directory is created.
+        Do not resolve remote state over the network — the local inventory
+        only.
+
+    Raises:
+        click.ClickException: a git infrastructure failure (its stderr when
+            git reports one, or a missing git binary).
+    """
+    try:
+        return _occupancy_conflict(branch_name, slug, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+
+
+def create_topic(branch_name: str, year: str | None = None) -> str:
+    """Create fresh work — a branch with the name as entered and its topic
+    directory of the year.
+
+    Args:
+        branch_name: Branch name as entered by the user.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        One line describing the outcome — the created work, or the
+        idempotent success when the current branch already hosts the topic.
+
+    Algorithm:
+        1. Normalize ``branch_name`` into a slug via ``normalize_topic_slug``
+        2. Empty slug -> print the reason, prompt for a new name on an
+           interactive terminal and restart, or fail with the reason
+           otherwise
+        3. The current branch — read via ``resolve_current_branch_name`` —
+           hosts the same slug -> idempotent success, no mutation, no
+           occupancy check
+        4. ``check_branch_occupancy`` reports a conflict -> print the reason
+           with a hint to the board, prompt for a new name on an interactive
+           terminal and restart, or fail otherwise
+        5. Free name -> create the branch named exactly as entered and
+           switch to it via ``create_and_switch_branch``, and create the
+           topic directory via ``ensure_topic_dir`` of the year
+        6. Return the single result line
+
+    Requirements:
+        The branch keeps the name as entered; the topic directory takes the
+        slug — the two may deliberately differ.
+        An aborted re-ask leaves the repository untouched.
+        The caller stays on the new branch.
+
+    Constraints:
+        Do not validate branch-name characters — git owns name validity.
+        Do not auto-pick suffixed names on a conflict — the user re-asks or
+        aborts.
+        Do not write artifact files inside the topic directory.
+
+    Raises:
+        click.ClickException: an unresolved empty slug or occupancy conflict
+            without a terminal, a git infrastructure failure (its stderr
+            when git reports one, or a missing git binary).
+        click.Abort: Ctrl-C or EOF at the re-ask prompt — the repository is
+            left untouched.
+    """
+    try:
+        return _create_topic(branch_name, year)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip() or str(exc)
+        raise click.ClickException(f"git failed: {detail}") from exc
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"git is not available: {exc}") from exc
+
+
+def _occupancy_conflict(
+    branch_name: str, slug: str, year: str | None
+) -> str | None:
+    """Probe the three occupancy oracles — the traced algorithm, unwrapped.
+
+    Args:
+        branch_name: Branch name as entered (checked against the inventory).
+        slug: Normalized topic slug (checked against the topic directory).
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The reason of the first occupied oracle, or ``None``.
+    """
+    resolved_year = year or current_year()
+    refs = list_branch_refs()
+    if any(not ref.remote and ref.name == branch_name for ref in refs):
+        return f"branch '{branch_name}' already exists"
+    if any(
+        ref.remote and ref.name.partition("/")[2] == branch_name for ref in refs
+    ):
+        return f"remote-tracking branch '{branch_name}' already exists"
+    if topic_exists(slug, resolved_year):
+        return f"history topic '{slug}' already exists for {resolved_year}"
+    return None
+
+
+def _create_topic(branch_name: str, year: str | None) -> str:
+    """Run the traced creation procedure — the unwrapped orchestration.
+
+    Args:
+        branch_name: Branch name as entered by the user.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        The single result line of the outcome.
+    """
+    resolved_year = year or current_year()
+    while True:
+        slug = normalize_topic_slug(branch_name)
+
+        if slug == "":
+            reason = f"branch name '{branch_name}' normalizes to an empty topic slug"
+            branch_name = _reask(reason)
+            continue
+
+        current = resolve_current_branch_name()
+        if current is not None and normalize_topic_slug(current) == slug:
+            return f"Branch {current} already hosts topic {resolved_year}/{slug}"
+
+        conflict = check_branch_occupancy(branch_name, slug, resolved_year)
+        if conflict is not None:
+            branch_name = _reask(conflict, _BOARD_HINT)
+            continue
+
+        create_and_switch_branch(branch_name)
+        ensure_topic_dir(branch_name, resolved_year)
+        return f"Created branch {branch_name} and topic {resolved_year}/{slug}"
+
+
+def _reask(reason: str, hint: str = "") -> str:
+    """Handle an unusable name: re-ask on a terminal, abort otherwise.
+
+    Args:
+        reason: Human-readable reason the current name cannot be used.
+        hint: Optional next step appended to the non-terminal error.
+
+    Returns:
+        The re-asked branch name — the caller restarts the procedure with it.
+
+    Raises:
+        click.ClickException: without a terminal — the reason (and the hint
+            when given) go to the user as a non-terminal abort.
+        click.Abort: Ctrl-C or EOF at the prompt.
+    """
+    if not sys.stdin.isatty():
+        message = f"{reason} — {hint}" if hint else reason
+        raise click.ClickException(message)
+    click.echo(reason, err=True)
+    return click.prompt("New branch name")
