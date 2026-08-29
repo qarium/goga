@@ -26,9 +26,7 @@ def _git_answer(stdout: str) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(args=["git"], returncode=0, stdout=stdout, stderr="")
 
 
-def _answering_run(
-    heads: str = "", remotes: str = ""
-) -> Callable[..., subprocess.CompletedProcess[str]]:
+def _answering_run(heads: str = "", remotes: str = "") -> Callable[..., subprocess.CompletedProcess[str]]:
     """A ``subprocess.run`` mock answering by the requested ref prefix."""
 
     def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:

@@ -8,5 +8,20 @@ access, not topic logic — every decision belongs to the caller.
 """
 
 from .refs import BranchRef, list_branch_refs
+from .switch import (
+    checkout_local_branch,
+    create_and_switch_branch,
+    create_branch_from_remote_tracking,
+    is_working_tree_clean,
+)
+from .trees import read_ref_tree_paths
 
-__all__: list[str] = ["BranchRef", "list_branch_refs"]
+__all__: list[str] = [
+    "BranchRef",
+    "checkout_local_branch",
+    "create_and_switch_branch",
+    "create_branch_from_remote_tracking",
+    "is_working_tree_clean",
+    "list_branch_refs",
+    "read_ref_tree_paths",
+]

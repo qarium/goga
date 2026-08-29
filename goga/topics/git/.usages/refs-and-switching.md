@@ -47,7 +47,7 @@ from goga.topics.git import (
 )
 
 if is_working_tree_clean():
-    checkout_local_branch("feature-foo")            # existing local branch
+    checkout_local_branch("feature-foo")  # existing local branch
     create_branch_from_remote_tracking(remote_ref)  # remote-only host
 ```
 
