@@ -63,9 +63,7 @@ def _wire_resolution(
     monkeypatch.setattr(board, "read_ref_tree_paths", _trees_reader(trees))
 
 
-def _wire_mutations(
-    monkeypatch: pytest.MonkeyPatch, clean: bool = True
-) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
+def _wire_mutations(monkeypatch: pytest.MonkeyPatch, clean: bool = True) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
     """Patch the switch mutations at their import points.
 
     Returns:
@@ -131,9 +129,7 @@ class TestSwitchingContract:
             "current": bool,
             "remote": bool,
         }
-        candidate = SwitchCandidate(
-            branch="feat/a", topic="feat-a", statuses=["planned"], current=True, remote=False
-        )
+        candidate = SwitchCandidate(branch="feat/a", topic="feat-a", statuses=["planned"], current=True, remote=False)
         assert candidate.branch == "feat/a"
         assert candidate.topic == "feat-a"
         assert candidate.statuses == ["planned"]
@@ -149,8 +145,7 @@ class TestSwitchingContract:
         signature = inspect.signature(resolve_switch_candidates)
         assert list(signature.parameters) == ["identifier", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(resolve_switch_candidates)
@@ -165,8 +160,7 @@ class TestSwitchingContract:
         signature = inspect.signature(switch_topic)
         assert list(signature.parameters) == ["identifier", "year"]
         assert all(
-            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
-            for parameter in signature.parameters.values()
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD for parameter in signature.parameters.values()
         )
         assert signature.parameters["year"].default is None
         hints = typing.get_type_hints(switch_topic)
@@ -319,9 +313,7 @@ class TestResolveSwitchCandidates:
 
         # The first entry of the tier order (branch, then topic) carries the
         # branch — the alphabetically first hosted topic.
-        assert [(c.branch, c.topic, c.statuses) for c in candidates] == [
-            ("main", "feat-a", ["defined"])
-        ]
+        assert [(c.branch, c.topic, c.statuses) for c in candidates] == [("main", "feat-a", ["defined"])]
 
     def test_resolve_switch_candidates_working_copy_of_current_branch(
         self,
@@ -571,9 +563,7 @@ class TestSwitchTopic:
         with pytest.raises(click.ClickException) as raised:
             switch_topic("nope")
 
-        assert raised.value.message == (
-            "no branch hosts 'nope' — run 'goga topics status' to see the board"
-        )
+        assert raised.value.message == ("no branch hosts 'nope' — run 'goga topics status' to see the board")
         checkout.assert_not_called()
 
     def test_switch_topic_non_interactive_multiple_candidates_fails_with_list(
@@ -631,6 +621,22 @@ class TestSwitchingInfrastructureBoundary:
 
         assert "fatal: not a git repository" in raised.value.message
 
+    def test_missing_git_binary_at_resolution_surfaces_as_clean_error(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A missing git binary during the resolution is a clean error."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr(switching, "assemble_status_scale", lambda: builtin_scale)
+        monkeypatch.setattr(switching, "list_branch_refs", mock.Mock(side_effect=FileNotFoundError("git")))
+
+        with pytest.raises(click.ClickException) as raised:
+            resolve_switch_candidates("feat/a", "2026")
+
+        assert "git is not available" in raised.value.message
+
     def test_broken_tool_package_import_surfaces_as_clean_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -683,14 +689,39 @@ class TestSwitchingInfrastructureBoundary:
         ]
         trees = {"feat/a": [".goga/history/2026/feat-a/plan.md"], "main": ["README.md"]}
         _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
-        monkeypatch.setattr(
-            switching, "is_working_tree_clean", mock.Mock(side_effect=FileNotFoundError("git"))
-        )
+        monkeypatch.setattr(switching, "is_working_tree_clean", mock.Mock(side_effect=FileNotFoundError("git")))
 
         with pytest.raises(click.ClickException) as raised:
             switch_topic("feat/a", "2026")
 
         assert "git" in raised.value.message
+
+    def test_broken_import_after_resolution_surfaces_as_clean_error(
+        self,
+        builtin_scale: StatusScale,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A fatal ``ImportError`` after the resolution is a clean error.
+
+        The scale of a command run assembles inside the resolution, so the
+        orchestration wrapper's own ``ImportError`` boundary is probed here:
+        the cleanliness check raising it after the candidates resolved.
+        """
+        monkeypatch.chdir(tmp_path)
+        inventory = [
+            BranchRef(name="feat/a", remote=False),
+            BranchRef(name="main", remote=False),
+        ]
+        trees = {"feat/a": [".goga/history/2026/feat-a/plan.md"], "main": ["README.md"]}
+        _wire_resolution(monkeypatch, builtin_scale, inventory, trees, "main")
+        broken = ImportError("package goga_tool_bad failed to import: boom")
+        monkeypatch.setattr(switching, "is_working_tree_clean", mock.Mock(side_effect=broken))
+
+        with pytest.raises(click.ClickException) as raised:
+            switch_topic("feat/a", "2026")
+
+        assert raised.value.message == "package goga_tool_bad failed to import: boom"
 
     def test_selection_prompt_abort_leaves_repository_untouched(
         self,

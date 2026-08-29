@@ -162,7 +162,9 @@ Annotations: |
       1. Qualify `name` with the registry's tool prefix
       2. Validate the content: a non-empty name, a non-empty `filepath`,
          and at least one anchor present
-      3. Append the entry to the registry content
+      3. Reject a name already registered in this registry — the qualified
+         name is the identity, one entry per name
+      4. Append the entry to the registry content
 
       Requirements:
       - A structural violation raises a clean registration error naming the

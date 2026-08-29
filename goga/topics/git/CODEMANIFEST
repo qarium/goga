@@ -64,7 +64,8 @@ Annotations: |
     Algorithm:
     1. Ask git for the local branch refs
     2. Ask git for the remote-tracking refs
-    3. Merge both into one inventory sorted alphabetically by display name
+    3. Drop the <remote>/HEAD symrefs — they are pointers, not branches
+    4. Merge both into one inventory sorted alphabetically by display name
 
     Requirements:
     - Read-only — no ref is created, moved, or deleted

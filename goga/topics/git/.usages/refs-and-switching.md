@@ -41,18 +41,25 @@ paths = read_ref_tree_paths("feature-foo", prefix)
 
 ```python
 from goga.topics.git import (
+    BranchRef,
     checkout_local_branch,
+    create_and_switch_branch,
     create_branch_from_remote_tracking,
     is_working_tree_clean,
 )
 
 if is_working_tree_clean():
     checkout_local_branch("feature-foo")  # existing local branch
-    create_branch_from_remote_tracking(remote_ref)  # remote-only host
+    create_and_switch_branch("Feature/Foo_Bar")  # fresh work, name verbatim
+
+remote_ref = BranchRef(name="origin/feature-foo", remote=True)
+create_branch_from_remote_tracking(remote_ref)  # remote-only host
 ```
 
 - `checkout_local_branch` takes a short local branch name; the branch must
   exist.
+- `create_and_switch_branch` takes the branch name exactly as entered — no
+  normalization, no suffixing; git owns name validity.
 - `create_branch_from_remote_tracking` takes a remote `BranchRef` obtained
   from `list_branch_refs` and creates a local branch with its short name at
   the ref's commit — no network.

@@ -6,6 +6,8 @@ Imports:
       - ensure_topic_dir
       - resolve_history_root
       - resolve_topic_status
+      - resolve_topic_dir
+      - current_year
       - StatusScale
       - assemble_status_scale
     Usages:
@@ -104,6 +106,7 @@ Annotations: |
 
     Algorithm:
     1. Resolve the year — `year` when given, otherwise the current year
+       via `current_year`
     2. Assemble the status scale via `assemble_status_scale` once
     3. Local mode enumerates local branches via `list_branch_refs` and reads
        the current branch from the working copy via
@@ -116,7 +119,8 @@ Annotations: |
        `resolve_history_root` with `read_ref_tree_paths`, without checkout
     5. For every ref, take the topics of the resolved year with their
        artifact paths and compute the maximal statuses — the working copy
-       via `resolve_topic_status`, every other ref via the `StatusScale`
+       over the directory composed by `resolve_topic_dir` via
+       `resolve_topic_status`, every other ref via the `StatusScale`
     6. Collapse a local branch and its remote twin into one row — the local
        branch wins; different branches hosting one slug stay separate rows
     7. Mark the row hosting the current branch
@@ -191,6 +195,10 @@ Annotations: |
 
     Requirements:
     - Exact matches always precede prefix matches
+    - A branch appears in the result once — a local branch beats its
+      remote twin, and a branch hosting several topics of the year
+      contributes its first entry only, so an unambiguous identifier never
+      reaches a prompt
     - A branch without a topic is a valid candidate
     - Read-only — no mutation before a choice
 
