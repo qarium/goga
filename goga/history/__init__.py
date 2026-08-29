@@ -2,9 +2,10 @@
 
 Topic identity (the slug grammar and the current year), topic addressing
 (directory and artifact file paths, existence, creation), the topic status
-model, and tree traversal. The git branch reader lives in the nested leaf cell
-``goga.history.git`` and is re-exported on this facade — the embedding
-declared in ``goga/history/CODEMANIFEST``.
+listing, and tree traversal. The git branch reader lives in the nested leaf
+cell ``goga.history.git`` and the status scale in the ``goga.history.statuses``
+subcell — both re-exported on this facade, the embeddings declared in
+``goga/history/CODEMANIFEST``.
 """
 
 from .git import resolve_current_branch_name
@@ -16,13 +17,17 @@ from .paths import (
     resolve_topic_file,
     topic_exists,
 )
-from .status import TopicRecord, TopicStatus, collect_topic_statuses, resolve_topic_status
+from .status import TopicRecord, collect_topic_statuses, resolve_topic_status
+from .statuses import Stage, StatusRegistry, StatusScale, assemble_status_scale
 from .tree import HistoryYear, collect_history_tree
 
 __all__: list[str] = [
     "HistoryYear",
+    "Stage",
+    "StatusRegistry",
+    "StatusScale",
     "TopicRecord",
-    "TopicStatus",
+    "assemble_status_scale",
     "collect_history_tree",
     "collect_topic_statuses",
     "current_year",

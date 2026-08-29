@@ -31,20 +31,21 @@ def render_history_tree(tree: list[HistoryYear]) -> None:
 
 
 def render_topic_statuses(records: list[TopicRecord]) -> None:
-    """Render the status view — one flat ``topic [status]`` line per record.
+    """Render the status view — one flat ``topic [status] …`` line per record.
 
     The topic prints plain with a trailing space and no newline; the bracketed
-    status display name follows as the one colored segment (``cyan``). A
-    non-empty ``NO_COLOR`` keeps the segment plain — click does not honor the
-    variable, so it is checked explicitly. An empty input renders nothing.
+    status names follow, space-separated, as the colored segment
+    (``cyan``). A non-empty ``NO_COLOR`` keeps the segments plain — click does
+    not honor the variable, so it is checked explicitly. An empty input
+    renders nothing.
 
     Args:
         records: The records to print — already filtered by the caller.
     """
     for record in records:
         click.echo(f"{record.topic} ", nl=False)
-        status_segment = f"[{record.status.value}]"
+        status_segments = " ".join(f"[{status_name}]" for status_name in record.statuses)
         if os.environ.get("NO_COLOR"):
-            click.echo(status_segment)
+            click.echo(status_segments)
         else:
-            click.secho(status_segment, fg="cyan")
+            click.secho(status_segments, fg="cyan")

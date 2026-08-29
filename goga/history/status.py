@@ -1,103 +1,108 @@
-"""Topic status model for the history domain.
+"""Topic status listing for the history domain.
 
 The entities declared in the cell CODEMANIFEST with ``location: status.py``:
-the fixed eight-member status value set, the per-topic record of the status
-listing, the read-only resolver that walks the artifact progression, and the
-year collector. Both filesystem routines only probe — nothing is created or
-changed; filtering and rendering belong to the consumer.
+the per-topic record of the status listing and the two read-only resolvers
+that walk a topic directory and a whole year against the caller's assembled
+status scale. Both routines only probe — nothing is created or changed; the
+scale itself belongs to the statuses subcell and is assembled once per
+command run, never per topic. Filtering and rendering belong to the consumer.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
 from pathlib import Path
 
 from .naming import current_year
 from .paths import _history_root
-
-
-class TopicStatus(Enum):
-    """Fixed value set of a history topic status.
-
-    Each member names the process stage reached by the topic's deepest
-    present artifact; ``value`` is the display string consumers filter and
-    render by.
-    """
-
-    empty = "empty"
-    defined = "defined"
-    discovered = "discovered"
-    backlog = "backlog"
-    designed = "designed"
-    specified = "specified"
-    planned = "planned"
-    done = "done"
+from .statuses import StatusScale, assemble_status_scale
 
 
 @dataclass(frozen=True, kw_only=True)
 class TopicRecord:
-    """One topic of a year paired with its resolved status.
+    """One topic of a year paired with its maximal present statuses.
 
     Attributes:
         topic: The topic slug — the directory name of the topic.
-        status: The status resolved for the topic.
+        statuses: The qualified names of the maximal present statuses, in
+            scale order.
     """
 
     topic: str
-    status: TopicStatus
+    statuses: list[str]
 
 
-# Defined after TopicStatus — each row pairs a progression artifact with the
-# status its presence reports; the deepening order is the contract.
-_ARTIFACT_PROGRESSION: list[tuple[str, TopicStatus]] = [
-    ("prd.md", TopicStatus.defined),
-    ("adr.md", TopicStatus.discovered),
-    ("task.md", TopicStatus.backlog),
-    ("arch.md", TopicStatus.designed),
-    ("design.md", TopicStatus.specified),
-    ("plan.md", TopicStatus.planned),
-    ("completed/plan.md", TopicStatus.done),
-]
-
-
-def resolve_topic_status(topic_dir: Path) -> TopicStatus:
-    """Resolve the status of one topic from its directory content.
-
-    The artifacts of the progression are probed in deepening order and the
-    deepest present one wins — ``completed/plan.md`` is last in the list, so
-    its presence outranks every flat artifact. Files outside the progression
-    are ignored; an empty or missing directory resolves to ``empty``.
+def resolve_topic_status(topic_dir: Path, scale: StatusScale) -> list[str]:
+    """Resolve the maximal present statuses of one topic from its directory content.
 
     Args:
         topic_dir: The topic directory path.
+        scale: The assembled status scale.
 
     Returns:
-        The status of the topic. Read-only — the directory content is probed,
-        never changed.
+        The qualified names of the maximal present statuses, in scale order.
+        Read-only — the directory content is read, never changed. A topic
+        with no artifact present yields the single built-in name ``empty``.
+
+    Algorithm:
+        1. List the artifact paths present in the directory, relative to it
+        2. Compute the maximal present statuses via ``scale``
+        3. No artifact present yields the single built-in name empty
+
+    Requirements:
+        Nested artifact paths are honored — a status artifact may sit in a
+        subdirectory of the topic directory.
+
+    Constraints:
+        Do not assemble the scale here — the caller owns the single assembly
+        per command run.
+        Do not consider files outside the scale.
     """
-    resolved = TopicStatus.empty
-    for artifact, artifact_status in _ARTIFACT_PROGRESSION:
-        if (topic_dir / artifact).is_file():
-            resolved = artifact_status
-    return resolved
+    paths = [
+        path.relative_to(topic_dir).as_posix()
+        for path in topic_dir.rglob("*")
+        if path.is_file()
+    ]
+    return scale.maximal_present(paths)
 
 
-def collect_topic_statuses(year: str | None = None) -> list[TopicRecord]:
-    """Collect every topic of one year with its resolved status.
+def collect_topic_statuses(
+    year: str | None = None, scale: StatusScale | None = None
+) -> list[TopicRecord]:
+    """Collect every topic of one year with its maximal present statuses.
 
     Args:
         year: Optional year as four digits; ``None`` (or the empty string an
             empty CLI value produces) means the current year.
+        scale: Optional assembled status scale; ``None`` assembles it once
+            here.
 
     Returns:
         One ``TopicRecord`` per topic, sorted alphabetically by topic — the
         full year, unfiltered. An absent year yields an empty list, not an
         error; stray files in the year directory are not topics.
+
+    Algorithm:
+        1. Resolve the year — ``year`` when given, otherwise the current year
+        2. Resolve the scale — ``scale`` when given, otherwise assemble it
+           once
+        3. List the topic directories of that year; an absent year yields no
+           records
+        4. Resolve the statuses of each topic via ``resolve_topic_status``
+        5. Assemble the records sorted alphabetically by topic and return
+           them
+
+    Constraints:
+        Do not filter — filtering belongs to the consumer.
+        Do not render — output shaping belongs to the consumer.
     """
+    resolved_scale = scale or assemble_status_scale()
     resolved_year = year or current_year()
     year_dir = _history_root() / resolved_year
     if not year_dir.is_dir():
         return []
     topics = sorted(path.name for path in year_dir.iterdir() if path.is_dir())
-    return [TopicRecord(topic=topic, status=resolve_topic_status(year_dir / topic)) for topic in topics]
+    return [
+        TopicRecord(topic=topic, statuses=resolve_topic_status(year_dir / topic, resolved_scale))
+        for topic in topics
+    ]

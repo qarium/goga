@@ -16,7 +16,7 @@ from __future__ import annotations
 import click
 
 from ...history import (
-    TopicStatus,
+    assemble_status_scale,
     collect_history_tree,
     collect_topic_statuses,
     ensure_topic_dir,
@@ -87,10 +87,10 @@ def status(
     empty result prints nothing and exits 0 — it is not an error. The topics
     come out alphabetically; the domain sorts, this command does not re-sort.
     """
-    resolved: list[TopicStatus] = []
+    scale = assemble_status_scale()
     for name in statuses:
         try:
-            resolved.append(TopicStatus(name))
+            scale.resolve_status(name)
         except ValueError as exc:
             raise click.ClickException(f"unknown status name: {name!r}") from exc
 
@@ -100,12 +100,12 @@ def status(
         if filter_slug == "":
             raise click.ClickException(f"topic filter {topic!r} normalizes to an empty topic slug")
 
-    records = collect_topic_statuses(year)
+    records = collect_topic_statuses(year, scale)
     if topic is not None:
         records = [record for record in records if filter_slug in record.topic]
     if statuses:
-        allowed = set(resolved)
-        records = [record for record in records if record.status in allowed]
+        requested = set(statuses)
+        records = [record for record in records if set(record.statuses) & requested]
     render_topic_statuses(records)
     ctx.exit(0)
 

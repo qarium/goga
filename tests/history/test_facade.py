@@ -1,9 +1,11 @@
 """Facade contract test for the ``goga/history`` domain cell.
 
-The cell CODEMANIFEST declares fourteen facade names: the thirteen domain types
-and routines of the ``naming``/``paths``/``status``/``tree`` modules plus the
-git branch reader embedded from the nested ``goga.history.git`` leaf cell (the
-``->resolve_current_branch_name: {}`` re-export).
+The cell CODEMANIFEST declares seventeen facade names: the domain types and
+routines of the ``naming``/``paths``/``status``/``tree`` modules, the git
+branch reader embedded from the nested ``goga.history.git`` leaf cell, and the
+four status scale names embedded from the ``goga.history.statuses`` subcell
+(the ``->`` re-exports). The former single-status enum ``TopicStatus`` is
+deleted by the contract — the multi-status scale replaces it.
 """
 
 from __future__ import annotations
@@ -12,8 +14,11 @@ import goga.history
 
 _HISTORY_FACADE_ALL = [
     "HistoryYear",
+    "Stage",
+    "StatusRegistry",
+    "StatusScale",
     "TopicRecord",
-    "TopicStatus",
+    "assemble_status_scale",
     "collect_history_tree",
     "collect_topic_statuses",
     "current_year",
@@ -29,8 +34,8 @@ _HISTORY_FACADE_ALL = [
 
 
 class TestHistoryFacade:
-    def test_history_facade_exports_fourteen_names(self) -> None:
-        """The facade ``__all__`` is exactly the fourteen contract names, alphabetical."""
+    def test_history_facade_exports_seventeen_names(self) -> None:
+        """The facade ``__all__`` is exactly the seventeen contract names, alphabetical."""
         assert goga.history.__all__ == _HISTORY_FACADE_ALL
         for name in _HISTORY_FACADE_ALL:
             assert hasattr(goga.history, name), f"{name} is not defined on goga.history"
@@ -41,3 +46,15 @@ class TestHistoryFacade:
             goga.history.resolve_current_branch_name
             is goga.history.git.resolve_current_branch_name
         )
+
+    def test_history_facade_embeds_the_status_scale(self) -> None:
+        """The embedded scale names are the statuses subcell's objects, not copies."""
+        assert goga.history.StatusScale is goga.history.statuses.StatusScale
+        assert goga.history.Stage is goga.history.statuses.Stage
+        assert goga.history.StatusRegistry is goga.history.statuses.StatusRegistry
+        assert goga.history.assemble_status_scale is goga.history.statuses.assemble_status_scale
+
+    def test_history_facade_dropped_the_single_status_enum(self) -> None:
+        """``TopicStatus`` is deleted from the facade — the scale replaces it."""
+        assert "TopicStatus" not in goga.history.__all__
+        assert not hasattr(goga.history, "TopicStatus")
