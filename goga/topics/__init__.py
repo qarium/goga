@@ -8,4 +8,6 @@ belong to the history facade; git access belongs to the nested leaf cell
 every decision is made.
 """
 
-__all__: list[str] = []
+from .board import BoardRecord, collect_topic_board
+
+__all__: list[str] = ["BoardRecord", "collect_topic_board"]
