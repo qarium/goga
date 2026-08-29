@@ -146,14 +146,15 @@ class TestCompileFlowContract:
         assert "_CANONICAL_KEY_ORDER" not in facade_all
 
     def test_canonical_fields_signature_has_stage_name(self) -> None:
-        """``_canonical_fields`` takes ``(body, stage_name)`` for the mutual-exclusion message."""
+        """``_canonical_fields`` takes ``(body, stage_name, notes)`` — ``notes`` optional, defaults to None."""
         import inspect
 
         from goga.pipeline.compiler.compile_flow import _canonical_fields
 
         parameters = list(inspect.signature(_canonical_fields).parameters)
 
-        assert parameters == ["body", "stage_name"]
+        assert parameters == ["body", "stage_name", "notes"]
+        assert inspect.signature(_canonical_fields).parameters["notes"].default is None
 
     def test_canonical_key_order_includes_approve_and_script_slots(self) -> None:
         """The extended canonical order slots ``auto_approve`` and the script_* keys."""
@@ -166,6 +167,9 @@ class TestCompileFlowContract:
         assert _CANONICAL_KEY_ORDER.index("auto_approve") == _CANONICAL_KEY_ORDER.index("interactive") + 1
         assert _CANONICAL_KEY_ORDER[-4:] == ["script_before", "script", "script_after", "script_timeout"]
         assert _CANONICAL_KEY_ORDER.index("skills") < _CANONICAL_KEY_ORDER.index("script_before")
+        # ``buttons`` — the compiled form of the workflow notes instruction —
+        # occupies the canonical slot immediately after ``description``.
+        assert _CANONICAL_KEY_ORDER.index("buttons") == _CANONICAL_KEY_ORDER.index("description") + 1
 
     def test_approve_sentinel_constant_exists(self) -> None:
         """The ``_APPROVE_SENTINEL`` constant (approve directive plumbing) exists."""

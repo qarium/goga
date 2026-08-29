@@ -10,12 +10,15 @@ type during compilation.
 an empty list produces ``depends_on: []``. ``fields`` insertion order IS the
 output order — the serializer iterates it as-is, so the compiler must build it
 in canonical order: ``interactive``, ``auto_approve``, ``auto_run``, ``command``,
-``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+``prompt``, ``description``, ``buttons``, ``agents``, ``supervisor``,
+``supervisor_prompt``,
 ``skills``, ``script_before``, ``script``, ``script_after``, ``script_timeout``,
 then any unknown
 keys alphabetically. ``auto_run`` (bool) is present only when the stage's
 effective trigger is ``manual`` — the value is always ``False``;
-``auto_run: true`` is never assembled.
+``auto_run: true`` is never assembled. ``buttons`` (map of str→str) is present
+only when the workflow supplied a non-empty notes instruction for the stage —
+the map passes through verbatim.
 """
 
 from __future__ import annotations
@@ -34,13 +37,16 @@ class FlowStage:
         depends_on: Predecessor step ids, or ``None`` when absent.
         fields: Extra step fields in canonical key order
             (``interactive``, ``auto_approve``, ``auto_run``, ``command``,
-            ``prompt``, ``description``, ``agents``, ``supervisor``,
-            ``supervisor_prompt``, ``skills``, ``script_before``, ``script``,
+            ``prompt``, ``description``, ``buttons``, ``agents``,
+            ``supervisor``, ``supervisor_prompt``, ``skills``,
+            ``script_before``, ``script``,
             ``script_after``, ``script_timeout``, then unknown keys
             alphabetically). ``auto_run``
             (bool) is present only when the stage's effective trigger is
             ``manual`` — the value is always ``False``; ``auto_run: true`` is
-            never assembled.
+            never assembled. ``buttons`` (map of str→str) is present only when
+            the workflow supplied a non-empty notes instruction for the stage
+            — the map passes through verbatim.
     """
 
     id: str

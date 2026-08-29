@@ -61,6 +61,22 @@ pipeline-file stage bodies AND embedded extend-stage bodies, and every
 loop-expanded copy (``NAME-i``) inherits the translated value verbatim. The
 translation is local to ``FlowStage`` assembly — the ``PipelineDocument.body``
 returned to consumers keeps the authored ``timeout`` untouched.
+
+Symmetrically, the workflow ``notes`` instruction compiles into the per-stage
+``buttons`` field: when the workflow stages block carries notes for a stage
+(a map of note name → prompt text on ``WorkflowStage``), the compiler
+assembles the stage's ``buttons`` field in the canonical slot immediately
+after ``description``; the map passes through verbatim — keys and values
+unchanged. An authoring ``buttons`` key in a stage body (pipeline-file stage
+OR embedded extend-stage) is a structural error ``"buttons key is forbidden
+in stage body; use notes in workflow.stages"`` — buttons are authored ONLY
+through the workflow notes instruction (a single authoring source; no
+collisions). The instruction applies per stage name to embedded extend-stages
+as well; loop-expanded copies carry the same buttons; a skipped stage never
+reaches the application (skip removal runs first). Interpretation of the
+buttons belongs to afm — the compiler only assembles and serializes the
+field. Output-side only — the ``PipelineDocument.body`` returned to consumers
+stays the faithful mirror of the source pipeline-file.
 ``auto`` is a
 sentinel string emitted verbatim (goga does not interpret it; afm resolves the
 agent). In a body carrying ``script``, the ``agents`` directive is NOT
@@ -129,6 +145,11 @@ logger = logging.getLogger(__name__)
 # ``script_timeout`` (str) sits immediately after ``script_after`` — the
 # translated form of the authoring ``timeout`` directive — and is likewise
 # present only when authored (or directly authored under its output name).
+# ``buttons`` (map of str→str) sits immediately after ``description`` — the
+# compiled form of the workflow ``notes`` instruction (the map verbatim, one
+# deep copy per ``FlowStage``); present only when the workflow supplied a
+# non-empty notes instruction for the stage, so pipelines without notes
+# compile byte-identically.
 _CANONICAL_KEY_ORDER = [
     "interactive",
     "auto_approve",
@@ -136,6 +157,7 @@ _CANONICAL_KEY_ORDER = [
     "command",
     "prompt",
     "description",
+    "buttons",
     "agents",
     "supervisor",
     "supervisor_prompt",
@@ -303,11 +325,14 @@ def _inject_defaults(body: dict[str, Any], suppress_agents: bool = False) -> dic
 def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
     """Reject authoring-side stage-body keys that duplicate output-only afm fields.
 
-    Three authoring keys are forbidden because each names an afm OUTPUT field
+    Four authoring keys are forbidden because each names an afm OUTPUT field
     whose authoring-side counterpart is a different key: ``agents`` (author the
     ``roles`` field — translated element-wise), ``interactive`` (author the
-    ``communication`` field — renamed), and ``auto_run`` (author the ``trigger``
-    field — ``trigger: manual`` assembles ``auto_run: false``). Checking them in
+    ``communication`` field — renamed), ``auto_run`` (author the ``trigger``
+    field — ``trigger: manual`` assembles ``auto_run: false``), and ``buttons``
+    (author the workflow ``notes`` instruction — a different FILE, not a
+    different body key: buttons live in the workflow-file stages block, never
+    in a stage body). Checking them in
     one place, at the very start of ``_canonical_fields``, keeps every
     prohibition ahead of any translation, exactly as the contract orders it.
 
@@ -316,7 +341,7 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
             extend body).
 
     Raises:
-        StructuralError: When ``body`` carries any of the three authoring keys,
+        StructuralError: When ``body`` carries any of the four authoring keys,
             with the contract message naming the authoring-side field to use.
     """
     if "agents" in body:
@@ -327,6 +352,9 @@ def _reject_authoring_output_keys(body: dict[str, Any]) -> None:
 
     if "auto_run" in body:
         raise StructuralError("auto_run key is forbidden in stage body; use trigger: manual")
+
+    if "buttons" in body:
+        raise StructuralError("buttons key is forbidden in stage body; use notes in workflow.stages")
 
 
 def _validate_trigger(body: dict[str, Any]) -> str | None:
@@ -394,7 +422,37 @@ def _apply_timeout_directive(body: dict[str, Any], stage_name: str, timeout_valu
     body["script_timeout"] = timeout_value
 
 
-def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
+def _assemble_buttons(source: dict[str, Any], notes: dict[str, str] | None) -> None:
+    """Deep-copy the effective workflow notes into the output ``buttons`` field.
+
+    The single assembly site of the workflow notes instruction: a
+    non-``None`` notes map is deep-copied verbatim — keys and values
+    unchanged — into the REBUILT source dict under the output ``buttons`` key
+    (the canonical-order loop in ``_canonical_fields`` slots it immediately
+    after ``description``). The notes value travels as a function argument,
+    never threaded through the stage body (the authoring-buttons prohibition
+    in ``_reject_authoring_output_keys`` guards that channel), and the deep
+    copy keeps ``FlowStage.fields["buttons"]`` from aliasing
+    ``WorkflowStage.notes`` — post-compile mutation of either side cannot
+    corrupt the other. ``None`` (no instruction, or an empty map normalized
+    to ``None`` by ``parse_workflow``) assembles no key at all.
+
+    Args:
+        source: The REBUILT body dict (authoring keys already translated) —
+            mutated in place by the assignment (the caller's fresh dict, never
+            the caller's original parsed body).
+        notes: The effective workflow notes instruction for the stage, or
+            ``None`` when the workflow carries none. Read-only input.
+    """
+    if notes is not None:
+        source["buttons"] = copy.deepcopy(notes)
+
+
+def _canonical_fields(
+    body: dict[str, Any],
+    stage_name: str,
+    notes: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Reorder ``body`` into canonical key order, deep-copying each value.
 
     A legacy ``agents`` key in the step body is rejected up front with
@@ -406,7 +464,12 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     is the output-only afm field. Likewise, an authoring ``auto_run`` key is
     rejected with ``StructuralError("auto_run key is forbidden in stage body; use
     trigger: manual")`` — the authoring-side field for the launch mode is
-    ``trigger``; ``auto_run`` is the output-only afm field.
+    ``trigger``; ``auto_run`` is the output-only afm field. Likewise, an
+    authoring ``buttons`` key is rejected with
+    ``StructuralError("buttons key is forbidden in stage body; use notes in
+    workflow.stages")`` — buttons are authored ONLY through the workflow
+    ``notes`` instruction (a different FILE, not a different body key);
+    ``buttons`` is the output-only afm field.
 
     The ``trigger`` key (when present in a pipeline-file body, an embedded
     extend body, or a loop-expanded copy) is read and validated: any non-``None``
@@ -464,9 +527,20 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     ``interactive``). A body whose effective ``trigger`` is ``manual`` assembles
     ``auto_run: false`` (canonical slot immediately after ``auto_approve``);
     ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key —
-    ``auto_run: true`` is never emitted. Known keys (``interactive``,
+    ``auto_run: true`` is never emitted. The ``notes`` argument (the effective
+    workflow notes instruction for this stage, already resolved by base name
+    so loop-expanded copies share it) is assembled into the output ``buttons``
+    field whenever it is not ``None``: the map is deep-copied verbatim — keys
+    and values unchanged — into the canonical slot immediately after
+    ``description``. The notes value travels as a function argument ONLY; it
+    is never threaded into ``body`` under any key (a body ``buttons`` key
+    trips the authoring-buttons prohibition above), keeping the
+    single-authoring-source rule intact. A ``None`` notes (no instruction, or
+    an empty map normalized to ``None`` upstream) assembles no ``buttons`` key
+    at all. Known keys (``interactive``,
     ``auto_approve``, ``auto_run``, ``command``,
-    ``prompt``, ``description``, ``agents``, ``supervisor``, ``supervisor_prompt``,
+    ``prompt``, ``description``, ``buttons``, ``agents``, ``supervisor``,
+    ``supervisor_prompt``,
     ``skills``, ``script_before``, ``script``, ``script_after``,
     ``script_timeout``) are emitted in
     that fixed order; any remaining keys are appended alphabetically. The
@@ -488,6 +562,11 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             reconstructed deep copy carrying the ``_APPROVE_SENTINEL``).
         stage_name: The stage id (used in the mutual-exclusion error message —
             for loop-expanded copies this is ``NAME-i``).
+        notes: The effective workflow notes instruction for this stage (a map
+            of note name → prompt text, already resolved by base name so
+            loop-expanded copies share it), or ``None`` when the workflow
+            carries none. Read-only input — deep-copied into the assembled
+            ``buttons`` field, never threaded into ``body``.
 
     Returns:
         A new dict in canonical key order with deep-copied values.
@@ -499,7 +578,10 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
             field is ``communication``; ``interactive`` is output-only. Or if
             ``body`` carries an authoring ``auto_run`` key — the authoring-side
             field for the launch mode is ``trigger``; ``auto_run`` is
-            output-only. Or if ``body`` carries a ``trigger`` value outside the
+            output-only. Or if ``body`` carries an authoring ``buttons`` key —
+            buttons are authored ONLY through the workflow ``notes``
+            instruction; ``buttons`` is output-only. Or if ``body`` carries a
+            ``trigger`` value outside the
             closed set ``on_success``/``manual`` (a ``None`` value counts as
             absent). Or if
             ``body`` carries ``script`` together with ``prompt`` and/or ``skills``
@@ -580,6 +662,15 @@ def _canonical_fields(body: dict[str, Any], stage_name: str) -> dict[str, Any]:
     # ``script`` is legal; the agents slot is simply not emitted).
     source = _inject_defaults(body, suppress_agents="script" in body)
 
+    # Workflow notes instruction → the output ``buttons`` field (single
+    # authoring source). The notes map arrives as a function argument — never
+    # threaded through the body (the authoring-buttons prohibition above would
+    # trip on a body ``buttons`` key) — and is deep-copied into the assembled
+    # fields by ``_assemble_buttons`` (see its docstring for the no-aliasing
+    # rationale). The ``notes`` argument itself is read-only input; this
+    # function stays non-mutating.
+    _assemble_buttons(source, notes)
+
     # An approve directive that drives the roles effect (``auto``/``dialog``) +
     # ``planner`` in the raw roles ⇒ emit ``auto_approve: true`` (canonical slot
     # right after ``interactive``). The two approve effects are independent:
@@ -621,21 +712,29 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
     ``manual`` (``parse_workflow`` rejects it in an extend-entry), so the merged
     branch passes ``manual=stg.manual`` EXPLICITLY — the ``WorkflowStage``
     constructor defaults it to ``None``, and an overlay that omitted it would
-    silently drop the instruction.
+    silently drop the instruction. The note-buttons instruction is
+    stages-block-only the same way: the extend seed carries ``notes=None``
+    (the constructor default — ``parse_workflow`` rejects ``notes`` in an
+    extend-entry), and the merged branch passes ``notes=stg.notes``
+    explicitly, mirroring ``manual``.
 
     Args:
         workflow: The declarative workflow instructions.
 
     Returns:
         The effective per-stage override map keyed by stage name. Extend-seeded
-        entries carry only ``agent``/``loop``/``approve`` (``manual`` stays
-        ``None``); stages-block entries carry their full ``WorkflowStage``;
-        merged entries combine them per-field, always carrying the stages-block
-        ``manual``.
+        entries carry only ``agent``/``loop``/``approve`` (``manual`` and
+        ``notes`` stay ``None``); stages-block entries carry their full
+        ``WorkflowStage``; merged entries combine them per-field, always
+        carrying the stages-block ``manual`` and ``notes``.
     """
     effective: dict[str, WorkflowStage] = {}
 
     for name, ext in workflow.extend.items():
+        # Extend-seeded default: only the inline fields an extend-entry can
+        # carry. ``manual``/``notes`` stay ``None`` (the constructor defaults)
+        # — both are stages-block-only (``parse_workflow`` rejects them in an
+        # extend-entry).
         effective[name] = WorkflowStage(agent=ext.agent, loop=ext.loop, approve=ext.approve)
 
     for name, stg in workflow.stages.items():
@@ -645,8 +744,9 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             effective[name] = stg
             continue
         # Per-field overlay: stages-block wins whenever its field is not None.
-        # ``manual`` is passed explicitly — the extend seed carries none, and the
-        # constructor default (None) would silently drop the instruction.
+        # ``manual`` and ``notes`` are passed explicitly — the extend seed
+        # carries neither, and the constructor default (None) would silently
+        # drop the instruction.
         effective[name] = WorkflowStage(
             agent=stg.agent if stg.agent is not None else base.agent,
             prompt=stg.prompt,
@@ -654,9 +754,51 @@ def _effective_overrides(workflow: WorkflowDocument) -> dict[str, WorkflowStage]
             skills=stg.skills,
             approve=stg.approve if stg.approve is not None else base.approve,
             manual=stg.manual,
+            notes=stg.notes,
         )
 
     return effective
+
+
+def _effective_notes_by_id(
+    effective: dict[str, WorkflowStage],
+    expanded_ids: dict[str, list[str]],
+) -> dict[str, dict[str, str] | None]:
+    """Resolve the effective notes for every FINAL step id (base name → copies).
+
+    Built from the resolved per-stage override map (``_effective_overrides``)
+    and the loop-expansion map (``_expand_loops``): each base name's effective
+    notes value is copied onto EVERY id that base produced. Resolution is by
+    BASE name on purpose — a loop-expanded copy's id (``NAME-i``) never appears
+    in ``workflow.stages``, so a naive ``effective.get(step.name)`` lookup on
+    the final id would return ``None`` for every copy and silently drop the
+    instruction; routing through ``expanded_ids`` keeps the buttons uniform
+    across all copies of one stage.
+
+    ``expanded_ids`` covers EVERY final id by construction (``_expand_loops``
+    maps a non-expanded base to ``[base]`` itself), so every final step id has
+    an entry in the result — a missing key is impossible.
+
+    Args:
+        effective: The resolved per-stage override map (from
+            ``_effective_overrides``), keyed by stage name.
+        expanded_ids: The base-name → produced-ids map from ``_expand_loops``
+            (every final id appears in exactly one produced-ids list).
+
+    Returns:
+        The final-id → effective-notes map. A name absent from ``effective``
+        (or carrying ``notes=None``) maps to ``None`` — no buttons key.
+    """
+    notes_by_id: dict[str, dict[str, str] | None] = {}
+
+    for base_name, produced_ids in expanded_ids.items():
+        stage = effective.get(base_name)
+        notes = stage.notes if stage is not None else None
+
+        for produced_id in produced_ids:
+            notes_by_id[produced_id] = notes
+
+    return notes_by_id
 
 
 def _merge_skills(
@@ -1375,7 +1517,7 @@ def _reconstruct_body(
     fmt: BodyFormat,
     body: PhasesBody | StagesBody,
     workflow: WorkflowDocument,
-) -> list[PhaseStep | StageStep]:
+) -> tuple[list[PhaseStep | StageStep], dict[str, dict[str, str] | None]]:
     """Apply the workflow reconstruction branch, returning a NEW step sequence.
 
     Deep-copies the parsed steps first so the ORIGINAL body (returned later via
@@ -1398,9 +1540,18 @@ def _reconstruct_body(
     before strict validation (so an extend-embedded name is a valid
     ``workflow.stages`` target) and before the effective map is resolved (so
     their inline ``agent``/``loop`` seed the default override); skip removal runs
-    before ``4a`` so a skipped stage's overrides are never applied ("skip wins");
-    the empty-body guard runs once on the working copy, format-agnostic, before
-    any assembly.
+    before ``4a`` so a skipped stage's overrides are never applied ("skip wins")
+    — and before the notes companion map is resolved, so a skipped stage's
+    notes can never leak into a survivor; the empty-body guard runs once on the
+    working copy, format-agnostic, before any assembly.
+
+    The return also carries the per-final-id effective-notes companion map
+    (built by ``_effective_notes_by_id`` from the effective override map and
+    the expanded-ids map). The companion travels as a SEPARATE map — never
+    threaded into the step bodies — so the notes instruction reaches
+    ``_canonical_fields`` as a function argument while the working bodies stay
+    free of any buttons/notes key (the authoring-buttons prohibition would trip
+    on a body ``buttons`` key).
 
     Args:
         fmt: The body format — PHASES or STAGES.
@@ -1408,7 +1559,10 @@ def _reconstruct_body(
         workflow: The declarative workflow instructions.
 
     Returns:
-        The reconstructed step sequence (PHASES or STAGES steps).
+        The reconstructed step sequence (PHASES or STAGES steps) and the
+        final-id → effective-notes map consumed per step by
+        ``_canonical_fields`` (loop-expanded copies resolve through their base
+        name, keeping the buttons uniform across copies).
 
     Raises:
         StructuralError: When a ``workflow.extend.<name>.before/.after`` ref
@@ -1430,7 +1584,7 @@ def _reconstruct_body(
     if fmt is BodyFormat.STAGES:
         _rewrite_external_depends_on(expanded, expanded_ids)
 
-    return expanded
+    return expanded, _effective_notes_by_id(effective, expanded_ids)
 
 
 def compile_flow(
@@ -1465,7 +1619,13 @@ def compile_flow(
     ``trigger: on_success`` or no trigger assembles NO ``auto_run`` key).
     ``supervisor``/``supervisor_prompt`` are
     authored-only — never injected, but they pass through the canonical slot when
-    the source body carries them. The translation/injection is local to
+    the source body carries them. When the ``workflow`` carries the per-stage
+    ``notes`` instruction, each stage's ``buttons`` field is assembled from it
+    (the map verbatim, canonical slot immediately after ``description``,
+    uniform across every loop-expanded copy and applied to embedded
+    extend-stages by name); an authoring ``buttons`` key in any stage body is
+    rejected with ``StructuralError`` — buttons are authored ONLY through the
+    workflow notes instruction. The translation/injection is local to
     ``FlowStage.fields`` — the ``PipelineDocument.body`` returned to consumers is
     never affected.
 
@@ -1552,15 +1712,22 @@ def compile_flow(
 
     # The step sequence consumed for FlowStage assembly. When a workflow is
     # applied, this is a reconstructed (deep-copied + overridden + expanded)
-    # sequence; the ORIGINAL `body` is preserved for PipelineDocument below.
-    reconstructed = _reconstruct_body(fmt, body, workflow) if workflow is not None else list(body.steps)
+    # sequence plus the per-final-id effective-notes companion map (the source
+    # of each stage's ``buttons`` field — resolved by base name so
+    # loop-expanded copies share it); the ORIGINAL `body` is preserved for
+    # PipelineDocument below. Workflow-less compiles carry an empty notes map,
+    # so every lookup below is ``None`` and no ``buttons`` key is assembled.
+    if workflow is not None:
+        reconstructed, notes_by_id = _reconstruct_body(fmt, body, workflow)
+    else:
+        reconstructed, notes_by_id = list(body.steps), {}
 
     stages: list[FlowStage] = []
 
     if fmt is BodyFormat.PHASES:
         for i, step in enumerate(reconstructed):
             depends_on = [reconstructed[i - 1].name] if i > 0 else None
-            fields = _canonical_fields(step.body, step.name)
+            fields = _canonical_fields(step.body, step.name, notes=notes_by_id.get(step.name))
             stages.append(
                 FlowStage(
                     id=step.name,
@@ -1571,7 +1738,7 @@ def compile_flow(
             )
     elif fmt is BodyFormat.STAGES:
         for step in reconstructed:
-            fields = _canonical_fields(step.body, step.name)
+            fields = _canonical_fields(step.body, step.name, notes=notes_by_id.get(step.name))
             stages.append(
                 FlowStage(
                     id=step.name,
