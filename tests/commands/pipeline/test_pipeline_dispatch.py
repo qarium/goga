@@ -5,30 +5,32 @@ These tests pin the click-command contract declared in
 ``pipeline(ctx, name, extra_env, proxy, add_host, clean, update)``:
 
 - new ``--proxy``, ``--add-host`` (multiple), ``--clean``, ``--update/-u`` options
-- new ``-b/--branch`` option (run form only): one Option with both forms
-  binding the ``branch`` parameter; the guarded branch procedure runs after
-  the step-2 validation and before any docker activity, prints exactly one
-  stdout line, and never forwards the branch name into a launcher
+- the ``-t/--topic`` option (run form only): one Option with both forms
+  binding the ``topic`` parameter; the guarded topic procedure runs after
+  the step-2 validation and before any docker activity, echoes exactly one
+  stdout line — the result line of ``switch_topic`` — and never forwards
+  the topic into a launcher
 - proxy resolution: ``--proxy`` wins over ``config.pipeline.proxy``
 - hosts resolution: ``--add-host`` entries merge on top of
   ``config.pipeline.hosts`` (CLI overrides config on key conflict)
-- dispatch semantics: discovery (``name is None``) forces ``clean=False``;
-  run mode forwards ``clean``; both modes forward ``proxy``/``hosts``/``update``
+- dispatch semantics: the listing forms take hosts from the config only;
+  the run form forwards ``clean``; both modes forward
+  ``proxy``/``hosts``/``update``
 - exit code propagated via ``ctx.exit``
 
 The dispatch target ``run_pipeline_container`` is mocked so these tests stay
 focused on the click surface and the host-side resolution logic, with no docker
 dependency.
 
-The integration block at the bottom drives the REAL ``ensure_pipeline_branch``
-through the real command surface, mocking only the process boundary (git
-subprocess and docker launcher) to verify the wiring the unit tests mock away.
+The integration block at the bottom drives the REAL ``switch_topic`` from the
+topics domain through the real command surface, mocking the domain's git
+boundary at its import points (the same wiring the topics cell tests use), to
+verify the wiring the unit tests mock away.
 """
 
 from __future__ import annotations
 
 import inspect
-import subprocess
 import sys
 import typing
 from pathlib import Path
@@ -37,10 +39,13 @@ from unittest import mock
 import click
 import pytest
 from click.testing import CliRunner
-from goga.commands.pipeline import branch as branch_module
 from goga.commands.pipeline import pipeline
 from goga.commands.pipeline.pipeline import pipeline as pipeline_cmd
 from goga.config import BuildConfig, PipelineConfig, ProjectConfig, TaskExecutorConfig
+from goga.history import current_year
+from goga.topics import board as topics_board
+from goga.topics import switching as topics_switching
+from goga.topics.git import BranchRef
 
 # goga.commands.pipeline.pipeline is shadowed in the package __init__ by the
 # pipeline Click command, so a string-based mock.patch path walking through it
@@ -117,39 +122,40 @@ class TestPipelineDispatchContract:
         assert "-u" in output
 
 
-class TestPipelineBranchOptionContract:
-    def test_pipeline_branch_option_contract_both_forms_one_option(self) -> None:
-        """-b/--branch is a single Option binding ``branch``; both forms reach the procedure.
+class TestPipelineTopicOptionContract:
+    def test_pipeline_topic_option_contract_both_forms_one_option(self) -> None:
+        """-t/--topic is a single Option binding ``topic``; both forms reach the procedure.
 
         The Option carries both forms (``set(param.opts)`` is exactly the pair),
         defaults to None, and is a plain string option (click renders the
         declared ``type=str`` as its canonical STRING param type). The callback
-        declares ``branch: str | None`` directly after ``info`` (contract
-        order), and ``--branch x NAME`` / ``-b x NAME`` reach
-        ``ensure_pipeline_branch`` with the same value.
+        declares ``topic: str | None`` directly after ``info`` (contract
+        order), and ``--topic x NAME`` / ``-t x NAME`` reach ``switch_topic``
+        with the same value.
         """
-        branch_param = next(p for p in pipeline.params if p.name == "branch")
-        assert set(branch_param.opts) == {"-b", "--branch"}
-        assert branch_param.default is None
-        assert branch_param.type is click.STRING
+        topic_param = next(p for p in pipeline.params if p.name == "topic")
+        assert set(topic_param.opts) == {"-t", "--topic"}
+        assert topic_param.default is None
+        assert topic_param.type is click.STRING
 
         parameters = list(inspect.signature(pipeline_cmd.callback).parameters)
-        assert parameters.index("branch") == parameters.index("info") + 1
+        assert parameters.index("topic") == parameters.index("info") + 1
         hints = typing.get_type_hints(pipeline_cmd.callback)
-        assert hints["branch"] == str | None
+        assert hints["topic"] == str | None
+        assert "branch" not in parameters
 
         config = _make_config()
         runner = CliRunner()
-        for argv in (["--branch", "x", "my-pipeline"], ["-b", "x", "my-pipeline"]):
+        for argv in (["--topic", "x", "my-pipeline"], ["-t", "x", "my-pipeline"]):
             with (
                 mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-                mock.patch.object(_pipeline_module, "ensure_pipeline_branch", return_value="x") as mock_ensure,
+                mock.patch.object(_pipeline_module, "switch_topic", return_value="Switched to branch x") as mock_switch,
                 mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0),
             ):
                 result = runner.invoke(pipeline, argv)
 
             assert result.exit_code == 0
-            mock_ensure.assert_called_once_with("x")
+            mock_switch.assert_called_once_with("x")
 
 
 # --- Logic tests (positive) ---
@@ -301,201 +307,244 @@ class TestPipelineDispatchEdge:
         assert result.exit_code == exit_code
 
 
-class TestPipelineBranchRunForm:
-    def test_pipeline_run_form_with_branch_prints_line_and_launches(self) -> None:
-        """The run form runs the procedure, prints the branch line, launches without the name."""
+class TestPipelineTopicRunForm:
+    def test_pipeline_topic_option_switches_before_docker(self) -> None:
+        """The topic procedure runs, echoes its one result line, then the container launches."""
         config = _make_config()
+        switch_line = "Switched to branch feat/x"
+        mock_switch = mock.Mock(return_value=switch_line)
+        mock_run = mock.Mock(return_value=0)
+        order = mock.Mock()
+        order.attach_mock(mock_switch, "switch_topic")
+        order.attach_mock(mock_run, "run_container")
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "ensure_pipeline_branch", return_value="feat/x") as mock_ensure,
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+            mock.patch.object(_pipeline_module, "switch_topic", mock_switch),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", mock_run),
         ):
-            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
+            result = runner.invoke(pipeline, ["-t", "feat/x", "development"])
 
         assert result.exit_code == 0
-        assert "Pipeline running on branch feat/x" in result.stdout
-        mock_ensure.assert_called_once_with("feat/x")
-        assert mock_run.call_count == 1
-        assert mock_run.call_args.kwargs["name"] == "my-pipeline"
-        # The branch name never crosses the docker boundary — no branch kwarg,
-        # no value equal to it anywhere in the launcher call.
-        assert "branch" not in mock_run.call_args.kwargs
+        # Exactly one topic line on stdout, verbatim from switch_topic.
+        assert result.stdout.count(switch_line) == 1
+        mock_switch.assert_called_once_with("feat/x")
+        mock_run.assert_called_once()
+        assert mock_run.call_args.kwargs["name"] == "development"
+        # The switch precedes the docker activity, and the topic identifier
+        # never crosses the docker boundary.
+        assert order.method_calls[0] == mock.call.switch_topic("feat/x")
+        assert order.method_calls[1][0] == "run_container"
+        assert "topic" not in mock_run.call_args.kwargs
         assert "feat/x" not in mock_run.call_args.kwargs.values()
 
     @pytest.mark.parametrize(
         "argv",
         [
-            ["-b", "x", "--list"],
-            ["-b", "x", "--list", "--info"],
-            ["-b", "x", "my-pipeline", "--info"],
+            ["-t", "x", "--list"],
+            ["-t", "x", "--list", "--info"],
+            ["-t", "x", "my-pipeline", "--info"],
         ],
         ids=["flat-list", "overview", "card"],
     )
-    def test_pipeline_list_and_info_forms_silently_skip_branch(self, argv: list[str]) -> None:
-        """The flat list, overview, and card forms ignore -b — no procedure, no line."""
+    def test_pipeline_topic_ignored_in_list_and_info_forms(self, argv: list[str]) -> None:
+        """The flat list, overview, and card forms ignore -t — no procedure, no line."""
         config = _make_config()
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "ensure_pipeline_branch") as mock_ensure,
-            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0),
+            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
+            mock.patch.object(_pipeline_module, "run_pipeline_info_container", return_value=0) as mock_info,
         ):
             result = runner.invoke(pipeline, argv)
 
         assert result.exit_code == 0
-        mock_ensure.assert_not_called()
-        assert "Pipeline running on branch" not in result.stdout
+        mock_switch.assert_not_called()
+        mock_info.assert_called_once()
+        assert "Switched to branch" not in result.stdout
 
-    def test_pipeline_missing_name_error_precedes_branch_procedure(self) -> None:
-        """A step-2 form error exits 1 before any git action of the branch procedure."""
+    def test_pipeline_missing_name_with_topic_no_switch(self) -> None:
+        """A step-2 form error exits 1 before any git action of the topic procedure."""
         config = _make_config()
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(_pipeline_module, "ensure_pipeline_branch") as mock_ensure,
+            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
             mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
         ):
-            result = runner.invoke(pipeline, ["-b", "feat/x"])
+            result = runner.invoke(pipeline, ["-t", "x"])
 
         assert result.exit_code == 1
         assert "Missing pipeline name" in result.output
-        mock_ensure.assert_not_called()
+        mock_switch.assert_not_called()
         mock_run.assert_not_called()
 
-
-# --- Integration tests (the real branch procedure through the real command) ---
-
-
-class _GitResult:
-    """Minimal stand-in for a ``subprocess.CompletedProcess``."""
-
-    def __init__(self, returncode: int = 0, stdout: str = "", stderr: str = "") -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-
-def _git_answers(
-    show_current: object = _GitResult(stdout="main\n"),
-    show_ref: object = subprocess.CalledProcessError(1, "git"),
-    for_each_ref: object = _GitResult(stdout=""),
-    switch: object = _GitResult(),
-) -> mock.Mock:
-    """Build a ``subprocess.run`` mock answering per git subcommand.
-
-    Each answer is either a result object (returned) or an exception instance
-    (raised); an unexpected argv fails the test loudly. Same process-boundary
-    doubling as ``test_branch.py`` — git itself is never mocked.
-    """
-    answers = {
-        ("branch", "--show-current"): show_current,
-        ("show-ref",): show_ref,
-        ("for-each-ref",): for_each_ref,
-        ("switch",): switch,
-    }
-
-    def _run(argv: list[str], **_kwargs: object) -> _GitResult:
-        for key, answer in answers.items():
-            if tuple(argv[1 : 1 + len(key)]) == key:
-                if isinstance(answer, BaseException):
-                    raise answer
-                return answer
-        raise AssertionError(f"unexpected git argv in test: {argv!r}")
-
-    return mock.Mock(side_effect=_run)
-
-
-def _switch_calls(run_mock: mock.Mock) -> list[list[str]]:
-    """The recorded ``git switch`` argvs (usually asserted to be empty)."""
-    return [call.args[0] for call in run_mock.call_args_list if call.args[0][1] == "switch"]
-
-
-class TestPipelineBranchIntegration:
-    """Cross-entity: the real ``ensure_pipeline_branch`` through the real command.
-
-    Only the process boundary is mocked (git subprocess calls, docker
-    launcher), so these tests verify the wiring the unit tests mock away: the
-    ``from .branch import`` path, the run-form guard, the argument handed to
-    the procedure, and the ordering guarantee — step-2 validation, branch
-    procedure, branch line, docker activity.
-    """
-
-    def test_pipeline_branch_flow_a_creates_and_launches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Flow A happy path: created as entered, line printed, launcher unbranch'd."""
-        monkeypatch.chdir(tmp_path)
+    def test_pipeline_has_no_branch_option(self) -> None:
+        """-b is gone from the surface: unknown option, and absent from --help."""
         config = _make_config()
-        run_mock = _git_answers()
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
+            mock.patch.object(_pipeline_module, "switch_topic") as mock_switch,
+        ):
+            result = runner.invoke(pipeline, ["-b", "x", "dev"])
+
+        assert result.exit_code != 0
+        mock_switch.assert_not_called()
+
+        help_result = runner.invoke(pipeline, ["--help"])
+        assert help_result.exit_code == 0
+        assert "-b" not in help_result.output
+        assert "--branch" not in help_result.output
+
+
+# --- Integration tests (the real topics-domain switch through the real command) ---
+
+
+def _trees_reader(trees: dict[str, list[str]]):
+    """A ``read_ref_tree_paths`` stand-in answering by ref display name."""
+
+    def read(ref: str, prefix: str) -> list[str]:
+        return [path for path in trees.get(ref, []) if path.startswith(prefix)]
+
+    return read
+
+
+def _wire_topic_domain(
+    monkeypatch: pytest.MonkeyPatch,
+    inventory: list[BranchRef],
+    trees: dict[str, list[str]],
+    current: str | None,
+) -> tuple[mock.Mock, mock.Mock, mock.Mock]:
+    """Wire the REAL ``switch_topic`` to a canned git boundary.
+
+    The resolution reads the scale, the ref inventory, the ref trees, and the
+    current branch at their import points inside the topics domain (the same
+    points the domain's own tests patch); the mutations are recording mocks.
+    Only the topics facade stays real — exactly the wiring ``pipeline`` relies
+    on through ``from ...topics import switch_topic``.
+
+    Returns:
+        The cleanliness probe, the local checkout, and the remote-tracking
+        branch creation — all as recording mocks.
+    """
+    monkeypatch.setattr(topics_switching, "assemble_status_scale", _builtin_scale)
+    monkeypatch.setattr(topics_switching, "list_branch_refs", lambda: inventory)
+    monkeypatch.setattr(topics_switching, "resolve_current_branch_name", lambda: current)
+    monkeypatch.setattr(topics_board, "read_ref_tree_paths", _trees_reader(trees))
+
+    cleanliness = mock.Mock(return_value=True)
+    checkout = mock.Mock()
+    creation = mock.Mock()
+    monkeypatch.setattr(topics_switching, "is_working_tree_clean", cleanliness)
+    monkeypatch.setattr(topics_switching, "checkout_local_branch", checkout)
+    monkeypatch.setattr(topics_switching, "create_branch_from_remote_tracking", creation)
+    return cleanliness, checkout, creation
+
+
+def _builtin_scale():
+    """The deterministic builtin scale for the resolution (no tool packages)."""
+    from goga.history.statuses import Stage, StatusScale
+
+    return StatusScale(
+        stages=[
+            Stage(name="empty", filepath=""),
+            Stage(name="defined", filepath="prd.md"),
+            Stage(name="discovered", filepath="adr.md"),
+            Stage(name="backlog", filepath="task.md"),
+            Stage(name="designed", filepath="arch.md"),
+            Stage(name="specified", filepath="design.md"),
+            Stage(name="planned", filepath="plan.md"),
+            Stage(name="done", filepath="completed/plan.md"),
+        ]
+    )
+
+
+class TestPipelineTopicIntegration:
+    """Cross-entity: the real ``switch_topic`` from the topics domain through the real command.
+
+    Only the domain's git boundary is canned, so these tests verify the wiring
+    the unit tests mock away: the ``from ...topics import`` path, the run-form
+    guard, the argument handed to the domain, and the ordering guarantee —
+    step-2 validation, topic procedure, topic line, docker activity.
+    """
+
+    def test_pipeline_topic_flow_switches_and_launches(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Flow happy path: the domain switches, its line prints, the launcher runs topic-free."""
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+        inventory = [
+            BranchRef(name="main", remote=False),
+            BranchRef(name="feat/a", remote=False),
+        ]
+        trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
+        _cleanliness, checkout, _creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
+
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
         ):
-            result = runner.invoke(pipeline, ["-b", "Feature/X", "my-pipeline"])
+            result = runner.invoke(pipeline, ["-t", "feat/a", "my-pipeline"])
 
         assert result.exit_code == 0
-        assert "Pipeline running on branch Feature/X" in result.stdout
-        assert run_mock.call_args_list[-1].args[0] == ["git", "switch", "-c", "Feature/X"]
+        assert "Switched to branch feat/a" in result.stdout
+        checkout.assert_called_once_with("feat/a")
         assert mock_run.call_count == 1
         assert mock_run.call_args.kwargs["name"] == "my-pipeline"
-        # The branch name never crosses the docker boundary.
-        assert "branch" not in mock_run.call_args.kwargs
-        assert "Feature/X" not in mock_run.call_args.kwargs.values()
+        # The topic identifier never crosses the docker boundary.
+        assert "topic" not in mock_run.call_args.kwargs
+        assert "feat/a" not in mock_run.call_args.kwargs.values()
 
-    def test_pipeline_branch_line_uses_final_branch_name(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Already on the branch: the line carries the CURRENT name and git is untouched."""
-        monkeypatch.chdir(tmp_path)
-        config = _make_config()
-        run_mock = _git_answers(show_current=_GitResult(stdout="release/1.3.0\n"))
-        runner = CliRunner()
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
-            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
-        ):
-            result = runner.invoke(pipeline, ["-b", "release-1.3.0", "my-pipeline"])
-
-        assert result.exit_code == 0
-        assert "Pipeline running on branch release/1.3.0" in result.stdout
-        assert _switch_calls(run_mock) == []
-        assert mock_run.call_count == 1
-
-    def test_pipeline_branch_no_git_host_fails_cleanly_through_cli(self) -> None:
-        """A host without git: the clean failure on stderr, exit 1, nothing launches."""
-        config = _make_config()
-        runner = CliRunner()
-        with (
-            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(branch_module.subprocess, "run", side_effect=FileNotFoundError("git")),
-            mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
-        ):
-            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
-
-        assert result.exit_code == 1
-        assert "git is required for -b/--branch: git binary not found" in result.stderr
-        mock_run.assert_not_called()
-
-    def test_pipeline_branch_conflict_without_tty_fails_through_cli(
+    def test_pipeline_topic_idempotent_host_skips_git_mutations(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A conflict without a terminal: reason and -b hint on stderr, no launch."""
+        """Already on the host branch: the confirmation line prints and git is untouched."""
         monkeypatch.chdir(tmp_path)
+        year = current_year()
+        inventory = [BranchRef(name="feat/a", remote=False)]
+        trees = {"feat/a": [f".goga/history/{year}/feat-a/plan.md"]}
+        cleanliness, checkout, creation = _wire_topic_domain(monkeypatch, inventory, trees, "feat/a")
+
         config = _make_config()
-        run_mock = _git_answers(show_ref=_GitResult(returncode=0))
         runner = CliRunner()
         with (
             mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
-            mock.patch.object(branch_module.subprocess, "run", run_mock),
-            mock.patch.object(branch_module.sys.stdin, "isatty", return_value=False),
+            mock.patch.object(_pipeline_module, "run_pipeline_container", return_value=0) as mock_run,
+        ):
+            result = runner.invoke(pipeline, ["-t", "feat/a", "my-pipeline"])
+
+        assert result.exit_code == 0
+        assert "Already on branch feat/a" in result.stdout
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
+        creation.assert_not_called()
+        assert mock_run.call_count == 1
+
+    def test_pipeline_topic_unresolved_identifier_aborts_before_docker(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An unresolved identifier: clean failure on stderr, exit 1, nothing launches."""
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+        inventory = [BranchRef(name="main", remote=False)]
+        trees = {"main": [f".goga/history/{year}/other/prd.md"]}
+        cleanliness, checkout, _creation = _wire_topic_domain(monkeypatch, inventory, trees, "main")
+
+        config = _make_config()
+        runner = CliRunner()
+        with (
+            mock.patch.object(_pipeline_module, "load_project_config", return_value=config),
             mock.patch.object(_pipeline_module, "run_pipeline_container") as mock_run,
         ):
-            result = runner.invoke(pipeline, ["-b", "feat/x", "my-pipeline"])
+            result = runner.invoke(pipeline, ["-t", "nope", "my-pipeline"])
 
         assert result.exit_code == 1
-        assert "branch 'feat/x' already exists" in result.stderr
-        assert "Pass another branch name via -b." in result.stderr
-        assert _switch_calls(run_mock) == []
+        assert "no branch hosts 'nope'" in result.stderr
+        assert "goga topics status" in result.stderr
+        cleanliness.assert_not_called()
+        checkout.assert_not_called()
         mock_run.assert_not_called()
 
 
@@ -507,3 +556,9 @@ class TestPipelineCallbackSignature:
         assert "add_host" in parameters
         assert "clean" in parameters
         assert "update" in parameters
+
+    def test_pipeline_callback_declares_topic_not_branch(self) -> None:
+        """The callback signature carries ``topic: str | None`` and no ``branch``."""
+        hints = typing.get_type_hints(pipeline_cmd.callback)
+        assert hints["topic"] == str | None
+        assert "branch" not in hints

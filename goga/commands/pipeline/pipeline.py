@@ -6,7 +6,7 @@ import click
 import yaml
 
 from ...config import load_project_config
-from .branch import ensure_pipeline_branch
+from ...topics import switch_topic
 from .run_pipeline_container import run_pipeline_container
 from .run_pipeline_info_container import run_pipeline_info_container
 
@@ -30,12 +30,13 @@ from .run_pipeline_info_container import run_pipeline_info_container
     help="Show pipeline descriptions (--list) or a pipeline card (NAME) instead of running",
 )
 @click.option(
-    "-b",
-    "--branch",
-    "branch",
+    "-t",
+    "--topic",
+    "topic",
     type=str,
     default=None,
-    help="Create and switch to a fresh branch before the run (run form only)",
+    help="Bring the repository onto the requested work before the run "
+    "(branch name, topic slug, or prefix; run form only)",
 )
 @click.option(
     "-e",
@@ -107,7 +108,7 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     name: str | None,
     list_requested: bool,
     info: bool,
-    branch: str | None,
+    topic: str | None,
     extra_env: tuple[str, ...],
     proxy: str | None,
     add_host: tuple[str, ...],
@@ -129,7 +130,8 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
     With NAME and -i/--info: prints the pipeline card (name, description,
     stages in execution order) without running anything.
 
-    With -b/--branch: prepare a fresh git branch and history topic before the run.
+    With -t/--topic: bring the repository onto the requested work (a branch
+    name, a topic slug, or their prefix) before the run.
 
     All forms launch the goga Docker container and delegate there — the host
     never reads pipeline files directly.
@@ -200,19 +202,20 @@ def pipeline(  # noqa: C901, PLR0912, PLR0913, PLR0917
         if not workflow_path.exists():
             raise click.ClickException(f"workflow '{workflow}' not found at {workflow_path}")
 
-    # Step 3 — branch procedure (run form only: `name` given, no --list, no
-    # --info, and -b/--branch given). Every git action happens here on the
+    # Step 3 — topic procedure (run form only: `name` given, no --list, no
+    # --info, and -t/--topic given). Every git action happens here on the
     # host, AFTER every step-2 form check and BEFORE any docker activity — a
-    # form error or a branch error never refreshes, builds, or launches an
+    # form error or a switching error never refreshes, builds, or launches an
     # image. The flat list, overview, and card forms skip the procedure
-    # silently: passing -b there is not an error and has no effect. The final
-    # branch name (the created-and-switched one, or the current one in the
-    # already-on-branch case) is echoed to stdout exactly once, immediately
-    # after the procedure and before the dispatch — and never forwarded into
-    # a launcher: the container sees the branch through the mounted project.
-    if branch is not None and name is not None and not list_requested and not info:
-        final_branch = ensure_pipeline_branch(branch)
-        click.echo(f"Pipeline running on branch {final_branch}")
+    # silently: passing -t there is not an error and has no effect. The single
+    # result line of `switch_topic` (a switch, a fresh branch created from a
+    # remote-tracking ref, or the already-on-host confirmation) is echoed to
+    # stdout exactly once, immediately after the procedure and before the
+    # dispatch — and never forwarded into a launcher: the container sees the
+    # branch through the mounted project.
+    if topic is not None and name is not None and not list_requested and not info:
+        line = switch_topic(topic)
+        click.echo(line)
 
     # Step 4 — dispatch. The info forms receive hosts from the config ONLY:
     # --add-host is a run-form surface (an info container is read-only, so
