@@ -68,13 +68,13 @@ class TestTreesContract:
         assert kwargs["env"] == {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
 
     def test_file_entity_is_importable_from_the_cell_facade(self) -> None:
-        """``read_ref_file`` lives on the eight-name cell facade."""
+        """``read_ref_file`` lives on the fourteen-name cell facade."""
         import goga.topics.git as cell
 
         assert cell.read_ref_file is read_ref_file
         assert "read_ref_file" in cell.__all__
         assert cell.__all__ == sorted(cell.__all__)
-        assert len(cell.__all__) == 8
+        assert len(cell.__all__) == 14
 
     def test_file_signature_takes_ref_and_path_and_returns_optional_str(self) -> None:
         """``read_ref_file(ref: str, path: str) -> str | None``."""
