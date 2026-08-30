@@ -6,8 +6,10 @@ Usages:
     Read-only inspection (branch refs, ref tree paths and file contents,
     working tree state) plus host-side mutations (checkout of a local
     branch, creating a local branch from a remote-tracking ref,
-    create-and-switch to a new branch). Mock the subprocess call in tests
-    per `convention`.
+    create-and-switch to a new branch). A single-file content read decodes
+    UTF-8 explicitly and maps every git failure to None — the content is
+    display data; every other invocation propagates its git error. Mock
+    the subprocess call in tests per `convention`.
 
 Annotations: |
   The `convention` practice is used for:
@@ -116,8 +118,8 @@ Annotations: |
 
     `ref`: the ref to read — a display branch name as carried by `BranchRef`
     `path`: the file path to read, relative to the repository root
-    `content`: the file content as text, or None when the file is absent at
-               the ref
+    `content`: the file content as text, or None when git cannot read the
+               file at the ref
 
     Apply the `git` practice for the invocation pattern.
     Apply the `convention` practice for docstring style and intra-package
@@ -125,12 +127,16 @@ Annotations: |
 
     Algorithm:
     1. Ask git for the content of `path` at the `ref`
-    2. An absent file at the ref yields None — not an error
+    2. A failed read yields None — not an error: the content is display
+       data, never a reason to fail the reader
     3. Return the content as text
 
     Requirements:
     - One git invocation per file
     - Read-only — the working copy, the index, and .git stay untouched
+    - Every git failure of the read yields None — an absent file at the
+      ref, an unknown ref, or any other git error are indistinguishable
+      to the caller
     - The content is returned as-is — no interpretation, no transformation
 
     Constraints:

@@ -25,7 +25,9 @@ print(result)  # one line — the outcome
 - Nothing hosts the identifier -> fresh work: the branch is created with
   the name as entered, the repository switches to it, and the topic
   directory of the year is created from its slug —
-  `Created branch <name> and topic <year>/<slug>`.
+  `Created branch <name> and topic <year>/<slug>`. No title file is
+  written: the creation fallback takes no title — titled fresh work is
+  `create_topic` alone.
 - A hosted identifier -> the plain switch outcome: `Switched to branch
   <name>`, `Created branch <name> from <remote>/<name>`, or `Already on
   branch <name>` (idempotent, nothing touched).

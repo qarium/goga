@@ -6,7 +6,7 @@ facade that registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the status subcommand reads remote-tracking refs with
---remote/-r.
+--remote/-r and adds the title column with --info/-i.
 
 ## Boarding all work
 
@@ -18,11 +18,13 @@ current year); the status subcommand reads remote-tracking refs with
 Prints a three-column table — topic, branch, statuses — with column and
 row separators fitted to the terminal width. `--info/-i` adds the title
 column: topic, branch, title, and statuses share the width — each of
-the first three capped at a quarter of it — and the title shows the
-first line of the topic's `title.txt` read from the ref trees without
-checkout; a topic without a title file shows an empty cell. The current
-branch row carries `*`; remote hosts keep their remote prefix. A topic's
-statuses are all its maximal statuses, wrapped onto continuation lines.
+the first three capped at a quarter of it minus the dividers — and the
+title shows the first line of the topic's `title.txt`, read from the
+ref trees without checkout (the current row from the working copy); a
+topic without a title file shows an empty cell. Overlong cells are
+truncated with an ellipsis. The current branch row carries `*` in its
+topic cell; remote hosts keep their remote prefix. A topic's statuses
+are all its maximal statuses, wrapped onto continuation lines.
 An empty board prints nothing and exits 0.
 
 ## Creating fresh work
@@ -35,8 +37,9 @@ Creates the branch with the name as entered, switches to it, and creates
 the topic directory of the scoped year. An explicit `--title/-t` also
 writes the topic title file `title.txt` — the text as entered plus a
 trailing newline; on the idempotent re-run (the current branch already
-hosts the same slug) the title file is created or overwritten and
-nothing else mutates. Without `-t` no title file is written. Occupied
+hosts the same slug) the topic directory is ensured and the title file
+is created or overwritten — nothing else mutates, no switch happens.
+Without `-t` no title file is written. Occupied
 names and empty slugs trigger a re-ask on an interactive terminal, or a
 clean error with a hint otherwise.
 

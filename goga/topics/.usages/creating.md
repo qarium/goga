@@ -43,6 +43,7 @@ result = create_topic("Feature/Foo_Bar", title="Payment retry")
 - The current branch already hosting the same slug with an explicit
   title: the topic directory is ensured and `title.txt` is created or
   overwritten — nothing else mutates, no switch happens.
-- Without a title the behavior carries no title file at all.
+- Without a title no title file is written — an existing one is left
+  untouched.
 - `title.txt` marks the `new` status on the topic status scale; no
   other artifact is written — artifacts belong to their producers.

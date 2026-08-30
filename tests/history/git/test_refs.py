@@ -162,3 +162,22 @@ class TestListBranchRefs:
 
         assert refs == []
         assert run.call_count == 2
+
+    def test_list_branch_refs_propagates_git_failure(self) -> None:
+        """A git infrastructure failure of the listing propagates unwrapped."""
+        failure = subprocess.CalledProcessError(returncode=128, cmd=["git", "for-each-ref"])
+        run = mock.Mock(side_effect=failure)
+        with (
+            mock.patch("goga.history.git.refs.subprocess.run", run),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            list_branch_refs()
+
+    def test_list_branch_refs_propagates_missing_binary(self) -> None:
+        """A missing git binary surfaces as the OS-level error of the call."""
+        run = mock.Mock(side_effect=FileNotFoundError("git"))
+        with (
+            mock.patch("goga.history.git.refs.subprocess.run", run),
+            pytest.raises(FileNotFoundError, match="git"),
+        ):
+            list_branch_refs()

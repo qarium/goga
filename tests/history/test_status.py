@@ -42,10 +42,11 @@ class _FixedClock:
 
 
 def _builtin_scale() -> StatusScale:
-    """Deterministic built-in scale — eight entries with the contract artifacts."""
+    """Deterministic built-in scale — nine entries with the contract artifacts."""
     return StatusScale(
         stages=[
             Stage(name="empty", filepath=""),
+            Stage(name="new", filepath="title.txt"),
             Stage(name="defined", filepath="prd.md"),
             Stage(name="discovered", filepath="adr.md"),
             Stage(name="backlog", filepath="task.md"),
@@ -140,6 +141,7 @@ class TestResolveTopicStatus:
     @pytest.mark.parametrize(
         ("artifact", "expected"),
         [
+            ("title.txt", ["new"]),
             ("prd.md", ["defined"]),
             ("adr.md", ["discovered"]),
             ("task.md", ["backlog"]),

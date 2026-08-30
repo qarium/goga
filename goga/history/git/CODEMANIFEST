@@ -67,6 +67,9 @@ Annotations: |
     Requirements:
     - Read-only — no ref is created, moved, or deleted
     - No network — remote-tracking refs as they exist locally
+    - A git infrastructure failure of the listing raises
+      subprocess.CalledProcessError, a missing git binary OSError — both
+      propagate to the caller
 
     Constraints:
     - Do not deduplicate — a local branch and its remote twin are two distinct

@@ -64,6 +64,10 @@ Annotations: |
     - ensure — an optional NAME positional
     - prune — an optional YEAR positional, --dry-run
 
+    The surfaces carry the CLI names; the Python attribute of a callback
+    may carry a suffix to avoid shadowing a builtin (list -> list_topics) —
+    the CLI name is the contract.
+
     Apply the `convention` CLI command docstring rule for the --help text
     (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
@@ -91,8 +95,9 @@ Annotations: |
       Subcommand goga history status: print the flat list of topics of one
       year, each line "topic [status] [status] ...".
 
-      `year`: optional YEAR positional — four digits; None means the current
-              year; the year is never printed
+      `year`: optional YEAR positional — four digits, the recognized form of
+              a history year; None means the current year; the year is
+              never printed
       `topic`: --topic/-t value — a substring filter; the value is normalized
                via `normalize_topic_slug` before matching
       `statuses`: -s/--status values (repeatable, multiple=True) — qualified
@@ -105,9 +110,10 @@ Annotations: |
       the color rules.
 
       Algorithm:
-      1. Assemble the status scale via `assemble_status_scale` once and
-         validate every name in `statuses` against it — an unknown name is
-         a clean error (stderr, non-zero exit)
+      1. Assemble the status scale via `assemble_status_scale` once — a
+         broken tool package of the assembly is a clean error (stderr,
+         non-zero exit) — and validate every name in `statuses` against it;
+         an unknown name is a clean error (stderr, non-zero exit)
       2. A `topic` value that normalizes to an empty slug is a clean error
          (stderr, non-zero exit) — an empty filter would silently match
          every topic and is rejected instead
@@ -142,7 +148,8 @@ Annotations: |
                means the current git branch
       `filename`: -f/--file value — an artifact filename with an extension;
                   without the flag the topic directory is printed
-      `year`: --year/-y value — four digits; None means the current year
+      `year`: --year/-y value — four digits, the recognized form of a
+               history year; None means the current year
       `exit_code`: 0 on success, 1 on error
 
       Apply the `topic-paths` practice for the path contracts of the domain.
@@ -195,8 +202,10 @@ Annotations: |
       Subcommand goga history prune: delete the orphan topics of one year —
       the topics no branch of the repository inventory hosts.
 
-      `year`: optional YEAR positional — four digits; None means the current
-              year
+      `year`: optional YEAR positional — four digits, the recognized form of
+              a history year; None means the current year; a year with no
+              matching directory of the tree yields an empty result — the
+              domain enumerates four-digit year directories only
       `dry_run`: the --dry-run flag — list the deletion candidates without
                  deleting anything
       `exit_code`: 0 on success (an empty result included), 1 on error
@@ -207,8 +216,12 @@ Annotations: |
 
       Algorithm:
       1. Run the orphan cleanup via `prune_topics` with `year` and `dry_run`
-      2. Echo one slug per line of the returned list
-      3. An empty result prints nothing — exit 0
+      2. A domain ValueError surfaces as a clean CLI error; a git
+         CalledProcessError surfaces as git failed, a missing git binary
+         as git is not available, and an OSError of the deletion as
+         cannot delete topic directory
+      3. Echo one slug per line of the returned list
+      4. An empty result prints nothing — exit 0
 
       Requirements:
       - The deletion is irreversible — the dry pass is the safe preview

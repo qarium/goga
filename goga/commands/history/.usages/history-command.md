@@ -17,7 +17,7 @@ artifacts.
 
 - Read-only. An empty history prints nothing, exit 0.
 
-## Reading the statuses of a year
+## goga history status [YEAR] [-t TOPIC] [-s STATUS]
 
     goga history status
     goga history status 2025
@@ -29,6 +29,9 @@ in scale order — for example "release-1-3-0 [done] [mkdocs.published]".
 Status filters take qualified status names: built-in names bare, tool
 statuses as <tool>.<name>; a record matches when any of its maximal
 statuses is one of the requested names. An unknown name is a clean error.
+`-t/--topic` keeps the topics whose slug contains the normalized filter
+as a substring; it combines with `-s/--status` by AND, and a filter that
+normalizes to an empty slug is a clean error.
 The year is never printed; an empty result prints nothing and exits 0.
 
 ## goga history path [TOPIC] [-f FILENAME] [-y YEAR]
@@ -80,4 +83,5 @@ is printed; an empty result prints nothing and exits 0.
 Every failure is a clean message on stderr with a non-zero exit and no
 fallback values: git unavailable / not a repository / detached HEAD, a
 topic that normalizes to an empty slug, a filename without an extension, an
-unknown status name.
+unknown status name, a tool package of the status scale that fails to
+import (status), a topic directory that cannot be deleted (prune).

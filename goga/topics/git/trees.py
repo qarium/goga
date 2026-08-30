@@ -71,16 +71,21 @@ def read_ref_file(ref: str, path: str) -> str | None:
         path: The file path to read, relative to the repository root.
 
     Returns:
-        The file content as text, or None when the file is absent at
-        the ref.
+        The file content as text, or None when git cannot read the
+        file at the ref — an absent file or any other git failure.
 
     Algorithm:
         1. Ask git for the content of ``path`` at the ``ref``
-        2. An absent file at the ref yields None — not an error
+        2. A failed read yields None — not an error: the content is
+           display data, never a reason to fail the reader
         3. Return the content as text
 
     Requirements:
         One git invocation per file.
+
+        Every git failure of the read yields None — an absent file at
+        the ref, an unknown ref, or any other git error are
+        indistinguishable to the caller.
 
         Read-only — the working copy, the index, and ``.git`` stay
         untouched.

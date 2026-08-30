@@ -278,6 +278,36 @@ class TestCreateTopic:
         create_and_switch.assert_not_called()
         ensure_dir.assert_not_called()
 
+    def test_create_topic_without_title_writes_no_title_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A free name without a title: the topic directory carries no title file."""
+        monkeypatch.chdir(tmp_path)
+        _wire_inventory(monkeypatch, [], current="main")
+        monkeypatch.setattr(creation, "current_year", lambda: "2026")
+
+        result = create_topic("Feature/Foo_Bar")
+
+        assert result == "Created branch Feature/Foo_Bar and topic 2026/feature-foo-bar"
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
+        assert topic_dir.is_dir()
+        assert not (topic_dir / "title.txt").exists()
+
+    def test_create_topic_without_title_leaves_existing_title_file(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The idempotent path without a title: an existing title file stays verbatim."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = _topic_dir(tmp_path, "2026", "feature-foo")
+        (topic_dir / "title.txt").write_text("Old\n", encoding="utf-8")
+        create_and_switch = _wire_inventory(monkeypatch, [], current="feature-foo")
+
+        result = create_topic("feature-foo")
+
+        assert result == "Branch feature-foo already hosts topic 2026/feature-foo"
+        create_and_switch.assert_not_called()
+        assert (topic_dir / "title.txt").read_text(encoding="utf-8") == "Old\n"
+
     def test_create_topic_with_title_idempotent_path(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

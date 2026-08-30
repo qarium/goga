@@ -23,10 +23,11 @@ for record in records:
 ```
 
 - One `BoardRecord` per hosted topic: the slug, the hosting branch display
-  name, the maximal status names in scale order, the current marker, and
-  the title — the first line of the topic's `title.txt`, or None when the
-  topic has none. The title is read from the ref trees without checkout;
-  rows hosted by other branches show their titles.
+  name, the maximal status names in scale order, the current and remote
+  markers, and the title — the first line of the topic's `title.txt`, or
+  None when the topic has none. Rows hosted by other branches read their
+  titles from the ref trees without checkout; the current branch's row
+  reads the working copy, so an uncommitted title edit shows at once.
 - A local branch and its remote twin collapse to one row — the local branch
   wins. Two different branches hosting one slug stay two rows.
 - Sorting: scale order of the first maximal status, then topic alphabet.

@@ -48,7 +48,9 @@ def list_branch_refs() -> list[BranchRef]:
     Algorithm:
         1. Ask git for the local branch refs
         2. Ask git for the remote-tracking refs
-        3. Merge both into one inventory sorted alphabetically by display
+        3. Drop the ``<remote>/HEAD`` symrefs of the answers — they are
+           pointers, not branches
+        4. Merge both into one inventory sorted alphabetically by display
            name
 
     Requirements:

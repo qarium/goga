@@ -49,8 +49,9 @@ if content is not None:
     print(content.splitlines()[0] if content else "")
 ```
 
-- Returns the file content as text, or None when the file is absent at
-  the ref — absence is a normal condition, not an error.
+- Returns the file content as text, or None when the file cannot be read
+  at the ref — an absent file is the normal case, not an error; any other
+  git failure reads the same way.
 - One git invocation per file; no checkout, no worktree, no temp
   directory — the working copy stays untouched.
 

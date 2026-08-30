@@ -60,7 +60,9 @@ Annotations: |
   title, and the combined ensure orchestration that switches onto hosted
   work and creates it when nothing hosts the identifier. Topic identity,
   addressing, and statuses belong to the history facade; git access
-  belongs to the topics git cell. Mutations are local-only and happen
+  belongs to the topics git cell. Git infrastructure failures and the
+  fatal scale-assembly ImportError surface as click.ClickException.
+  Mutations are local-only and happen
   strictly after every decision is made. Use relative imports.
 
 ---
@@ -205,9 +207,11 @@ Annotations: |
     3. Exact branch name match -> the candidates hosting that name
     4. Exact slug match otherwise -> the branches hosting the slug, local
        branches first
-    5. Prefix matches otherwise -> the branches whose name or hosted slug
-       starts with the input
-    6. Return the candidates with their statuses
+    5. Prefix matches otherwise -> the branches whose name starts with
+       the raw `identifier`, and — when the slug is non-empty — the
+       branches hosting a topic whose slug starts with it
+    6. Collapse the tier to one entry per branch, then return the
+       candidates with their statuses
 
     Requirements:
     - Exact matches always precede prefix matches
@@ -325,7 +329,7 @@ Annotations: |
     Algorithm:
     1. Normalize `branch_name` into a slug via `normalize_topic_slug`
     2. Empty slug -> input error: print the reason, prompt for a new name
-       on an interactive terminal and restart, or fail with the hint
+       on an interactive terminal and restart, or fail with the reason
        otherwise
     3. The current branch — read via `resolve_current_branch_name` — hosts
        the same slug -> the idempotent path: a `title` given writes the
@@ -346,12 +350,17 @@ Annotations: |
     - The branch keeps the name as entered; the topic directory takes the
       slug — the two may deliberately differ
     - The title file carries `title` as entered plus a single trailing
-      newline, encoded UTF-8
+      newline, encoded UTF-8; an empty string writes the bare newline, and
+      the first-line read of the board yields the empty title
     - The title file is written only when `title` is given — None never
       creates and never overwrites it; an explicit `title` creates the
       file or overwrites it
     - The topic directory exists before the title file is written
     - An aborted re-ask leaves the repository untouched
+    - On the fresh path the branch is created and switched to before the
+      topic directory and the title file are written — a filesystem
+      failure of the writes leaves the caller on the new branch with the
+      directory or the title missing, reported as a clean error
     - The caller stays on the new branch
 
     Constraints:

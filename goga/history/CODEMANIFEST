@@ -378,10 +378,13 @@ Annotations: |
     Delete the orphan topics of one year — the topics no branch of the
     repository inventory hosts.
 
-    `year`: optional year as four digits; None means the current year
+    `year`: optional year as four digits; None and the empty string mean
+            the current year
     `dry_run`: True lists the orphan topics without deleting anything
     `removed`: the slugs of the orphan topics sorted alphabetically — the
-               deleted ones, or the deletion candidates under `dry_run`
+               deleted ones, or the deletion candidates under `dry_run`;
+               the slugs come out normalized — a manually unnormalized
+               directory name is listed yet not reachable for deletion
 
     Apply the `convention` practice for docstring style and intra-package
     imports.
@@ -403,6 +406,8 @@ Annotations: |
     - A topic is protected when at least one branch of the inventory
       normalizes to its slug — the protection is year-independent, a branch
       protects same-named topics of every year
+    - The branch inventory is queried even when the resolved year holds no
+      topics; a git failure of the listing propagates to the caller
     - Deletion is unconditional — no status protects a topic
     - Only the resolved year is affected — no other year is touched
     - Filesystem-only — no branch, ref, or index of git is mutated in any

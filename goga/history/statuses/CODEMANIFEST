@@ -46,6 +46,9 @@ Annotations: |
       backlog, designed, specified, planned, done by the artifacts
       title.txt, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
       completed/plan.md
+    - The built-in empty entry carries the empty artifact path — one name
+      more than the artifact list: it is never markable and surfaces as
+      the single status of a topic with no artifact present
     - A tool status never reorders or replaces a built-in one
   properties:
     "stages -> list[Stage]": |
@@ -103,7 +106,8 @@ Annotations: |
     `name`: the qualified name — bare for built-in entries, <tool>.<name>
             for tool entries
     `filepath`: the artifact path relative to the topic directory; nested
-                paths allowed
+                paths allowed; empty only for the built-in empty entry —
+                such an entry is never marked present
     `before`: the qualified name of the entry this one precedes; None for
               built-in entries
     `after`: the qualified name of the entry this one follows; None for
@@ -115,6 +119,8 @@ Annotations: |
     Requirements:
     - A tool entry carries at least one anchor; a built-in entry carries
       none — its position is the axis order
+    - A filepath of the empty string belongs to the built-in empty entry
+      alone — no tool entry may register the unmarked floor
   properties:
     "name -> str": |
       The qualified status name.
@@ -200,11 +206,14 @@ Annotations: |
     5. Call the callback of the `registration` practice with a registry
        scoped to the package
     6. Any exception from the callback — a registration content error or a
-       crashed callback — skips that registration with a warning to stderr;
-       the package import failure of step 3 remains the only fatal case
-    7. Resolve anchors and validate placement ranges; an unresolvable
-       anchor or an invalid range skips the registration with a warning to
-       stderr
+       crashed callback — ends that callback's registration with a warning
+       to stderr, keeping the entries it registered before failing; the
+       package import failure of step 3 remains the only fatal case
+    7. Resolve the anchors of each surviving entry against the list
+       assembled by the moment the entry is processed — the built-in axis
+       plus the entries of the earlier packages and the earlier entries of
+       the current one; an anchor naming anything else, or an invalid
+       placement range, skips the registration with a warning to stderr
     8. Assemble and return the scale
 
     Requirements:
@@ -212,6 +221,10 @@ Annotations: |
       before any output and before any mutation
     - The scale assembles from the surviving registrations alone — one
       broken registration never cancels the rest
+    - Entries sharing an anchor form one continuous block in registration
+      order: an after-anchored entry lands at the end of its anchor's
+      block, a before-anchored entry right in front of its anchor, and
+      both anchors given define a range the entry must fit into
     - Package enumeration mirrors goga/connect: importlib.metadata
       .packages_distributions() filtered to top-level module names starting
       with goga_tool_, sorted alphabetically by top-level module name

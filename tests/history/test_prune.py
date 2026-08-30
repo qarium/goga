@@ -200,6 +200,28 @@ class TestPruneTopicsNegatives:
         remover.assert_not_called()
         assert kept.is_dir()
 
+    def test_prune_topics_queries_inventory_even_for_empty_year(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A year without topics still reads the branch inventory — no short-circuit."""
+        monkeypatch.chdir(tmp_path)
+        with _inventory([]) as inventory:
+            assert prune_topics("1999") == []
+
+        inventory.assert_called_once_with()
+
+    def test_prune_topics_propagates_inventory_git_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A git failure of the ref listing propagates to the caller."""
+        monkeypatch.chdir(tmp_path)
+        failure = subprocess.CalledProcessError(returncode=128, cmd=["git", "for-each-ref"])
+        with (
+            mock.patch("goga.history.prune.list_branch_refs", side_effect=failure),
+            pytest.raises(subprocess.CalledProcessError),
+        ):
+            prune_topics("2026")
+
     def test_prune_topics_never_mutates_git(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """The only git invocations of the flow are the read-only ref listings — wet and dry alike."""
         monkeypatch.chdir(tmp_path)

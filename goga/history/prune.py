@@ -22,12 +22,15 @@ def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
     repository inventory hosts.
 
     Args:
-        year: Optional year as four digits; ``None`` means the current year.
+        year: Optional year as four digits — ``None`` and the empty string
+            mean the current year.
         dry_run: ``True`` lists the orphan topics without deleting anything.
 
     Returns:
         The slugs of the orphan topics sorted alphabetically — the deleted
-        ones, or the deletion candidates under ``dry_run``.
+        ones, or the deletion candidates under ``dry_run``. The slugs come
+        out normalized: a manually unnormalized directory name is listed
+        yet not reachable for deletion.
 
     Algorithm:
         1. Resolve the year — ``year`` when given, otherwise the current year
@@ -48,6 +51,9 @@ def prune_topics(year: str | None = None, dry_run: bool = False) -> list[str]:
         A topic is protected when at least one branch of the inventory
         normalizes to its slug — the protection is year-independent, a
         branch protects same-named topics of every year.
+
+        The branch inventory is queried even when the resolved year holds
+        no topics; a git failure of the listing propagates to the caller.
 
         Deletion is unconditional — no status protects a topic.
 

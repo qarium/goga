@@ -36,9 +36,10 @@ def render_topic_board(records: list[BoardRecord], width: int, info: bool = Fals
             four-column width rule.
 
     Algorithm:
-        1. Compute the column widths from ``width`` and the record content
-           per the width rule of the requirements — the three-column rule
-           without ``info``, the four-column rule with it
+        1. Compute the column widths from ``width`` alone per the width
+           rule of the requirements — the three-column rule without
+           ``info``, the four-column rule with it; the grid is fixed and
+           independent of the record content
         2. Print one header row and one separator row with column and row
            dividers — the column order is topic, branch, title, statuses
            under ``info``
