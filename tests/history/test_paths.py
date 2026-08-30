@@ -6,11 +6,13 @@
 - ``resolve_topic_file(topic: str, filename: str, year: str | None = None) -> Path``
 - ``topic_exists(topic: str, year: str | None = None) -> bool``
 - ``ensure_topic_dir(name: str, year: str | None = None) -> Path``
+- ``remove_topic_dir(name: str, year: str | None = None) -> bool``
 
 The path composers are pure with respect to the filesystem; ``ensure_topic_dir``
-is the only mutating routine. The single mock target is ``naming.datetime``
-(the mandated bare-``now()`` point), patched at the import site; filesystem
-fixtures use ``tmp_path`` + ``monkeypatch.chdir``.
+and ``remove_topic_dir`` are the mutating routines — creation and deletion.
+The single mock target is ``naming.datetime`` (the mandated bare-``now()``
+point), patched at the import site; filesystem fixtures use ``tmp_path`` +
+``monkeypatch.chdir``.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import pytest
 from goga.history import naming, paths
 from goga.history.paths import (
     ensure_topic_dir,
+    remove_topic_dir,
     resolve_history_root,
     resolve_topic_dir,
     resolve_topic_file,
@@ -45,17 +48,19 @@ class _FixedClock:
 
 class TestPathsContract:
     def test_routines_are_importable_from_module_and_callable(self) -> None:
-        """All five routines are importable from ``goga.history.paths`` and callable."""
+        """All six routines are importable from ``goga.history.paths`` and callable."""
         assert callable(resolve_history_root)
         assert callable(resolve_topic_dir)
         assert callable(resolve_topic_file)
         assert callable(topic_exists)
         assert callable(ensure_topic_dir)
+        assert callable(remove_topic_dir)
         assert paths.resolve_history_root is resolve_history_root
         assert paths.resolve_topic_dir is resolve_topic_dir
         assert paths.resolve_topic_file is resolve_topic_file
         assert paths.topic_exists is topic_exists
         assert paths.ensure_topic_dir is ensure_topic_dir
+        assert paths.remove_topic_dir is remove_topic_dir
 
     def test_facade_reexports_the_paths_names(self) -> None:
         """The paths routines are importable from the domain facade."""
@@ -130,6 +135,20 @@ class TestPathsContract:
         hints = typing.get_type_hints(ensure_topic_dir)
         assert hints == {"name": str, "year": str | None, "return": Path}
         bound = inspect.signature(ensure_topic_dir).bind(name="X", year="2025")
+        assert bound.arguments == {"name": "X", "year": "2025"}
+
+    def test_remove_topic_dir_signature(self) -> None:
+        """``remove_topic_dir(name: str, year: str | None = None) -> bool`` — year is a kwarg."""
+        signature = inspect.signature(remove_topic_dir)
+        assert list(signature.parameters) == ["name", "year"]
+        assert all(
+            parameter.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD
+            for parameter in signature.parameters.values()
+        )
+        assert signature.parameters["year"].default is None
+        hints = typing.get_type_hints(remove_topic_dir)
+        assert hints == {"name": str, "year": str | None, "return": bool}
+        bound = inspect.signature(remove_topic_dir).bind(name="X", year="2025")
         assert bound.arguments == {"name": "X", "year": "2025"}
 
     def test_history_root_helper_points_at_the_tree(self) -> None:
@@ -299,3 +318,48 @@ class TestEnsureTopicDir:
 
         with pytest.raises(OSError, match="feat-x"):
             ensure_topic_dir("feat-x", year="2026")
+
+
+class TestRemoveTopicDir:
+    def test_remove_topic_dir_deletes_whole_directory(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The whole directory goes — nested ``completed/`` with it; the year directory stays."""
+        monkeypatch.chdir(tmp_path)
+        topic_dir = tmp_path / ".goga" / "history" / "2026" / "feature-foo-bar"
+        (topic_dir / "completed").mkdir(parents=True)
+        (topic_dir / "prd.md").write_text("problem", encoding="utf-8")
+        (topic_dir / "completed" / "plan.md").write_text("plan", encoding="utf-8")
+
+        assert remove_topic_dir("Feature/Foo_Bar", "2026") is True
+        assert not topic_dir.exists()
+        assert not (topic_dir / "completed").exists()
+        assert (tmp_path / ".goga" / "history" / "2026").is_dir()
+
+    def test_remove_topic_dir_absent_returns_false(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An absent directory is idempotent absence — False, not an error."""
+        monkeypatch.chdir(tmp_path)
+        assert remove_topic_dir("absent-topic", "2026") is False
+        assert not (tmp_path / ".goga").exists()
+
+    def test_remove_topic_dir_stray_file_returns_false(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A stray file named like the slug does not occupy a topic — it stays in place."""
+        monkeypatch.chdir(tmp_path)
+        year_dir = tmp_path / ".goga" / "history" / "2026"
+        year_dir.mkdir(parents=True)
+        (year_dir / "feat-a").write_text("not a topic", encoding="utf-8")
+
+        assert remove_topic_dir("feat-a", "2026") is False
+        assert (year_dir / "feat-a").is_file()
+
+    def test_remove_topic_dir_empty_slug_raises(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An empty slug is the directory composer's clean error — nothing is deleted."""
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(ValueError, match="normalizes to an empty topic slug"):
+            remove_topic_dir("", "2026")

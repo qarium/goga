@@ -3,12 +3,14 @@
 The routines declared in the cell CODEMANIFEST with ``location: paths.py``:
 the public history-root composer (the private helper delegates to it), the
 two pure path composers (topic directory and artifact file), the read-only
-occupancy oracle, and the idempotent directory creator. Composers never touch
-the filesystem — creation belongs to ``ensure_topic_dir`` alone.
+occupancy oracle, the idempotent directory creator, and the idempotent
+directory remover. Composers never touch the filesystem — creation belongs
+to ``ensure_topic_dir`` alone, deletion to ``remove_topic_dir`` alone.
 """
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path, PurePath
 
 from .naming import current_year, normalize_topic_slug
@@ -127,3 +129,36 @@ def ensure_topic_dir(name: str, year: str | None = None) -> Path:
     topic_dir = resolve_topic_dir(name, year)
     topic_dir.mkdir(parents=True, exist_ok=True)
     return topic_dir
+
+
+def remove_topic_dir(name: str, year: str | None = None) -> bool:
+    """Delete the directory of a history topic of a year.
+
+    The whole topic directory goes — every artifact including nested
+    directories such as ``completed/`` — and nothing else: sibling topic
+    directories and the year directory itself stay untouched. Deciding
+    whether a topic deserves deletion belongs to the caller; this routine
+    only executes the decision. A pure filesystem mutation — no git branch,
+    ref, or index is touched. A stray file named like the slug does not
+    occupy a topic (the ``topic_exists`` semantics), so it yields False
+    and stays in place.
+
+    Args:
+        name: Topic input — a branch name or an already-normalized slug.
+        year: Optional year as four digits; ``None`` means the current year.
+
+    Returns:
+        True when the topic directory existed and was deleted, False when
+        it was absent.
+
+    Raises:
+        ValueError: The name normalizes to an empty slug (the directory
+            composer's error).
+        OSError: Propagated from ``rmtree`` — unexpected OS failures are
+            not swallowed.
+    """
+    topic_dir = resolve_topic_dir(name, year)
+    if not topic_dir.is_dir():
+        return False
+    shutil.rmtree(topic_dir)
+    return True
