@@ -5,12 +5,12 @@ For consumers that report progress: CLI status output, boards, reviews,
 dashboards.
 
 A topic's status is the set of its maximal present statuses on the topic
-status scale. The built-in axis is fixed — empty, defined, discovered,
-backlog, designed, specified, planned, done, marked by the artifacts prd.md,
-adr.md, task.md, arch.md, design.md, plan.md, completed/plan.md inside the
-topic directory. Tool packages extend the scale with qualified statuses
-`<tool>.<name>`, so one topic can carry several statuses at once — all of
-them are shown.
+status scale. The built-in axis is fixed — empty, new, defined, discovered,
+backlog, designed, specified, planned, done, marked by the artifacts
+title.txt, prd.md, adr.md, task.md, arch.md, design.md, plan.md,
+completed/plan.md inside the topic directory. Tool packages extend the scale
+with qualified statuses `<tool>.<name>`, so one topic can carry several
+statuses at once — all of them are shown.
 
 ## Listing a year with statuses
 

@@ -13,23 +13,32 @@ current year); the status subcommand reads remote-tracking refs with
     goga topics status
     goga topics --year 2025 status
     goga topics status --remote
+    goga topics status --info
 
-Prints a three-column table — topic, branch, statuses — with column and row
-separators fitted to the terminal width. The current branch row carries `*`;
-remote hosts keep their remote prefix. A topic's statuses are all its
-maximal statuses, wrapped onto continuation lines. An empty board prints
-nothing and exits 0.
+Prints a three-column table — topic, branch, statuses — with column and
+row separators fitted to the terminal width. `--info/-i` adds the title
+column: topic, branch, title, and statuses share the width — each of
+the first three capped at a quarter of it — and the title shows the
+first line of the topic's `title.txt` read from the ref trees without
+checkout; a topic without a title file shows an empty cell. The current
+branch row carries `*`; remote hosts keep their remote prefix. A topic's
+statuses are all its maximal statuses, wrapped onto continuation lines.
+An empty board prints nothing and exits 0.
 
 ## Creating fresh work
 
     goga topics create Feature/Foo_Bar
     goga topics --year 2025 create Feature/Foo_Bar
+    goga topics create Feature/Foo_Bar -t "Payment retry"
 
 Creates the branch with the name as entered, switches to it, and creates
-the topic directory of the scoped year. The current branch already hosting
-the same slug is an idempotent success. Occupied names and empty slugs
-trigger a re-ask on an interactive terminal, or a clean error with a hint
-otherwise.
+the topic directory of the scoped year. An explicit `--title/-t` also
+writes the topic title file `title.txt` — the text as entered plus a
+trailing newline; on the idempotent re-run (the current branch already
+hosts the same slug) the title file is created or overwritten and
+nothing else mutates. Without `-t` no title file is written. Occupied
+names and empty slugs trigger a re-ask on an interactive terminal, or a
+clean error with a hint otherwise.
 
 ## Switching to existing work
 

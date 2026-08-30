@@ -37,6 +37,23 @@ paths = read_ref_tree_paths("feature-foo", prefix)
 - One git invocation per ref; a ref or prefix without matches yields an
   empty list.
 
+## Reading one file of a ref
+
+```python
+from goga.history import resolve_history_root
+from goga.topics.git import read_ref_file
+
+path = f"{resolve_history_root().as_posix()}/2026/feature-foo/title.txt"
+content = read_ref_file("feature-foo", path)
+if content is not None:
+    print(content.splitlines()[0] if content else "")
+```
+
+- Returns the file content as text, or None when the file is absent at
+  the ref — absence is a normal condition, not an error.
+- One git invocation per file; no checkout, no worktree, no temp
+  directory — the working copy stays untouched.
+
 ## Switching branches
 
 ```python

@@ -6,6 +6,7 @@ Imports:
       - collect_topic_statuses
       - ensure_topic_dir
       - normalize_topic_slug
+      - prune_topics
       - resolve_current_branch_name
       - resolve_topic_dir
       - resolve_topic_file
@@ -14,6 +15,7 @@ Imports:
       - topic-paths
       - topic-statuses
       - history-tree
+      - prune
     From: goga/history
 
 Usages:
@@ -60,6 +62,7 @@ Annotations: |
       -s/--status (repeatable status filter)
     - path — an optional TOPIC positional, -f/--file FILENAME, --year/-y YYYY
     - ensure — an optional NAME positional
+    - prune — an optional YEAR positional, --dry-run
 
     Apply the `convention` CLI command docstring rule for the --help text
     (rendered verbatim by Click; omit Args/Returns/Raises).
@@ -188,6 +191,34 @@ Annotations: |
         belongs to the caller
       - Do not create artifact files inside the directory
 
+    "prune(year: str | None = None, dry_run: bool = False) -> exit_code: int": |
+      Subcommand goga history prune: delete the orphan topics of one year —
+      the topics no branch of the repository inventory hosts.
+
+      `year`: optional YEAR positional — four digits; None means the current
+              year
+      `dry_run`: the --dry-run flag — list the deletion candidates without
+                 deleting anything
+      `exit_code`: 0 on success (an empty result included), 1 on error
+
+      Apply the `prune` practice for the orphan-cleanup contract of the
+      domain.
+      Apply the `click` practice for the flag and echo.
+
+      Algorithm:
+      1. Run the orphan cleanup via `prune_topics` with `year` and `dry_run`
+      2. Echo one slug per line of the returned list
+      3. An empty result prints nothing — exit 0
+
+      Requirements:
+      - The deletion is irreversible — the dry pass is the safe preview
+      - Only stdout carries the slug list — nothing else is printed
+
+      Constraints:
+      - Do not ask for confirmation — the dry pass is the safety tool
+      - Do not compute orphan-hood or delete anything here — both belong to
+        the domain
+
 "render_history_tree(tree: list[HistoryYear])":
   location: render.py
   annotations: |
@@ -243,5 +274,5 @@ Annotations: |
 Author: Goga
 CreatedAt: 28/08/26
 Description: |
-  The goga history command group with the list, status, path, and ensure
-  subcommands over the history domain.
+  The goga history command group with the list, status, path, ensure, and
+  prune subcommands over the history domain.

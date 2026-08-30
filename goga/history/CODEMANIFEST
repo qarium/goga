@@ -1,6 +1,8 @@
 Imports:
   - Types:
       - resolve_current_branch_name
+      - BranchRef
+      - list_branch_refs
     From: goga/history/git
   - Types:
       - StatusScale
@@ -22,12 +24,15 @@ Annotations: |
 
   This cell is the single owner of the .goga/history/ tree: topic identity
   (the slug grammar and the current year), topic addressing (the tree root,
-  directory and artifact file paths, existence, creation), the topic status
-  listing, and tree traversal. The status scale is provided by the statuses
+  directory and artifact file paths, existence, creation, removal), the
+  topic status listing, tree traversal, and the orphan cleanup of one year
+  — the deletion of topic directories no branch of the repository
+  inventory hosts. The status scale is provided by the statuses subcell and
+  re-exported on this facade; the branch inventory is provided by the git
   subcell and re-exported on this facade. Artifact files are written by
-  their producers — this cell computes paths and creates topic directories
-  only; it never writes artifact content. Pure filesystem and grammar
-  logic: no git access beyond the branch reader re-export, no CLI, no
+  their producers — this cell computes paths and creates and removes topic
+  directories; it never writes artifact content. Pure filesystem and
+  grammar logic: no git access beyond the subcell re-exports, no CLI, no
   output rendering. Every topic value received on the input is normalized —
   a branch name and an already-normalized slug are both accepted,
   identically and idempotently. Use relative imports.
@@ -35,6 +40,8 @@ Annotations: |
 ---
 
 ->resolve_current_branch_name: {}
+->BranchRef: {}
+->list_branch_refs: {}
 ->StatusScale: {}
 ->Stage: {}
 ->StatusRegistry: {}
@@ -217,6 +224,35 @@ Annotations: |
       belongs to the caller
     - Do not create or touch artifact files inside the directory
 
+"remove_topic_dir(name: str, year: str | None = None) -> removed: bool":
+  location: paths.py
+  annotations: |
+    Delete the directory of a history topic of a year.
+
+    `name`: topic input — a branch name or an already-normalized slug
+    `year`: optional year as four digits; None means the current year
+    `removed`: True when the topic directory existed and was deleted,
+               False when it was absent
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Compose the topic directory via `resolve_topic_dir` with `name` and
+       `year`
+    2. An absent directory yields False — idempotent absence, not an error
+    3. Delete the directory with all of its content and return True
+
+    Requirements:
+    - Deletes the whole topic directory — every artifact including nested
+      directories goes with it
+    - Pure filesystem mutation — no git branch, ref, or index is touched
+
+    Constraints:
+    - Do not decide whether a topic deserves deletion — the orphan decision
+      belongs to the caller
+    - Do not touch sibling topic directories or the year directory itself
+
 "TopicRecord(topic: str, statuses: list[str])":
   location: status.py
   annotations: |
@@ -336,11 +372,55 @@ Annotations: |
     - Do not compute statuses — the tree carries topic names only
     - Do not render — output shaping belongs to the consumer
 
+"prune_topics(year: str | None = None, dry_run: bool = False) -> removed: list[str]":
+  location: prune.py
+  annotations: |
+    Delete the orphan topics of one year — the topics no branch of the
+    repository inventory hosts.
+
+    `year`: optional year as four digits; None means the current year
+    `dry_run`: True lists the orphan topics without deleting anything
+    `removed`: the slugs of the orphan topics sorted alphabetically — the
+               deleted ones, or the deletion candidates under `dry_run`
+
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Resolve the year — `year` when given, otherwise the current year
+    2. Take the topics of the resolved year from the tree collected via
+       `collect_history_tree` — an absent year yields no topics
+    3. Enumerate the repository branch inventory via `list_branch_refs`
+    4. Build the hosted slug set: every local branch name normalized via
+       `normalize_topic_slug`, and the short name of every remote-tracking
+       ref — the part after the first "/" — normalized the same way
+    5. The orphans are the year's topics whose slug is not in the hosted set
+    6. `dry_run` False -> delete every orphan directory via
+       `remove_topic_dir`; True -> delete nothing
+    7. Return the orphan slugs sorted alphabetically
+
+    Requirements:
+    - A topic is protected when at least one branch of the inventory
+      normalizes to its slug — the protection is year-independent, a branch
+      protects same-named topics of every year
+    - Deletion is unconditional — no status protects a topic
+    - Only the resolved year is affected — no other year is touched
+    - Filesystem-only — no branch, ref, or index of git is mutated in any
+      mode
+    - `dry_run` True mutates nothing at all
+    - An empty result is an empty list — not an error
+
+    Constraints:
+    - Do not assemble the status scale — statuses take no part in the orphan
+      decision
+    - Do not spare topics by status or age
+    - Do not print — output shaping belongs to the consumer
+
 ---
 
 Author: Goga
 CreatedAt: 28/08/26
 Description: |
   Owner of the .goga/history/ tree — topic identity, addressing, status
-  listing, and traversal. Re-exports the branch reader and the status scale
-  on its facade.
+  listing, traversal, and orphan cleanup. Re-exports the git introspection
+  and the status scale on its facade.

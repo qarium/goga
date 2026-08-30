@@ -28,3 +28,21 @@ print(result)  # one line describing what was created
   topic directory of the year — exposed as `check_branch_occupancy`.
 - No artifact files are written inside the topic directory — artifacts
   belong to their producers.
+
+## Creating with a title
+
+```python
+from goga.topics import create_topic
+
+result = create_topic("Feature/Foo_Bar", title="Payment retry")
+```
+
+- Fresh work: the branch, the switch, the topic directory, and the
+  title file `title.txt` — the text as entered plus a trailing newline,
+  UTF-8.
+- The current branch already hosting the same slug with an explicit
+  title: the topic directory is ensured and `title.txt` is created or
+  overwritten — nothing else mutates, no switch happens.
+- Without a title the behavior carries no title file at all.
+- `title.txt` marks the `new` status on the topic status scale; no
+  other artifact is written — artifacts belong to their producers.

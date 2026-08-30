@@ -50,19 +50,21 @@ Annotations: |
     the subcommand registration.
 
     Subcommand surfaces:
-    - status — a --remote/-r flag
-    - create — a NAME positional
+    - status — a --remote/-r flag, an --info/-i flag
+    - create — a NAME positional, a --title/-t option
     - switch — an IDENTIFIER positional
 
     Apply the `convention` CLI command docstring rule for the --help text
     (rendered verbatim by Click; omit Args/Returns/Raises).
   methods:
-    "status(remote: bool = False) -> exit_code: int": |
+    "status(remote: bool = False, info: bool = False) -> exit_code: int": |
       Subcommand goga topics status: print the board — the cross-branch
-      topic inventory of the scoped year as a three-column table.
+      topic inventory of the scoped year as a three-column table, or a
+      four-column table with the title column under --info/-i.
 
       `remote`: the --remote/-r flag — read remote-tracking refs instead of
                 local branches
+      `info`: the --info/-i flag — add the title column to the table
       `exit_code`: 0 on success (an empty board included), 1 on error
 
       Apply the `topic-board` practice for the board contract of the
@@ -73,7 +75,8 @@ Annotations: |
       1. Collect the board via `collect_topic_board` with the scoped year
          and `remote`
       2. Measure the terminal width
-      3. Render the table via `render_topic_board`
+      3. Render the table via `render_topic_board` with the records, the
+         width, and `info`
       4. An empty board renders nothing — exit 0
 
       Requirements:
@@ -81,12 +84,16 @@ Annotations: |
 
       Constraints:
       - Do not print the year, the artifacts, or a header — the table
-        carries topic, branch, and statuses only
-    "create(branch_name: str) -> exit_code: int": |
+        carries topic, branch, the title column under `info`, and
+        statuses only
+    "create(branch_name: str, title: str | None = None) -> exit_code: int": |
       Subcommand goga topics create: create fresh work — a branch with the
-      name as entered and its topic directory of the scoped year.
+      name as entered, its topic directory of the scoped year, and an
+      optional topic title.
 
       `branch_name`: NAME positional — the branch name as entered
+      `title`: the --title/-t value — the topic title; None writes no title
+               file
       `exit_code`: 0 on success, 1 on error
 
       Apply the `creating` practice for the creation contract of the
@@ -94,7 +101,8 @@ Annotations: |
       Apply the `click` practice for exit-code propagation.
 
       Algorithm:
-      1. Delegate to `create_topic` with `branch_name` and the scoped year
+      1. Delegate to `create_topic` with `branch_name`, the scoped year,
+         and `title`
       2. Echo the single result line
       3. Propagate the exit code
 
@@ -121,40 +129,51 @@ Annotations: |
       Constraints:
       - Do not launch any pipeline — continuation is a separate command
 
-"render_topic_board(records: list[BoardRecord], width: int)":
+"render_topic_board(records: list[BoardRecord], width: int, info: bool = False)":
   location: render.py
   annotations: |
-    Render the board as a three-column table: topic, branch, statuses.
+    Render the board as a table: topic, branch, and statuses — under
+    `info` the title column sits between branch and statuses.
 
     `records`: the collected board records — already sorted by the domain
     `width`: the measured terminal width in columns
+    `info`: True adds the title column and switches to the four-column
+            width rule
 
     Apply the `click` practice for echo.
 
     Algorithm:
     1. Compute the column widths from `width` and the record content per
-       the width rule of the requirements
+       the width rule of the requirements — the three-column rule without
+       `info`, the four-column rule with it
     2. Print one header row and one separator row with column and row
-       dividers
-    3. Print each record: the topic truncated with an ellipsis when it
-       exceeds its column, the branch truncated the same way, and the
-       statuses wrapped onto continuation lines without affecting the
-       column widths
+       dividers — the column order is topic, branch, title, statuses
+       under `info`
+    3. Print each record: every text column truncated with an ellipsis when
+       it exceeds its column, the statuses wrapped onto continuation lines
+       without affecting the column widths
     4. Mark the record hosting the current branch with an asterisk; keep
        the remote prefix of a remote host visible in the branch column
     5. An empty `records` prints nothing
 
     Requirements:
-    - Column widths: topic and branch get an equal share first, statuses
-      take the remainder — each of topic and branch is capped at one third
-      of `width` minus the dividers, statuses receives what is left, and
-      every column keeps a minimum of 8 columns before truncation applies
+    - Three-column widths: topic and branch get an equal share first,
+      statuses take the remainder — each of topic and branch is capped at
+      one third of `width` minus the dividers, statuses receives what is
+      left, and every column keeps a minimum of 8 columns before
+      truncation applies
+    - Four-column widths under `info`: topic, branch, and title get an
+      equal share — each capped at one quarter of `width` minus the
+      dividers, statuses receives the non-negative remainder, and every
+      column keeps a minimum of 8 columns before truncation applies
+    - A title of None or an empty string renders an empty cell
     - The truncation marker is a single ellipsis character
     - An overlong status is truncated like the other columns
     - The table never exceeds `width`, with one documented exception: when
-      `width` is below 33, every column keeps its minimum of 8 and the table
-      may exceed `width` — minimum readability wins over the width cap on
-      ultra-narrow terminals
+      the minimum columns no longer fit — below the narrow threshold of the
+      active column rule — every column keeps its minimum of 8 and the
+      table may exceed `width`; minimum readability wins over the width cap
+      on ultra-narrow terminals
 
     Constraints:
     - Read-only on `records` — do not mutate, do not re-sort, do not filter

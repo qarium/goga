@@ -58,6 +58,23 @@ Creates the topic directory of the current year — idempotently.
   checks belong to the caller.
 - Prints nothing on stdout; the exit code carries the result.
 
+## goga history prune [YEAR] [--dry-run]
+
+Deletes the orphan topics of one year — the topics no branch of the
+repository inventory hosts — and prints one slug per line. Nothing else
+is printed; an empty result prints nothing and exits 0.
+
+    goga history prune --dry-run    # list the candidates, delete nothing
+    goga history prune              # current year, delete the orphans
+    goga history prune 2025         # an explicit year
+
+- Protection: a local branch or a remote-tracking ref whose short name
+  normalizes to the topic slug protects the topic — in every year.
+- Deletion is unconditional: no status protects a topic, the whole topic
+  directory goes with all artifacts. The tree is not in git — a deleted
+  topic directory is unrecoverable; run --dry-run first.
+- Filesystem-only: branches, refs, and the index are never touched.
+
 ## Errors
 
 Every failure is a clean message on stderr with a non-zero exit and no

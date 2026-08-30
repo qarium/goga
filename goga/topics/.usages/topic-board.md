@@ -19,11 +19,14 @@ from goga.topics import collect_topic_board
 records = collect_topic_board()                          # current year, local
 records = collect_topic_board(year="2025", remote=True)  # remote-tracking refs
 for record in records:
-    print(record.topic, record.branch, record.statuses, record.current)
+    print(record.topic, record.branch, record.statuses, record.current, record.title)
 ```
 
 - One `BoardRecord` per hosted topic: the slug, the hosting branch display
-  name, the maximal status names in scale order, and the current marker.
+  name, the maximal status names in scale order, the current marker, and
+  the title — the first line of the topic's `title.txt`, or None when the
+  topic has none. The title is read from the ref trees without checkout;
+  rows hosted by other branches show their titles.
 - A local branch and its remote twin collapse to one row — the local branch
   wins. Two different branches hosting one slug stay two rows.
 - Sorting: scale order of the first maximal status, then topic alphabet.

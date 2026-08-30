@@ -2,7 +2,9 @@ Usages:
   convention: .goga/usages/conventions.md
   git: |
     External git binary invoked via subprocess.run (check=True, capture_output=True).
-    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts. Mock the
+    Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts.
+    Read-only inspection: the current branch name and the branch ref
+    inventory (local branches and remote-tracking refs). Mock the
     subprocess call in tests per `convention`.
 
 Annotations: |
@@ -13,13 +15,62 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell owns git-environment introspection for the history domain: reading the
-  current branch name. It is environment-probing, NOT history-path or topic logic —
-  that lives in goga/history. All git access flows through the `git` practice; mock
-  the subprocess call in tests per `convention`. Use relative imports. Re-exported
-  on the goga/history facade via embedding.
+  This cell owns git-environment introspection for the history domain: reading
+  the current branch name and enumerating the repository branch inventory. It
+  is environment access, not history-path or topic logic — every decision
+  belongs to the caller. All git access flows through the `git` practice;
+  mock the subprocess call in tests per `convention`. Use relative imports.
+  Re-exported on the goga/history facade via embedding.
 
 ---
+
+"BranchRef(name: str, remote: bool)":
+  location: refs.py
+  annotations: |
+    One branch ref of the repository inventory — a local branch or a
+    remote-tracking ref.
+
+    `name`: the display name — the short branch name for a local ref,
+            <remote>/<branch> for a remote-tracking ref
+    `remote`: True when the ref is remote-tracking
+
+    Apply the `convention` practice for the data-model rules and
+    intra-package imports.
+
+    Requirements:
+    - The display name is the identity used by consumers — no reshortening,
+      no normalization
+  properties:
+    "name -> str": |
+      The display branch name of the ref.
+    "remote -> bool": |
+      True when the ref is a remote-tracking ref.
+
+"list_branch_refs() -> refs: list[BranchRef]":
+  location: refs.py
+  annotations: |
+    Enumerate the branch refs of the repository — local branches and
+    remote-tracking refs together.
+
+    `refs`: every branch ref, sorted alphabetically by display name
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git for the local branch refs
+    2. Ask git for the remote-tracking refs
+    3. Drop the <remote>/HEAD symrefs — they are pointers, not branches
+    4. Merge both into one inventory sorted alphabetically by display name
+
+    Requirements:
+    - Read-only — no ref is created, moved, or deleted
+    - No network — remote-tracking refs as they exist locally
+
+    Constraints:
+    - Do not deduplicate — a local branch and its remote twin are two distinct
+      refs here; collapsing them belongs to the caller
 
 "resolve_current_branch_name() -> branch: str | None":
   location: branch.py
@@ -49,5 +100,5 @@ Annotations: |
 Author: Goga
 CreatedAt: 28/08/26
 Description: |
-  Git-environment introspection for the history domain — reads the current branch
-  name. Re-exported on the goga/history facade.
+  Git-environment introspection for the history domain — the current branch
+  name and the branch inventory. Re-exported on the goga/history facade.

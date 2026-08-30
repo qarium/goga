@@ -7,6 +7,7 @@ Imports:
       - resolve_history_root
       - resolve_topic_status
       - resolve_topic_dir
+      - resolve_topic_file
       - current_year
       - StatusScale
       - assemble_status_scale
@@ -18,6 +19,7 @@ Imports:
       - BranchRef
       - list_branch_refs
       - read_ref_tree_paths
+      - read_ref_file
       - checkout_local_branch
       - create_branch_from_remote_tracking
       - create_and_switch_branch
@@ -44,26 +46,26 @@ Annotations: |
 
   Use the `topic-paths` practice for the consumer patterns of the history
   facade — the topic slug, the topic directory of a year, the existence
-  oracle, and the current branch.
+  oracle, the topic title file path, and the current branch.
   Use the `topic-statuses` practice for the status scale patterns of the
   history facade — scale assembly and maximal-status computation.
   Use the `refs-and-switching` practice for the git patterns of the topics
-  git cell — the branch inventory, ref tree reading, and the bounded switch
-  mutations.
+  git cell — the branch inventory, ref tree reading, and file reading
+  without checkout.
 
   This cell owns the topics domain — the work-tracker view of the history
   tree: the cross-branch topic inventory of one year with per-topic
-  statuses, the switch-identifier resolution and switching orchestration,
-  the fresh-work creation procedure, and the combined ensure orchestration
-  that switches onto hosted work and creates it when nothing hosts the
-  identifier. Topic identity, addressing, and statuses belong to the
-  history facade; git access belongs to the topics git cell. Mutations are
-  local-only and happen strictly after every decision is made. Use
-  relative imports.
+  statuses and titles, the switch-identifier resolution and switching
+  orchestration, the fresh-work creation procedure with its optional topic
+  title, and the combined ensure orchestration that switches onto hosted
+  work and creates it when nothing hosts the identifier. Topic identity,
+  addressing, and statuses belong to the history facade; git access
+  belongs to the topics git cell. Mutations are local-only and happen
+  strictly after every decision is made. Use relative imports.
 
 ---
 
-"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool)":
+"BoardRecord(topic: str, branch: str, statuses: list[str], current: bool, remote: bool, title: str | None = None)":
   location: board.py
   annotations: |
     One row of the topic board — a topic hosted by one branch.
@@ -74,6 +76,8 @@ Annotations: |
                 scale order
     `current`: True when the row hosts the current working branch
     `remote`: True when the hosting ref is remote-tracking
+    `title`: the first line of the topic title file, or None when the topic
+             has none
 
     Apply the `convention` practice for the data-model rules and
     intra-package imports.
@@ -88,12 +92,15 @@ Annotations: |
       True when the row hosts the current working branch.
     "remote -> bool": |
       True when the hosting ref is remote-tracking.
+    "title -> str | None": |
+      The first line of the topic title file, or None when the topic has
+      no title file.
 
 "collect_topic_board(year: str | None = None, remote: bool = False) -> records: list[BoardRecord]":
   location: board.py
   annotations: |
     Collect the cross-branch topic inventory of one year — every topic with
-    its hosting branch and statuses.
+    its hosting branch, statuses, and title.
 
     `year`: optional year as four digits; None means the current year
     `remote`: True reads remote-tracking refs instead of local branches
@@ -103,8 +110,8 @@ Annotations: |
     Apply the `topic-paths` practice for the year and tree-root patterns.
     Apply the `topic-statuses` practice for the scale assembly and
     maximal-status computation.
-    Apply the `refs-and-switching` practice for the inventory and
-    tree-reading patterns.
+    Apply the `refs-and-switching` practice for the inventory,
+    tree-reading, and file-reading patterns.
 
     Algorithm:
     1. Resolve the year — `year` when given, otherwise the current year
@@ -123,10 +130,14 @@ Annotations: |
        artifact paths and compute the maximal statuses — the working copy
        over the directory composed by `resolve_topic_dir` via
        `resolve_topic_status`, every other ref via the `StatusScale`
-    6. Collapse a local branch and its remote twin into one row — the local
+    6. Read the title of every hosted topic — the working copy from the
+       title file title.txt of its directory, every other ref from the
+       title file of its ref tree via `read_ref_file`; the value is the
+       first line of the file, None when it is absent
+    7. Collapse a local branch and its remote twin into one row — the local
        branch wins; different branches hosting one slug stay separate rows
-    7. Mark the row hosting the current branch
-    8. Sort by scale order of the first maximal status, then alphabetically
+    8. Mark the row hosting the current branch
+    9. Sort by scale order of the first maximal status, then alphabetically
        by topic, and return the records
 
     Requirements:
@@ -134,6 +145,9 @@ Annotations: |
       progress is visible; remote mode shows it through its remote twin
     - Read-only — no checkout, no worktree, no mutation of any kind
     - A year without topics yields an empty list — not an error
+    - A multi-line title file yields its first line; an empty title file
+      yields an empty string
+    - The title never affects the sort order
 
     Constraints:
     - Do not render — output shaping belongs to the consumer
@@ -290,20 +304,21 @@ Annotations: |
     - Do not manage the stages of the hosting pipeline — continuation
       belongs to the pipeline itself
 
-"create_topic(branch_name: str, year: str | None = None) -> result: str":
+"create_topic(branch_name: str, year: str | None = None, title: str | None = None) -> result: str":
   location: creation.py
   annotations: |
-    Create fresh work — a branch with the name as entered and its topic
-    directory of the year.
+    Create fresh work — a branch with the name as entered, its topic
+    directory of the year, and an optional topic title.
 
     `branch_name`: the branch name as entered by the user
     `year`: optional year as four digits; None means the current year
+    `title`: optional topic title; None writes no title file
     `result`: one line describing the outcome
 
     Apply the `click` practice for the re-ask prompt and the non-interactive
     detection.
-    Apply the `topic-paths` practice for the slug, existence, and directory
-    creation patterns.
+    Apply the `topic-paths` practice for the slug, existence, directory
+    creation, and title-file path patterns.
     Apply the `refs-and-switching` practice for the create-and-switch
     pattern.
 
@@ -313,19 +328,29 @@ Annotations: |
        on an interactive terminal and restart, or fail with the hint
        otherwise
     3. The current branch — read via `resolve_current_branch_name` — hosts
-       the same slug -> idempotent success, no mutation, no occupancy
-       check
+       the same slug -> the idempotent path: a `title` given writes the
+       topic title file title.txt — the path resolved via
+       `resolve_topic_file` — of the ensured topic directory; no `title`
+       is a success without mutation; no occupancy check, no switch
     4. `check_branch_occupancy` reports a conflict -> print the reason with
        a hint to the board, prompt for a new name on an interactive terminal
        and restart, or fail otherwise
     5. Free name -> create the branch named exactly as entered and switch
-       to it via `create_and_switch_branch`, and create the topic directory
-       via `ensure_topic_dir` of the year
+       to it via `create_and_switch_branch`, create the topic directory
+       via `ensure_topic_dir` of the year, and a `title` given writes the
+       title file title.txt — the path resolved via `resolve_topic_file`
+       — of the topic directory
     6. Return the single result line
 
     Requirements:
     - The branch keeps the name as entered; the topic directory takes the
       slug — the two may deliberately differ
+    - The title file carries `title` as entered plus a single trailing
+      newline, encoded UTF-8
+    - The title file is written only when `title` is given — None never
+      creates and never overwrites it; an explicit `title` creates the
+      file or overwrites it
+    - The topic directory exists before the title file is written
     - An aborted re-ask leaves the repository untouched
     - The caller stays on the new branch
 
@@ -333,7 +358,8 @@ Annotations: |
     - Do not validate branch-name characters — git owns name validity
     - Do not auto-pick suffixed names on a conflict — the user re-asks or
       aborts
-    - Do not write artifact files inside the topic directory
+    - Do not write artifact files other than the topic title file inside
+      the topic directory
 
 "check_branch_occupancy(branch_name: str, slug: str, year: str | None = None) -> conflict: str | None":
   location: creation.py
@@ -374,6 +400,7 @@ Annotations: |
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  The topics domain — the cross-branch topic inventory, switch resolution
-  and orchestration, fresh-work creation, and the combined ensure
-  orchestration that switches onto hosted work or creates it.
+  The topics domain — the cross-branch topic inventory with titles, switch
+  resolution and orchestration, fresh-work creation with an optional title,
+  and the combined ensure orchestration that switches onto hosted work or
+  creates it.
