@@ -6,7 +6,8 @@ facade that registers the group.
 
 The group scopes every subcommand to one year (--year/-y, default the
 current year); the status subcommand reads remote-tracking refs with
---remote/-r and adds the title column with --info/-i.
+--remote/-r and adds the title column with --info/-i; the create subcommand
+publishes fresh work without switching under --publish/-p.
 
 ## Boarding all work
 
@@ -42,6 +43,36 @@ is created or overwritten — nothing else mutates, no switch happens.
 Without `-t` no title file is written. Occupied
 names and empty slugs trigger a re-ask on an interactive terminal, or a
 clean error with a hint otherwise.
+
+## Creating and publishing fresh work
+
+    goga topics create Feature/Foo_Bar --publish -t "Payment retry"
+    goga topics create Feature/Foo_Bar -p -t "Payment retry" --base-ref origin/release-1.3
+    goga topics create Feature/Foo_Bar -p -t "Payment retry" -c "chore: new topic {slug}"
+
+Creates the branch off the configured base (topics.base_ref in
+.goga/config.yml, overridden by --base-ref), commits the topic title file
+on it without touching the working copy — the caller stays on their
+branch, a dirty tree and a detached HEAD are both fine — and pushes the
+branch to origin with upstream binding. The topic is visible on the
+remote board with the new status. The result is one line: created and
+published on the remote.
+
+- The title is required in this mode — the board reads the topic through
+  the title file.
+- The commit message comes from topics.publish_commit (default
+  `goga: create topic {slug}`), overridden by --commit/-c; the {slug}
+  placeholder takes the topic slug, a template without it is used as is.
+- An occupied name, an empty slug, or a slug already hosted by any branch
+  of the inventory re-asks on an interactive terminal, or fails with a
+  hint to the board.
+- A failed publication rolls back fully — the branch is deleted and one
+  clean error names the reason; re-run after fixing the cause succeeds.
+- The base must come from --base-ref or the configuration — nothing set is
+  a clean error with a configuration example; the base resolves as git
+  resolves it, no fetch happens.
+- --base-ref or --commit without --publish is a clean error; a missing
+  origin or an unset git identity is a clean error.
 
 ## Switching to existing work
 

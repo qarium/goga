@@ -18,6 +18,7 @@ from goga.config import (
     CodemanifestConfig,
     DepConfig,
     LintConfig,
+    TopicsConfig,
     load_project_config,
 )
 ```
@@ -51,6 +52,11 @@ config = load_project_config()
   (integer); an empty `roles` list and an empty `env` mapping pass through
   verbatim — the empty-to-full-set (roles) and env-requires-agent (env)
   semantics belong to the consuming command
+- Optional `topics` follows structural-only validation: `topics.base_ref` and
+  `topics.publish_commit` are strings when present — absent/YAML-null/empty/
+  whitespace resolves to `None`; a present-but-non-mapping `topics` raises
+  `ValueError`. Rev resolvability, template grammar, and the default template
+  belong to the consuming command
 
 **Error handling**:
 
@@ -164,6 +170,9 @@ lint:                          # optional linter section
   ignore:                      # list of exact relative paths to exclude
     - .venv/                   # glob (**, *, ?) is NOT supported
     - build/dist
+topics:                          # optional fast-creation section
+  base_ref: origin/main          # str | absent — base of published topic branches
+  publish_commit: "goga: create topic {slug}"  # str | absent — commit message template
 ```
 
 ### Required Fields
@@ -235,6 +244,9 @@ afm) that consume these fields.
 | `usages.<group>.<dep>.ref`  | str     | None                   | optional git ref (branch/tag/commit; absent → default branch) |
 | `lint`        | mapping | None | Linter section (optional); when absent, config.lint is None |
 | `lint.ignore` | list    | `[]` | List of exact relative paths excluded from AST traversal by `goga lint`. Glob is not supported |
+| `topics`                    | mapping | None  | Fast-creation section (structural validation only) |
+| `topics.base_ref`           | str     | None  | Base revision of published topic branches, verbatim |
+| `topics.publish_commit`     | str     | None  | Commit message template; the {slug} placeholder is optional, verbatim |
 
 ## Accessing Configuration Data
 
@@ -294,7 +306,21 @@ config.build.review_executor.patience  # int | None — external-review stop thr
 config.codemanifest  # CodemanifestConfig | None
 config.codemanifest.usages  # dict — {str: str}
 config.codemanifest.annotations  # str | None
+
+# TopicsConfig fields — None when the `topics` section is absent
+config.topics  # TopicsConfig | None
+config.topics.base_ref  # str | None — base revision, verbatim
+config.topics.publish_commit  # str | None — commit message template, verbatim
 ```
+
+```yaml
+topics:
+  base_ref: origin/main
+  publish_commit: "goga: create topic {slug}"
+```
+
+The default template and the `{slug}` substitution belong to the consuming
+command (the create command).
 
 The legacy `build.review_patience` key is no longer parsed — declare review
 patience as `build.review_executor.patience`.

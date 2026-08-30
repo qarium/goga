@@ -4,12 +4,17 @@ Usages:
     External git binary invoked via subprocess.run (check=True, capture_output=True).
     Set GIT_TERMINAL_PROMPT=0 in the env to suppress interactive prompts.
     Read-only inspection (branch refs, ref tree paths and file contents,
-    working tree state) plus host-side mutations (checkout of a local
-    branch, creating a local branch from a remote-tracking ref,
-    create-and-switch to a new branch). A single-file content read decodes
-    UTF-8 explicitly and maps every git failure to None — the content is
-    display data; every other invocation propagates its git error. Mock
-    the subprocess call in tests per `convention`.
+    revision resolution, working tree state, the origin remote probe),
+    host-side mutations (checkout of a local branch, creating a local branch
+    from a remote-tracking ref, create-and-switch to a new branch), and
+    quarantined publication (building a commit in a temporary index held by
+    the GIT_INDEX_FILE env var of a single invocation — read-tree of the
+    base, hash-object -w of the blob, update-index --add, write-tree,
+    commit-tree -p; creating a branch at a commit and deleting a branch via
+    update-ref; pushing a branch to origin with -u). A single-file content
+    read decodes UTF-8 explicitly and maps every git failure to None — the
+    content is display data; every other invocation propagates its git
+    error. Mock the subprocess call in tests per `convention`.
 
 Annotations: |
   The `convention` practice is used for:
@@ -19,14 +24,19 @@ Annotations: |
   - Organizing the test infrastructure
   - Understanding the general principles and rules of development and testing in the project
 
-  This cell owns git access for the topics domain: enumerating branch refs,
-  reading the file paths and the file contents of a ref tree, and the
-  bounded set of host-side branch mutations — checking out a local branch,
-  creating a local branch from a remote-tracking ref, creating and
-  switching to a new branch, and the working-tree cleanliness probe. It is
-  environment access, not topic logic — every decision belongs to the
-  caller. All git access flows through the `git` practice; mock the
-  subprocess call in tests per `convention`. Use relative imports.
+  This cell owns git access for the topics domain: enumerating branch
+  refs, reading the file paths and the file contents of a ref tree,
+  resolving a revision into its commit, and the bounded set of host-side
+  branch mutations — checking out a local branch, creating a local branch
+  from a remote-tracking ref, creating and switching to a new branch,
+  creating a branch at a commit without switching, deleting a local branch,
+  and the working-tree cleanliness probe. The quarantined creation path
+  builds its commits in a temporary index isolated from the working copy —
+  the working tree, the index, and HEAD stay untouched; pushing a branch to
+  origin is the single network operation of the domain. It is environment
+  access, not topic logic — every decision belongs to the caller. All git
+  access flows through the `git` practice; mock the subprocess call in
+  tests per `convention`. Use relative imports.
 
 ---
 
@@ -235,10 +245,172 @@ Annotations: |
     Constraints:
     - Do not act on a dirty tree — the caller owns the policy
 
+"resolve_ref_commit(ref: str) -> commit: str":
+  location: publish.py
+  annotations: |
+    Resolve a revision string into the commit it names.
+
+    `ref`: any revision string — a branch name, a remote-tracking ref, a
+          tag, or a commit hash, resolved as git resolves it
+    `commit`: the commit hash the revision names
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git to resolve `ref` into its commit
+    2. An unresolvable revision surfaces as a clean error carrying the git
+       reason
+
+    Requirements:
+    - Read-only — no ref is created, moved, or deleted
+    - No network — the revision resolves against the local repository state
+
+    Constraints:
+    - Do not fetch — a stale remote-tracking base is the caller's accepted
+      condition
+    - Do not decide what a usable base is — the caller owns the policy
+
+"commit_file_on_base(base: str, path: str, content: str, message: str) -> commit: str":
+  location: publish.py
+  annotations: |
+    Build one commit that adds a single file on top of a parent commit —
+    without touching the working copy.
+
+    `base`: the parent commit hash
+    `path`: the file path to add, relative to the repository root
+    `content`: the file content as text
+    `message`: the final commit message
+    `commit`: the hash of the built commit
+
+    Apply the `git` practice for the quarantined index pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Build the tree of the commit in a temporary index quarantined from
+       the repository — the parent tree, the new blob of `path` staged over
+       it, and the resulting tree written out
+    2. Ask git to create the commit with `message` on the parent `base`,
+       authored by the repository git identity
+    3. Return the new commit hash; every git failure — an unreadable
+       parent, an unset identity — surfaces as a clean error
+
+    Requirements:
+    - The working copy, the repository index, and HEAD stay untouched
+    - The temporary index lives only inside the environment of a single git
+       invocation — nothing persists after the build
+    - No temporary directories or files are created outside .git
+
+    Constraints:
+    - Do not create, move, or delete branches — the commit exists only as a
+      hash until the caller plants it
+    - Do not write the file to the working copy
+
+"create_branch_at_commit(branch_name: str, commit: str)":
+  location: publish.py
+  annotations: |
+    Create a branch at a commit without switching to it.
+
+    `branch_name`: the branch name as entered by the user
+    `commit`: the commit the branch points to
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git to create the branch `branch_name` pointing at `commit`,
+       leaving the working copy on its current branch
+    2. A git failure surfaces as a clean error
+
+    Requirements:
+    - The name is taken verbatim — no normalization, no suffixing
+    - The mutation is local — no network
+    - The working copy, the index, and HEAD stay untouched — no switch
+      happens
+
+    Constraints:
+    - Do not validate the name characters — git owns name validity
+
+"delete_local_branch(branch_name: str)":
+  location: publish.py
+  annotations: |
+    Delete a local branch.
+
+    `branch_name`: the short name of the local branch
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git to delete the local branch ref
+    2. A git failure surfaces as a clean error
+
+    Requirements:
+    - The deletion is local — no network
+    - The working copy, the index, and HEAD stay untouched — a branch not
+      checked out is deletable without a switch
+
+    Constraints:
+    - Do not decide whether deletion is safe — the caller owns the rollback
+      policy
+
+"push_branch(branch_name: str)":
+  location: publish.py
+  annotations: |
+    Publish a branch to the origin remote with upstream binding.
+
+    `branch_name`: the short name of the local branch
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git to push the branch to origin and bind its upstream
+    2. A git failure propagates with its message — the caller owns the
+       rollback
+
+    Requirements:
+    - The push is the only network operation of the topics domain
+    - The local branch stays in the repository after the push
+
+    Constraints:
+    - Do not push other branches or tags — exactly the named branch
+    - Do not retry or roll back — the caller owns the failure policy
+
+"origin_configured() -> configured: bool":
+  location: publish.py
+  annotations: |
+    Probe whether the origin remote is configured.
+
+    `configured`: True when the repository has an origin remote
+
+    Apply the `git` practice for the invocation pattern.
+    Apply the `convention` practice for docstring style and intra-package
+    imports.
+
+    Algorithm:
+    1. Ask git for the origin remote URL
+    2. Report the answer as a plain boolean
+
+    Requirements:
+    - Read-only — no remote state is contacted, no network
+    - Strict as a probe result: an absent or unreadable origin reads False —
+      the probe never raises
+
+    Constraints:
+    - Do not tolerate the absence into a success — the caller turns False
+      into its own clean error
+
 ---
 
 Author: Goga
 CreatedAt: 29/08/26
 Description: |
-  Git access for the topics domain — branch refs, ref tree paths and file
-  contents, and the bounded host-side branch mutations.
+  Git access for the topics domain — branch refs, ref tree reading,
+  revision resolution, host-side branch mutations, and quarantined branch
+  construction with publication.

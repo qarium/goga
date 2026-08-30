@@ -4,11 +4,19 @@ Imports:
       - collect_topic_board
       - switch_topic
       - create_topic
+      - publish_topic
     Usages:
       - topic-board
       - switching
       - creating
+      - publishing
     From: goga/topics
+  - Types:
+      - load_project_config
+      - TopicsConfig
+    Usages:
+      - project-configuration
+    From: goga/config
 
 Usages:
   convention: .goga/usages/conventions.md
@@ -26,6 +34,16 @@ Annotations: |
   decorator with its own option, the subcommand registration, the flag,
   arguments, and options of each subcommand, echo, and exit-code
   propagation.
+
+  Use the `publishing` practice for the fast creation-and-publication
+  contract of the domain. Use the `project-configuration` practice for the
+  schema of the topics section.
+
+  The fast-creation flags resolve their values at this layer: a flag beats
+  the topics section — `TopicsConfig` — of the project configuration read
+  via `load_project_config`, which beats the built-in default; the
+  configuration is read on the publish path only, and only for values no
+  flag provided.
 
   This cell is the CLI surface of the topics domain: a thin wrapper that
   resolves inputs, delegates every computation to the domain routines, and
@@ -51,7 +69,8 @@ Annotations: |
 
     Subcommand surfaces:
     - status — a --remote/-r flag, an --info/-i flag
-    - create — a NAME positional, a --title/-t option
+    - create — a NAME positional, a --title/-t option, a --publish/-p flag,
+      a --base-ref option, a --commit/-c option
     - switch — an IDENTIFIER positional
 
     Apply the `convention` CLI command docstring rule for the --help text
@@ -86,29 +105,59 @@ Annotations: |
       - Do not print the year or the artifacts, and no heading line
         outside the table — the table carries topic, branch, the title
         column under `info`, and statuses only
-    "create(branch_name: str, title: str | None = None) -> exit_code: int": |
+    "create(branch_name: str, title: str | None = None, publish: bool = False, base_ref: str | None = None, commit_message: str | None = None) -> exit_code: int": |
       Subcommand goga topics create: create fresh work — a branch with the
       name as entered, its topic directory of the scoped year, and an
-      optional topic title.
+      optional topic title; under --publish the work is created off an
+      explicit base and published to origin without switching.
 
       `branch_name`: NAME positional — the branch name as entered
-      `title`: the --title/-t value — the topic title; None writes no title
-               file
+      `title`: the --title/-t value — the topic title; required under
+               --publish, optional otherwise
+      `publish`: the --publish/-p flag — the fast creation-and-publication
+                 mode
+      `base_ref`: the --base-ref value — the base of the published branch;
+                  beats the topics section of the configuration
+      `commit_message`: the --commit/-c value — the commit message template;
+                        beats the topics section of the configuration
       `exit_code`: 0 on success, 1 on error
 
-      Apply the `creating` practice for the creation contract of the
-      domain.
+      Apply the `creating` practice for the creation contract of the domain.
+      Apply the `publishing` practice for the fast creation-and-publication
+      contract of the domain.
+      Apply the `project-configuration` practice for the topics section
+      schema.
       Apply the `click` practice for exit-code propagation.
 
       Algorithm:
-      1. Delegate to `create_topic` with `branch_name`, the scoped year,
-         and `title`
-      2. Echo the single result line
-      3. Propagate the exit code
+      1. `base_ref` or `commit_message` without `publish` -> clean error:
+         the publication-only options never act silently
+      2. `publish` with no `title` -> clean error asking for the title
+      3. The default path delegates to `create_topic` with `branch_name`,
+         the scoped year, and `title`
+      4. The publish path resolves the base — `base_ref`, otherwise the
+         topics section of the configuration loaded via
+         `load_project_config`, otherwise a clean error naming the
+         configuration line and the flag — and the message template —
+         `commit_message`, otherwise the topics section, otherwise the
+         built-in default `goga: create topic {slug}`
+      5. The publish path delegates to `publish_topic` with `branch_name`,
+         `title`, the resolved base, the resolved template, and the scoped
+         year
+      6. Echo the single result line
+      7. Propagate the exit code
+
+      Requirements:
+      - The configuration is read on the publish path only, and only for
+        values no flag provided — the default path never reads it
+      - A missing configuration file counts as an unset value; a present
+        but invalid one surfaces its own clean error
 
       Constraints:
       - Do not validate the name at the CLI layer — the domain and git own
         that
+      - Do not switch branches or render the board here — every computation
+        belongs to the domain
     "switch(identifier: str) -> exit_code: int": |
       Subcommand goga topics switch: bring the repository onto the branch
       hosting the requested work.
