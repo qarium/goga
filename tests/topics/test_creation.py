@@ -114,6 +114,7 @@ class TestCreationContract:
             "collect_topic_board",
             "create_topic",
             "ensure_topic",
+            "publish_topic",
             "resolve_switch_candidates",
             "switch_topic",
         }
