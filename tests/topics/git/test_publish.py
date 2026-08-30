@@ -198,6 +198,44 @@ class TestCommitFileOnBase:
         assert index.parent == git_dir
         assert not index.exists()
 
+    def test_commit_file_on_base_empty_message_never_waits_for_stdin(self, tmp_path: Path) -> None:
+        """An empty template completes instead of waiting on the caller's stdin.
+
+        ``commit-tree -m ""`` counts the empty ``-m`` as "no message
+        supplied" and falls back to reading the message from stdin. Without
+        the devnull redirect the invocation inherited the caller's stdin —
+        a terminal or an open pipe under a harness, neither of which ever
+        reaches EOF — and the publish cycle hung forever with no output and
+        no error. The invocations that legitimately need stdin pass
+        ``input`` explicitly and keep their pipe.
+        """
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+
+        def answer_by_argv(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            stdout = {
+                ("rev-parse", "--git-dir"): str(git_dir),
+                ("hash-object", "-w", "--stdin"): "<blob>",
+                ("write-tree",): "<tree>",
+                ("commit-tree", "<tree>", "-p", "<base>", "-m", ""): "<commit>",
+            }.get(tuple(command[1:]), "")
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout=stdout, stderr="")
+
+        run = mock.Mock(side_effect=answer_by_argv)
+        with mock.patch("goga.topics.git.publish.subprocess.run", run):
+            commit = commit_file_on_base("<base>", _TITLE_PATH, _TITLE_CONTENT, "")
+
+        assert commit == "<commit>"
+        for call in run.call_args_list:
+            if call.kwargs.get("input") is None:
+                assert call.kwargs["stdin"] == subprocess.DEVNULL
+            else:
+                # The explicit ``input`` routes the invocation through a
+                # pipe — a second stdin would make ``subprocess.run`` raise.
+                assert call.kwargs["stdin"] is None
+        # The empty message reached git verbatim — no error, no substitution.
+        assert run.call_args_list[-1].args[0][-1] == ""
+
 
 class TestBranchAndPushMutations:
     def test_create_branch_at_commit_creates_ref_without_switch(self) -> None:

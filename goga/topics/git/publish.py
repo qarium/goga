@@ -289,6 +289,17 @@ def _run_git(
     # ``UnicodeDecodeError`` is a ``ValueError``, it matches none of the
     # domain's handlers, so it would pierce the clean-error boundary and
     # skip the caller's rollback — mirroring ``read_ref_file``.
+    #
+    # The devnull stdin is load-bearing: without it every invocation
+    # inherits the caller's stdin, and a git subcommand that falls back to
+    # reading its operand from stdin would block on a descriptor that never
+    # reaches EOF — a terminal, an open pipe under a harness. ``commit-tree
+    # -m ""`` does exactly that (an empty ``-m`` counts as "no message
+    # supplied"), so an explicit empty template hung the publish cycle
+    # forever. No invocation of this module consumes the caller's stdin:
+    # the two that need stdin (``hash-object --stdin``,
+    # ``update-ref --stdin``) pass ``input`` explicitly, which routes them
+    # through a pipe instead.
     return subprocess.run(
         command,
         check=True,
@@ -297,6 +308,7 @@ def _run_git(
         encoding="utf-8",
         errors="replace",
         input=input,
+        stdin=subprocess.DEVNULL if input is None else None,
         env={
             **os.environ,
             "GIT_TERMINAL_PROMPT": "0",

@@ -42,9 +42,11 @@ assembly stay the real ones either way.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
 from types import ModuleType
 from unittest import mock
@@ -914,4 +916,66 @@ class TestPublishTopicRealGit:
         assert _git_out(tmp_path, "for-each-ref", "--format=%(refname)", "refs/heads") == "refs/heads/main"
         assert "refs/remotes/origin/evil" not in _git_out(
             tmp_path, "for-each-ref", "refs/remotes/origin"
+        )
+
+    def test_publish_empty_template_does_not_wait_for_stdin(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An explicitly empty commit template publishes without waiting on stdin.
+
+        ``commit-tree -m ""`` reads its message from stdin when the ``-m``
+        argument is empty, and the runner used to leave that stdin
+        inherited from the caller: under a terminal or a harness-held open
+        pipe — neither ever reaching EOF — the publish hung forever with no
+        output. The cycle must complete, the empty template taken as
+        verbatim as an empty ``--title`` writing its bare newline.
+        """
+        _init_publish_repo(tmp_path)
+        monkeypatch.chdir(tmp_path)
+        year = current_year()
+
+        # fd 0 becomes a pipe nobody writes to — EOF never arrives, the
+        # exact descriptor a terminal or a held stdin provides. The cycle
+        # runs on a thread so a regression surfaces as this test's failure
+        # instead of a timeout of the whole session.
+        read_fd, write_fd = os.pipe()
+        saved_stdin = os.dup(0)
+        lines: list[str] = []
+        failure: list[BaseException] = []
+
+        def cycle() -> None:
+            try:
+                os.dup2(read_fd, 0)
+                lines.append(
+                    publish_topic("Feature/Foo_Bar", "Payment retry", "origin/main", "")
+                )
+            except BaseException as exc:  # recorded, re-raised on the main thread below
+                failure.append(exc)
+            finally:
+                os.dup2(saved_stdin, 0)
+
+        thread = threading.Thread(target=cycle, daemon=True)
+        thread.start()
+        thread.join(timeout=30)
+        alive = thread.is_alive()
+        os.close(read_fd)
+        os.close(write_fd)
+        os.close(saved_stdin)
+
+        assert not alive, (
+            "publish_topic with an empty template never returned — "
+            "a git invocation is waiting on the caller's stdin"
+        )
+        if failure:
+            raise failure[0]
+        assert lines[0] == (
+            f"Created branch Feature/Foo_Bar and published topic {year}/feature-foo-bar"
+        )
+        # The published commit carries the empty message verbatim.
+        assert _git_out(tmp_path, "show", "-s", "--format=%s", "Feature/Foo_Bar") == ""
+        assert (
+            _git_out(
+                tmp_path, "show", f"Feature/Foo_Bar:.goga/history/{year}/feature-foo-bar/title.txt"
+            )
+            == "Payment retry"
         )
