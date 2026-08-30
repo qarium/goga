@@ -517,7 +517,9 @@ Annotations: |
     1. Resolve the year — `year` when given, otherwise the current year via
        `current_year`
     2. Compose the topic directory prefix of the slug under the root
-       resolved via `resolve_history_root`
+       resolved via `resolve_history_root` — the prefix carries a trailing
+       slash, so a sibling slug sharing only the prefix text
+       ("feature-foo" of "feature-foo-bar") stays free
     3. Probe every ref of `list_branch_refs` via `read_ref_tree_paths` —
        the first ref whose tree carries paths under the prefix is the
        conflict

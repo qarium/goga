@@ -114,6 +114,9 @@ Annotations: |
     - One git invocation per ref
     - Read-only — the working copy, the index, and .git stay untouched
     - A ref or prefix without matches yields an empty list — not an error
+    - Both sides of the read are anchored at the repository root — the
+      invocation reads the same tree and reports the same paths from any
+      working directory inside the repository
 
     Constraints:
     - Do not materialize the tree — no checkout, no worktree, no temp
@@ -252,7 +255,9 @@ Annotations: |
 
     `ref`: any revision string — a branch name, a remote-tracking ref, a
           tag, or a commit hash, resolved as git resolves it
-    `commit`: the commit hash the revision names
+    `commit`: the commit hash the revision names — an annotated tag is
+              peeled to its commit, so the hash is usable as the parent of
+              a commit-tree build
 
     Apply the `git` practice for the invocation pattern.
     Apply the `convention` practice for docstring style and intra-package
